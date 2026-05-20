@@ -1,0 +1,15 @@
+# Pinned Rust toolchain for the AbyssBSD layer.
+#
+# Pinned to the most recent stable on the primary development bed (macOS,
+# Apple Silicon). Stable only — see docs/DESIGN.md §3.1: AbyssBSD does not
+# wait on a compiler, and every feature it needs (async/.await, procedural
+# macros, Send/Sync) is stable today.
+#
+# rustup honours this file on both macOS (host phases) and FreeBSD
+# (Phase 4+). The FreeBSD build target is added per-environment with:
+#   rustup target add x86_64-unknown-freebsd
+
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -1,0 +1,8 @@
+# Build output
+/target/
+**/*.rs.bk
+
+# OS / editor cruft
+.DS_Store
+
+# Cargo.lock IS committed — AbyssBSD ships binaries, not a library.

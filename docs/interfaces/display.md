@@ -14,8 +14,8 @@
 The largest interface. It is native, not Wayland (`DESIGN.md` §7.2), and is
 designed around two first-class cases: ordinary composited windows, and
 full-screen games that scan out directly. Window decorations are
-**server-side** — the compositor draws every title bar and frame (decision
-#45); a client never draws chrome.
+**server-side** — the compositor draws every title bar and frame; a client
+never draws chrome.
 
 ## Data types
 

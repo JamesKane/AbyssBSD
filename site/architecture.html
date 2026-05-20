@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — AbyssBSD</title>
+<meta name="description" content="The AbyssBSD architecture: the unified message primitive, the looper/service framework, the from-scratch compositor and display protocol, the retained-mode toolkit, and the object-capability security model.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html" class="active">Architecture</a>
+      <a href="components.html">Components</a>
+      <a href="interfaces.html">Interfaces</a>
+      <a href="roadmap.html">Roadmap</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <div class="eyebrow">Architecture</div>
+  <h1>One primitive, one bus, one security model</h1>
+  <p class="lede">AbyssBSD adopts BeOS's defining idea: a single message
+     primitive carries everything — UI events, inter-thread traffic, IPC, the
+     display protocol, and capabilities. It <em>is</em> the bus.</p>
+
+  <h2>The unified message primitive</h2>
+  <p>A <strong>looper</strong> is a thread with a message queue;
+     <strong>handlers</strong> are the objects it dispatches messages to — the
+     BeOS <code>BLooper</code>/<code>BHandler</code> model. The primitive is
+     used three ways, and only the third involves a wire format at all:</p>
+  <ul class="feature-list">
+    <li><strong>In-process</strong> — a message is a value moved by ownership
+        through a looper's queue. No serialization.</li>
+    <li><strong>Inter-thread</strong> — the same: a value moved between looper
+        threads.</li>
+    <li><strong>Inter-process</strong> — the message is serialized into an
+        <em>envelope</em>; the wire format exists only here.</li>
+  </ul>
+
+  <h3>The envelope</h3>
+  <p>The cross-process representation is a universal envelope: a header
+     (interface id, method/type id, flags, payload length, handle count), the
+     serialized payload, and a handle array. Handles are file descriptors
+     (passed via <code>SCM_RIGHTS</code>) or bus tokens, each carrying its
+     Capsicum rights mask. <strong>Large data never travels inline</strong> — it
+     is shared as a memory handle; dmabuf buffer sharing is exactly this case.</p>
+  <div class="diagram">  ┌──────────────────────────────────────────────┐
+  │ header:  interface id · method/type id       │
+  │          flags · payload len · handle count  │
+  ├──────────────────────────────────────────────┤
+  │ payload: the serialized message body          │
+  ├──────────────────────────────────────────────┤
+  │ handles: [ {kind, value, cap_rights} ] …      │
+  └──────────────────────────────────────────────┘</div>
+
+  <h3>Self-describing payloads, typed views</h3>
+  <p>The payload is <strong>BMessage-like</strong>: a self-describing structure
+     of named, typed fields. That is what makes applications scriptable — a
+     script can build and inspect messages with no compile-time knowledge of
+     them. AbyssBSD's own code is not written against an untyped dict, though:
+     Rust <code>derive</code> and procedural macros generate <strong>typed
+     views</strong> over the dict, so OS code gets compile-time field checking
+     while scripts work the dict directly.</p>
+
+  <h3>Addressing is authority</h3>
+  <p>There is no namespace of destinations. <strong>You send to a capability you
+     hold</strong> — <code>cap.send(msg)</code>. Capabilities are statically
+     typed by interface: a <code>Cap&lt;Display&gt;</code> only accepts
+     display-protocol messages. Replies ride the same mechanism — a request
+     carries a <em>reply-to</em> capability.</p>
+
+  <h3>The looper as an async executor</h3>
+  <p>A looper is a thread, a message queue, <strong>and a cooperative async
+     executor</strong>. A handler may be <code>async</code> and may
+     <code>.await</code>. Awaiting a request/reply call <strong>suspends the
+     handler, never the looper's thread</strong> — so "the UI thread never
+     blocks" becomes mechanically true. While one invocation of a handler is
+     suspended, the looper runs <em>other</em> handlers, never re-entering the
+     same one: BeOS's <code>BHandler</code> invariant kept, with async added
+     beneath it.</p>
+
+  <div class="note">
+    <strong>The looper &amp; service framework</strong> is the chief structural
+    piece the project builds for itself — a first-party crate providing loopers,
+    handlers, typed point-to-point rings, and a transport-agnostic API. The
+    broker realizes the whole system on this framework: it pre-creates every
+    ring and spawns each component looper, the eager, pre-wired,
+    statically-auditable authority graph.
+  </div>
+
+  <hr class="divider">
+
+  <h2>Display &amp; input</h2>
+
+  <h3>The compositor</h3>
+  <p>Written from scratch, the compositor plays the role BeOS's
+     <code>app_server</code> played: the single display server, speaking the
+     native message primitive. It talks to <strong>DRM/KMS directly</strong> via
+     the DRM ioctl uAPI — no <code>libdrm</code>. A render-backend seam exposes
+     three backends:</p>
+  <table>
+    <thead><tr><th>Backend</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>CPU / dumb-buffer</td><td>Needs zero GPU stack — the zero-Mesa
+        floor; the system boots and renders in a VM with no GPU stack at all.</td></tr>
+      <tr><td>GLES (OpenGL ES 3.x via EGL)</td><td>The accelerated path and the
+        M2 target; covers all hardware Mesa accelerates.</td></tr>
+      <tr><td>Vulkan <span class="tag post">post-v1</span></td><td>A second
+        accelerated backend behind the same seam.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The display protocol — native, not Wayland</h3>
+  <p>Because there is one unified message primitive, the display protocol is
+     <strong>not</strong> a separate Wayland wire format. The compositor speaks
+     the native primitive directly. Apps render their own buffers and share them
+     as dmabuf handles carried in messages. Key properties:</p>
+  <ul class="feature-list">
+    <li><strong>Surfaces &amp; roles</strong> — a client creates a surface and
+        gives it a role (top-level, popup, fullscreen).</li>
+    <li><strong>API-agnostic buffers</strong> — GLES, Vulkan, and CPU-rendered
+        buffers are identical to the protocol; pixel data is never inline.</li>
+    <li><strong>Explicit synchronization</strong> — every buffer carries
+        acquire and release timeline-semaphore points; implicit fencing is not
+        used.</li>
+    <li><strong>Server-side decorations</strong> — the compositor draws every
+        title bar and frame; title-bar drags and window buttons are handled
+        compositor-side with no client round-trip, so window manipulation is
+        frame-perfect.</li>
+    <li><strong>Authorized clipboard &amp; drag-and-drop</strong> — the user's
+        gesture <em>is</em> the capability; no client snoops the clipboard
+        ambiently, unlike X11.</li>
+  </ul>
+  <p><strong>Managed direct scanout.</strong> When a full-screen surface covers
+     an output exactly, the compositor page-flips the client's buffer directly
+     to KMS — no composition pass, no copy — for near-exclusive-fullscreen
+     performance. It keeps KMS ownership: the instant an overlay is needed
+     (notification, alt-tab, lock screen) it resumes compositing seamlessly. A
+     game does nothing special — it uses an ordinary Vulkan swapchain.</p>
+
+  <h3>The input service</h3>
+  <p>The input service turns hardware input devices into one normalized event
+     stream using <code>libinput</code>. Its interface is internal and
+     one-directional — input service &rarr; compositor; clients receive input
+     via the display protocol. Each key event carries <strong>both</strong> the
+     raw keycode (the physical key, which games need) and the cooked
+     interpretation (keysym, modifiers, text). Keyboard interpretation lives
+     here, in the one component whose job is interpreting input hardware.</p>
+
+  <hr class="divider">
+
+  <h2>The toolkit</h2>
+  <p>Retained-mode, organized as <strong>Kits</strong> — the BeOS structure:</p>
+  <table>
+    <thead><tr><th>Kit</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td>Interface Kit</td><td>Widgets, layout, theming, the view hierarchy.</td></tr>
+      <tr><td>Application Kit</td><td>App lifecycle, the looper/handler model, messaging.</td></tr>
+      <tr><td>Storage Kit</td><td>Files, XDG-resolved locations; typed attributes and live queries <span class="tag post">post-v1</span></td></tr>
+      <tr><td>Media Kit</td><td>Audio stream handling and device re-routing <span class="tag post">later</span></td></tr>
+    </tbody>
+  </table>
+  <p>Each window is its own looper on its own thread. The toolkit themes the
+     <strong>widgets</strong> to the GNOME 2 appearance; window decorations are
+     drawn by the compositor and the panel by the shell — all three draw from
+     <strong>one shared theme</strong> so the desktop is visually coherent.</p>
+
+  <h3>An arena of views, addressed by handle</h3>
+  <p>A window's view hierarchy is not a tree of pointers or reference-counted
+     nodes. One <strong>arena per window</strong> owns every view; every
+     cross-reference is a <strong><code>ViewId</code></strong> — a generational
+     handle (index + generation, the standard slotmap pattern). Resolving one
+     generation-checks: a <code>ViewId</code> outliving its view resolves to
+     <em>none</em> — safe and observable, never a dangling pointer, never a
+     leak. There are no ownership cycles and no <code>Rc</code>/<code>Arc</code>.
+     Retained-mode means only the dirty <code>ViewId</code> set is re-laid-out
+     and repainted.</p>
+  <p>The view tree stores <strong>no callbacks</strong>: a widget interaction is
+     routed to a <code>ViewId</code> and emitted as a <em>message</em> to the
+     app's looper, not a stored closure.</p>
+
+  <hr class="divider">
+
+  <h2>The object-capability security model</h2>
+  <p>AbyssBSD uses an <strong>object-capability (ocap)</strong> model. It is not
+     a subsystem bolted on beside the message bus — it <em>is</em> the bus.</p>
+  <ul class="feature-list">
+    <li><strong>No ambient authority.</strong> A process is born holding
+        nothing. It cannot name or reach any resource it was not given.</li>
+    <li><strong>Authority is an unforgeable handle.</strong> To hold a reference
+        to an object <em>is</em> the permission to use it.</li>
+    <li><strong>Authority travels only in messages.</strong> The unified
+        primitive already carries handles, so the security model and the IPC
+        model are the same mechanism.</li>
+    <li><strong>Attenuate and delegate, never amplify.</strong> A holder may
+        pass on a handle, or a weaker derivation, but never manufacture more
+        authority than it was given.</li>
+  </ul>
+  <p>This is the structural reason AbyssBSD rejects D-Bus: D-Bus is a
+     names-and-methods bus with no notion of authority, so security has to be
+     bolted alongside it (polkit, portals, Flatpak). A capability bus needs none
+     of them.</p>
+
+  <h3>Enforcement — native Capsicum + jails</h3>
+  <table>
+    <thead><tr><th>Concern</th><th>Mechanism</th></tr></thead>
+    <tbody>
+      <tr><td>No opening resources by name</td><td>Capsicum capability mode
+        (<code>cap_enter</code>) — irreversible, kernel-enforced</td></tr>
+      <tr><td>Per-handle rights</td><td>Capsicum <code>cap_rights_limit</code> —
+        fine-grained, kernel-enforced fd rights</td></tr>
+      <tr><td>Isolation container</td><td>jails</td></tr>
+      <tr><td>Process handle</td><td>process descriptors (<code>pdfork</code>)</td></tr>
+      <tr><td>Handle transport</td><td><code>SCM_RIGHTS</code> for fd-backed
+        capabilities; bus tokens for service objects</td></tr>
+    </tbody>
+  </table>
+  <p>Because FreeBSD's Capsicum enforces per-fd rights <em>in the kernel</em>,
+     both backings of a capability are genuinely enforced — there is no
+     "advisory mask on a raw fd" gap. This is the concrete payoff of choosing
+     FreeBSD over Linux.</p>
+
+  <h3>The broker</h3>
+  <p>A <strong>broker</strong> is the sole minter of authority — the only
+     component that opens devices and creates jails. It hands each child its
+     initial capability set at spawn time; a child cannot open those resources
+     itself, because capability mode forbids it. The broker is started early by
+     <code>rc</code> and is modeled on FreeBSD's <code>libcasper</code>. Any
+     capability holder can sub-broker for its own children, carving sandboxes
+     out of its own authority.</p>
+
+  <div class="note">
+    <strong>Honest scope.</strong> The FreeBSD base sits in the trusted
+    computing base regardless. This is not seL4-grade verified isolation, and
+    AbyssBSD does not claim it. What the model buys is a desktop layer in which
+    no application holds ambient authority — a strict, real improvement over
+    every conventional desktop, now with <em>kernel-enforced</em> capabilities
+    rather than a best-effort approximation.
+  </div>
+
+  <p style="margin-top:2rem;"><a href="components.html">Continue to the components &rarr;</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+  </div>
+</footer>
+
+</body>
+</html>

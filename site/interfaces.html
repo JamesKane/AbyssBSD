@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interfaces — AbyssBSD</title>
+<meta name="description" content="The AbyssBSD component interfaces: typed message schemas, message kinds, request/reply conventions, and a per-interface summary.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="components.html">Components</a>
+      <a href="interfaces.html" class="active">Interfaces</a>
+      <a href="roadmap.html">Roadmap</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <div class="eyebrow">Interfaces</div>
+  <h1>The message-interface contracts</h1>
+  <p class="lede">The design gives each component interface its <em>shape</em>.
+     The interface documents give the concrete typed message schema — the actual
+     messages, their fields and types, their request/reply pairings. One
+     document per interface.</p>
+
+  <h2>Message kinds</h2>
+  <p>Every message is one of three kinds:</p>
+  <ul class="feature-list">
+    <li><strong>request</strong> — carries a <em>reply-to capability</em>; the
+        recipient sends back exactly one message: the typed success reply, or an
+        <code>Error</code>.</li>
+    <li><strong>command</strong> — fire-and-forget; no reply, no reply-to
+        capability.</li>
+    <li><strong>event</strong> — unsolicited; sent by a service to a
+        <em>retained</em> sink capability the client gave it earlier.</li>
+  </ul>
+  <p>A <strong>subscription</strong> is a request whose reply-to capability the
+     service <em>retains</em> — rather than spending it on one reply — and uses
+     as the event sink for an ongoing stream.</p>
+
+  <h2>Conventions</h2>
+  <div class="panel">
+    <h3>Request / reply</h3>
+    <p>A request carries a <strong>fresh reply-to capability</strong>. The
+       capability <em>is</em> the correlation: there are no request-ids, and a
+       reply can reach no one but the one waiter.</p>
+    <h3>Errors are values</h3>
+    <p>A request's reply is a success value or an <code>Error</code> — never an
+       exception. <code>Error</code> is <code>{ code, detail }</code>:
+       <code>code</code> a per-interface enum, <code>detail</code> a
+       human-readable string.</p>
+    <h3>Lifetime</h3>
+    <p>A subscription ends when the capability is dropped or its holder
+       disconnects. No explicit teardown is needed for correctness.</p>
+    <h3>Envelope mapping</h3>
+    <p>Each message is one envelope: the interface id and method id in the
+       header; the fields serialized as the payload; every capability — including
+       the reply-to capability — in the handle array.</p>
+  </div>
+
+  <h3>Notation</h3>
+  <p>A message is written as a name and kind, its typed fields, and (for
+     requests) its reply type:</p>
+  <pre><code>Name  — kind
+  field : Type
+  field : Type
+  → ReplyType | Error        (requests only)</code></pre>
+  <p><code>Ack</code> is the empty success reply. Types are the typed-value
+     types — <code>bool</code>, <code>i64</code>, <code>f64</code>,
+     <code>string</code>, <code>enum</code>, <code>list&lt;T&gt;</code>,
+     <code>dict</code> — plus interface-defined types.</p>
+
+  <hr class="divider">
+
+  <h2>The interfaces</h2>
+  <p>One document per component interface. Each has, in order: the interface
+     identity and consumers, data types, messages grouped by direction,
+     capabilities, errors, and accepted/rejected example exchanges.</p>
+
+  <div class="iface">
+    <h3>settings <span class="kind">store</span></h3>
+    <p class="muted">The typed configuration store — <code>get</code> /
+       <code>set</code> / <code>subscribe</code>. Schemas are declarative and
+       shipped; access is capability-scoped to a subtree and to read or
+       read-write. The first interface document, and the template.</p>
+  </div>
+  <div class="iface">
+    <h3>input <span class="kind">stream</span></h3>
+    <p class="muted">The normalized input event stream — input service &rarr;
+       compositor. Internal and one-directional; clients receive input via the
+       display protocol instead.</p>
+  </div>
+  <div class="iface">
+    <h3>notification <span class="kind">service</span></h3>
+    <p class="muted">Posting notifications and rendering them — <code>post</code>
+       / <code>update</code> / <code>withdraw</code> for posters;
+       <code>subscribe</code> and history for the shell. Action buttons ride
+       reply-to capabilities.</p>
+  </div>
+  <div class="iface">
+    <h3>power <span class="kind">service</span></h3>
+    <p class="muted">Power &amp; lifecycle — events, control, and inhibitors.
+       An inhibitor is a capability handle: the inhibit lasts exactly as long as
+       the handle is held.</p>
+  </div>
+  <div class="iface">
+    <h3>device-monitor <span class="kind">service</span></h3>
+    <p class="muted">Device presence and removable-volume mounting. Exports
+       device arrival/change/removal events and volume mount/unmount. Fed by
+       FreeBSD's <code>devd</code>.</p>
+  </div>
+  <div class="iface">
+    <h3>networking <span class="kind">service</span></h3>
+    <p class="muted">Desktop network management — <code>list</code>,
+       <code>connect</code> / <code>disconnect</code>, <code>status</code>, and
+       a connection-event <code>subscribe</code>. Control-plane only.</p>
+  </div>
+  <div class="iface">
+    <h3>audio <span class="kind">service</span></h3>
+    <p class="muted">Desktop audio control — per-app and master volume, device
+       selection, audio events. Control-plane only; the kernel mixes. Capture is
+       a separately gated capability.</p>
+  </div>
+  <div class="iface">
+    <h3>display <span class="kind">protocol</span></h3>
+    <p class="muted">The compositor's display protocol — surfaces, roles,
+       buffers, commit and frame callbacks, explicit synchronization,
+       server-side decorations, and managed direct scanout.</p>
+  </div>
+  <div class="iface">
+    <h3>broker <span class="kind">spawn &amp; grant</span></h3>
+    <p class="muted">Spawn, supervision, and the capability bundle. Less a
+       request/reply API than a spawn-and-grant surface, configured by a
+       declarative manifest per component.</p>
+  </div>
+  <div class="iface">
+    <h3>scripting <span class="kind">cross-cutting</span></h3>
+    <p class="muted">The introspect / get / set / invoke suite every handler
+       answers. Scripting authority <em>is</em> capability authority — an
+       inspect-only cap and a full-invoke cap are genuinely different grants.</p>
+  </div>
+  <div class="iface">
+    <h3>session-lock <span class="kind">report</span></h3>
+    <p class="muted">The unlock report — on successful authentication the
+       session lock reports to the power &amp; lifecycle service, which owns
+       lock state.</p>
+  </div>
+  <div class="iface">
+    <h3>shell <span class="kind">consumer</span></h3>
+    <p class="muted">The desktop shell — a consumer that exports only the
+       scripting interface.</p>
+  </div>
+  <div class="iface">
+    <h3>toolkit <span class="kind">library</span></h3>
+    <p class="muted">The toolkit — a library, not a process; the scriptable
+       window/view model addressed by <code>ViewId</code>.</p>
+  </div>
+
+  <div class="note">
+    <strong>Why this matters.</strong> The interface is the artifact: a
+    component is defined by the message interface it exports, and anything
+    exporting that interface is a valid replacement. The schema is the
+    replaceability contract.
+  </div>
+
+  <p style="margin-top:2rem;"><a href="roadmap.html">Continue to the roadmap &rarr;</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+  </div>
+</footer>
+
+</body>
+</html>

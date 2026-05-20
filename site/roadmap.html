@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap — AbyssBSD</title>
+<meta name="description" content="The AbyssBSD roadmap: five milestones from a minimal framebuffer UI to a curated, installable image, plus open threads.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="components.html">Components</a>
+      <a href="interfaces.html">Interfaces</a>
+      <a href="roadmap.html" class="active">Roadmap</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <div class="eyebrow">Roadmap</div>
+  <h1>Five milestones</h1>
+  <p class="lede">There is no self-host milestone — FreeBSD already provides a
+     self-hosting system. The message primitive, the bus, and the capability
+     broker are foundational, built across M1, because the compositor depends on
+     them.</p>
+
+  <ul class="timeline">
+    <li>
+      <h3><span class="ms-tag">M1</span> Minimal framebuffer UI</h3>
+      <p>On a stock FreeBSD system, an AbyssBSD <code>rc</code> service starts
+         broker &rarr; compositor (CPU backend) plus one terminal window. The
+         message primitive, bus, and broker exist. This is the recovery floor
+         forever after — the terminal emulator is a real VT and is load-bearing
+         from M1.</p>
+    </li>
+    <li>
+      <h3><span class="ms-tag">M2</span> GPU path</h3>
+      <p>A GLES 3.x backend, Mesa, and dmabuf buffer sharing; the compositor
+         goes accelerated.</p>
+    </li>
+    <li>
+      <h3><span class="ms-tag">M3</span> Toolkit + desktop</h3>
+      <p>Retained-mode Kits and the GNOME-2 shell — panel, application menu,
+         window list.</p>
+    </li>
+    <li>
+      <h3><span class="ms-tag">M4</span> Core apps</h3>
+      <p>File manager, settings, text editor. The terminal already exists from
+         M1.</p>
+    </li>
+    <li>
+      <h3><span class="ms-tag">M5</span> Distribution &amp; hardening</h3>
+      <p>A curated installable image and installer; performance and
+         daily-driver work; broadening curated hardware support.</p>
+    </li>
+  </ul>
+
+  <p class="muted">Capsicum and jail confinement is applied per service as each
+     is brought up through M1–M5.</p>
+
+  <hr class="divider">
+
+  <h2>The desktop experience</h2>
+  <ul class="feature-list">
+    <li><strong>No text mode.</strong> Boot lands directly in the AbyssBSD
+        graphical session. FreeBSD's <code>vt</code> console still exists
+        beneath, as a safety valve only.</li>
+    <li><strong>First boot = minimal framebuffer UI.</strong>
+        <code>rc</code> &rarr; broker &rarr; compositor (CPU backend) &rarr; one
+        terminal window.</li>
+    <li><strong>The minimal framebuffer UI is the permanent recovery floor.</strong>
+        It is simultaneously the bringup environment and the rescue
+        environment, and uses the CPU render backend so it always comes up.</li>
+  </ul>
+
+  <hr class="divider">
+
+  <h2>Reference hardware</h2>
+  <p>AbyssBSD adds no hardware enablement of its own — supported hardware is
+     exactly what FreeBSD's drivers and <code>drm-kmod</code> provide. The
+     project is VM-first early on; the bare-metal development and test reference
+     is a desktop with an <strong>AMD RX 6750 XT (RDNA2)</strong> — first-class
+     <code>amdgpu</code> support under Mesa, well covered by recent
+     <code>drm-kmod</code>.</p>
+
+  <hr class="divider">
+
+  <h2>Open threads</h2>
+  <div class="panel">
+    <h3>Vulkan backend <span class="tag post">post-v1</span></h3>
+    <p style="margin-bottom:0;">A second accelerated render backend behind the
+       existing render-backend seam, added once the GLES path is solid. Note
+       that client-side Vulkan — for games using direct scanout — ships in v1
+       regardless; only the compositor's <em>own</em> Vulkan render backend is
+       deferred.</p>
+  </div>
+  <div class="panel">
+    <h3>Typed attributes &amp; live queries <span class="tag post">post-v1</span></h3>
+    <p style="margin-bottom:0;">The BeOS data-model legacy: a file is not only
+       its bytes but a set of typed attributes, and the filesystem can be
+       queried like a database with results that stay live. Delivered by the
+       index/query service over ordinary FreeBSD files — the Spotlight
+       architecture, not the BFS or WinFS one.</p>
+  </div>
+
+  <div class="note">
+    <strong>Status:</strong> design captured from the initial brainstorm.
+    Nothing built yet. This site presents the design documentation as it
+    currently stands.
+  </div>
+
+  <p style="margin-top:2rem;"><a href="index.html">&larr; Back to the start</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+  </div>
+</footer>
+
+</body>
+</html>

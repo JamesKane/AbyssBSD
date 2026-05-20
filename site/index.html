@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AbyssBSD — A desktop OS that fits in your head</title>
+<meta name="description" content="AbyssBSD is an opinionated desktop operating system on the FreeBSD base: BeOS architecture, GNOME 2 look, capability security, written in Rust.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html" class="active">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="components.html">Components</a>
+      <a href="interfaces.html">Interfaces</a>
+      <a href="roadmap.html">Roadmap</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <h1>AbyssBSD</h1>
+  <p class="tagline">A desktop operating system that fits in your head.</p>
+  <p>An opinionated desktop OS on the FreeBSD base — the <em>feel</em> of BeOS,
+     the <em>look</em> of GNOME 2, capability security woven through a single
+     message bus, and not one line of garbage-collected code in the resident set.</p>
+  <div class="btn-row">
+    <a class="btn btn-primary" href="design.html">Read the design</a>
+    <a class="btn btn-ghost" href="architecture.html">See the architecture</a>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <div class="eyebrow">The problem</div>
+    <h2>The 40-million-line problem</h2>
+    <p>A modern desktop is an act of forgetting. Boot one and you are running
+       tens of millions of lines of code — kernel, display server, message bus,
+       policy daemons, portal services, toolkit upon toolkit — that no single
+       person has read, that nobody fully understands, and that grows by
+       accretion every release.</p>
+    <p>The hardware underneath got a thousand times faster since 1995. The
+       desktop did not get faster. It got <em>heavier</em>. Every gain was spent
+       on layers. This is not a law of nature — it is a habit.
+       <strong>AbyssBSD is the refusal of that habit.</strong></p>
+  </section>
+
+  <hr class="divider">
+
+  <section>
+    <div class="eyebrow">What it is</div>
+    <h2>A new desktop on a whole FreeBSD base</h2>
+    <p>AbyssBSD keeps the <strong>FreeBSD base</strong> whole — kernel, libc,
+       drivers, the LLVM/Clang toolchain, and ports — tracked upstream and never
+       forked. FreeBSD does the unglamorous 90%, and does it well. On top of that
+       base, AbyssBSD adds one coherent thing: a desktop with a genuinely new
+       architecture.</p>
+    <p>It ships as a curated, installable FreeBSD-based image — the same form as
+       helloSystem or GhostBSD — but with a new architecture above the base
+       rather than a conventional desktop environment.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">The ideas</div>
+    <h2>Six commitments</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>One message primitive</h3>
+        <p>A single typed message carries UI events, inter-thread traffic, and
+           IPC alike. It <em>is</em> the bus. No D-Bus, no second mechanism.</p>
+      </div>
+      <div class="card">
+        <h3>Capabilities, not ambient authority</h3>
+        <p>A process is born holding nothing. Authority travels only as
+           unforgeable handles in messages, backed by FreeBSD's native Capsicum
+           and jails.</p>
+      </div>
+      <div class="card">
+        <h3>One thing well, swappable</h3>
+        <p>Every component does one job behind an enforced message interface.
+           Coherent like macOS — but every part replaceable at the seam.</p>
+      </div>
+      <div class="card">
+        <h3>From-scratch compositor &amp; toolkit</h3>
+        <p>Wayland-free, retained-mode, server-side decorations, and direct
+           scanout so full-screen games pay nothing.</p>
+      </div>
+      <div class="card">
+        <h3>Zero vendored dependencies</h3>
+        <p>The AbyssBSD layer leans on the Rust standard library and a tiny,
+           version-controlled allowlist. Every dependency is a decision.</p>
+      </div>
+      <div class="card">
+        <h3>Budgets are walls</h3>
+        <p>The idle desktop is budgeted at ~256&nbsp;MB at 4K. Exceeding a
+           budget is a build failure — not a regret logged for later.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section>
+    <div class="eyebrow">Written in Rust</div>
+    <h2>No garbage collector. Anywhere.</h2>
+    <p>The whole AbyssBSD layer — bus, broker, compositor, toolkit, shell, and
+       apps — is written in <strong>Rust</strong>: memory safety without a
+       garbage collector, compiler-checked concurrency, and a mature toolchain
+       with no runtime to wait on. No GC pauses anywhere in the resident set.</p>
+    <p>The FreeBSD base below stays C, well-maintained upstream. Rust is chosen
+       because it ships, today, every hard requirement the architecture needs —
+       with no compiler-maturity risk to carry.</p>
+  </section>
+
+  <hr class="divider">
+
+  <section>
+    <div class="eyebrow">The wager</div>
+    <h2>It should never feel slower than 1995</h2>
+    <p>A 12-core, 5&nbsp;GHz machine should never feel slower than a 1995 desktop
+       did. That it routinely does is <em>accreted latency</em> — and accreted
+       latency can be designed out. AbyssBSD is small enough to hold in one head,
+       fast because it was measured, and secure because authority is explicit.</p>
+    <p><strong>A return to simplicity. By construction.</strong></p>
+  </section>
+
+  <section>
+    <h2>Explore the design</h2>
+    <div class="cards">
+      <a class="card-link" href="design.html">
+        <h3>Design principles &rarr;</h3>
+        <p>The vision, the FreeBSD boundary, and the taste that holds every
+           component to account.</p>
+      </a>
+      <a class="card-link" href="architecture.html">
+        <h3>Architecture &rarr;</h3>
+        <p>The message primitive, the compositor, the toolkit, and the
+           object-capability security model.</p>
+      </a>
+      <a class="card-link" href="components.html">
+        <h3>Components &rarr;</h3>
+        <p>The closed, curated map of processes — broker, compositor, services,
+           shell — and how apps are packaged.</p>
+      </a>
+      <a class="card-link" href="interfaces.html">
+        <h3>Interfaces &rarr;</h3>
+        <p>The typed message schemas each component exports across the bus.</p>
+      </a>
+      <a class="card-link" href="roadmap.html">
+        <h3>Roadmap &rarr;</h3>
+        <p>Five milestones from a minimal framebuffer UI to a curated,
+           installable image.</p>
+      </a>
+    </div>
+  </section>
+
+  <div class="note">
+    <strong>Status:</strong> design captured from the initial brainstorm.
+    Nothing built yet. This site is a presentation of the design documentation.
+  </div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+  </div>
+</footer>
+
+</body>
+</html>

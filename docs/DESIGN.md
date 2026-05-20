@@ -5,13 +5,6 @@
 > graphical desktop layered on top of FreeBSD's kernel, libc, drivers,
 > toolchain, and ports.
 >
-> **Rust-fallback variant.** This is the parallel design under the
-> assumption AbyssBSD is implemented in **Rust**, not Vestra — a contingency
-> branch maintained beside the primary Vestra line (`../NewOS/`) against the
-> risk that the Vestra compiler does not reach production stability. The
-> architecture is identical; the implementation-language layer differs
-> (§3.1, decision #63).
->
 > Status: design captured from the initial brainstorm. Nothing built yet.
 
 ---
@@ -83,41 +76,32 @@ written in **Rust**. The FreeBSD base below is C, well-maintained upstream
 and not AbyssBSD's to audit line by line (though it is honestly in the TCB,
 §10.6).
 
-**Why Rust — this is the fallback line.** The primary AbyssBSD design
-(`../NewOS/`) is implemented in Vestra, the in-house language. This variant
-exists against one risk: that the Vestra compiler does not reach production
-stability in time. Rust is the fallback because it is the one *shipping,
-mature* language that meets the same hard requirements with no
-compiler-maturity risk of its own — and the project already weighed it as a
-serious candidate before choosing Vestra (decision #27).
+**Why Rust.** AbyssBSD needs a *shipping, mature* systems language that
+meets a set of hard requirements with no compiler-maturity risk — and Rust
+is the one that does. What AbyssBSD needs from the language, and how Rust
+provides it: memory safety without a GC (ownership + borrow checking); move
+semantics; data-race-free concurrency, compiler-checked (`Send`/`Sync` —
+§6.7); C FFI and header import (`extern "C"` plus `bindgen` at build time,
+§11.2); generics; compile-time codegen (`derive` and procedural macros,
+§6.3); and `async`/`.await` (native — §6.9). Rust supplies every one today,
+in a stable toolchain — there is no language-design backlog and no compiler
+to wait on.
 
-What AbyssBSD needs from the language, and how Rust provides it: memory
-safety without a GC (ownership + borrow checking); move semantics;
-data-race-free concurrency, compiler-checked (`Send`/`Sync` — §6.7); C FFI
-and header import (`extern "C"` plus `bindgen` at build time, §11.2);
-generics; compile-time codegen (`derive` and procedural macros, §6.3); and
-`async`/`.await` (native — §6.9). Rust supplies every one today, in a
-stable toolchain — there is no language-design backlog and no compiler to
-wait on.
+**What Rust leaves to AbyssBSD.** Two things the architecture leans on are
+not language surface in Rust, and so become first-party AbyssBSD code:
 
-**What the fallback costs.** Two things the Vestra line drew from the
-*language* become first-party AbyssBSD code here:
+- **The looper/service framework (§6.10).** Rust has `async`/`.await` but
+  no actor or service model, so AbyssBSD writes the looper, message rings,
+  and supervised wiring itself, as a first-party crate. Well-trodden ground
+  — a supervised unit with a thread, an executor, and typed message queues
+  is the actor pattern — but code AbyssBSD owns and audits. It is the chief
+  structural piece the project builds for itself.
+- **Capability rights as typestate (§10.5).** Capability rights are
+  expressed as compile-time typestate via phantom type parameters — sound,
+  slightly verbose. The enforcement that actually matters — the kernel and
+  the exporting service — does not depend on it.
 
-- **The looper/service framework (§6.10).** Vestra's `service`/`ring`
-  constructs gave the looper, message rings, and supervised wiring as
-  language surface. Rust has `async`/`.await` but no actor or service
-  model, so AbyssBSD writes that framework itself, as a first-party crate.
-  Well-trodden ground — but code AbyssBSD owns and audits, not language
-  surface. This is the chief structural cost of the fallback.
-- **Capability rights as typestate (§10.5).** Vestra's `with rights`
-  expressed capability rights as zero-cost compile-time typestate. Rust
-  approximates it with phantom type parameters — sound, slightly more
-  verbose. The enforcement that actually matters — the kernel and the
-  exporting service — is unchanged.
-
-Neither is a blocker; both are ordinary Rust. The trade against the Vestra
-line is plain: a mature compiler available now, in exchange for language
-constructs that would have carried more of the weight.
+Neither is a blocker; both are ordinary Rust.
 
 ### 3.2 Zero vendored dependencies — scoped to the AbyssBSD layer
 
@@ -302,9 +286,9 @@ and to small RISC-V.
   DRM ioctl interface, so the compositor (§7) targets it directly.
 - **Toolchain.** Clang/LLVM is FreeBSD's system compiler. The AbyssBSD layer
   is built by **`rustc`** — the Rust toolchain, itself a FreeBSD port and
-  LLVM-based (§3.1). The FreeBSD base self-hosts inherently; with a mature,
-  shipping Rust toolchain there is no compiler-maturity risk to carry —
-  which is the whole reason this fallback line exists (§3.1).
+  LLVM-based (§3.1). The FreeBSD base self-hosts inherently, and the Rust
+  toolchain is mature and shipping, so there is no compiler-maturity risk
+  to carry (§3.1).
 - **Console.** FreeBSD's `vt` console is kept as the low-level safety valve
   for early-boot messages and panic output, since the AbyssBSD desktop has no
   text mode (§9). It is a base facility, not a userland login.
@@ -340,8 +324,8 @@ involves a wire format at all:
   in-process, serialized across" means concretely.
 
 The looper, its handlers, and these three uses are provided by a
-first-party **looper/service framework** (§6.10) — the Rust line writes
-that framework, where the Vestra line got it from language constructs.
+first-party **looper/service framework** (§6.10) — a crate AbyssBSD writes
+and owns.
 
 ### 6.2 The envelope
 
@@ -421,8 +405,7 @@ The language scripts are written in is a later concern.
 This same introspection surface is the natural substrate for accessibility
 tooling — a screen reader is, structurally, a scripting client. But a
 dedicated accessibility stack is a **scoped-out non-goal**: the team is too
-small to carry it (decision log). AbyssBSD provides the substrate, not the
-stack.
+small to carry it. AbyssBSD provides the substrate, not the stack.
 
 ### 6.7 Why Rust fits this
 
@@ -432,9 +415,7 @@ values may cross a thread. Rust has it as a settled, shipping feature: the
 `Send` and `Sync` marker traits, auto-derived and compiler-enforced, make a
 value unsafe to move or share between threads a *compile error*, not a
 runtime bug; the borrow checker does the rest. BeOS fought C++ for thread
-safety; Rust gives it by construction. (The Vestra line obtains the
-equivalent guarantee from region inference instead — `../NewOS/` §6.7 — the
-property is the same, the mechanism differs.)
+safety; Rust gives it by construction.
 
 ### 6.8 Responsiveness as a contract
 
@@ -477,19 +458,17 @@ awaiting never stalls another. The model rests on Rust's native
 `async`/`.await` and `Future` — stable language features. The looper *is*
 the executor that drives them; Rust exposes `Pin` and `Waker` as the
 machinery, which the looper/service framework (§6.10) encapsulates so
-handler code never sees them. Unlike the Vestra line, no language feature
-here is pending — the substrate exists today.
+handler code never sees them. No language feature here is pending — the
+substrate exists today.
 
 ### 6.10 The looper & service framework
 
-§6.1's looper and §6.9's async executor are, in the Rust line, a
-**first-party AbyssBSD framework** — a crate the project writes, owns, and
-audits. The Vestra line gets this from language constructs (`service` /
-`ring`, `../NewOS/` §6.10); Rust has `async`/`.await` but no actor or
-service model, so AbyssBSD builds one. It is well-trodden ground — a
-supervised unit with a thread, an executor, and typed message queues is the
-actor pattern — but it is AbyssBSD code, not language surface, and it is the
-chief structural cost of the fallback (§3.1).
+§6.1's looper and §6.9's async executor are a **first-party AbyssBSD
+framework** — a crate the project writes, owns, and audits. Rust has
+`async`/`.await` but no actor or service model, so AbyssBSD builds one. It
+is well-trodden ground — a supervised unit with a thread, an executor, and
+typed message queues is the actor pattern — but it is AbyssBSD code, and it
+is the chief structural piece the project builds for itself (§3.1).
 
 The framework provides:
 
@@ -497,8 +476,7 @@ The framework provides:
   executor. Each window and each component is a looper.
 - **Handlers** — a handler runs to completion and is **not re-entered
   across `.await`** (§6.9's per-handler serialization); the framework
-  enforces this invariant, where Vestra's `service` enforced it in the
-  language.
+  enforces this invariant.
 - **Rings** — typed point-to-point message queues. An endpoint is a
   `RingCap`, move-only — exactly one sender, one receiver; a dead peer
   surfaces to a handler as a typed `RingClosed` error.
@@ -515,15 +493,14 @@ fds out-of-band via `SCM_RIGHTS` — the §6.2 payload/handle split).
 **The broker realizes §11.9 on this framework.** It is the sole authority
 to create components and connections — no ambient spawn. Bringing up a
 component set (§11.15) it pre-creates every ring and spawns each component
-looper, moving the endpoints into each child's bundle: decision #38's
-eager, pre-wired, statically-auditable graph. Each spawn yields a
+looper, moving the endpoints into each child's bundle: the broker's
+eager, pre-wired, statically-auditable authority graph (§11.9). Each spawn yields a
 supervision handle the broker holds for the session; a dead peer surfaces
 as a `RingClosed` error, and restart policy stays in the broker manifest.
 
-So in the Rust line AbyssBSD writes a framework *and* the components on it,
-where the Vestra line wrote only components and a transport. The framework
-is bounded and conventional — but it is real code in the core, and §3.6's
-budgets cover it.
+AbyssBSD thus writes this framework *and* the components on it. The
+framework is bounded and conventional — but it is real code in the core,
+and §3.6's budgets cover it.
 
 ---
 
@@ -759,24 +736,20 @@ dirty `ViewId` set is re-laid-out and repainted — the desktop stays limited
 by the refresh rate, not by busywork (§3.6). The `ViewId` is also the
 internal handle behind a scripting specifier path (§6.6).
 
-**No language modes — uniform Rust.** The Vestra line split components into
-`@strict` and `@managed` modes (`../NewOS/` §8); Rust has no such split. It
-is uniformly GC-free, with `Rc`/`Arc` reference-counting an explicit, local
-opt-in rather than a default. The whole system — broker, compositor,
-toolkit, services, shell — and apps alike are ordinary Rust: explicit
-allocation, deterministic destruction (`Drop`), no GC anywhere in the
-resident set, fully budgetable (§3.6). The arena+`ViewId` model above is
-kept — not to bridge a mode boundary (there is none) but because it is the
-right ownership model regardless: cache-friendly, refcount-free, with safe
-generational handles, and one toolkit crate the shell and every app link
-alike. The discipline that the resident desktop holds no `Rc`/`Arc` cycles
-and stays inside §3.6's budgets is a code-review rule here, where Vestra's
-`@strict` made it a compiler guarantee — a real but modest loss.
+**Uniform Rust — no GC.** The whole system — broker, compositor, toolkit,
+services, shell — and apps alike are ordinary Rust: explicit allocation,
+deterministic destruction (`Drop`), no GC anywhere in the resident set,
+fully budgetable (§3.6). `Rc`/`Arc` reference-counting is an explicit,
+local opt-in, never a default. The arena+`ViewId` model above is the right
+ownership model for the view tree regardless: cache-friendly,
+refcount-free, with safe generational handles, and one toolkit crate the
+shell and every app link alike. The discipline that the resident desktop
+holds no `Rc`/`Arc` cycles and stays inside §3.6's budgets is a code-review
+rule.
 
-The view tree stores **no callbacks** — not because a language mode forbids
-it (the Vestra line's reason) but by the same design choice §6.9 makes: a
-widget interaction is routed to a `ViewId` and emitted as a *message* to the
-app's looper (§6.9, §6.10), not a stored closure. The per-window arena is
+The view tree stores **no callbacks**, by the same design choice §6.9
+makes: a widget interaction is routed to a `ViewId` and emitted as a
+*message* to the app's looper (§6.9, §6.10), not a stored closure. The per-window arena is
 that window looper's private, share-nothing state (§6.10); cross-window
 widget references are structurally impossible, which is correct.
 
@@ -900,7 +873,7 @@ manifest (§3.5 — never an opaque blob). It declares: *identity* (name,
 exported interface, version); the *capabilities needed* — each a kind (peer
 connection, device, Casper service, settings subtree) and its object
 rights, the list being the component's whole authority and the static
-authority graph (decision #38); *jail parameters* (filesystem visibility,
+authority graph (§11.9); *jail parameters* (filesystem visibility,
 network — usually none — and the principal to run as); the *resource budget*
 (memory §3.6, fd/CPU caps, applied as jail/`rctl` limits); and the *restart
 policy*. One format, two trust profiles: a **system-component** manifest
@@ -1052,7 +1025,7 @@ would enlarge the TCB for nothing.
 input service sit here deliberately, so one instance serves the greeter and
 then every session as ordinary display clients. The *session layer* — the
 desktop shell, the session lock, the per-user services, and the user's apps
-— is spawned per login as the authenticated user (decision #38) and torn
+— is spawned per login as the authenticated user and torn
 down at logout. The boot's two spawn phases are §11.15.
 
 **Not a component.** The toolkit (the Kits, §8) is a *library* linked into
@@ -1464,8 +1437,8 @@ job.
 (§11.1). The greeter draws on the compositor, which confines input to it
 exactly as it does for the session lock (§11.11). On a verified login the
 broker spawns the **session layer** — the desktop shell and the per-user
-services and apps — as the authenticated user; this is decision #38's
-eager, pre-wired spawn, understood now as the *session* phase specifically.
+services and apps — as the authenticated user; this is the broker's
+eager, pre-wired spawn (§11.9), here the *session* phase specifically.
 The compositor and input service persist across the transition; the
 greeter's window gives way to the shell's. Logout cancels the session
 layer's looper supervision handles (§6.10) and re-presents the greeter; the
@@ -1522,7 +1495,7 @@ toolkit-side API.
 
 **Not a filesystem.** BeOS's BFS maintained the indexes in the filesystem
 itself. AbyssBSD does not — writing or forking a filesystem is the
-from-scratch-OS scope §2 (decision #59) rejects. Files live on an ordinary
+from-scratch-OS scope §2 rejects. Files live on an ordinary
 FreeBSD filesystem, unchanged; a focused userland service indexes them. This
 is the Spotlight architecture, not the BFS or WinFS one.
 
@@ -1644,355 +1617,3 @@ confinement is applied per service as each is brought up through M1–M5.
 - **Vulkan backend (post-v1).** A second accelerated backend behind the
   existing render-backend seam, added once the GLES path is solid (§7.1).
 
----
-
-## Appendix — decision log
-
-The project began as a Linux-based OS replacing the entire userland; it
-**pivoted to a FreeBSD base** (entries 18–20), which superseded several
-earlier decisions. The list below is the current state.
-
-1. Base: the **FreeBSD** kernel and base system, kept whole and tracked
-   upstream — *not* forked. *(Was: stock Linux.)*
-2. libc: **FreeBSD's base libc, used as-is.** No libc fork. *(Was: fork
-   musl — dropped; musl is Linux-only and a fork is unneeded on a kept
-   base.)*
-3. Language: the AbyssBSD layer is implemented in **Vestra**, the in-house
-   language; the FreeBSD base is its existing C. *(Was: Rust-first, then
-   undecided — resolved, see #28.)*
-4. Compositor: written from scratch.
-5. Toolkit: retained-mode, organized as Kits.
-6. Rendering: GPU-accelerated via **OpenGL ES 3.x** (via EGL); the
-   CPU/dumb-buffer backend is the floor. *(Was: Vulkan — revised, see #22.)*
-7. Input: `libinput` + `seatd`, from FreeBSD ports.
-8. Desktop IPC: a new, in-house bus — the unified message primitive's
-   inter-process transport. No D-Bus.
-9. Packaging: FreeBSD **ports + `pkg`**; AbyssBSD ships as a curated image.
-10. No text mode: boot lands in the minimal framebuffer UI + terminal.
-11. Compositor: one binary; v1 render backends CPU/dumb-buffer + GLES
-    (Vulkan deferred, #22).
-12. Overall experience: BeOS-like.
-13. Look vs. architecture: BeOS internals, GNOME 2 shell appearance.
-14. Message model: one unified primitive across all three transports.
-15. BFS-like live queries / typed attributes: deferred post-v1.
-16. Display protocol: native message-bus protocol (app_server style);
-    Wayland support, if ever, is an optional later compat layer.
-17. Security: an object-capability model — the message bus *is* the
-    capability system, no ambient authority. Enforced by **native Capsicum**
-    (`cap_enter`, `cap_rights_limit`) and **jails**. No D-Bus, no polkit,
-    no portals.
-18. **Pivot: FreeBSD replaces Linux as the base** — chosen for native
-    Capsicum, jails, ZFS, BSD licensing, and an already-LLVM toolchain.
-19. **Identity: AbyssBSD is an opinionated desktop on the FreeBSD base** — a
-    curated FreeBSD-based desktop OS, not a from-scratch userland.
-20. Layer depth: **desktop layer only, for now.** AbyssBSD runs on FreeBSD's
-    `rc`; the broker is an `rc` service designed so it *can* grow into a
-    fuller session/service role later, but does not replace `rc` today.
-    *(Superseded by #59 — the broker's desktop scope is now a permanent
-    boundary, not "for now".)*
-21. Hardware scope: **whatever FreeBSD provides** — AbyssBSD ships no hardware
-    enablement of its own. VM-first early; the bare-metal reference is an
-    AMD RX 6750 XT (RDNA2) desktop.
-22. Render API revisited: Vulkan-only was too narrow for the hardware BSD
-    users run. v1 ships an **OpenGL ES 3.x** accelerated backend (widest
-    Mesa coverage); **Vulkan is deferred** to a planned post-v1 second
-    backend behind the same render-backend seam.
-23. Per-user files follow the **XDG Base Directory Specification** (a
-    convention, not a freedesktop dependency); system layout stays FreeBSD's
-    `hier(7)`. The Storage Kit exposes only XDG-resolved locations.
-24. Message primitive — a universal **envelope** (header + payload + handle
-    array) carries the message; handles are fds or bus tokens with Capsicum
-    rights. In-process a message is a value moved by ownership (no wire
-    format); the envelope exists only at process boundaries.
-25. Message payload — a **BMessage-like self-describing dict** (named, typed
-    fields) is the canonical wire and scripting form; a compile-time
-    derive/codegen facility generates **typed views** for OS code (hybrid).
-    Wire format is tagged/self-describing, copying serializer (not zero-copy).
-26. Message transport — `SOCK_SEQPACKET` sockets for general IPC plus a
-    shared-memory ring (`kqueue` doorbell) display fast-path, both built for
-    M1. Addressing is by held capability (`Cap<Interface>`); scripting is a
-    standard introspect/get/set/invoke handler protocol gated by capability
-    rights.
-27. Implementation language kept open — Rust or Vestra; design held
-    language-neutral pending the choice. *(Superseded by #28 — Vestra
-    adopted.)*
-28. **AbyssBSD is implemented in Vestra**, guided by this project's needs:
-    AbyssBSD takes the Vestra floor and extends it only with what it needs,
-    each gap a `vestra-mc` RFC — so far RFC-0001 (structured async),
-    RFC-0002 (compile-time codegen), and RFC-0003 (C header import).
-    Accepted cost: AbyssBSD progress is coupled to `vestra-mc`'s maturity. The
-    looper model (§13) depends on RFC-0001. *(Floor + RFC approach superseded
-    by #54 — AbyssBSD now targets the full Vestra proposal directly.)*
-29. Architectural principle — **one thing well, replaceable at the seam**
-    (§3.4): every component does one job and interacts only through enforced
-    message interfaces over the capability bus. The bus + object-capabilities
-    make the boundary structural, not nominal; one coherent design avoids
-    the freedesktop pattern of duplicated, uncoordinated, leaky components.
-30. Component decomposition is **by responsibility** (§11.1): a component is
-    one coherent responsibility, possibly spanning several mechanisms — not
-    one per mechanism. The component map is §11.1; the bus is a
-    protocol/library, not a daemon.
-31. Display protocol designed (§7.4): bus-borne and native; API-agnostic
-    dmabuf buffers; explicit timeline-semaphore synchronization; window
-    management and input routing carried through it. Full-screen game
-    pass-through is **managed direct scanout** — the compositor page-flips
-    an eligible fullscreen client buffer straight to KMS, keeps KMS
-    ownership, and revokes instantly for overlays. Client Vulkan (games)
-    ships in v1; the compositor's own Vulkan render backend stays post-v1.
-32. Input interface (§7.5): an internal, one-directional input-service →
-    compositor stream of normalized events; `libinput` does normalization;
-    keyboard interpretation (keymap, keysyms, modifiers) lives in the input
-    service, which emits key events carrying both the raw keycode and the
-    cooked interpretation (#50). Clients get input via the display protocol,
-    not this interface.
-33. Settings interface (§11.5): one typed configuration store with
-    `get`/`set`/`subscribe`; **declarative shipped schemas** (statically
-    auditable, defaults exist pre-launch, type-checked); system + per-user
-    layers; access capability-scoped to a subtree (§10), not ACL'd.
-34. Notification interface (§11.6): the notification service owns
-    notification policy, queue, lifecycle, and session history; the shell
-    only renders. `post`/`update`/`withdraw` for posters,
-    `subscribe`/history for the shell; action buttons carry reply-to
-    capabilities; do-not-disturb and per-app policy come from settings.
-35. Device monitor interface (§11.7): reports device presence (fed by
-    `devd`) and **mounts/unmounts removable volumes itself** via a brokered
-    privileged op — no separate volume service. Display/connector hotplug
-    is the compositor's, via KMS, not the device monitor's.
-36. Power & lifecycle interface (§11.8): owns suspend/resume, battery, idle
-    and lock policy, shutdown coordination. **Inhibitors are capability
-    handles** — an inhibit lasts as long as its handle is held and lifts
-    automatically on holder exit. Consumes kernel ACPI, an activity signal
-    from the input service, and policy from settings; posts critical alerts
-    via notifications. Idle: the input service exposes activity, the power
-    service owns the timeout policy.
-37. Adopted an explicit **review lens** (§3.5) — the shared sensibility of
-    Carmack, Ousterhout, Muratori, and Blow: hold the whole in your head,
-    earn every abstraction, refuse incremental complexity, dependencies are
-    liabilities, no hidden state. Every component is reviewed against it.
-38. Broker interface (§11.9): the broker spawns each component into a jail
-    and hands it its capability *bundle* per a declarative shipped manifest;
-    supervises via process descriptors (`pdfork`); supports delegated spawn
-    of children (#51 refines the grant model). **Activation is eager + pre-wired** — the
-    fixed component set starts at session start with all bus connections
-    pre-created, so no component races a peer being up; apps spawn on
-    demand. The broker does only this (anti-systemd, §3.4/§3.5).
-39. Desktop shell interface (§11.10): GNOME-2 panels, application menu
-    (categorized + search), per-window menus, and a strict **window list** —
-    one button per window, never grouped, no launchers, no tray, no
-    search/widgets/ads, stable. The Windows taskbar is **burn** — the
-    cautionary tale of an accreted window list. The shell holds a
-    shell-scoped display capability (window-list introspection, struts) and
-    exports only scripting.
-40. The **session lock is a separate component** (§11.11), not part of the
-    shell — a deliberately tiny, auditable TCB for the unlock path; a shell
-    bug cannot become a lock bypass. §11.1 updated; the shell no longer
-    draws the lock surface.
-41. Networking component (§11.12): desktop network management — a
-    control-plane orchestrator over the FreeBSD base (`dhclient`,
-    `wpa_supplicant`, `ifconfig`), owning connection profiles and feeding
-    the network indicator. Not in the packet path; never reimplements DHCP
-    or Wi-Fi authentication.
-42. Audio component (§11.13): **control-plane only** — the FreeBSD kernel
-    mixes (`vchans`); apps open the audio device directly via a brokered,
-    playback/capture-scoped capability. The component sets volume, selects
-    the device, feeds the indicator; it never touches a sample. Lowest
-    latency by default; live-stream re-routing handled once in the Media
-    Kit. Microphone capture is a separately-gated capability.
-43. Performance & memory budgets are a first-class, enforced constraint
-    (§3.6). Latency: software-added input-to-photon ≤ one refresh interval,
-    zero dropped frames — the desktop is refresh-rate-bound. Memory: the
-    idle desktop is the display's triple-buffer cost plus a bounded constant
-    (~256 MB at 4K); each component's budget is manifest-declared and
-    **broker-enforced via jail resource limits**. The latency harness
-    **gates CI** on p99. Budgets are walls — exceeding one is a build or
-    runtime failure.
-44. Clipboard and drag-and-drop (§7.4) are compositor-mediated and
-    **authorized by user action** — copy / paste / drag / drop. No ambient
-    clipboard access: a client reads a selection only on the user's paste
-    and receives drag data only on the drop. The user's gesture is the
-    capability, which also closes the X11 selection-snooping hole.
-45. Window decorations are **server-side** — the compositor draws every
-    window's title bar and frame (§7.4). The toolkit themes only the widgets
-    within a window, the shell draws the panel/menu/window-list, and the
-    three share one theme. SSD keeps decoration logic in one place, frames
-    foreign and minimal-UI windows for free, and makes title-bar drags
-    frame-perfect. §8 corrected.
-46. The project is named **AbyssBSD** — reviving an earlier abandoned name,
-    coherent now that the system is FreeBSD-based. Resolves the §13 "project
-    name" thread. (The project directory remains `NewOS/`; only the name
-    changed.)
-47. The app model (§11.14): an app is a **bundle** — a single-object
-    directory, macOS `.app`-style — carrying a manifest, executable,
-    resources, and (for transport) its libraries. Libraries are
-    **content-addressed**: stored once system-wide in a hash-keyed store,
-    referenced by hash, deduplicated by construction (§3.4) — so one
-    resident copy is shared across apps (§3.6). Self-contained for
-    transport, deduplicated once installed; no package database, no version
-    conflicts. Resolves the §13 app-model thread.
-48. Accessibility is a **non-goal** beyond what it shares with scripting:
-    AbyssBSD builds no dedicated accessibility stack (screen reader, AT
-    integration), scoped out because the team is too small to support it.
-    The §6.6 scripting protocol remains a latent introspection substrate
-    such tooling could be built on — by others. Closes the §13
-    accessibility thread.
-49. Per-interface message schemas are concrete design documents under
-    `interfaces/` — `DESIGN.md` gives each interface's shape, these give its
-    typed messages. `interfaces/README.md` fixes the shared conventions
-    (message kinds request/command/event; request/reply via a fresh
-    reply-to capability — the capability is the correlation, no
-    request-ids; errors are values). `interfaces/settings.md` is the first,
-    establishing the template.
-50. Keyboard events carry the **raw keycode alongside the cooked**
-    keysym/text/modifiers — refining #32. Cooked-only was an over-reach:
-    games need the physical key position (WASD by position, independent of
-    layout). Every `Key` event carries both — always, not an opt-in mode —
-    plus a `repeat` flag so games can filter synthetic key-repeat.
-51. Spawn grant model clarified (§11.9, `interfaces/broker.md`): a child's
-    **birth bundle is the broker's grant** — the broker is the root of
-    authority, so it grants per the child's manifest (for an app, ∩ user
-    approval), *not* bounded by whoever launched it. The shell need not hold
-    mic / network / file authority to launch apps that use them. Recursive
-    attenuation (§10.4) governs only capabilities a component delegates from
-    its *own* holdings. Refines #38 and #47.
-52. Non-binding goal (§3.6): AbyssBSD's own code is kept **32-bit-clean** —
-    no gratuitous 64-bit-pointer / 64-bit-address-space assumption — so the
-    system could degrade to a 32-bit OS on PPC32 (FreeBSD paths restored) or
-    RV32 (a FreeBSD port permitting). Non-binding — the substrate is not
-    AbyssBSD's to provide. Its value is the forcing function: 32-bit-clean
-    code proves the leanness the budgets demand.
-53. The looper is an **async executor** (§6.9): a request/reply call is a
-    `Future` whose `.await` suspends the *handler*, never the looper thread,
-    and resumes when the reply arrives — multi-step flows read sequentially,
-    no hand-rolled state machines. Per-handler message serialization is kept
-    (concurrency is between handlers, never re-entrancy within one). Classic
-    callback dispatch rejected. Settled now because structured async is
-    available under either Vestra outcome (§3.1) — the language coupling
-    that held this open is resolved. Closes the §13 looper thread.
-54. **AbyssBSD targets the full Vestra proposal** (`../new-lang/PROPOSAL.md`)
-    and its self-hosting compiler; the stripped floor (`vestra-mc/SPEC.md`)
-    is dropped and RFC-0001/0002/0003 retired — they were floor-deltas the
-    full proposal already designs (§16 concurrency, §17 C interop, §18
-    compile-time execution). Resolves the §13 "Vestra outcome" thread to
-    outcome 2 (§3.1, supersedes the floor approach in #28). Prompted by the
-    language group's consumer roadmap (`../new-lang/CONSUMER_ROADMAP.md`),
-    which gates AbyssBSD's M1 on two compiler phases — the §16 async runtime
-    and §17 header import — and reports §18 codegen usable today. Three new
-    §13 threads opened from the roadmap: looper-as-`service`, widget-tree
-    ownership / per-component Vestra mode, and PIC shared-object emission.
-    *(In this Rust-fallback line, superseded by #63 — the Vestra dependency
-    is the very risk this line hedges; see §3.1.)*
-55. The looper **is** a Vestra `service` (§6.10): §6.1's looper and §6.9's
-    executor are realized directly as a `service` — a thread, typed `ring`s,
-    a per-service executor, and the not-re-entered-across-`.await` invariant
-    that is §6.9's per-handler serialization. The inter-process bus is a
-    cross-Task transport behind the same `service`/`ring`/`RingCap` surface;
-    AbyssBSD hand-builds only the transport implementation
-    (`SOCK_SEQPACKET`/shm/`SCM_RIGHTS`/jails/`pdfork`), not the model — which
-    supersedes the §13 thread's scope note that "the bus stays hand-built."
-    Settled by `../new-lang/SERVICE_WIRING_DESIGN.md` (converged through
-    AbyssBSD consumer review). Closes the §13 looper-as-`service` thread.
-56. Widget-tree ownership and language mode (§8): a window's view hierarchy
-    is an **arena of views addressed by generational `ViewId` handles** —
-    not pointers, not reference-counting. Every cross-reference (focus,
-    event target, layout relations, an app's handle to a widget) is a
-    `ViewId`; a stale one resolves to `none`. The whole resident system
-    layer — broker, compositor, input, bus transport, toolkit, services,
-    shell — is Vestra `@strict`; apps are `@managed`, budgeted externally
-    by the broker jail limit. The two are one decision: `ViewId` is
-    mode-neutral, so a single `@strict` toolkit serves both the strict
-    shell and managed apps — an ARC or `borrow`-based tree could not. The
-    view tree stores no callbacks; interaction is a message (§6.9, §6.10).
-    Closes the §13 widget-tree thread.
-57. The login & session lifecycle (§11.15): authentication is split across
-    **three roles** — the broker establishes sessions (spawns the per-user
-    set as the user), the **authenticator** is the single trusted PAM
-    front-end (credential conversation + user-database access, small and
-    audited), and the **greeter** is an *unprivileged* pre-session login UI
-    that renders but never verifies. Boot has two spawn phases — a
-    persistent **system layer** (broker, compositor, input service,
-    authenticator, greeter) and a per-login **session layer** (shell,
-    per-user services, apps), §11.1. The session lock (§11.11) is
-    refactored onto the same authenticator, so the trusted credential path
-    is one component, not two. Auto-login is a supported broker config
-    (cold-boot only; the lock still applies); one active session at a time,
-    switching is logout/login. Closes the §13 greeter thread.
-58. Capability mechanics (§10.5): a capability's rights are `cap_rights_t`
-    (fd-backed, kernel-enforced) or object rights (service-object,
-    exporter-enforced); both obey one monotonic law — `narrow` only ever
-    restricts. Vestra's compile-time `with rights` keeps a component honest
-    intra-process but does **not** secure a process boundary — inter-process
-    security is the kernel plus the exporter's runtime check. Each component
-    ships a small declarative manifest (identity, capabilities + rights,
-    jail params, budget, restart policy) in two trust profiles —
-    system-component (grant = manifest) and app (grant = manifest ∩
-    user-approval). The broker boots as root and never enters capability
-    mode (the unsandboxed Casper-style root); children `cap_enter` after
-    receiving their bundle. Casper services are composed in as fd-backed
-    capabilities declared in the manifest. Revocation: service-object caps
-    are revocable by the membrane pattern (a typed `Revoked` error);
-    fd-backed caps are revoked only by resource lifecycle or holder restart,
-    so caps that must be revocable per-holder are exported as mediated
-    service objects. Closes the §13 capability-mechanics thread.
-59. The broker's scope is **fixed at the desktop, permanently** (§2, §11.9):
-    it does not grow to subsume `rc`'s system-init role. `rc` stays
-    FreeBSD's system init — it supervises the base and the broker itself;
-    the broker is a leaf of `rc`'s supervision tree and the root of the
-    desktop's, an s6-style bounded subtree. Subsuming `rc` would fork
-    FreeBSD's init and inflate the security TCB (§10.6) — the service-scope
-    counterpart of the D-Bus refusal (§10.1). The broker is
-    machine-boot-scoped, spanning every session of a boot (§11.15).
-    Internal Casper-style decomposition (§10.4) is an implementation
-    matter, not a scope change. Hardens the thread's "leave room" lean into
-    a deliberate boundary; closes the §13 broker-growth thread.
-60. The data model — typed attributes & live queries (§11.16): the BeOS BFS
-    feature, built as a **userland index/query service** (§11.1) over an
-    ordinary FreeBSD filesystem — not by writing or forking a filesystem
-    (§2). Typed attributes are stored as POSIX **extended attributes** on
-    the file (the file is the source of truth), typed in the §6.3
-    vocabulary; the index is derived, rebuildable **soft state**. The
-    substrate is the extattr capability — UFS and ZFS both provide it; **ZFS
-    recommended, not required**. Liveness is exact for files written through
-    the Storage Kit, eventually-consistent (reconciliation) for foreign
-    writes. A live query is the existing subscription pattern; query
-    capabilities are scoped like settings subtrees. Closes the §13
-    Storage-Kit thread.
-61. Multi-monitor behavior (§7.6): the outputs form one continuous
-    coordinate space — windows may straddle — but each output is composited
-    on its **own refresh clock**, so §3.6's refresh-rate budget is
-    per-output (a 60 Hz and a 144 Hz monitor each run native). A window
-    renders at the scale of the output it predominantly occupies. New
-    windows open on the active output; maximize and fullscreen — including
-    direct scanout — are per-output. On hotplug-disconnect a window migrates
-    to a surviving output, never lost. The shell draws panels and desktop
-    surface per output with a per-output window list; notifications appear
-    on the active output only; the lock and greeter cover all outputs.
-    Closes the §13 multi-monitor thread.
-62. Install & system updates (§11.17): install and update are one lifecycle
-    on **ZFS boot environments** (`bectl`). The system — a FreeBSD base
-    release plus the AbyssBSD layer — is one curated, co-versioned artifact;
-    `pkg`/ports are build-time tools, not the on-machine update path. An
-    update creates a new boot environment, populates it, activates it, and
-    reboots — **atomic**; rollback is booting the prior environment, and a
-    freshly-activated one auto-reverts if it does not reach a healthy
-    desktop. Apps update separately (§11.14). The installer is a **graphical
-    AbyssBSD application** on a live boot of the install image —
-    `bsdinstall` is inadmissible (§9 admits no text mode); opinionated and
-    short, it creates the ZFS pool and first boot environment. A privileged
-    update service does the work; an unprivileged desktop UI surfaces and
-    authorizes it (the §11.15 pattern). Closes the §13 system-updates
-    thread.
-63. **Fallback: AbyssBSD is implemented in Rust, not Vestra.** This is the
-    Rust-fallback variant (`AbyssBSD-rust/`) — a contingency branch beside
-    the primary Vestra line (`../NewOS/`) against the risk that the Vestra
-    compiler does not reach production stability. Rust meets the same hard
-    requirements (§3.1) with a mature, shipping toolchain. The architecture
-    is unchanged; the implementation-language layer is adapted — §3.1, §5,
-    §6.1, §6.3, §6.7, §6.9, §6.10, §8, §10.5, §11.2. This supersedes the
-    Vestra-specific decisions for this line: #3 and #28 (language choice),
-    #54 (targets the full Vestra proposal), #55 (the looper *is* a Vestra
-    `service` → here a first-party looper/service framework, §6.10), the
-    `@strict`/`@managed` half of #56 (Rust has no language modes, §8), and
-    the `with rights` typestate of #58 (phantom types instead, §10.5). The
-    §13 PIC-emission thread is closed — `rustc` emits PIC `cdylib` shared
-    objects as a matter of course. The looper model (#53) and the
-    remainder of #56/#58 stand unchanged.

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Components — AbyssBSD</title>
+<meta name="description" content="The closed, curated AbyssBSD component map — broker, compositor, system services, shell — plus the app bundle model and install lifecycle.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="components.html" class="active">Components</a>
+      <a href="interfaces.html">Interfaces</a>
+      <a href="roadmap.html">Roadmap</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <div class="eyebrow">Components</div>
+  <h1>The component map</h1>
+  <p class="lede">AbyssBSD decomposes into the components below — and the
+     discipline is that this list is <em>closed and curated</em>, not
+     open-ended. Each is one process, jailed, reached only over a bus connection
+     carrying a capability.</p>
+
+  <p>No component shares memory or authority with another except by explicit
+     handle. Granularity is <strong>by responsibility</strong>: a component is
+     cut at one coherent responsibility. Replacing a component means supplying a
+     process that exports the same interface. The bus itself is not a component
+     — it is a protocol and a library; there is no central bus daemon.</p>
+
+  <h2>Foundation</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Broker</h3>
+      <p>The root of authority and the session root: spawns every component,
+         creates its jail, mints and delegates capabilities, wires bus
+         connections, owns the session. Started by <code>rc</code>.</p>
+    </div>
+  </div>
+
+  <h2>Display &amp; input</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Compositor</h3>
+      <p>Owns the display (GPU/KMS), composites client surfaces, manages windows
+         (placement, focus, stacking, decoration), and routes input to the
+         focused surface. Exports the display protocol.</p>
+    </div>
+    <div class="card">
+      <h3>Input service</h3>
+      <p>Turns hardware input devices into one normalized event stream via
+         <code>libinput</code>. Exports the input-event interface, consumed by
+         the compositor. Holds <code>seatd</code>-mediated device capabilities.</p>
+    </div>
+  </div>
+
+  <h2>Login &amp; session</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Authenticator</h3>
+      <p>The single trusted front-end to system authentication (FreeBSD PAM):
+         owns the credential conversation and user-database access. Privileged,
+         deliberately tiny, audited.</p>
+    </div>
+    <div class="card">
+      <h3>Greeter</h3>
+      <p>The pre-session login UI — user picker, auth conversation, power menu.
+         An <em>unprivileged</em> display client running as a dedicated
+         <code>_greeter</code> principal. It renders; it does not verify.</p>
+    </div>
+  </div>
+
+  <h2>System services — one responsibility each</h2>
+  <table>
+    <thead><tr><th>Component</th><th>Responsibility &amp; exports</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Settings service</strong></td>
+        <td>The typed settings store — <code>get</code> / <code>set</code> /
+            <code>subscribe</code>.</td></tr>
+      <tr><td><strong>Notification service</strong></td>
+        <td>Accepts, queues, and dispatches notifications — <code>post</code> /
+            <code>update</code> / <code>withdraw</code>; the shell subscribes
+            and renders.</td></tr>
+      <tr><td><strong>Device monitor</strong></td>
+        <td>Hardware presence (hotplug, fed by <code>devd</code>) and
+            removable-volume mounting.</td></tr>
+      <tr><td><strong>Power &amp; lifecycle service</strong></td>
+        <td>Suspend/resume, battery, idle detection, lock policy, shutdown
+            coordination.</td></tr>
+      <tr><td><strong>Networking</strong></td>
+        <td>Desktop network management — a control-plane orchestrator over the
+            FreeBSD base, never in the packet path.</td></tr>
+      <tr><td><strong>Audio</strong></td>
+        <td>Desktop audio control — per-app and master volume, device
+            selection; control-plane only, the kernel mixes.</td></tr>
+      <tr><td><strong>Index/query service</strong> <span class="tag post">post-v1</span></td>
+        <td>Indexes files and answers live queries — the BFS-like
+            typed-attribute data model.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Shell &amp; apps</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Session lock</h3>
+      <p>Draws the unlock surface and authenticates the user — a deliberately
+         tiny, auditable component, the trusted unlock path.</p>
+    </div>
+    <div class="card">
+      <h3>Desktop shell</h3>
+      <p>The in-session furniture: panels, application menu, window list,
+         desktop surface, status-indicator area. A consumer — nothing in the
+         system depends on it.</p>
+    </div>
+    <div class="card">
+      <h3>Apps</h3>
+      <p>Terminal, file manager, settings UI, text editor. The leaves: they
+         consume interfaces and expose only the scripting interface.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>System layer vs. session layer.</strong> The map divides by
+    lifecycle. The <em>system layer</em> — broker, compositor, input service,
+    authenticator, greeter — is spawned once at boot and persists across logins.
+    The <em>session layer</em> — the desktop shell, the session lock, the
+    per-user services, and the user's apps — is spawned per login as the
+    authenticated user and torn down at logout. The toolkit is <em>not</em> a
+    component — it is a library linked into every UI process.
+  </div>
+
+  <hr class="divider">
+
+  <h2>The desktop shell &amp; the window list</h2>
+  <p>The shell presents GNOME-2-style panels (a top and a bottom panel by
+     default), the application menu (categorized, with a search box), the window
+     list, the desktop surface, and a curated status-indicator area. Menus are
+     per-window — not a global menu bar.</p>
+  <p>The <strong>window list is the anti-taskbar</strong>, held to six
+     disciplines — the Windows taskbar being the cautionary tale of what a
+     window list becomes without them:</p>
+  <ol>
+    <li>One button per <strong>window</strong> — never grouped; reaching a
+        window is one click.</li>
+    <li>The button shows the window's title, and nothing else.</li>
+    <li><strong>Launching is not here</strong> — the application menu launches.
+        No pinned apps.</li>
+    <li><strong>No tray.</strong> The status-indicator area is a curated, fixed
+        set — clock, battery, network, volume — apps cannot dump icons into it.</li>
+    <li>No search box, no widgets, no "recommended," no ads — not ever.</li>
+    <li>The model is stable; it does not churn across versions.</li>
+  </ol>
+
+  <hr class="divider">
+
+  <h2>The app model</h2>
+  <p>An AbyssBSD app is a <strong>bundle</strong> — a directory presented as one
+     object, in the macOS <code>.app</code> tradition. The bundle holds an app
+     manifest, the executable, resources, and the libraries the app needs. The
+     manifest declares identity, the <strong>capabilities the app requests</strong>,
+     and its library dependencies by content hash.</p>
+  <ul class="feature-list">
+    <li><strong>Libraries are content-addressed.</strong> Each library is
+        stored once, system-wide, keyed by the hash of its contents. The store
+        cannot hold a duplicate — "no duplication" by construction, and no DLL
+        hell.</li>
+    <li><strong>Dedup serves the memory budget.</strong> Because every app
+        references the identical library file, the kernel maps its text once
+        and shares it across all of them.</li>
+    <li><strong>Self-contained for transport.</strong> A shipped bundle carries
+        its libraries; on install they merge into the store, deduplicated on the
+        way in.</li>
+    <li><strong>Capabilities are requested, not assumed.</strong> A curated
+        app's manifest is curation-vetted; a third-party app's requests beyond a
+        safe default are surfaced for the user to approve.</li>
+  </ul>
+
+  <h3>Packaging &amp; distribution</h3>
+  <p>AbyssBSD rides FreeBSD's <strong>ports + <code>pkg</code></strong> — they
+     are how the curators <em>build</em> the AbyssBSD layer. <code>pkg</code> is
+     a build-time tool, not the on-machine update path. The product ships as a
+     curated, installable FreeBSD-based image with the desktop preinstalled.</p>
+  <p>Install and system update are <strong>one lifecycle</strong>, both running
+     on <strong>ZFS boot environments</strong>. An update creates a fresh boot
+     environment, populates it, marks it active, and reboots into it — atomic;
+     the running system is never half-updated. A freshly-activated environment
+     is on probation: if it does not reach a healthy desktop, the system
+     auto-reverts. The installer is a graphical application running in a live
+     AbyssBSD environment — there is no text-mode curses installer.</p>
+
+  <p style="margin-top:2rem;"><a href="interfaces.html">Continue to the interfaces &rarr;</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+  </div>
+</footer>
+
+</body>
+</html>

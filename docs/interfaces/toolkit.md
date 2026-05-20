@@ -9,7 +9,7 @@
 - **Realizes** — `DESIGN.md` §8, and §6.6 (scripting) made concrete.
 - **Interface id** — none of its own; answers `scripting` (`scripting.md`).
 - **Consumed by** — scripting tools, automation, and the latent
-  accessibility substrate (decision #48).
+  accessibility substrate.
 
 The toolkit is a **library**, not a service — it is linked into every app
 and the shell, never spawned as a component. Like the desktop shell
@@ -85,7 +85,7 @@ compile-time knowledge of the widget set (§6.6).
 ## Addressing — specifier paths over `ViewId`s
 
 Internally a view is a **`ViewId`** — a generational handle into the
-window's per-window arena (`DESIGN.md` §8, decision #56). Externally a
+window's per-window arena (`DESIGN.md` §8). Externally a
 script names it by `SpecifierPath` — *window "Save As" → view "ok"*. The
 toolkit resolves the path to a `ViewId` and looks it up in the arena. Two
 properties of the §8 model carry straight into scripting:
@@ -102,7 +102,7 @@ properties of the §8 model carry straight into scripting:
 
 A `Cap<Scripting>` to an app's `application` root, carrying scripting
 rights (`introspect`/`get`/`set`/`invoke`, `scripting.md`) and narrowable
-to a subtree. The broker mints it per the app's manifest (decision #51); an
+to a subtree. The broker mints it per the app's manifest; an
 app handed none is simply not scriptable (`scripting.md`).
 
 Layout- and compositor-owned properties — `view.bounds`, `view.kind`,

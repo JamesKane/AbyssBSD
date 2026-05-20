@@ -12,7 +12,7 @@
 - **Realizes** — `DESIGN.md` §6.6.
 - **Consumed by** — scripting tools (a `hey`-equivalent), automation, and —
   latently — accessibility tooling (the substrate, though no a11y stack is
-  built, decision #48).
+  built).
 - **Interface id** — `scripting`.
 
 Following BeOS: a handler exposes named **properties** and **actions**,
