@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: cargo xtask ci
+  linux:
+    name: cargo xtask ci (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -41,3 +41,29 @@ jobs:
         # The single CI lane: fmt --check, clippy -D warnings, build, test.
         # On Linux the sys/* FreeBSD FFI crates build as empty stubs.
         run: cargo xtask ci
+
+  freebsd:
+    name: cargo xtask ci (FreeBSD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and test in a FreeBSD VM
+        # GitHub has no FreeBSD runner; vmactions boots one inside the
+        # Ubuntu runner. This job compiles and tests the real sys/* FFI
+        # (Capsicum, jail, procdesc) and every #[cfg(target_os = "freebsd")]
+        # path — code the Linux job stubs out and never builds or lints.
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "15.0"
+          usesh: true
+          # FreeBSD has no rustup toolchain, so the workspace builds with
+          # the pkg Rust; the MSRV is set to match it (tools/vm/README.md).
+          # The package set mirrors `tools/vm/vm.sh provision`; `dejavu` is
+          # the font the abyss-font tests open.
+          prepare: |
+            pkg install -y rust git pkgconf freetype2 harfbuzz dejavu
+          run: |
+            cargo xtask ci
