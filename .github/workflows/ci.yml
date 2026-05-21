@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: cargo xtask ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install the pinned Rust toolchain
+        # rustup honours rust-toolchain.toml: channel 1.95.0, plus the
+        # rustfmt and clippy components the CI lane needs.
+        run: rustup show
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo xtask ci
+        # The single CI lane: fmt --check, clippy -D warnings, build, test.
+        # On Linux the sys/* FreeBSD FFI crates build as empty stubs.
+        run: cargo xtask ci

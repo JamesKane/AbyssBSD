@@ -2,6 +2,8 @@
 
 *A desktop operating system that fits in your head.*
 
+[![CI](https://github.com/JamesKane/AbyssBSD/actions/workflows/ci.yml/badge.svg)](https://github.com/JamesKane/AbyssBSD/actions/workflows/ci.yml)
+
 ## The 40-million-line problem
 
 A modern desktop is an act of forgetting. Boot one and you are running tens

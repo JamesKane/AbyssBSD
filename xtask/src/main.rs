@@ -3,8 +3,9 @@
 //! AbyssBSD build & CI harness.
 //!
 //! Run via the `cargo xtask` alias (see `.cargo/config.toml`). This is the
-//! single source of truth for the CI lane (docs/ROADMAP.md, Phase 0): a
-//! future Forgejo workflow invokes `cargo xtask ci` and nothing more.
+//! single source of truth for the CI lane (docs/ROADMAP.md, Phase 0): the
+//! GitHub Actions workflow (`.github/workflows/ci.yml`) invokes
+//! `cargo xtask ci` and nothing more.
 
 use std::process::{Command, ExitCode};
 
