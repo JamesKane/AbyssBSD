@@ -16,6 +16,9 @@ dependencies = [
 [[package]]
 name = "abyss-font"
 version = "0.0.0"
+dependencies = [
+ "abyss-test-support",
+]
 
 [[package]]
 name = "abyss-log"
@@ -44,6 +47,14 @@ name = "abyss-render"
 version = "0.0.0"
 dependencies = [
  "abyss-font",
+ "abyss-test-support",
+]
+
+[[package]]
+name = "abyss-test-support"
+version = "0.0.0"
+dependencies = [
+ "abyss-font",
 ]
 
 [[package]]
@@ -51,6 +62,7 @@ name = "abyss-toolkit"
 version = "0.0.0"
 dependencies = [
  "abyss-render",
+ "abyss-test-support",
 ]
 
 [[package]]

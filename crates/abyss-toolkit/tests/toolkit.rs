@@ -3,28 +3,11 @@
 //! `abyss-toolkit` tests — the arena, layout, widgets, input, and damage,
 //! proven end to end (`docs/design/toolkit.md` §12).
 
-use std::path::Path;
-
+use abyss_test_support::test_font;
 use abyss_toolkit::{
     Button, Canvas, Color, CpuBackend, Font, GlyphCache, InputEvent, Label, Linear, MeasureCtx,
     PaintCtx, Pixmap, Size, Theme, UiEvent, ViewTree, Widget,
 };
-
-const FONT_CANDIDATES: &[&str] = &[
-    "/System/Library/Fonts/Monaco.ttf",
-    "/System/Library/Fonts/Geneva.ttf",
-    "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-];
-
-fn test_font() -> Font {
-    for candidate in FONT_CANDIDATES {
-        if Path::new(candidate).exists() {
-            return Font::open(Path::new(candidate)).expect("open the test font");
-        }
-    }
-    panic!("no test font found — add a path to FONT_CANDIDATES for this platform");
-}
 
 fn near(a: Color, b: Color, tol: u8) -> bool {
     a.r.abs_diff(b.r) <= tol

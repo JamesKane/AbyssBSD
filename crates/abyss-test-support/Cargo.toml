@@ -1,6 +1,6 @@
 [package]
-name = "abyss-render"
-description = "AbyssBSD 2D renderer — the Canvas drawing API and its CPU backend"
+name = "abyss-test-support"
+description = "AbyssBSD workspace test support — a real system font for tests"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,6 @@ publish = false
 
 [dependencies]
 abyss-font = { path = "../abyss-font" }
-
-[dev-dependencies]
-abyss-test-support = { path = "../abyss-test-support" }
 
 [lints]
 workspace = true

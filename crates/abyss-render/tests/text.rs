@@ -2,25 +2,8 @@
 
 //! `abyss-render` text tests — `Canvas::text` proven against a real font.
 
-use std::path::Path;
-
-use abyss_render::{Canvas, Color, CpuBackend, Font, GlyphCache, Point, Rect};
-
-const FONT_CANDIDATES: &[&str] = &[
-    "/System/Library/Fonts/Monaco.ttf",
-    "/System/Library/Fonts/Geneva.ttf",
-    "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-];
-
-fn test_font() -> Font {
-    for candidate in FONT_CANDIDATES {
-        if Path::new(candidate).exists() {
-            return Font::open(Path::new(candidate)).expect("open the test font");
-        }
-    }
-    panic!("no test font found — add a path to FONT_CANDIDATES for this platform");
-}
+use abyss_render::{Canvas, Color, CpuBackend, GlyphCache, Point, Rect};
+use abyss_test_support::test_font;
 
 #[test]
 fn text_leaves_ink() {

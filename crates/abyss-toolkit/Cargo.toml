@@ -10,5 +10,8 @@ publish = false
 [dependencies]
 abyss-render = { path = "../abyss-render" }
 
+[dev-dependencies]
+abyss-test-support = { path = "../abyss-test-support" }
+
 [lints]
 workspace = true
