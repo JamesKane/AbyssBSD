@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `eaa5e72` Phase 4: abyss-transport — the IPC ring connection (service side)
+- `4deef44` Bump STATUS: Phase 4 — the IPC ring connection (call side)
 - `f360a20` Phase 4: abyss-transport — the IPC ring connection (call side)
 - `565e0d7` Bump STATUS: Phase 4 — the async IPC channel
 - `b0d5670` Phase 4: abyss-transport — the async IPC channel
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `5429aa8` Bump STATUS: Phase 4 — the framed connection
 - `47a3d6b` Phase 4: abyss-transport — the framed connection
 - `49655d8` Bump STATUS: Phase 4 — the kqueue reactor
-- `812d46c` Phase 4: abyss-transport — the kqueue reactor
-- `1bcb4eb` Bump STATUS: IPC ring design pass (broker-and-transport.md §2.5-2.7)
 
 ## Site
 
@@ -66,27 +66,27 @@ is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
   driven by the `kqueue` where the in-process backend used thread-park;
 - `AsyncChannel` — a `FramedChannel` whose `recv`/`send` suspend the
   *task*, not the looper thread, when the socket would block;
-- `Connection` — the request/reply protocol (§2.7), client side: `call`
-  correlates a request with its reply by id, and a `serve` receive loop
-  routes each reply to the `call` awaiting it.
+- `Connection` — the request/reply protocol (§2.7): `call` correlates a
+  request with its reply by id; `serve` routes replies to callers and
+  inbound messages to an `Inbox`; `accept` lifts a request off it with a
+  `Responder` to answer it. **The IPC ring is complete.**
 
 A design pass first settled where this was under-specified — the Gate D
 doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame; the
 `Responder`) — and `abyss-looper` gained the **`EventSource` seam** so a
-non-thread-park backend can drive the looper (looper-framework §3.3). A
-looper task now `call`s over a `Connection` and gets a correlated reply,
-verified end to end in the FreeBSD VM. `cargo xtask ci` green on macOS
-and FreeBSD; working tree clean.
+non-thread-park backend can drive the looper (looper-framework §3.3).
+Verified end to end in the FreeBSD VM: a looper `call`s and gets a
+correlated reply, and an `accept`ed request is answered through its
+`Responder`. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **`Connection` service side** — `accept` an inbound request and the
-  `Responder` that answers it (§2.7) — the next increment;
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
-  `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
+  `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings — the
+  next increment;
 - supervision and `PeerRestarted` re-wiring (§5.5);
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
 
