@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `266b8a4` Phase 4: design — pin the Cap two-backend crate structure (§2.8)
+- `39ec8f1` Bump STATUS: Phase 4 — the handle table carries fds
 - `1e616df` Phase 4: abyss-msg — the handle table carries fds
 - `b81f3f4` Bump STATUS: Phase 4 — the capability handle-table body layout
 - `adca251` Phase 4: abyss-cap — the capability handle-table body layout
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `e4c42a3` Bump STATUS: Phase 4 — kqueue process-descriptor exit monitoring
 - `69a02d7` Phase 4: abyss-transport — kqueue process-descriptor exit monitoring
 - `210e7f6` Bump STATUS: Phase 4 — the cap_enter startup shim
-- `a0f5ade` Phase 4: abyss-bootstrap — the cap_enter startup shim
-- `c83943d` Bump STATUS: Phase 4 — the broker component spawn module
 
 ## Site
 
@@ -109,17 +109,19 @@ handle-table body a capability serializes to (the `cap_rights` mask and
 the object-rights set that ride beside an fd), and `abyss-msg`'s handle
 table now **carries those fds**: `HandleSink` / `HandleStore` pair each
 handle's metadata with the descriptor it rides `SCM_RIGHTS` on, and
-`Envelope::from_message` / `into_message` carry the fds across. `cargo
-xtask ci` green on macOS and FreeBSD; tree clean.
+`Envelope::from_message` / `into_message` carry the fds across. A design
+pass (§2.8) has pinned the `Cap` two-backend crate structure the IPC
+backend lands in — `abyss-cap` over `abyss-transport`, `Cap: Wire` gated
+to FreeBSD. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **`Cap` `Wire` impl** and IPC backend — `Cap<I, R>` serializing
-  through `CapBody` and the fd-carrying handle table, backed by an
-  IPC-ring fd (§2.5, §3.4) — the next increment;
+- the **`Cap` two-backend rework** — `Cap<I, R>` gaining its IPC backend
+  and `Wire` impl, per the §2.8 structure now pinned (§2.5, §3.4) — the
+  next increment;
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
