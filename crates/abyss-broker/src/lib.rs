@@ -18,9 +18,11 @@
 //!
 //! - `spawn` — component spawn: the component's jail, its bootstrap
 //!   channel, the `pdfork` into the jail, and the bootstrap bundle (§5.3).
+//! - `supervisor` — keeping components alive: a component that exits is
+//!   spawned again (§5.5).
 //!
-//! `cap_enter` and supervision (§5.4–§5.7) arrive with the rest of the
-//! FreeBSD work; see `STATUS.md`.
+//! `PeerRestarted` re-wiring and the broker's full event loop (§5.5–§5.7)
+//! arrive with the rest of the FreeBSD work; see `STATUS.md`.
 //!
 //! The broker itself holds no `unsafe`: every kernel call is a safe API
 //! exported by a `sys/*` crate (`broker-and-transport.md` §6).
@@ -32,3 +34,6 @@ pub mod manifest;
 
 #[cfg(target_os = "freebsd")]
 pub mod spawn;
+
+#[cfg(target_os = "freebsd")]
+pub mod supervisor;

@@ -10,7 +10,7 @@
 //! and the broker's end of the bootstrap channel.
 
 use std::io;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, BorrowedFd};
 use std::path::Path;
 
 use abyss_msg::Envelope;
@@ -32,6 +32,17 @@ impl Component {
     /// The component's process id.
     pub fn pid(&self) -> i32 {
         self.child.pid()
+    }
+
+    /// The component's process descriptor, borrowed — what the supervisor
+    /// watches for the component's exit (§5.5).
+    pub fn descriptor(&self) -> BorrowedFd<'_> {
+        self.child.descriptor()
+    }
+
+    /// The id of the component's jail.
+    pub fn jid(&self) -> i32 {
+        self.jid
     }
 
     /// The broker's end of the bootstrap channel.
