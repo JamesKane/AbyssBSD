@@ -9,6 +9,8 @@
  * no Rust code ever runs in the forked child.
  */
 
+#include <sys/param.h>
+#include <sys/jail.h>
 #include <sys/procdesc.h>
 #include <sys/types.h>
 
@@ -20,11 +22,13 @@ extern char **environ;
 
 /*
  * pdfork a child that immediately execs `path` with argument vector `argv`.
- * On success returns the child's pid and writes its process descriptor to
- * *pd_out; on failure returns -1 with errno set.
+ * If `jid` is non-negative the child attaches to that jail before the exec,
+ * so the component lands confined. On success returns the child's pid and
+ * writes its process descriptor to *pd_out; on failure returns -1 with
+ * errno set.
  */
 int
-abyss_pdspawn(const char *path, char *const argv[], int *pd_out)
+abyss_pdspawn(const char *path, char *const argv[], int jid, int *pd_out)
 {
 	int pd = -1;
 	pid_t pid = pdfork(&pd, 0);
@@ -32,6 +36,8 @@ abyss_pdspawn(const char *path, char *const argv[], int *pd_out)
 		return -1;
 	if (pid == 0) {
 		/* Child: only async-signal-safe calls until execve. */
+		if (jid >= 0 && jail_attach(jid) < 0)
+			_exit(126); /* could not enter the jail */
 		execve(path, argv, environ);
 		_exit(127); /* execve returns only on failure */
 	}

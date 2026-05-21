@@ -11,5 +11,9 @@ publish = false
 # the pdfork-then-execve must run in C so no Rust executes in the forked
 # child (§5.3, §6). The build is a no-op on every non-FreeBSD host.
 
+[dev-dependencies]
+# The jailed-spawn test creates a real jail for the child to attach to.
+freebsd-jail-sys = { path = "../freebsd-jail-sys" }
+
 [lints]
 workspace = true

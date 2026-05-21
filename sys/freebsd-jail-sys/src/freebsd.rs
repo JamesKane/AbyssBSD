@@ -101,3 +101,19 @@ pub fn remove(jid: c_int) -> io::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_then_remove_a_jail() {
+        // `path = "/"` is a jail without filesystem isolation — enough to
+        // exercise jail_set and jail_remove without staging a root tree.
+        let name = format!("abyss-jail-test-{}", std::process::id());
+        let spec = JailSpec::new(Path::new("/"), &name).expect("jail spec");
+        let jid = spec.create().expect("jail_set creates the jail");
+        assert!(jid > 0, "a created jail has a positive jid");
+        remove(jid).expect("jail_remove tears it down");
+    }
+}
