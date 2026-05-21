@@ -3,7 +3,10 @@
 //! The Phase 2 multi-looper harness — the framework proven end to end on
 //! the in-process backend (`docs/design/looper-framework.md` §11).
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::Duration;
 
@@ -77,14 +80,83 @@ impl Handler for WorkHandler {
     }
 }
 
-/// Synchronous — records `Note` and is done; never `.await`s.
-struct NoteHandler {
+/// A one-shot gate: [`Gate::wait`] parks the caller until [`Gate::open`].
+///
+/// This gives the multi-handler scheduling test a *deterministic*
+/// suspension point. A cross-looper `call` suspends only if its reply has
+/// not already arrived — a race the in-process backend loses on a fast
+/// host — so concurrency between handlers is tested against a gate the
+/// test itself controls, not against thread timing.
+#[derive(Clone)]
+struct Gate(Arc<Mutex<GateState>>);
+
+struct GateState {
+    open: bool,
+    waker: Option<Waker>,
+}
+
+impl Gate {
+    fn new() -> Self {
+        Gate(Arc::new(Mutex::new(GateState {
+            open: false,
+            waker: None,
+        })))
+    }
+
+    /// Open the gate, waking the parked waiter if there is one.
+    fn open(&self) {
+        let mut g = self.0.lock().unwrap();
+        g.open = true;
+        if let Some(w) = g.waker.take() {
+            w.wake();
+        }
+    }
+
+    /// A future that is `Pending` until [`open`](Self::open) is called.
+    fn wait(&self) -> GateWait {
+        GateWait(self.0.clone())
+    }
+}
+
+struct GateWait(Arc<Mutex<GateState>>);
+
+impl Future for GateWait {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let mut g = self.0.lock().unwrap();
+        if g.open {
+            Poll::Ready(())
+        } else {
+            g.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+/// Parks on the gate mid-handling: records `Start`, waits, records `End`.
+struct GateWaiter {
+    gate: Gate,
     log: Arc<Mutex<Vec<Step>>>,
 }
-impl Handler for NoteHandler {
+impl Handler for GateWaiter {
+    type Message = i32;
+    async fn handle(&mut self, n: i32, _ctx: &Ctx) {
+        self.log.lock().unwrap().push(Step::Start(n));
+        self.gate.wait().await;
+        self.log.lock().unwrap().push(Step::End(n));
+    }
+}
+
+/// Synchronous: records `Note`, then opens the gate to release the waiter.
+struct GateOpener {
+    gate: Gate,
+    log: Arc<Mutex<Vec<Step>>>,
+}
+impl Handler for GateOpener {
     type Message = i32;
     async fn handle(&mut self, n: i32, _ctx: &Ctx) {
         self.log.lock().unwrap().push(Step::Note(n));
+        self.gate.open();
     }
 }
 
@@ -148,15 +220,13 @@ fn per_handler_serialization_holds_across_await() {
 
 #[test]
 fn other_handlers_progress_while_one_awaits() {
-    let (helper_cap, helper_rx) = cap_channel::<Echo, Full>(8);
-    let mut helper = Looper::new();
-    helper.attach(EchoHandler, helper_rx);
-    let helper_thread = thread::spawn(move || helper.run());
-
     let log = Arc::new(Mutex::new(Vec::new()));
+    let gate = Gate::new();
 
-    // One looper, two handlers. `A` (work) suspends on a helper call;
-    // `B` (note) is synchronous. Each is given one message up front.
+    // One looper, two handlers, each given one message up front. `A` (the
+    // waiter) parks on the gate mid-handling; `B` (the opener) is
+    // synchronous and opens it. The gate makes the suspension
+    // deterministic — the test does not race thread timing.
     let (a_cap, a_rx) = cap_channel::<Work, Full>(8);
     let (b_cap, b_rx) = cap_channel::<Work, Full>(8);
     a_cap.try_send(0).unwrap();
@@ -166,26 +236,25 @@ fn other_handlers_progress_while_one_awaits() {
 
     let mut looper = Looper::new();
     looper.attach(
-        WorkHandler {
-            helper: helper_cap,
+        GateWaiter {
+            gate: gate.clone(),
             log: Arc::clone(&log),
         },
         a_rx,
     );
     looper.attach(
-        NoteHandler {
+        GateOpener {
+            gate,
             log: Arc::clone(&log),
         },
         b_rx,
     );
     let looper_thread = thread::spawn(move || looper.run());
-
     looper_thread.join().unwrap();
-    helper_thread.join().unwrap();
 
-    // A starts and suspends on its call; B runs to completion during that
-    // suspension; A then resumes — concurrency between handlers, with
-    // each handler still strictly sequential.
+    // A starts and parks on the gate; B runs to completion and opens it;
+    // A then resumes — concurrency between handlers, with each handler
+    // still strictly sequential within itself.
     assert_eq!(
         *log.lock().unwrap(),
         [Step::Start(0), Step::Note(100), Step::End(0)],
