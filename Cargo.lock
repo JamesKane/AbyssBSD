@@ -39,6 +39,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "abyss-toolkit"
+version = "0.0.0"
+dependencies = [
+ "abyss-render",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,13 @@
+[package]
+name = "abyss-toolkit"
+description = "AbyssBSD Interface Kit — the retained view tree, layout, and widgets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+abyss-render = { path = "../abyss-render" }
+
+[lints]
+workspace = true

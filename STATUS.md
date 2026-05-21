@@ -6,24 +6,28 @@ plan is the roadmap.
 
 ## Epic
 
-**Phase 3 — rendering & toolkit core. Increment 2 of 3: text.**
-`crates/abyss-font` binds the freetype + harfbuzz **ports** through a small
-C shim (`c/font_shim.c`) — chosen over `bindgen` so freetype's struct
-layouts stay in C. `build.rs` compiles the shim by invoking the system
-toolchain (`cc`, `ar`) directly, so `abyss-font` has **zero
-dependencies**; the FFI `unsafe` is confined there. `abyss-render` gained
-text: a `RenderBackend::blit_coverage` mask op, a per-font `GlyphCache`,
-and `Canvas::text` — and stays `#![forbid(unsafe_code)]`. 10 new tests
-(6 font, 4 text) against real Monaco; 68 workspace-wide; `cargo xtask ci`
-passes.
+**Phase 3 — rendering & toolkit core: COMPLETE.** Increment 3,
+`crates/abyss-toolkit`, finishes Phase 3 (`docs/design/toolkit.md`
+§4–§10): the view arena with generational `ViewId`s, the retained view
+tree, the two-pass box layout, a representative widget set (`Linear`,
+`Label`, `Button`), input routing → `UiEvent`s, the `Theme`, and damage
+tracking. `#![forbid(unsafe_code)]`. 10 tests — generational handles,
+column layout, click → `Clicked`, damage, typed widget access, a button
+visibly changing on press. 78 workspace-wide; `cargo xtask ci` passes.
 
-Phase 3 increments: **(1) `abyss-render` geometry [done]**, **(2) text
-[done]**, (3) `abyss-toolkit` — the arena, layout, and widgets.
+CI caught a real bug — a data race in the font shim's shared freetype
+library — fixed (`306abfd`) with a per-`Font` library.
+
+The remaining `docs/design/toolkit.md` §7 widgets are mechanical
+population on the same `Widget` interface, done as the M3 desktop and M4
+apps need them.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `306abfd` abyss-font: per-Font freetype library — fix a data race
+- `f931937` Phase 3 (2/3): text — abyss-font and Canvas::text
 - `f073994` Phase 3 (1/3): abyss-render — the 2D geometry renderer
 - `551084a` Gate C: the toolkit design doc
 - `1cc1cca` Gate E: the window-management design doc
@@ -32,22 +36,23 @@ Phase 3 increments: **(1) `abyss-render` geometry [done]**, **(2) text
 - `3636807` Phase 1: the message primitive — abyss-msg & abyss-msg-derive
 - `80510c3` Gate A: the wire-format design doc
 - `b90c53b` Phase 0: Cargo workspace & CI harness
-- `c1d3fe5` site: add the Ecosystem statement page
-- `a0784fe` Pin the FreeBSD base source (ROADMAP §6 resolved)
 
 ## In flight
 
-The Phase 3 increment-2 commit is pending. Working tree otherwise clean
-(the parallel-process `docs/DESIGN.md` / `docs/BACKLOG.md` edits are far-
-future / hole-filling and left to that process).
+The Phase 3 increment-3 commit is pending. Working tree otherwise clean.
 
 ## Next
 
-**Phase 3, increment 3 — `crates/abyss-toolkit`.** The arena and
-generational `ViewId`, the retained view tree, the two-pass box layout,
-the curated widget set, input routing and UI events, theming, and damage
-tracking (`docs/design/toolkit.md` §4–§10). Host-testable on macOS. This
-completes Phase 3.
+Phases 0–3 are done — the host-buildable layer is complete (message
+primitive, looper/service framework, renderer, font stack, toolkit; 78
+tests). The next phase is the **first FreeBSD work**, so it is gated:
+
+1. **Gate D** — `docs/design/broker-and-transport.md`: the manifest
+   schema, the spawn/bundle protocol, `SOCK_SEQPACKET` framing, the
+   object-rights → `cap_rights_t` mapping (`ROADMAP.md` §5).
+2. **Phase 4** — `crates/abyss-broker` and `sys/*`, on an amd64 FreeBSD
+   15.0 VM (`ROADMAP.md` §4). This is where the in-tree `freebsd-src`
+   submodule is first populated (ROADMAP §6).
 
 The window-management gate (E) remains designed ahead of its Phase 5; the
 tiling layout engine is pure geometry and can be built standalone whenever
