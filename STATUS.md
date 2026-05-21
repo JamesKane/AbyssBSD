@@ -16,8 +16,8 @@ for the rest now exists (`tools/vm`, see In flight).
   text format, a first-party parser with no vendored config crate
   (`broker-and-transport.md` §4) — and the `graph` module, the static
   authority graph computed and validated from a manifest set (§5.2). And,
-  on FreeBSD, the `spawn` module — component spawn (§5.3); see In flight.
-  No `unsafe`.
+  on FreeBSD, the `spawn` and `supervisor` modules — component spawn and
+  restart-on-death (§5.3, §5.5); see In flight. No `unsafe`.
 - `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6),
   all three now built out and VM-verified. Capsicum and procdesc carry C
   shims (Capsicum's rights API is C macros; procdesc's `pdfork`-then-`exec`
@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `3d45fcf` Phase 4: abyss-broker — the supervisor, restart on death
+- `e4c42a3` Bump STATUS: Phase 4 — kqueue process-descriptor exit monitoring
 - `69a02d7` Phase 4: abyss-transport — kqueue process-descriptor exit monitoring
 - `210e7f6` Bump STATUS: Phase 4 — the cap_enter startup shim
 - `a0f5ade` Phase 4: abyss-bootstrap — the cap_enter startup shim
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `d325451` Bump STATUS: Phase 4 — the bootstrap fd in the spawn
 - `baf68eb` Phase 4: freebsd-procdesc-sys — the bootstrap fd in the spawn
 - `8bb3a9b` Bump STATUS: Phase 4 — the jail around the spawn
-- `4e86395` Phase 4: the jail around the spawn — verified jail-sys, jailed spawn
-- `ff7dd78` Bump STATUS: Phase 4 — the pdfork-based spawn
 
 ## Site
 
@@ -100,19 +100,20 @@ The `component-probe` binary is the first AbyssBSD component; an
 end-to-end VM test spawns it through the broker and sees it report back
 from inside capability mode, having received exactly the bundle the
 broker sent. And the kqueue substrate now watches process descriptors for
-exit (`EVFILT_PROCDESC` / `NOTE_EXIT`) — the signal the broker's
-supervision is built on. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+exit (`EVFILT_PROCDESC` / `NOTE_EXIT`); the broker's **`Supervisor`** is
+built on that signal — it watches its components' process descriptors
+and, when one exits, spawns it again, reclaiming its jail first. Verified
+in the VM: a supervised component that exits is respawned as a fresh
+process. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the broker's **supervision loop** — on the `EVFILT_PROCDESC` exit
-  signal now in place: restarting a failed component and the
-  `PeerRestarted` re-wiring of the components that talked to it (§5.5) —
-  the next increment;
+- **`PeerRestarted`** — when the supervisor restarts a component, the
+  re-wiring of the components that held rings to it: handing each a fresh
+  ring to the replacement (§5.5) — the next increment;
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
 - the broker built from a manifest set: spawning a whole graph, not one
   component at a time (§5).
