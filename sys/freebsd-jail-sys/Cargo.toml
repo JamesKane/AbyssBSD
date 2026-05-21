@@ -1,0 +1,14 @@
+[package]
+name = "freebsd-jail-sys"
+description = "FreeBSD jail FFI — jail_set, jail_attach, jail_remove (broker-and-transport.md §6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# The jail syscalls are ordinary libc functions — a direct `extern` block,
+# no C shim. FreeBSD only; an empty crate on every other host.
+
+[lints]
+workspace = true

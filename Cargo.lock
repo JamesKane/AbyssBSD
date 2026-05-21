@@ -50,6 +50,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "freebsd-capsicum-sys"
+version = "0.0.0"
+
+[[package]]
+name = "freebsd-jail-sys"
+version = "0.0.0"
+
+[[package]]
+name = "freebsd-procdesc-sys"
+version = "0.0.0"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"

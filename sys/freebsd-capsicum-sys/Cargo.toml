@@ -1,0 +1,15 @@
+[package]
+name = "freebsd-capsicum-sys"
+description = "FreeBSD Capsicum FFI — cap_enter and capability rights (broker-and-transport.md §6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# build.rs compiles c/capsicum_shim.c with the system toolchain (cc, ar):
+# Capsicum's cap_rights_* API is C macros, so a shim is required (§6). The
+# build is a no-op on every non-FreeBSD host.
+
+[lints]
+workspace = true
