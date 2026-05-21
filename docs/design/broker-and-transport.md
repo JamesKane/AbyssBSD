@@ -99,6 +99,85 @@ sent inline (§6.2): it is shared as a **memory capability** — a `memfd` or
 shm fd in the handle table, mapped by the receiver. dmabuf buffer sharing
 (the display path) is exactly this case. Envelopes stay small.
 
+### 2.5 The ring across two backends
+
+Gate B framed the ring as a *transport seam* — one ring API, a pluggable
+backend. There are two:
+
+- **in-process** — an MPSC ring of typed Rust messages, no serialization
+  (looper-framework §3). It is the Phase-2 host-test backend, and it
+  serves intra-process use.
+- **IPC** — a `SOCK_SEQPACKET` connection (§2.1) carrying serialized
+  envelopes.
+
+For the IPC backend to carry an interface's messages they must serialize,
+so — **resolved here — `Interface::Message: Wire`**: every interface's
+message type implements `Wire` (`#[derive(Wire)]`, wire-format §6). An
+interface is a cross-component *contract*; being serializable is intrinsic
+to it, not a tax. (The request/reply *reply* value rides a raw ring of an
+arbitrary `Rep` type, not an `Interface`, and is unaffected — see §2.7.)
+
+`Cap<I, R>` and the receiving end are backend-agnostic; the backend is
+fixed when the ring is constructed. `cap_channel` builds an in-process
+pair (host tests); the broker, wiring the authority graph (§5.2), builds
+IPC pairs over `socketpair`. `Cap::send` and `Cap::call` dispatch on the
+backend the `Cap` holds.
+
+### 2.6 The IPC ring frame
+
+This refines §2.2. On the IPC backend the datagram body is a small fixed
+**ring frame** followed by the envelope. The ring frame is the IPC ring's
+own protocol layer; the envelope (wire-format §3) is **unchanged**, so
+`abyss-msg` and the Gate A wire format are untouched.
+
+The ring frame is 8 bytes:
+
+- `frame_kind: u8` — `0` a message, `1` a reply;
+- 3 bytes reserved, zero;
+- `correlation: u32` — the request/reply correlation id (§2.7).
+
+A **message** frame carries an envelope inbound to a handler — a Request,
+Command, or Event, by the envelope's own `MessageKind`. A Request's
+`correlation` is a fresh id; a Command's or Event's is `0`. A **reply**
+frame carries the answer to a Request: its `correlation` echoes the
+request's, and its envelope payload is the reply value.
+
+The correlation id lives in the ring frame, not the envelope, on purpose:
+request/reply correlation is an IPC concern the in-process backend has no
+need of, and keeping it out of the envelope leaves the wire format and
+`abyss-msg` alone. `MessageChannel` (the increment-2 type) sends a *bare*
+envelope with no ring frame — exactly right for the one-shot **bootstrap
+bundle** (§5.3); the IPC ring frames over the raw `Channel`.
+
+### 2.7 Request and reply over the wire
+
+In-process, the looper framework's `call` embeds a live reply `Sender` in
+the request message. That cannot cross a process — an in-process queue
+handle is meaningless to another. Over IPC, request and reply correlate
+by the ring frame's `correlation` id (§2.6), and the reply rides back over
+the same bidirectional `SOCK_SEQPACKET` connection.
+
+An IPC ring connection owns a monotonic per-connection correlation
+counter, a **pending-call table** (`correlation → a waiting caller`), and
+the connection's receive loop. `Cap::call` over IPC takes the next id,
+sends a message frame (envelope kind Request) carrying it, registers a
+slot, and awaits it. The receive loop reads each datagram: a reply frame
+is matched by `correlation` and fulfills its waiting caller; a message
+frame is delivered to the looper for the handler.
+
+The reply path is **framework-mediated, not embedded**. A request
+delivered to a handler is accompanied by a **`Responder`** — a
+backend-agnostic reply handle the framework supplies; it is *not* a field
+the interface author writes into the message. The handler answers with
+`responder.send(value)`, and the framework routes it: in-process over a
+reply ring, over IPC as a reply frame echoing the correlation id. This
+**supersedes the looper framework's embedded-`Sender` `call`** — the
+embedded `Sender` becomes an in-process implementation detail of the
+`Responder`, never part of an interface's message shape. `Cap::call` and
+`Handler` are then uniform across both backends: the caller `await`s a
+typed reply, the handler answers a `Responder`, and neither names a
+backend.
+
 ---
 
 ## 3. Capabilities across a process boundary
