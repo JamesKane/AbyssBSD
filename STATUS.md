@@ -18,10 +18,10 @@ for the rest now exists (`tools/vm`, see In flight).
   authority graph — components, and the connections between them —
   computed and validated from a manifest set (§5.2). 23 tests, no `unsafe`.
 - `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6).
-  `procdesc` is built out and VM-verified (see In flight); `capsicum` and
-  `jail` are still blind scaffolds. Capsicum and procdesc carry C shims
-  (Capsicum's rights API is C macros; procdesc's `pdfork`-then-`exec` must
-  run in C); jail is a direct `extern` block. Each is gated on
+  `procdesc` and `jail` are built out and VM-verified (see In flight);
+  `capsicum` is still a blind scaffold. Capsicum and procdesc carry C
+  shims (Capsicum's rights API is C macros; procdesc's `pdfork`-then-`exec`
+  must run in C); jail is a direct `extern` block. Each is gated on
   `target_os = "freebsd"` and compiles to an empty library on macOS.
 
 The workspace is now eight `crates/` + three `sys/` + `xtask`; 101 tests,
@@ -32,6 +32,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `4e86395` Phase 4: the jail around the spawn — verified jail-sys, jailed spawn
+- `ff7dd78` Bump STATUS: Phase 4 — the pdfork-based spawn
 - `2261e50` Phase 4: freebsd-procdesc-sys — the pdfork-based spawn
 - `ef793dc` Bump STATUS: Phase 4 — the IPC ring connection complete
 - `eaa5e72` Phase 4: abyss-transport — the IPC ring connection (service side)
@@ -40,8 +42,6 @@ specifies the FreeBSD remainder.
 - `565e0d7` Bump STATUS: Phase 4 — the async IPC channel
 - `b0d5670` Phase 4: abyss-transport — the async IPC channel
 - `bc3a12d` Bump STATUS: Phase 4 — the looper event-source seam
-- `8466c49` Phase 4: abyss-looper — the event-source seam
-- `5429aa8` Bump STATUS: Phase 4 — the framed connection
 
 ## Site
 
@@ -81,21 +81,22 @@ Verified end to end in the FreeBSD VM: a looper `call`s and gets a
 correlated reply, and an `accept`ed request is answered through its
 `Responder`.
 
-The broker's spawn foundation is also down: **`freebsd-procdesc-sys`** is
-reworked from blind scaffold to a real, VM-verified `spawn` — `pdfork`
-then `execve`, done in a C shim so no Rust runs in the forked child, and
+The broker's jailed-spawn foundation is also down: **`freebsd-procdesc-sys`**
+is reworked from blind scaffold to a real, VM-verified `spawn` — `pdfork`
+then `execve`, done in a C shim so no Rust runs in the forked child, with
 a `Child` holding the process descriptor that `wait`s on the exit and
-`kill`s the child (§5.3, §5.5). `cargo xtask ci` green on macOS and
-FreeBSD; tree clean.
+`kill`s the child (§5.3, §5.5); and **`freebsd-jail-sys`** is verified, the
+spawned child `jail_attach`ing before the exec so a component lands
+confined. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **jail** around the spawn — `freebsd-jail-sys` verified, the child
-  `jail_attach`ing before `execve` (§5.3) — the next increment;
-- the bootstrap bundle and the `cap_enter` startup shim (§5.3–§5.4);
+- the **bootstrap bundle** the broker hands a freshly spawned component,
+  and the **`cap_enter` startup shim** that decodes it and confines the
+  process (§5.3–§5.4) — the next increment;
 - supervision and `PeerRestarted` re-wiring, on the process descriptor
   the spawn now hands back (§5.5);
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
