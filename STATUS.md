@@ -6,19 +6,19 @@ plan is the roadmap.
 
 ## Epic
 
-**Window-management design gate** (done early, at the user's request).
-`docs/design/window-management.md` written, elaborating `DESIGN.md` §7.7:
-the window-management core, the layout-policy seam, the tiling layout
-engine (pure geometry — host-testable), the floating policy, key-chords,
-and the two coexisting experiences. Tiling is the first face (M1–M2); the
-floating GNOME-2 desktop follows at M3. Added to `ROADMAP.md` §5 as
-**Gate E**; the gate table re-lettered (display → F, render-backends → G,
-schemas/login → H, install-update → I).
+**Gate C — the toolkit design.** `docs/design/toolkit.md` written,
+elaborating `DESIGN.md` §7.3 and §8: the 2D renderer and its CPU/GLES
+backend seam, the view arena and generational `ViewId`, the retained view
+tree, the two-pass box layout, the curated widget set, the no-callbacks
+event model, theming, and damage tracking. Phase 3 (`abyss-render`,
+`abyss-toolkit`) is now fully specified — and host-testable on macOS (CPU
+rendering into a memory buffer, golden images).
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `1cc1cca` Gate E: the window-management design doc
 - `366263c` Phase 2: the looper & service framework — abyss-looper & abyss-cap
 - `198b5f3` Gate B: the looper & service framework design doc
 - `3636807` Phase 1: the message primitive — abyss-msg & abyss-msg-derive
@@ -28,22 +28,23 @@ schemas/login → H, install-update → I).
 - `a0784fe` Pin the FreeBSD base source (ROADMAP §6 resolved)
 - `139c785` Update STATUS after merge to main
 - `322d8ad` Add STATUS.md rolling change context
-- `16c387b` Bootstrap project: docs cleanup, reorg, roadmap, toolchain, site
 
 ## In flight
 
-The window-management gate commit is pending. Working tree otherwise clean
-— the parallel-process DESIGN.md / BACKLOG.md / site changes landed in
-`9fb7995` and `a09fc9f`.
+The Gate C doc commit is pending. Working tree otherwise clean.
 
 ## Next
 
-Implementation order resumes with **Gate C** — `docs/design/toolkit.md`
-(the Interface Kit widget set, the layout algorithm, the arena/`ViewId`
-API, the §7.3 drawing-API seam) — then **Phase 3**, the renderer and
-toolkit core. The window-management gate (E) was designed ahead of its
-Phase 5; the tiling layout engine can be built as a standalone, host-
-tested crate whenever convenient, since it is pure geometry.
+**Phase 3** — build `crates/abyss-render` (the `Canvas`, the
+`RenderBackend` seam, the CPU backend, the font-stack FFI) and
+`crates/abyss-toolkit` (the arena/`ViewId`, the retained tree, layout, the
+widget set, theming, damage) per `docs/design/toolkit.md` §12. Fully
+host-testable on macOS. A Phase-3 opening task: add `bindgen` and the font
+libraries to `docs/dependency-allowlist.md` (§3.3 of the toolkit doc).
+
+The window-management gate (E) remains designed ahead of its Phase 5; the
+tiling layout engine is pure geometry and can be built standalone whenever
+convenient.
 
 ## Notes
 
