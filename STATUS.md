@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `47a3d6b` Phase 4: abyss-transport — the framed connection
+- `49655d8` Bump STATUS: Phase 4 — the kqueue reactor
 - `812d46c` Phase 4: abyss-transport — the kqueue reactor
 - `1bcb4eb` Bump STATUS: IPC ring design pass (broker-and-transport.md §2.5-2.7)
 - `b772b49` Gate D refinement: the IPC ring, serialization, wire request/reply
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `454d518` Bump STATUS: Phase 4 FreeBSD remainder, increment 1 (abyss-transport)
 - `ea2b569` Phase 4: abyss-transport — the SOCK_SEQPACKET transport
 - `a0f13b0` ci: add a FreeBSD job that runs the test suite in a VM
-- `1b5dcf3` ci: install freetype and harfbuzz on the runner
-- `e8712f9` Bump STATUS: the FreeBSD VM builds the workspace green
 
 ## Site
 
@@ -58,7 +58,9 @@ is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
 
 - `Channel` — a `SOCK_SEQPACKET` socket pair with `SCM_RIGHTS` fd-passing
   over a C cmsg shim;
-- `MessageChannel` — envelope framing on top, one datagram per envelope;
+- `MessageChannel` — a bare envelope per datagram (the bootstrap bundle);
+- `RingFrame` / `FramedChannel` — the IPC ring's wire (§2.6): an 8-byte
+  ring frame, with the correlation id, ahead of each envelope;
 - `Reactor` — the `kqueue` readiness reactor (§2.3), the looper's FreeBSD
   event source: register descriptors, `wait`, `wake` across threads.
 
