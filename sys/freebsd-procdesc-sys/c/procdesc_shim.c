@@ -15,20 +15,27 @@
 #include <sys/types.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
 
 extern char **environ;
 
+/* The child receives its bootstrap socket at this fixed descriptor
+ * number (broker-and-transport.md §5.3). */
+#define ABYSS_BOOTSTRAP_FD 3
+
 /*
  * pdfork a child that immediately execs `path` with argument vector `argv`.
- * If `jid` is non-negative the child attaches to that jail before the exec,
- * so the component lands confined. On success returns the child's pid and
- * writes its process descriptor to *pd_out; on failure returns -1 with
- * errno set.
+ * If `bootstrap_fd` is non-negative it becomes the child's fd 3 — its
+ * bootstrap socket. If `jid` is non-negative the child attaches to that
+ * jail before the exec, so the component lands confined. On success
+ * returns the child's pid and writes its process descriptor to *pd_out;
+ * on failure returns -1 with errno set.
  */
 int
-abyss_pdspawn(const char *path, char *const argv[], int jid, int *pd_out)
+abyss_pdspawn(const char *path, char *const argv[], int jid, int bootstrap_fd,
+    int *pd_out)
 {
 	int pd = -1;
 	pid_t pid = pdfork(&pd, 0);
@@ -36,6 +43,23 @@ abyss_pdspawn(const char *path, char *const argv[], int jid, int *pd_out)
 		return -1;
 	if (pid == 0) {
 		/* Child: only async-signal-safe calls until execve. */
+		if (bootstrap_fd >= 0) {
+			/*
+			 * Hand the child its bootstrap socket as fd 3. dup2
+			 * onto a fresh descriptor clears close-on-exec; but
+			 * dup2(fd, fd) is a no-op that leaves the flag set,
+			 * so when the socket is already fd 3 the flag has to
+			 * be cleared by hand or the exec would close it.
+			 */
+			if (bootstrap_fd == ABYSS_BOOTSTRAP_FD) {
+				if (fcntl(bootstrap_fd, F_SETFD, 0) < 0)
+					_exit(125);
+			} else {
+				if (dup2(bootstrap_fd, ABYSS_BOOTSTRAP_FD) < 0)
+					_exit(125);
+				close(bootstrap_fd);
+			}
+		}
 		if (jid >= 0 && jail_attach(jid) < 0)
 			_exit(126); /* could not enter the jail */
 		execve(path, argv, environ);

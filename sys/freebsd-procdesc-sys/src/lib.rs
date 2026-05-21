@@ -21,4 +21,4 @@
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::{Child, spawn};
+pub use freebsd::{Child, SpawnOptions, spawn};
