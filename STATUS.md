@@ -11,12 +11,13 @@ the boundary the roadmap was ordered around. Its FreeBSD-independent
 parts are built and tested on the macOS dev bed; the FreeBSD environment
 for the rest now exists (`tools/vm`, see In flight).
 
-- `crates/abyss-broker` — the broker's FreeBSD-independent core. The
-  `manifest` parser: the component-manifest schema and its fixed-schema
-  declarative text format, a first-party parser with no vendored config
-  crate (`broker-and-transport.md` §4). The `graph` module: the static
-  authority graph — components, and the connections between them —
-  computed and validated from a manifest set (§5.2). 23 tests, no `unsafe`.
+- `crates/abyss-broker` — the broker. Its host slice: the `manifest`
+  parser — the component-manifest schema and its fixed-schema declarative
+  text format, a first-party parser with no vendored config crate
+  (`broker-and-transport.md` §4) — and the `graph` module, the static
+  authority graph computed and validated from a manifest set (§5.2). And,
+  on FreeBSD, the `spawn` module — component spawn (§5.3); see In flight.
+  No `unsafe`.
 - `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6).
   `procdesc` and `jail` are built out and VM-verified (see In flight);
   `capsicum` is still a blind scaffold. Capsicum and procdesc carry C
@@ -24,14 +25,16 @@ for the rest now exists (`tools/vm`, see In flight).
   must run in C); jail is a direct `extern` block. Each is gated on
   `target_os = "freebsd"` and compiles to an empty library on macOS.
 
-The workspace is now eight `crates/` + three `sys/` + `xtask`; 101 tests,
-`cargo xtask ci` green. Gate D (`docs/design/broker-and-transport.md`)
-specifies the FreeBSD remainder.
+The workspace is eight `crates/` + three `sys/` + `xtask`, `cargo xtask
+ci` green. Gate D (`docs/design/broker-and-transport.md`) specifies the
+FreeBSD remainder.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `9c85f9e` Phase 4: abyss-broker — the FreeBSD component spawn module
+- `d325451` Bump STATUS: Phase 4 — the bootstrap fd in the spawn
 - `baf68eb` Phase 4: freebsd-procdesc-sys — the bootstrap fd in the spawn
 - `8bb3a9b` Bump STATUS: Phase 4 — the jail around the spawn
 - `4e86395` Phase 4: the jail around the spawn — verified jail-sys, jailed spawn
@@ -40,8 +43,6 @@ specifies the FreeBSD remainder.
 - `ef793dc` Bump STATUS: Phase 4 — the IPC ring connection complete
 - `eaa5e72` Phase 4: abyss-transport — the IPC ring connection (service side)
 - `4deef44` Bump STATUS: Phase 4 — the IPC ring connection (call side)
-- `f360a20` Phase 4: abyss-transport — the IPC ring connection (call side)
-- `565e0d7` Bump STATUS: Phase 4 — the async IPC channel
 
 ## Site
 
@@ -87,22 +88,25 @@ then `execve`, done in a C shim so no Rust runs in the forked child, with
 a `Child` holding the process descriptor that `wait`s on the exit and
 `kill`s the child (§5.3, §5.5); and **`freebsd-jail-sys`** is verified, the
 spawned child `jail_attach`ing before the exec so a component lands
-confined. The spawn also hands the child a bootstrap socket at fd 3 — the
-descriptor the broker will send the bundle over (§5.3). `cargo xtask ci`
-green on macOS and FreeBSD; tree clean.
+confined; and the spawn hands the child a bootstrap socket at fd 3.
+**`abyss-broker`'s `spawn` module** composes all of it: `spawn_component`
+creates the component's jail, opens the bootstrap channel, `pdfork`s the
+program into the jail holding that channel as fd 3, and sends the
+bootstrap bundle over it — verified in the VM, a spawned component
+decoding exactly the bundle the broker sent. `cargo xtask ci` green on
+macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the broker's FreeBSD **spawn module** — creating the bootstrap socket,
-  sending the **bundle** envelope over it, owning component spawn (§5.3)
-  — the next increment;
-- the **`cap_enter` startup shim** a component runs to decode the bundle
-  and confine itself, verifying `freebsd-capsicum-sys` (§5.4);
+- the **`cap_enter` startup shim** — the code a spawned component runs to
+  receive its bundle and drop into capability mode, verifying
+  `freebsd-capsicum-sys`, the last blind `sys/*` crate (§5.4) — the next
+  increment;
 - supervision and `PeerRestarted` re-wiring, on the process descriptor
-  the spawn now hands back (§5.5);
+  the spawn hands back (§5.5);
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
 
 with the `sys/*` shims fleshed out and every FFI signature verified
