@@ -45,6 +45,9 @@ pub enum Interest {
     Readable,
     /// Writable — a `send` would not block.
     Writable,
+    /// The process behind a process descriptor has exited — `EVFILT_PROCDESC`
+    /// with `NOTE_EXIT`, the broker's supervision signal (§5.5).
+    ProcessExit,
 }
 
 impl Interest {
@@ -52,6 +55,7 @@ impl Interest {
         match self {
             Interest::Readable => 0,
             Interest::Writable => 1,
+            Interest::ProcessExit => 2,
         }
     }
 }
@@ -63,6 +67,8 @@ pub enum Event {
     Readable(RawFd),
     /// A registered descriptor became writable.
     Writable(RawFd),
+    /// The process behind a registered process descriptor exited.
+    ProcessExited(RawFd),
     /// [`Reactor::wake`] was called — a cross-thread or in-process nudge.
     Woken,
 }
@@ -155,6 +161,7 @@ impl Reactor {
             .map(|e| match e.kind {
                 1 => Event::Writable(e.ident as RawFd),
                 2 => Event::Woken,
+                3 => Event::ProcessExited(e.ident as RawFd),
                 _ => Event::Readable(e.ident as RawFd),
             })
             .collect();
@@ -217,6 +224,7 @@ impl EventSource for ReactorSource {
             let key = match event {
                 Event::Readable(fd) => (fd, Interest::Readable),
                 Event::Writable(fd) => (fd, Interest::Writable),
+                Event::ProcessExited(fd) => (fd, Interest::ProcessExit),
                 Event::Woken => continue,
             };
             if let Some(waker) = waiters.remove(&key) {
@@ -271,5 +279,31 @@ mod tests {
         reactor.wake().expect("wake");
 
         assert_eq!(handle.join().expect("join"), vec![Event::Woken]);
+    }
+
+    #[test]
+    fn reports_a_process_descriptor_exit() {
+        use freebsd_procdesc_sys::{SpawnOptions, spawn};
+        use std::path::Path;
+
+        // A child that lives just long enough for its descriptor to be
+        // registered before it exits.
+        let child = spawn(
+            Path::new("/bin/sh"),
+            &["-c", "sleep 0.3"],
+            &SpawnOptions::default(),
+        )
+        .expect("spawn a child");
+        let pd = child.descriptor();
+
+        let reactor = Reactor::new().expect("kqueue");
+        reactor
+            .register(pd, Interest::ProcessExit)
+            .expect("register the process descriptor");
+
+        let ready = reactor
+            .wait(Some(Duration::from_secs(5)))
+            .expect("wait for the child to exit");
+        assert_eq!(ready, vec![Event::ProcessExited(pd.as_raw_fd())]);
     }
 }

@@ -15,5 +15,9 @@ publish = false
 abyss-looper = { path = "../abyss-looper" }
 abyss-msg = { path = "../abyss-msg" }
 
+# The reactor's process-descriptor test spawns a child to watch exit.
+[dev-dependencies]
+freebsd-procdesc-sys = { path = "../../sys/freebsd-procdesc-sys" }
+
 [lints]
 workspace = true

@@ -27,7 +27,7 @@
 /*
  * A flat readiness event handed back to Rust. The layout must match
  * `AbyssEvent` in src/freebsd/reactor.rs. `kind`: 0 readable, 1 writable,
- * 2 woken.
+ * 2 woken, 3 process-exited.
  */
 struct abyss_event {
 	int64_t ident;
@@ -41,22 +41,34 @@ abyss_kqueue(void)
 }
 
 /*
- * Add (add != 0) or remove a read/write interest for `fd`.
- * `interest`: 0 readable, 1 writable. Returns 0, or -1 with errno set.
+ * Add (add != 0) or remove an interest for `fd`.
+ * `interest`: 0 readable, 1 writable, 2 process-exit (the process behind a
+ * process descriptor exiting). Returns 0, or -1 with errno set.
  *
  * An added interest is EV_ONESHOT: it fires at most once and is then
  * removed from the kqueue automatically. The async ring re-registers on
  * each would-block poll, so a registration never outlives the task
- * parked on it — no stale filter, no busy wakeup.
+ * parked on it — no stale filter, no busy wakeup. A process exits once,
+ * so process-exit interest is naturally one-shot too.
  */
 int
 abyss_kqueue_ctl(int kq, int fd, int interest, int add)
 {
 	struct kevent kev;
-	short filter = (interest == 1) ? EVFILT_WRITE : EVFILT_READ;
+	short filter;
+	unsigned int fflags = 0;
 	unsigned short flags = add ? (EV_ADD | EV_ONESHOT) : EV_DELETE;
 
-	EV_SET(&kev, (uintptr_t)fd, filter, flags, 0, 0, NULL);
+	if (interest == 1) {
+		filter = EVFILT_WRITE;
+	} else if (interest == 2) {
+		filter = EVFILT_PROCDESC;
+		fflags = NOTE_EXIT;
+	} else {
+		filter = EVFILT_READ;
+	}
+
+	EV_SET(&kev, (uintptr_t)fd, filter, flags, fflags, 0, NULL);
 	return kevent(kq, &kev, 1, NULL, 0, NULL);
 }
 
@@ -112,6 +124,8 @@ abyss_kqueue_wait(int kq, struct abyss_event *out, int max, int timeout_ms)
 			out[i].kind = 2;
 		else if (evs[i].filter == EVFILT_WRITE)
 			out[i].kind = 1;
+		else if (evs[i].filter == EVFILT_PROCDESC)
+			out[i].kind = 3;
 		else
 			out[i].kind = 0;
 	}
