@@ -6,17 +6,21 @@ plan is the roadmap.
 
 ## Epic
 
-**Gate B — the looper & service framework.**
-`docs/design/looper-framework.md` written: the looper and its cooperative
-executor (run loop, per-handler serialization, wakers), the typed ring API
-and transport seam, the request/reply call, the `abyss-cap` capability
-layer (`Cap<I, R>`, phantom rights, `Cap: Wire`), and supervision. Phase 2
-is now fully specified.
+**Phase 2 — the looper & service framework.** `crates/abyss-looper` (the
+MPSC ring, the cooperative executor, `Handler`/`attach`, `block_on`) and
+`crates/abyss-cap` (`Cap<I, R>`, phantom-typed rights, `narrow`, `call`)
+built per `docs/design/looper-framework.md`. Both
+`#![forbid(unsafe_code)]`, zero external deps. 15 tests green — ring
+basics, cross-thread backpressure, call/reply, per-handler serialization,
+concurrency between handlers, narrow (incl. a compile-fail doctest for
+widening). 46 tests workspace-wide; `cargo xtask ci` passes. Build
+refinements recorded in the framework doc §12.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `198b5f3` Gate B: the looper & service framework design doc
 - `3636807` Phase 1: the message primitive — abyss-msg & abyss-msg-derive
 - `80510c3` Gate A: the wire-format design doc
 - `b90c53b` Phase 0: Cargo workspace & CI harness
@@ -29,17 +33,16 @@ is now fully specified.
 
 ## In flight
 
-The Gate B doc commit is pending. Parallel-process changes are also
-uncommitted and untouched by me — `docs/DESIGN.md`, `docs/BACKLOG.md`,
-`site/ecosystem.html`, `site/index.html`.
+The Phase 2 commit is pending. Parallel-process changes remain uncommitted
+and untouched by me — `docs/DESIGN.md`, `docs/BACKLOG.md`, and several
+`site/` files.
 
 ## Next
 
-**Phase 2** — build `crates/abyss-looper` and `crates/abyss-cap` per
-`docs/design/looper-framework.md` §11: the in-process ring, the looper and
-executor, handlers, the call, `Cap<I, R>` with phantom rights, and the
-host multi-looper test harness. Still host-testable on macOS — the
-inter-process backend and the broker are Gate D.
+**Gate C** — `docs/design/toolkit.md`: the toolkit architecture (the
+Interface Kit widget set, the layout algorithm, the arena/`ViewId` API,
+the §7.3 drawing-API seam). Design before Phase 3 builds the renderer and
+toolkit core. Phase 3 is still host-testable on macOS.
 
 ## Notes
 

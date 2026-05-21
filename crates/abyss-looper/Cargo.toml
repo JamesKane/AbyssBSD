@@ -1,0 +1,10 @@
+[package]
+name = "abyss-looper"
+description = "AbyssBSD looper & service framework — the cooperative executor, rings, and handlers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true

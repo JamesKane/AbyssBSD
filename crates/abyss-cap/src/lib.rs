@@ -1,0 +1,117 @@
+//! AbyssBSD capability layer — the typed, rights-bearing face of a ring
+//! endpoint (`docs/design/looper-framework.md` §7).
+//!
+//! - [`Cap`] — a typed send capability, parameterized by the interface it
+//!   speaks and the rights its holder was granted. Move-only.
+//! - [`Interface`] — what messages a capability of an interface carries.
+//! - [`Rights`] / [`SubsetOf`] — rights as compile-time phantom typestate.
+//!
+//! The `Wire` impl that lets a capability travel inside a cross-process
+//! message is Gate D — in-process (Phase 2) a capability moves as an
+//! ordinary value, so it has no serialization to do.
+
+#![forbid(unsafe_code)]
+
+mod rights;
+
+pub use rights::{Rights, SubsetOf};
+
+use std::marker::PhantomData;
+
+use abyss_looper::{Receiver, RingClosed, Sender, TrySendError, channel};
+
+/// An interface — the set of messages a capability of this interface
+/// carries. `Message` is typically an enum of the interface's requests,
+/// commands, and events.
+pub trait Interface: 'static {
+    /// The message type carried by this interface's ring.
+    type Message: Send + 'static;
+}
+
+/// A typed, rights-bearing **send** capability — the send endpoint of a
+/// ring (§7.1), typed by the interface `I` it speaks and the rights `R`
+/// its holder was granted.
+///
+/// Move-only: there is deliberately no `Clone`. Sharing a service among
+/// many clients is many capabilities, each minted for one connection —
+/// never a duplicated one (§10.1).
+pub struct Cap<I: Interface, R: Rights> {
+    sender: Sender<I::Message>,
+    _marker: PhantomData<fn() -> (I, R)>,
+}
+
+/// Create a connected capability and its receiver, over a ring of the
+/// given capacity.
+///
+/// In the running system the broker mints these as it wires the authority
+/// graph; this is the direct constructor for tests and bring-up.
+///
+/// # Panics
+///
+/// Panics if `capacity` is zero.
+pub fn cap_channel<I: Interface, R: Rights>(capacity: usize) -> (Cap<I, R>, Receiver<I::Message>) {
+    let (sender, receiver) = channel(capacity);
+    (
+        Cap {
+            sender,
+            _marker: PhantomData,
+        },
+        receiver,
+    )
+}
+
+impl<I: Interface, R: Rights> Cap<I, R> {
+    /// Send a message. Awaiting suspends the calling handler — never the
+    /// looper thread — if the ring is full (§3.1).
+    pub async fn send(&self, msg: I::Message) -> Result<(), RingClosed> {
+        self.sender.send(msg).await
+    }
+
+    /// Send without waiting; on a full ring the message is returned.
+    pub fn try_send(&self, msg: I::Message) -> Result<(), TrySendError<I::Message>> {
+        self.sender.try_send(msg)
+    }
+
+    /// Narrow to a weaker rights set.
+    ///
+    /// The `R2: SubsetOf<R>` bound makes the monotonic law of §10.1 a
+    /// *compile error* to break — widening does not type-check:
+    ///
+    /// ```compile_fail
+    /// use abyss_cap::{Cap, Interface, Rights, SubsetOf, cap_channel};
+    ///
+    /// struct Iface;
+    /// impl Interface for Iface { type Message = i32; }
+    ///
+    /// struct Broad;
+    /// struct Narrow;
+    /// impl Rights for Broad {}
+    /// impl Rights for Narrow {}
+    /// impl SubsetOf<Broad> for Narrow {}
+    ///
+    /// let (cap, _rx) = cap_channel::<Iface, Narrow>(1);
+    /// // Broad is not a subset of Narrow — this must not compile.
+    /// let _wider: Cap<Iface, Broad> = cap.narrow::<Broad>();
+    /// ```
+    pub fn narrow<R2: SubsetOf<R>>(self) -> Cap<I, R2> {
+        Cap {
+            sender: self.sender,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Request/reply (§6). `build` is handed a fresh reply [`Sender`] to
+    /// embed in the request message; the reply is awaited on the matching
+    /// receiver. Awaiting suspends the calling handler, never the thread.
+    ///
+    /// `Err(RingClosed)` means the peer was gone before it could reply.
+    pub async fn call<Rep, F>(&self, build: F) -> Result<Rep, RingClosed>
+    where
+        Rep: Send + 'static,
+        F: FnOnce(Sender<Rep>) -> I::Message,
+    {
+        let (reply_tx, mut reply_rx) = channel::<Rep>(1);
+        self.sender.send(build(reply_tx)).await?;
+        reply_rx.recv().await
+    }
+}

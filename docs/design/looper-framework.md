@@ -437,3 +437,58 @@ for capabilities (§7.3). Depends on `abyss-looper` and `abyss-msg`.
   measurable CPU.
 
 `cargo xtask ci` runs all of it on every change.
+
+---
+
+## 12. As built — Phase 2 refinements
+
+§§1–11 are the design. Building `abyss-looper` and `abyss-cap` refined
+several mechanisms. Every *contract* above holds — per-handler
+serialization, concurrency between handlers, the thread never blocks, idle
+is zero CPU, move-only capabilities, narrow-only rights — but these details
+changed, and this section is authoritative where it differs.
+
+- **The executor is serve loops, not a dispatch table.** §4.1 sketched a
+  looper dispatching messages into per-handler queues. The build is simpler
+  and equivalent: `attach` spawns one task per handler — a `serve` loop
+  that `recv`s the handler's inbox and `.await`s `handle`. Per-handler
+  serialization is then just the loop being sequential, and the
+  "per-handler queue" is the inbox ring's own buffer. The executor only
+  polls tasks and parks. This also dissolves the §4.3 self-reference
+  worry: the serve loop *owns* the handler, so `handle`'s `&mut self` is an
+  ordinary local borrow inside one task future. Both crates are
+  `#![forbid(unsafe_code)]`.
+
+- **Rings are MPSC.** §3's "exactly one sender, one receiver" became an
+  MPSC ring: `channel` yields a clonable `Sender` and one `Receiver`. A
+  capability stays move-only regardless — `Cap<I, R>` wraps a sender and is
+  deliberately not `Clone`. Many clients of one service are many `Cap`s
+  minted onto that service's one ring: the move-only, per-connection
+  authority discipline of §7.1, realized over an MPSC ring.
+
+- **`call` is a method on `Cap`.** Not `ctx.call(&cap, request)` but
+  `cap.call(|reply| Request { …, reply }).await` — the closure is handed a
+  fresh reply `Sender` to embed. `call` needs no looper context, so it
+  belongs on the capability (§6.5 — act on a capability you hold).
+
+- **The receive endpoint is `Receiver<I::Message>`.** No distinct `Inbox<I>`
+  newtype was built; it would wrap `Receiver` and add nothing (§3.5).
+  `cap_channel()` yields `(Cap<I, R>, Receiver<I::Message>)`.
+
+- **`block_on` was added.** It drives a future to completion on a
+  non-looper thread (`main`, tests) — the bridge for any thread that is
+  not itself a looper.
+
+- **`Cap: Wire` is deferred to Gate D.** §7.3 placed it in Phase 2, but
+  in-process a capability moves as an ordinary Rust value — there is
+  nothing to serialize. The `Wire` impl has a job only when a capability
+  crosses a process, which is the Gate D transport. `abyss-cap` therefore
+  depends only on `abyss-looper`, not `abyss-msg`, for now.
+
+- **`Send` bounds.** A looper moves to its thread once, so its tasks — and
+  thus `Handler` and the `handle` future — must be `Send` (§6.7, §9). The
+  `Handler` trait carries the bound.
+
+- **`Ctx` is empty.** Reserved as §5 and §10 said; Phase 2 puts nothing in
+  it. It is passed by reference so the `Handler` signature is stable as it
+  grows.
