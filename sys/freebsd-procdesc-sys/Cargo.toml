@@ -1,14 +1,15 @@
 [package]
 name = "freebsd-procdesc-sys"
-description = "FreeBSD process-descriptor FFI — pdfork, pdkill, pdgetpid (broker-and-transport.md §6)"
+description = "FreeBSD process-descriptor FFI — pdfork-based spawn and pdkill (broker-and-transport.md §6)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
 
-# pdfork/pdkill/pdgetpid are ordinary libc functions — a direct `extern`
-# block, no C shim. FreeBSD only; an empty crate on every other host.
+# build.rs compiles c/procdesc_shim.c with the system toolchain (cc, ar):
+# the pdfork-then-execve must run in C so no Rust executes in the forked
+# child (§5.3, §6). The build is a no-op on every non-FreeBSD host.
 
 [lints]
 workspace = true
