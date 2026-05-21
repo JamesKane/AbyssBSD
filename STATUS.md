@@ -18,14 +18,13 @@ for the rest now exists (`tools/vm`, see In flight).
   authority graph computed and validated from a manifest set (§5.2). And,
   on FreeBSD, the `spawn` module — component spawn (§5.3); see In flight.
   No `unsafe`.
-- `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6).
-  `procdesc` and `jail` are built out and VM-verified (see In flight);
-  `capsicum` is still a blind scaffold. Capsicum and procdesc carry C
+- `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6),
+  all three now built out and VM-verified. Capsicum and procdesc carry C
   shims (Capsicum's rights API is C macros; procdesc's `pdfork`-then-`exec`
   must run in C); jail is a direct `extern` block. Each is gated on
   `target_os = "freebsd"` and compiles to an empty library on macOS.
 
-The workspace is eight `crates/` + three `sys/` + `xtask`, `cargo xtask
+The workspace is nine `crates/` + three `sys/` + `xtask`, `cargo xtask
 ci` green. Gate D (`docs/design/broker-and-transport.md`) specifies the
 FreeBSD remainder.
 
@@ -33,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `a0f5ade` Phase 4: abyss-bootstrap — the cap_enter startup shim
+- `c83943d` Bump STATUS: Phase 4 — the broker component spawn module
 - `9c85f9e` Phase 4: abyss-broker — the FreeBSD component spawn module
 - `d325451` Bump STATUS: Phase 4 — the bootstrap fd in the spawn
 - `baf68eb` Phase 4: freebsd-procdesc-sys — the bootstrap fd in the spawn
@@ -41,8 +42,6 @@ FreeBSD remainder.
 - `ff7dd78` Bump STATUS: Phase 4 — the pdfork-based spawn
 - `2261e50` Phase 4: freebsd-procdesc-sys — the pdfork-based spawn
 - `ef793dc` Bump STATUS: Phase 4 — the IPC ring connection complete
-- `eaa5e72` Phase 4: abyss-transport — the IPC ring connection (service side)
-- `4deef44` Bump STATUS: Phase 4 — the IPC ring connection (call side)
 
 ## Site
 
@@ -92,25 +91,27 @@ confined; and the spawn hands the child a bootstrap socket at fd 3.
 **`abyss-broker`'s `spawn` module** composes all of it: `spawn_component`
 creates the component's jail, opens the bootstrap channel, `pdfork`s the
 program into the jail holding that channel as fd 3, and sends the
-bootstrap bundle over it — verified in the VM, a spawned component
-decoding exactly the bundle the broker sent. `cargo xtask ci` green on
-macOS and FreeBSD; tree clean.
+bootstrap bundle over it.
+
+And the spawn-and-bootstrap loop is closed. **`abyss-bootstrap`** is the
+component-side startup shim: `enter` adopts the bootstrap socket at fd 3,
+receives the bundle, and `cap_enter`s — verifying `freebsd-capsicum-sys`.
+The `component-probe` binary is the first AbyssBSD component; an
+end-to-end VM test spawns it through the broker and sees it report back
+from inside capability mode, having received exactly the bundle the
+broker sent. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **`cap_enter` startup shim** — the code a spawned component runs to
-  receive its bundle and drop into capability mode, verifying
-  `freebsd-capsicum-sys`, the last blind `sys/*` crate (§5.4) — the next
-  increment;
-- supervision and `PeerRestarted` re-wiring, on the process descriptor
-  the spawn hands back (§5.5);
+- **supervision** — watching the process descriptor the spawn hands back,
+  restarting a failed component, and the `PeerRestarted` re-wiring of the
+  components that talked to it (§5.5) — the next increment;
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
-
-with the `sys/*` shims fleshed out and every FFI signature verified
-against the FreeBSD headers as the broker exercises them.
+- the broker built from a manifest set: spawning a whole graph, not one
+  component at a time (§5).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
 This reaches the bulk of **M1**.
