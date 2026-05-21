@@ -14,20 +14,24 @@
 //! primitive is kept separate so `abyss-looper` stays host-clean, and the
 //! `kqueue` event loop that will drive these sockets is a later, separate
 //! piece. [`Channel`] is the raw primitive — bytes and descriptors;
-//! [`MessageChannel`] frames whole [`abyss_msg::Envelope`]s over it; and
-//! [`Reactor`] is the `kqueue` event source the looper waits on (§2.3).
-//! The ring API builds on these.
+//! [`MessageChannel`] frames a bare envelope over it; [`FramedChannel`]
+//! adds the [`RingFrame`] the IPC ring needs (§2.6); and [`Reactor`] is
+//! the `kqueue` event source the looper waits on (§2.3).
 //!
-//! **FreeBSD only.** `SOCK_SEQPACKET` Unix-domain sockets do not exist on
-//! macOS; on every non-FreeBSD host this crate is empty, so the workspace
-//! still builds on the development bed. The transport is built and tested
-//! in the FreeBSD VM (`tools/vm`).
+//! **Mostly FreeBSD.** `SOCK_SEQPACKET` Unix-domain sockets do not exist
+//! on macOS, so the channels and the reactor are FreeBSD-only; on every
+//! other host just the platform-independent [`RingFrame`] is present, and
+//! the workspace still builds on the development bed. The FreeBSD parts
+//! are built and tested in the VM (`tools/vm`).
 
 // An FFI crate: `unsafe` is its purpose, and is confined to `freebsd`.
 #![allow(unsafe_code)]
+
+mod frame;
+pub use frame::{FrameError, FrameKind, RING_FRAME_LEN, RingFrame};
 
 #[cfg(target_os = "freebsd")]
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::{Channel, Event, Interest, MessageChannel, Reactor};
+pub use freebsd::{Channel, Event, FramedChannel, Interest, MessageChannel, Reactor};

@@ -12,6 +12,8 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 
 use abyss_msg::Envelope;
 
+use crate::frame::{RING_FRAME_LEN, RingFrame};
+
 mod reactor;
 pub use reactor::{Event, Interest, Reactor};
 
@@ -194,6 +196,75 @@ impl AsFd for MessageChannel {
     }
 }
 
+/// A [`Channel`] carrying ring-framed envelopes — the IPC ring's wire
+/// (`docs/design/broker-and-transport.md` §2.6).
+///
+/// One `send` is one `SOCK_SEQPACKET` datagram: an 8-byte [`RingFrame`]
+/// followed by the encoded envelope, with the envelope's handle
+/// descriptors passed via `SCM_RIGHTS`. The request/reply correlation
+/// that runs over these frames is a layer above this one.
+pub struct FramedChannel {
+    channel: Channel,
+}
+
+impl FramedChannel {
+    /// A connected pair — the two ends of one IPC ring.
+    pub fn pair() -> io::Result<(FramedChannel, FramedChannel)> {
+        let (a, b) = Channel::pair()?;
+        Ok((FramedChannel { channel: a }, FramedChannel { channel: b }))
+    }
+
+    /// Carry ring datagrams over an existing channel.
+    pub fn new(channel: Channel) -> Self {
+        FramedChannel { channel }
+    }
+
+    /// Send one ring datagram: `frame`, then `envelope`, with the
+    /// envelope's handle descriptors carried alongside via `SCM_RIGHTS`.
+    pub fn send(
+        &self,
+        frame: RingFrame,
+        envelope: &Envelope,
+        fds: &[BorrowedFd<'_>],
+    ) -> io::Result<()> {
+        let body = envelope.encode();
+        let mut datagram = Vec::with_capacity(RING_FRAME_LEN + body.len());
+        datagram.extend_from_slice(&frame.encode());
+        datagram.extend_from_slice(&body);
+        let sent = self.channel.send(&datagram, fds)?;
+        if sent != datagram.len() {
+            return Err(io::Error::other("ring datagram truncated on send"));
+        }
+        Ok(())
+    }
+
+    /// Receive one ring datagram: the frame, the envelope, and the
+    /// descriptors that rode with it.
+    pub fn recv(&self) -> io::Result<(RingFrame, Envelope, Vec<OwnedFd>)> {
+        let mut buf = vec![0u8; RING_FRAME_LEN + MAX_ENVELOPE];
+        let (n, fds) = self.channel.recv(&mut buf)?;
+        let frame = RingFrame::decode(&buf[..n]).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("malformed ring frame: {err}"),
+            )
+        })?;
+        let envelope = Envelope::decode(&buf[RING_FRAME_LEN..n]).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("malformed envelope: {err:?}"),
+            )
+        })?;
+        Ok((frame, envelope, fds))
+    }
+}
+
+impl AsFd for FramedChannel {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.channel.as_fd()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,6 +386,80 @@ mod tests {
         let mut content = String::new();
         received.read_to_string(&mut content).expect("read");
         assert_eq!(content, "handle target");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn round_trips_a_framed_envelope() {
+        use crate::frame::FrameKind;
+        use abyss_msg::{Header, MessageKind, Value};
+
+        let (a, b) = FramedChannel::pair().expect("socketpair");
+        let frame = RingFrame {
+            kind: FrameKind::Reply,
+            correlation: 4242,
+        };
+        let envelope = Envelope {
+            header: Header {
+                kind: MessageKind::Event,
+                interface_id: 3,
+                method_id: 1,
+            },
+            payload: Value::Bool(true),
+            handles: Vec::new(),
+        };
+        a.send(frame, &envelope, &[]).expect("send framed");
+
+        let (got_frame, got_envelope, fds) = b.recv().expect("recv framed");
+        assert_eq!(got_frame, frame);
+        assert_eq!(got_envelope, envelope);
+        assert!(fds.is_empty());
+    }
+
+    #[test]
+    fn a_framed_request_carries_its_handle_descriptor() {
+        use crate::frame::FrameKind;
+        use abyss_msg::{Header, MessageKind, RawHandle, Value};
+
+        let mut path = std::env::temp_dir();
+        path.push(format!("abyss-transport-framed-{}", std::process::id()));
+        File::create(&path)
+            .expect("create temp file")
+            .write_all(b"framed handle target")
+            .expect("write temp file");
+        let file = File::open(&path).expect("open temp file");
+
+        let frame = RingFrame {
+            kind: FrameKind::Message,
+            correlation: 7,
+        };
+        let envelope = Envelope {
+            header: Header {
+                kind: MessageKind::Request,
+                interface_id: 9,
+                method_id: 5,
+            },
+            payload: Value::Handle(0),
+            handles: vec![RawHandle {
+                kind: 1,
+                body: vec![0x10, 0x20],
+            }],
+        };
+        let (a, b) = FramedChannel::pair().expect("socketpair");
+        a.send(frame, &envelope, &[file.as_fd()])
+            .expect("send framed");
+
+        let (got_frame, got_envelope, mut fds) = b.recv().expect("recv framed");
+        assert_eq!(got_frame, frame);
+        assert_eq!(got_envelope, envelope);
+        assert_eq!(fds.len(), 1);
+
+        let mut received = File::from(fds.pop().expect("one fd"));
+        received.seek(SeekFrom::Start(0)).expect("seek");
+        let mut content = String::new();
+        received.read_to_string(&mut content).expect("read");
+        assert_eq!(content, "framed handle target");
 
         let _ = std::fs::remove_file(&path);
     }
