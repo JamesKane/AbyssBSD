@@ -6,15 +6,16 @@ plan is the roadmap.
 
 ## Epic
 
-**Phase 0 — workspace & CI harness.** Cargo workspace and the
-`cargo xtask ci` lane (fmt, clippy, build, test) stood up and verified
-green on the pinned Rust 1.95.0. No `crates/` yet — Gate A then Phase 1
-next.
+**Gate A — the wire format.** `docs/design/wire-format.md` written: the
+nine-kind value vocabulary, the envelope byte layout, untrusted-input
+decoding rules, and the `#[derive(Wire)]` contract. Phase 1 is now fully
+specified and ready to build.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `b90c53b` Phase 0: Cargo workspace & CI harness
 - `c1d3fe5` site: add the Ecosystem statement page
 - `a0784fe` Pin the FreeBSD base source (ROADMAP §6 resolved)
 - `139c785` Update STATUS after merge to main
@@ -24,14 +25,15 @@ next.
 
 ## In flight
 
-Nothing — working tree clean; the Phase 0 workspace commit is pending.
+Nothing — working tree clean; the Gate A doc commit is pending.
 
 ## Next
 
-1. **Gate A** — write `docs/design/wire-format.md`: the envelope byte
-   layout, the typed-value vocabulary, the derive-macro contract.
-2. **Phase 1** — `abyss-msg` + `abyss-msg-derive`, the message primitive.
-   First `crates/` members; CI starts exercising real code.
+1. **Phase 1** — build `crates/abyss-msg` and `crates/abyss-msg-derive`
+   per `docs/design/wire-format.md` §10: the `Value` codec, the envelope,
+   the `Wire` trait, `#[derive(Wire)]`, and the full host test suite
+   (round-trip, property, decoder fuzz, golden vectors, trybuild).
+2. These are the first `crates/` members — CI begins exercising real code.
 
 ## Notes
 
