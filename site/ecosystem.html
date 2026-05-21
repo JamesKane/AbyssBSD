@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ecosystem — AbyssBSD</title>
+<meta name="description" content="AbyssBSD does not aim to run existing Linux desktop applications. A deliberate choice: a native, capability-respecting app ecosystem and a standards-first, Ladybird-esque browser for the pre-enshittification web.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="components.html">Components</a>
+      <a href="ecosystem.html" class="active">Ecosystem</a>
+      <a href="interfaces.html">Interfaces</a>
+      <a href="roadmap.html">Roadmap</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <div class="eyebrow">Ecosystem</div>
+  <h1>A native ecosystem — by intent</h1>
+  <p class="lede">AbyssBSD does not aim to run the existing Linux desktop
+     applications. That is a deliberate decision, not a missing feature — and it
+     follows from the same reasoning as the rest of the system.</p>
+
+  <h2>What "existing apps" really are</h2>
+  <p>Let us be plain about it. The modern free-software desktop application is,
+     almost without exception, a <strong>Linux UI app</strong>: built on GTK,
+     Qt, or Electron; drawing through X11 or Wayland; and wired to D-Bus,
+     polkit, and portal services for everything it cannot do by itself. That is
+     what today's free desktop apps amount to.</p>
+  <p>To run those applications, an operating system must provide that entire
+     stack. Hosting them on AbyssBSD would mean importing — or re-implementing —
+     X11, Wayland, D-Bus, the portal daemons, the policy services: precisely the
+     accreted layers AbyssBSD was built to <a href="design.html">refuse</a>.</p>
+  <div class="note">
+    <strong>So AbyssBSD does not.</strong> There is no X server, and Wayland
+    compatibility is not a goal. A system cannot both reject that stack and host
+    the applications that require it. AbyssBSD chooses the rejection — with eyes
+    open, and on purpose.
+  </div>
+
+  <h2>The cost, named honestly</h2>
+  <p>This has a real price, and we will not pretend otherwise: AbyssBSD does not
+     run the GUI applications you use on Linux today, and it is not trying to.
+     This is the BeOS bargain, and we take it deliberately — a coherent system
+     you can hold in your head is worth more than a compatibility layer that
+     drags the whole 40-million-line mess back in through the side door.</p>
+  <p>An ecosystem built this way starts small. We would rather start small and
+     coherent than large and incoherent.</p>
+
+  <h2>What <em>does</em> run</h2>
+  <p>The FreeBSD base is kept whole, so the news is not all austere:</p>
+  <ul class="feature-list">
+    <li><strong>Every command-line and terminal program runs unchanged</strong>
+        — from M1 — compilers, editors, version control, build systems,
+        language runtimes, servers. The FreeBSD base below is untouched.</li>
+    <li><strong>AbyssBSD is a real working system for developers</strong> before
+        it has a single graphical app of its own. The terminal emulator is
+        load-bearing by design, and it is the bridge.</li>
+  </ul>
+
+  <h2>Native apps — citizens, not ports</h2>
+  <p>An AbyssBSD app is written <em>for</em> AbyssBSD: a
+     <a href="components.html">bundle with a capability manifest</a>,
+     message-driven, drawing through the one toolkit. It is born holding no
+     ambient authority and asks for exactly the capabilities it needs — no more.</p>
+  <p>The result is an application that is <strong>coherent with the system
+     instead of fighting it</strong>: small, fast, inside the memory and latency
+     budgets, scriptable through the standard interface, and secure by
+     construction. Not a port wearing a costume — a citizen.</p>
+
+  <hr class="divider">
+
+  <h2>The browser — a window to the pre-enshittification web</h2>
+  <p>A desktop needs a browser. A browser does not need to be Chromium.</p>
+  <p>The path we mean to take is a <strong>clean-room, independent engine</strong>
+     in the spirit of <em>Ladybird</em> — no Blink, no Gecko, no inherited
+     billion-line dependency — targeting <strong>standard, well-specified HTML5
+     and CSS</strong>.</p>
+  <p>Not the moving target of whatever a surveillance-funded ad company shipped
+     this quarter, but the open web as a <em>documented standard</em>: documents
+     and applications that work because they are built to specifications anyone
+     can read. A browser for the web as it was meant to be — before the
+     tracking, the ad-tech accretion, and the engagement machinery. The
+     <strong>pre-enshittification web</strong>: standards-first, user-first, and
+     small enough to understand.</p>
+  <div class="note">
+    <strong>A direction, not yet a dated milestone</strong> — the
+    <a href="roadmap.html">roadmap</a> through M5 is the desktop itself. But the
+    browser is the path forward we intend, and it is of a piece with everything
+    else here: refuse the accretion, build the coherent thing.
+  </div>
+
+  <hr class="divider">
+
+  <h2>Built with likeminded folks</h2>
+  <p>An ecosystem is not shipped; it is grown. AbyssBSD's will be grown with
+     people who share the values that produced it — simplicity over accretion,
+     capability security over ambient trust, software that is measured and held
+     to budgets, a desktop and a web you can actually hold in your head.</p>
+  <p>The application ecosystem is the part of this project that a small team
+     cannot write alone — and it is the part most worth building together. If
+     this is the system you have been waiting for, you are who AbyssBSD is for:
+     as a user, and as a builder.</p>
+  <p><strong>A return to simplicity — built in the open, in good company.</strong></p>
+
+  <div class="note">
+    <strong>Status:</strong> design captured from the initial brainstorm.
+    Nothing built yet. This page states intent and direction, not a shipped
+    feature set.
+  </div>
+
+  <p style="margin-top:2rem;"><a href="interfaces.html">Continue to the interfaces &rarr;</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+  </div>
+</footer>
+
+</body>
+</html>
