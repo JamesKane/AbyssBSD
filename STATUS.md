@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `adca251` Phase 4: abyss-cap — the capability handle-table body layout
+- `edbae68` Bump STATUS: Phase 4 — the supervisor, restart on death
 - `3d45fcf` Phase 4: abyss-broker — the supervisor, restart on death
 - `e4c42a3` Bump STATUS: Phase 4 — kqueue process-descriptor exit monitoring
 - `69a02d7` Phase 4: abyss-transport — kqueue process-descriptor exit monitoring
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `c83943d` Bump STATUS: Phase 4 — the broker component spawn module
 - `9c85f9e` Phase 4: abyss-broker — the FreeBSD component spawn module
 - `d325451` Bump STATUS: Phase 4 — the bootstrap fd in the spawn
-- `baf68eb` Phase 4: freebsd-procdesc-sys — the bootstrap fd in the spawn
-- `8bb3a9b` Bump STATUS: Phase 4 — the jail around the spawn
 
 ## Site
 
@@ -104,19 +104,23 @@ exit (`EVFILT_PROCDESC` / `NOTE_EXIT`); the broker's **`Supervisor`** is
 built on that signal — it watches its components' process descriptors
 and, when one exits, spawns it again, reclaiming its jail first. Verified
 in the VM: a supervised component that exits is respawned as a fresh
-process. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+process. And `Cap: Wire` is begun — `abyss-cap`'s **`CapBody`** is the
+§3.2 handle-table body a capability serializes to: the `cap_rights` mask
+and the object-rights set that ride beside an fd. `cargo xtask ci` green
+on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`PeerRestarted`** — when the supervisor restarts a component, the
-  re-wiring of the components that held rings to it: handing each a fresh
-  ring to the replacement (§5.5) — the next increment;
-- `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
-- the broker built from a manifest set: spawning a whole graph, not one
-  component at a time (§5).
+- the **`Cap` IPC backend** and its `Wire` impl — `Cap<I, R>` backed by an
+  IPC-ring fd, serializing through `CapBody` and onto `SCM_RIGHTS`
+  (§2.5, §3.4) — the next increment;
+- the broker **wiring an authority graph** — spawning a manifest set and
+  connecting the components with rings (§5.2);
+- supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
+  component, once components are wired (§5.5).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
 This reaches the bulk of **M1**.
