@@ -28,6 +28,8 @@ CON_PORT=4555
 DISK_SIZE="40G"
 SMP=4
 MEM=6144
+REPO=$(cd "$VMDIR/../.." && pwd)
+GUEST_SRC="/root/abyss"
 
 fail() { echo "vm.sh: $1" >&2; exit 1; }
 
@@ -94,6 +96,23 @@ cmd_ssh() {
         -p "$SSH_PORT" root@127.0.0.1 "$@"
 }
 
+cmd_sync() {
+    running || fail "VM is not running — ./vm.sh boot"
+    command -v rsync >/dev/null 2>&1 || fail "rsync is not on the host PATH"
+    echo "syncing $REPO/ -> VM:$GUEST_SRC/ ..."
+    rsync -az --delete \
+        --exclude .git --exclude target --exclude tools --exclude site \
+        -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -p $SSH_PORT" \
+        "$REPO/" "root@127.0.0.1:$GUEST_SRC/"
+    echo "synced."
+}
+
+cmd_build() {
+    cmd_sync
+    echo "running cargo xtask ci in the VM ..."
+    cmd_ssh "cd $GUEST_SRC && cargo xtask ci"
+}
+
 cmd_stop() {
     running || fail "VM is not running"
     pid=$(cat "$PIDFILE")
@@ -122,8 +141,10 @@ case "${1:-}" in
     seed)   cmd_seed ;;
     boot)   cmd_boot ;;
     ssh)    shift 2>/dev/null || true; cmd_ssh "$@" ;;
+    sync)   cmd_sync ;;
+    build)  cmd_build ;;
     stop)   cmd_stop ;;
     reset)  cmd_reset ;;
     status) cmd_status ;;
-    *) echo "usage: vm.sh {fetch|seed|boot|ssh|stop|reset|status}" >&2; exit 1 ;;
+    *) echo "usage: vm.sh {fetch|seed|boot|ssh|sync|build|stop|reset|status}" >&2; exit 1 ;;
 esac

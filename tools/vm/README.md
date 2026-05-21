@@ -26,6 +26,8 @@ toolchain, so the guest builds with FreeBSD's `pkg` Rust rather than the
 ./vm.sh fetch    # download (if needed), checksum, and decompress the image
 ./vm.sh boot     # build the cloud-init seed, create the disk, start the VM
 ./vm.sh ssh      # ssh in as root (or: ./vm.sh ssh 'uname -a')
+./vm.sh sync     # rsync the repo into the VM (excludes .git, target, tools, site)
+./vm.sh build    # sync, then run `cargo xtask ci` in the VM
 ./vm.sh status
 ./vm.sh stop     # shut the VM down
 ./vm.sh reset    # discard the VM disk; next boot is a clean FreeBSD

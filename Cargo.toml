@@ -11,7 +11,12 @@ members = ["xtask", "crates/*", "sys/*"]
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.95.0"
+# MSRV — the minimum supported Rust, which cargo enforces. Kept at or below
+# what FreeBSD packages (`pkg install rust`), since FreeBSD is AbyssBSD's
+# base OS and the project must build with its toolchain. This is distinct
+# from rust-toolchain.toml, which pins the exact, newer toolchain the macOS
+# development bed uses.
+rust-version = "1.94.0"
 license = "BSD-2-Clause"
 
 # Unsafe is permitted, but only as a deliberate per-crate `#![allow(...)]`
