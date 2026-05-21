@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Governance: AbyssBSD</title>
+<meta name="description" content="How AbyssBSD changes: a small RFC process, a BDFL while the project is young, the design invariants RFCs cannot casually overturn, and the trigger that hands governance to a steering committee.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Abyss<span>BSD</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="design.html">Design</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="components.html">Components</a>
+      <a href="ecosystem.html">Ecosystem</a>
+      <a href="interfaces.html">Interfaces</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="governance.html" class="active">Governance</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <div class="eyebrow">Governance</div>
+  <h1>How AbyssBSD changes</h1>
+  <p class="lede">A system you can hold in your head needs a process you can
+     hold in your head. AbyssBSD has one: formal enough to be honest, small
+     enough to stay out of the way.</p>
+
+  <h2>Formal informal</h2>
+  <p>There is structure here, not bureaucracy. A small RFC process governs
+     the decisions that genuinely deserve deliberation, and nothing else.
+     Everything below the threshold, a bug fix, a refactor, a better error
+     message, just ships through ordinary review. The point of writing the
+     process down is not ceremony; it is so that the boundary between "send
+     a patch" and "write a proposal" is a rule, not a mood.</p>
+
+  <h2>Guided by a BDFL, for now</h2>
+  <p>While AbyssBSD is young, it is guided by a benevolent dictator for life:
+     James Kane, the project's initiator and architect, who holds final
+     authority over the AbyssBSD layer and renders the decision on every
+     RFC. The reason is speed and coherence. A desktop with this many
+     simultaneously-moving pieces, bus, broker, compositor, toolkit, shell,
+     needs decisions that fit together, and a committee at this scale
+     produces churn and weakly-defended compromises instead.</p>
+  <p>The role is honest about its cost: it is one person's worldview. That
+     is defensible while the project is small and untenable once it is not,
+     so the process names, precisely, the moment it ends.</p>
+
+  <h2>What needs an RFC</h2>
+  <p>An RFC is required for changes to the load-bearing surfaces: the
+     unified message primitive and the wire format, the object-capability
+     model, the public surface and its versioned epochs, the component
+     interface schemas, the toolkit API, the performance and memory budgets,
+     and the dependency allowlist. Changes to the FreeBSD base itself are
+     not AbyssBSD's to make; they are filed upstream with FreeBSD, because
+     the base is kept whole and never forked.</p>
+  <p>Everything else stays light. Bug fixes, internal refactors, diagnostic
+     improvements, documentation, and additive changes that follow an
+     established pattern do not need an RFC at all. When in doubt, a
+     one-page pre-RFC sketch gets a yes, a no, or a "just send the patch"
+     within about two weeks.</p>
+
+  <h2>The lifecycle</h2>
+  <p>An RFC moves through a fixed set of stages, each with a published
+     target time so nothing stalls in silence:</p>
+  <ul class="feature-list">
+    <li><strong>Pre-RFC.</strong> A short sketch. A commitment to respond,
+        not to accept.</li>
+    <li><strong>Draft.</strong> The proposal is written up; a shepherd is
+        assigned to edit it toward readiness.</li>
+    <li><strong>Discussion.</strong> Open to public comment for at least two
+        weeks.</li>
+    <li><strong>Decision.</strong> The BDFL accepts, rejects, defers, or
+        records a withdrawal. There are no surprise rejections: a likely no
+        is signalled in the thread first.</li>
+    <li><strong>Implementation.</strong> Accepted is not done. The work
+        follows the project's phase-exit-gate pattern: an end-to-end test, a
+        negative test, the design docs updated, and the change proven to sit
+        inside the budgets.</li>
+    <li><strong>Stabilised.</strong> A change to the public surface stays
+        fluid until it is folded into a numbered epoch; from then it can
+        change only through a new RFC and a real migration path.</li>
+  </ul>
+
+  <h2>The invariants</h2>
+  <p>Some properties are load-bearing for what AbyssBSD is. An RFC may still
+     propose to change one, but it starts at a strong presumption against,
+     and it has to argue the invariant itself in the open, not smuggle the
+     change through. The shepherd rejects silent invariant changes.</p>
+  <ul class="feature-list">
+    <li><strong>The FreeBSD base is never forked.</strong> It is kept whole
+        and tracked upstream.</li>
+    <li><strong>One message primitive.</strong> A single typed message
+        carries UI events, IPC, the display protocol, and capabilities.
+        There is no second bus, no D-Bus.</li>
+    <li><strong>Capabilities, not ambient authority.</strong> A process is
+        born holding nothing; authority travels only as unforgeable handles.</li>
+    <li><strong>No X11, no Wayland in the base.</strong> The compositor is
+        from-scratch; any compatibility layer is optional and out of tree.</li>
+    <li><strong>Zero vendored dependencies.</strong> The AbyssBSD layer
+        leans on the Rust standard library and a small, version-controlled
+        allowlist.</li>
+    <li><strong>Budgets are walls.</strong> The idle-desktop memory budget
+        and the input-to-photon latency budget are build failures when
+        exceeded, not aspirations.</li>
+    <li><strong>Written in Rust, on stable.</strong> No nightly-only
+        features in shipped code.</li>
+    <li><strong>Hold it in your head.</strong> Surface area is a cost; a
+        change that grows the system without a matching simplification has
+        to justify itself.</li>
+  </ul>
+
+  <h2>The catch-fire trigger</h2>
+  <p>The BDFL model fits a project with no independent downstreams and few
+     outside contributors. AbyssBSD is a whole operating system, not a part
+     other projects consume, so its version of catching fire is a real
+     community forming around it: people running it, people building on it,
+     and people shipping applications for it.</p>
+  <p>Three conditions measure that, each written to need genuine,
+     independent traction rather than a flash in the pan:</p>
+  <ul class="feature-list">
+    <li><strong>Independent downstream systems.</strong> Distributions,
+        redistributions, or substantial forks built on the AbyssBSD layer by
+        distinct teams, in real use.</li>
+    <li><strong>Sustained external contribution.</strong> Several
+        contributors from outside the BDFL's organisation, each landing
+        accepted RFCs, over a rolling year.</li>
+    <li><strong>An external application ecosystem.</strong> Published
+        AbyssBSD apps by outside authors that an independent user base
+        depends on.</li>
+  </ul>
+  <p>When two of the three hold for a sustained six months, the governance
+     document is revised: a steering committee forms, and the BDFL becomes
+     Lead Architect, keeping a veto over the design invariants above but
+     losing unilateral authority over everything else. The transition is
+     planned for in advance, not improvised when it arrives.</p>
+
+  <div class="note">
+    <strong>The full process</strong> lives in <code>GOVERNANCE.md</code> at
+    the repository root, with the RFC format, the template, and the precise
+    timings and thresholds. This page is the summary.
+  </div>
+
+  <p style="margin-top:2rem;"><a href="index.html">&larr; Back to the start</a></p>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AbyssBSD: an opinionated desktop OS on the FreeBSD base.</span>
+    <span>Built from the project design documentation.</span>
+    <span>BSD 2-Clause licensed.</span>
+  </div>
+</footer>
+
+</body>
+</html>
