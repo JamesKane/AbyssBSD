@@ -49,6 +49,22 @@ over feature checklists.
   FreeBSD base).
 - "Measure; do not guess" (§3.5) turned into a tool.
 
+### Hex file viewer & editor
+
+A native viewer and editor for binary files — the hex/ASCII panes, offset
+navigation, search, and structured inspection. A small, focused tool in the
+§3.4 spirit, and a natural companion to the debugger above: inspecting file
+formats, core dumps, and on-disk structures.
+
+- Small enough to **build native** outright — no fork question, unlike the
+  editor and terminal.
+- Large-file handling is the one real design constraint: a memory-mapped file
+  with a viewport-rendered view — only the visible rows laid out and drawn —
+  fits the retained-mode toolkit (§8) and stays inside the §3.6 budgets
+  whatever the file size.
+- "Viewer" and "editor" are not two apps or a mode toggle: capability scoping
+  (§10) decides which — a file handed in read-only simply cannot be written.
+
 ### Terminal emulator — Ghostty-class
 
 `DESIGN.md` §12 M1 already requires a real VT terminal, load-bearing from M1.
@@ -57,6 +73,23 @@ This item is the *bar* for it: Ghostty-class — fast, GPU-accelerated, modern.
 - Ghostty is MIT-licensed but written in Zig with its own renderer; a fork is
   impractical. Design target, not codebase.
 - The M1 terminal should be **built to grow into this**, not replaced later.
+
+### System inspector — the desktop made visible
+
+A graphical view of the running system: the live component graph, the bus
+connections between components, the capability graph, and each component's
+memory against its §3.6 budget. The tinkerer's window into what the machine is
+actually doing.
+
+- Not nostalgia but identity: AbyssBSD's pitch is a system you can hold in your
+  head, with "no hidden control flow, no magic" (§3.5). The broker already
+  "can report the live picture, plainly and legibly, never an opaque blob"
+  (§11.9); this app renders it.
+- A pure consumer — it reads the broker's inspection surface and the scripting
+  interface (§6.6), holds no authority over what it shows, and exports only
+  scripting like any app.
+- A genuine differentiator: almost no other desktop can show you its own
+  structure honestly, because almost no other has one this legible.
 
 ---
 
@@ -86,6 +119,83 @@ A photo manager in the early-iPhoto spirit — local-first, fast, restrained.
 
 ---
 
+## Creative tools
+
+The game-and-demo making corner — tools for the assets, and the framework to
+build the thing itself.
+
+### Raster painting & pixel art — a Deluxe Paint for the modern era
+
+A fast, direct raster painting and pixel-art program in the spirit of Amiga
+Deluxe Paint — the brush model (any grabbed region becomes a brush), palette
+and indexed-color work, dithering and gradients, frame-based animation —
+brought to modern displays, truecolor, large canvases, and pressure-sensitive
+input.
+
+- The spirit is the point: Deluxe Paint was instant and direct, never bloated.
+  Aseprite and Grafx2 are the closest living relatives; a modern image editor's
+  feature-sprawl is the cautionary tale. Held to the §3.5 lens like everything
+  else.
+- Native, built outright — no fork. The UI is the Interface Kit; the canvas is
+  the app's own pixel buffer — immediate-mode painting beneath a retained-mode
+  shell.
+- A natural consumer of the input service's **tablet / stylus** events (§7.5)
+  and of the image **codec ports** (§11.2) for load and save.
+- Indexed-palette mode is first-class, not an afterthought — pixel art and the
+  demoscene lineage need it; "modern era" *adds* truecolor, it does not
+  replace the palette.
+
+### Sound-effect generator — the sfxr / Bfxr lineage
+
+A small, parameter-driven synthesizer for creating sound assets — the tool a
+game maker reaches for to produce a pickup, a laser, an explosion, or a jump in
+seconds: waveform and envelope controls, category presets, a randomize button,
+and export to audio files.
+
+- The lineage is sfxr → Bfxr → jfxr / ChipTone / rFXGen; the exact exemplar
+  matters less than the shape — instant, fun, focused, deliberately tiny.
+- Native, built outright — no fork. The synthesis is the app's own DSP
+  (oscillators, envelopes, filters), small code rather than a Media Kit job.
+- Previews play through a playback-scoped audio capability (§11.13); export is
+  to WAV directly, or to compressed formats through the codec ports (§11.2).
+- Pairs with the paint program above — both are game-asset creation tools, and
+  AbyssBSD already takes games seriously (direct scanout, §7.4).
+
+### Music tracker — the FastTracker / Renoise lineage
+
+A pattern-based music tracker for composing game and demo soundtracks — the
+demoscene's own instrument, from ProTracker and FastTracker II through to
+Renoise and OpenMPT. Samples and synthesized instruments arranged in patterns:
+fast, keyboard-driven, made for getting a tune down quickly.
+
+- Native, built outright. Mixing and playback are the app's own DSP; preview
+  and output go through a playback-scoped audio capability (§11.13).
+- Completes the Creative-tools trio with the paint program and the sfx
+  generator — art, sound effects, and now music: every asset a small game or
+  demo needs.
+- Sample import/export through the codec ports (§11.2); module formats are the
+  app's own concern.
+
+### Game framework — a RayLib for AbyssBSD
+
+A small, friendly, batteries-included library for making simple games and
+graphical toys — open a window, draw shapes and sprites, play a sound, read
+input — with no engine, no editor, and no scene graph. RayLib is the spirit:
+the easy on-ramp, not Unity.
+
+- A **library**, not an app — the one such entry here, and plausibly
+  semi-first-party: the friendly front door to AbyssBSD's own client APIs for
+  game-shaped programs.
+- It rests on what the OS already gives games: a display surface and input
+  (§7.4), direct scanout for going fullscreen (§7.4), a playback audio
+  capability (§11.13), and the codec ports for textures and sound (§11.2).
+- The counterpart to the asset apps above — the framework you build the game
+  with; the paint program, sfx generator, and tracker make what goes in it.
+- Restraint, as everywhere (§3.5): the simple-games on-ramp. A heavyweight
+  engine is explicitly not the goal.
+
+---
+
 ## Communication
 
 ### Email client
@@ -95,6 +205,32 @@ A desktop mail client — local-first store, IMAP/SMTP.
 - Capability-scoped network access (§10), declared in its manifest.
 - Could index mail into the §11.16 model, making mailboxes and filters live
   queries like the media and photo libraries.
+
+### IRC client
+
+A native IRC client — the precise anti-Discord: local, scriptable, owned, no
+telemetry, no server you do not control. Small, and a natural fit for an
+audience escaping centralized chat.
+
+- Capability-scoped network access (§10), declared in its manifest, like the
+  email client.
+- A strong candidate for the Lua scripting host (§6.6): IRC's culture has
+  always been scripts and bots — and here a script is a capability-scoped
+  bundle, not ambient automation.
+
+### RSS / feed reader
+
+A native feed reader — RSS and Atom — for following sites directly: the IRC
+client's instinct applied to *reading*. The feed is a list you own and curate,
+not an algorithm's product — no ranking, no engagement metrics, no account.
+
+- Capability-scoped network access (§10), declared in its manifest, like the
+  email and IRC clients.
+- A natural fit for the §11.16 typed-attribute model — articles as items with
+  typed attributes, unread and saved-search folders as live queries, the same
+  pattern as the media and photo libraries.
+- Pairs with the web browser: the reader follows the feeds, the browser opens
+  the full article.
 
 ---
 
@@ -117,21 +253,37 @@ designing once, up front, rather than three times.
 ## Web browser
 
 A clean-room, independent web engine in the spirit of **Ladybird** — no Blink,
-no Gecko, no inherited billion-line dependency — targeting standard,
-well-specified HTML5 and CSS. Not the moving target of whatever a
-surveillance-funded ad company shipped this quarter, but the open web as a
-*documented standard*: the **pre-enshittification web** — standards-first,
-user-first, small enough to understand.
+no Gecko, no inherited billion-line dependency. Its distinguishing bet is
+**native hypermedia** and first-class **zero-JavaScript apps**.
 
-- **The largest item in this file, by several-fold.** A modern web engine is
-  plausibly more effort than everything else here combined — a multi-year
-  programme, not an app. Recorded as a long-horizon ambition, not a near-term
-  candidate, and not to be sized or scheduled alongside the others.
-- Inspiration, not a fork: Ladybird is the design exemplar and the proof that
-  an independent engine is possible. The codebase question stays open, but the
-  engine must end up native to the Kit toolkit (§8) like everything else here.
-- Was briefly described on the public ecosystem page; pulled back here until it
-  is real enough to commit to.
+The engine targets standard, well-specified HTML5 and CSS — the open web as a
+*documented standard*, the **pre-enshittification web** — and builds a
+hypermedia extension into the engine itself: the htmx / Hotwire idea (any
+element may issue a request and swap an HTML fragment in place), native rather
+than shimmed in JavaScript. A page can then run under `script-src 'none'` — no
+framework, no SPA, no XSS surface — with event interception, fetch, and DOM
+morphing done in the engine. Full design exploration:
+`docs/design/hypermedia-browser.md`.
+
+- **Native hypermedia is the strategic point.** It lets the browser opt out of
+  the JavaScript arms race — *excellent* at HTML/CSS and hypermedia, merely
+  *adequate* at heavy JS, because the good apps stop needing heavy JS. That is
+  how a from-scratch engine stays comprehensible instead of becoming the
+  multi-year monster this entry otherwise warns of.
+- **Standards-compliant, plus an honest extension.** The hypermedia attributes
+  are an AbyssBSD extension until standardized, and are designed to *degrade* —
+  unknown attributes are inert, so every hypermedia control is also a working
+  plain `<form>` or `<a>`. Progressive enhancement, not a fork of the web.
+- **Still the largest item in this file, by several-fold** — a modern engine is
+  plausibly more effort than everything else here combined, a multi-year
+  programme. The hypermedia extension is cheap *relative to* the engine, but it
+  does not shrink that baseline.
+- Inspiration, not a fork: Ladybird is the design exemplar and the proof an
+  independent engine is possible; the codebase question stays open. The engine
+  must end up native to the Kit toolkit (§8) like everything else here.
+- The hypermedia model is also the most promising answer to the parked
+  "accessible creation / HyperCard" question — a zero-JS hypermedia app, served
+  even from a local source, is HyperCard-shaped.
 
 ---
 

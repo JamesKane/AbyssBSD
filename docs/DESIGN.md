@@ -401,12 +401,55 @@ any app it holds a capability to.
 Scripting authority *is* capability authority: a scripting capability
 carries Capsicum-style rights (§10), so an inspect-only cap, a
 set-properties cap, and a full-invoke cap are genuinely different grants.
-The language scripts are written in is a later concern.
+
+**Inter-app automation is the use case this enables.** The
+introspect/get/set/invoke suite is what AppleScript and the Amiga's ARexx were
+built on — a script discovers an app's properties and commands and drives
+several apps in concert ("export the selection, hand it to the editor, file the
+result"). AbyssBSD already has the hard half of that, in the suite above; what
+remains is a *host* and a *language*, not a new protocol.
+
+**The scripting host.** A script runs in a **scripting host** — a process that
+loads the script, holds the capabilities the script may use, and translates the
+script's calls into introspect/get/set/invoke messages on the bus. There is no
+system-wide interpreter daemon able to see every app; §11.1 admits no such
+central thing, and scripting needs none. Each run is one host process with one
+capability bundle — because **an automation script is itself a capability-scoped
+bundle** (§11.14): its manifest requests scripting capabilities to the apps it
+drives, intersected with the user's approval exactly as an app manifest is, and
+the broker spawns the host with precisely that bundle (§11.9). A script can
+therefore drive *only* the apps it was granted, at the rights it was granted —
+the inspect / set / invoke distinction above. This is the deliberate improvement
+on AppleScript and ARexx, where *any* script could drive *any* app by ambient
+authority — the standing security hole in both. Here the set of apps a script
+may automate *is* the content of its capability bundle (§10.1).
+
+**The language — leaning Lua.** The language is not the architecture, and is
+the last thing to fix; but the lean is **Lua**, for reasons that are not taste.
+Lua is tiny, mature, and dependency-free — the kind of small, proven dependency
+§3.2's discipline readily admits, the same call already made for the font stack
+and the codecs (§11.2); reviving a 1980s language, or designing a bespoke one,
+would instead fail §3.5's "earn every abstraction." A Lua table is,
+structurally, the self-describing typed dict of §6.3, so marshalling between
+script values and message payloads is near-frictionless. And Lua sandboxes by
+construction — a script's environment exposes only the capability handles its
+bundle holds. Whether apps also *embed* the host for in-app macros, or it stays
+a standalone automation host, is left open.
 
 This same introspection surface is the natural substrate for accessibility
 tooling — a screen reader is, structurally, a scripting client. But a
 dedicated accessibility stack is a **scoped-out non-goal**: the team is too
 small to carry it. AbyssBSD provides the substrate, not the stack.
+
+**Agentic automation would ride this same seam.** An AI agent that drives the
+desktop is, structurally, a scripting client — the host, the suite, and the
+capability-scoped bundle are precisely the substrate it needs; it differs from a
+Lua script only in that an LLM, not a person, writes the calls. AbyssBSD makes
+**no first-party commitment** to ship one — it is a vector the architecture
+*permits*, not a product the project promises — and if pursued, an agent is an
+**explicit user install**: an opt-in bundle whose capability requests the user
+approves (§11.14), bounded by exactly the model above and no more, and quite
+possibly a third-party offering rather than AbyssBSD's own.
 
 ### 6.7 Why Rust fits this
 
