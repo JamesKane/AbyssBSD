@@ -13,6 +13,7 @@ const FONT_CANDIDATES: &[&str] = &[
     "/System/Library/Fonts/Geneva.ttf",
     "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ];
 
 fn test_font() -> Font {
