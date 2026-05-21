@@ -11,5 +11,8 @@ publish = false
 # control-message API is C macros (broker-and-transport.md §6). FreeBSD only;
 # the build is a no-op on every other host.
 
+[dependencies]
+abyss-msg = { path = "../abyss-msg" }
+
 [lints]
 workspace = true

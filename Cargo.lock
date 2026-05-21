@@ -56,6 +56,9 @@ dependencies = [
 [[package]]
 name = "abyss-transport"
 version = "0.0.0"
+dependencies = [
+ "abyss-msg",
+]
 
 [[package]]
 name = "freebsd-capsicum-sys"

@@ -13,8 +13,9 @@
 //! (which §7 of the design doc anticipated): the raw, FFI-bearing
 //! primitive is kept separate so `abyss-looper` stays host-clean, and the
 //! `kqueue` event loop that will drive these sockets is a later, separate
-//! piece. This crate is the primitive; the envelope framing, the ring
-//! API, and the event loop build on it.
+//! piece. [`Channel`] is the raw primitive — bytes and descriptors;
+//! [`MessageChannel`] frames whole [`abyss_msg::Envelope`]s over it. The
+//! ring API and the event loop build on these.
 //!
 //! **FreeBSD only.** `SOCK_SEQPACKET` Unix-domain sockets do not exist on
 //! macOS; on every non-FreeBSD host this crate is empty, so the workspace
@@ -28,4 +29,4 @@
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::Channel;
+pub use freebsd::{Channel, MessageChannel};
