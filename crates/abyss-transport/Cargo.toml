@@ -1,0 +1,15 @@
+[package]
+name = "abyss-transport"
+description = "AbyssBSD IPC transport — the SOCK_SEQPACKET ring with SCM_RIGHTS fd-passing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# build.rs compiles c/cmsg_shim.c with the system toolchain: the SCM_RIGHTS
+# control-message API is C macros (broker-and-transport.md §6). FreeBSD only;
+# the build is a no-op on every other host.
+
+[lints]
+workspace = true
