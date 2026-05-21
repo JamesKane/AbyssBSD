@@ -1,0 +1,10 @@
+[package]
+name = "abyss-render"
+description = "AbyssBSD 2D renderer — the Canvas drawing API and its CPU backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
