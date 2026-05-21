@@ -178,6 +178,38 @@ embedded `Sender` becomes an in-process implementation detail of the
 typed reply, the handler answers a `Responder`, and neither names a
 backend.
 
+### 2.8 The two backends in the crate graph
+
+§2.5 fixed the model; this fixes how it lands in code — the question
+Gate B left open.
+
+`Cap<I, R>` holds a **backend**, and `send`/`call` match on it:
+
+- `Local` — the Gate B in-process ring, a `Sender<I::Message>`. It is on
+  every host; it is what the macOS development bed and the host tests run.
+- `Ipc` — an `abyss-transport` IPC ring over a `SOCK_SEQPACKET`
+  connection. It is `cfg(target_os = "freebsd")`: those sockets are a
+  FreeBSD facility.
+
+So **`abyss-cap` depends on `abyss-transport`** (and `abyss-msg`) — the
+capability layer sits above the transport, the natural direction, and no
+cycle. `abyss-transport` already builds on every host (its IPC parts gate
+on FreeBSD), so `abyss-cap` still builds on the development bed.
+
+**`Interface::Message: Wire` is an IPC-construction requirement, not a
+trait supertrait.** The `Interface` trait keeps `type Message: Send +
+'static`. The `Wire` bound is demanded where an *IPC* ring is built — the
+broker wiring the authority graph (§5.2) — not of every `Interface`. An
+interface used only in-process is unaffected, and `#[derive(Wire)]` stays
+something an interface opts into, not a tax the trait levies on every
+message on every host.
+
+`Cap: Wire` (§3.4) is therefore itself `cfg(target_os = "freebsd")`:
+serializing a capability *is* the IPC act of passing an fd across a
+process boundary. An in-process `Cap` never serializes — it moves as a
+value (looper-framework §7) — so the absence of a `Wire` impl off FreeBSD
+costs nothing.
+
 ---
 
 ## 3. Capabilities across a process boundary
