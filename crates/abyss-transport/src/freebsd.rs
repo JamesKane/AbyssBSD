@@ -15,9 +15,11 @@ use abyss_msg::Envelope;
 use crate::frame::{RING_FRAME_LEN, RingFrame};
 
 mod async_channel;
+mod connection;
 mod reactor;
 
 pub use async_channel::AsyncChannel;
+pub use connection::Connection;
 pub use reactor::{Event, Interest, Reactor, ReactorSource};
 
 /// The largest descriptor count one datagram may carry. Must match
