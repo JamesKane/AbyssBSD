@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD looper & service framework.
 //!
 //! The cooperative executor, the typed ring, and the handler model.

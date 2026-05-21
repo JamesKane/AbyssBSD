@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! 2D paths — a command list, flattened to polyline contours for the
 //! rasterizer.
 

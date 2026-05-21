@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The render-backend seam (`docs/design/toolkit.md` §3.2).
 
 use crate::color::Color;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! A bounded, ordered MPSC ring — the in-process ring backend
 //! (`docs/design/looper-framework.md` §3).
 //!

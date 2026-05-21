@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The `Canvas` — a NanoVG-style immediate 2D drawing API
 //! (`docs/design/toolkit.md` §3.1).
 //!

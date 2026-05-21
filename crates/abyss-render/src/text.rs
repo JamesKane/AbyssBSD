@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Text rendering — a per-font glyph cache (`docs/design/toolkit.md` §3.3).
 
 use std::collections::HashMap;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Decode and typed-conversion errors.
 
 use std::fmt;

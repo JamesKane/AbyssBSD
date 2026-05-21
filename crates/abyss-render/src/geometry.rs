@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! 2D points, sizes, rectangles, and affine transforms.
 
 /// A point in 2D space.

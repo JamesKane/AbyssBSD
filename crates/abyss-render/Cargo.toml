@@ -4,6 +4,7 @@ description = "AbyssBSD 2D renderer — the Canvas drawing API and its CPU backe
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish = false
 
 [dependencies]

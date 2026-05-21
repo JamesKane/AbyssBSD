@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Ring and looper basics — exercised with `block_on` and one helper
 //! thread (`docs/design/looper-framework.md` §11).
 

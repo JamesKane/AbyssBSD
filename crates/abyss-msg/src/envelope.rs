@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The cross-process envelope (`docs/design/wire-format.md` §3.3).
 
 use crate::cursor::Decoder;

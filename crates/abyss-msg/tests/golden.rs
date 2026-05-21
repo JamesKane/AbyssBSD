@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Golden vectors: fixed values encode to exact, checked-in bytes. A diff
 //! here is an accidental wire-format change (`docs/design/wire-format.md`
 //! §10).

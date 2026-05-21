@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Input events into the toolkit, and UI events out of it
 //! (`docs/design/toolkit.md` §8).
 

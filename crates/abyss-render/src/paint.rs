@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Paints — solid colors and gradients — and the fill rule.
 
 use crate::color::Color;

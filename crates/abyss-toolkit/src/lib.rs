@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD Interface Kit — the retained view tree, layout, and widgets.
 //!
 //! Implements `docs/design/toolkit.md` §4–§10: the view arena and

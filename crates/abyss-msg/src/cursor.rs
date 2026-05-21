@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! A bounds-checked cursor over input bytes.
 //!
 //! Every read is fallible; none can panic or run past the end of the

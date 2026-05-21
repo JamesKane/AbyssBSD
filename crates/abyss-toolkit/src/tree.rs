@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The view arena, the retained tree, and the layout / paint / input
 //! drivers (`docs/design/toolkit.md` §4–§6, §8, §10).
 

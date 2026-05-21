@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD font crate — text shaping and glyph rasterization.
 //!
 //! Binds the FreeBSD-port font stack — freetype (rasterization) and

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The [`Wire`] trait — typed views over [`Value`] — and the handle
 //! sink/store that thread capabilities through the §3.4 payload/handle
 //! split (`docs/design/wire-format.md` §6).

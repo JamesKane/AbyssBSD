@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Handlers — the `async fn handle` API over a looper
 //! (`docs/design/looper-framework.md` §5).
 

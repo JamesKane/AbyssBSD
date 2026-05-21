@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD message primitive.
 //!
 //! The self-describing value vocabulary, the cross-process envelope, and

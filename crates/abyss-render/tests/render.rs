@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `abyss-render` tests — geometry, and the CPU rasterizer proven with
 //! precise pixel assertions (`docs/design/toolkit.md` §12).
 

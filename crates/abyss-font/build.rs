@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Compile the C font shim and link the freetype + harfbuzz ports.
 //!
 //! No build-dependency crates: the system C compiler (`cc` — clang on

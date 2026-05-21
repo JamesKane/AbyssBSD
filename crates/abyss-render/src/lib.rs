@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD 2D renderer.
 //!
 //! A NanoVG-style immediate-mode vector drawing API ([`Canvas`]) over a

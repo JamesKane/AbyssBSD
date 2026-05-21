@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Capability rights as compile-time phantom typestate
 //! (`docs/design/looper-framework.md` §7.2).
 //!

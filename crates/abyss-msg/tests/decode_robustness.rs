@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Decoding untrusted input is total: random and malformed bytes always
 //! yield `Ok` or `Err`, never a panic, hang, or over-allocation
 //! (`docs/design/wire-format.md` §4, §10). A panic fails the test.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Colors and source-over compositing.
 
 /// An 8-bit-per-channel RGBA color with straight (non-premultiplied) alpha.

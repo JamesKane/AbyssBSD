@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `abyss-render` text tests — `Canvas::text` proven against a real font.
 
 use std::path::Path;

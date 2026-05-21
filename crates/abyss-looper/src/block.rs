@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `block_on` — drive a future to completion on the current thread, with
 //! no looper. The bridge for `main`, for tests, and for any non-looper
 //! thread that needs to wait on async work.

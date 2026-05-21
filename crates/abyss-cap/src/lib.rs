@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD capability layer — the typed, rights-bearing face of a ring
 //! endpoint (`docs/design/looper-framework.md` §7).
 //!

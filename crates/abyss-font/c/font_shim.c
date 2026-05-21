@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 /* AbyssBSD font shim.
  *
  * A flat C API over freetype + harfbuzz. Every freetype/harfbuzz struct is

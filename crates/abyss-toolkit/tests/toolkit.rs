@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `abyss-toolkit` tests — the arena, layout, widgets, input, and damage,
 //! proven end to end (`docs/design/toolkit.md` §12).
 

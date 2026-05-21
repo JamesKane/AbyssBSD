@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Ring errors (`docs/design/looper-framework.md` §3.2).
 
 use std::fmt;

@@ -12,6 +12,7 @@ members = ["xtask", "crates/*"]
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.95.0"
+license = "BSD-2-Clause"
 
 # Unsafe is permitted, but only as a deliberate per-crate `#![allow(...)]`
 # opt-in — FFI and the renderer will need it; nothing else should reach for

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Round-trip tests: `decode(encode(x)) == x` for values, envelopes, and
 //! typed `Wire` views (`docs/design/wire-format.md` §10).
 

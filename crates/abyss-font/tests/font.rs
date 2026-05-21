@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `abyss-font` tests — open a real system font and exercise metrics,
 //! shaping, and rasterization.
 

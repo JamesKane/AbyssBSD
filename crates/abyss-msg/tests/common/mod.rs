@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Shared test helpers — a deterministic PRNG and a `Value` generator.
 
 #![allow(dead_code)]

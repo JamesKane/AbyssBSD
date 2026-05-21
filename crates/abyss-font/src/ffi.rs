@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Raw FFI to the C font shim (`c/font_shim.c`).
 //!
 //! The shim's structs are AbyssBSD-defined and flat — only primitives — so

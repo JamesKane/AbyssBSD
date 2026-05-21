@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! A CPU pixel buffer — the [`CpuBackend`](crate::CpuBackend)'s target.
 
 use crate::color::Color;

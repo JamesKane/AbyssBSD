@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The CPU render backend — a software anti-aliased rasterizer.
 //!
 //! Each pixel row is rasterized analytically in X and 4× supersampled in

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `#[derive(Wire)]` for the AbyssBSD message primitive.
 //!
 //! Generates the [`Wire`] impl — the typed view over a `Value`

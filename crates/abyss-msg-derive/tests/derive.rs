@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! `#[derive(Wire)]` integration tests — derived types round-trip and
 //! fail as specified (`docs/design/wire-format.md` §7).
 

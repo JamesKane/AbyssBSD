@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The shared visual theme (`docs/design/toolkit.md` §9).
 
 use abyss_render::Color;

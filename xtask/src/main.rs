@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! AbyssBSD build & CI harness.
 //!
 //! Run via the `cargo xtask` alias (see `.cargo/config.toml`). This is the

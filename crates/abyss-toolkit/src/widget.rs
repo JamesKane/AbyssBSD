@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The `Widget` trait — the behavior behind a view
 //! (`docs/design/toolkit.md` §7).
 

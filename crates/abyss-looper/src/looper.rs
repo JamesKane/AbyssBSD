@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The looper and its cooperative executor
 //! (`docs/design/looper-framework.md` §4).
 //!

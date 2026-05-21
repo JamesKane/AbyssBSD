@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The Phase 2 multi-looper harness — the framework proven end to end on
 //! the in-process backend (`docs/design/looper-framework.md` §11).
 

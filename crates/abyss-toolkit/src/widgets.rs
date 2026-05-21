@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The curated widget set (`docs/design/toolkit.md` §7).
 //!
 //! `Linear`, `Label`, and `Button` — a container, a display widget, and

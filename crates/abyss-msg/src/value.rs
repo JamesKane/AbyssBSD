@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! The self-describing value vocabulary (`docs/design/wire-format.md` §2)
 //! and its byte codec (§3.2).
 
