@@ -4,9 +4,9 @@
  * touched only here, in C, where the compiler knows the layout — the Rust
  * side (src/ffi.rs) sees only the small, AbyssBSD-defined structs below.
  *
- * Single-threaded use: the freetype library is process-global and is not
- * guarded. Fine for one looper and for host tests; a locked or per-thread
- * library is a later concern (see docs/design/toolkit.md).
+ * Each font carries its own freetype library, so distinct fonts share no
+ * state: opening or using fonts on different threads is race-free. (A
+ * single font is still used from one thread — the Rust `Font` is `!Send`.)
  */
 
 #include <ft2build.h>
@@ -18,6 +18,7 @@
 #include <string.h>
 
 typedef struct {
+    FT_Library lib;
     FT_Face    ft_face;
     hb_font_t *hb_font;
 } AbyssFont;
@@ -47,8 +48,6 @@ typedef struct {
     float line_height;
 } AbyssFontMetrics;
 
-static FT_Library g_ft = NULL;
-
 /* Set the working size to `px` pixels — fractional, via a 26.6 char size
  * at 72 dpi, where one point equals one pixel. */
 static void abyss_set_size(AbyssFont *f, float px) {
@@ -57,24 +56,29 @@ static void abyss_set_size(AbyssFont *f, float px) {
 }
 
 AbyssFont *abyss_font_open(const char *path, unsigned int index) {
-    if (g_ft == NULL && FT_Init_FreeType(&g_ft) != 0) {
+    FT_Library lib;
+    if (FT_Init_FreeType(&lib) != 0) {
         return NULL;
     }
     FT_Face face;
-    if (FT_New_Face(g_ft, path, (FT_Long)index, &face) != 0) {
+    if (FT_New_Face(lib, path, (FT_Long)index, &face) != 0) {
+        FT_Done_FreeType(lib);
         return NULL;
     }
     hb_font_t *hb = hb_ft_font_create_referenced(face);
     if (hb == NULL) {
         FT_Done_Face(face);
+        FT_Done_FreeType(lib);
         return NULL;
     }
     AbyssFont *f = (AbyssFont *)malloc(sizeof(AbyssFont));
     if (f == NULL) {
         hb_font_destroy(hb);
         FT_Done_Face(face);
+        FT_Done_FreeType(lib);
         return NULL;
     }
+    f->lib = lib;
     f->ft_face = face;
     f->hb_font = hb;
     return f;
@@ -86,6 +90,7 @@ void abyss_font_close(AbyssFont *f) {
     }
     hb_font_destroy(f->hb_font);
     FT_Done_Face(f->ft_face);
+    FT_Done_FreeType(f->lib);
     free(f);
 }
 

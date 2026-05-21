@@ -51,13 +51,13 @@ pub struct GlyphMask {
     pub coverage: Vec<u8>,
 }
 
-/// A loaded font face — a freetype face and its harfbuzz font.
+/// A loaded font face — its own freetype library, freetype face, and
+/// harfbuzz font.
 ///
 /// `Font` holds a raw handle to C state, so it is neither `Send` nor
-/// `Sync`: a font is used on the thread (the looper) that opened it. The
-/// shim's freetype library is process-global and not yet thread-safe —
-/// fine for single-looper and host-test use; a locked or per-thread
-/// library is a later concern.
+/// `Sync`: a font is used on the thread (the looper) that opened it.
+/// Distinct fonts share no state, so opening and using fonts on different
+/// threads is race-free.
 pub struct Font {
     handle: *mut ffi::AbyssFont,
 }
