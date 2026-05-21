@@ -7,16 +7,20 @@
 //!   speaks and the rights its holder was granted. Move-only.
 //! - [`Interface`] — what messages a capability of an interface carries.
 //! - [`Rights`] / [`SubsetOf`] — rights as compile-time phantom typestate.
+//! - [`CapBody`] — the handle-table body a capability serializes to when
+//!   it crosses a process boundary (`broker-and-transport.md` §3.2).
 //!
-//! The `Wire` impl that lets a capability travel inside a cross-process
-//! message is Gate D — in-process (Phase 2) a capability moves as an
-//! ordinary value, so it has no serialization to do.
+//! The `Wire` impl that puts a `Cap` through that body — pulling its fd
+//! onto `SCM_RIGHTS` — is the next Gate D step; in-process (Phase 2) a
+//! capability moves as an ordinary value, with no serialization to do.
 
 #![forbid(unsafe_code)]
 
 mod rights;
+mod wire;
 
 pub use rights::{Rights, SubsetOf};
+pub use wire::{CAP_BODY_LEN, CapBody, CapBodyError, KIND_FD_CAPABILITY};
 
 use std::marker::PhantomData;
 
