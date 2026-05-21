@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `f360a20` Phase 4: abyss-transport — the IPC ring connection (call side)
+- `565e0d7` Bump STATUS: Phase 4 — the async IPC channel
 - `b0d5670` Phase 4: abyss-transport — the async IPC channel
 - `bc3a12d` Bump STATUS: Phase 4 — the looper event-source seam
 - `8466c49` Phase 4: abyss-looper — the event-source seam
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `49655d8` Bump STATUS: Phase 4 — the kqueue reactor
 - `812d46c` Phase 4: abyss-transport — the kqueue reactor
 - `1bcb4eb` Bump STATUS: IPC ring design pass (broker-and-transport.md §2.5-2.7)
-- `b772b49` Gate D refinement: the IPC ring, serialization, wire request/reply
-- `e2d76de` Phase 4: abyss-transport — the envelope over the transport
 
 ## Site
 
@@ -65,13 +65,16 @@ is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
   presented as an `abyss-looper` `EventSource`: a looper built on it is
   driven by the `kqueue` where the in-process backend used thread-park;
 - `AsyncChannel` — a `FramedChannel` whose `recv`/`send` suspend the
-  *task*, not the looper thread, when the socket would block.
+  *task*, not the looper thread, when the socket would block;
+- `Connection` — the request/reply protocol (§2.7), client side: `call`
+  correlates a request with its reply by id, and a `serve` receive loop
+  routes each reply to the `call` awaiting it.
 
 A design pass first settled where this was under-specified — the Gate D
 doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame; the
 `Responder`) — and `abyss-looper` gained the **`EventSource` seam** so a
 non-thread-park backend can drive the looper (looper-framework §3.3). A
-looper task now async-`recv`s a framed request and async-sends a reply,
+looper task now `call`s over a `Connection` and gets a correlated reply,
 verified end to end in the FreeBSD VM. `cargo xtask ci` green on macOS
 and FreeBSD; working tree clean.
 
@@ -80,9 +83,8 @@ and FreeBSD; working tree clean.
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **request/reply layer** — the `Connection`: a correlation table,
-  the demux receive loop, and the `Responder` (§2.7), over `AsyncChannel`
-  — the next increment;
+- the **`Connection` service side** — `accept` an inbound request and the
+  `Responder` that answers it (§2.7) — the next increment;
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
   `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
 - supervision and `PeerRestarted` re-wiring (§5.5);
