@@ -117,8 +117,66 @@ fn envelope_roundtrip_with_handle_references() {
 fn wire_roundtrip<T: Wire + PartialEq + std::fmt::Debug + Clone>(value: T) {
     let mut sink = HandleSink::new();
     let encoded = value.to_wire(&mut sink);
-    let mut store = HandleStore::new(sink.into_handles());
+    let (handles, fds) = sink.into_parts();
+    let mut store = HandleStore::new(handles, fds).expect("handle/fd counts match");
     assert_eq!(T::from_wire(&encoded, &mut store), Ok(value));
+}
+
+#[test]
+fn handle_sink_collects_metadata_and_its_fd_together() {
+    use std::os::fd::AsRawFd;
+
+    let (reader, _writer) = std::io::pipe().expect("pipe");
+    let fd_number = reader.as_raw_fd();
+
+    let mut sink = HandleSink::new();
+    let index = sink.push(
+        RawHandle {
+            kind: 1,
+            body: vec![9],
+        },
+        reader.into(),
+    );
+    assert_eq!(index, 0);
+
+    let (handles, fds) = sink.into_parts();
+    let mut store = HandleStore::new(handles, fds).expect("handle/fd counts match");
+    let (handle, fd) = store.take(0).expect("the capability is in the store");
+    assert_eq!(
+        handle,
+        RawHandle {
+            kind: 1,
+            body: vec![9],
+        },
+    );
+    assert_eq!(fd.as_raw_fd(), fd_number);
+}
+
+#[test]
+fn handle_store_rejects_a_handle_fd_count_mismatch() {
+    let mismatch = HandleStore::new(
+        vec![RawHandle {
+            kind: 1,
+            body: vec![],
+        }],
+        vec![],
+    );
+    assert!(matches!(
+        mismatch,
+        Err(WireError::HandleFdMismatch { handles: 1, fds: 0 }),
+    ));
+}
+
+#[test]
+fn from_message_and_into_message_round_trip_a_payload() {
+    let header = Header {
+        kind: MessageKind::Event,
+        interface_id: 4,
+        method_id: 2,
+    };
+    let (envelope, fds) = Envelope::from_message(header, &1234_i64);
+    assert!(fds.is_empty(), "an i64 payload carries no capabilities");
+    assert_eq!(envelope.into_message::<i64>(fds), Ok(1234));
 }
 
 #[test]
@@ -145,7 +203,7 @@ fn wire_primitives_roundtrip() {
 
 #[test]
 fn narrow_int_out_of_range_is_rejected() {
-    let mut store = HandleStore::new(vec![]);
+    let mut store = HandleStore::new(vec![], vec![]).expect("an empty store");
 
     let too_big = Value::Int(i64::from(u32::MAX) + 1);
     assert!(matches!(
@@ -162,7 +220,7 @@ fn narrow_int_out_of_range_is_rejected() {
 
 #[test]
 fn wire_type_mismatch_is_rejected() {
-    let mut store = HandleStore::new(vec![]);
+    let mut store = HandleStore::new(vec![], vec![]).expect("an empty store");
     assert!(matches!(
         bool::from_wire(&Value::Int(1), &mut store),
         Err(WireError::TypeMismatch {

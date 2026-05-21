@@ -143,19 +143,29 @@ fn envelope_rejects_dangling_handle_index() {
 #[test]
 fn handle_store_take_is_move_once() {
     use abyss_msg::HandleStore;
+    use std::os::fd::AsRawFd;
 
-    let mut store = HandleStore::new(vec![RawHandle {
-        kind: 1,
-        body: vec![7],
-    }]);
+    let (reader, _writer) = std::io::pipe().expect("pipe");
+    let fd_number = reader.as_raw_fd();
+    let mut store = HandleStore::new(
+        vec![RawHandle {
+            kind: 1,
+            body: vec![7],
+        }],
+        vec![reader.into()],
+    )
+    .expect("handle/fd counts match");
+
+    let (handle, fd) = store.take(0).expect("the capability is in the store");
     assert_eq!(
-        store.take(0),
-        Ok(RawHandle {
+        handle,
+        RawHandle {
             kind: 1,
             body: vec![7]
-        })
+        }
     );
-    assert_eq!(store.take(0), Err(WireError::HandleTaken(0)));
+    assert_eq!(fd.as_raw_fd(), fd_number);
+    assert!(matches!(store.take(0), Err(WireError::HandleTaken(0))));
     assert!(matches!(
         store.take(5),
         Err(WireError::BadHandleIndex { index: 5, .. })

@@ -49,6 +49,10 @@ pub enum WireError {
     IntOutOfRange { value: i64, target: &'static str },
     /// A handle was already moved out of the store.
     HandleTaken(u32),
+    /// The received handle table and the `SCM_RIGHTS` fd count disagree —
+    /// every handle is an fd capability, so the two must correspond
+    /// (`broker-and-transport.md` §2.2, §3.2).
+    HandleFdMismatch { handles: usize, fds: usize },
 }
 
 impl fmt::Display for WireError {
@@ -78,6 +82,10 @@ impl fmt::Display for WireError {
                 write!(f, "integer {value} out of range for {target}")
             }
             WireError::HandleTaken(i) => write!(f, "handle {i} already taken"),
+            WireError::HandleFdMismatch { handles, fds } => write!(
+                f,
+                "handle table has {handles} entries but {fds} descriptors arrived"
+            ),
         }
     }
 }

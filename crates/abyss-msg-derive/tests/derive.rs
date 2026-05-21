@@ -10,7 +10,8 @@ use abyss_msg_derive::Wire;
 fn roundtrip<T: Wire + PartialEq + std::fmt::Debug + Clone>(value: T) -> T {
     let mut sink = HandleSink::new();
     let encoded = value.to_wire(&mut sink);
-    let mut store = HandleStore::new(sink.into_handles());
+    let (handles, fds) = sink.into_parts();
+    let mut store = HandleStore::new(handles, fds).expect("handle/fd counts match");
     T::from_wire(&encoded, &mut store).expect("decode")
 }
 
@@ -19,7 +20,10 @@ fn encode<T: Wire>(value: &T) -> Value {
 }
 
 fn decode<T: Wire>(value: &Value) -> Result<T, WireError> {
-    T::from_wire(value, &mut HandleStore::new(vec![]))
+    T::from_wire(
+        value,
+        &mut HandleStore::new(vec![], vec![]).expect("an empty store"),
+    )
 }
 
 #[derive(Wire, Debug, Clone, PartialEq)]

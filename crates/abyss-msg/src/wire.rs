@@ -4,6 +4,8 @@
 //! sink/store that thread capabilities through the §3.4 payload/handle
 //! split (`docs/design/wire-format.md` §6).
 
+use std::os::fd::OwnedFd;
+
 use crate::envelope::{Envelope, Header, RawHandle};
 use crate::error::WireError;
 use crate::value::Value;
@@ -21,10 +23,12 @@ pub trait Wire: Sized {
     fn from_wire(value: &Value, handles: &mut HandleStore) -> Result<Self, WireError>;
 }
 
-/// Append-only collector for the handle table during encoding.
+/// Append-only collector for the handle table during encoding — the
+/// handle-table metadata, and the fds those handles ride `SCM_RIGHTS` with.
 #[derive(Debug, Default)]
 pub struct HandleSink {
     handles: Vec<RawHandle>,
+    fds: Vec<OwnedFd>,
 }
 
 impl HandleSink {
@@ -32,10 +36,13 @@ impl HandleSink {
         Self::default()
     }
 
-    /// Append a handle; returns the index a `Value::Handle` should carry.
-    pub fn push(&mut self, handle: RawHandle) -> u32 {
+    /// Append a capability — its handle-table metadata and the fd that
+    /// rides `SCM_RIGHTS` beside it (§2.2). Returns the index a
+    /// `Value::Handle` should carry.
+    pub fn push(&mut self, handle: RawHandle, fd: OwnedFd) -> u32 {
         let index = u32::try_from(self.handles.len()).expect("more than 4 billion handles");
         self.handles.push(handle);
+        self.fds.push(fd);
         index
     }
 
@@ -47,28 +54,39 @@ impl HandleSink {
         self.handles.is_empty()
     }
 
-    /// Consume the sink, yielding the collected handle table.
-    pub fn into_handles(self) -> Vec<RawHandle> {
-        self.handles
+    /// Consume the sink: the handle table to encode into the envelope, and
+    /// the fds to hand the transport for `SCM_RIGHTS`.
+    pub fn into_parts(self) -> (Vec<RawHandle>, Vec<OwnedFd>) {
+        (self.handles, self.fds)
     }
 }
 
-/// Owns received handles during decoding. Each may be taken exactly once —
-/// a handle is move-only (`DESIGN.md` §6.10).
+/// Owns received capabilities during decoding — each handle's metadata
+/// paired with its fd. Each may be taken exactly once — a handle is
+/// move-only (`DESIGN.md` §6.10).
 #[derive(Debug)]
 pub struct HandleStore {
-    slots: Vec<Option<RawHandle>>,
+    slots: Vec<Option<(RawHandle, OwnedFd)>>,
 }
 
 impl HandleStore {
-    pub fn new(handles: Vec<RawHandle>) -> Self {
-        Self {
-            slots: handles.into_iter().map(Some).collect(),
+    /// Build from a received handle table and the `SCM_RIGHTS` fds that
+    /// rode beside it; the two correspond by order (§2.2). Every handle is
+    /// an fd capability (§3.2), so the counts must match.
+    pub fn new(handles: Vec<RawHandle>, fds: Vec<OwnedFd>) -> Result<Self, WireError> {
+        if handles.len() != fds.len() {
+            return Err(WireError::HandleFdMismatch {
+                handles: handles.len(),
+                fds: fds.len(),
+            });
         }
+        Ok(Self {
+            slots: handles.into_iter().zip(fds).map(Some).collect(),
+        })
     }
 
-    /// Move handle `index` out of the store.
-    pub fn take(&mut self, index: u32) -> Result<RawHandle, WireError> {
+    /// Move capability `index` — its metadata and its fd — out of the store.
+    pub fn take(&mut self, index: u32) -> Result<(RawHandle, OwnedFd), WireError> {
         let count = u16::try_from(self.slots.len()).unwrap_or(u16::MAX);
         let slot = self
             .slots
@@ -92,20 +110,27 @@ impl HandleStore {
 pub struct Bytes(pub Vec<u8>);
 
 impl Envelope {
-    /// Build an envelope from a typed message.
-    pub fn from_message<M: Wire>(header: Header, message: &M) -> Self {
+    /// Build an envelope from a typed message, returning it with the fds
+    /// its capabilities surrendered — for the transport to send over
+    /// `SCM_RIGHTS` (§2.2).
+    pub fn from_message<M: Wire>(header: Header, message: &M) -> (Envelope, Vec<OwnedFd>) {
         let mut sink = HandleSink::new();
         let payload = message.to_wire(&mut sink);
-        Envelope {
-            header,
-            payload,
-            handles: sink.into_handles(),
-        }
+        let (handles, fds) = sink.into_parts();
+        (
+            Envelope {
+                header,
+                payload,
+                handles,
+            },
+            fds,
+        )
     }
 
-    /// Decode the typed message carried by this envelope.
-    pub fn into_message<M: Wire>(self) -> Result<M, WireError> {
-        let mut store = HandleStore::new(self.handles);
+    /// Decode the typed message carried by this envelope, claiming the fds
+    /// the transport received over `SCM_RIGHTS` alongside it.
+    pub fn into_message<M: Wire>(self, fds: Vec<OwnedFd>) -> Result<M, WireError> {
+        let mut store = HandleStore::new(self.handles, fds)?;
         M::from_wire(&self.payload, &mut store)
     }
 }
