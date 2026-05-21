@@ -32,6 +32,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `baf68eb` Phase 4: freebsd-procdesc-sys — the bootstrap fd in the spawn
+- `8bb3a9b` Bump STATUS: Phase 4 — the jail around the spawn
 - `4e86395` Phase 4: the jail around the spawn — verified jail-sys, jailed spawn
 - `ff7dd78` Bump STATUS: Phase 4 — the pdfork-based spawn
 - `2261e50` Phase 4: freebsd-procdesc-sys — the pdfork-based spawn
@@ -40,8 +42,6 @@ specifies the FreeBSD remainder.
 - `4deef44` Bump STATUS: Phase 4 — the IPC ring connection (call side)
 - `f360a20` Phase 4: abyss-transport — the IPC ring connection (call side)
 - `565e0d7` Bump STATUS: Phase 4 — the async IPC channel
-- `b0d5670` Phase 4: abyss-transport — the async IPC channel
-- `bc3a12d` Bump STATUS: Phase 4 — the looper event-source seam
 
 ## Site
 
@@ -87,16 +87,20 @@ then `execve`, done in a C shim so no Rust runs in the forked child, with
 a `Child` holding the process descriptor that `wait`s on the exit and
 `kill`s the child (§5.3, §5.5); and **`freebsd-jail-sys`** is verified, the
 spawned child `jail_attach`ing before the exec so a component lands
-confined. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+confined. The spawn also hands the child a bootstrap socket at fd 3 — the
+descriptor the broker will send the bundle over (§5.3). `cargo xtask ci`
+green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **bootstrap bundle** the broker hands a freshly spawned component,
-  and the **`cap_enter` startup shim** that decodes it and confines the
-  process (§5.3–§5.4) — the next increment;
+- the broker's FreeBSD **spawn module** — creating the bootstrap socket,
+  sending the **bundle** envelope over it, owning component spawn (§5.3)
+  — the next increment;
+- the **`cap_enter` startup shim** a component runs to decode the bundle
+  and confine itself, verifying `freebsd-capsicum-sys` (§5.4);
 - supervision and `PeerRestarted` re-wiring, on the process descriptor
   the spawn now hands back (§5.5);
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
