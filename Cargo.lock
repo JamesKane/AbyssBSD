@@ -18,6 +18,10 @@ name = "abyss-font"
 version = "0.0.0"
 
 [[package]]
+name = "abyss-log"
+version = "0.0.0"
+
+[[package]]
 name = "abyss-looper"
 version = "0.0.0"
 

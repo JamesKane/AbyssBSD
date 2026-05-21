@@ -36,6 +36,16 @@ toolchain and `pkg-config` are part of the build environment, not vendored
 crates, so nothing is added to this table. `abyss-font` itself has no
 dependencies, build or otherwise.
 
+**Not a crate dependency — the `sys/*` FreeBSD FFI.** The Phase 4 `sys/*`
+crates bind FreeBSD kernel facilities. `freebsd-capsicum-sys` carries a C
+shim (`c/capsicum_shim.c`), because Capsicum's `cap_rights_*` API is built
+from C macros that cannot be called over Rust's FFI; `freebsd-jail-sys`
+and `freebsd-procdesc-sys` are direct `extern` blocks over ordinary libc
+functions. This resolves the binding question `ROADMAP.md` §2 raised
+against `bindgen`: the C-shim approach the font stack validated is used —
+no `bindgen`, no `libclang`, no C struct layouts transcribed into Rust.
+No `sys/*` crate has a crate dependency, build or otherwise.
+
 ## Deliberately not used
 
 - **A property-testing crate** (`proptest`, `quickcheck`). Phase 1's
@@ -49,11 +59,9 @@ dependencies, build or otherwise.
 - **`trybuild`**, for derive compile-fail tests — deferred. The derive's
   accepted forms are covered by round-trip tests; its rejected forms emit
   `compile_error!` with a clear message, checked by reading.
-
-## Pending
-
-- **FreeBSD FFI binding** for the `sys/*` crates (Phase 4). `ROADMAP.md` §2
-  noted `bindgen`; the font stack instead validated the **C-shim** approach
-  — a small shim compiled by the system toolchain, no build crate, no
-  `libclang`, no C struct layouts in Rust. Phase 4 chooses between the two
-  when the `sys/*` crates land — whichever is recorded here then.
+- **An ecosystem logging crate** (`log`, `tracing`, `env_logger`). Logging
+  is the first-party `abyss-log` crate — five levels, five macros, one
+  line format, zero dependencies (`crates/abyss-log`). `tracing` pulls a
+  broad dependency tree; `log` is only a facade and still needs a separate
+  backend. A small first-party crate gives the project the consistency it
+  needs without spending the dependency budget (`DESIGN.md` §3.2).
