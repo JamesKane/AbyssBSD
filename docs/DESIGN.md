@@ -588,6 +588,19 @@ full-screen games that scan out directly.
   on the drop. No client snoops the clipboard ambiently — unlike X11, where
   any client may read any selection at any time. The user's gesture *is* the
   capability (§10).
+- **Screen capture.** Reading pixels a client did not draw — for a
+  screenshot, a screen recorder, or screen sharing in a call — is a
+  capability, never an ambient power. The compositor already holds every
+  surface and output buffer, so it exports *capture* behind a capability
+  scoped to a single surface, a single output, or the whole desktop, and
+  bounded to a one-shot frame or a continuous stream; a live stream is
+  surfaced in the status-indicator area (§11.10) for as long as it runs, so
+  capture is never silent. The grant is authorized the way the clipboard is —
+  by a user action, the gesture *is* the capability (§10) — and, as a
+  service-object capability, it is revocable (§10.5): the user ends the share
+  and the capturer's next frame fails with `Revoked`. No client reads the
+  screen ambiently — unlike X11, where any client may read any pixel at any
+  time.
 
 **Full-screen pass-through — managed direct scanout.** When a surface holds
 the fullscreen role on an output:
@@ -691,6 +704,62 @@ surfaces are deliberately *not* replicated — notification popups appear on
 the active output only, not flashed across every monitor; and the session
 lock and greeter cover **all** outputs (an output left showing the session
 would be a lock bypass, §11.11/§11.15), with the prompt on the primary.
+
+### 7.7 Window management — tiling and floating
+
+Window management is the compositor's (§7.4, §11.1): it owns placement, focus,
+and stacking. *How* it places windows is a **layout policy** — a bounded module
+behind a defined internal seam — and AbyssBSD ships two, first-class, from
+early on:
+
+- **Tiling** — Sway/i3-grade. Windows fill the output without overlap, split
+  into horizontal and vertical containers; navigating, splitting, resizing, and
+  moving windows between containers and **workspaces** is keyboard-driven
+  through configurable key-chords. This is the power-programmer-first
+  experience — and the first to exist: it needs only the compositor and a
+  keyboard, no toolkit and no pointer-driven furniture, so it is usable from
+  the minimal-UI stage (§9) the moment the compositor manages more than one
+  window.
+- **Floating** — conventional overlapping windows, pointer-placed. This is the
+  placement the GNOME-2 desktop shell (§11.10) presents, and the **shipped
+  default** (§3.3): most users get the GNOME-2 desktop; tiling is the
+  first-class alternative they may select.
+
+Both are policies over **one shared set of primitives** — the output coordinate
+space (§7.6), workspaces, surface roles (§7.4), focus, and the `configure`
+protocol. The GNOME-2 desktop is not a second mechanism: it is the floating
+policy plus the shell's furniture. The tiling WM is therefore not throwaway
+early scaffolding — it is the first consumer of the permanent window-management
+core that the desktop then reuses (§3.5: build the concrete thing, reuse it
+when the reuse is real).
+
+The policies coexist within a session — a surface may be tiled or floating, and
+dialogs and popups (§7.4 roles) float regardless; which policy is the *default*
+and which furniture is shown is what makes the "tiling experience" and the
+"desktop experience" distinct. Because decorations are server-side (§7.4) the
+frame follows the policy with no client involvement: full title bars when
+floating, thin borders and container/tab headers when tiling.
+
+**Key-chords.** Bindings are configuration (§11.5), not compiled in. The input
+service interprets the keymap and emits keysym + modifiers (§7.5); the
+compositor matches each event against the binding table and, on a match,
+performs the window-management action — otherwise the event passes to the
+focused surface. Chord *sequences* and *modes* — a prefix that re-scopes the
+keys that follow, i3's "mode" — are supported. This is the same chord-matching
+the compositor uses for global shortcuts (§13); a WM binding is the case where
+the matched action is internal.
+
+**The bar.** The tiling experience's bar — workspaces, the focused-window
+title, the status indicators — is the desktop shell (§11.10) in a minimal
+configuration; the GNOME-2 panels are that same component, fuller. One
+furniture component, scaled to the experience.
+
+**Restraint.** The tiling experience is held to the same lens as everything
+else (§3.3, §3.5): Sway/i3 in spirit — fast, legible, keyboard-first, a small
+and well-specified feature set — and deliberately **not** Hyprland-style
+maximalism. Animation is not the product, and the configuration surface is
+curated, not infinite. "Power-user-first" describes the input model — it is not
+an invitation to a thousand knobs.
 
 ---
 
@@ -1253,7 +1322,10 @@ the application menu (categorized, with a search box), the window list, the
 desktop surface, and a curated status-indicator area. Menus are per-window
 (GNOME 2 and BeOS both) — not a global menu bar. On a multi-monitor desktop
 this furniture is drawn per output — each monitor self-sufficient — with the
-window list scoped to its own output (§7.6).
+window list scoped to its own output (§7.6). The same component scales to the
+*experience* (§7.7): in a minimal configuration it is the **bar** of the tiling
+experience — workspaces, focused-window title, status indicators — and the
+GNOME-2 panels are that same furniture, fuller.
 
 **The window list** is the *anti-taskbar*, held to six disciplines — the
 Windows taskbar (survey verdict: burn) being the cautionary tale of what a
@@ -1607,8 +1679,12 @@ There is no self-host milestone — FreeBSD provides a self-hosting system.
 | **M5** | Distribution & hardening | A curated installable image/installer; performance and daily-driver work; broadening curated hardware support. |
 
 The message primitive, the bus, and the capability broker are foundational —
-built across M1 — because the compositor depends on them. Capsicum and jail
-confinement is applied per service as each is brought up through M1–M5.
+built across M1 — because the compositor depends on them. The compositor's
+window-management core and its tiling layout policy (§7.7) come up with the
+compositor across M1–M2 — the keyboard-driven tiling experience is the system's
+first face; the floating GNOME-2 desktop and its furniture follow at M3.
+Capsicum and jail confinement is applied per service as each is brought up
+through M1–M5.
 
 ---
 
@@ -1616,4 +1692,26 @@ confinement is applied per service as each is brought up through M1–M5.
 
 - **Vulkan backend (post-v1).** A second accelerated backend behind the
   existing render-backend seam, added once the GLES path is solid (§7.1).
+
+- **Display & input capability coverage.** Routing input only to the focused
+  surface and forbidding ambient observation (§7.4, §7.5) is the right default
+  — and the same instinct that made Wayland's security model sound. But a model
+  with only two answers — *deliver-to-focused-client* or *forbid* — loses every
+  legitimate workflow that falls between them, and that loss, re-litigated one
+  protocol extension at a time, is the substance of the long-standing grievance
+  against Wayland. AbyssBSD holds the answer Wayland lacked: the capability is a
+  third answer — a bounded, revocable, user-authorized *yes* (§10.5) — but only
+  where each such workflow is actually given one. Screen capture is now in the
+  protocol shape (§7.4). Still to design: **global shortcuts** — a holder
+  registers a binding with the compositor and receives its event whether or not
+  it is focused (media keys, push-to-talk) — and **clipboard history**, kept by
+  the compositor, which already holds the selection, and exported behind a
+  capability, rather than the ambient read §7.4 rightly forbids. Two scope calls
+  are pending, to be settled *explicitly* — the way the accessibility stack was
+  (§6.6), never by silent omission: **remote display** (the bus transport is
+  local fd/shm/dmabuf, §6.4; network transparency would need a re-encoding proxy
+  and is likely a non-goal) and **HDR / color management** (buffers carry format
+  and modifier but no color space, §7.4; likely a later addition). The
+  discipline: every power a legacy desktop granted ambiently, AbyssBSD either
+  mints as an explicit capability or scopes out on purpose.
 

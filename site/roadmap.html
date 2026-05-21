@@ -64,6 +64,11 @@
     </li>
   </ul>
 
+  <p class="muted">The compositor's window-management core and its tiling layout
+     policy come up with the compositor across M1–M2 — the keyboard-driven
+     tiling experience is the system's first face; the floating GNOME 2 desktop
+     and its furniture follow at M3.</p>
+
   <p class="muted">Capsicum and jail confinement is applied per service as each
      is brought up through M1–M5.</p>
 
@@ -102,6 +107,19 @@
        that client-side Vulkan — for games using direct scanout — ships in v1
        regardless; only the compositor's <em>own</em> Vulkan render backend is
        deferred.</p>
+  </div>
+  <div class="panel">
+    <h3>Display &amp; input capability coverage <span class="tag">design</span></h3>
+    <p style="margin-bottom:0;">Routing input only to the focused surface and
+       forbidding ambient observation is the right default — and the same
+       instinct that made Wayland's security model sound. But a model with only
+       two answers, <em>deliver-to-focused-client</em> or <em>forbid</em>, loses
+       the legitimate workflows in between. The capability is the third answer —
+       a bounded, revocable, user-authorized <em>yes</em>. Screen capture is now
+       in the protocol; still to design are global shortcuts and clipboard
+       history, and two scope calls — remote display, and HDR / color
+       management — are to be settled explicitly rather than by silent
+       omission.</p>
   </div>
   <div class="panel">
     <h3>Typed attributes &amp; live queries <span class="tag post">post-v1</span></h3>

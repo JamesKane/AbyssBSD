@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Architecture — AbyssBSD</title>
-<meta name="description" content="The AbyssBSD architecture: the unified message primitive, the looper/service framework, the from-scratch compositor and display protocol, the retained-mode toolkit, and the object-capability security model.">
+<meta name="description" content="The AbyssBSD architecture: the unified message primitive, the looper/service framework, the from-scratch compositor, display protocol and window management, the retained-mode toolkit, and the object-capability security model.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -139,6 +139,11 @@
     <li><strong>Authorized clipboard &amp; drag-and-drop</strong> — the user's
         gesture <em>is</em> the capability; no client snoops the clipboard
         ambiently, unlike X11.</li>
+    <li><strong>Screen capture</strong> — reading pixels a client did not draw
+        is a capability, not an ambient power: scoped to a surface, an output,
+        or the whole desktop, revocable, and authorized by user gesture. A live
+        capture is always shown in the status-indicator area — capture is never
+        silent.</li>
   </ul>
   <p><strong>Managed direct scanout.</strong> When a full-screen surface covers
      an output exactly, the compositor page-flips the client's buffer directly
@@ -155,6 +160,36 @@
      raw keycode (the physical key, which games need) and the cooked
      interpretation (keysym, modifiers, text). Keyboard interpretation lives
      here, in the one component whose job is interpreting input hardware.</p>
+
+  <h3>Window management — tiling and floating</h3>
+  <p>Window management is the compositor's job — it owns placement, focus, and
+     stacking. <em>How</em> it places windows is a selectable <strong>layout
+     policy</strong>, and AbyssBSD ships two, first-class, from early on:</p>
+  <ul class="feature-list">
+    <li><strong>Tiling</strong> — Sway/i3-grade: windows fill the output without
+        overlap, split into containers and workspaces, navigated and resized by
+        keyboard through configurable key-chords. The power-programmer-first
+        experience — and the first to exist, since it needs only the compositor
+        and a keyboard, no toolkit and no pointer-driven furniture.</li>
+    <li><strong>Floating</strong> — conventional overlapping windows,
+        pointer-placed. The shipped default: the GNOME 2 desktop most users get.
+        Tiling is the first-class alternative they may select.</li>
+  </ul>
+  <p>Both are policies over <strong>one shared window-management core</strong> —
+     the output coordinate space, workspaces, surface roles, focus. The GNOME 2
+     desktop is not a second mechanism; it is the floating policy plus the
+     shell's furniture, so the tiling WM is the first consumer of the permanent
+     core the desktop later reuses. Key bindings are configuration, not compiled
+     in — chord sequences and i3-style "modes" included — and the tiling bar is
+     the desktop shell in a minimal configuration, the GNOME 2 panels the same
+     component, fuller.</p>
+  <div class="note">
+    <strong>Restraint.</strong> The tiling experience is held to the same lens
+    as everything else — Sway/i3 in spirit: fast, keyboard-first, a small and
+    well-specified feature set, and deliberately <em>not</em> Hyprland-style
+    maximalism. "Power-user-first" describes the input model — it is not an
+    invitation to a thousand knobs.
+  </div>
 
   <hr class="divider">
 
