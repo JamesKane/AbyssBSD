@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Design — AbyssBSD</title>
+<title>Design · AbyssBSD</title>
 <meta name="description" content="AbyssBSD design principles: the vision, the FreeBSD boundary, why Rust, dependency discipline, and the performance budgets that are enforced as walls.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -33,23 +33,23 @@
      on top of FreeBSD's kernel, libc, drivers, toolchain, and ports.</p>
 
   <h2>1 · The vision</h2>
-  <p>FreeBSD is kept whole — kernel, libc, device drivers, the LLVM/Clang
+  <p>FreeBSD is kept whole: kernel, libc, device drivers, the LLVM/Clang
      toolchain, base utilities, <code>rc</code>, ports/pkg. AbyssBSD adds, on
      top, a coherent graphical desktop with a genuinely new architecture:</p>
   <ul class="feature-list">
     <li>One <strong>unified, typed message primitive</strong> that carries UI
-        events, inter-thread traffic, and IPC alike — the BeOS idea.</li>
+        events, inter-thread traffic, and IPC alike: the BeOS idea.</li>
     <li>An <strong>object-capability security model</strong> woven through that
         bus, backed by FreeBSD's native Capsicum and jails.</li>
     <li>A <strong>from-scratch, Wayland-free compositor</strong>.</li>
     <li>A <strong>Kit-structured, retained-mode toolkit</strong>.</li>
     <li>A desktop that <em>looks</em> like GNOME 2 and <em>feels</em> like
-        BeOS — snappy, message-driven, never stalling.</li>
+        BeOS: snappy, message-driven, never stalling.</li>
     <li>A <strong>coherent architecture</strong> in which every component does
-        one thing and is replaceable behind an enforced interface — coherent
+        one thing and is replaceable behind an enforced interface: coherent
         like macOS, but swappable.</li>
   </ul>
-  <p>The experience is BeOS-like — the <em>feel</em>, not the chrome. The visual
+  <p>The experience is BeOS-like: the <em>feel</em>, not the chrome. The visual
      surface is deliberately conventional, so the novelty is in the
      architecture, not the look.</p>
 
@@ -70,7 +70,7 @@
       </tr>
     </tbody>
   </table>
-  <p>AbyssBSD <strong>does not fork the FreeBSD base</strong> — it tracks it
+  <p>AbyssBSD <strong>does not fork the FreeBSD base</strong>; it tracks it
      upstream. That is what makes the project an order of magnitude smaller than
      a new-userland OS. The capability broker runs as an <code>rc</code> service
      and is <em>permanently desktop-scoped</em>; <code>rc</code> remains the
@@ -78,10 +78,10 @@
 
   <h2>3 · Design principles</h2>
 
-  <h3>3.1 · The implementation language — Rust</h3>
+  <h3>3.1 · The implementation language: Rust</h3>
   <p>The AbyssBSD layer is written in <strong>Rust</strong>. The architecture
      needs a shipping, mature systems language that meets a set of hard
-     requirements with no compiler-maturity risk — and Rust is the one that
+     requirements with no compiler-maturity risk, and Rust is the one that
      delivers all of them today: memory safety without a GC, move semantics,
      data-race-free concurrency checked by the compiler, C FFI, generics,
      compile-time codegen, and native <code>async</code>/<code>.await</code>.</p>
@@ -96,7 +96,7 @@
      set of first-party crates, plus an explicit, version-controlled allowlist
      for any external crate or build-time tool. No dependency is taken for "a
      few methods." FreeBSD ports the layer depends on are kept to a small,
-     recorded set — the font stack, <code>libinput</code>, <code>seatd</code>,
+     recorded set: the font stack, <code>libinput</code>, <code>seatd</code>,
      Mesa. Adding to either list is a deliberate decision.</p>
 
   <h3>3.3 · Opinionated</h3>
@@ -106,10 +106,10 @@
 
   <h3>3.4 · One thing well, replaceable at the seam</h3>
   <p>Every component does one thing, and components interact <em>only</em>
-     through typed messages over the capability bus — never shared internals,
+     through typed messages over the capability bus, never shared internals,
      never ambient authority. A component is defined by the message interface
      it exports, and anything exporting that interface is a valid replacement.</p>
-  <p>This is the deliberate answer to the freedesktop desktop — which is not
+  <p>This is the deliberate answer to the freedesktop desktop, which is not
      short of small components, but short of a <em>coherent design</em> and of
      <em>enforced</em> boundaries. AbyssBSD takes both: the coherence of one
      opinionated design and genuine replaceability, because the bus and
@@ -124,7 +124,7 @@
   </ul>
 
   <h3>3.5 · The review lens</h3>
-  <p>Every component is held against one yardstick — the shared sensibility of
+  <p>Every component is held against one yardstick: the shared sensibility of
      Carmack, Ousterhout, Muratori, and Blow:</p>
   <ul class="feature-list">
     <li><strong>Hold the whole thing in your head.</strong> A component too
@@ -132,7 +132,7 @@
     <li><strong>Earn every abstraction.</strong> A deep module is good; a
         shallow one, and speculative generality, are not.</li>
     <li><strong>Refuse incremental complexity.</strong> It arrives one
-        locally-justified addition at a time — that is how systemd happened.</li>
+        locally-justified addition at a time. That is how systemd happened.</li>
     <li><strong>Dependencies are liabilities</strong>, each one weighed.</li>
     <li><strong>No hidden control flow, no opaque state, no magic.</strong></li>
     <li><strong>Measure; do not guess.</strong></li>
@@ -147,16 +147,16 @@
       <h3>Latency</h3>
       <p>The software AbyssBSD controls adds <strong>at most one refresh
          interval</strong>. The compositor finishes every frame within the
-         refresh interval — zero dropped frames under desktop load.</p>
+         refresh interval, with zero dropped frames under desktop load.</p>
     </div>
     <div class="card">
       <h3>Memory</h3>
       <p>The idle desktop is budgeted at the display's triple-buffer cost plus
-         a bounded constant — on the order of <strong>256&nbsp;MB at 4K</strong>.
+         a bounded constant, on the order of <strong>256&nbsp;MB at 4K</strong>.
          A current GNOME/KDE desktop idles at 1–2&nbsp;GB.</p>
     </div>
     <div class="card">
-      <h3>Idle CPU — zero</h3>
+      <h3>Idle CPU: zero</h3>
       <p>Components are event-driven; a looper wakes only on a message. An idle
          desktop does no work. No polling loops, anywhere.</p>
     </div>
@@ -165,11 +165,11 @@
     <strong>The budgets are walls, not targets.</strong> Memory is enforced by
     the broker via jail resource limits. Input-to-photon is measured
     continuously and gates CI on the p99. Exceeding either budget is a build or
-    runtime failure — a legitimate increase is a deliberate, reviewed manifest
+    runtime failure; a legitimate increase is a deliberate, reviewed manifest
     change. Soft tracking is how the industry drifted into the mess this section
     exists to prevent.
   </div>
-  <p class="muted"><strong>Non-binding goal — 32-bit degradability.</strong>
+  <p class="muted"><strong>Non-binding goal: 32-bit degradability.</strong>
      AbyssBSD's own code is kept 32-bit-clean as a forcing function: code that
      genuinely fits a 4&nbsp;GB address space has proven it carries no bloat.</p>
 
@@ -194,7 +194,7 @@
 
 <footer>
   <div class="footer-inner">
-    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>AbyssBSD: an opinionated desktop OS on the FreeBSD base.</span>
     <span>Built from the project design documentation.</span>
     <span>BSD 2-Clause licensed.</span>
   </div>

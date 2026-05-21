@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Roadmap — AbyssBSD</title>
+<title>Roadmap: AbyssBSD</title>
 <meta name="description" content="The AbyssBSD roadmap: five milestones from a minimal framebuffer UI to a curated, installable image, plus open threads.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -28,7 +28,7 @@
 
   <div class="eyebrow">Roadmap</div>
   <h1>Five milestones</h1>
-  <p class="lede">There is no self-host milestone — FreeBSD already provides a
+  <p class="lede">There is no self-host milestone; FreeBSD already provides a
      self-hosting system. The message primitive, the bus, and the capability
      broker are foundational, built across M1, because the compositor depends on
      them.</p>
@@ -39,7 +39,7 @@
       <p>On a stock FreeBSD system, an AbyssBSD <code>rc</code> service starts
          broker &rarr; compositor (CPU backend) plus one terminal window. The
          message primitive, bus, and broker exist. This is the recovery floor
-         forever after — the terminal emulator is a real VT and is load-bearing
+         forever after. The terminal emulator is a real VT and is load-bearing
          from M1.</p>
     </li>
     <li>
@@ -49,7 +49,7 @@
     </li>
     <li>
       <h3><span class="ms-tag">M3</span> Toolkit + desktop</h3>
-      <p>Retained-mode Kits and the GNOME-2 shell — panel, application menu,
+      <p>Retained-mode Kits and the GNOME-2 shell: panel, application menu,
          window list.</p>
     </li>
     <li>
@@ -65,7 +65,7 @@
   </ul>
 
   <p class="muted">The compositor's window-management core and its tiling layout
-     policy come up with the compositor across M1–M2 — the keyboard-driven
+     policy come up with the compositor across M1–M2; the keyboard-driven
      tiling experience is the system's first face; the floating GNOME 2 desktop
      and its furniture follow at M3.</p>
 
@@ -90,10 +90,10 @@
   <hr class="divider">
 
   <h2>Reference hardware</h2>
-  <p>AbyssBSD adds no hardware enablement of its own — supported hardware is
+  <p>AbyssBSD adds no hardware enablement of its own; supported hardware is
      exactly what FreeBSD's drivers and <code>drm-kmod</code> provide. The
      project is VM-first early on; the bare-metal development and test reference
-     is a desktop with an <strong>AMD RX 6750 XT (RDNA2)</strong> — first-class
+     is a desktop with an <strong>AMD RX 6750 XT (RDNA2)</strong>, with first-class
      <code>amdgpu</code> support under Mesa, well covered by recent
      <code>drm-kmod</code>.</p>
 
@@ -104,21 +104,21 @@
     <h3>Vulkan backend <span class="tag post">post-v1</span></h3>
     <p style="margin-bottom:0;">A second accelerated render backend behind the
        existing render-backend seam, added once the GLES path is solid. Note
-       that client-side Vulkan — for games using direct scanout — ships in v1
+       that client-side Vulkan (for games using direct scanout) ships in v1
        regardless; only the compositor's <em>own</em> Vulkan render backend is
        deferred.</p>
   </div>
   <div class="panel">
     <h3>Display &amp; input capability coverage <span class="tag">design</span></h3>
     <p style="margin-bottom:0;">Routing input only to the focused surface and
-       forbidding ambient observation is the right default — and the same
+       forbidding ambient observation is the right default, and the same
        instinct that made Wayland's security model sound. But a model with only
        two answers, <em>deliver-to-focused-client</em> or <em>forbid</em>, loses
-       the legitimate workflows in between. The capability is the third answer —
+       the legitimate workflows in between. The capability is the third answer:
        a bounded, revocable, user-authorized <em>yes</em>. Screen capture is now
        in the protocol; still to design are global shortcuts and clipboard
-       history, and two scope calls — remote display, and HDR / color
-       management — are to be settled explicitly rather than by silent
+       history, and two scope calls (remote display, and HDR / color
+       management) are to be settled explicitly rather than by silent
        omission.</p>
   </div>
   <div class="panel">
@@ -126,13 +126,13 @@
     <p style="margin-bottom:0;">The BeOS data-model legacy: a file is not only
        its bytes but a set of typed attributes, and the filesystem can be
        queried like a database with results that stay live. Delivered by the
-       index/query service over ordinary FreeBSD files — the Spotlight
+       index/query service over ordinary FreeBSD files: the Spotlight
        architecture, not the BFS or WinFS one.</p>
   </div>
 
   <div class="note">
-    <strong>Status:</strong> the host-buildable foundation — message bus,
-    looper &amp; service framework, 2D renderer, font stack, and toolkit —
+    <strong>Status:</strong> the host-buildable foundation (message bus,
+    looper &amp; service framework, 2D renderer, font stack, and toolkit)
     builds and tests green on a stock host. The first FreeBSD integration
     (broker and compositor, milestone M1) is the next step. This site presents
     the design as it currently stands.
@@ -144,7 +144,7 @@
 
 <footer>
   <div class="footer-inner">
-    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>AbyssBSD: an opinionated desktop OS on the FreeBSD base.</span>
     <span>Built from the project design documentation.</span>
     <span>BSD 2-Clause licensed.</span>
   </div>

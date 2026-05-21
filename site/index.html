@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AbyssBSD — A desktop OS that fits in your head</title>
+<title>AbyssBSD: A desktop OS that fits in your head</title>
 <meta name="description" content="AbyssBSD is an opinionated desktop operating system on the FreeBSD base: BeOS architecture, GNOME 2 look, capability security, written in Rust.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -27,7 +27,7 @@
 <header class="hero">
   <h1>AbyssBSD</h1>
   <p class="tagline">A desktop operating system that fits in your head.</p>
-  <p>An opinionated desktop OS on the FreeBSD base — the <em>feel</em> of BeOS,
+  <p>An opinionated desktop OS on the FreeBSD base: the <em>feel</em> of BeOS,
      the <em>look</em> of GNOME 2, capability security woven through a single
      message bus, and not one line of garbage-collected code in the resident set.</p>
   <div class="btn-row">
@@ -42,13 +42,13 @@
     <div class="eyebrow">The problem</div>
     <h2>The 40-million-line problem</h2>
     <p>A modern desktop is an act of forgetting. Boot one and you are running
-       tens of millions of lines of code — kernel, display server, message bus,
-       policy daemons, portal services, toolkit upon toolkit — that no single
+       tens of millions of lines of code (kernel, display server, message bus,
+       policy daemons, portal services, toolkit upon toolkit) that no single
        person has read, that nobody fully understands, and that grows by
        accretion every release.</p>
     <p>The hardware underneath got a thousand times faster since 1995. The
        desktop did not get faster. It got <em>heavier</em>. Every gain was spent
-       on layers. This is not a law of nature — it is a habit.
+       on layers. This is not a law of nature; it is a habit.
        <strong>AbyssBSD is the refusal of that habit.</strong></p>
   </section>
 
@@ -57,13 +57,13 @@
   <section>
     <div class="eyebrow">What it is</div>
     <h2>A new desktop on a whole FreeBSD base</h2>
-    <p>AbyssBSD keeps the <strong>FreeBSD base</strong> whole — kernel, libc,
-       drivers, the LLVM/Clang toolchain, and ports — tracked upstream and never
+    <p>AbyssBSD keeps the <strong>FreeBSD base</strong> whole (kernel, libc,
+       drivers, the LLVM/Clang toolchain, and ports), tracked upstream and never
        forked. FreeBSD does the unglamorous 90%, and does it well. On top of that
        base, AbyssBSD adds one coherent thing: a desktop with a genuinely new
        architecture.</p>
-    <p>It ships as a curated, installable FreeBSD-based image — the same form as
-       helloSystem or GhostBSD — but with a new architecture above the base
+    <p>It ships as a curated, installable FreeBSD-based image, the same form as
+       helloSystem or GhostBSD, but with a new architecture above the base
        rather than a conventional desktop environment.</p>
   </section>
 
@@ -85,7 +85,7 @@
       <div class="card">
         <h3>One thing well, swappable</h3>
         <p>Every component does one job behind an enforced message interface.
-           Coherent like macOS — but every part replaceable at the seam.</p>
+           Coherent like macOS, but every part replaceable at the seam.</p>
       </div>
       <div class="card">
         <h3>From-scratch compositor &amp; toolkit</h3>
@@ -100,7 +100,7 @@
       <div class="card">
         <h3>Budgets are walls</h3>
         <p>The idle desktop is budgeted at ~256&nbsp;MB at 4K. Exceeding a
-           budget is a build failure — not a regret logged for later.</p>
+           budget is a build failure, not a regret logged for later.</p>
       </div>
     </div>
   </section>
@@ -110,12 +110,12 @@
   <section>
     <div class="eyebrow">Written in Rust</div>
     <h2>No garbage collector. Anywhere.</h2>
-    <p>The whole AbyssBSD layer — bus, broker, compositor, toolkit, shell, and
-       apps — is written in <strong>Rust</strong>: memory safety without a
+    <p>The whole AbyssBSD layer (bus, broker, compositor, toolkit, shell, and
+       apps) is written in <strong>Rust</strong>: memory safety without a
        garbage collector, compiler-checked concurrency, and a mature toolchain
        with no runtime to wait on. No GC pauses anywhere in the resident set.</p>
     <p>The FreeBSD base below stays C, well-maintained upstream. Rust is chosen
-       because it ships, today, every hard requirement the architecture needs —
+       because it ships, today, every hard requirement the architecture needs,
        with no compiler-maturity risk to carry.</p>
   </section>
 
@@ -125,7 +125,7 @@
     <div class="eyebrow">The wager</div>
     <h2>It should never feel slower than 1995</h2>
     <p>A 12-core, 5&nbsp;GHz machine should never feel slower than a 1995 desktop
-       did. That it routinely does is <em>accreted latency</em> — and accreted
+       did. That it routinely does is <em>accreted latency</em>, and accreted
        latency can be designed out. AbyssBSD is small enough to hold in one head,
        fast because it was measured, and secure because authority is explicit.</p>
     <p><strong>A return to simplicity. By construction.</strong></p>
@@ -146,12 +146,12 @@
       </a>
       <a class="card-link" href="components.html">
         <h3>Components &rarr;</h3>
-        <p>The closed, curated map of processes — broker, compositor, services,
-           shell — and how apps are packaged.</p>
+        <p>The closed, curated map of processes (broker, compositor, services,
+           shell) and how apps are packaged.</p>
       </a>
       <a class="card-link" href="ecosystem.html">
         <h3>Ecosystem &rarr;</h3>
-        <p>Why AbyssBSD does not run existing Linux desktop apps — and the
+        <p>Why AbyssBSD does not run existing Linux desktop apps, and the
            native, capability-respecting ecosystem it builds instead.</p>
       </a>
       <a class="card-link" href="interfaces.html">
@@ -167,8 +167,8 @@
   </section>
 
   <div class="note">
-    <strong>Status:</strong> the host-buildable foundation — message bus,
-    looper &amp; service framework, 2D renderer, font stack, and toolkit —
+    <strong>Status:</strong> the host-buildable foundation (message bus,
+    looper &amp; service framework, 2D renderer, font stack, and toolkit)
     builds and tests green on a stock host. The first FreeBSD integration
     (broker and compositor, milestone M1) is the next step. This site presents
     the design as it currently stands.
@@ -178,7 +178,7 @@
 
 <footer>
   <div class="footer-inner">
-    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>AbyssBSD: an opinionated desktop OS on the FreeBSD base.</span>
     <span>Built from the project design documentation.</span>
     <span>BSD 2-Clause licensed.</span>
   </div>

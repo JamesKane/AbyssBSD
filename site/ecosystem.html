@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ecosystem — AbyssBSD</title>
+<title>Ecosystem: AbyssBSD</title>
 <meta name="description" content="AbyssBSD does not aim to run existing Linux desktop applications. A deliberate choice: a native, capability-respecting app ecosystem grown with likeminded folks.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -27,9 +27,9 @@
 <main>
 
   <div class="eyebrow">Ecosystem</div>
-  <h1>A native ecosystem — by intent</h1>
+  <h1>A native ecosystem, by intent</h1>
   <p class="lede">AbyssBSD does not aim to run the existing Linux desktop
-     applications. That is a deliberate decision, not a missing feature — and it
+     applications. That is a deliberate decision, not a missing feature, and it
      follows from the same reasoning as the rest of the system.</p>
 
   <h2>What "existing apps" really are</h2>
@@ -39,20 +39,20 @@
      polkit, and portal services for everything it cannot do by itself. That is
      what today's free desktop apps amount to.</p>
   <p>To run those applications, an operating system must provide that entire
-     stack. Hosting them on AbyssBSD would mean importing — or re-implementing —
+     stack. Hosting them on AbyssBSD would mean importing (or re-implementing)
      X11, Wayland, D-Bus, the portal daemons, the policy services: precisely the
      accreted layers AbyssBSD was built to <a href="design.html">refuse</a>.</p>
   <div class="note">
     <strong>So AbyssBSD does not.</strong> There is no X server, and Wayland
     compatibility is not a goal. A system cannot both reject that stack and host
-    the applications that require it. AbyssBSD chooses the rejection — with eyes
+    the applications that require it. AbyssBSD chooses the rejection, with eyes
     open, and on purpose.
   </div>
 
   <h2>The cost, named honestly</h2>
   <p>This has a real price, and we will not pretend otherwise: AbyssBSD does not
      run the GUI applications you use on Linux today, and it is not trying to.
-     This is the BeOS bargain, and we take it deliberately — a coherent system
+     This is the BeOS bargain, and we take it deliberately: a coherent system
      you can hold in your head is worth more than a compatibility layer that
      drags the whole 40-million-line mess back in through the side door.</p>
   <p>An ecosystem built this way starts small. We would rather start small and
@@ -62,39 +62,39 @@
   <p>The FreeBSD base is kept whole, so the news is not all austere:</p>
   <ul class="feature-list">
     <li><strong>Every command-line and terminal program runs unchanged</strong>
-        — from M1 — compilers, editors, version control, build systems,
+        (from M1): compilers, editors, version control, build systems,
         language runtimes, servers. The FreeBSD base below is untouched.</li>
     <li><strong>AbyssBSD is a real working system for developers</strong> before
         it has a single graphical app of its own. The terminal emulator is
         load-bearing by design, and it is the bridge.</li>
   </ul>
 
-  <h2>Native apps — citizens, not ports</h2>
+  <h2>Native apps: citizens, not ports</h2>
   <p>An AbyssBSD app is written <em>for</em> AbyssBSD: a
      <a href="components.html">bundle with a capability manifest</a>,
      message-driven, drawing through the one toolkit. It is born holding no
-     ambient authority and asks for exactly the capabilities it needs — no more.</p>
+     ambient authority and asks for exactly the capabilities it needs, no more.</p>
   <p>The result is an application that is <strong>coherent with the system
      instead of fighting it</strong>: small, fast, inside the memory and latency
      budgets, scriptable through the standard interface, and secure by
-     construction. Not a port wearing a costume — a citizen.</p>
+     construction. Not a port wearing a costume, but a citizen.</p>
 
   <hr class="divider">
 
   <h2>Built with likeminded folks</h2>
   <p>An ecosystem is not shipped; it is grown. AbyssBSD's will be grown with
-     people who share the values that produced it — simplicity over accretion,
+     people who share the values that produced it: simplicity over accretion,
      capability security over ambient trust, software that is measured and held
      to budgets, a desktop and a web you can actually hold in your head.</p>
   <p>The application ecosystem is the part of this project that a small team
-     cannot write alone — and it is the part most worth building together. If
+     cannot write alone, and it is the part most worth building together. If
      this is the system you have been waiting for, you are who AbyssBSD is for:
      as a user, and as a builder.</p>
-  <p><strong>A return to simplicity — built in the open, in good company.</strong></p>
+  <p><strong>A return to simplicity, built in the open, in good company.</strong></p>
 
   <div class="note">
-    <strong>Status:</strong> the host-buildable foundation — message bus,
-    looper &amp; service framework, 2D renderer, font stack, and toolkit —
+    <strong>Status:</strong> the host-buildable foundation (message bus,
+    looper &amp; service framework, 2D renderer, font stack, and toolkit)
     builds and tests green on a stock host. The first FreeBSD integration
     (broker and compositor, milestone M1) is the next step. This site presents
     the design as it currently stands.
@@ -106,7 +106,7 @@
 
 <footer>
   <div class="footer-inner">
-    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>AbyssBSD: an opinionated desktop OS on the FreeBSD base.</span>
     <span>Built from the project design documentation.</span>
     <span>BSD 2-Clause licensed.</span>
   </div>

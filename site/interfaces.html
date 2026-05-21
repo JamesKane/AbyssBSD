@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Interfaces — AbyssBSD</title>
+<title>Interfaces: AbyssBSD</title>
 <meta name="description" content="The AbyssBSD component interfaces: typed message schemas, message kinds, request/reply conventions, and a per-interface summary.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -29,23 +29,23 @@
   <div class="eyebrow">Interfaces</div>
   <h1>The message-interface contracts</h1>
   <p class="lede">The design gives each component interface its <em>shape</em>.
-     The interface documents give the concrete typed message schema — the actual
+     The interface documents give the concrete typed message schema: the actual
      messages, their fields and types, their request/reply pairings. One
      document per interface.</p>
 
   <h2>Message kinds</h2>
   <p>Every message is one of three kinds:</p>
   <ul class="feature-list">
-    <li><strong>request</strong> — carries a <em>reply-to capability</em>; the
+    <li><strong>request</strong>: carries a <em>reply-to capability</em>; the
         recipient sends back exactly one message: the typed success reply, or an
         <code>Error</code>.</li>
-    <li><strong>command</strong> — fire-and-forget; no reply, no reply-to
+    <li><strong>command</strong>: fire-and-forget; no reply, no reply-to
         capability.</li>
-    <li><strong>event</strong> — unsolicited; sent by a service to a
+    <li><strong>event</strong>: unsolicited; sent by a service to a
         <em>retained</em> sink capability the client gave it earlier.</li>
   </ul>
   <p>A <strong>subscription</strong> is a request whose reply-to capability the
-     service <em>retains</em> — rather than spending it on one reply — and uses
+     service <em>retains</em> (rather than spending it on one reply) and uses
      as the event sink for an ongoing stream.</p>
 
   <h2>Conventions</h2>
@@ -55,7 +55,7 @@
        capability <em>is</em> the correlation: there are no request-ids, and a
        reply can reach no one but the one waiter.</p>
     <h3>Errors are values</h3>
-    <p>A request's reply is a success value or an <code>Error</code> — never an
+    <p>A request's reply is a success value or an <code>Error</code>, never an
        exception. <code>Error</code> is <code>{ code, detail }</code>:
        <code>code</code> a per-interface enum, <code>detail</code> a
        human-readable string.</p>
@@ -64,21 +64,21 @@
        disconnects. No explicit teardown is needed for correctness.</p>
     <h3>Envelope mapping</h3>
     <p>Each message is one envelope: the interface id and method id in the
-       header; the fields serialized as the payload; every capability — including
-       the reply-to capability — in the handle array.</p>
+       header; the fields serialized as the payload; every capability, including
+       the reply-to capability, in the handle array.</p>
   </div>
 
   <h3>Notation</h3>
   <p>A message is written as a name and kind, its typed fields, and (for
      requests) its reply type:</p>
-  <pre><code>Name  — kind
+  <pre><code>Name  : kind
   field : Type
   field : Type
   → ReplyType | Error        (requests only)</code></pre>
   <p><code>Ack</code> is the empty success reply. Types are the typed-value
-     types — <code>bool</code>, <code>i64</code>, <code>f64</code>,
+     types (<code>bool</code>, <code>i64</code>, <code>f64</code>,
      <code>string</code>, <code>enum</code>, <code>list&lt;T&gt;</code>,
-     <code>dict</code> — plus interface-defined types.</p>
+     <code>dict</code>) plus interface-defined types.</p>
 
   <hr class="divider">
 
@@ -89,27 +89,27 @@
 
   <div class="iface">
     <h3>settings <span class="kind">store</span></h3>
-    <p class="muted">The typed configuration store — <code>get</code> /
+    <p class="muted">The typed configuration store: <code>get</code> /
        <code>set</code> / <code>subscribe</code>. Schemas are declarative and
        shipped; access is capability-scoped to a subtree and to read or
        read-write. The first interface document, and the template.</p>
   </div>
   <div class="iface">
     <h3>input <span class="kind">stream</span></h3>
-    <p class="muted">The normalized input event stream — input service &rarr;
+    <p class="muted">The normalized input event stream, from input service &rarr;
        compositor. Internal and one-directional; clients receive input via the
        display protocol instead.</p>
   </div>
   <div class="iface">
     <h3>notification <span class="kind">service</span></h3>
-    <p class="muted">Posting notifications and rendering them — <code>post</code>
+    <p class="muted">Posting notifications and rendering them: <code>post</code>
        / <code>update</code> / <code>withdraw</code> for posters;
        <code>subscribe</code> and history for the shell. Action buttons ride
        reply-to capabilities.</p>
   </div>
   <div class="iface">
     <h3>power <span class="kind">service</span></h3>
-    <p class="muted">Power &amp; lifecycle — events, control, and inhibitors.
+    <p class="muted">Power &amp; lifecycle: events, control, and inhibitors.
        An inhibitor is a capability handle: the inhibit lasts exactly as long as
        the handle is held.</p>
   </div>
@@ -121,19 +121,19 @@
   </div>
   <div class="iface">
     <h3>networking <span class="kind">service</span></h3>
-    <p class="muted">Desktop network management — <code>list</code>,
+    <p class="muted">Desktop network management: <code>list</code>,
        <code>connect</code> / <code>disconnect</code>, <code>status</code>, and
        a connection-event <code>subscribe</code>. Control-plane only.</p>
   </div>
   <div class="iface">
     <h3>audio <span class="kind">service</span></h3>
-    <p class="muted">Desktop audio control — per-app and master volume, device
+    <p class="muted">Desktop audio control: per-app and master volume, device
        selection, audio events. Control-plane only; the kernel mixes. Capture is
        a separately gated capability.</p>
   </div>
   <div class="iface">
     <h3>display <span class="kind">protocol</span></h3>
-    <p class="muted">The compositor's display protocol — surfaces, roles,
+    <p class="muted">The compositor's display protocol: surfaces, roles,
        buffers, commit and frame callbacks, explicit synchronization,
        server-side decorations, and managed direct scanout.</p>
   </div>
@@ -146,23 +146,23 @@
   <div class="iface">
     <h3>scripting <span class="kind">cross-cutting</span></h3>
     <p class="muted">The introspect / get / set / invoke suite every handler
-       answers. Scripting authority <em>is</em> capability authority — an
+       answers. Scripting authority <em>is</em> capability authority: an
        inspect-only cap and a full-invoke cap are genuinely different grants.</p>
   </div>
   <div class="iface">
     <h3>session-lock <span class="kind">report</span></h3>
-    <p class="muted">The unlock report — on successful authentication the
+    <p class="muted">The unlock report: on successful authentication the
        session lock reports to the power &amp; lifecycle service, which owns
        lock state.</p>
   </div>
   <div class="iface">
     <h3>shell <span class="kind">consumer</span></h3>
-    <p class="muted">The desktop shell — a consumer that exports only the
+    <p class="muted">The desktop shell, a consumer that exports only the
        scripting interface.</p>
   </div>
   <div class="iface">
     <h3>toolkit <span class="kind">library</span></h3>
-    <p class="muted">The toolkit — a library, not a process; the scriptable
+    <p class="muted">The toolkit: a library, not a process; the scriptable
        window/view model addressed by <code>ViewId</code>.</p>
   </div>
 
@@ -179,7 +179,7 @@
 
 <footer>
   <div class="footer-inner">
-    <span>AbyssBSD — an opinionated desktop OS on the FreeBSD base.</span>
+    <span>AbyssBSD: an opinionated desktop OS on the FreeBSD base.</span>
     <span>Built from the project design documentation.</span>
     <span>BSD 2-Clause licensed.</span>
   </div>
