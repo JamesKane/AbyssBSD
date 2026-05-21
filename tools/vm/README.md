@@ -26,6 +26,7 @@ toolchain, so the guest builds with FreeBSD's `pkg` Rust rather than the
 ./vm.sh fetch    # download (if needed), checksum, and decompress the image
 ./vm.sh boot     # build the cloud-init seed, create the disk, start the VM
 ./vm.sh ssh      # ssh in as root (or: ./vm.sh ssh 'uname -a')
+./vm.sh provision  # install the build/test packages (Rust, git, font stack)
 ./vm.sh sync     # rsync the repo into the VM (excludes .git, target, tools, site)
 ./vm.sh build    # sync, then run `cargo xtask ci` in the VM
 ./vm.sh status
@@ -64,8 +65,15 @@ Every provisioning step is logged inside the guest to
 the image runs `freebsd-update` to the latest patch level and reboots once
 before nuageinit's work completes. Later boots take seconds.
 
-Everything past that — installing the Rust toolchain, syncing the AbyssBSD
-source — is done over SSH.
+A freshly-provisioned VM is made build-ready with `./vm.sh provision`,
+which installs the package set the workspace needs: the Rust toolchain,
+git, the `abyss-font` stack (`pkgconf` + `freetype2` + `harfbuzz`), the
+`dejavu` font the `abyss-font` tests open, and `rsync`. From then on
+`./vm.sh build` syncs the working tree and runs the full `cargo xtask ci`
+inside the guest.
+
+FreeBSD packages Rust 1.94.0; the workspace MSRV is set accordingly. The
+macOS dev bed keeps the exact 1.95.0 pin from `rust-toolchain.toml`.
 
 ## What is committed
 

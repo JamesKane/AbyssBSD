@@ -113,6 +113,17 @@ cmd_build() {
     cmd_ssh "cd $GUEST_SRC && cargo xtask ci"
 }
 
+# The packages a clean VM needs to build and test the workspace: the Rust
+# toolchain, git, the abyss-font stack (pkgconf + freetype2 + harfbuzz),
+# the dejavu font the abyss-font tests open, and rsync for `sync`.
+cmd_provision() {
+    running || fail "VM is not running — ./vm.sh boot"
+    echo "installing build and test packages in the VM ..."
+    cmd_ssh "env ASSUME_ALWAYS_YES=YES pkg bootstrap -f && \
+        env ASSUME_ALWAYS_YES=YES pkg install -y \
+        rust git pkgconf freetype2 harfbuzz dejavu rsync"
+}
+
 cmd_stop() {
     running || fail "VM is not running"
     pid=$(cat "$PIDFILE")
@@ -141,10 +152,14 @@ case "${1:-}" in
     seed)   cmd_seed ;;
     boot)   cmd_boot ;;
     ssh)    shift 2>/dev/null || true; cmd_ssh "$@" ;;
+    provision) cmd_provision ;;
     sync)   cmd_sync ;;
     build)  cmd_build ;;
     stop)   cmd_stop ;;
     reset)  cmd_reset ;;
     status) cmd_status ;;
-    *) echo "usage: vm.sh {fetch|seed|boot|ssh|sync|build|stop|reset|status}" >&2; exit 1 ;;
+    *)
+        echo "usage: vm.sh {fetch|seed|boot|ssh|provision|sync|build|stop|reset|status}" >&2
+        exit 1
+        ;;
 esac
