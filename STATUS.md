@@ -6,15 +6,19 @@ plan is the roadmap.
 
 ## Epic
 
-**Gate A — the wire format.** `docs/design/wire-format.md` written: the
-nine-kind value vocabulary, the envelope byte layout, untrusted-input
-decoding rules, and the `#[derive(Wire)]` contract. Phase 1 is now fully
-specified and ready to build.
+**Phase 1 — the message primitive.** `crates/abyss-msg` (value codec,
+envelope, the `Wire` trait — zero deps, `#![forbid(unsafe_code)]`) and
+`crates/abyss-msg-derive` (`#[derive(Wire)]`) built per
+`docs/design/wire-format.md`. 31 tests green — round-trip, golden vectors,
+randomized decoder robustness, derive coverage. First external deps
+(`syn`/`quote`/`proc-macro2`, build-tier) recorded in
+`docs/dependency-allowlist.md`.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `80510c3` Gate A: the wire-format design doc
 - `b90c53b` Phase 0: Cargo workspace & CI harness
 - `c1d3fe5` site: add the Ecosystem statement page
 - `a0784fe` Pin the FreeBSD base source (ROADMAP §6 resolved)
@@ -25,15 +29,16 @@ specified and ready to build.
 
 ## In flight
 
-Nothing — working tree clean; the Gate A doc commit is pending.
+Nothing — working tree clean; the Phase 1 commit is pending.
 
 ## Next
 
-1. **Phase 1** — build `crates/abyss-msg` and `crates/abyss-msg-derive`
-   per `docs/design/wire-format.md` §10: the `Value` codec, the envelope,
-   the `Wire` trait, `#[derive(Wire)]`, and the full host test suite
-   (round-trip, property, decoder fuzz, golden vectors, trybuild).
-2. These are the first `crates/` members — CI begins exercising real code.
+1. **Gate B** — `docs/design/looper-framework.md`: the looper & service
+   framework design (executor internals, ring API, `RingCap` &
+   supervision, the `Wire`-trait integration). The §6.10 "chief
+   structural piece" — design before Phase 2 builds it.
+2. **Phase 2** — `crates/abyss-looper` and `crates/abyss-cap`, on the
+   in-process ring (still host-testable).
 
 ## Notes
 

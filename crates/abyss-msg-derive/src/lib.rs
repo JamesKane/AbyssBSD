@@ -1,0 +1,451 @@
+//! `#[derive(Wire)]` for the AbyssBSD message primitive.
+//!
+//! Generates the [`Wire`] impl — the typed view over a `Value`
+//! (`docs/design/wire-format.md` §7). A struct becomes a `dict`; an enum
+//! becomes a `variant`.
+//!
+//! The generated code refers to the message primitive as `::abyss_msg`,
+//! so the deriving crate must depend on `abyss-msg`.
+//!
+//! [`Wire`]: https://docs.rs/abyss-msg
+
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::{format_ident, quote};
+use syn::{
+    Attribute, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, Index,
+    LitStr, PathArguments, Type, Variant, parse_macro_input, parse_quote,
+};
+
+/// Derive [`Wire`](https://docs.rs/abyss-msg) for a struct or enum.
+#[proc_macro_derive(Wire, attributes(wire))]
+pub fn derive_wire(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let rule = container_rename_rule(&input.attrs)?;
+    let (to_body, from_body) = match &input.data {
+        Data::Struct(data) => struct_body(data, &rule)?,
+        Data::Enum(data) => enum_body(data, &rule)?,
+        Data::Union(_) => {
+            return Err(syn::Error::new_spanned(
+                input,
+                "Wire cannot be derived for a union",
+            ));
+        }
+    };
+
+    let name = &input.ident;
+    let mut generics = input.generics.clone();
+    for type_param in generics.type_params_mut() {
+        type_param.bounds.push(parse_quote!(::abyss_msg::Wire));
+    }
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    Ok(quote! {
+        #[automatically_derived]
+        impl #impl_generics ::abyss_msg::Wire for #name #ty_generics #where_clause {
+            fn to_wire(&self, __handles: &mut ::abyss_msg::HandleSink) -> ::abyss_msg::Value {
+                #to_body
+            }
+
+            fn from_wire(
+                __value: &::abyss_msg::Value,
+                __handles: &mut ::abyss_msg::HandleStore,
+            ) -> ::core::result::Result<Self, ::abyss_msg::WireError> {
+                #from_body
+            }
+        }
+    })
+}
+
+// --- structs → dict --------------------------------------------------------
+
+fn struct_body(data: &DataStruct, rule: &RenameRule) -> syn::Result<(TokenStream2, TokenStream2)> {
+    let fields = named_fields(&data.fields)?;
+
+    let mut to_pushes = Vec::new();
+    let mut from_lets = Vec::new();
+    let mut idents = Vec::new();
+    for field in fields {
+        let ident = field.ident.as_ref().expect("named field");
+        let access = quote!(&self.#ident);
+        let (to, from) = dict_field(field, rule, &access)?;
+        to_pushes.push(to);
+        from_lets.push(from);
+        idents.push(ident);
+    }
+
+    let to_body = quote! {
+        let mut __entries: ::std::vec::Vec<(::std::string::String, ::abyss_msg::Value)> =
+            ::std::vec::Vec::new();
+        #(#to_pushes)*
+        ::abyss_msg::Value::Dict(__entries)
+    };
+    let from_body = quote! {
+        let __dict = match __value {
+            ::abyss_msg::Value::Dict(__d) => __d,
+            __other => {
+                return ::core::result::Result::Err(::abyss_msg::WireError::TypeMismatch {
+                    expected: "dict",
+                    found: ::abyss_msg::Value::kind_name(__other),
+                });
+            }
+        };
+        let __lookup = |__name: &str| {
+            __dict.iter().find(|(__k, _)| __k == __name).map(|(_, __v)| __v)
+        };
+        #(#from_lets)*
+        ::core::result::Result::Ok(Self { #(#idents),* })
+    };
+    Ok((to_body, from_body))
+}
+
+// --- enums → variant -------------------------------------------------------
+
+fn enum_body(data: &DataEnum, rule: &RenameRule) -> syn::Result<(TokenStream2, TokenStream2)> {
+    let mut to_arms = Vec::new();
+    let mut from_arms = Vec::new();
+
+    for variant in &data.variants {
+        let vident = &variant.ident;
+        let tag = variant_wire_name(variant, rule)?;
+        let (to_arm, from_arm) = match &variant.fields {
+            Fields::Unit => (
+                quote! {
+                    Self::#vident => ::abyss_msg::Value::Variant {
+                        tag: #tag.to_owned(),
+                        value: ::core::option::Option::None,
+                    },
+                },
+                quote! {
+                    #tag => ::core::result::Result::Ok(Self::#vident),
+                },
+            ),
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                let ty = &fields.unnamed[0].ty;
+                (
+                    quote! {
+                        Self::#vident(__0) => ::abyss_msg::Value::Variant {
+                            tag: #tag.to_owned(),
+                            value: ::core::option::Option::Some(::std::boxed::Box::new(
+                                ::abyss_msg::Wire::to_wire(__0, __handles),
+                            )),
+                        },
+                    },
+                    quote! {
+                        #tag => {
+                            let __p = __payload
+                                .ok_or(::abyss_msg::WireError::MissingField(#tag))?;
+                            ::core::result::Result::Ok(Self::#vident(
+                                <#ty as ::abyss_msg::Wire>::from_wire(__p, __handles)?,
+                            ))
+                        }
+                    },
+                )
+            }
+            Fields::Unnamed(fields) => {
+                let count = fields.unnamed.len();
+                let binds: Vec<_> = (0..count).map(|i| format_ident!("__{}", i)).collect();
+                let tys: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
+                let indices: Vec<_> = (0..count).map(Index::from).collect();
+                (
+                    quote! {
+                        Self::#vident( #(#binds),* ) => ::abyss_msg::Value::Variant {
+                            tag: #tag.to_owned(),
+                            value: ::core::option::Option::Some(::std::boxed::Box::new(
+                                ::abyss_msg::Value::List(::std::vec![
+                                    #(::abyss_msg::Wire::to_wire(#binds, __handles)),*
+                                ]),
+                            )),
+                        },
+                    },
+                    quote! {
+                        #tag => {
+                            let __p = __payload
+                                .ok_or(::abyss_msg::WireError::MissingField(#tag))?;
+                            let __items = match __p {
+                                ::abyss_msg::Value::List(__l) if __l.len() == #count => __l,
+                                __other => {
+                                    return ::core::result::Result::Err(
+                                        ::abyss_msg::WireError::TypeMismatch {
+                                            expected: "list",
+                                            found: ::abyss_msg::Value::kind_name(__other),
+                                        },
+                                    );
+                                }
+                            };
+                            ::core::result::Result::Ok(Self::#vident(
+                                #(<#tys as ::abyss_msg::Wire>::from_wire(
+                                    &__items[#indices], __handles,
+                                )?),*
+                            ))
+                        }
+                    },
+                )
+            }
+            Fields::Named(fields) => {
+                let mut to_pushes = Vec::new();
+                let mut from_lets = Vec::new();
+                let mut idents = Vec::new();
+                for field in &fields.named {
+                    let ident = field.ident.as_ref().expect("named field");
+                    let access = quote!(#ident);
+                    let (to, from) = dict_field(field, rule, &access)?;
+                    to_pushes.push(to);
+                    from_lets.push(from);
+                    idents.push(ident);
+                }
+                (
+                    quote! {
+                        Self::#vident { #(#idents),* } => {
+                            let mut __entries: ::std::vec::Vec<
+                                (::std::string::String, ::abyss_msg::Value)
+                            > = ::std::vec::Vec::new();
+                            #(#to_pushes)*
+                            ::abyss_msg::Value::Variant {
+                                tag: #tag.to_owned(),
+                                value: ::core::option::Option::Some(::std::boxed::Box::new(
+                                    ::abyss_msg::Value::Dict(__entries),
+                                )),
+                            }
+                        }
+                    },
+                    quote! {
+                        #tag => {
+                            let __p = __payload
+                                .ok_or(::abyss_msg::WireError::MissingField(#tag))?;
+                            let __dict = match __p {
+                                ::abyss_msg::Value::Dict(__d) => __d,
+                                __other => {
+                                    return ::core::result::Result::Err(
+                                        ::abyss_msg::WireError::TypeMismatch {
+                                            expected: "dict",
+                                            found: ::abyss_msg::Value::kind_name(__other),
+                                        },
+                                    );
+                                }
+                            };
+                            let __lookup = |__name: &str| {
+                                __dict.iter().find(|(__k, _)| __k == __name).map(|(_, __v)| __v)
+                            };
+                            #(#from_lets)*
+                            ::core::result::Result::Ok(Self::#vident { #(#idents),* })
+                        }
+                    },
+                )
+            }
+        };
+        to_arms.push(to_arm);
+        from_arms.push(from_arm);
+    }
+
+    let to_body = quote! {
+        match self { #(#to_arms)* }
+    };
+    let from_body = quote! {
+        let (__tag, __payload) = match __value {
+            ::abyss_msg::Value::Variant { tag: __t, value: __v } => {
+                (__t.as_str(), __v.as_deref())
+            }
+            __other => {
+                return ::core::result::Result::Err(::abyss_msg::WireError::TypeMismatch {
+                    expected: "variant",
+                    found: ::abyss_msg::Value::kind_name(__other),
+                });
+            }
+        };
+        match __tag {
+            #(#from_arms)*
+            __unknown => ::core::result::Result::Err(
+                ::abyss_msg::WireError::UnknownVariant(__unknown.to_owned()),
+            ),
+        }
+    };
+    Ok((to_body, from_body))
+}
+
+/// Codegen for one named field of a dict-shaped body. `access` is a
+/// `&FieldTy` expression. Returns `(to-wire push, from-wire let)`.
+fn dict_field(
+    field: &Field,
+    rule: &RenameRule,
+    access: &TokenStream2,
+) -> syn::Result<(TokenStream2, TokenStream2)> {
+    let ident = field.ident.as_ref().expect("named field");
+    let name = field_wire_name(field, rule)?;
+
+    if let Some(inner) = option_inner(&field.ty) {
+        let to = quote! {
+            if let ::core::option::Option::Some(__v) = #access {
+                __entries.push((#name.to_owned(), ::abyss_msg::Wire::to_wire(__v, __handles)));
+            }
+        };
+        let from = quote! {
+            let #ident = match __lookup(#name) {
+                ::core::option::Option::Some(__v) => ::core::option::Option::Some(
+                    <#inner as ::abyss_msg::Wire>::from_wire(__v, __handles)?,
+                ),
+                ::core::option::Option::None => ::core::option::Option::None,
+            };
+        };
+        Ok((to, from))
+    } else {
+        let ty = &field.ty;
+        let to = quote! {
+            __entries.push((#name.to_owned(), ::abyss_msg::Wire::to_wire(#access, __handles)));
+        };
+        let from = quote! {
+            let #ident = {
+                let __v = __lookup(#name)
+                    .ok_or(::abyss_msg::WireError::MissingField(#name))?;
+                <#ty as ::abyss_msg::Wire>::from_wire(__v, __handles)?
+            };
+        };
+        Ok((to, from))
+    }
+}
+
+// --- attributes & helpers --------------------------------------------------
+
+/// How field and variant names map to wire names.
+enum RenameRule {
+    None,
+    Kebab,
+    Snake,
+}
+
+impl RenameRule {
+    fn apply(&self, ident: &str) -> String {
+        match self {
+            RenameRule::None => ident.to_owned(),
+            RenameRule::Kebab => delimit(ident, '-'),
+            RenameRule::Snake => delimit(ident, '_'),
+        }
+    }
+}
+
+/// Lower-case `ident`, treating CamelCase humps and existing `_` / `-` as
+/// word breaks, joining words with `delim`.
+fn delimit(ident: &str, delim: char) -> String {
+    let mut out = String::new();
+    for (i, ch) in ident.char_indices() {
+        if ch == '_' || ch == '-' {
+            if i != 0 && !out.ends_with(delim) {
+                out.push(delim);
+            }
+        } else if ch.is_ascii_uppercase() {
+            if i != 0 && !out.is_empty() && !out.ends_with(delim) {
+                out.push(delim);
+            }
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn named_fields(
+    fields: &Fields,
+) -> syn::Result<&syn::punctuated::Punctuated<Field, syn::Token![,]>> {
+    match fields {
+        Fields::Named(named) => Ok(&named.named),
+        Fields::Unnamed(_) | Fields::Unit => Err(syn::Error::new_spanned(
+            fields,
+            "Wire on a struct requires named fields",
+        )),
+    }
+}
+
+fn field_wire_name(field: &Field, rule: &RenameRule) -> syn::Result<String> {
+    if let Some(explicit) = explicit_rename(&field.attrs)? {
+        return Ok(explicit);
+    }
+    let ident = field.ident.as_ref().expect("named field").to_string();
+    Ok(rule.apply(&ident))
+}
+
+fn variant_wire_name(variant: &Variant, rule: &RenameRule) -> syn::Result<String> {
+    if let Some(explicit) = explicit_rename(&variant.attrs)? {
+        return Ok(explicit);
+    }
+    Ok(rule.apply(&variant.ident.to_string()))
+}
+
+/// `#[wire(rename = "...")]` on a field or variant.
+fn explicit_rename(attrs: &[Attribute]) -> syn::Result<Option<String>> {
+    let mut found = None;
+    for attr in attrs {
+        if !attr.path().is_ident("wire") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("rename") {
+                let lit: LitStr = meta.value()?.parse()?;
+                found = Some(lit.value());
+                Ok(())
+            } else {
+                Err(meta.error("expected `rename = \"...\"` here"))
+            }
+        })?;
+    }
+    Ok(found)
+}
+
+/// `#[wire(rename_all = "...")]` on the struct or enum.
+fn container_rename_rule(attrs: &[Attribute]) -> syn::Result<RenameRule> {
+    let mut rule = RenameRule::None;
+    for attr in attrs {
+        if !attr.path().is_ident("wire") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("rename_all") {
+                let lit: LitStr = meta.value()?.parse()?;
+                rule = match lit.value().as_str() {
+                    "kebab-case" => RenameRule::Kebab,
+                    "snake_case" => RenameRule::Snake,
+                    other => {
+                        return Err(meta.error(format!(
+                            "unknown rename_all {other:?} \
+                             (expected \"kebab-case\" or \"snake_case\")"
+                        )));
+                    }
+                };
+                Ok(())
+            } else {
+                Err(meta.error("expected `rename_all = \"...\"` here"))
+            }
+        })?;
+    }
+    Ok(rule)
+}
+
+/// If `ty` is `Option<T>`, the inner `T`.
+fn option_inner(ty: &Type) -> Option<&Type> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    let segment = path.path.segments.last()?;
+    if segment.ident != "Option" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+    match args.args.first()? {
+        GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    }
+}

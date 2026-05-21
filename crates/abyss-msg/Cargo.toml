@@ -1,0 +1,10 @@
+[package]
+name = "abyss-msg"
+description = "AbyssBSD message primitive — value vocabulary, envelope, and the Wire typed-view layer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true

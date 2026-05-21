@@ -1,0 +1,22 @@
+[package]
+name = "abyss-msg-derive"
+description = "#[derive(Wire)] for the AbyssBSD message primitive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+proc-macro = true
+
+# Build-time only — see docs/dependency-allowlist.md.
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = "2"
+
+[dev-dependencies]
+abyss-msg = { path = "../abyss-msg" }
+
+[lints]
+workspace = true
