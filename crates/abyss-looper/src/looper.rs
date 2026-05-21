@@ -4,22 +4,23 @@
 //! (`docs/design/looper-framework.md` §4).
 //!
 //! A looper is one thread hosting a set of tasks. It polls a task when its
-//! waker has fired, and parks the thread when none is runnable — so an
-//! idle looper costs zero CPU. A task's waker may fire from another
-//! thread (a reply arriving from another looper), so the ready set is
-//! shared and the thread is unparked.
+//! waker has fired, and blocks on its [`EventSource`] when none is
+//! runnable — so an idle looper costs zero CPU. A task's waker may fire
+//! from another thread (a reply arriving from another looper), so the
+//! ready set is shared and the event source is woken.
 
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Wake, Waker};
-use std::thread::{self, Thread};
+
+use crate::event_source::{EventSource, ThreadPark};
 
 type Task = Pin<Box<dyn Future<Output = ()> + Send>>;
 
 /// A single-threaded cooperative executor: a thread, its tasks, and a run
-/// loop that polls them and parks when idle.
+/// loop that polls them and blocks on the event source when idle.
 pub struct Looper {
     tasks: Vec<Option<Task>>,
     wakers: Vec<Waker>,
@@ -27,14 +28,15 @@ pub struct Looper {
     shared: Arc<Shared>,
 }
 
-/// Cross-thread state: the ready set and the means to wake the thread.
+/// Cross-thread state: the ready set and the event source that wakes the
+/// looper's thread.
 struct Shared {
     ready: Mutex<VecDeque<usize>>,
-    unparker: Mutex<Option<Thread>>,
+    event_source: Arc<dyn EventSource>,
 }
 
-/// The waker for one task. Marking the task ready and unparking the
-/// looper's thread is all it does — and both are thread-safe, because a
+/// The waker for one task. Marking the task ready and waking the looper's
+/// event source is all it does — and both are thread-safe, because a
 /// reply waking this task commonly arrives on another looper's thread.
 struct TaskWaker {
     shared: Arc<Shared>,
@@ -48,22 +50,28 @@ impl Wake for TaskWaker {
 
     fn wake_by_ref(self: &Arc<Self>) {
         self.shared.ready.lock().unwrap().push_back(self.id);
-        if let Some(thread) = self.shared.unparker.lock().unwrap().as_ref() {
-            thread.unpark();
-        }
+        self.shared.event_source.wake();
     }
 }
 
 impl Looper {
-    /// A new looper with no tasks.
+    /// A new looper with no tasks, on the in-process event source.
     pub fn new() -> Self {
+        Looper::with_event_source(Arc::new(ThreadPark::new()))
+    }
+
+    /// A new looper driven by a specific [`EventSource`]. The FreeBSD IPC
+    /// backend supplies a `kqueue`-based one
+    /// (`docs/design/broker-and-transport.md` §2.3); [`new`](Self::new)
+    /// uses the in-process default.
+    pub fn with_event_source(event_source: Arc<dyn EventSource>) -> Self {
         Looper {
             tasks: Vec::new(),
             wakers: Vec::new(),
             live: 0,
             shared: Arc::new(Shared {
                 ready: Mutex::new(VecDeque::new()),
-                unparker: Mutex::new(None),
+                event_source,
             }),
         }
     }
@@ -85,7 +93,7 @@ impl Looper {
     /// completes when its future returns — for a handler's serve loop,
     /// when its inbox closes (`docs/design/looper-framework.md` §4, §8).
     pub fn run(mut self) {
-        *self.shared.unparker.lock().unwrap() = Some(thread::current());
+        self.shared.event_source.bind();
         // Every spawned task gets an initial poll.
         {
             let mut ready = self.shared.ready.lock().unwrap();
@@ -102,7 +110,7 @@ impl Looper {
                 if self.live == 0 {
                     break;
                 }
-                thread::park();
+                self.shared.event_source.wait();
                 continue;
             }
             for id in batch {
