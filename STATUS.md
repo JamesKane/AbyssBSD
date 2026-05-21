@@ -30,6 +30,7 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `b772b49` Gate D refinement: the IPC ring, serialization, wire request/reply
 - `e2d76de` Phase 4: abyss-transport — the envelope over the transport
 - `23b2bec` ci: install a DejaVu font for the Linux test step
 - `454d518` Bump STATUS: Phase 4 FreeBSD remainder, increment 1 (abyss-transport)
@@ -39,7 +40,6 @@ specifies the FreeBSD remainder.
 - `e8712f9` Bump STATUS: the FreeBSD VM builds the workspace green
 - `82c1469` tools/vm: add `provision` — reproducible VM package set
 - `de9be9d` abyss-cap: make the concurrency harness test deterministic
-- `3412381` Build the workspace in the FreeBSD VM: source sync, MSRV
 
 ## Site
 
@@ -53,8 +53,8 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-**Phase 4's FreeBSD remainder, increments 1–2 of 5 done.**
-`crates/abyss-transport` is the inter-process transport
+**Phase 4's FreeBSD remainder — the transport built, the IPC-ring
+design settled.** `crates/abyss-transport` is the inter-process transport
 (`broker-and-transport.md` §2): a `SOCK_SEQPACKET` socket pair with
 `SCM_RIGHTS` fd-passing over a C cmsg shim (`Channel`), and the envelope
 framing on top (`MessageChannel`) — one datagram carries one encoded
@@ -62,20 +62,27 @@ envelope plus its handles' descriptors. Built and tested in the FreeBSD
 VM (`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
 Working tree clean.
 
+A design pass then resolved where increment 3 was under-specified —
+how `Cap` reconciles its in-process and IPC backends. The Gate D doc
+gains §2.5–§2.7: `Interface::Message: Wire`; the IPC ring frame (a
+correlation id outside the envelope); and wire request/reply via a
+`Responder`, superseding the embedded-`Sender` `call`.
+
 The dev loop is settled: edit on macOS, `vm.sh build` runs the full
 `cargo xtask ci` in the FreeBSD guest.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
-`docs/design/broker-and-transport.md` §7:
+`docs/design/broker-and-transport.md`:
 
-- `Cap`'s fd-backed IPC form and `Cap: Wire`, with the handle pipeline
-  carrying descriptors (§3.2, §3.4) — the next increment;
-- the `kqueue` event loop, wiring the transport into `abyss-looper` (§2.3);
+- the **IPC ring backend** — `Cap`/looper over a `SOCK_SEQPACKET`
+  connection, the ring frame, correlation, the `Responder`, and the
+  `kqueue` event source (§2.3, §2.5–§2.7) — the next increment;
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
   `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
 - supervision and `PeerRestarted` re-wiring (§5.5);
+- `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
 
 with the `sys/*` shims fleshed out and every FFI signature verified
 against the FreeBSD headers as the broker exercises them.
