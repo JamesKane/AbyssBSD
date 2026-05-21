@@ -264,6 +264,23 @@
      "advisory mask on a raw fd" gap. This is the concrete payoff of choosing
      FreeBSD over Linux.</p>
 
+  <div class="note">
+    <strong>Why FreeBSD — and, today, only FreeBSD.</strong> This is not a
+    portable design wearing a FreeBSD coat. Kernel-enforced <em>per-handle</em>
+    rights — Capsicum's <code>cap_rights_limit</code> — ship on exactly one
+    general-purpose OS. A Linux port is buildable: namespaces and cgroups
+    out-isolate jails, <code>pidfd</code> stands in for <code>pdfork</code>,
+    <code>memfd</code> and <code>SCM_RIGHTS</code> are native. But Linux has no
+    per-fd rights mask; <code>seccomp</code> can approximate capability
+    <em>mode</em> and not per-handle rights, so a capability there is a sandbox
+    with an advisory mask — AbyssBSD-shaped, not AbyssBSD. Fuchsia's Zircon
+    kernel fits the model <em>better</em> than FreeBSD does — every handle
+    carries rights bits by construction — but it offers no whole, mature base
+    to keep and track upstream. FreeBSD is the single place a real kernel
+    capability primitive and a complete desktop base meet. The choice was the
+    only one on the table.
+  </div>
+
   <h3>The broker</h3>
   <p>A <strong>broker</strong> is the sole minter of authority — the only
      component that opens devices and creates jails. It hands each child its
