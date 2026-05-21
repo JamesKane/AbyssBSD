@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `69a02d7` Phase 4: abyss-transport — kqueue process-descriptor exit monitoring
+- `210e7f6` Bump STATUS: Phase 4 — the cap_enter startup shim
 - `a0f5ade` Phase 4: abyss-bootstrap — the cap_enter startup shim
 - `c83943d` Bump STATUS: Phase 4 — the broker component spawn module
 - `9c85f9e` Phase 4: abyss-broker — the FreeBSD component spawn module
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `8bb3a9b` Bump STATUS: Phase 4 — the jail around the spawn
 - `4e86395` Phase 4: the jail around the spawn — verified jail-sys, jailed spawn
 - `ff7dd78` Bump STATUS: Phase 4 — the pdfork-based spawn
-- `2261e50` Phase 4: freebsd-procdesc-sys — the pdfork-based spawn
-- `ef793dc` Bump STATUS: Phase 4 — the IPC ring connection complete
 
 ## Site
 
@@ -99,16 +99,20 @@ receives the bundle, and `cap_enter`s — verifying `freebsd-capsicum-sys`.
 The `component-probe` binary is the first AbyssBSD component; an
 end-to-end VM test spawns it through the broker and sees it report back
 from inside capability mode, having received exactly the bundle the
-broker sent. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+broker sent. And the kqueue substrate now watches process descriptors for
+exit (`EVFILT_PROCDESC` / `NOTE_EXIT`) — the signal the broker's
+supervision is built on. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **supervision** — watching the process descriptor the spawn hands back,
-  restarting a failed component, and the `PeerRestarted` re-wiring of the
-  components that talked to it (§5.5) — the next increment;
+- the broker's **supervision loop** — on the `EVFILT_PROCDESC` exit
+  signal now in place: restarting a failed component and the
+  `PeerRestarted` re-wiring of the components that talked to it (§5.5) —
+  the next increment;
 - `Cap: Wire` — a capability delegated inside a message (§3.2, §3.4);
 - the broker built from a manifest set: spawning a whole graph, not one
   component at a time (§5).
