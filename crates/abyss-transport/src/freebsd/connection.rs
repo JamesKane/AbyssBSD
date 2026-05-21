@@ -106,6 +106,20 @@ impl Connection {
             .map_err(|_| io::Error::other("connection closed before the reply"))
     }
 
+    /// Send a one-way message — a Command or an Event — over the
+    /// connection.
+    ///
+    /// Unlike [`call`](Self::call) it awaits no reply: the message frame
+    /// carries correlation `0`, the id reserved for a frame that expects
+    /// no answer (`broker-and-transport.md` §2.6).
+    pub async fn send(&self, message: &Envelope, fds: &[BorrowedFd<'_>]) -> io::Result<()> {
+        let frame = RingFrame {
+            kind: FrameKind::Message,
+            correlation: 0,
+        };
+        self.inner.channel.send(frame, message, fds).await
+    }
+
     /// The receive loop — drive this as a task on the looper. It reads
     /// each datagram and routes it: a reply frame to the `call` awaiting
     /// its id, a message frame to the [`Inbox`]. It ends when the
@@ -257,6 +271,37 @@ mod tests {
 
         peer.join().expect("peer thread");
         assert_eq!(answer.lock().unwrap().take(), Some(reply));
+    }
+
+    #[test]
+    fn send_delivers_a_one_way_message() {
+        let message = envelope(MessageKind::Command, 77);
+
+        let (client_framed, server_framed) = FramedChannel::pair().expect("socketpair");
+        let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+        let client = AsyncChannel::new(client_framed, Arc::clone(&source)).expect("async channel");
+        let (connection, _inbox) = Connection::open(client);
+
+        // The peer receives the one-way message — a message frame with no
+        // correlation, since it expects no reply.
+        let expect = message.clone();
+        let peer = thread::spawn(move || {
+            let (frame, got, _) = server_framed.recv().expect("peer recv");
+            assert_eq!(frame.kind, FrameKind::Message);
+            assert_eq!(frame.correlation, 0);
+            assert_eq!(got, expect);
+        });
+
+        let mut looper = Looper::with_event_source(source);
+        looper.spawn(async move {
+            connection
+                .send(&message, &[])
+                .await
+                .expect("send the one-way message");
+        });
+        looper.run();
+
+        peer.join().expect("peer thread");
     }
 
     #[test]
