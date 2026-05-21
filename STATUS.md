@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `ea2b569` Phase 4: abyss-transport — the SOCK_SEQPACKET transport
+- `e8712f9` Bump STATUS: the FreeBSD VM builds the workspace green
 - `82c1469` tools/vm: add `provision` — reproducible VM package set
 - `de9be9d` abyss-cap: make the concurrency harness test deterministic
 - `3412381` Build the workspace in the FreeBSD VM: source sync, MSRV
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `56664e8` ci: add the GitHub Actions pipeline and README status badge
 - `e3893ba` site: link the site to the GitHub source
 - `c6eb968` docs: prepare README for a public push
-- `1850903` site: add the Governance page and nav entry
-- `cedb430` governance: add the RFC and adoption process
 
 ## Site
 
@@ -53,29 +53,29 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-Working tree clean. **The FreeBSD VM builds the workspace green.**
-`tools/vm` runs a FreeBSD 15.0-RELEASE-p9 aarch64 guest (QEMU + HVF,
-native speed); `./tools/vm/vm.sh build` syncs the working tree and runs
-the full `cargo xtask ci` in the guest, which passes — fmt, clippy,
-build, every test — for the whole workspace, the `sys/*` FFI crates now
-compiled against real FreeBSD kernel headers (the Capsicum C shim, the
-`jail` and `procdesc` `extern` blocks). The dev loop for the FreeBSD
-remainder of Phase 4 is in place: edit on macOS, `vm.sh build` on FreeBSD.
+**Phase 4's FreeBSD remainder, increment 1 of 5 done.** `crates/abyss-transport`
+is the inter-process transport (`broker-and-transport.md` §2): a
+`SOCK_SEQPACKET` socket pair, `send`/`recv` of datagrams with `SCM_RIGHTS`
+fd-passing, over a C cmsg shim. Built and tested in the FreeBSD VM
+(`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
+Working tree clean.
+
+The dev loop is settled: edit on macOS, `vm.sh build` runs the full
+`cargo xtask ci` in the FreeBSD guest.
 
 ## Next
 
-**The FreeBSD remainder of Phase 4** — the code that needs a FreeBSD
-kernel, per `docs/design/broker-and-transport.md` §7, now that the VM
-builds and tests the workspace:
+**The rest of Phase 4's FreeBSD remainder**, per
+`docs/design/broker-and-transport.md` §7 — increments 2–5:
 
-- the `SOCK_SEQPACKET` ring transport with `SCM_RIGHTS` fd-passing, and
-  the `kqueue` event loop in `abyss-looper` (§2);
-- `Cap: Wire` in `abyss-cap` (§3.4);
-- the broker's jailed `pdfork` spawn, the bootstrap bundle, the
-  `cap_enter` startup shim, and supervision (§5.3–§5.7) — wiring the
-  manifest parser and authority graph to the `sys/*` bindings;
-- fleshing out the `sys/*` shims and verifying every FFI signature
-  against the FreeBSD headers as the broker exercises them.
+- the envelope over the transport, and `Cap: Wire` (§2.2, §3.4);
+- the `kqueue` event loop, wiring the transport into `abyss-looper` (§2.3);
+- the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
+  `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
+- supervision and `PeerRestarted` re-wiring (§5.5);
+
+with the `sys/*` shims fleshed out and every FFI signature verified
+against the FreeBSD headers as the broker exercises them.
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
 This reaches the bulk of **M1**.
