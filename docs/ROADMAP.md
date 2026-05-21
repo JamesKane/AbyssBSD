@@ -227,10 +227,15 @@ through, that it is redesigning instead of building.
 | B | Phase 2 | `design/looper-framework.md` — executor internals, ring API, `RingCap` & supervision, the `Wire` trait |
 | C | Phase 3 | `design/toolkit.md` — Interface Kit widget set, layout algorithm, the arena/`ViewId` API, the drawing-API seam (§7.3) |
 | D | Phase 4 | `design/broker-and-transport.md` — manifest schema, the spawn/bundle protocol, `SOCK_SEQPACKET` framing, the object-rights → `cap_rights_t` mapping |
-| E | Phase 5 | `interfaces/display.md` finalized to its M1 subset; DRM/KMS bring-up notes |
-| F | Phase 6 | `design/render-backends.md` — the render-backend seam, the GLES backend, the Mesa port plan |
-| G | Phase 7 | the remaining `interfaces/*.md` schemas verified M3-complete; the login/session lifecycle elaborated |
-| H | Phase 9 | `design/install-update.md` — boot-environment lifecycle, the installer, the image build |
+| E | Phase 5 | `design/window-management.md` — the WM core, the layout-policy seam, the tiling layout engine, floating, and key-chords (`DESIGN.md` §7.7) |
+| F | Phase 5 | `interfaces/display.md` finalized to its M1 subset; DRM/KMS bring-up notes |
+| G | Phase 6 | `design/render-backends.md` — the render-backend seam, the GLES backend, the Mesa port plan |
+| H | Phase 7 | the remaining `interfaces/*.md` schemas verified M3-complete; the login/session lifecycle elaborated |
+| I | Phase 9 | `design/install-update.md` — boot-environment lifecycle, the installer, the image build |
+
+Gates E and F both precede Phase 5 and **co-design**: the `configure`
+events and surface roles the window manager needs (Gate E) shape the
+display-protocol schema (Gate F).
 
 ---
 
