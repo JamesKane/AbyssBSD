@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `8466c49` Phase 4: abyss-looper — the event-source seam
+- `5429aa8` Bump STATUS: Phase 4 — the framed connection
 - `47a3d6b` Phase 4: abyss-transport — the framed connection
 - `49655d8` Bump STATUS: Phase 4 — the kqueue reactor
 - `812d46c` Phase 4: abyss-transport — the kqueue reactor
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `e2d76de` Phase 4: abyss-transport — the envelope over the transport
 - `23b2bec` ci: install a DejaVu font for the Linux test step
 - `454d518` Bump STATUS: Phase 4 FreeBSD remainder, increment 1 (abyss-transport)
-- `ea2b569` Phase 4: abyss-transport — the SOCK_SEQPACKET transport
-- `a0f13b0` ci: add a FreeBSD job that runs the test suite in a VM
 
 ## Site
 
@@ -64,20 +64,24 @@ is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
 - `Reactor` — the `kqueue` readiness reactor (§2.3), the looper's FreeBSD
   event source: register descriptors, `wait`, `wake` across threads.
 
-A design pass settled where the next step was under-specified — the Gate
-D doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame
-with the correlation id outside the envelope; wire request/reply via a
-`Responder`). Built and tested in the FreeBSD VM (`tools/vm/vm.sh build`);
-`cargo xtask ci` green on macOS and FreeBSD. Working tree clean.
+A design pass first settled where this was under-specified — the Gate D
+doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame with
+the correlation id outside the envelope; wire request/reply via a
+`Responder`). And `abyss-looper` gained the **`EventSource` seam**: the
+looper's idle-wait is now a trait, so the `Reactor` can drive it where
+thread-park did (looper-framework §3.3); a pure refactor, every existing
+test still green. Built and tested in the FreeBSD VM
+(`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
+Working tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **IPC ring** — the framed connection (the ring frame, §2.6),
-  request/reply correlation and the `Responder` (§2.7), and wiring
-  `Cap`/the looper onto the `Reactor` — the next increment;
+- the **IPC ring** — a `kqueue` `EventSource` over the `Reactor`, async
+  channel I/O, then request/reply correlation and the `Responder` (§2.7)
+  — the next increment;
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
   `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
 - supervision and `PeerRestarted` re-wiring (§5.5);
