@@ -69,6 +69,12 @@ impl Channel {
         Ok((Channel { fd: a }, Channel { fd: b }))
     }
 
+    /// Wrap an already-owned descriptor as a channel — used to adopt the
+    /// bootstrap socket a component is spawned holding (§5.3).
+    pub fn from_fd(fd: OwnedFd) -> Channel {
+        Channel { fd }
+    }
+
     /// Send one datagram: `data` as the body, `fds` passed via `SCM_RIGHTS`.
     ///
     /// The descriptors are borrowed — the receiver is handed its own owned

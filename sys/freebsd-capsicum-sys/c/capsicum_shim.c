@@ -77,3 +77,10 @@ abyss_cap_enter(void)
 {
 	return cap_enter();
 }
+
+/* Report whether the process is in capability mode. Wraps cap_getmode(2). */
+int
+abyss_cap_getmode(unsigned int *modep)
+{
+	return cap_getmode(modep);
+}

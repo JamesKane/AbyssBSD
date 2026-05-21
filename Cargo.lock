@@ -3,8 +3,24 @@
 version = 4
 
 [[package]]
+name = "abyss-bootstrap"
+version = "0.0.0"
+dependencies = [
+ "abyss-broker",
+ "abyss-msg",
+ "abyss-transport",
+ "freebsd-capsicum-sys",
+]
+
+[[package]]
 name = "abyss-broker"
 version = "0.0.0"
+dependencies = [
+ "abyss-msg",
+ "abyss-transport",
+ "freebsd-jail-sys",
+ "freebsd-procdesc-sys",
+]
 
 [[package]]
 name = "abyss-cap"
@@ -84,6 +100,9 @@ version = "0.0.0"
 [[package]]
 name = "freebsd-procdesc-sys"
 version = "0.0.0"
+dependencies = [
+ "freebsd-jail-sys",
+]
 
 [[package]]
 name = "proc-macro2"

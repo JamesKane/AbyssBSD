@@ -1,0 +1,23 @@
+[package]
+name = "abyss-bootstrap"
+description = "AbyssBSD component bootstrap — receive the bundle, enter capability mode (broker-and-transport.md §5.4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# The bootstrap shim is FreeBSD-only — the IPC transport and Capsicum — so
+# its dependencies are pulled only there. On every other host the crate is
+# empty and the probe binary is a stub, so the macOS dev bed still builds.
+[target.'cfg(target_os = "freebsd")'.dependencies]
+abyss-msg = { path = "../abyss-msg" }
+abyss-transport = { path = "../abyss-transport" }
+freebsd-capsicum-sys = { path = "../../sys/freebsd-capsicum-sys" }
+
+# The end-to-end test spawns the probe through the broker's spawn module.
+[target.'cfg(target_os = "freebsd")'.dev-dependencies]
+abyss-broker = { path = "../abyss-broker" }
+
+[lints]
+workspace = true

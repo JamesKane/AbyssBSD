@@ -6,6 +6,7 @@
 //! wrappers are what the broker programs against. Both are verified when
 //! the crate is first built on FreeBSD.
 
+use std::ffi::c_uint;
 use std::io;
 use std::os::fd::RawFd;
 
@@ -51,6 +52,7 @@ unsafe extern "C" {
     fn abyss_cap_rights_size() -> usize;
     fn abyss_cap_rights_build(out: *mut u8, flags: u64);
     fn abyss_cap_rights_limit(fd: RawFd, rights: *const u8) -> i32;
+    fn abyss_cap_getmode(modep: *mut c_uint) -> i32;
 }
 
 /// Enter Capsicum capability mode — irreversibly (`broker-and-transport.md`
@@ -61,6 +63,19 @@ pub fn cap_enter() -> io::Result<()> {
     let rc = unsafe { abyss_cap_enter() };
     if rc == 0 {
         Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// Whether the process has entered Capsicum capability mode. Wraps
+/// `cap_getmode(2)`.
+pub fn cap_getmode() -> io::Result<bool> {
+    let mut mode: c_uint = 0;
+    // SAFETY: `mode` is a valid out-pointer for the `u_int` result.
+    let rc = unsafe { abyss_cap_getmode(&mut mode) };
+    if rc == 0 {
+        Ok(mode != 0)
     } else {
         Err(io::Error::last_os_error())
     }

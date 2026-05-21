@@ -20,4 +20,4 @@
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::{CapRights, Rights, cap_enter};
+pub use freebsd::{CapRights, Rights, cap_enter, cap_getmode};
