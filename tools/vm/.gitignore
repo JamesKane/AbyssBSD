@@ -1,0 +1,10 @@
+# Generated VM artifacts — large binaries and per-machine keys, never committed.
+*.qcow2
+*.qcow2.xz
+*.iso
+*.fd
+id_abyss_vm
+id_abyss_vm.pub
+cidata/
+console.log
+qemu.pid

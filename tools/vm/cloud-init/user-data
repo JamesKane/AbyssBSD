@@ -1,0 +1,20 @@
+#cloud-config
+# AbyssBSD FreeBSD 15.0 development VM — cloud-init (nuageinit) user-data.
+#
+# vm.sh seed renders this (every __SSH_PUBKEY__ becomes id_abyss_vm.pub)
+# onto an ISO labelled `cidata`; FreeBSD's nuageinit applies it at first
+# boot. Two complementary, deliberately simple mechanisms:
+#
+#   - ssh_authorized_keys keys the image's default `freebsd` user, which
+#     nuageinit creates in its reliable pre-network phase;
+#   - runcmd, executed as root by rc.d/nuageinit_user_data_script, keys
+#     root, sets a root password (FreeBSD's console allows root login, and
+#     `su` then works from the freebsd account), enables key-based root
+#     SSH (FreeBSD's sshd defaults PermitRootLogin to `no`), and restarts
+#     sshd. Every step is logged to /tmp/abyss-provision.log.
+#
+# runcmd entries must be plain strings — nuageinit rejects the list form.
+ssh_authorized_keys:
+  - __SSH_PUBKEY__
+runcmd:
+  - "exec >/tmp/abyss-provision.log 2>&1; set -x; install -d -m 700 -o root -g wheel /root/.ssh; echo '__SSH_PUBKEY__' > /root/.ssh/authorized_keys; chmod 600 /root/.ssh/authorized_keys; chown root:wheel /root/.ssh/authorized_keys; echo abyssroot | pw usermod root -h 0; echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config; service sshd restart"
