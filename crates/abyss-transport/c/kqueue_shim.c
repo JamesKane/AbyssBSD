@@ -43,13 +43,18 @@ abyss_kqueue(void)
 /*
  * Add (add != 0) or remove a read/write interest for `fd`.
  * `interest`: 0 readable, 1 writable. Returns 0, or -1 with errno set.
+ *
+ * An added interest is EV_ONESHOT: it fires at most once and is then
+ * removed from the kqueue automatically. The async ring re-registers on
+ * each would-block poll, so a registration never outlives the task
+ * parked on it — no stale filter, no busy wakeup.
  */
 int
 abyss_kqueue_ctl(int kq, int fd, int interest, int add)
 {
 	struct kevent kev;
 	short filter = (interest == 1) ? EVFILT_WRITE : EVFILT_READ;
-	unsigned short flags = add ? EV_ADD : EV_DELETE;
+	unsigned short flags = add ? (EV_ADD | EV_ONESHOT) : EV_DELETE;
 
 	EV_SET(&kev, (uintptr_t)fd, filter, flags, 0, 0, NULL);
 	return kevent(kq, &kev, 1, NULL, 0, NULL);

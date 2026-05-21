@@ -12,6 +12,7 @@ publish = false
 # the build is a no-op on every other host.
 
 [dependencies]
+abyss-looper = { path = "../abyss-looper" }
 abyss-msg = { path = "../abyss-msg" }
 
 [lints]

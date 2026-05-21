@@ -14,8 +14,11 @@ use abyss_msg::Envelope;
 
 use crate::frame::{RING_FRAME_LEN, RingFrame};
 
+mod async_channel;
 mod reactor;
-pub use reactor::{Event, Interest, Reactor};
+
+pub use async_channel::AsyncChannel;
+pub use reactor::{Event, Interest, Reactor, ReactorSource};
 
 /// The largest descriptor count one datagram may carry. Must match
 /// `ABYSS_MAX_FDS` in `c/cmsg_shim.c`.
@@ -38,6 +41,7 @@ unsafe extern "C" {
         fdcap: usize,
         nfds: *mut usize,
     ) -> isize;
+    fn abyss_set_nonblocking(fd: c_int) -> c_int;
 }
 
 /// One end of a `SOCK_SEQPACKET` connection — an ordered, reliable,
@@ -122,6 +126,17 @@ impl Channel {
             .map(|&fd| unsafe { OwnedFd::from_raw_fd(fd) })
             .collect();
         Ok((n as usize, fds))
+    }
+
+    /// Put the socket into non-blocking mode, so `send` and `recv` fail
+    /// with [`io::ErrorKind::WouldBlock`] rather than blocking the thread
+    /// — the mode the async ring drives the channel in.
+    pub fn set_nonblocking(&self) -> io::Result<()> {
+        // SAFETY: the shim issues `fcntl` on this live descriptor.
+        if unsafe { abyss_set_nonblocking(self.fd.as_raw_fd()) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
     }
 }
 
@@ -256,6 +271,12 @@ impl FramedChannel {
             )
         })?;
         Ok((frame, envelope, fds))
+    }
+
+    /// Put the underlying socket into non-blocking mode — see
+    /// [`Channel::set_nonblocking`].
+    pub fn set_nonblocking(&self) -> io::Result<()> {
+        self.channel.set_nonblocking()
     }
 }
 

@@ -69,6 +69,7 @@ dependencies = [
 name = "abyss-transport"
 version = "0.0.0"
 dependencies = [
+ "abyss-looper",
  "abyss-msg",
 ]
 

@@ -7,10 +7,15 @@
 //! for readiness and carries a wakeup channel for cross-thread nudges. The
 //! `extern` declarations match `c/kqueue_shim.c`.
 
+use std::collections::HashMap;
 use std::ffi::c_int;
 use std::io;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::sync::Mutex;
+use std::task::Waker;
 use std::time::Duration;
+
+use abyss_looper::EventSource;
 
 /// The most events one [`Reactor::wait`] reports — matches
 /// `ABYSS_MAX_EVENTS` in `c/kqueue_shim.c`.
@@ -34,7 +39,7 @@ unsafe extern "C" {
 }
 
 /// What a registered descriptor is watched for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Interest {
     /// Readable — a `recv` would not block.
     Readable,
@@ -160,6 +165,68 @@ impl Reactor {
 impl AsRawFd for Reactor {
     fn as_raw_fd(&self) -> RawFd {
         self.kq.as_raw_fd()
+    }
+}
+
+/// A [`Reactor`] presented as a looper [`EventSource`]
+/// (`docs/design/broker-and-transport.md` §2.3).
+///
+/// The looper blocks in `wait`; a registered descriptor's readiness — or a
+/// `wake` from any thread — releases it and wakes the task parked on that
+/// descriptor. This is what makes an IPC ring's `recv` and `send` suspend
+/// the calling task rather than the looper thread.
+pub struct ReactorSource {
+    reactor: Reactor,
+    /// The waker of each task parked on a descriptor, keyed by the
+    /// descriptor and what it waits for.
+    waiters: Mutex<HashMap<(RawFd, Interest), Waker>>,
+}
+
+impl ReactorSource {
+    /// Create a reactor-backed event source. It is shared — between the
+    /// looper that waits on it and the channels that register with it —
+    /// so callers wrap it in an `Arc`.
+    pub fn new() -> io::Result<ReactorSource> {
+        Ok(ReactorSource {
+            reactor: Reactor::new()?,
+            waiters: Mutex::new(HashMap::new()),
+        })
+    }
+
+    /// Park `waker` until `fd` reaches `interest`. The reactor registration
+    /// is one-shot; a task re-registers on its next would-block poll.
+    pub fn register(&self, fd: BorrowedFd<'_>, interest: Interest, waker: Waker) -> io::Result<()> {
+        self.reactor.register(fd, interest)?;
+        self.waiters
+            .lock()
+            .unwrap()
+            .insert((fd.as_raw_fd(), interest), waker);
+        Ok(())
+    }
+}
+
+impl EventSource for ReactorSource {
+    fn wait(&self) {
+        // A failed wait reports as no events; the looper re-checks its
+        // ready set and waits again.
+        let Ok(events) = self.reactor.wait(None) else {
+            return;
+        };
+        let mut waiters = self.waiters.lock().unwrap();
+        for event in events {
+            let key = match event {
+                Event::Readable(fd) => (fd, Interest::Readable),
+                Event::Writable(fd) => (fd, Interest::Writable),
+                Event::Woken => continue,
+            };
+            if let Some(waker) = waiters.remove(&key) {
+                waker.wake();
+            }
+        }
+    }
+
+    fn wake(&self) {
+        let _ = self.reactor.wake();
     }
 }
 

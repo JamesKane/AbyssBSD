@@ -12,6 +12,7 @@
  */
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -120,4 +121,18 @@ abyss_recv_fds(int sock, void *buf, size_t buflen,
 	}
 
 	return n;
+}
+
+/*
+ * Put `fd` into non-blocking mode, so send/recv fail with EAGAIN rather
+ * than blocking — the mode the async ring needs (§2.3). Returns 0, or -1
+ * with errno set.
+ */
+int
+abyss_set_nonblocking(int fd)
+{
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0)
+		return -1;
+	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }

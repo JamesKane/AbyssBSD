@@ -34,4 +34,6 @@ pub use frame::{FrameError, FrameKind, RING_FRAME_LEN, RingFrame};
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::{Channel, Event, FramedChannel, Interest, MessageChannel, Reactor};
+pub use freebsd::{
+    AsyncChannel, Channel, Event, FramedChannel, Interest, MessageChannel, Reactor, ReactorSource,
+};
