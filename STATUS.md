@@ -6,24 +6,25 @@ plan is the roadmap.
 
 ## Epic
 
-**Phase 3 — rendering & toolkit core. Increment 1 of 3: `abyss-render`
-(geometry).** `crates/abyss-render` built per `docs/design/toolkit.md` §3 —
-the NanoVG-style `Canvas`, the `RenderBackend` seam, and a CPU backend: a
-software anti-aliased rasterizer (analytic-X, 4×-supersampled-Y), with
-paths/curves, solid and gradient paints, rectangular clipping, and
-source-over compositing. `#![forbid(unsafe_code)]`, zero external deps. 12
-tests green — crisp integer fills, anti-aliased fractional edges,
-triangles, rounded rects, gradients, clipping, both winding rules. 58
-workspace-wide; `cargo xtask ci` passes.
+**Phase 3 — rendering & toolkit core. Increment 2 of 3: text.**
+`crates/abyss-font` binds the freetype + harfbuzz **ports** through a small
+C shim (`c/font_shim.c`) — chosen over `bindgen` so freetype's struct
+layouts stay in C. `build.rs` compiles the shim by invoking the system
+toolchain (`cc`, `ar`) directly, so `abyss-font` has **zero
+dependencies**; the FFI `unsafe` is confined there. `abyss-render` gained
+text: a `RenderBackend::blit_coverage` mask op, a per-font `GlyphCache`,
+and `Canvas::text` — and stays `#![forbid(unsafe_code)]`. 10 new tests
+(6 font, 4 text) against real Monaco; 68 workspace-wide; `cargo xtask ci`
+passes.
 
-Phase 3 is large — split into increments: **(1) `abyss-render` geometry
-[done]**, (2) text — the font-stack FFI and glyph atlas, (3)
-`abyss-toolkit` — the arena, layout, and widgets.
+Phase 3 increments: **(1) `abyss-render` geometry [done]**, **(2) text
+[done]**, (3) `abyss-toolkit` — the arena, layout, and widgets.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `f073994` Phase 3 (1/3): abyss-render — the 2D geometry renderer
 - `551084a` Gate C: the toolkit design doc
 - `1cc1cca` Gate E: the window-management design doc
 - `366263c` Phase 2: the looper & service framework — abyss-looper & abyss-cap
@@ -33,21 +34,20 @@ Phase 3 is large — split into increments: **(1) `abyss-render` geometry
 - `b90c53b` Phase 0: Cargo workspace & CI harness
 - `c1d3fe5` site: add the Ecosystem statement page
 - `a0784fe` Pin the FreeBSD base source (ROADMAP §6 resolved)
-- `139c785` Update STATUS after merge to main
 
 ## In flight
 
-The Phase 3 increment-1 commit is pending. Working tree otherwise clean.
+The Phase 3 increment-2 commit is pending. Working tree otherwise clean
+(the parallel-process `docs/DESIGN.md` / `docs/BACKLOG.md` edits are far-
+future / hole-filling and left to that process).
 
 ## Next
 
-**Phase 3, increment 2 — text.** Add the font-stack FFI
-(freetype/harfbuzz/fontconfig) and a glyph atlas to `abyss-render`, so the
-`Canvas` gains a `text` API (`docs/design/toolkit.md` §3.3). This is the
-point where `bindgen` and the font libraries are added to
-`docs/dependency-allowlist.md`. Then increment 3: `crates/abyss-toolkit` —
-the arena/`ViewId`, retained tree, two-pass layout, widget set, theming,
-and damage (toolkit doc §4–§10).
+**Phase 3, increment 3 — `crates/abyss-toolkit`.** The arena and
+generational `ViewId`, the retained view tree, the two-pass box layout,
+the curated widget set, input routing and UI events, theming, and damage
+tracking (`docs/design/toolkit.md` §4–§10). Host-testable on macOS. This
+completes Phase 3.
 
 The window-management gate (E) remains designed ahead of its Phase 5; the
 tiling layout engine is pure geometry and can be built standalone whenever

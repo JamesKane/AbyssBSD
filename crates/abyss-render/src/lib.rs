@@ -18,8 +18,10 @@ mod geometry;
 mod paint;
 mod path;
 mod pixmap;
+mod text;
 
-pub use backend::RenderBackend;
+pub use abyss_font::{Font, FontMetrics};
+pub use backend::{CoverageMask, RenderBackend};
 pub use canvas::Canvas;
 pub use color::Color;
 pub use cpu::CpuBackend;
@@ -27,3 +29,4 @@ pub use geometry::{Point, Rect, Size, Transform};
 pub use paint::{FillRule, GradientStop, Paint};
 pub use path::Path;
 pub use pixmap::Pixmap;
+pub use text::GlyphCache;

@@ -10,6 +10,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "abyss-font"
+version = "0.0.0"
+
+[[package]]
 name = "abyss-looper"
 version = "0.0.0"
 
@@ -30,6 +34,9 @@ dependencies = [
 [[package]]
 name = "abyss-render"
 version = "0.0.0"
+dependencies = [
+ "abyss-font",
+]
 
 [[package]]
 name = "proc-macro2"

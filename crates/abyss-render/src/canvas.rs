@@ -5,10 +5,14 @@
 //! device-space geometry to the [`RenderBackend`]. Retention is the
 //! toolkit's view tree.
 
-use crate::backend::RenderBackend;
+use abyss_font::Font;
+
+use crate::backend::{CoverageMask, RenderBackend};
+use crate::color::Color;
 use crate::geometry::{Point, Rect, Transform};
 use crate::paint::{FillRule, Paint};
 use crate::path::Path;
+use crate::text::GlyphCache;
 
 /// Device-space error budget for curve flattening, in pixels.
 const FLATTEN_TOLERANCE: f32 = 0.2;
@@ -99,6 +103,43 @@ impl<'a> Canvas<'a> {
     /// Fill a rectangle — a non-zero fill of [`Path::rect`].
     pub fn fill_rect(&mut self, rect: Rect, paint: &Paint) {
         self.fill(&Path::rect(rect), paint, FillRule::NonZero);
+    }
+
+    /// Draw `text` in `color`, with the text baseline starting at `origin`.
+    ///
+    /// `cache` is the glyph cache paired with `font` (one cache per font).
+    /// Glyph masks are blitted at integer device pixels; the canvas
+    /// transform's translation places them, but a scaling transform does
+    /// not scale the text — it stays at `size_px` (re-rasterizing at the
+    /// device scale is a later refinement, `docs/design/toolkit.md` §3.3).
+    pub fn text(
+        &mut self,
+        origin: Point,
+        text: &str,
+        font: &Font,
+        size_px: f32,
+        color: Color,
+        cache: &mut GlyphCache,
+    ) {
+        if self.state.clip.is_empty() {
+            return;
+        }
+        let device = self.state.transform.apply(origin);
+        let mut pen_x = device.x;
+        for shaped in font.shape(text, size_px) {
+            let glyph = cache.entry(font, shaped.glyph, size_px);
+            if glyph.width > 0 && glyph.height > 0 {
+                let mask = CoverageMask {
+                    x: (pen_x + shaped.x_offset + glyph.left as f32).round() as i32,
+                    y: (device.y - shaped.y_offset - glyph.top as f32).round() as i32,
+                    width: glyph.width,
+                    height: glyph.height,
+                    data: &glyph.coverage,
+                };
+                self.backend.blit_coverage(&mask, color, self.state.clip);
+            }
+            pen_x += shaped.x_advance;
+        }
     }
 }
 

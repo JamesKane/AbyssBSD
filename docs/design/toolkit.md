@@ -46,7 +46,10 @@ with no FreeBSD and no GPU.
 ## 2. The crate split
 
 - **`abyss-render`** — the 2D renderer: the `Canvas` drawing API, the
-  `RenderBackend` seam, the CPU backend, and the font-stack FFI (§3).
+  `RenderBackend` seam, the CPU backend, and text rendering (§3).
+- **`abyss-font`** — the font-stack binding: shaping and glyph
+  rasterization over freetype + harfbuzz, through a C shim (§3.3). Split
+  out so `abyss-render` keeps `#![forbid(unsafe_code)]`.
 - **`abyss-toolkit`** — the Interface Kit: the view arena and `ViewId`, the
   retained tree, the layout algorithm, the widget set, theming, and damage
   tracking (§4–§10). Depends on `abyss-render` (drawing) and `abyss-msg`
@@ -96,18 +99,23 @@ image, all on macOS.
 
 ### 3.3 Text
 
-The font stack is **freetype + harfbuzz + fontconfig** — FreeBSD ports
-(§11.2), not reimplemented. The pipeline: *fontconfig* selects a face,
-*harfbuzz* shapes a string into positioned glyphs, *freetype* rasterizes a
-glyph into a coverage bitmap. Rasterized glyphs are cached in a **glyph
-atlas**; `Canvas::text` shapes the run, ensures its glyphs are in the
-atlas, and blits them.
+The font stack is **freetype + harfbuzz** — FreeBSD ports (§11.2), not
+reimplemented. The pipeline: *harfbuzz* shapes a string into positioned
+glyphs, *freetype* rasterizes a glyph into a coverage bitmap. Rasterized
+glyphs are cached in a **glyph atlas**; `Canvas::text` shapes the run,
+ensures its glyphs are in the atlas, and blits them. (*fontconfig* —
+selecting a face by name — is deferred; `abyss-font` loads a font by file
+path, and name resolution comes with the `Theme` work, §9.)
 
-The stack is bound by **FFI**. The binding mechanism — `bindgen` at build
-time — and adding `bindgen` plus the font libraries to
-`docs/dependency-allowlist.md` is a **Phase-3 decision**: earlier than
-`ROADMAP.md` §2's Phase-4 note, because text rendering needs it. Host
-testing links the stack via Homebrew, for parity with the FreeBSD ports.
+**As built.** The stack is bound through a small **C shim**
+(`crates/abyss-font/c/font_shim.c`), *not* `bindgen`: the C compiler owns
+freetype's struct layouts, so none is transcribed into Rust, and there is
+no `libclang` build requirement. `abyss-font`'s `build.rs` compiles the
+shim by invoking the system toolchain — `cc` (clang on macOS and the BSDs)
+and `ar` — directly, with no build-dependency crate; `abyss-font` has no
+dependencies at all. The binding lives in its own crate so `abyss-render`
+stays `#![forbid(unsafe_code)]`. Host testing links the system stack
+(Homebrew on macOS), for parity with the FreeBSD ports.
 
 ---
 
@@ -317,5 +325,5 @@ through a `Custom` view (§7).
   `interfaces/toolkit.md` (Gate H).
 - **Rich text & IME** — complex text input (CJK composition) is a separate
   later design (§7.5); §3.3's `TextField` is plain text in v1.
-- **The font-FFI allowlist entries** — `bindgen` and the font libraries —
-  are added to `docs/dependency-allowlist.md` when Phase 3 begins (§3.3).
+- **`fontconfig`** — selecting a font face by name. `abyss-font` loads a
+  font by file path; name resolution comes with the `Theme` work (§9).

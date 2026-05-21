@@ -1,0 +1,13 @@
+[package]
+name = "abyss-font"
+description = "AbyssBSD font crate — text shaping and glyph rasterization over freetype + harfbuzz"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# build.rs compiles the C font shim with the system toolchain (cc, ar) —
+# no build-dependency crates.
+
+[lints]
+workspace = true

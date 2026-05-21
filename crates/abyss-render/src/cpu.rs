@@ -6,7 +6,8 @@
 //! contributes exact horizontal coverage. Correct and legible; a faster
 //! active-edge rasterizer is a later optimization (`DESIGN.md` §3.5).
 
-use crate::backend::RenderBackend;
+use crate::backend::{CoverageMask, RenderBackend};
+use crate::color::Color;
 use crate::geometry::{Point, Rect};
 use crate::paint::{FillRule, Paint};
 use crate::pixmap::Pixmap;
@@ -166,6 +167,53 @@ impl RenderBackend for CpuBackend {
                 let src = paint.eval(center).scale_alpha(coverage.min(1.0));
                 let blended = src.over(self.target.pixel(x, y));
                 self.target.set_pixel(x, y, blended);
+            }
+        }
+    }
+
+    fn blit_coverage(&mut self, mask: &CoverageMask<'_>, color: Color, clip: Rect) {
+        let bounds = Rect::new(
+            0.0,
+            0.0,
+            self.target.width() as f32,
+            self.target.height() as f32,
+        );
+        let clip = clip.intersect(&bounds);
+        let len = mask.width as usize * mask.height as usize;
+        if clip.is_empty() || mask.data.len() < len {
+            return;
+        }
+        for row in 0..mask.height {
+            let py = mask.y + row as i32;
+            if py < 0 {
+                continue;
+            }
+            let py = py as u32;
+            if py >= self.target.height() {
+                break;
+            }
+            if !(clip.y..clip.bottom()).contains(&(py as f32 + 0.5)) {
+                continue;
+            }
+            for col in 0..mask.width {
+                let px = mask.x + col as i32;
+                if px < 0 {
+                    continue;
+                }
+                let px = px as u32;
+                if px >= self.target.width() {
+                    break;
+                }
+                if !(clip.x..clip.right()).contains(&(px as f32 + 0.5)) {
+                    continue;
+                }
+                let coverage = mask.data[(row * mask.width + col) as usize];
+                if coverage == 0 {
+                    continue;
+                }
+                let src = color.scale_alpha(f32::from(coverage) / 255.0);
+                let blended = src.over(self.target.pixel(px, py));
+                self.target.set_pixel(px, py, blended);
             }
         }
     }
