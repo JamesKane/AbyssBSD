@@ -19,7 +19,7 @@ mod connection;
 mod reactor;
 
 pub use async_channel::AsyncChannel;
-pub use connection::Connection;
+pub use connection::{Connection, Inbound, Inbox, Responder};
 pub use reactor::{Event, Interest, Reactor, ReactorSource};
 
 /// The largest descriptor count one datagram may carry. Must match
