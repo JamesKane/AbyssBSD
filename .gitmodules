@@ -1,0 +1,4 @@
+[submodule "third_party/freebsd-src"]
+	path = third_party/freebsd-src
+	url = https://git.freebsd.org/src.git
+	branch = releng/15.0

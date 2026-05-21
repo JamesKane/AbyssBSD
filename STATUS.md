@@ -13,20 +13,23 @@ established, project website added. No code yet — Gate A then Phase 0 next.
 
 *(≤10 most recent, newest first)*
 
+- `139c785` Update STATUS after merge to main
 - `322d8ad` Add STATUS.md rolling change context
 - `16c387b` Bootstrap project: docs cleanup, reorg, roadmap, toolchain, site
 - `fc2596c` Initial Rust-fallback variant of the AbyssBSD design
 
 ## In flight
 
-Nothing — working tree clean, bootstrap merged to `main`.
+Nothing — working tree clean.
 
 ## Next
 
-1. Resolve ROADMAP §6 — where the pinned FreeBSD 15.0 source lives
-   (recommendation: in-tree submodule). Not needed until Phase 4.
-2. **Gate A** — write `docs/design/wire-format.md` (before Phase 1).
-3. **Phase 0** — scaffold the Cargo workspace and the macOS CI lane.
+1. **Gate A** — write `docs/design/wire-format.md` (before Phase 1).
+2. **Phase 0** — scaffold the Cargo workspace and the macOS CI lane.
+
+ROADMAP §6 is resolved: the FreeBSD 15.0 source is an in-tree submodule at
+`third_party/freebsd-src`, pinned to `releng/15.0` (15.0-RELEASE-p9),
+populated on demand at Phase 4.
 
 ## Notes
 

@@ -232,26 +232,29 @@ through, that it is redesigning instead of building.
 
 ---
 
-## 6. Open decisions
+## 6. The FreeBSD source pin
 
-**Where the pinned FreeBSD 15.0 source lives.** AbyssBSD needs a
-release-pinned FreeBSD source tree for header import (`bindgen`), sysroot,
-and curation/image builds. The sibling `../freebsd-src` is a 30 GB `main`
-(16.0-CURRENT) checkout — wrong branch, and shared mutable state.
+AbyssBSD builds and curates against a release-pinned FreeBSD source tree —
+header import (`bindgen`), sysroot, and curation/image builds. **Resolved:**
+it lives in-tree as a git submodule — reproducible and self-contained,
+decoupled from any working copy outside the repo.
 
-Options:
-1. **In-tree git submodule** at `third_party/freebsd-src`, a treeless
-   partial clone (`--filter=tree:0`) pinned to `releng/15.0` — reproducible,
-   self-contained, ~1–2 GB. Advances by retargeting the submodule on each
-   dot release. *(Recommended.)*
-2. A **git worktree** of `../freebsd-src` pinned to `releng/15.0` — shares
-   the existing object store, no duplication, but couples the project to
-   that checkout's presence.
-3. Keep it **fully external** and document the required tag — lightest
-   repo, least reproducible.
+- **Location:** `third_party/freebsd-src` (submodule; setup and pin-bump
+  procedure in [`../third_party/README.md`](../third_party/README.md)).
+- **Pin:** branch `releng/15.0`, commit `6d536196` — FreeBSD
+  **15.0-RELEASE-p9**.
+- **Upstream:** `https://git.freebsd.org/src.git`.
+- **Populated at Phase 4.** Nothing earlier needs the FreeBSD source and a
+  checkout is multi-GB, so the submodule is *committed now but cloned on
+  demand*: `git submodule update --init --filter=tree:0` — a treeless
+  partial clone, small but with full history so the pin can advance without
+  a re-clone.
+- **Advancing the pin** follows the dot cycle (§1) — one errata level or
+  dot release at a time (`releng/15.0` → `releng/15.1` → …), by retargeting
+  the submodule.
 
-*Recommendation:* option 1. To be confirmed before Phase 4 (Gate D);
-nothing before Phase 4 needs the FreeBSD source.
+The sibling `../freebsd-src` (a 30 GB `main`/16.0-CURRENT checkout) is
+unrelated — a general working copy, never the project's pin.
 
 ---
 
