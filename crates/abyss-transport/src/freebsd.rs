@@ -12,6 +12,9 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 
 use abyss_msg::Envelope;
 
+mod reactor;
+pub use reactor::{Event, Interest, Reactor};
+
 /// The largest descriptor count one datagram may carry. Must match
 /// `ABYSS_MAX_FDS` in `c/cmsg_shim.c`.
 const MAX_FDS: usize = 64;

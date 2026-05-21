@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
-//! Compile the `SCM_RIGHTS` / cmsg C shim — FreeBSD only.
+//! Compile the C shims — FreeBSD only.
 //!
-//! `sendmsg`/`recvmsg` are ordinary libc functions, but the control-message
-//! API that carries file descriptors — `CMSG_FIRSTHDR`, `CMSG_DATA`,
-//! `CMSG_SPACE`, `CMSG_LEN` — is C macros, uncallable over Rust's FFI
-//! (`docs/design/broker-and-transport.md` §6). `c/cmsg_shim.c` does the
-//! cmsg work in C and exposes a flat ABI. It is compiled with the system C
-//! compiler (`cc`) and archived with `ar` — no build-dependency crates.
+//! The transport's `SCM_RIGHTS` control-message API and the `kqueue` event
+//! API (`EV_SET`) are C macros, uncallable over Rust's FFI
+//! (`docs/design/broker-and-transport.md` §6). The shims in `c/` expose
+//! them as flat ABIs; they are compiled with the system C compiler (`cc`)
+//! and archived with `ar` into one static library — no build-dependency
+//! crates, the `abyss-font` pattern.
 //!
-//! On any non-FreeBSD host the shim is not built: the crate compiles to an
-//! empty library so the workspace still builds on the macOS dev bed.
+//! On any non-FreeBSD host the shims are not built: the crate compiles to
+//! an empty library so the workspace still builds on the macOS dev bed.
 
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// The C shims, compiled and archived together into one static library.
+const SHIMS: [&str; 2] = ["cmsg_shim.c", "kqueue_shim.c"];
+
 fn main() {
-    println!("cargo:rerun-if-changed=c/cmsg_shim.c");
+    for shim in SHIMS {
+        println!("cargo:rerun-if-changed=c/{shim}");
+    }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=CC");
 
@@ -26,27 +31,33 @@ fn main() {
     }
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set for build scripts"));
-    let object = out_dir.join("cmsg_shim.o");
-    let archive = out_dir.join("libabyss_cmsg_shim.a");
-
     let cc = env::var("CC").unwrap_or_else(|_| "cc".to_owned());
-    let compiled = Command::new(&cc)
-        .args(["-c", "-O2", "-fPIC"])
-        .arg("c/cmsg_shim.c")
-        .arg("-o")
-        .arg(&object)
-        .status()
-        .expect("a C compiler (cc) is required to build abyss-transport");
-    assert!(compiled.success(), "compiling the cmsg shim failed");
+    let archive = out_dir.join("libabyss_transport_shim.a");
 
-    let archived = Command::new("ar")
-        .arg("crs")
-        .arg(&archive)
-        .arg(&object)
+    let mut objects = Vec::new();
+    for shim in SHIMS {
+        let object = out_dir.join(shim).with_extension("o");
+        let compiled = Command::new(&cc)
+            .args(["-c", "-O2", "-fPIC"])
+            .arg(format!("c/{shim}"))
+            .arg("-o")
+            .arg(&object)
+            .status()
+            .expect("a C compiler (cc) is required to build abyss-transport");
+        assert!(compiled.success(), "compiling {shim} failed");
+        objects.push(object);
+    }
+
+    let mut ar = Command::new("ar");
+    ar.arg("crs").arg(&archive);
+    for object in &objects {
+        ar.arg(object);
+    }
+    let archived = ar
         .status()
         .expect("ar is required to build abyss-transport");
-    assert!(archived.success(), "archiving the cmsg shim failed");
+    assert!(archived.success(), "archiving the transport shims failed");
 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
-    println!("cargo:rustc-link-lib=static=abyss_cmsg_shim");
+    println!("cargo:rustc-link-lib=static=abyss_transport_shim");
 }

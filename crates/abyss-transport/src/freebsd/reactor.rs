@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
+//! The `kqueue` readiness reactor — compiled only on FreeBSD.
+//!
+//! [`Reactor`] is the FreeBSD event source the looper waits on
+//! (`docs/design/broker-and-transport.md` §2.3): it watches descriptors
+//! for readiness and carries a wakeup channel for cross-thread nudges. The
+//! `extern` declarations match `c/kqueue_shim.c`.
+
+use std::ffi::c_int;
+use std::io;
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::time::Duration;
+
+/// The most events one [`Reactor::wait`] reports — matches
+/// `ABYSS_MAX_EVENTS` in `c/kqueue_shim.c`.
+const MAX_EVENTS: usize = 64;
+
+/// A flat readiness event from the shim. The layout must match
+/// `struct abyss_event` in `c/kqueue_shim.c`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct AbyssEvent {
+    ident: i64,
+    kind: c_int,
+}
+
+unsafe extern "C" {
+    fn abyss_kqueue() -> c_int;
+    fn abyss_kqueue_ctl(kq: c_int, fd: c_int, interest: c_int, add: c_int) -> c_int;
+    fn abyss_kqueue_arm_wake(kq: c_int) -> c_int;
+    fn abyss_kqueue_wake(kq: c_int) -> c_int;
+    fn abyss_kqueue_wait(kq: c_int, out: *mut AbyssEvent, max: c_int, timeout_ms: c_int) -> c_int;
+}
+
+/// What a registered descriptor is watched for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Interest {
+    /// Readable — a `recv` would not block.
+    Readable,
+    /// Writable — a `send` would not block.
+    Writable,
+}
+
+impl Interest {
+    fn as_raw(self) -> c_int {
+        match self {
+            Interest::Readable => 0,
+            Interest::Writable => 1,
+        }
+    }
+}
+
+/// One readiness notification from [`Reactor::wait`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    /// A registered descriptor became readable.
+    Readable(RawFd),
+    /// A registered descriptor became writable.
+    Writable(RawFd),
+    /// [`Reactor::wake`] was called — a cross-thread or in-process nudge.
+    Woken,
+}
+
+/// A `kqueue`-based readiness reactor.
+///
+/// The FreeBSD looper waits on one of these: it watches the descriptors of
+/// the IPC rings it serves, and `wake` lets another thread (or an
+/// in-process task) interrupt a `wait` in progress.
+pub struct Reactor {
+    kq: OwnedFd,
+}
+
+impl Reactor {
+    /// Create a reactor, with its wakeup channel armed.
+    pub fn new() -> io::Result<Reactor> {
+        // SAFETY: `abyss_kqueue` wraps `kqueue()`, which takes no arguments.
+        let raw = unsafe { abyss_kqueue() };
+        if raw < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `kqueue()` just produced `raw` as a fresh owned descriptor.
+        let kq = unsafe { OwnedFd::from_raw_fd(raw) };
+        // SAFETY: `kq` is a live kqueue descriptor.
+        if unsafe { abyss_kqueue_arm_wake(kq.as_raw_fd()) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Reactor { kq })
+    }
+
+    /// Watch `fd` for `interest`.
+    pub fn register(&self, fd: BorrowedFd<'_>, interest: Interest) -> io::Result<()> {
+        self.ctl(fd, interest, true)
+    }
+
+    /// Stop watching `fd` for `interest`.
+    pub fn deregister(&self, fd: BorrowedFd<'_>, interest: Interest) -> io::Result<()> {
+        self.ctl(fd, interest, false)
+    }
+
+    fn ctl(&self, fd: BorrowedFd<'_>, interest: Interest, add: bool) -> io::Result<()> {
+        // SAFETY: the kqueue and `fd` are live; the shim issues one kevent.
+        let rc = unsafe {
+            abyss_kqueue_ctl(
+                self.kq.as_raw_fd(),
+                fd.as_raw_fd(),
+                interest.as_raw(),
+                c_int::from(add),
+            )
+        };
+        if rc < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    /// Wake a [`wait`](Self::wait) in progress — or the next one — from any
+    /// thread. The waiting reactor returns an [`Event::Woken`].
+    pub fn wake(&self) -> io::Result<()> {
+        // SAFETY: `kq` is a live kqueue with the wake channel armed.
+        if unsafe { abyss_kqueue_wake(self.kq.as_raw_fd()) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    /// Block until a registered descriptor is ready, the reactor is woken,
+    /// or `timeout` elapses. `None` blocks indefinitely.
+    pub fn wait(&self, timeout: Option<Duration>) -> io::Result<Vec<Event>> {
+        let mut raw = [AbyssEvent { ident: 0, kind: 0 }; MAX_EVENTS];
+        let timeout_ms = match timeout {
+            None => -1,
+            Some(d) => c_int::try_from(d.as_millis()).unwrap_or(c_int::MAX),
+        };
+        // SAFETY: `raw` is `MAX_EVENTS` long; the shim writes at most that
+        // many events, and never more than the `max` passed.
+        let n = unsafe {
+            abyss_kqueue_wait(
+                self.kq.as_raw_fd(),
+                raw.as_mut_ptr(),
+                MAX_EVENTS as c_int,
+                timeout_ms,
+            )
+        };
+        if n < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let events = raw[..n as usize]
+            .iter()
+            .map(|e| match e.kind {
+                1 => Event::Writable(e.ident as RawFd),
+                2 => Event::Woken,
+                _ => Event::Readable(e.ident as RawFd),
+            })
+            .collect();
+        Ok(events)
+    }
+}
+
+impl AsRawFd for Reactor {
+    fn as_raw_fd(&self) -> RawFd {
+        self.kq.as_raw_fd()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Channel;
+    use super::*;
+    use std::os::fd::AsFd;
+    use std::sync::Arc;
+    use std::thread;
+
+    #[test]
+    fn reports_a_readable_descriptor() {
+        let (a, b) = Channel::pair().expect("socketpair");
+        let reactor = Reactor::new().expect("kqueue");
+        reactor
+            .register(a.as_fd(), Interest::Readable)
+            .expect("register");
+
+        // Nothing sent yet — a short wait reports nothing.
+        let idle = reactor
+            .wait(Some(Duration::from_millis(50)))
+            .expect("wait idle");
+        assert!(idle.is_empty());
+
+        // A send on the peer makes `a` readable.
+        b.send(b"ping", &[]).expect("send");
+        let ready = reactor
+            .wait(Some(Duration::from_secs(1)))
+            .expect("wait ready");
+        assert_eq!(ready, vec![Event::Readable(a.as_raw_fd())]);
+    }
+
+    #[test]
+    fn wake_unblocks_a_waiter() {
+        let reactor = Arc::new(Reactor::new().expect("kqueue"));
+        let waiter = Arc::clone(&reactor);
+
+        // A wait with no timeout — only `wake` can release it.
+        let handle = thread::spawn(move || waiter.wait(None).expect("wait"));
+        thread::sleep(Duration::from_millis(100));
+        reactor.wake().expect("wake");
+
+        assert_eq!(handle.join().expect("join"), vec![Event::Woken]);
+    }
+}

@@ -14,8 +14,9 @@
 //! primitive is kept separate so `abyss-looper` stays host-clean, and the
 //! `kqueue` event loop that will drive these sockets is a later, separate
 //! piece. [`Channel`] is the raw primitive — bytes and descriptors;
-//! [`MessageChannel`] frames whole [`abyss_msg::Envelope`]s over it. The
-//! ring API and the event loop build on these.
+//! [`MessageChannel`] frames whole [`abyss_msg::Envelope`]s over it; and
+//! [`Reactor`] is the `kqueue` event source the looper waits on (§2.3).
+//! The ring API builds on these.
 //!
 //! **FreeBSD only.** `SOCK_SEQPACKET` Unix-domain sockets do not exist on
 //! macOS; on every non-FreeBSD host this crate is empty, so the workspace
@@ -29,4 +30,4 @@
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::{Channel, MessageChannel};
+pub use freebsd::{Channel, Event, Interest, MessageChannel, Reactor};
