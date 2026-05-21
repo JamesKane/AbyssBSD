@@ -6,13 +6,17 @@ plan is the roadmap.
 
 ## Epic
 
-**Project bootstrap.** Design docs cleaned up, roadmap and toolchain pin
-established, project website added. No code yet — Gate A then Phase 0 next.
+**Phase 0 — workspace & CI harness.** Cargo workspace and the
+`cargo xtask ci` lane (fmt, clippy, build, test) stood up and verified
+green on the pinned Rust 1.95.0. No `crates/` yet — Gate A then Phase 1
+next.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `c1d3fe5` site: add the Ecosystem statement page
+- `a0784fe` Pin the FreeBSD base source (ROADMAP §6 resolved)
 - `139c785` Update STATUS after merge to main
 - `322d8ad` Add STATUS.md rolling change context
 - `16c387b` Bootstrap project: docs cleanup, reorg, roadmap, toolchain, site
@@ -20,16 +24,14 @@ established, project website added. No code yet — Gate A then Phase 0 next.
 
 ## In flight
 
-Nothing — working tree clean.
+Nothing — working tree clean; the Phase 0 workspace commit is pending.
 
 ## Next
 
-1. **Gate A** — write `docs/design/wire-format.md` (before Phase 1).
-2. **Phase 0** — scaffold the Cargo workspace and the macOS CI lane.
-
-ROADMAP §6 is resolved: the FreeBSD 15.0 source is an in-tree submodule at
-`third_party/freebsd-src`, pinned to `releng/15.0` (15.0-RELEASE-p9),
-populated on demand at Phase 4.
+1. **Gate A** — write `docs/design/wire-format.md`: the envelope byte
+   layout, the typed-value vocabulary, the derive-macro contract.
+2. **Phase 1** — `abyss-msg` + `abyss-msg-derive`, the message primitive.
+   First `crates/` members; CI starts exercising real code.
 
 ## Notes
 

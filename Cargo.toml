@@ -1,0 +1,20 @@
+# AbyssBSD — Cargo workspace root.
+#
+# The AbyssBSD layer is a single workspace. Crates are added phase by phase
+# (docs/ROADMAP.md §3, §4): crates/ holds the AbyssBSD layer, sys/ the
+# FreeBSD FFI crates (added at Phase 4), xtask the build & CI harness.
+
+[workspace]
+resolver = "3"
+members = ["xtask", "crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95.0"
+
+# Unsafe is permitted, but only as a deliberate per-crate `#![allow(...)]`
+# opt-in — FFI and the renderer will need it; nothing else should reach for
+# it silently (DESIGN.md §3.5, §10.6).
+[workspace.lints.rust]
+unsafe_code = "warn"

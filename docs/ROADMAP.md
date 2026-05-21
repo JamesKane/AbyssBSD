@@ -79,6 +79,8 @@ AbyssBSD-rust/
 ├── STATUS.md               rolling change context (see §7)
 ├── rust-toolchain.toml      the Rust pin
 ├── Cargo.toml               workspace root
+├── .cargo/config.toml       cargo aliases — the `xtask` alias
+├── xtask/                   build & CI harness — `cargo xtask ci`
 ├── docs/
 │   ├── DESIGN.md
 │   ├── ROADMAP.md           this file
