@@ -14,9 +14,13 @@
 //! - [`graph`] — the static authority graph: components and the connections
 //!   between them, computed and validated from a manifest set (§5.2).
 //!
-//! The FreeBSD-only parts — the `SOCK_SEQPACKET` transport, jailed `pdfork`
-//! spawn, the bootstrap bundle, `cap_enter`, and supervision (§5.3–§5.7) —
-//! arrive with the FreeBSD work; see `STATUS.md`.
+//! FreeBSD-only:
+//!
+//! - `spawn` — component spawn: the component's jail, its bootstrap
+//!   channel, the `pdfork` into the jail, and the bootstrap bundle (§5.3).
+//!
+//! `cap_enter` and supervision (§5.4–§5.7) arrive with the rest of the
+//! FreeBSD work; see `STATUS.md`.
 //!
 //! The broker itself holds no `unsafe`: every kernel call is a safe API
 //! exported by a `sys/*` crate (`broker-and-transport.md` §6).
@@ -25,3 +29,6 @@
 
 pub mod graph;
 pub mod manifest;
+
+#[cfg(target_os = "freebsd")]
+pub mod spawn;
