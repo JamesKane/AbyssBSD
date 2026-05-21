@@ -47,6 +47,35 @@ autovectorized scalar is deleted.
 
 ---
 
+## Architecture targets
+
+AbyssBSD distributes for **three architectures** — `x86_64`, `aarch64`
+(ARM64), and `riscv64` (RV64). A SIMD fast lane is not written once; it is
+written against three very different baselines, and rule 1 (a complete
+scalar fallback, always) is what makes that tractable.
+
+| Arch | Baseline SIMD | Guaranteed in the baseline ISA? | `core::arch` intrinsics |
+|---|---|---|---|
+| `x86_64` | SSE2 | yes — SSE2 is part of `x86_64` | stable; AVX2 needs runtime detection |
+| `aarch64` | NEON | yes — NEON is mandatory in ARMv8 | stable |
+| `riscv64` | **none** | **no — RVV is not in RV64GC** | **RVV intrinsics still unstable** |
+
+RISC-V is the constraining case. The Vector extension (RVV) is **not part
+of the RV64GC baseline**: a large share of the RV64 install base has no
+vector unit at all, and the ones that do expose a *scalable*-vector ISA
+that does not map onto a fixed-width hand-written kernel. This is the
+concrete reason the scalar path is the floor — on RV64 it is frequently
+the *only* path — and the reason a per-arch `core::arch` strategy cannot
+cover all three targets today (the RISC-V vector intrinsics are not yet
+stable). It also means within-arch fragmentation must be handled at
+selection time: AVX2-vs-SSE2 on x86-64, and RVV-present-vs-absent on RV64.
+
+The portability of `std::simd` — one kernel lowering to SSE2 / NEON / RVV —
+is therefore worth the most *here*, of all the places it could matter; see
+below for why it is still not adopted.
+
+---
+
 ## `std::simd` maturity
 
 Portable SIMD (`core::simd` / `std::simd`) is **nightly-only** — gated
