@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `1e616df` Phase 4: abyss-msg — the handle table carries fds
+- `b81f3f4` Bump STATUS: Phase 4 — the capability handle-table body layout
 - `adca251` Phase 4: abyss-cap — the capability handle-table body layout
 - `edbae68` Bump STATUS: Phase 4 — the supervisor, restart on death
 - `3d45fcf` Phase 4: abyss-broker — the supervisor, restart on death
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `210e7f6` Bump STATUS: Phase 4 — the cap_enter startup shim
 - `a0f5ade` Phase 4: abyss-bootstrap — the cap_enter startup shim
 - `c83943d` Bump STATUS: Phase 4 — the broker component spawn module
-- `9c85f9e` Phase 4: abyss-broker — the FreeBSD component spawn module
-- `d325451` Bump STATUS: Phase 4 — the bootstrap fd in the spawn
 
 ## Site
 
@@ -104,19 +104,22 @@ exit (`EVFILT_PROCDESC` / `NOTE_EXIT`); the broker's **`Supervisor`** is
 built on that signal — it watches its components' process descriptors
 and, when one exits, spawns it again, reclaiming its jail first. Verified
 in the VM: a supervised component that exits is respawned as a fresh
-process. And `Cap: Wire` is begun — `abyss-cap`'s **`CapBody`** is the
-§3.2 handle-table body a capability serializes to: the `cap_rights` mask
-and the object-rights set that ride beside an fd. `cargo xtask ci` green
-on macOS and FreeBSD; tree clean.
+process. And `Cap: Wire` is under way — `abyss-cap`'s **`CapBody`** is the §3.2
+handle-table body a capability serializes to (the `cap_rights` mask and
+the object-rights set that ride beside an fd), and `abyss-msg`'s handle
+table now **carries those fds**: `HandleSink` / `HandleStore` pair each
+handle's metadata with the descriptor it rides `SCM_RIGHTS` on, and
+`Envelope::from_message` / `into_message` carry the fds across. `cargo
+xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **`Cap` IPC backend** and its `Wire` impl — `Cap<I, R>` backed by an
-  IPC-ring fd, serializing through `CapBody` and onto `SCM_RIGHTS`
-  (§2.5, §3.4) — the next increment;
+- the **`Cap` `Wire` impl** and IPC backend — `Cap<I, R>` serializing
+  through `CapBody` and the fd-carrying handle table, backed by an
+  IPC-ring fd (§2.5, §3.4) — the next increment;
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
