@@ -115,7 +115,8 @@ The discipline is precise: it governs the AbyssBSD layer.
   the async runtime is notably *not* a third-party crate: the looper is
   AbyssBSD's own executor (§6.9, §6.10).
 - **FreeBSD ports** the AbyssBSD layer leans on are kept to a deliberately
-  small, recorded set — the font stack, `libinput`, `seatd`, Mesa (§11.2).
+  small, recorded set — the font stack, `libinput`, `seatd`, Mesa, and the
+  codec libraries (§11.2).
   Depending on a new port is a decision too.
 
 Discipline here = dependency discipline + port discipline.
@@ -1113,6 +1114,7 @@ problem — all from FreeBSD ports:
 | `libinput` | Hardware-quirk-heavy input handling (palm rejection, tap heuristics). |
 | `seatd` | Seat / session device brokering. |
 | Mesa | The GPU stack — unreimplementable; provides OpenGL/GLES, Vulkan (RADV / ANV), and `llvmpipe` software GL. Client-side Vulkan (games, §7.4) ships in v1; only the compositor's *own* Vulkan render backend is post-v1 (§7.1). |
+| Image & media codecs | Proven C codec libraries — image (`libpng`, `libjpeg-turbo`, …) and audio/video — behind thin Rust wrappers. Codecs are decades of work to reimplement, give no user-visible gain for it, and are a notorious source of security bugs best left to hardened, widely-fuzzed implementations; §3.2's discipline weighs the proven port, exactly as for the font stack. *Which* codecs are vendored is a deliberate, recorded choice. Image codecs serve the Interface Kit (icons, images — needed from M3); media codecs the Media Kit (§8). |
 
 ### 11.3 Packaging & distribution
 
@@ -1714,4 +1716,47 @@ through M1–M5.
   and modifier but no color space, §7.4; likely a later addition). The
   discipline: every power a legacy desktop granted ambiently, AbyssBSD either
   mints as an explicit capability or scopes out on purpose.
+
+- **Internationalization — text input and localization.** AbyssBSD is, by
+  present omission, a Latin-script, English desktop; making it more is
+  unresolved design, not a missing feature. Three parts, to be designed
+  together. **Complex text input (IME)** is the load-bearing one, and an
+  architectural seam rather than a bolt-on: the input interface is deliberately
+  one-directional (§7.5), but IME is a bidirectional, app-involved conversation
+  — the focused text field feeds context to an input-method engine that streams
+  back preedit and candidate lists for the app to render inline. The input
+  interface and the Interface Kit's text widget (§8) must be designed IME-aware
+  from the start; retrofitting the seam later is costly. **UI localization** —
+  a translation facility for the desktop's own strings — and **bidirectional
+  text** — right-to-left layout in the Interface Kit, above HarfBuzz's shaping
+  — are the other two. The engines and the translations may follow; the seams
+  come first.
+
+- **Bluetooth.** Absent from the component map (§11.1) — it holds neither a
+  slot nor a stated non-goal, which §3.4's closed-and-curated discipline does
+  not permit. Desktop Bluetooth — audio devices, pointers, keyboards, file
+  transfer — is a control-plane component in the shape of networking (§11.12):
+  it orchestrates the FreeBSD base's Bluetooth stack, runs the pairing agent
+  (passkey/PIN prompts), and manages per-device state. To be designed, then it
+  takes its slot in the map. (FreeBSD's own Bluetooth support is uneven — a
+  hardware-scope caveat, §5 — but the desktop design owes a decision
+  regardless.)
+
+- **Printing.** In scope, and the approach is decided: a control-plane
+  component that **wraps a proven print system** behind a thin Rust API —
+  printing is not worth reimplementing — orchestrating a base program the way
+  networking orchestrates its own (§11.12). The component slot, the interface,
+  and which print system to wrap remain to be designed.
+
+- **Trash and file thumbnails.** Two desktop-file conventions the M4 file
+  manager needs and the design does not yet cover: a **trash/recycle model** —
+  reversible deletion, with the freedesktop trash semantics or a deliberate
+  variant — and a **thumbnailing facility** — preview generation, distinct from
+  the index/query service (§11.16), which carries metadata, not pixels, and
+  leaning on the codec ports (§11.2). Both to be designed.
+
+- **Theme variants (much later).** A single shared theme is the rule today
+  (§8). Variants — a dark mode foremost — are wanted and accepted, but
+  deliberately deferred: the GNOME-2 surface ships first and whole, and theming
+  breadth is post-desktop polish.
 
