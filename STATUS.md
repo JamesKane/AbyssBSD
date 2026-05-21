@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `812d46c` Phase 4: abyss-transport — the kqueue reactor
+- `1bcb4eb` Bump STATUS: IPC ring design pass (broker-and-transport.md §2.5-2.7)
 - `b772b49` Gate D refinement: the IPC ring, serialization, wire request/reply
 - `e2d76de` Phase 4: abyss-transport — the envelope over the transport
 - `23b2bec` ci: install a DejaVu font for the Linux test step
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `a0f13b0` ci: add a FreeBSD job that runs the test suite in a VM
 - `1b5dcf3` ci: install freetype and harfbuzz on the runner
 - `e8712f9` Bump STATUS: the FreeBSD VM builds the workspace green
-- `82c1469` tools/vm: add `provision` — reproducible VM package set
-- `de9be9d` abyss-cap: make the concurrency harness test deterministic
 
 ## Site
 
@@ -53,32 +53,29 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-**Phase 4's FreeBSD remainder — the transport built, the IPC-ring
-design settled.** `crates/abyss-transport` is the inter-process transport
-(`broker-and-transport.md` §2): a `SOCK_SEQPACKET` socket pair with
-`SCM_RIGHTS` fd-passing over a C cmsg shim (`Channel`), and the envelope
-framing on top (`MessageChannel`) — one datagram carries one encoded
-envelope plus its handles' descriptors. Built and tested in the FreeBSD
-VM (`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
-Working tree clean.
+**Phase 4's FreeBSD remainder is in progress** — `crates/abyss-transport`
+is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
 
-A design pass then resolved where increment 3 was under-specified —
-how `Cap` reconciles its in-process and IPC backends. The Gate D doc
-gains §2.5–§2.7: `Interface::Message: Wire`; the IPC ring frame (a
-correlation id outside the envelope); and wire request/reply via a
-`Responder`, superseding the embedded-`Sender` `call`.
+- `Channel` — a `SOCK_SEQPACKET` socket pair with `SCM_RIGHTS` fd-passing
+  over a C cmsg shim;
+- `MessageChannel` — envelope framing on top, one datagram per envelope;
+- `Reactor` — the `kqueue` readiness reactor (§2.3), the looper's FreeBSD
+  event source: register descriptors, `wait`, `wake` across threads.
 
-The dev loop is settled: edit on macOS, `vm.sh build` runs the full
-`cargo xtask ci` in the FreeBSD guest.
+A design pass settled where the next step was under-specified — the Gate
+D doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame
+with the correlation id outside the envelope; wire request/reply via a
+`Responder`). Built and tested in the FreeBSD VM (`tools/vm/vm.sh build`);
+`cargo xtask ci` green on macOS and FreeBSD. Working tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **IPC ring backend** — `Cap`/looper over a `SOCK_SEQPACKET`
-  connection, the ring frame, correlation, the `Responder`, and the
-  `kqueue` event source (§2.3, §2.5–§2.7) — the next increment;
+- the **IPC ring** — the framed connection (the ring frame, §2.6),
+  request/reply correlation and the `Responder` (§2.7), and wiring
+  `Cap`/the looper onto the `Reactor` — the next increment;
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
   `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
 - supervision and `PeerRestarted` re-wiring (§5.5);
