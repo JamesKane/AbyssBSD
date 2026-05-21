@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `f330979` Phase 4: abyss-transport — Connection::send, the one-way message
+- `6b1bc65` Bump STATUS: Phase 4 — the Cap two-backend design pass
 - `266b8a4` Phase 4: design — pin the Cap two-backend crate structure (§2.8)
 - `39ec8f1` Bump STATUS: Phase 4 — the handle table carries fds
 - `1e616df` Phase 4: abyss-msg — the handle table carries fds
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `edbae68` Bump STATUS: Phase 4 — the supervisor, restart on death
 - `3d45fcf` Phase 4: abyss-broker — the supervisor, restart on death
 - `e4c42a3` Bump STATUS: Phase 4 — kqueue process-descriptor exit monitoring
-- `69a02d7` Phase 4: abyss-transport — kqueue process-descriptor exit monitoring
-- `210e7f6` Bump STATUS: Phase 4 — the cap_enter startup shim
 
 ## Site
 
@@ -69,9 +69,10 @@ is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
 - `AsyncChannel` — a `FramedChannel` whose `recv`/`send` suspend the
   *task*, not the looper thread, when the socket would block;
 - `Connection` — the request/reply protocol (§2.7): `call` correlates a
-  request with its reply by id; `serve` routes replies to callers and
-  inbound messages to an `Inbox`; `accept` lifts a request off it with a
-  `Responder` to answer it. **The IPC ring is complete.**
+  request with its reply by id; `send` carries a one-way Command or Event;
+  `serve` routes replies to callers and inbound messages to an `Inbox`;
+  `accept` lifts a request off it with a `Responder`. **The IPC ring is
+  complete.**
 
 A design pass first settled where this was under-specified — the Gate D
 doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame; the
