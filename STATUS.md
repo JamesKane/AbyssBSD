@@ -6,18 +6,18 @@ plan is the roadmap.
 
 ## Epic
 
-**Phase 1 — the message primitive.** `crates/abyss-msg` (value codec,
-envelope, the `Wire` trait — zero deps, `#![forbid(unsafe_code)]`) and
-`crates/abyss-msg-derive` (`#[derive(Wire)]`) built per
-`docs/design/wire-format.md`. 31 tests green — round-trip, golden vectors,
-randomized decoder robustness, derive coverage. First external deps
-(`syn`/`quote`/`proc-macro2`, build-tier) recorded in
-`docs/dependency-allowlist.md`.
+**Gate B — the looper & service framework.**
+`docs/design/looper-framework.md` written: the looper and its cooperative
+executor (run loop, per-handler serialization, wakers), the typed ring API
+and transport seam, the request/reply call, the `abyss-cap` capability
+layer (`Cap<I, R>`, phantom rights, `Cap: Wire`), and supervision. Phase 2
+is now fully specified.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `3636807` Phase 1: the message primitive — abyss-msg & abyss-msg-derive
 - `80510c3` Gate A: the wire-format design doc
 - `b90c53b` Phase 0: Cargo workspace & CI harness
 - `c1d3fe5` site: add the Ecosystem statement page
@@ -29,16 +29,17 @@ randomized decoder robustness, derive coverage. First external deps
 
 ## In flight
 
-Nothing — working tree clean; the Phase 1 commit is pending.
+The Gate B doc commit is pending. Parallel-process changes are also
+uncommitted and untouched by me — `docs/DESIGN.md`, `docs/BACKLOG.md`,
+`site/ecosystem.html`, `site/index.html`.
 
 ## Next
 
-1. **Gate B** — `docs/design/looper-framework.md`: the looper & service
-   framework design (executor internals, ring API, `RingCap` &
-   supervision, the `Wire`-trait integration). The §6.10 "chief
-   structural piece" — design before Phase 2 builds it.
-2. **Phase 2** — `crates/abyss-looper` and `crates/abyss-cap`, on the
-   in-process ring (still host-testable).
+**Phase 2** — build `crates/abyss-looper` and `crates/abyss-cap` per
+`docs/design/looper-framework.md` §11: the in-process ring, the looper and
+executor, handlers, the call, `Cap<I, R>` with phantom rights, and the
+host multi-looper test harness. Still host-testable on macOS — the
+inter-process backend and the broker are Gate D.
 
 ## Notes
 
