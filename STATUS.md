@@ -30,16 +30,16 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `e2d76de` Phase 4: abyss-transport — the envelope over the transport
+- `23b2bec` ci: install a DejaVu font for the Linux test step
+- `454d518` Bump STATUS: Phase 4 FreeBSD remainder, increment 1 (abyss-transport)
 - `ea2b569` Phase 4: abyss-transport — the SOCK_SEQPACKET transport
+- `a0f13b0` ci: add a FreeBSD job that runs the test suite in a VM
+- `1b5dcf3` ci: install freetype and harfbuzz on the runner
 - `e8712f9` Bump STATUS: the FreeBSD VM builds the workspace green
 - `82c1469` tools/vm: add `provision` — reproducible VM package set
 - `de9be9d` abyss-cap: make the concurrency harness test deterministic
 - `3412381` Build the workspace in the FreeBSD VM: source sync, MSRV
-- `505977a` Bump STATUS: the FreeBSD development VM is up
-- `402271e` Add tools/vm: the FreeBSD development VM
-- `56664e8` ci: add the GitHub Actions pipeline and README status badge
-- `e3893ba` site: link the site to the GitHub source
-- `c6eb968` docs: prepare README for a public push
 
 ## Site
 
@@ -53,11 +53,13 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-**Phase 4's FreeBSD remainder, increment 1 of 5 done.** `crates/abyss-transport`
-is the inter-process transport (`broker-and-transport.md` §2): a
-`SOCK_SEQPACKET` socket pair, `send`/`recv` of datagrams with `SCM_RIGHTS`
-fd-passing, over a C cmsg shim. Built and tested in the FreeBSD VM
-(`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
+**Phase 4's FreeBSD remainder, increments 1–2 of 5 done.**
+`crates/abyss-transport` is the inter-process transport
+(`broker-and-transport.md` §2): a `SOCK_SEQPACKET` socket pair with
+`SCM_RIGHTS` fd-passing over a C cmsg shim (`Channel`), and the envelope
+framing on top (`MessageChannel`) — one datagram carries one encoded
+envelope plus its handles' descriptors. Built and tested in the FreeBSD
+VM (`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
 Working tree clean.
 
 The dev loop is settled: edit on macOS, `vm.sh build` runs the full
@@ -66,9 +68,10 @@ The dev loop is settled: edit on macOS, `vm.sh build` runs the full
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
-`docs/design/broker-and-transport.md` §7 — increments 2–5:
+`docs/design/broker-and-transport.md` §7:
 
-- the envelope over the transport, and `Cap: Wire` (§2.2, §3.4);
+- `Cap`'s fd-backed IPC form and `Cap: Wire`, with the handle pipeline
+  carrying descriptors (§3.2, §3.4) — the next increment;
 - the `kqueue` event loop, wiring the transport into `abyss-looper` (§2.3);
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
   `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
