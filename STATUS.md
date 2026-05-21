@@ -30,6 +30,8 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `b0d5670` Phase 4: abyss-transport — the async IPC channel
+- `bc3a12d` Bump STATUS: Phase 4 — the looper event-source seam
 - `8466c49` Phase 4: abyss-looper — the event-source seam
 - `5429aa8` Bump STATUS: Phase 4 — the framed connection
 - `47a3d6b` Phase 4: abyss-transport — the framed connection
@@ -38,8 +40,6 @@ specifies the FreeBSD remainder.
 - `1bcb4eb` Bump STATUS: IPC ring design pass (broker-and-transport.md §2.5-2.7)
 - `b772b49` Gate D refinement: the IPC ring, serialization, wire request/reply
 - `e2d76de` Phase 4: abyss-transport — the envelope over the transport
-- `23b2bec` ci: install a DejaVu font for the Linux test step
-- `454d518` Bump STATUS: Phase 4 FreeBSD remainder, increment 1 (abyss-transport)
 
 ## Site
 
@@ -61,26 +61,27 @@ is the FreeBSD IPC and event substrate (`broker-and-transport.md` §2):
 - `MessageChannel` — a bare envelope per datagram (the bootstrap bundle);
 - `RingFrame` / `FramedChannel` — the IPC ring's wire (§2.6): an 8-byte
   ring frame, with the correlation id, ahead of each envelope;
-- `Reactor` — the `kqueue` readiness reactor (§2.3), the looper's FreeBSD
-  event source: register descriptors, `wait`, `wake` across threads.
+- `Reactor` / `ReactorSource` — the `kqueue` readiness reactor (§2.3),
+  presented as an `abyss-looper` `EventSource`: a looper built on it is
+  driven by the `kqueue` where the in-process backend used thread-park;
+- `AsyncChannel` — a `FramedChannel` whose `recv`/`send` suspend the
+  *task*, not the looper thread, when the socket would block.
 
 A design pass first settled where this was under-specified — the Gate D
-doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame with
-the correlation id outside the envelope; wire request/reply via a
-`Responder`). And `abyss-looper` gained the **`EventSource` seam**: the
-looper's idle-wait is now a trait, so the `Reactor` can drive it where
-thread-park did (looper-framework §3.3); a pure refactor, every existing
-test still green. Built and tested in the FreeBSD VM
-(`tools/vm/vm.sh build`); `cargo xtask ci` green on macOS and FreeBSD.
-Working tree clean.
+doc gained §2.5–§2.7 (`Interface::Message: Wire`; the IPC ring frame; the
+`Responder`) — and `abyss-looper` gained the **`EventSource` seam** so a
+non-thread-park backend can drive the looper (looper-framework §3.3). A
+looper task now async-`recv`s a framed request and async-sends a reply,
+verified end to end in the FreeBSD VM. `cargo xtask ci` green on macOS
+and FreeBSD; working tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **IPC ring** — a `kqueue` `EventSource` over the `Reactor`, async
-  channel I/O, then request/reply correlation and the `Responder` (§2.7)
+- the **request/reply layer** — the `Connection`: a correlation table,
+  the demux receive loop, and the `Responder` (§2.7), over `AsyncChannel`
   — the next increment;
 - the broker's jailed `pdfork` spawn, the bootstrap bundle, and the
   `cap_enter` startup shim (§5.3–§5.4), over the `sys/*` bindings;
