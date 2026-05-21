@@ -6,22 +6,25 @@ plan is the roadmap.
 
 ## Epic
 
-**Phases 0–3 complete — the host-buildable layer is done.** Seven crates —
-the message primitive (`abyss-msg`, `abyss-msg-derive`), the looper &
-service framework (`abyss-looper`, `abyss-cap`), the 2D renderer
-(`abyss-render`), the font stack (`abyss-font`), and the toolkit
-(`abyss-toolkit`) — 78 tests, `cargo xtask ci` green, zero runtime
-dependencies, all building and testing on macOS with no FreeBSD.
+**Gate D — the broker & transport design.**
+`docs/design/broker-and-transport.md` written, elaborating `DESIGN.md`
+§6.2/§6.4, §10, §11.9: the `SOCK_SEQPACKET` IPC ring transport (the
+envelope as wire frame, `SCM_RIGHTS` for fds, a `kqueue` event loop), how
+capabilities cross a process boundary (every capability is an fd; the
+handle-table body layout; the object-rights → `cap_rights_t` mapping),
+the component manifest, the broker (jailed `pdfork` spawn, the bootstrap
+bundle, `cap_enter`, supervision and re-wiring), and the `sys/*` C-shim
+FFI. It also resolves the IPC-backend and `Cap: Wire` items deferred from
+Gates A and B. Phase 4 — the first FreeBSD work — is now fully specified.
 
-Since Phase 3: two registers added — `docs/acceleration.md` (SIMD/GPU
-hot-path candidates, with the multi-arch / RVV constraints) and
-`docs/TECH-DEBT.md` (corrections owed) — and the project is licensed
-**BSD 2-Clause**, with an SPDX header on every source file.
+Phases 0–3 (the host-buildable layer — 7 crates, 78 tests) remain done;
+the project is BSD-2-Clause licensed.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `d8e3ef7` Bump STATUS: Phases 0-3 done, registers, license, site
 - `6d868e8` docs: record the multi-arch SIMD constraint in the acceleration register
 - `0acf55e` Apply the BSD 2-Clause license
 - `370c1b2` docs: add the acceleration register and the tech-debt list
@@ -31,7 +34,6 @@ hot-path candidates, with the multi-arch / RVV constraints) and
 - `0ce5c78` Expand scripting/automation design, grow the backlog, browser spec
 - `f073994` Phase 3 (1/3): abyss-render — the 2D geometry renderer
 - `551084a` Gate C: the toolkit design doc
-- `1cc1cca` Gate E: the window-management design doc
 
 ## Site
 
@@ -45,15 +47,18 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-Nothing — working tree clean.
+The Gate D doc commit is pending. Working tree otherwise clean.
 
 ## Next
 
-The next phase is the **first FreeBSD work**, so it is gated:
+**Phase 4 — the first FreeBSD work** (`ROADMAP.md` §4), per
+`docs/design/broker-and-transport.md` §7:
 
-1. **Gate D** — `docs/design/broker-and-transport.md`: the manifest
-   schema, the spawn/bundle protocol, `SOCK_SEQPACKET` framing, the
-   object-rights → `cap_rights_t` mapping (`ROADMAP.md` §5).
-2. **Phase 4** — `crates/abyss-broker` and the `sys/*` FFI crates, on an
-   amd64 FreeBSD 15.0 VM (`ROADMAP.md` §4). Here the in-tree `freebsd-src`
-   submodule is first populated (`ROADMAP.md` §6).
+- extend `abyss-looper` with the `kqueue` event loop and the
+  `SOCK_SEQPACKET` ring backend; add `Cap: Wire` to `abyss-cap`;
+- build `crates/abyss-broker` and `sys/freebsd-{capsicum,jail,procdesc}-sys`;
+- on an **amd64 FreeBSD 15.0 VM** — the first FreeBSD environment.
+
+Phase 4 first populates the in-tree `freebsd-src` submodule
+(`git submodule update --init --filter=tree:0`, `ROADMAP.md` §6) for the
+`sys/*` C-shim headers. It reaches the bulk of **M1**.
