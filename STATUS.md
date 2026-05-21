@@ -6,34 +6,40 @@ plan is the roadmap.
 
 ## Epic
 
-**Gate D — the broker & transport design.**
-`docs/design/broker-and-transport.md` written, elaborating `DESIGN.md`
-§6.2/§6.4, §10, §11.9: the `SOCK_SEQPACKET` IPC ring transport (the
-envelope as wire frame, `SCM_RIGHTS` for fds, a `kqueue` event loop), how
-capabilities cross a process boundary (every capability is an fd; the
-handle-table body layout; the object-rights → `cap_rights_t` mapping),
-the component manifest, the broker (jailed `pdfork` spawn, the bootstrap
-bundle, `cap_enter`, supervision and re-wiring), and the `sys/*` C-shim
-FFI. It also resolves the IPC-backend and `Cap: Wire` items deferred from
-Gates A and B. Phase 4 — the first FreeBSD work — is now fully specified.
+**Phase 4 — the broker, host slice.** Phase 4 is the first FreeBSD work,
+the boundary the roadmap was ordered around. Its FreeBSD-independent
+parts are built and tested on the macOS dev bed; the rest waits on a
+FreeBSD environment (see Next).
 
-Phases 0–3 (the host-buildable layer — 7 crates, 78 tests) remain done;
-the project is BSD-2-Clause licensed.
+- `crates/abyss-broker` — the broker's FreeBSD-independent core. The
+  `manifest` parser: the component-manifest schema and its fixed-schema
+  declarative text format, a first-party parser with no vendored config
+  crate (`broker-and-transport.md` §4). The `graph` module: the static
+  authority graph — components, and the connections between them —
+  computed and validated from a manifest set (§5.2). 23 tests, no `unsafe`.
+- `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates,
+  scaffolded (§6). Capsicum carries a C shim (its rights API is C macros);
+  jail and procdesc are direct `extern` blocks. Each is gated on
+  `target_os = "freebsd"` and compiles to an empty library on macOS.
+
+The workspace is now eight `crates/` + three `sys/` + `xtask`; 101 tests,
+`cargo xtask ci` green. Gate D (`docs/design/broker-and-transport.md`)
+specifies the FreeBSD remainder.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `1f21b09` Phase 4 (3/3): the sys/* FreeBSD FFI crate scaffolding
+- `b7e82c7` Phase 4 (2/3): abyss-broker — the authority graph
+- `ee362c1` Phase 4 (1/3): abyss-broker — the manifest parser
+- `6a17d3a` Gate D: the broker & transport design doc
 - `d8e3ef7` Bump STATUS: Phases 0-3 done, registers, license, site
 - `6d868e8` docs: record the multi-arch SIMD constraint in the acceleration register
 - `0acf55e` Apply the BSD 2-Clause license
 - `370c1b2` docs: add the acceleration register and the tech-debt list
 - `fd0bddb` Phase 3 (3/3): abyss-toolkit — the Interface Kit
 - `306abfd` abyss-font: per-Font freetype library — fix a data race
-- `f931937` Phase 3 (2/3): text — abyss-font and Canvas::text
-- `0ce5c78` Expand scripting/automation design, grow the backlog, browser spec
-- `f073994` Phase 3 (1/3): abyss-render — the 2D geometry renderer
-- `551084a` Gate C: the toolkit design doc
 
 ## Site
 
@@ -47,18 +53,26 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-The Gate D doc commit is pending. Working tree otherwise clean.
+Nothing — working tree clean. The Phase 4 host slice is committed; the
+FreeBSD remainder is blocked on a FreeBSD environment (see Next).
 
 ## Next
 
-**Phase 4 — the first FreeBSD work** (`ROADMAP.md` §4), per
-`docs/design/broker-and-transport.md` §7:
+**The FreeBSD remainder of Phase 4** — everything that needs a FreeBSD
+kernel, per `docs/design/broker-and-transport.md` §7. It requires a
+FreeBSD environment, which the macOS dev bed cannot provide (no
+`SOCK_SEQPACKET`, Capsicum, jails, or `pdfork`) and which is not yet
+provisioned:
 
-- extend `abyss-looper` with the `kqueue` event loop and the
-  `SOCK_SEQPACKET` ring backend; add `Cap: Wire` to `abyss-cap`;
-- build `crates/abyss-broker` and `sys/freebsd-{capsicum,jail,procdesc}-sys`;
-- on an **amd64 FreeBSD 15.0 VM** — the first FreeBSD environment.
+- the `SOCK_SEQPACKET` ring transport with `SCM_RIGHTS` fd-passing, and
+  the `kqueue` event loop in `abyss-looper` (§2);
+- `Cap: Wire` in `abyss-cap` (§3.4);
+- the broker's jailed `pdfork` spawn, the bootstrap bundle, the
+  `cap_enter` startup shim, and supervision (§5.3–§5.7) — wiring the
+  manifest parser and authority graph to the `sys/*` bindings;
+- verifying the `sys/*` shims and FFI signatures against the FreeBSD
+  headers.
 
-Phase 4 first populates the in-tree `freebsd-src` submodule
-(`git submodule update --init --filter=tree:0`, `ROADMAP.md` §6) for the
-`sys/*` C-shim headers. It reaches the bulk of **M1**.
+The path: provision a FreeBSD 15.0 VM under QEMU, or build on a FreeBSD
+box. The `freebsd-src` submodule (`ROADMAP.md` §6) is populated then.
+This reaches the bulk of **M1**.
