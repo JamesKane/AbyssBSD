@@ -8,8 +8,8 @@ plan is the roadmap.
 
 **Phase 4 — the broker, host slice.** Phase 4 is the first FreeBSD work,
 the boundary the roadmap was ordered around. Its FreeBSD-independent
-parts are built and tested on the macOS dev bed; the rest waits on a
-FreeBSD environment (see Next).
+parts are built and tested on the macOS dev bed; the FreeBSD environment
+for the rest now exists (`tools/vm`, see In flight).
 
 - `crates/abyss-broker` — the broker's FreeBSD-independent core. The
   `manifest` parser: the component-manifest schema and its fixed-schema
@@ -30,16 +30,16 @@ specifies the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `402271e` Add tools/vm: the FreeBSD development VM
+- `56664e8` ci: add the GitHub Actions pipeline and README status badge
+- `e3893ba` site: link the site to the GitHub source
+- `c6eb968` docs: prepare README for a public push
+- `1850903` site: add the Governance page and nav entry
+- `cedb430` governance: add the RFC and adoption process
+- `9ff495c` docs: add the API evolution policy and public-api register
+- `36f75b3` Add abyss-log — the standard logging crate
+- `0bf8108` Bump STATUS: Phase 4 host slice done
 - `1f21b09` Phase 4 (3/3): the sys/* FreeBSD FFI crate scaffolding
-- `b7e82c7` Phase 4 (2/3): abyss-broker — the authority graph
-- `ee362c1` Phase 4 (1/3): abyss-broker — the manifest parser
-- `6a17d3a` Gate D: the broker & transport design doc
-- `d8e3ef7` Bump STATUS: Phases 0-3 done, registers, license, site
-- `6d868e8` docs: record the multi-arch SIMD constraint in the acceleration register
-- `0acf55e` Apply the BSD 2-Clause license
-- `370c1b2` docs: add the acceleration register and the tech-debt list
-- `fd0bddb` Phase 3 (3/3): abyss-toolkit — the Interface Kit
-- `306abfd` abyss-font: per-Font freetype library — fix a data race
 
 ## Site
 
@@ -53,17 +53,20 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-Nothing — working tree clean. The Phase 4 host slice is committed; the
-FreeBSD remainder is blocked on a FreeBSD environment (see Next).
+Working tree clean. **The FreeBSD development VM is up** (`tools/vm`): a
+FreeBSD 15.0-RELEASE-p9 aarch64 guest under QEMU + HVF, native speed on
+Apple Silicon, reachable as root over SSH (`./tools/vm/vm.sh ssh`). A
+clean provision is verified reproducible. The FreeBSD remainder of
+Phase 4 is no longer blocked.
 
 ## Next
 
 **The FreeBSD remainder of Phase 4** — everything that needs a FreeBSD
-kernel, per `docs/design/broker-and-transport.md` §7. It requires a
-FreeBSD environment, which the macOS dev bed cannot provide (no
-`SOCK_SEQPACKET`, Capsicum, jails, or `pdfork`) and which is not yet
-provisioned:
+kernel, per `docs/design/broker-and-transport.md` §7, now that the VM
+exists:
 
+- in the VM, install the Rust toolchain (FreeBSD `pkg`) and settle how
+  the AbyssBSD source is built there;
 - the `SOCK_SEQPACKET` ring transport with `SCM_RIGHTS` fd-passing, and
   the `kqueue` event loop in `abyss-looper` (§2);
 - `Cap: Wire` in `abyss-cap` (§3.4);
@@ -73,6 +76,5 @@ provisioned:
 - verifying the `sys/*` shims and FFI signatures against the FreeBSD
   headers.
 
-The path: provision a FreeBSD 15.0 VM under QEMU, or build on a FreeBSD
-box. The `freebsd-src` submodule (`ROADMAP.md` §6) is populated then.
+The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
 This reaches the bulk of **M1**.
