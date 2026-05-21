@@ -20,6 +20,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install the native font libraries
+        # abyss-font's build script links freetype2 and harfbuzz, located
+        # via pkg-config. On FreeBSD these come from the ports; on the
+        # Ubuntu runner they are installed here.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libfreetype-dev libharfbuzz-dev
+
       - name: Install the pinned Rust toolchain
         # rustup honours rust-toolchain.toml: channel 1.95.0, plus the
         # rustfmt and clippy components the CI lane needs.
