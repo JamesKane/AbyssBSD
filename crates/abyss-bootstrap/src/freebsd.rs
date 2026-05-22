@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use abyss_bundle::{Bundle, Grant, PeerRestarted, Role};
 use abyss_cap::{Cap, DurableCap, Interface, Rights, durable, unbound_ipc_cap};
-use abyss_looper::Spawner;
+use abyss_looper::{Receiver, Spawner, channel};
 use abyss_msg::{Method, Wire};
 use abyss_transport::{AsyncMessageChannel, Channel, MessageChannel, ReactorSource};
 
@@ -144,32 +144,39 @@ impl Control {
     /// Make `cap` — an already-bound client capability for `interface` — a
     /// [`DurableCap`], and register its re-wiring.
     ///
-    /// The returned `DurableCap` is what the component holds and `call`s
-    /// through. When the peer providing `interface` is restarted, the
-    /// control loop binds the fresh ring the broker delivers and repoints
-    /// this capability at it (§5.5); `reactor` and `spawner` are the
-    /// looper's, used to bind that fresh ring.
+    /// Returns the `DurableCap` the component holds and `call`s through,
+    /// and a [`Receiver`] that ticks once each time that capability is
+    /// repointed. When the peer providing `interface` is restarted, the
+    /// control loop binds the fresh ring the broker delivers, repoints the
+    /// capability at it (§5.5), and sends that tick — a component awaiting
+    /// it knows a `call` will now reach the fresh peer. `reactor` and
+    /// `spawner` are the looper's, used to bind the fresh ring.
     pub fn durable_cap<I, R>(
         &mut self,
         interface: &str,
         cap: Cap<I, R>,
         reactor: Arc<ReactorSource>,
         spawner: Spawner,
-    ) -> DurableCap<I, R>
+    ) -> (DurableCap<I, R>, Receiver<()>)
     where
         I: Interface + 'static,
         R: Rights + 'static,
         I::Message: Wire + Method,
     {
         let (durable_cap, repointer) = durable(cap);
+        let (repointed_tx, repointed_rx) = channel::<()>(1);
         self.on_rewire(interface, move |grant| {
             // The fresh ring the broker re-wired: bind it onto the looper,
             // then repoint the durable capability at it.
             let fresh: Cap<I, R> = unbound_ipc_cap(grant.endpoint, grant.rights);
             let bound = fresh.bind(Arc::clone(&reactor), &spawner);
             repointer.repoint(bound);
+            // Signal the repoint. The channel holds one slot: a still
+            // unconsumed tick means a rewire is already known, so dropping
+            // this one loses nothing.
+            let _ = repointed_tx.try_send(());
         });
-        durable_cap
+        (durable_cap, repointed_rx)
     }
 
     /// Watch the control channel for the rest of the component's life,

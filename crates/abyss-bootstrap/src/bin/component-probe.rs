@@ -17,15 +17,16 @@
 
 #[cfg(target_os = "freebsd")]
 mod component {
+    use std::os::fd::AsFd;
     use std::sync::Arc;
 
-    use abyss_bootstrap::Startup;
+    use abyss_bootstrap::{Control, Startup};
     use abyss_bundle::Role;
     use abyss_cap::{CallError, Cap, Interface, Reply, Rights, Service, bind_service};
     use abyss_looper::Looper;
     use abyss_msg::{Envelope, Header, MessageKind, Value};
     use abyss_msg_derive::{Method, Request, Wire};
-    use abyss_transport::{MessageChannel, ReactorSource};
+    use abyss_transport::{Channel, MessageChannel, ReactorSource};
 
     /// The probe's test interface — one request, `Ping`, answered with its
     /// value. Both ends of a wired pair run this one binary, so a single
@@ -56,6 +57,10 @@ mod component {
 
     /// The value a client `Ping`s with; the server echoes it back.
     const PING_VALUE: i64 = 41;
+
+    /// The value the §5.5 durable client's *second* `Ping` carries — the
+    /// call it makes after its peer has been restarted and re-wired.
+    const PING_RESTARTED: i64 = 77;
 
     /// The probe's service over `Echo` — answers one `Ping`, then reports.
     /// `bind_service` runs the accept loop and its object-rights check; a
@@ -115,10 +120,26 @@ mod component {
             .map(|grant| grant.interface.clone());
 
         match (client, server) {
+            // A `durable` argument selects the §5.5 path: the client holds
+            // a durable capability and survives its peer being restarted.
+            (Some(interface), _) if std::env::args().any(|arg| arg == "durable") => {
+                run_client_durable(startup, &interface, confined, grant_count)
+            }
             (Some(interface), _) => run_client(startup, &interface, confined, grant_count),
             (None, Some(interface)) => run_server(startup, &interface, confined, grant_count),
             // No grants: nothing to do but report.
             (None, None) => report_and_exit(&startup.bootstrap, [confined, grant_count, 0, 0]),
+        }
+    }
+
+    /// Reduce a call's result to a probe report field: the reply value, or
+    /// a sentinel — -1 if the service refused it for want of rights (§3.6),
+    /// -2 if the peer was gone.
+    fn call_outcome(result: Result<i64, CallError>) -> i64 {
+        match result {
+            Ok(reply) => reply,
+            Err(CallError::RightsDenied) => -1,
+            Err(CallError::PeerGone) => -2,
         }
     }
 
@@ -140,15 +161,61 @@ mod component {
             // Binding spawns the connection's serve loop onto this looper,
             // so the call's reply routes back (§3.5).
             let cap = cap.bind(reactor, &spawner);
-            // The outcome: the reply value, or a sentinel — -1 if the
-            // service refused the call for want of rights (§3.6), -2 if
-            // the peer was gone.
-            let outcome = match cap.call(Ping { value: PING_VALUE }).await {
-                Ok(reply) => reply,
-                Err(CallError::RightsDenied) => -1,
-                Err(CallError::PeerGone) => -2,
-            };
+            let outcome = call_outcome(cap.call(Ping { value: PING_VALUE }).await);
             report_and_exit(&bootstrap, [confined, grant_count, 1, outcome]);
+        });
+        looper.run();
+    }
+
+    /// The §5.5 durable-capability client: hold the cap as a `DurableCap`,
+    /// run the control loop, and `call` once — then, after the broker
+    /// restarts and re-wires the peer, `call` again. The second call must
+    /// reach the *fresh* server over the repointed ring.
+    ///
+    /// Reports `[confined, grant count, first outcome, second outcome]`.
+    fn run_client_durable(mut startup: Startup, interface: &str, confined: i64, grant_count: i64) {
+        let cap: Cap<Echo, AnyRights> = startup
+            .take_client_cap(interface)
+            .expect("the client grant claims");
+
+        // The bootstrap channel is now the control connection — `Control`
+        // takes it. A duplicate is kept so the probe can still report back
+        // over the same socket once its calls are done.
+        let report = MessageChannel::new(Channel::from_fd(
+            startup
+                .bootstrap
+                .as_fd()
+                .try_clone_to_owned()
+                .expect("duplicate the bootstrap descriptor"),
+        ));
+        let control_channel = startup.bootstrap;
+
+        let reactor = Arc::new(ReactorSource::new().expect("kqueue reactor"));
+        let mut looper = Looper::with_event_source(reactor.clone());
+        let spawner = looper.spawner();
+
+        // Bind the cap, make it durable, and register its re-wiring; the
+        // control loop repoints it when the broker re-wires this peer.
+        let bound = cap.bind(reactor.clone(), &spawner);
+        let mut control = Control::watch(control_channel, reactor.clone()).expect("watch control");
+        let (durable, mut repointed) =
+            control.durable_cap(interface, bound, reactor.clone(), spawner.clone());
+
+        looper.spawn(control.run());
+        looper.spawn(async move {
+            // The first call reaches the original server.
+            let first = call_outcome(durable.call(Ping { value: PING_VALUE }).await);
+            // Wait for the broker's `PeerRestarted` to repoint the cap,
+            // then call again — this must travel the fresh ring.
+            let _ = repointed.recv().await;
+            let second = call_outcome(
+                durable
+                    .call(Ping {
+                        value: PING_RESTARTED,
+                    })
+                    .await,
+            );
+            report_and_exit(&report, [confined, grant_count, first, second]);
         });
         looper.run();
     }

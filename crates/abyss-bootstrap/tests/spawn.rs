@@ -184,3 +184,59 @@ fn a_wired_session_refuses_an_ungranted_call() {
     // field is -1, the rights-denied sentinel.
     assert_eq!(caller_report, Some([1, 1, 1, -1]));
 }
+
+#[test]
+fn a_restarted_peer_is_re_wired_and_a_call_after_it_still_answers() {
+    // `rt-client` → `rt-server` over `rt-echo`. The probe server answers
+    // one `Ping` and exits, so the broker restarts it; the client is the
+    // §5.5 durable client — it calls once, waits for the `PeerRestarted`
+    // that re-wires it, and calls again. The second call must reach the
+    // fresh server (`broker-and-transport.md` §5.5).
+    let graph = Graph::build(vec![
+        manifest("rt-client", "rt-client-iface", &peer("rt-echo")),
+        manifest("rt-server", "rt-echo", ""),
+    ])
+    .expect("the graph builds");
+
+    let mut catalogue = InterfaceCatalogue::new();
+    catalogue.register("rt-echo", &[("recv", 1)]);
+
+    // The `durable` argument selects the probe's §5.5 client path; the
+    // server runs the ordinary serve-one-then-exit path.
+    let binary = probe();
+    let mut session = Session::launch(graph, catalogue, |name| Program {
+        path: binary.clone(),
+        args: if name == "rt-client" {
+            vec!["durable".to_owned()]
+        } else {
+            Vec::new()
+        },
+    })
+    .expect("launch the wired session");
+
+    // The server answers the client's first call, then exits; `step`
+    // re-wires the connection and respawns the server, sending the client
+    // a `PeerRestarted` over its control channel.
+    let restarted = session.step().expect("supervise the server's exit");
+    assert_eq!(restarted, vec!["rt-server".to_owned()]);
+
+    // The client reports once its *second* call has returned — which it
+    // can only do after the re-wire reached it.
+    let (report, _fds) = session
+        .component("rt-client")
+        .expect("the client is live")
+        .bootstrap()
+        .recv()
+        .expect("the client reports back");
+    let [confined, grants, first, second] = read_report(&report);
+    assert_eq!(confined, 1, "the client is in capability mode");
+    assert_eq!(
+        grants, 1,
+        "the client holds one grant — its echo client cap"
+    );
+    assert_eq!(first, 41, "the first call reached the original server");
+    assert_eq!(
+        second, 77,
+        "the second call reached the re-wired, freshly restarted server",
+    );
+}
