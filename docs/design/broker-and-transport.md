@@ -422,13 +422,22 @@ its socket through the receiving looper's `kqueue` reactor (§2.3), and
 none. So `from_wire` builds an **unbound** `Cap`: the received fd and the
 `CapBody`, no live ring yet.
 
-**Binding.** A decoded `Cap` is bound to a looper before use —
-`Cap::bind(reactor)` turns the unbound fd into a live `Connection` on that
-looper's reactor. The *framework* binds, never component code: the startup
-shim binds the capabilities the bootstrap bundle delivered (§5.3), and a
-capability arriving in a later message is bound by the framework as it
-dispatches that message on the looper — the point where the looper's
-reactor is in hand. A handler only ever receives a bound, usable `Cap`.
+**Binding.** A decoded `Cap` is bound to a looper before use.
+`Cap::bind` consumes the unbound cap and returns the bound one — a
+typestate move, `IpcUnbound` to `Ipc`. It turns the unbound fd into a live
+`Connection` on the looper's reactor; but a bound cap's `call` replies
+route through that connection's `serve` loop, which must run *as a task on
+the looper*, so `bind` also needs a handle that spawns onto a running
+looper. That handle is `abyss-looper`'s `Spawner` (looper-framework §10): a
+cloneable, `Send` handle whose `spawn` queues a task the looper installs at
+its next turn. So the built signature is `bind(self, reactor, &Spawner) ->
+Cap` — the reactor the received socket is driven on, and the spawner that
+places its `serve` loop. The *framework* binds, never component code: the
+startup shim binds the capabilities the bootstrap bundle delivered (§5.3),
+and a capability arriving in a later message is bound by the framework as
+it dispatches that message on the looper — the point where the looper's
+reactor and spawner are in hand. A handler only ever receives a bound,
+usable `Cap`.
 
 So a `Cap`'s backend has three forms: `Local` (in-process), `Ipc` (a live
 IPC ring), and `IpcUnbound` (a received fd awaiting its reactor). `to_wire`

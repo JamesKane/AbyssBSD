@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `031f5a6` Phase 4: abyss-cap — Cap: Wire, and binding a received capability (§3.4–§3.5)
+- `22c60ed` Bump STATUS: Phase 4 — a Spawner for a running looper
 - `c8fdb0e` Phase 4: abyss-looper — a Spawner for a running looper
 - `5df312f` Phase 4: design — Cap: Wire in code, and binding (§3.5)
 - `abc68e9` Bump STATUS: Phase 4 — Cap::call reshaped to the typed request
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `64f139c` Phase 4: abyss-looper — in-process request delivery to a handler
 - `ad29a24` Bump STATUS: Phase 4 — the Responder reply handle
 - `751cf93` Phase 4: abyss-looper — the Responder reply handle
-- `fa0c688` Bump STATUS: Phase 4 — the Request trait and derive
-- `689c97a` Phase 4: abyss-msg — the Request trait and #[derive(Request)]
 
 ## Site
 
@@ -137,26 +137,29 @@ the in-process reply path — the **`Responder`** handle, and `Delivery` /
 handler — and `Cap::call` is reshaped onto it: `call<Q>` hands the caller
 exactly the request's `Q::Reply`, framework-mediated over either backend,
 no embedded `Sender`. The multi-looper harness passes on the reshaped
-path. A design pass (§3.5) has since pinned `Cap: Wire`'s mechanics —
-`to_wire`'s fd dup, the unbound `Cap` `from_wire` yields, and `Cap::bind`
-attaching a received capability to its looper's reactor. The first
-`Cap: Wire` increment is down: `abyss-looper` gained a **`Spawner`** — a
-cloneable, `Send` handle that adds tasks to a running looper
-(looper-framework §10), drained and installed at the start of every run
-turn. It is the prerequisite `Cap::bind` needs to spawn a received
-capability's `serve` loop onto the looper that received it.
-`cargo xtask ci` green on macOS and FreeBSD; tree clean.
+path. A design pass (§3.5) pinned `Cap: Wire`'s mechanics, and **`Cap: Wire` is
+now built**. `abyss-looper` first gained a **`Spawner`** — a cloneable,
+`Send` handle that adds tasks to a running looper (looper-framework §10),
+drained and installed at the start of every run turn. Then `abyss-cap`'s
+**`impl Wire for Cap`**: `to_wire` duplicates the cap's ring socket onto
+`SCM_RIGHTS` beside its `CapBody`; `from_wire` yields an *unbound* `Cap` —
+a received fd, no live ring; and **`Cap::bind`** lifts that into a live
+`Connection` on the looper's reactor and spawns its `serve` loop through
+the `Spawner` — the single `IpcUnbound → Ipc` edge. The transport gained
+the supporting API: `AsFd` for `Connection` / `AsyncChannel`,
+`FramedChannel::from_fd`, and a non-blocking `Connection::try_send` that
+wires `Cap::try_send`'s IPC arm. Verified in the VM: a `Cap` round-trips
+through `to_wire` / `from_wire` across a socket, binds onto a looper, and
+`call`s over the bound ring with the reply routed by the spawned `serve`
+loop. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`Cap: Wire`** — `impl Wire for Cap`: `to_wire` dups the ring fd and
-  pushes the `CapBody`, `from_wire` builds an unbound cap, with `Cap::bind`
-  attaching it to a looper, per §3.5 — the next increment;
 - the broker **wiring an authority graph** — spawning a manifest set and
-  connecting the components with rings (§5.2);
+  connecting the components with rings (§5.2) — the next increment;
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
   component, once components are wired (§5.5).
 
