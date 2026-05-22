@@ -515,6 +515,50 @@ edge between them. Operating an `IpcUnbound` cap — `send`, `call` — is the
 same contract violation as serializing an in-process one: the framework
 binds before any handler sees it.
 
+### 3.6 Binding a service, and enforcing object rights
+
+§3.5 bound a received *client* capability — a `Cap`. A component that
+*exports* an interface holds the other end: a `Role::Server` grant (§5.8),
+the service side of a ring. Binding it is the server counterpart, and the
+point where object rights (§3.3) are enforced.
+
+**The IPC service.** `abyss-cap` gains the server counterpart of
+`Cap::bind` — `bind_service`. It takes a server grant (a descriptor and
+its `CapBody`), a service handler, and the looper's reactor and spawner;
+it lifts the descriptor into a live `Connection`, spawns the connection's
+`serve` loop, and spawns an **accept loop**. The accept loop, for each
+inbound message, decodes the envelope to the interface's typed message,
+checks it against the connection's object rights, and dispatches it.
+
+**The service handler.** A service answers with an *encoded* reply, where
+the in-process `Handler` (looper-framework §5) answers with a moved value
+through a `Responder` channel — a reply that crosses a process must be
+`Wire`. So an IPC service takes a distinct handler: `abyss-cap`'s
+**`Service`** trait, whose `handle` receives the decoded message and a
+typed **reply handle**. The handler, for a request, answers the handle
+with the reply value; the handle encodes it and sends it back over the
+ring. The encoding lives in `abyss-cap`, which already has the wire layer
+— `abyss-looper` stays free of it, as the `EventSource` seam keeps it free
+of the transport.
+
+**Enforcement — the object-rights check.** The connection's object-rights
+mask (§3.3) rides in the server grant's `CapBody`. The accept loop tests
+each inbound `method_id` against it *before* the handler sees the message:
+a method whose ordinal bit is set is dispatched; one whose bit is clear is
+**refused**. The handler cannot reach an unauthorized message, and cannot
+forget the check — it is the framework's, exactly as the `Responder` is
+(§2.7). This is the §3.3 object layer's enforcement point.
+
+**The error reply.** A refused command or event is dropped and logged
+(`abyss-log`). A refused *request* is answered with an error, so its
+caller is not left to time out: the §2.7 request/reply protocol gains a
+third frame kind beside `Message` and `Reply` — **`Error`**. `serve`, on
+an `Error` frame, fails the awaiting `call`; `Cap::call` then yields a
+`CallError` that distinguishes *rights-denied* from a *gone peer*, rather
+than the misleading `RingClosed` of a dropped responder. An `Error` frame
+carries no payload — its correlation id names the request it refuses, and
+a small code says why.
+
 ---
 
 ## 4. The manifest
