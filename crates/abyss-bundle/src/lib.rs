@@ -12,6 +12,8 @@
 //! - [`Grant`] — one capability: the [interface](Grant::interface) it
 //!   speaks, the [`Role`] the component plays on it, the [`CapBody`]
 //!   rights, and the ring-endpoint descriptor.
+//! - [`PeerRestarted`] — a control message delivered after boot, carrying
+//!   one fresh `Grant` that re-wires a restarted peer (§5.5).
 //!
 //! `Bundle` is [`Wire`]: `to_wire` duplicates each grant's descriptor onto
 //! the handle table beside its `CapBody` (the §3.4 pattern `Cap` follows),
@@ -98,6 +100,20 @@ pub struct Bundle {
     pub grants: Vec<Grant>,
 }
 
+/// A control message re-wiring one of a component's peers
+/// (`broker-and-transport.md` §5.5).
+///
+/// When the broker restarts a component, each surviving peer is sent a
+/// `PeerRestarted` over its control connection: one fresh [`Grant`] — the
+/// same interface and role as the grant in the original bundle, but a new
+/// ring endpoint — that replaces the peer's now-dead ring. It is the unit
+/// a [`Bundle`] is a list of, delivered one at a time after boot.
+#[derive(Debug)]
+pub struct PeerRestarted {
+    /// The fresh grant for the re-wired connection.
+    pub grant: Grant,
+}
+
 impl Wire for Grant {
     fn to_wire(&self, handles: &mut HandleSink) -> Value {
         // `&self`, so the endpoint is *duplicated* onto the handle table,
@@ -159,6 +175,18 @@ impl Wire for Grant {
             role,
             rights,
             endpoint,
+        })
+    }
+}
+
+impl Wire for PeerRestarted {
+    fn to_wire(&self, handles: &mut HandleSink) -> Value {
+        self.grant.to_wire(handles)
+    }
+
+    fn from_wire(value: &Value, handles: &mut HandleStore) -> Result<Self, WireError> {
+        Ok(PeerRestarted {
+            grant: Grant::from_wire(value, handles)?,
         })
     }
 }
@@ -327,5 +355,27 @@ mod tests {
             Err(WireError::UnknownVariant(token)) => assert_eq!(token, "bystander"),
             other => panic!("expected UnknownVariant, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_peer_restarted_round_trips_through_the_handle_table() {
+        let restarted = PeerRestarted {
+            grant: Grant {
+                interface: "input".to_owned(),
+                role: Role::Client,
+                rights: rights(0x33),
+                endpoint: a_descriptor(),
+            },
+        };
+        let mut sink = HandleSink::new();
+        let value = restarted.to_wire(&mut sink);
+        let (handles, fds) = sink.into_parts();
+        assert_eq!(handles.len(), 1, "the fresh ring rides one handle");
+
+        let mut store = HandleStore::new(handles, fds).expect("the handle store builds");
+        let decoded = PeerRestarted::from_wire(&value, &mut store).expect("the message decodes");
+        assert_eq!(decoded.grant.interface, "input");
+        assert_eq!(decoded.grant.role, Role::Client);
+        assert_eq!(decoded.grant.rights, rights(0x33));
     }
 }
