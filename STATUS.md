@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `31f9b17` Phase 4: design — PeerRestarted, re-wiring a restarted component (§5.5)
+- `a9b7d26` Bump STATUS: Phase 4 — the object-rights layer enforced end to end
 - `04eed42` Phase 4: abyss-bootstrap — the probe serves through bind_service (§3.6)
 - `0d972cf` Bump STATUS: Phase 4 — the IPC service framework and rights enforcement
 - `e2d2d93` Phase 4: abyss-cap — the IPC service framework and rights enforcement (§3.6)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `308f68f` Bump STATUS: Phase 4 — the IPC service framework designed (§3.6)
 - `e65c309` Phase 4: design — binding a service, and enforcing object rights (§3.6)
 - `6537dd4` Bump STATUS: Phase 4 — the broker resolves and mints object rights
-- `303d9cd` Phase 4: abyss-broker — resolve and mint object rights (§3.3)
-- `1013973` Bump STATUS: Phase 4 — rights classes on #[derive(Method)]
 
 ## Site
 
@@ -217,16 +217,24 @@ refuses what is out of rights; `Cap::call` yields a `CallError`. A wired
 test grants a component no rights on a peer, and its `call` is refused —
 the broker's mint, the framework's check, the `Error` frame, and
 `CallError::RightsDenied` at the caller, across two jailed,
-capability-mode components. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+capability-mode components.
+
+A design pass (§5.5) has pinned **`PeerRestarted`** — the broker re-wiring
+a restarted component's peers: the bootstrap channel kept as a *control
+connection*, a `PeerRestarted` message carrying one fresh `Grant`, the
+`Session` and `Supervisor` unified into one broker runtime, and the
+component-side **durable capability** the framework repoints at the fresh
+ring so a `call` after a restart travels it transparently. Building it is
+next. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
-  component (§5.5) — the next increment;
+- **building §5.5 `PeerRestarted`**, now designed — the control-message
+  schema, the `Session`/`Supervisor` unification, the durable capability,
+  and the component-side re-wiring — the next increment;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
   net beside the now-enforced service-side check (§3.3).
