@@ -9,6 +9,12 @@
 //! from another thread (a reply arriving from another looper), so the
 //! ready set is shared and the event source is woken.
 //!
+//! Tasks live in an arena of slots. A completed task's slot is freed and
+//! reused, so a long-lived looper running an unbounded number of short
+//! tasks holds a bounded arena. Each slot carries a generation; a waker
+//! names a slot *and* a generation, so a wake aimed at a finished task
+//! whose slot has since been reused is recognised as stale and ignored.
+//!
 //! Tasks added before [`run`](Looper::run) go on with [`spawn`](Looper::spawn).
 //! A running looper takes new tasks through a [`Spawner`] — a cloneable,
 //! `Send` handle (looper-framework §10): a task already on the looper, or
@@ -26,11 +32,35 @@ use crate::event_source::{EventSource, ThreadPark};
 
 type Task = Pin<Box<dyn Future<Output = ()> + Send>>;
 
-/// A single-threaded cooperative executor: a thread, its tasks, and a run
-/// loop that polls them and blocks on the event source when idle.
+/// Names a task: its slot in the arena, and the generation occupying that
+/// slot. A waker carries a `TaskId`; once the slot is reused at a higher
+/// generation, a wake from the stale waker is recognised by the generation
+/// mismatch and ignored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TaskId {
+    index: u32,
+    generation: u32,
+}
+
+/// One slot in the looper's task arena.
+struct Slot {
+    /// The task, or `None` once it has completed and before the slot is
+    /// reused.
+    task: Option<Task>,
+    /// The generation of the task currently — or last — in this slot.
+    /// Bumped when a task completes, so a stale waker is recognised.
+    generation: u32,
+    /// The waker for the task in this slot — a [`TaskWaker`] carrying the
+    /// slot's current [`TaskId`].
+    waker: Waker,
+}
+
+/// A single-threaded cooperative executor: a thread, its task arena, and a
+/// run loop that polls tasks and blocks on the event source when idle.
 pub struct Looper {
-    tasks: Vec<Option<Task>>,
-    wakers: Vec<Waker>,
+    slots: Vec<Slot>,
+    /// Indices of freed slots, awaiting reuse.
+    free: Vec<u32>,
     live: usize,
     shared: Arc<Shared>,
 }
@@ -38,9 +68,9 @@ pub struct Looper {
 /// Cross-thread state: the ready set, the queue of tasks awaiting
 /// installation, and the event source that wakes the looper's thread.
 struct Shared {
-    ready: Mutex<VecDeque<usize>>,
-    /// Tasks queued through a [`Spawner`], not yet given a task slot. The
-    /// run loop drains this at the start of every turn.
+    ready: Mutex<VecDeque<TaskId>>,
+    /// Tasks queued through a [`Spawner`], not yet given a slot. The run
+    /// loop drains this at the start of every turn.
     incoming: Mutex<Vec<Task>>,
     event_source: Arc<dyn EventSource>,
 }
@@ -49,9 +79,9 @@ struct Shared {
 /// (looper-framework §10).
 ///
 /// [`spawn`](Self::spawn) queues a future; the looper installs it — gives
-/// it a task slot and an initial poll — at its next turn. A `Spawner` may
-/// be used from a task already running on the looper, or from another
-/// thread entirely.
+/// it a slot and an initial poll — at its next turn. A `Spawner` may be
+/// used from a task already running on the looper, or from another thread
+/// entirely.
 #[derive(Clone)]
 pub struct Spawner {
     shared: Arc<Shared>,
@@ -72,7 +102,7 @@ impl Spawner {
 /// reply waking this task commonly arrives on another looper's thread.
 struct TaskWaker {
     shared: Arc<Shared>,
-    id: usize,
+    id: TaskId,
 }
 
 impl Wake for TaskWaker {
@@ -84,6 +114,14 @@ impl Wake for TaskWaker {
         self.shared.ready.lock().unwrap().push_back(self.id);
         self.shared.event_source.wake();
     }
+}
+
+/// The waker for the task identified by `id`.
+fn make_waker(shared: &Arc<Shared>, id: TaskId) -> Waker {
+    Waker::from(Arc::new(TaskWaker {
+        shared: Arc::clone(shared),
+        id,
+    }))
 }
 
 impl Looper {
@@ -98,8 +136,8 @@ impl Looper {
     /// uses the in-process default.
     pub fn with_event_source(event_source: Arc<dyn EventSource>) -> Self {
         Looper {
-            tasks: Vec::new(),
-            wakers: Vec::new(),
+            slots: Vec::new(),
+            free: Vec::new(),
             live: 0,
             shared: Arc::new(Shared {
                 ready: Mutex::new(VecDeque::new()),
@@ -113,14 +151,7 @@ impl Looper {
     /// are added before [`run`](Self::run); a running looper takes new
     /// tasks through a [`Spawner`].
     pub fn spawn(&mut self, future: impl Future<Output = ()> + Send + 'static) {
-        let id = self.tasks.len();
-        let waker = Waker::from(Arc::new(TaskWaker {
-            shared: self.shared.clone(),
-            id,
-        }));
-        self.tasks.push(Some(Box::pin(future)));
-        self.wakers.push(waker);
-        self.live += 1;
+        self.install(Box::pin(future));
     }
 
     /// A [`Spawner`] for this looper — a handle that adds tasks to it while
@@ -131,16 +162,38 @@ impl Looper {
         }
     }
 
-    /// Install a task queued through a [`Spawner`]: give it a task slot, a
-    /// waker, and a place in the ready set for its initial poll.
+    /// Install `task`: give it a slot — a freed one reused if there is one,
+    /// otherwise a fresh one — a waker, and a place in the ready set for
+    /// its initial poll.
     fn install(&mut self, task: Task) {
-        let id = self.tasks.len();
-        let waker = Waker::from(Arc::new(TaskWaker {
-            shared: self.shared.clone(),
-            id,
-        }));
-        self.tasks.push(Some(task));
-        self.wakers.push(waker);
+        let id = match self.free.pop() {
+            Some(index) => {
+                // A freed slot's generation was bumped when it was freed,
+                // so the id this reuse forms is already distinct.
+                let slot = &mut self.slots[index as usize];
+                let id = TaskId {
+                    index,
+                    generation: slot.generation,
+                };
+                slot.task = Some(task);
+                slot.waker = make_waker(&self.shared, id);
+                id
+            }
+            None => {
+                let index =
+                    u32::try_from(self.slots.len()).expect("task-slot count stays within u32");
+                let id = TaskId {
+                    index,
+                    generation: 0,
+                };
+                self.slots.push(Slot {
+                    task: Some(task),
+                    generation: 0,
+                    waker: make_waker(&self.shared, id),
+                });
+                id
+            }
+        };
         self.live += 1;
         self.shared.ready.lock().unwrap().push_back(id);
     }
@@ -149,14 +202,13 @@ impl Looper {
     /// completes when its future returns — for a handler's serve loop,
     /// when its inbox closes (`docs/design/looper-framework.md` §4, §8).
     pub fn run(mut self) {
+        self.drive();
+    }
+
+    /// The run loop. Split from [`run`](Self::run) so a task can be driven
+    /// without consuming the looper — `run` is the public, owned form.
+    fn drive(&mut self) {
         self.shared.event_source.bind();
-        // Every spawned task gets an initial poll.
-        {
-            let mut ready = self.shared.ready.lock().unwrap();
-            for id in 0..self.tasks.len() {
-                ready.push_back(id);
-            }
-        }
         loop {
             // Install any tasks queued through a `Spawner` since the last
             // turn — before snapshotting the ready set, so a freshly
@@ -168,7 +220,7 @@ impl Looper {
             for task in incoming {
                 self.install(task);
             }
-            let batch: Vec<usize> = {
+            let batch: Vec<TaskId> = {
                 let mut ready = self.shared.ready.lock().unwrap();
                 ready.drain(..).collect()
             };
@@ -180,19 +232,29 @@ impl Looper {
                 continue;
             }
             for id in batch {
-                if self.tasks[id].is_none() {
-                    continue; // already completed; a stale wake
+                let index = id.index as usize;
+                // A stale wake: the slot has been reused (its generation
+                // moved on) or its task has already completed.
+                if self.slots[index].generation != id.generation || self.slots[index].task.is_none()
+                {
+                    continue;
                 }
-                let waker = self.wakers[id].clone();
+                let waker = self.slots[index].waker.clone();
                 let mut cx = Context::from_waker(&waker);
-                let ready = self.tasks[id]
+                let completed = self.slots[index]
+                    .task
                     .as_mut()
                     .expect("task present")
                     .as_mut()
                     .poll(&mut cx)
                     .is_ready();
-                if ready {
-                    self.tasks[id] = None;
+                if completed {
+                    // Free the slot for reuse, and bump its generation so
+                    // any waker still naming the finished task is ignored.
+                    let slot = &mut self.slots[index];
+                    slot.task = None;
+                    slot.generation = slot.generation.wrapping_add(1);
+                    self.free.push(id.index);
                     self.live -= 1;
                 }
             }
@@ -211,6 +273,7 @@ mod tests {
     use super::*;
     use crate::channel;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn a_task_spawns_another_through_a_spawner() {
@@ -256,5 +319,36 @@ mod tests {
         sender.join().unwrap();
 
         assert_eq!(*seen.lock().unwrap(), Some(7));
+    }
+
+    #[test]
+    fn completed_tasks_free_their_slots_for_reuse() {
+        // A chain of short tasks: each, as it runs, queues the next through
+        // the Spawner and then completes. No two are ever live at once, so
+        // one freed slot serves the whole chain — the arena does not grow.
+        fn spawn_next(spawner: Spawner, left: Arc<AtomicUsize>) {
+            let next = spawner.clone();
+            spawner.spawn(async move {
+                if left.fetch_sub(1, Ordering::SeqCst) > 1 {
+                    spawn_next(next, left);
+                }
+            });
+        }
+
+        let mut looper = Looper::new();
+        let left = Arc::new(AtomicUsize::new(64));
+        spawn_next(looper.spawner(), Arc::clone(&left));
+        looper.drive();
+
+        assert_eq!(
+            left.load(Ordering::SeqCst),
+            0,
+            "every task in the chain ran"
+        );
+        assert!(
+            looper.slots.len() <= 2,
+            "a 64-task sequential chain reused its slot — the arena holds {}",
+            looper.slots.len(),
+        );
     }
 }

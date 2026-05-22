@@ -3,10 +3,16 @@
 //! Ring and looper basics — exercised with `block_on` and one helper
 //! thread (`docs/design/looper-framework.md` §11).
 
+use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Wake, Waker};
 use std::thread;
 
-use abyss_looper::{Looper, RingClosed, TryRecvError, TrySendError, block_on, channel};
+use abyss_looper::{
+    Ctx, Delivery, Handler, Looper, RingClosed, Sender, TryRecvError, TrySendError, block_on,
+    channel, responder,
+};
 
 #[test]
 fn channel_send_then_recv() {
@@ -109,4 +115,112 @@ fn looper_drains_a_ring_under_backpressure() {
     handle.join().unwrap();
 
     assert_eq!(*log.lock().unwrap(), (0..200).collect::<Vec<_>>());
+}
+
+// --- regression tests: ring and handler correctness ------------------------
+
+/// A waker that records, in a shared flag, that it was woken.
+struct RecordingWaker(Arc<AtomicBool>);
+
+impl Wake for RecordingWaker {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+/// A waker paired with the flag it raises when woken.
+fn recording_waker() -> (Waker, Arc<AtomicBool>) {
+    let woken = Arc::new(AtomicBool::new(false));
+    let waker = Waker::from(Arc::new(RecordingWaker(Arc::clone(&woken))));
+    (waker, woken)
+}
+
+#[test]
+fn a_cancelled_send_does_not_strand_a_later_sender() {
+    // A capacity-1 ring, filled. Two senders then block on it; the first
+    // is cancelled — its future dropped — while still pending. Draining
+    // the one slot must wake the *second*, still-live sender: a cancelled
+    // send must not leave a stale waker queued ahead of a live one.
+    let (tx, mut rx) = channel::<i32>(1);
+    tx.try_send(1).expect("the empty ring has room");
+
+    let mut cancelled = Box::pin(tx.send(2));
+    assert!(
+        cancelled
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending(),
+        "the first sender blocks on the full ring",
+    );
+
+    let (live_waker, live_woken) = recording_waker();
+    let mut waiting = Box::pin(tx.send(3));
+    assert!(
+        waiting
+            .as_mut()
+            .poll(&mut Context::from_waker(&live_waker))
+            .is_pending(),
+        "the second sender blocks on the full ring too",
+    );
+
+    // The first sender's future is dropped — a cancelled send.
+    drop(cancelled);
+
+    // Draining one message frees a slot; the still-waiting sender is the
+    // one that must be woken for it.
+    assert_eq!(rx.try_recv(), Ok(1));
+    assert!(
+        live_woken.load(Ordering::SeqCst),
+        "the live sender was woken when the ring drained",
+    );
+}
+
+#[test]
+fn an_ignored_request_drops_its_responder() {
+    // A handler that ignores its request entirely: it never takes the
+    // responder, it only signals that it has run.
+    struct Ignores {
+        ran: Sender<()>,
+    }
+    impl Handler for Ignores {
+        type Message = i32;
+        async fn handle(&mut self, _msg: i32, _ctx: &Ctx) {
+            let _ = self.ran.send(()).await;
+        }
+    }
+
+    let (inbox_tx, inbox_rx) = channel::<Delivery<i32>>(1);
+    let (reply_handle, mut reply_rx) = responder::<i32>();
+    let (ran_tx, mut ran_rx) = channel::<()>(1);
+
+    let queued = inbox_tx.try_send(Delivery {
+        message: 1,
+        responder: Some(Box::new(reply_handle)),
+    });
+    assert!(queued.is_ok(), "the request queues onto the empty inbox");
+
+    let mut looper = Looper::new();
+    looper.attach_service(Ignores { ran: ran_tx }, inbox_rx);
+
+    // Once the handler has run — but while the looper is still live — the
+    // responder it ignored must already be dropped. A dropped responder
+    // closes the reply channel, so `try_recv` reports `Closed`, not the
+    // `Empty` of a responder still held.
+    let outcome = Arc::new(Mutex::new(None));
+    let outcome_task = Arc::clone(&outcome);
+    looper.spawn(async move {
+        ran_rx.recv().await.expect("the handler ran");
+        *outcome_task.lock().unwrap() = Some(reply_rx.try_recv());
+        drop(inbox_tx); // close the inbox so the looper winds down
+    });
+    looper.run();
+
+    assert_eq!(
+        outcome.lock().unwrap().take(),
+        Some(Err(TryRecvError::Closed)),
+        "the unanswered request's responder was dropped when the handler returned",
+    );
 }

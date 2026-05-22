@@ -25,7 +25,12 @@ struct Inner<M> {
     senders: usize,
     recv_open: bool,
     recv_waker: Option<Waker>,
-    send_wakers: VecDeque<Waker>,
+    /// The blocked senders, each waker keyed by the id its `SendFut`
+    /// registered under. The id lets a cancelled send remove its own
+    /// waker, so no stale entry sits ahead of a live sender's.
+    send_wakers: VecDeque<(u64, Waker)>,
+    /// The id the next `SendFut` to block will register under.
+    next_send_id: u64,
 }
 
 /// Create a bounded ring with room for `capacity` messages.
@@ -43,6 +48,7 @@ pub fn channel<M>(capacity: usize) -> (Sender<M>, Receiver<M>) {
             recv_open: true,
             recv_waker: None,
             send_wakers: VecDeque::new(),
+            next_send_id: 0,
         }),
     });
     (Sender { chan: chan.clone() }, Receiver { chan })
@@ -65,6 +71,7 @@ impl<M> Sender<M> {
         SendFut {
             chan: &self.chan,
             msg: Some(msg),
+            id: None,
         }
         .await
     }
@@ -125,7 +132,7 @@ impl<M> Receiver<M> {
         if let Some(msg) = inner.queue.pop_front() {
             let waker = inner.send_wakers.pop_front();
             drop(inner);
-            if let Some(waker) = waker {
+            if let Some((_, waker)) = waker {
                 waker.wake();
             }
             return Ok(msg);
@@ -143,7 +150,11 @@ impl<M> Drop for Receiver<M> {
         let mut inner = self.chan.inner.lock().unwrap();
         inner.recv_open = false;
         // Wake every blocked sender so each observes closure.
-        let wakers: Vec<Waker> = inner.send_wakers.drain(..).collect();
+        let wakers: Vec<Waker> = inner
+            .send_wakers
+            .drain(..)
+            .map(|(_, waker)| waker)
+            .collect();
         drop(inner);
         for waker in wakers {
             waker.wake();
@@ -154,13 +165,17 @@ impl<M> Drop for Receiver<M> {
 // --- the leaf futures ------------------------------------------------------
 //
 // Both are leaf futures with no internal self-reference, so both are
-// soundly `Unpin` regardless of `M`. A `SendFut` dropped while pending
-// leaves a stale waker in `send_wakers`; waking it later is a harmless
-// no-op.
+// soundly `Unpin` regardless of `M`. A `SendFut` registers its waker under
+// a unique id and removes that registration when it completes or is
+// dropped, so a send cancelled while pending strands no stale waker ahead
+// of a live sender's in `send_wakers`.
 
 struct SendFut<'a, M> {
     chan: &'a Chan<M>,
     msg: Option<M>,
+    /// The id this future's waker is registered under, once it has blocked.
+    /// `None` until it first blocks, and after it completes.
+    id: Option<u64>,
 }
 
 impl<M> Unpin for SendFut<'_, M> {}
@@ -177,6 +192,11 @@ impl<M> Future for SendFut<'_, M> {
         if inner.queue.len() < this.chan.capacity {
             let msg = this.msg.take().expect("SendFut polled after completion");
             inner.queue.push_back(msg);
+            // Completing: drop any waker this future had registered, so no
+            // stale entry lingers to be woken in a live sender's place.
+            if let Some(id) = this.id.take() {
+                inner.send_wakers.retain(|(entry, _)| *entry != id);
+            }
             let waker = inner.recv_waker.take();
             drop(inner);
             if let Some(waker) = waker {
@@ -184,8 +204,35 @@ impl<M> Future for SendFut<'_, M> {
             }
             Poll::Ready(Ok(()))
         } else {
-            inner.send_wakers.push_back(cx.waker().clone());
+            // Register under a stable id — assigned on the first block, so
+            // a re-poll refreshes the same entry rather than adding another.
+            let id = match this.id {
+                Some(id) => id,
+                None => {
+                    let id = inner.next_send_id;
+                    inner.next_send_id += 1;
+                    this.id = Some(id);
+                    id
+                }
+            };
+            match inner.send_wakers.iter_mut().find(|(entry, _)| *entry == id) {
+                Some((_, waker)) => waker.clone_from(cx.waker()),
+                None => inner.send_wakers.push_back((id, cx.waker().clone())),
+            }
             Poll::Pending
+        }
+    }
+}
+
+impl<M> Drop for SendFut<'_, M> {
+    fn drop(&mut self) {
+        // A send cancelled while pending still has its waker registered;
+        // remove it so a freed slot wakes a live sender, not this one. A
+        // completed `SendFut` cleared its `id` in `poll`, so this is a
+        // no-op for it.
+        if let Some(id) = self.id {
+            let mut inner = self.chan.inner.lock().unwrap();
+            inner.send_wakers.retain(|(entry, _)| *entry != id);
         }
     }
 }
@@ -202,7 +249,7 @@ impl<M> Future for RecvFut<'_, M> {
         if let Some(msg) = inner.queue.pop_front() {
             let waker = inner.send_wakers.pop_front();
             drop(inner);
-            if let Some(waker) = waker {
+            if let Some((_, waker)) = waker {
                 waker.wake();
             }
             Poll::Ready(Ok(msg))

@@ -98,6 +98,11 @@ impl Looper {
     /// possibly carrying a [`Responder`]. The responder is placed in the
     /// [`Ctx`] before `handle` runs, so the handler answers a request with
     /// `ctx.responder()` (`broker-and-transport.md` §2.7).
+    ///
+    /// A responder the handler does not take is dropped as soon as `handle`
+    /// returns: a caller awaiting a reply then learns at once, through
+    /// [`RingClosed`](crate::RingClosed), that its request went unanswered,
+    /// rather than hanging until the next delivery or the loop's end.
     pub fn attach_service<H: Handler>(
         &mut self,
         mut handler: H,
@@ -108,6 +113,9 @@ impl Looper {
             while let Ok(delivery) = inbox.recv().await {
                 ctx.set_responder(delivery.responder);
                 handler.handle(delivery.message, &ctx).await;
+                // Drop a responder the handler never took — promptly, not
+                // at the next delivery.
+                ctx.set_responder(None);
             }
         });
     }
