@@ -20,13 +20,12 @@
 //!
 //! - `spawn` — component spawn: the component's jail, its bootstrap
 //!   channel, the `pdfork` into the jail, and the bootstrap bundle (§5.3).
-//! - `session` — wiring a manifest set: a `SOCK_SEQPACKET` ring per
-//!   connection, each component's bundle assembled, then spawned (§5.2).
-//! - `supervisor` — keeping components alive: a component that exits is
-//!   spawned again (§5.5).
+//! - `session` — the session runtime: wiring a manifest set, spawning every
+//!   component, and supervising it — a component that exits is re-wired and
+//!   spawned again, its peers told over their control channels (§5.2, §5.5).
 //!
-//! `PeerRestarted` re-wiring and the broker's full event loop (§5.5–§5.7)
-//! arrive with the rest of the FreeBSD work; see `STATUS.md`.
+//! The broker's full event loop (§5.6–§5.7) arrives with the rest of the
+//! FreeBSD work; see `STATUS.md`.
 //!
 //! The broker itself holds no `unsafe`: every kernel call is a safe API
 //! exported by a `sys/*` crate (`broker-and-transport.md` §6).
@@ -42,6 +41,3 @@ pub mod spawn;
 
 #[cfg(target_os = "freebsd")]
 pub mod session;
-
-#[cfg(target_os = "freebsd")]
-pub mod supervisor;

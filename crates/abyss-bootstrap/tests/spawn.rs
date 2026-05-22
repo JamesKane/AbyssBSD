@@ -104,43 +104,31 @@ fn a_wired_session_lets_its_components_converse() {
     ])
     .expect("the graph builds");
 
-    // Wire the session — a ring per connection, a bundle per component —
-    // and spawn every component as the bootstrap probe. The catalogue
-    // resolves the `input` peer capability's `recv` rights class.
+    // Launch the session — a ring per connection, a bundle per component —
+    // spawning every component as the bootstrap probe. The catalogue
+    // resolves the `input` peer capability's `recv` rights class. The
+    // session is not stepped, so the probes run and exit unsupervised; its
+    // `Drop` removes every jail.
     let mut catalogue = InterfaceCatalogue::new();
     catalogue.register("input", &[("recv", 1)]);
-    let session = Session::wire(&graph, &catalogue).expect("the session wires");
     let binary = probe();
-    let wired = session
-        .spawn(|_name| Program {
-            path: binary.clone(),
-            args: Vec::new(),
-        })
-        .expect("spawn the wired session");
-    assert_eq!(wired.len(), 3);
+    let session = Session::launch(graph, catalogue, |_name| Program {
+        path: binary.clone(),
+        args: Vec::new(),
+    })
+    .expect("launch the wired session");
+    assert_eq!(session.components().count(), 3);
 
     let mut reports: HashMap<String, [i64; 4]> = HashMap::new();
-    for wired_component in wired {
-        wired_component
-            .component
-            .wait()
-            .expect("the component runs and exits");
-        let (report, _fds) = wired_component
-            .component
+    for (name, component) in session.components() {
+        component.wait().expect("the component runs and exits");
+        let (report, _fds) = component
             .bootstrap()
             .recv()
             .expect("the component reports back");
         let fields = read_report(&report);
-        assert_eq!(
-            fields[0], 1,
-            "{} is in capability mode",
-            wired_component.name
-        );
-        reports.insert(wired_component.name.clone(), fields);
-        wired_component
-            .component
-            .shutdown()
-            .expect("remove the component jail");
+        assert_eq!(fields[0], 1, "{name} is in capability mode");
+        reports.insert(name.to_owned(), fields);
     }
 
     // The conversation, end to end: each report is
@@ -170,38 +158,25 @@ fn a_wired_session_refuses_an_ungranted_call() {
 
     let mut catalogue = InterfaceCatalogue::new();
     catalogue.register("callee-svc", &[("recv", 1)]);
-    let session = Session::wire(&graph, &catalogue).expect("the session wires");
 
     let binary = probe();
-    let wired = session
-        .spawn(|_name| Program {
-            path: binary.clone(),
-            args: Vec::new(),
-        })
-        .expect("spawn the wired session");
-    assert_eq!(wired.len(), 2);
+    let session = Session::launch(graph, catalogue, |_name| Program {
+        path: binary.clone(),
+        args: Vec::new(),
+    })
+    .expect("launch the wired session");
+    assert_eq!(session.components().count(), 2);
 
     let mut caller_report = None;
-    for wired_component in wired {
-        wired_component
-            .component
-            .wait()
-            .expect("the component runs and exits");
+    for (name, component) in session.components() {
+        component.wait().expect("the component runs and exits");
         // The client reports the call's outcome; the server refuses the
         // call and never reports — it just winds down once the client
         // exits and closes the ring.
-        if wired_component.name == "caller" {
-            let (report, _fds) = wired_component
-                .component
-                .bootstrap()
-                .recv()
-                .expect("caller reports back");
+        if name == "caller" {
+            let (report, _fds) = component.bootstrap().recv().expect("caller reports back");
             caller_report = Some(read_report(&report));
         }
-        wired_component
-            .component
-            .shutdown()
-            .expect("remove the component jail");
     }
 
     // `caller`'s call named `Ping`, outside the empty mask it was granted;

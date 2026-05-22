@@ -1,27 +1,37 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
-//! Wiring a manifest set — compiled only on FreeBSD.
+//! The broker's session runtime — compiled only on FreeBSD.
 //!
-//! [`Session`] is the broker's pre-wiring of one spawn phase
-//! (`docs/design/broker-and-transport.md` §5.2): from an authority
-//! [`Graph`] it pre-creates a `SOCK_SEQPACKET` ring for every connection
-//! and assembles each component's bootstrap [`Bundle`], then spawns each
-//! component holding its bundle.
+//! A [`Session`] is one running manifest set. The broker pre-wires it from
+//! an authority [`Graph`] — a `SOCK_SEQPACKET` ring per connection, each
+//! component's bootstrap [`Bundle`] assembled — spawns every component into
+//! its jail, and then *supervises* it. Wiring, spawning, and supervision are
+//! one runtime (`docs/design/broker-and-transport.md` §5.2, §5.5): the
+//! `Session` owns every component's process and the broker's end of its
+//! control channel, watches each process descriptor on a `kqueue` reactor,
+//! and on an exit re-wires.
 //!
-//! Activation is eager and pre-wired: every ring exists before any
-//! component is spawned, so each component is born with both ends of every
-//! ring it touches already assigned.
+//! Re-wiring a restarted component: the session creates a fresh ring for
+//! every connection the dead component touched, respawns it holding a fresh
+//! bundle of its ends, and sends each surviving peer a [`PeerRestarted`]
+//! over that peer's control channel — one fresh [`Grant`] replacing the
+//! now-dead ring (§5.5).
+//!
+//! Activation is eager and pre-wired: every ring exists before any component
+//! is spawned, so each component is born holding both ends of every ring it
+//! touches. A restart restores that invariant for one component.
 
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::path::PathBuf;
 
-use abyss_bundle::{Bundle, CapBody, Grant, Role};
+use abyss_bundle::{Bundle, CapBody, Grant, PeerRestarted, Role};
 use abyss_msg::{Envelope, Header, MessageKind};
-use abyss_transport::Channel;
+use abyss_transport::{Channel, Event, Interest, MessageChannel, Reactor};
 use freebsd_capsicum_sys::{CapRights, Rights};
+use freebsd_jail_sys::remove;
 
 use crate::catalogue::{CatalogueError, InterfaceCatalogue};
 use crate::graph::Graph;
@@ -35,18 +45,11 @@ pub struct Program {
     pub args: Vec<String>,
 }
 
-/// A component the broker has wired and spawned.
-pub struct WiredComponent {
-    /// The component's name.
-    pub name: String,
-    /// Its live process and the broker's end of its bootstrap channel.
-    pub component: Component,
-}
-
-/// Why [`Session::wire`] failed.
+/// Why launching a [`Session`] failed.
 #[derive(Debug)]
 pub enum SessionError {
-    /// A descriptor operation failed — creating or limiting a ring.
+    /// A descriptor or process operation failed — creating or limiting a
+    /// ring, spawning a component, registering it on the reactor.
     Io(io::Error),
     /// A connection's requested rights did not resolve against the
     /// interface catalogue — a malformed manifest set (§5.1).
@@ -68,155 +71,370 @@ impl From<CatalogueError> for SessionError {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SessionError::Io(err) => write!(f, "wiring a session: {err}"),
-            SessionError::Rights(err) => write!(f, "wiring a session: {err}"),
+            SessionError::Io(err) => write!(f, "launching a session: {err}"),
+            SessionError::Rights(err) => write!(f, "launching a session: {err}"),
         }
     }
 }
 
 impl std::error::Error for SessionError {}
 
-/// The broker's pre-wiring of one manifest set (§5.2).
+/// One component under the session: its name and its live process.
+struct Live {
+    name: String,
+    component: Component,
+}
+
+/// The broker's running session — one wired, spawned, supervised manifest
+/// set (§5.2, §5.5).
 ///
-/// [`Session::wire`] computes it — a `SOCK_SEQPACKET` ring per connection,
-/// and each component's assembled [`Bundle`] — without spawning anything;
-/// [`Session::spawn`] then brings every component into being.
+/// [`Session::launch`] wires and spawns it; [`Session::step`] supervises it,
+/// re-wiring and restarting any component that exits.
 pub struct Session {
-    /// Each component, in graph order, paired with its bundle. A component
-    /// with no connections still appears here, with an empty bundle.
-    bundles: Vec<(String, Bundle)>,
+    /// The authority graph — kept so a restart can re-wire from it.
+    graph: Graph,
+    /// The interface catalogue — kept so a restart re-mints object rights.
+    catalogue: InterfaceCatalogue,
+    /// Each component's resolved program, so it can be respawned.
+    programs: HashMap<String, Program>,
+    /// The reactor every component's process descriptor is watched on.
+    reactor: Reactor,
+    /// Every component, live, in graph order.
+    components: Vec<Live>,
 }
 
 impl Session {
-    /// Pre-wire `graph`: create a `SOCK_SEQPACKET` ring for every
-    /// connection and assemble each component's bundle. No process is
-    /// spawned — every ring is created here, before [`spawn`](Self::spawn).
+    /// Wire `graph`, spawn every component, and bring the session up
+    /// supervised: each component's process descriptor is registered on a
+    /// `kqueue` reactor, ready for [`step`](Self::step) to watch.
     ///
     /// `catalogue` resolves each connection's requested rights classes to
-    /// the object-rights mask the broker mints for it (§3.3).
-    pub fn wire(graph: &Graph, catalogue: &InterfaceCatalogue) -> Result<Session, SessionError> {
-        // The §3.3 kernel mask every service ring carries, built once and
-        // applied to each ring descriptor before it enters a bundle.
-        let ring_rights = CapRights::new(service_ring_rights());
-        let cap_rights = ring_cap_rights(&ring_rights);
-
-        // Seed every component with a grant list — one with no connections
-        // still gets a bundle, an empty one.
-        let mut grants: HashMap<String, Vec<Grant>> = graph
+    /// the object-rights mask the broker mints for it (§3.3). `program`
+    /// resolves a component name to the binary to exec; it is consulted
+    /// once per component now and again on every restart.
+    ///
+    /// If a spawn fails, the components already spawned are torn down before
+    /// the error is returned, so a failed launch leaves no jails behind.
+    pub fn launch<F>(
+        graph: Graph,
+        catalogue: InterfaceCatalogue,
+        program: F,
+    ) -> Result<Session, SessionError>
+    where
+        F: Fn(&str) -> Program,
+    {
+        let programs: HashMap<String, Program> = graph
             .components()
             .iter()
-            .map(|manifest| (manifest.name.clone(), Vec::new()))
+            .map(|manifest| (manifest.name.clone(), program(&manifest.name)))
             .collect();
+        let bundles = wire_bundles(&graph, &catalogue)?;
+        let reactor = Reactor::new()?;
 
-        // One ring per connection: the requester holds the client end, the
-        // provider the server end (§5.2).
-        for connection in graph.connections() {
-            // The object-rights mask the broker mints for this connection
-            // — the requester's rights tokens resolved against the
-            // provider interface's catalogue (§3.3). Both ends carry it.
-            let object_rights = catalogue.resolve(&connection.interface, &connection.rights)?;
-            let body = CapBody {
-                cap_rights,
-                object_rights,
+        let mut components: Vec<Live> = Vec::with_capacity(bundles.len());
+        for (name, bundle) in bundles {
+            let component = match spawn_bundle(&name, &programs[&name], &bundle) {
+                Ok(component) => component,
+                Err(err) => {
+                    teardown(components);
+                    return Err(err.into());
+                }
             };
-            let (client_end, server_end) = Channel::pair()?;
-            push_grant(
-                &mut grants,
-                &connection.requester,
+            if let Err(err) = reactor.register(component.descriptor(), Interest::ProcessExit) {
+                let _ = component.shutdown();
+                teardown(components);
+                return Err(err.into());
+            }
+            components.push(Live { name, component });
+        }
+
+        Ok(Session {
+            graph,
+            catalogue,
+            programs,
+            reactor,
+            components,
+        })
+    }
+
+    /// The live process of a component, by name.
+    pub fn component(&self, name: &str) -> Option<&Component> {
+        self.components
+            .iter()
+            .find(|live| live.name == name)
+            .map(|live| &live.component)
+    }
+
+    /// Every component, paired with its name, in graph order.
+    pub fn components(&self) -> impl Iterator<Item = (&str, &Component)> {
+        self.components
+            .iter()
+            .map(|live| (live.name.as_str(), &live.component))
+    }
+
+    /// Wait for one or more components to exit, re-wire and respawn each,
+    /// and return their names. Blocks until at least one exits.
+    ///
+    /// A restart re-creates the dead component's rings and notifies its
+    /// surviving peers with a [`PeerRestarted`] — see [`restart`](Self::restart).
+    pub fn step(&mut self) -> io::Result<Vec<String>> {
+        loop {
+            let events = self.reactor.wait(None)?;
+            let exited: Vec<RawFd> = events
+                .iter()
+                .filter_map(|event| match event {
+                    Event::ProcessExited(fd) => Some(*fd),
+                    _ => None,
+                })
+                .collect();
+            if exited.is_empty() {
+                // A wake with no process-exit event — keep waiting.
+                continue;
+            }
+            let mut restarted = Vec::with_capacity(exited.len());
+            for fd in exited {
+                restarted.push(self.restart(fd)?);
+            }
+            return Ok(restarted);
+        }
+    }
+
+    /// Re-wire and restart the component whose process descriptor is `pd_fd`.
+    ///
+    /// A fresh ring is created for every connection the dead component
+    /// touched: the component is respawned holding its ends, and each
+    /// surviving peer is sent a [`PeerRestarted`] carrying the peer's fresh
+    /// end over that peer's control channel (§5.5).
+    fn restart(&mut self, pd_fd: RawFd) -> io::Result<String> {
+        let idx = self
+            .components
+            .iter()
+            .position(|live| live.component.descriptor().as_raw_fd() == pd_fd)
+            .ok_or_else(|| io::Error::other("process-exit event for an unknown component"))?;
+        let name = self.components[idx].name.clone();
+
+        // Re-wire: fresh rings for every connection the dead component
+        // touched. Its own ends go into a fresh bundle; each peer's end
+        // travels to it in a `PeerRestarted`. The catalogue resolved every
+        // one of these connections at launch, so a failure here is a
+        // descriptor error, not a malformed manifest.
+        let (bundle, peer_grants) = rewire(&self.graph, &self.catalogue, &name)
+            .map_err(|err| io::Error::other(err.to_string()))?;
+
+        // Reclaim the dead component's jail — the replacement reuses its
+        // name — then respawn it into the fresh bundle and re-watch it.
+        remove(self.components[idx].component.jid())?;
+        let fresh = spawn_bundle(&name, &self.programs[&name], &bundle)?;
+        self.reactor
+            .register(fresh.descriptor(), Interest::ProcessExit)?;
+        self.components[idx].component = fresh;
+
+        // Tell every surviving peer where its re-wired ring now leads. A
+        // peer that is itself awaiting restart is skipped — its own restart
+        // will re-wire this connection from the other side.
+        for (peer, grant) in peer_grants {
+            if let Some(live) = self.components.iter().find(|live| live.name == peer) {
+                send_peer_restarted(live.component.bootstrap(), grant)?;
+            }
+        }
+        Ok(name)
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // Tear down every component's jail, which kills the process.
+        for live in &self.components {
+            let _ = remove(live.component.jid());
+        }
+    }
+}
+
+/// Pre-wire `graph`: create a `SOCK_SEQPACKET` ring for every connection and
+/// assemble each component's bundle, in graph component order. No process is
+/// spawned — every ring is created here, before any component is.
+///
+/// `catalogue` resolves each connection's requested rights classes to the
+/// object-rights mask the broker mints for it (§3.3).
+fn wire_bundles(
+    graph: &Graph,
+    catalogue: &InterfaceCatalogue,
+) -> Result<Vec<(String, Bundle)>, SessionError> {
+    // The §3.3 kernel mask every service ring carries, built once and
+    // applied to each ring descriptor before it enters a bundle.
+    let ring_rights = CapRights::new(service_ring_rights());
+    let cap_rights = ring_cap_rights(&ring_rights);
+
+    // Seed every component with a grant list — one with no connections
+    // still gets a bundle, an empty one.
+    let mut grants: HashMap<String, Vec<Grant>> = graph
+        .components()
+        .iter()
+        .map(|manifest| (manifest.name.clone(), Vec::new()))
+        .collect();
+
+    // One ring per connection: the requester holds the client end, the
+    // provider the server end (§5.2).
+    for connection in graph.connections() {
+        // The object-rights mask the broker mints for this connection — the
+        // requester's rights tokens resolved against the provider
+        // interface's catalogue (§3.3). Both ends carry it.
+        let object_rights = catalogue.resolve(&connection.interface, &connection.rights)?;
+        let body = CapBody {
+            cap_rights,
+            object_rights,
+        };
+        let (client_end, server_end) = Channel::pair()?;
+        grants
+            .get_mut(&connection.requester)
+            .expect("a connection names only components in the graph")
+            .push(make_grant(
                 &connection.interface,
                 Role::Client,
                 client_end,
                 &ring_rights,
                 body,
-            )?;
-            push_grant(
-                &mut grants,
-                &connection.provider,
+            )?);
+        grants
+            .get_mut(&connection.provider)
+            .expect("a connection names only components in the graph")
+            .push(make_grant(
                 &connection.interface,
                 Role::Server,
                 server_end,
                 &ring_rights,
                 body,
-            )?;
-        }
-
-        // Assemble the bundles in graph component order.
-        let bundles = graph
-            .components()
-            .iter()
-            .map(|manifest| {
-                let grants = grants
-                    .remove(&manifest.name)
-                    .expect("every component was seeded with a grant list");
-                (manifest.name.clone(), Bundle { grants })
-            })
-            .collect();
-
-        Ok(Session { bundles })
+            )?);
     }
 
-    /// The wired components, in graph order, each paired with its bundle.
-    pub fn bundles(&self) -> &[(String, Bundle)] {
-        &self.bundles
-    }
-
-    /// Spawn every wired component, each holding its bootstrap bundle.
-    ///
-    /// `program` resolves a component name to the binary to exec. If a
-    /// spawn fails, the components already spawned are torn down before the
-    /// error is returned, so a failed session leaves no jails behind.
-    pub fn spawn<F>(self, program: F) -> io::Result<Vec<WiredComponent>>
-    where
-        F: Fn(&str) -> Program,
-    {
-        let mut spawned: Vec<WiredComponent> = Vec::with_capacity(self.bundles.len());
-        for (name, bundle) in self.bundles {
-            let program = program(&name);
-            // `from_message` duplicates each grant's endpoint onto the
-            // handle table; `fds` are those duplicates, sent via
-            // `SCM_RIGHTS` and dropped once the datagram is away.
-            let (envelope, fds) = Envelope::from_message(bundle_header(), &bundle);
-            let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
-            let args: Vec<&str> = program.args.iter().map(String::as_str).collect();
-            match spawn_component(&name, &program.path, &args, &envelope, &borrowed) {
-                Ok(component) => spawned.push(WiredComponent { name, component }),
-                Err(err) => {
-                    for wired in spawned {
-                        let _ = wired.component.shutdown();
-                    }
-                    return Err(err);
-                }
-            }
-        }
-        Ok(spawned)
-    }
+    // Assemble the bundles in graph component order.
+    Ok(graph
+        .components()
+        .iter()
+        .map(|manifest| {
+            let grants = grants
+                .remove(&manifest.name)
+                .expect("every component was seeded with a grant list");
+            (manifest.name.clone(), Bundle { grants })
+        })
+        .collect())
 }
 
-/// Push one ring endpoint onto a component's grant list, limiting the
-/// descriptor to its §3.3 kernel rights first.
-fn push_grant(
-    grants: &mut HashMap<String, Vec<Grant>>,
+/// Re-wire one restarted component: a fresh ring per connection it touches.
+///
+/// Returns the dead component's fresh [`Bundle`] — its end of every ring —
+/// and, per connection, the surviving peer's name with the [`Grant`] for the
+/// peer's fresh end, to be delivered to that peer as a [`PeerRestarted`].
+fn rewire(
+    graph: &Graph,
+    catalogue: &InterfaceCatalogue,
     component: &str,
+) -> Result<(Bundle, Vec<(String, Grant)>), SessionError> {
+    let ring_rights = CapRights::new(service_ring_rights());
+    let cap_rights = ring_cap_rights(&ring_rights);
+
+    let mut own_grants: Vec<Grant> = Vec::new();
+    let mut peer_grants: Vec<(String, Grant)> = Vec::new();
+
+    for connection in graph.connections_of(component) {
+        let object_rights = catalogue.resolve(&connection.interface, &connection.rights)?;
+        let body = CapBody {
+            cap_rights,
+            object_rights,
+        };
+        let (client_end, server_end) = Channel::pair()?;
+
+        // The restarted component is one end of the connection; the
+        // surviving peer is the other. The requester holds the client end,
+        // the provider the server end — exactly as at first wiring (§5.2).
+        let (own_role, own_end, peer_name, peer_role, peer_end) =
+            if connection.requester == component {
+                (
+                    Role::Client,
+                    client_end,
+                    &connection.provider,
+                    Role::Server,
+                    server_end,
+                )
+            } else {
+                (
+                    Role::Server,
+                    server_end,
+                    &connection.requester,
+                    Role::Client,
+                    client_end,
+                )
+            };
+
+        own_grants.push(make_grant(
+            &connection.interface,
+            own_role,
+            own_end,
+            &ring_rights,
+            body,
+        )?);
+        peer_grants.push((
+            peer_name.clone(),
+            make_grant(
+                &connection.interface,
+                peer_role,
+                peer_end,
+                &ring_rights,
+                body,
+            )?,
+        ));
+    }
+
+    Ok((Bundle { grants: own_grants }, peer_grants))
+}
+
+/// Build one ring-endpoint [`Grant`], limiting the descriptor to its §3.3
+/// kernel rights first; a duplicate the bundle later passes inherits the
+/// limit.
+fn make_grant(
     interface: &str,
     role: Role,
     endpoint: Channel,
     ring_rights: &CapRights,
     body: CapBody,
-) -> io::Result<()> {
+) -> io::Result<Grant> {
     let endpoint = endpoint.into_fd();
-    // Limit the descriptor before it is handed over (§3.3); a duplicate
-    // the bundle later passes inherits the limit.
     ring_rights.limit(endpoint.as_raw_fd())?;
-    grants
-        .get_mut(component)
-        .expect("a connection names only components in the graph")
-        .push(Grant {
-            interface: interface.to_owned(),
-            role,
-            rights: body,
-            endpoint,
-        });
-    Ok(())
+    Ok(Grant {
+        interface: interface.to_owned(),
+        role,
+        rights: body,
+        endpoint,
+    })
+}
+
+/// Spawn `program` as the component `name`, holding `bundle` as its
+/// bootstrap bundle.
+fn spawn_bundle(name: &str, program: &Program, bundle: &Bundle) -> io::Result<Component> {
+    // `from_message` duplicates each grant's endpoint onto the handle table;
+    // `fds` are those duplicates, sent via `SCM_RIGHTS` and dropped once the
+    // datagram is away.
+    let (envelope, fds) = Envelope::from_message(bundle_header(), bundle);
+    let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
+    let args: Vec<&str> = program.args.iter().map(String::as_str).collect();
+    spawn_component(name, &program.path, &args, &envelope, &borrowed)
+}
+
+/// Send a [`PeerRestarted`] to a surviving peer over its control channel —
+/// the same channel its bootstrap bundle arrived on (§5.5).
+fn send_peer_restarted(channel: &MessageChannel, grant: Grant) -> io::Result<()> {
+    let message = PeerRestarted { grant };
+    let (envelope, fds) = Envelope::from_message(control_header(), &message);
+    let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
+    channel.send(&envelope, &borrowed)
+}
+
+/// Tear down a partially launched session — remove every component's jail,
+/// which kills the process.
+fn teardown(components: Vec<Live>) {
+    for live in components {
+        let _ = live.component.shutdown();
+    }
 }
 
 /// The §3.3 kernel rights a service-ring socket carries: send and receive,
@@ -246,12 +464,24 @@ fn ring_cap_rights(ring: &CapRights) -> [u8; 16] {
 }
 
 /// The header of a bootstrap-bundle envelope. The bundle rides on no
-/// interface ring, so its interface and method ids are zero (§5.3).
+/// interface ring, so its interface id is zero; method id 0 marks it the
+/// initial bundle (§5.3).
 fn bundle_header() -> Header {
     Header {
         kind: MessageKind::Event,
         interface_id: 0,
         method_id: 0,
+    }
+}
+
+/// The header of a `PeerRestarted` control envelope. It rides the same
+/// control connection the bundle arrived on; method id 1 marks it a
+/// post-boot re-wire rather than the initial bundle (§5.5).
+fn control_header() -> Header {
+    Header {
+        kind: MessageKind::Event,
+        interface_id: 0,
+        method_id: 1,
     }
 }
 
@@ -276,12 +506,11 @@ mod tests {
     }
 
     /// The single bundle of the component named `name`.
-    fn bundle_of<'s>(session: &'s Session, name: &str) -> &'s Bundle {
-        &session
-            .bundles()
+    fn bundle_of<'b>(bundles: &'b [(String, Bundle)], name: &str) -> &'b Bundle {
+        &bundles
             .iter()
             .find(|(component, _)| component == name)
-            .expect("the component is in the session")
+            .expect("the component is in the wiring")
             .1
     }
 
@@ -299,17 +528,17 @@ mod tests {
         let mut catalogue = InterfaceCatalogue::new();
         catalogue.register("input", &[("recv", 0b01), ("send", 0b10)]);
 
-        let session = Session::wire(&graph, &catalogue).expect("the session wires");
-        assert_eq!(session.bundles().len(), 3);
+        let bundles = wire_bundles(&graph, &catalogue).expect("the session wires");
+        assert_eq!(bundles.len(), 3);
 
         // The requester holds the client end of the ring …
-        let compositor = bundle_of(&session, "compositor");
+        let compositor = bundle_of(&bundles, "compositor");
         assert_eq!(compositor.grants.len(), 1);
         assert_eq!(compositor.grants[0].interface, "input");
         assert_eq!(compositor.grants[0].role, Role::Client);
 
         // … the provider the server end.
-        let input = bundle_of(&session, "input");
+        let input = bundle_of(&bundles, "input");
         assert_eq!(input.grants.len(), 1);
         assert_eq!(input.grants[0].interface, "input");
         assert_eq!(input.grants[0].role, Role::Server);
@@ -327,14 +556,14 @@ mod tests {
         assert_eq!(input.grants[0].rights.object_rights, 0b01);
 
         // A component that peers no one is wired an empty bundle.
-        assert!(bundle_of(&session, "log").grants.is_empty());
+        assert!(bundle_of(&bundles, "log").grants.is_empty());
     }
 
     #[test]
-    fn an_empty_manifest_set_wires_to_an_empty_session() {
+    fn an_empty_manifest_set_wires_to_nothing() {
         let graph = Graph::build(vec![]).expect("graph");
-        let session = Session::wire(&graph, &InterfaceCatalogue::new()).expect("wire");
-        assert!(session.bundles().is_empty());
+        let bundles = wire_bundles(&graph, &InterfaceCatalogue::new()).expect("wire");
+        assert!(bundles.is_empty());
     }
 
     #[test]
@@ -350,12 +579,117 @@ mod tests {
         let mut catalogue = InterfaceCatalogue::new();
         catalogue.register("input", &[("send", 0b10)]);
 
-        match Session::wire(&graph, &catalogue) {
+        match wire_bundles(&graph, &catalogue) {
             Err(SessionError::Rights(CatalogueError::UnknownRightsClass { class, .. })) => {
                 assert_eq!(class, "recv");
             }
             Err(other) => panic!("expected an unknown-rights-class error, got {other:?}"),
             Ok(_) => panic!("expected the wiring to fail"),
         }
+    }
+
+    #[test]
+    fn rewire_freshens_one_components_rings() {
+        // compositor → input: input is the provider, compositor the peer.
+        let graph = Graph::build(vec![
+            manifest("compositor", "display", &peer("input")),
+            manifest("input", "input", ""),
+        ])
+        .expect("the graph builds");
+
+        let mut catalogue = InterfaceCatalogue::new();
+        catalogue.register("input", &[("recv", 0b01)]);
+
+        // Re-wire `input`: it provides one interface, so its fresh bundle
+        // holds one server-end grant, and its one peer — compositor, the
+        // requester — is to be sent the matching client end.
+        let (bundle, peers) = rewire(&graph, &catalogue, "input").expect("input re-wires");
+        assert_eq!(bundle.grants.len(), 1);
+        assert_eq!(bundle.grants[0].interface, "input");
+        assert_eq!(bundle.grants[0].role, Role::Server);
+        assert_eq!(bundle.grants[0].rights.object_rights, 0b01);
+
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].0, "compositor");
+        assert_eq!(peers[0].1.interface, "input");
+        assert_eq!(peers[0].1.role, Role::Client);
+        assert_eq!(peers[0].1.rights.object_rights, 0b01);
+
+        // Re-wiring the requester is the mirror image: a client-end grant
+        // for itself, the server end to be sent to the provider.
+        let (bundle, peers) =
+            rewire(&graph, &catalogue, "compositor").expect("compositor re-wires");
+        assert_eq!(bundle.grants[0].role, Role::Client);
+        assert_eq!(peers[0].0, "input");
+        assert_eq!(peers[0].1.role, Role::Server);
+    }
+
+    #[test]
+    fn rewire_a_component_with_no_peers_is_empty() {
+        let graph = Graph::build(vec![manifest("lonely", "lonely", "")]).expect("the graph builds");
+        let (bundle, peers) = rewire(&graph, &InterfaceCatalogue::new(), "lonely")
+            .expect("a lone component re-wires");
+        assert!(bundle.grants.is_empty());
+        assert!(peers.is_empty());
+    }
+
+    #[test]
+    fn a_failed_component_is_re_wired_and_restarted() {
+        let pid = std::process::id();
+        let caller = format!("rw-caller-{pid}");
+        let callee = format!("rw-callee-{pid}");
+
+        // caller → callee is one connection. /bin/sh ignores its bootstrap
+        // fd: this test exercises the broker's re-wire, not the component
+        // side, so a successful `step` proves the re-wire and the
+        // `PeerRestarted` send to the live caller both went through.
+        let graph = Graph::build(vec![
+            manifest(&caller, "rw-caller-iface", &peer("rw-callee-iface")),
+            manifest(&callee, "rw-callee-iface", ""),
+        ])
+        .expect("the graph builds");
+
+        let mut catalogue = InterfaceCatalogue::new();
+        catalogue.register("rw-callee-iface", &[("recv", 1)]);
+
+        // The callee lives just long enough to be registered, then exits;
+        // the caller lingers so it is a live peer to be re-wired.
+        let callee_name = callee.clone();
+        let mut session = Session::launch(graph, catalogue, |name| {
+            let script = if name == callee_name {
+                "sleep 0.3"
+            } else {
+                "sleep 30"
+            };
+            Program {
+                path: PathBuf::from("/bin/sh"),
+                args: vec!["-c".to_owned(), script.to_owned()],
+            }
+        })
+        .expect("the session launches");
+
+        let callee_first = session.component(&callee).expect("callee is live").pid();
+        let caller_first = session.component(&caller).expect("caller is live").pid();
+
+        let restarted = session.step().expect("supervise one exit");
+        assert_eq!(restarted, vec![callee.clone()]);
+
+        let callee_second = session
+            .component(&callee)
+            .expect("callee is live again")
+            .pid();
+        let caller_second = session
+            .component(&caller)
+            .expect("caller is still live")
+            .pid();
+
+        assert_ne!(
+            callee_first, callee_second,
+            "the callee was restarted as a fresh process",
+        );
+        assert_eq!(
+            caller_first, caller_second,
+            "the caller, a surviving peer, was not restarted",
+        );
     }
 }
