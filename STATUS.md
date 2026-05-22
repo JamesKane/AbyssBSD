@@ -37,6 +37,9 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `8d87188` Phase 4: design — delegated spawn, the mechanism (§5.6)
+- `7c663e7` Track abyss-log in Cargo.lock
+- `72dd695` Bump STATUS: Phase 4 — supervision honours the restart policy (§5.5)
 - `48ca9c3` Phase 4: abyss-broker — supervision honours the manifest restart policy (§5.5)
 - `7af83c6` Bump STATUS: Phase 4 — the broker binary boots a session from disk (§5.1)
 - `84bda29` Phase 4: abyss-broker — the broker binary, booting a session from disk (§5.1)
@@ -44,9 +47,6 @@ the FreeBSD remainder.
 - `8b99f3f` Bump STATUS: Phase 4 — load a directory of manifests (§5.1)
 - `2598449` Phase 4: abyss-broker — load a directory of manifests (§5.1)
 - `33287ed` Bump STATUS: Phase 4 — §5.5 PeerRestarted proven end to end
-- `14f2288` Phase 4: §5.5 — the multi-process peer-restart test, end to end
-- `488d60b` Bump STATUS: Phase 4 — Control, the component-side control loop (§5.5)
-- `4cacbae` Phase 4: abyss-bootstrap — Control, the component-side §5.5 control loop
 
 ## Site
 
@@ -279,17 +279,28 @@ consults each exited component's `always` / `on-failure` / `never` policy
 — `on-failure` reading the exit status the kqueue reactor's
 `ProcessExited` event now carries — and a component the policy does not
 restart is stopped, its jail reclaimed and its peers' rings left closed
-(§5.5). `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+(§5.5).
+
+The next broker feature, **delegated spawn (§5.6)** — the shell asking
+the broker to launch an app — is now **designed**: a spawnable manifest
+set the broker reads at boot but does not spawn; a bidirectional control
+connection carrying a `SpawnChild` request and its reply; a `kind = spawn`
+capability gating who may ask; and a mid-session child wired to running
+peers by reusing the §5.5 `PeerRestarted` re-wiring. Its build is the
+next increment. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **delegated spawn and Casper (§5.6–§5.7)** — a component (the shell)
-  asking the broker to spawn a child, born with the *child's* manifest as
-  its bundle; and `kind = casper` capabilities, the broker setting up a
-  `cap_channel_t` per declared Casper service;
+- **building delegated spawn (§5.6)** — the design is pinned (see In
+  flight); the build is the spawnable manifest set, the bidirectional
+  control connection and its `SpawnChild` request, the `kind = spawn`
+  capability, and wiring a mid-session child through `PeerRestarted`;
+- **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
+  a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
+  crate, and a design pass first;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
   net beside the now-enforced service-side check (§3.3).
