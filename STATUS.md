@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `b610b8d` Phase 4: abyss-msg — the Method trait and #[derive(Method)]
+- `2004c3e` Bump STATUS: Phase 4 — the interface contract design pass
 - `b2c7d17` Phase 4: design — the interface contract, identity and dispatch (§2.9)
 - `b0ebdd3` Bump STATUS: Phase 4 — Connection::send, the one-way message
 - `f330979` Phase 4: abyss-transport — Connection::send, the one-way message
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `39ec8f1` Bump STATUS: Phase 4 — the handle table carries fds
 - `1e616df` Phase 4: abyss-msg — the handle table carries fds
 - `b81f3f4` Bump STATUS: Phase 4 — the capability handle-table body layout
-- `adca251` Phase 4: abyss-cap — the capability handle-table body layout
-- `edbae68` Bump STATUS: Phase 4 — the supervisor, restart on death
 
 ## Site
 
@@ -114,20 +114,22 @@ handle's metadata with the descriptor it rides `SCM_RIGHTS` on, and
 passes have pinned what the IPC backend lands in: §2.8 — the `Cap`
 two-backend crate structure (`abyss-cap` over `abyss-transport`, `Cap:
 Wire` gated to FreeBSD); §2.9 — the interface contract `Cap::send`/`call`
-dispatch through (`Interface::ID`, declaration-order method ordinals, a
-`#[derive(Interface)]`), its shape checked against the Wayland / FIDL /
-Cap'n Proto / Binder corpus. `Connection::send` carries a one-way Command
-or Event, the IPC counterpart of `call`. `cargo xtask ci` green on macOS
-and FreeBSD; tree clean.
+dispatch through, its shape checked against the Wayland / FIDL / Cap'n
+Proto / Binder corpus. That contract's message side is built:
+`abyss-msg`'s **`Method`** trait and **`#[derive(Method)]`** give a
+message its routing identity — the method ordinal (by declaration order)
+and the kind. `Connection::send` carries a one-way Command or Event, the
+IPC counterpart of `call`. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **interface contract layer** — `Interface` gaining `const ID`, and
-  a `#[derive(Interface)]` assigning each message variant its method
-  ordinal and kind, per §2.9 — the next increment;
+- **`Interface::ID`** — the `Interface` marker gaining its `const ID:
+  u32`, the interface side of §2.9's contract (the message side, `Method`,
+  is done) — the next increment;
 - the **`Cap` two-backend rework** — `Cap<I, R>`'s IPC backend and `Wire`
   impl on top of that layer (§2.8, §3.4);
 - the broker **wiring an authority graph** — spawning a manifest set and
