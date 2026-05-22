@@ -41,6 +41,14 @@ pub trait Interface: 'static {
     type Message: Send + 'static;
 }
 
+/// The ring a [`Cap`] dispatches to (`broker-and-transport.md` §2.8).
+/// `Local` is the in-process ring (looper-framework §3); the IPC backend
+/// joins it as the FreeBSD transport work lands.
+enum Backend<I: Interface> {
+    /// An in-process `abyss-looper` channel of typed messages.
+    Local(Sender<I::Message>),
+}
+
 /// A typed, rights-bearing **send** capability — the send endpoint of a
 /// ring (§7.1), typed by the interface `I` it speaks and the rights `R`
 /// its holder was granted.
@@ -49,15 +57,15 @@ pub trait Interface: 'static {
 /// many clients is many capabilities, each minted for one connection —
 /// never a duplicated one (§10.1).
 pub struct Cap<I: Interface, R: Rights> {
-    sender: Sender<I::Message>,
+    backend: Backend<I>,
     _marker: PhantomData<fn() -> (I, R)>,
 }
 
-/// Create a connected capability and its receiver, over a ring of the
-/// given capacity.
+/// Create a connected capability and its receiver over an in-process ring
+/// — the [`Backend::Local`] backend — of the given capacity.
 ///
-/// In the running system the broker mints these as it wires the authority
-/// graph; this is the direct constructor for tests and bring-up.
+/// This is the constructor for host tests and bring-up; the broker builds
+/// IPC-backed capabilities when it wires the authority graph (§5.2).
 ///
 /// # Panics
 ///
@@ -66,7 +74,7 @@ pub fn cap_channel<I: Interface, R: Rights>(capacity: usize) -> (Cap<I, R>, Rece
     let (sender, receiver) = channel(capacity);
     (
         Cap {
-            sender,
+            backend: Backend::Local(sender),
             _marker: PhantomData,
         },
         receiver,
@@ -77,12 +85,16 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// Send a message. Awaiting suspends the calling handler — never the
     /// looper thread — if the ring is full (§3.1).
     pub async fn send(&self, msg: I::Message) -> Result<(), RingClosed> {
-        self.sender.send(msg).await
+        match &self.backend {
+            Backend::Local(sender) => sender.send(msg).await,
+        }
     }
 
     /// Send without waiting; on a full ring the message is returned.
     pub fn try_send(&self, msg: I::Message) -> Result<(), TrySendError<I::Message>> {
-        self.sender.try_send(msg)
+        match &self.backend {
+            Backend::Local(sender) => sender.try_send(msg),
+        }
     }
 
     /// Narrow to a weaker rights set.
@@ -108,7 +120,7 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// ```
     pub fn narrow<R2: SubsetOf<R>>(self) -> Cap<I, R2> {
         Cap {
-            sender: self.sender,
+            backend: self.backend,
             _marker: PhantomData,
         }
     }
@@ -123,8 +135,12 @@ impl<I: Interface, R: Rights> Cap<I, R> {
         Rep: Send + 'static,
         F: FnOnce(Sender<Rep>) -> I::Message,
     {
-        let (reply_tx, mut reply_rx) = channel::<Rep>(1);
-        self.sender.send(build(reply_tx)).await?;
-        reply_rx.recv().await
+        match &self.backend {
+            Backend::Local(sender) => {
+                let (reply_tx, mut reply_rx) = channel::<Rep>(1);
+                sender.send(build(reply_tx)).await?;
+                reply_rx.recv().await
+            }
+        }
     }
 }
