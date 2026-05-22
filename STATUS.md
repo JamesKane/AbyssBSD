@@ -32,6 +32,7 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `c8fdb0e` Phase 4: abyss-looper — a Spawner for a running looper
 - `5df312f` Phase 4: design — Cap: Wire in code, and binding (§3.5)
 - `abc68e9` Bump STATUS: Phase 4 — Cap::call reshaped to the typed request
 - `4942140` Phase 4: abyss-cap — Cap::call reshaped to the typed request (§2.10)
@@ -41,7 +42,6 @@ FreeBSD remainder.
 - `751cf93` Phase 4: abyss-looper — the Responder reply handle
 - `fa0c688` Bump STATUS: Phase 4 — the Request trait and derive
 - `689c97a` Phase 4: abyss-msg — the Request trait and #[derive(Request)]
-- `e7ee089` Bump STATUS: Phase 4 — typed request and reply design pass
 
 ## Site
 
@@ -139,8 +139,13 @@ exactly the request's `Q::Reply`, framework-mediated over either backend,
 no embedded `Sender`. The multi-looper harness passes on the reshaped
 path. A design pass (§3.5) has since pinned `Cap: Wire`'s mechanics —
 `to_wire`'s fd dup, the unbound `Cap` `from_wire` yields, and `Cap::bind`
-attaching a received capability to its looper's reactor. `cargo xtask ci`
-green on macOS and FreeBSD; tree clean.
+attaching a received capability to its looper's reactor. The first
+`Cap: Wire` increment is down: `abyss-looper` gained a **`Spawner`** — a
+cloneable, `Send` handle that adds tasks to a running looper
+(looper-framework §10), drained and installed at the start of every run
+turn. It is the prerequisite `Cap::bind` needs to spawn a received
+capability's `serve` loop onto the looper that received it.
+`cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
