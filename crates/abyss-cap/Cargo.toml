@@ -10,5 +10,15 @@ publish = false
 [dependencies]
 abyss-looper = { path = "../abyss-looper" }
 
+# The IPC backend (broker-and-transport.md §2.8) is FreeBSD-only — the
+# `SOCK_SEQPACKET` transport — so its dependencies are pulled only there.
+[target.'cfg(target_os = "freebsd")'.dependencies]
+abyss-msg = { path = "../abyss-msg" }
+abyss-transport = { path = "../abyss-transport" }
+
+# The IPC test derives Wire and Method on its message enum.
+[target.'cfg(target_os = "freebsd")'.dev-dependencies]
+abyss-msg-derive = { path = "../abyss-msg-derive" }
+
 [lints]
 workspace = true

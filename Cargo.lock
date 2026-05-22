@@ -27,6 +27,9 @@ name = "abyss-cap"
 version = "0.0.0"
 dependencies = [
  "abyss-looper",
+ "abyss-msg",
+ "abyss-msg-derive",
+ "abyss-transport",
 ]
 
 [[package]]
