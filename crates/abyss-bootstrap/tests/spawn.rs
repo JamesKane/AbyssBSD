@@ -14,6 +14,7 @@ use abyss_broker::graph::Graph;
 use abyss_broker::manifest::Manifest;
 use abyss_broker::session::{Exit, Program, Session};
 use abyss_broker::spawn::spawn_component;
+use abyss_broker::spawnable::SpawnableSet;
 use abyss_bundle::Bundle;
 use abyss_msg::{Envelope, Header, MessageKind, Value};
 
@@ -112,7 +113,7 @@ fn a_wired_session_lets_its_components_converse() {
     let mut catalogue = InterfaceCatalogue::new();
     catalogue.register("input", &[("recv", 1)]);
     let binary = probe();
-    let session = Session::launch(graph, catalogue, |_name| Program {
+    let session = Session::launch(graph, catalogue, SpawnableSet::new(), |_name| Program {
         path: binary.clone(),
         args: Vec::new(),
     })
@@ -160,7 +161,7 @@ fn a_wired_session_refuses_an_ungranted_call() {
     catalogue.register("callee-svc", &[("recv", 1)]);
 
     let binary = probe();
-    let session = Session::launch(graph, catalogue, |_name| Program {
+    let session = Session::launch(graph, catalogue, SpawnableSet::new(), |_name| Program {
         path: binary.clone(),
         args: Vec::new(),
     })
@@ -204,7 +205,7 @@ fn a_restarted_peer_is_re_wired_and_a_call_after_it_still_answers() {
     // The `durable` argument selects the probe's §5.5 client path; the
     // server runs the ordinary serve-one-then-exit path.
     let binary = probe();
-    let mut session = Session::launch(graph, catalogue, |name| Program {
+    let mut session = Session::launch(graph, catalogue, SpawnableSet::new(), |name| Program {
         path: binary.clone(),
         args: if name == "rt-client" {
             vec!["durable".to_owned()]

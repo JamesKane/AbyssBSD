@@ -16,6 +16,7 @@ use crate::catalogue::{CatalogueLoadError, InterfaceCatalogue};
 use crate::graph::{Graph, GraphError};
 use crate::manifest::{LoadError, Manifest};
 use crate::session::{Program, Session, SessionError};
+use crate::spawnable::{SpawnableError, SpawnableSet};
 
 /// Why the broker could not bring a session up — a boot fault (§5.1).
 #[derive(Debug)]
@@ -26,6 +27,8 @@ pub enum BootError {
     Graph(GraphError),
     /// The interface catalogue could not be loaded.
     Catalogue(CatalogueLoadError),
+    /// The spawnable manifest set could not be loaded (§5.6).
+    Spawnable(SpawnableError),
     /// The session could not be wired and spawned.
     Session(SessionError),
 }
@@ -36,6 +39,7 @@ impl fmt::Display for BootError {
             BootError::Manifests(err) => write!(f, "boot fault: {err}"),
             BootError::Graph(err) => write!(f, "boot fault: invalid authority graph: {err}"),
             BootError::Catalogue(err) => write!(f, "boot fault: {err}"),
+            BootError::Spawnable(err) => write!(f, "boot fault: {err}"),
             BootError::Session(err) => write!(f, "boot fault: {err}"),
         }
     }
@@ -61,6 +65,12 @@ impl From<CatalogueLoadError> for BootError {
     }
 }
 
+impl From<SpawnableError> for BootError {
+    fn from(err: SpawnableError) -> Self {
+        BootError::Spawnable(err)
+    }
+}
+
 impl From<SessionError> for BootError {
     fn from(err: SessionError) -> Self {
         BootError::Session(err)
@@ -70,27 +80,30 @@ impl From<SessionError> for BootError {
 /// Bring a session up from disk (§5.1).
 ///
 /// `manifest_dir` is the directory of component manifests (§4, §5.2);
-/// `catalogue_file` is the interface catalogue (§3.3); `bin_dir` is where
-/// component binaries live — a component named `n` is run from the binary
-/// `bin_dir/n` (§5.3). Returns the launched [`Session`] — every component
-/// spawned, wired, and supervised — for the caller to drive with
-/// [`Session::step`].
+/// `catalogue_file` is the interface catalogue (§3.3); `spawnable_dir` is
+/// the directory of on-demand-spawnable manifests (§5.6), read but not
+/// spawned; `bin_dir` is where component binaries live — a component named
+/// `n` is run from the binary `bin_dir/n` (§5.3). Returns the launched
+/// [`Session`] — every boot component spawned, wired, and supervised — for
+/// the caller to drive with [`Session::step`].
 ///
 /// Any failure along the way is a [`BootError`]: a boot fault, which the
 /// broker reports before dropping to the recovery floor (§5.1, §9).
 pub fn boot(
     manifest_dir: &Path,
     catalogue_file: &Path,
+    spawnable_dir: &Path,
     bin_dir: &Path,
 ) -> Result<Session, BootError> {
     let manifests = Manifest::load_dir(manifest_dir)?;
     let graph = Graph::build(manifests)?;
     let catalogue = InterfaceCatalogue::load(catalogue_file)?;
+    let spawnable = SpawnableSet::load(spawnable_dir)?;
 
     // A component is run from `bin_dir/<name>` and takes no arguments —
     // its bootstrap bundle is its whole input (§5.3).
     let bin_dir = bin_dir.to_path_buf();
-    let session = Session::launch(graph, catalogue, move |name| Program {
+    let session = Session::launch(graph, catalogue, spawnable, move |name| Program {
         path: bin_dir.join(name),
         args: Vec::new(),
     })?;

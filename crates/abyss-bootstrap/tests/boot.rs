@@ -22,7 +22,8 @@ fn probe() -> PathBuf {
 }
 
 /// A temp directory tree unique to the test, removed when dropped: a
-/// `manifests/` directory, a `catalogue` file, and a `bin/` directory.
+/// `manifests/` directory, a `catalogue` file, a `spawnable/` directory,
+/// and a `bin/` directory.
 struct BootTree {
     root: PathBuf,
 }
@@ -34,17 +35,24 @@ impl BootTree {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir(&root).expect("create the boot tree root");
         fs::create_dir(root.join("manifests")).expect("create the manifests directory");
+        fs::create_dir(root.join("spawnable")).expect("create the spawnable directory");
         fs::create_dir(root.join("bin")).expect("create the bin directory");
         BootTree { root }
     }
 
-    /// Write a component manifest, and symlink the component's binary —
+    /// Write a boot component's manifest, and symlink its binary —
     /// `bin/<name>` — to the probe, as the broker's `bin_dir/<name>`
     /// convention expects.
     fn component(&self, name: &str, manifest: &str) {
         fs::write(self.root.join("manifests").join(name), manifest)
             .expect("write a component manifest");
         symlink(probe(), self.root.join("bin").join(name)).expect("symlink the component binary");
+    }
+
+    /// Write a spawnable manifest — read at boot but not spawned (§5.6).
+    fn spawnable(&self, name: &str, manifest: &str) {
+        fs::write(self.root.join("spawnable").join(name), manifest)
+            .expect("write a spawnable manifest");
     }
 
     fn catalogue(&self, contents: &str) {
@@ -57,6 +65,10 @@ impl BootTree {
 
     fn catalogue_file(&self) -> PathBuf {
         self.root.join("catalogue")
+    }
+
+    fn spawnable_dir(&self) -> PathBuf {
+        self.root.join("spawnable")
     }
 
     fn bin_dir(&self) -> PathBuf {
@@ -114,20 +126,39 @@ fn the_broker_boots_a_wired_session_from_disk() {
     );
     tree.component("boot-log", &manifest("boot-log", "boot-log-iface", ""));
 
+    // A spawnable manifest: read at boot, but not spawned (§5.6).
+    tree.spawnable(
+        "boot-editor.manifest",
+        &manifest("boot-editor", "boot-editor-iface", ""),
+    );
+
     // The catalogue resolves the peer capability's `recv` class — the
     // probe's `Ping` is method ordinal 0, in the `recv` class.
     tree.catalogue("[interface]\nname = boot-input-iface\nrecv = 0\n");
 
-    // Boot the broker: load the manifests and catalogue, build the graph,
-    // launch the session. The session is not stepped — the probes run and
-    // exit unsupervised; the `Session`'s `Drop` removes every jail.
+    // Boot the broker: load the manifests, catalogue, and spawnable set,
+    // build the graph, launch the session. The session is not stepped —
+    // the probes run and exit unsupervised; `Session`'s `Drop` removes
+    // every jail.
     let session = boot(
         &tree.manifests_dir(),
         &tree.catalogue_file(),
+        &tree.spawnable_dir(),
         &tree.bin_dir(),
     )
     .expect("the broker boots the session");
     assert_eq!(session.components().count(), 3);
+
+    // The spawnable manifest was loaded — ready to spawn on request — but
+    // not spawned: it is no part of the running session.
+    assert!(
+        session.spawnable().get("boot-editor").is_some(),
+        "the spawnable manifest is loaded and nameable",
+    );
+    assert!(
+        session.component("boot-editor").is_none(),
+        "the spawnable manifest was not spawned at boot",
+    );
 
     let mut reports: HashMap<String, [i64; 4]> = HashMap::new();
     for (name, component) in session.components() {

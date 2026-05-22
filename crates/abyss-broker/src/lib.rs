@@ -16,6 +16,8 @@
 //!   between them, computed and validated from a manifest set (§5.2).
 //! - [`catalogue`] — the interface catalogue: resolving a manifest's rights
 //!   tokens to an object-rights mask (§3.3).
+//! - [`spawnable`] — the spawnable manifest set: the catalogue of what a
+//!   delegated spawn may name (§5.6).
 //!
 //! FreeBSD-only:
 //!
@@ -36,6 +38,7 @@
 pub mod catalogue;
 pub mod graph;
 pub mod manifest;
+pub mod spawnable;
 
 #[cfg(target_os = "freebsd")]
 pub mod spawn;

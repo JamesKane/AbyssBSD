@@ -37,6 +37,7 @@ use crate::catalogue::{CatalogueError, InterfaceCatalogue};
 use crate::graph::Graph;
 use crate::manifest::RestartPolicy;
 use crate::spawn::{Component, spawn_component};
+use crate::spawnable::SpawnableSet;
 
 /// The program to exec for a component — its binary and argument vector.
 pub struct Program {
@@ -108,6 +109,9 @@ pub struct Session {
     catalogue: InterfaceCatalogue,
     /// Each component's resolved program, so it can be respawned.
     programs: HashMap<String, Program>,
+    /// The manifests a delegated spawn may name — read at boot, spawned
+    /// only on a `SpawnChild` request (§5.6).
+    spawnable: SpawnableSet,
     /// The reactor every component's process descriptor is watched on.
     reactor: Reactor,
     /// Every component, live, in graph order.
@@ -120,15 +124,18 @@ impl Session {
     /// `kqueue` reactor, ready for [`step`](Self::step) to watch.
     ///
     /// `catalogue` resolves each connection's requested rights classes to
-    /// the object-rights mask the broker mints for it (§3.3). `program`
-    /// resolves a component name to the binary to exec; it is consulted
-    /// once per component now and again on every restart.
+    /// the object-rights mask the broker mints for it (§3.3). `spawnable`
+    /// is the set of manifests a delegated spawn may name later (§5.6);
+    /// none of it is spawned now. `program` resolves a component name to
+    /// the binary to exec; it is consulted once per component now and
+    /// again on every restart.
     ///
     /// If a spawn fails, the components already spawned are torn down before
     /// the error is returned, so a failed launch leaves no jails behind.
     pub fn launch<F>(
         graph: Graph,
         catalogue: InterfaceCatalogue,
+        spawnable: SpawnableSet,
         program: F,
     ) -> Result<Session, SessionError>
     where
@@ -163,9 +170,15 @@ impl Session {
             graph,
             catalogue,
             programs,
+            spawnable,
             reactor,
             components,
         })
+    }
+
+    /// The set of manifests a delegated spawn may name (§5.6).
+    pub fn spawnable(&self) -> &SpawnableSet {
+        &self.spawnable
     }
 
     /// The live process of a component, by name.
@@ -715,7 +728,7 @@ mod tests {
         // The callee lives just long enough to be registered, then exits;
         // the caller lingers so it is a live peer to be re-wired.
         let callee_name = callee.clone();
-        let mut session = Session::launch(graph, catalogue, |name| {
+        let mut session = Session::launch(graph, catalogue, SpawnableSet::new(), |name| {
             let script = if name == callee_name {
                 "sleep 0.3"
             } else {
@@ -772,10 +785,15 @@ mod tests {
         )])
         .expect("the graph builds");
 
-        let mut session = Session::launch(graph, InterfaceCatalogue::new(), |_name| Program {
-            path: PathBuf::from("/bin/sh"),
-            args: vec!["-c".to_owned(), script.to_owned()],
-        })
+        let mut session = Session::launch(
+            graph,
+            InterfaceCatalogue::new(),
+            SpawnableSet::new(),
+            |_name| Program {
+                path: PathBuf::from("/bin/sh"),
+                args: vec!["-c".to_owned(), script.to_owned()],
+            },
+        )
         .expect("the session launches");
 
         let exits = session.step().expect("supervise one exit");

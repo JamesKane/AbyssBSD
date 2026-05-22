@@ -19,8 +19,10 @@ fn main() -> std::process::ExitCode {
     use std::process::ExitCode;
 
     let args: Vec<String> = std::env::args().collect();
-    let [_, manifest_dir, catalogue, bin_dir] = args.as_slice() else {
-        abyss_log::error!("usage: abyss-broker <manifest-dir> <catalogue-file> <bin-dir>");
+    let [_, manifest_dir, catalogue, spawnable_dir, bin_dir] = args.as_slice() else {
+        abyss_log::error!(
+            "usage: abyss-broker <manifest-dir> <catalogue-file> <spawnable-dir> <bin-dir>",
+        );
         return ExitCode::from(2);
     };
 
@@ -29,6 +31,7 @@ fn main() -> std::process::ExitCode {
     let mut session = match abyss_broker::boot(
         Path::new(manifest_dir),
         Path::new(catalogue),
+        Path::new(spawnable_dir),
         Path::new(bin_dir),
     ) {
         Ok(session) => session,
