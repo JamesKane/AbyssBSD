@@ -210,6 +210,63 @@ process boundary. An in-process `Cap` never serializes — it moves as a
 value (looper-framework §7) — so the absence of a `Wire` impl off FreeBSD
 costs nothing.
 
+### 2.9 The interface contract: identity and dispatch
+
+§2.8 fixed where a `Cap`'s backend lives; this fixes how `Cap::send` and
+`Cap::call` turn a typed message into a wire `Header` — its
+`interface_id`, `method_id`, and `MessageKind` (wire-format §3.3). The
+shipping precedents — Wayland's `object_id` + `opcode`, FIDL's channel
+plus method ordinal, Cap'n Proto, Binder — converge on one shape, and
+AbyssBSD takes it.
+
+**The interface id belongs to the ring, not the message.** Each of those
+systems keys the interface off the connection; none re-derives it per
+message from the payload. So `Interface` carries `const ID: u32` beside
+`type Message`. A ring is single-interface — a `Cap<I, R>` is typed by
+`I` — so the IPC `Cap` stamps `header.interface_id` from `I::ID`. The
+envelope keeps the field (Gate A, wire-format §3.3), but on an IPC ring
+it is a redundant cross-check, not a dispatch input. `ID`s are assigned
+in the `interfaces/` catalogue; deriving each as a truncated hash of the
+interface name — FIDL's move, which removes hand-numbering — is recorded
+as a possible refinement, not adopted here.
+
+**The method id is a declaration-order ordinal.** A message type is an
+enum of the interface's requests, commands, and events; each variant
+takes a `method_id` by declaration order — Wayland's `opcode`, Binder's
+transaction code, Cap'n Proto's `@N`. FIDL instead hashes the method name
+to a 64-bit ordinal, buying registry-free evolution across a whole OS's
+protocols at a measured collision rate — a scale AbyssBSD's curated
+interface set does not reach. A `u16` ordinal is simpler and sufficient;
+reordering variants is an ABI break, as under any ordinal scheme, and the
+catalogue is the one versioned place.
+
+**The kind belongs to the variant.** Whether a variant is a Request,
+Command, or Event is marked on it — `#[request]`, `#[command]`,
+`#[event]` — and read into `header.kind`. Wayland splits request from
+event structurally, by direction; AbyssBSD's `MessageKind` is explicit,
+so it is named per variant.
+
+**The mapping is derived, not hand-written.** `wayland-scanner`, `fidlc`,
+`capnp`, `aidl` — every comparable system generates the typed-to-wire
+mapping. AbyssBSD's in-language equivalent is the derive macro:
+`#[derive(Interface)]` on the message enum, beside `#[derive(Wire)]` on
+its payloads, emits `I::ID`, the per-variant ordinals, and a
+`header(&self) -> Header`. `Cap::send` and `Cap::call` over IPC call it,
+then hand the envelope from `Envelope::from_message` to
+`Connection::send` / `Connection::call`.
+
+**`Wire` lands as a method bound.** Those systems sidestep this by
+emitting a per-interface stub type whose methods are monomorphic and
+already serialising. AbyssBSD has one generic `Cap<I, R>`, so the bound
+is explicit: `Cap::send` and `Cap::call` carry `where I::Message: Wire`.
+The `Interface` trait stays free of it (§2.8) — a `Cap` of a non-`Wire`
+interface may exist and serve in-process, it simply cannot cross to IPC.
+Since §2.5 holds that an interface's messages are `Wire` by nature, the
+bound costs nothing real.
+
+With identity and dispatch pinned, the §2.8 backend rework and `Cap:
+Wire` (§3.4) are mechanical.
+
 ---
 
 ## 3. Capabilities across a process boundary
