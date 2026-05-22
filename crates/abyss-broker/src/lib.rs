@@ -13,6 +13,8 @@
 //! - [`manifest`] — the component manifest: the schema and its parser (§4).
 //! - [`graph`] — the static authority graph: components and the connections
 //!   between them, computed and validated from a manifest set (§5.2).
+//! - [`catalogue`] — the interface catalogue: resolving a manifest's rights
+//!   tokens to an object-rights mask (§3.3).
 //!
 //! FreeBSD-only:
 //!
@@ -31,6 +33,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod catalogue;
 pub mod graph;
 pub mod manifest;
 

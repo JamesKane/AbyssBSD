@@ -13,6 +13,7 @@
 //! ring it touches already assigned.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::io;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::path::PathBuf;
@@ -22,6 +23,7 @@ use abyss_msg::{Envelope, Header, MessageKind};
 use abyss_transport::Channel;
 use freebsd_capsicum_sys::{CapRights, Rights};
 
+use crate::catalogue::{CatalogueError, InterfaceCatalogue};
 use crate::graph::Graph;
 use crate::spawn::{Component, spawn_component};
 
@@ -41,6 +43,39 @@ pub struct WiredComponent {
     pub component: Component,
 }
 
+/// Why [`Session::wire`] failed.
+#[derive(Debug)]
+pub enum SessionError {
+    /// A descriptor operation failed — creating or limiting a ring.
+    Io(io::Error),
+    /// A connection's requested rights did not resolve against the
+    /// interface catalogue — a malformed manifest set (§5.1).
+    Rights(CatalogueError),
+}
+
+impl From<io::Error> for SessionError {
+    fn from(err: io::Error) -> Self {
+        SessionError::Io(err)
+    }
+}
+
+impl From<CatalogueError> for SessionError {
+    fn from(err: CatalogueError) -> Self {
+        SessionError::Rights(err)
+    }
+}
+
+impl fmt::Display for SessionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionError::Io(err) => write!(f, "wiring a session: {err}"),
+            SessionError::Rights(err) => write!(f, "wiring a session: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for SessionError {}
+
 /// The broker's pre-wiring of one manifest set (§5.2).
 ///
 /// [`Session::wire`] computes it — a `SOCK_SEQPACKET` ring per connection,
@@ -56,11 +91,14 @@ impl Session {
     /// Pre-wire `graph`: create a `SOCK_SEQPACKET` ring for every
     /// connection and assemble each component's bundle. No process is
     /// spawned — every ring is created here, before [`spawn`](Self::spawn).
-    pub fn wire(graph: &Graph) -> io::Result<Session> {
+    ///
+    /// `catalogue` resolves each connection's requested rights classes to
+    /// the object-rights mask the broker mints for it (§3.3).
+    pub fn wire(graph: &Graph, catalogue: &InterfaceCatalogue) -> Result<Session, SessionError> {
         // The §3.3 kernel mask every service ring carries, built once and
         // applied to each ring descriptor before it enters a bundle.
         let ring_rights = CapRights::new(service_ring_rights());
-        let body = ring_cap_body(&ring_rights);
+        let cap_rights = ring_cap_rights(&ring_rights);
 
         // Seed every component with a grant list — one with no connections
         // still gets a bundle, an empty one.
@@ -73,6 +111,14 @@ impl Session {
         // One ring per connection: the requester holds the client end, the
         // provider the server end (§5.2).
         for connection in graph.connections() {
+            // The object-rights mask the broker mints for this connection
+            // — the requester's rights tokens resolved against the
+            // provider interface's catalogue (§3.3). Both ends carry it.
+            let object_rights = catalogue.resolve(&connection.interface, &connection.rights)?;
+            let body = CapBody {
+                cap_rights,
+                object_rights,
+            };
             let (client_end, server_end) = Channel::pair()?;
             push_grant(
                 &mut grants,
@@ -184,11 +230,10 @@ fn service_ring_rights() -> Rights {
         .with(Rights::FSTAT)
 }
 
-/// The §3.2 handle-table body for a service-ring grant: the kernel
-/// `cap_rights` mask `ring` was built from, recorded as the metadata that
-/// rides with the descriptor. The object-rights set is still zero — the
-/// §3.3 object layer is the next increment (`docs/TECH-DEBT.md`).
-fn ring_cap_body(ring: &CapRights) -> CapBody {
+/// The §3.2 `cap_rights` bytes a service-ring grant records — the kernel
+/// mask `ring` was built from. A grant's `CapBody` pairs these with the
+/// connection's object-rights mask (§3.3).
+fn ring_cap_rights(ring: &CapRights) -> [u8; 16] {
     let bytes = ring.as_bytes();
     let mut cap_rights = [0u8; 16];
     assert_eq!(
@@ -197,10 +242,7 @@ fn ring_cap_body(ring: &CapRights) -> CapBody {
         "a cap_rights_t is 16 bytes (broker-and-transport.md §3.2)",
     );
     cap_rights.copy_from_slice(bytes);
-    CapBody {
-        cap_rights,
-        object_rights: 0,
-    }
+    cap_rights
 }
 
 /// The header of a bootstrap-bundle envelope. The bundle rides on no
@@ -253,7 +295,11 @@ mod tests {
         ])
         .expect("the graph builds");
 
-        let session = Session::wire(&graph).expect("the session wires");
+        // `input`'s rights classes — the `peer` capability asks for `recv`.
+        let mut catalogue = InterfaceCatalogue::new();
+        catalogue.register("input", &[("recv", 0b01), ("send", 0b10)]);
+
+        let session = Session::wire(&graph, &catalogue).expect("the session wires");
         assert_eq!(session.bundles().len(), 3);
 
         // The requester holds the client end of the ring …
@@ -275,13 +321,41 @@ mod tests {
             "both ends of a ring carry the same service-ring mask",
         );
 
+        // And the object-rights mask the catalogue resolved `recv` to —
+        // the same on both ends of the connection.
+        assert_eq!(compositor.grants[0].rights.object_rights, 0b01);
+        assert_eq!(input.grants[0].rights.object_rights, 0b01);
+
         // A component that peers no one is wired an empty bundle.
         assert!(bundle_of(&session, "log").grants.is_empty());
     }
 
     #[test]
     fn an_empty_manifest_set_wires_to_an_empty_session() {
-        let session = Session::wire(&Graph::build(vec![]).expect("graph")).expect("wire");
+        let graph = Graph::build(vec![]).expect("graph");
+        let session = Session::wire(&graph, &InterfaceCatalogue::new()).expect("wire");
         assert!(session.bundles().is_empty());
+    }
+
+    #[test]
+    fn an_unknown_rights_class_fails_the_wiring() {
+        // The manifest asks for `recv`, but the catalogue's `input` has no
+        // such class — a malformed manifest set (§5.1).
+        let graph = Graph::build(vec![
+            manifest("compositor", "display", &peer("input")),
+            manifest("input", "input", ""),
+        ])
+        .expect("the graph builds");
+
+        let mut catalogue = InterfaceCatalogue::new();
+        catalogue.register("input", &[("send", 0b10)]);
+
+        match Session::wire(&graph, &catalogue) {
+            Err(SessionError::Rights(CatalogueError::UnknownRightsClass { class, .. })) => {
+                assert_eq!(class, "recv");
+            }
+            Err(other) => panic!("expected an unknown-rights-class error, got {other:?}"),
+            Ok(_) => panic!("expected the wiring to fail"),
+        }
     }
 }

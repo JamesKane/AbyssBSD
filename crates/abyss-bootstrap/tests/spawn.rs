@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use abyss_broker::catalogue::InterfaceCatalogue;
 use abyss_broker::graph::Graph;
 use abyss_broker::manifest::Manifest;
 use abyss_broker::session::{Program, Session};
@@ -98,8 +99,11 @@ fn a_wired_session_lets_its_components_converse() {
     .expect("the graph builds");
 
     // Wire the session — a ring per connection, a bundle per component —
-    // and spawn every component as the bootstrap probe.
-    let session = Session::wire(&graph).expect("the session wires");
+    // and spawn every component as the bootstrap probe. The catalogue
+    // resolves the `input` peer capability's `recv` rights class.
+    let mut catalogue = InterfaceCatalogue::new();
+    catalogue.register("input", &[("recv", 1)]);
+    let session = Session::wire(&graph, &catalogue).expect("the session wires");
     let binary = probe();
     let wired = session
         .spawn(|_name| Program {

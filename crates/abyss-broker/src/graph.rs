@@ -40,6 +40,11 @@ pub struct Connection {
     pub provider: String,
     /// The interface the requester named.
     pub interface: String,
+    /// The object-rights classes the requester asked for on this
+    /// connection — the `rights` of its `peer` capability (§3.3). The
+    /// broker resolves these against the interface's catalogue to mint the
+    /// connection's object-rights mask.
+    pub rights: Vec<String>,
 }
 
 /// The validated static authority graph.
@@ -167,6 +172,7 @@ impl Graph {
                     requester: m.name.clone(),
                     provider: provider.name.clone(),
                     interface: cap.target.clone(),
+                    rights: cap.rights.clone(),
                 });
             }
         }
