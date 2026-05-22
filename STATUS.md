@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `0a52e92` Phase 4: design — typed request and reply (§2.10)
+- `b337cd8` Bump STATUS: Phase 4 — the Cap IPC backend, send dispatch
 - `1ed3820` Phase 4: abyss-cap — the Cap IPC backend, send dispatch
 - `1963a6d` Bump STATUS: Phase 4 — Cap holds a Backend
 - `e8bddbe` Phase 4: abyss-cap — Cap holds a Backend
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `21369f0` Bump STATUS: Phase 4 — the Method trait and derive
 - `b610b8d` Phase 4: abyss-msg — the Method trait and #[derive(Method)]
 - `2004c3e` Bump STATUS: Phase 4 — the interface contract design pass
-- `b2c7d17` Phase 4: design — the interface contract, identity and dispatch (§2.9)
-- `b0ebdd3` Bump STATUS: Phase 4 — Connection::send, the one-way message
 
 ## Site
 
@@ -125,18 +125,19 @@ the **`Cap` rework** is under way — `Cap<I, R>` holds a `Backend`, both
 variants now in: `Local` (the in-process ring) and `Ipc` (an
 `abyss-transport` `Connection`). `Cap::send` dispatches over either;
 sent over IPC, a message is framed with its interface and method identity
-and crosses a real `SOCK_SEQPACKET` ring. `cargo xtask ci` green on macOS
-and FreeBSD; tree clean.
+and crosses a real `SOCK_SEQPACKET` ring. A further design pass (§2.10)
+pinned the typed request/reply shape `Cap::call` reshapes to — precise
+per-request, each request its own type carrying its reply type, the
+gRPC / FIDL shape. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`Cap::call` over IPC** — reshaping the request/reply path from the
-  in-process embedded-`Sender` form to §2.7's framework-mediated
-  `Responder`; it needs per-Request reply types, a further slice of the
-  interface contract — the next increment;
+- the **typed request layer** — the `Request` trait (`type Reply`), the
+  derive emitting it and `From<request> for I::Message` per Request
+  variant, and `Cap::call<Q>` reshaped per §2.10 — the next increment;
 - **`Cap: Wire`** — a `Cap` itself delivered inside a message (§3.4);
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
