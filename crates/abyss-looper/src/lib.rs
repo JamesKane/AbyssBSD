@@ -32,6 +32,6 @@ pub use block::block_on;
 pub use channel::{Receiver, Sender, channel};
 pub use error::{RingClosed, TryRecvError, TrySendError};
 pub use event_source::EventSource;
-pub use handler::{Ctx, Handler};
+pub use handler::{Ctx, Delivery, Handler};
 pub use looper::Looper;
 pub use responder::{Responder, responder};
