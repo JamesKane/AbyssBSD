@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `943141e` Phase 4: abyss-looper — fix a lost wakeup, a responder leak, and slot growth
+- `36ca290` Bump STATUS: Phase 4 — the broker wires an authority graph into a session
 - `e13ce72` Phase 4: abyss-broker — wire an authority graph into a spawned session (§5.2)
 - `c693146` Bump STATUS: Phase 4 — the bootstrap-bundle schema
 - `bc490e9` Phase 4: abyss-bundle — the bootstrap-bundle schema (§5.8)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `031f5a6` Phase 4: abyss-cap — Cap: Wire, and binding a received capability (§3.4–§3.5)
 - `22c60ed` Bump STATUS: Phase 4 — a Spawner for a running looper
 - `c8fdb0e` Phase 4: abyss-looper — a Spawner for a running looper
-- `5df312f` Phase 4: design — Cap: Wire in code, and binding (§3.5)
-- `abc68e9` Bump STATUS: Phase 4 — Cap::call reshaped to the typed request
 
 ## Site
 
@@ -167,8 +167,16 @@ component into being holding it. Verified in the VM: a three-component
 graph is wired and spawned, and each component decodes its bundle and
 finds exactly the grants its connections imply. The minted capabilities
 carry zero rights for now — the §3.3 rights mapping is deferred
-(`TECH-DEBT.md`). This increment is `cargo xtask ci`-green on macOS and
-FreeBSD.
+(`TECH-DEBT.md`).
+
+Three correctness defects in **`abyss-looper`** were then found and fixed,
+each with a regression test: a **lost wakeup** in the ring — a send
+cancelled while pending stranded its waker ahead of a live sender's, so a
+freed slot woke no one; a **responder leak** — `attach_service` held an
+unanswered request's responder past the handler, leaving its caller to
+hang; and **unbounded task-arena growth** — a completed task's slot was
+never reclaimed, now a generational slotmap that frees and reuses slots.
+`cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
