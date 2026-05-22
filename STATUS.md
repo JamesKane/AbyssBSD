@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `6a68f31` Phase 4: abyss-broker — a growable graph and pre-resolved spawn programs (§5.6)
+- `25cce69` Bump STATUS: Phase 4 — the bidirectional control connection (§5.6)
 - `139e450` Phase 4: abyss-broker — the bidirectional control connection (§5.6)
 - `e0278bd` Bump STATUS: Phase 4 — the spawnable manifest set (§5.6)
 - `d394731` Phase 4: abyss-broker — the spawnable manifest set (§5.6)
@@ -45,8 +47,6 @@ the FreeBSD remainder.
 - `a0599cd` Bump STATUS: Phase 4 — the kind = spawn capability (§5.6)
 - `8d23f75` Phase 4: abyss-broker — the `kind = spawn` capability (§5.6)
 - `b117b24` Bump STATUS: Phase 4 — delegated spawn designed (§5.6)
-- `8d87188` Phase 4: design — delegated spawn, the mechanism (§5.6)
-- `7c663e7` Track abyss-log in Cargo.lock
 
 ## Site
 
@@ -287,7 +287,7 @@ design: a spawnable manifest set the broker reads at boot but does not
 spawn; a bidirectional control connection carrying a `SpawnChild` request
 and its reply; a `kind = spawn` capability gating who may ask; and a
 mid-session child wired to running peers by reusing the §5.5
-`PeerRestarted` re-wiring. Three bricks are down — the **`kind = spawn`
+`PeerRestarted` re-wiring. Five bricks are down — the **`kind = spawn`
 capability** in the manifest schema, the permission the broker checks
 before honouring a request; the **`SpawnChild` / `SpawnReply`** control
 messages — the request a component sends the broker (naming a manifest,
@@ -295,13 +295,18 @@ carrying no authority) and the broker's answer — alongside `PeerRestarted`
 in the `abyss-bundle` schema crate; the **spawnable manifest set** —
 `SpawnableSet`, the broker's name-indexed catalogue of on-demand
 manifests, read at boot and held by the `Session`, spawned from only on
-request; and the **bidirectional control connection** — `Session::step`
+request; the **bidirectional control connection** — `Session::step`
 watches every component's control channel on the `kqueue` alongside the
-process descriptors, and answers a `SpawnChild` over it. The connection
-round-trips end to end (a wired test runs a lone component as a spawn
-requester), though the handler refuses every request for now. What
-remains is the real handler: mint the named child and wire it to running
-peers. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+process descriptors, and answers a `SpawnChild` over it (the connection
+round-trips end to end, though the handler refuses every request for
+now); and the **runtime support** the real handler needs — a growable
+authority graph (`Graph::add` joins a mid-session child, validated as
+`build` does) and a name→binary lookup that outlives the launch-time
+resolver (spawn programs pre-resolved for every spawnable manifest), the
+two frictions the design isolated. What remains is the handler itself:
+on a `SpawnChild`, check the `spawn` capability, mint the named child,
+spawn it, and wire it to live peers. `cargo xtask ci` green on macOS and
+FreeBSD; tree clean.
 
 ## Next
 
@@ -310,13 +315,12 @@ peers. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 - **building delegated spawn (§5.6)** — the `kind = spawn` capability,
   the `SpawnChild` / `SpawnReply` messages, the spawnable manifest set,
-  and the bidirectional control connection are in; what remains is the
-  real `SpawnChild` handler — check the requester's `spawn` capability,
-  mint the named child, spawn it into the running session, and wire it to
-  live peers through `PeerRestarted`. A mid-session child must join the
-  authority graph, which is `build`-once today — so this needs either a
-  `Graph::add` or an equivalent, and the `Session` keeping the program
-  resolver rather than dropping it after `launch`;
+  the bidirectional control connection, and the runtime support a
+  mid-session spawn needs (a growable graph, pre-resolved programs) are
+  all in; what remains is the real `SpawnChild` handler — check the
+  requester's `spawn` capability, mint the named child, spawn it into the
+  running session, and wire it to live peers through `PeerRestarted` — and
+  a wired end-to-end test of a `spawn`-capable component launching one;
 - **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
   a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
   crate, and a design pass first;
