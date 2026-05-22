@@ -33,6 +33,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `4cacbae` Phase 4: abyss-bootstrap — Control, the component-side §5.5 control loop
+- `3713eae` Bump STATUS: Phase 4 — AsyncMessageChannel, the async control channel (§5.5)
 - `442ba6c` Phase 4: abyss-transport — AsyncMessageChannel, the async control channel
 - `ba39aac` Bump STATUS: Phase 4 — Session/Supervisor unified (§5.5)
 - `edea028` Phase 4: §5.5 — Session and Supervisor unified into one runtime
@@ -41,8 +43,6 @@ the FreeBSD remainder.
 - `e381452` Phase 4: abyss-bundle — the PeerRestarted control message (§5.5)
 - `3f2a4d8` Bump STATUS: Phase 4 — PeerRestarted designed (§5.5)
 - `31f9b17` Phase 4: design — PeerRestarted, re-wiring a restarted component (§5.5)
-- `a9b7d26` Bump STATUS: Phase 4 — the object-rights layer enforced end to end
-- `04eed42` Phase 4: abyss-bootstrap — the probe serves through bind_service (§3.6)
 
 ## Site
 
@@ -238,24 +238,29 @@ component exit it *re-wires*, creating a fresh ring per connection the
 dead component touched, respawning it into a fresh bundle, and sending
 each surviving peer a `PeerRestarted` over that peer's control channel.
 Verified in the VM: a component that exits is re-wired and restarted, its
-live peer untouched. The component side has begun: `abyss-transport`
+live peer untouched. And the component side is built: `abyss-transport`
 gained **`AsyncMessageChannel`**, the bare-envelope async sibling of
 `AsyncChannel` — a component wraps its bootstrap channel in one to await
-`PeerRestarted` without blocking its looper thread. What remains is the
-control loop itself — decoding a received `PeerRestarted` and driving the
-`Repointer` — and a full multi-process restart test. `cargo xtask ci`
-green on macOS and FreeBSD; tree clean.
+`PeerRestarted` without blocking its looper thread — and `abyss-bootstrap`
+gained **`Control`**, the component's control loop. It watches that
+channel, decodes each `PeerRestarted`, and routes the fresh `Grant` to a
+per-interface rewire handler; `Control::durable_cap` makes a bound client
+`Cap` a `DurableCap` and registers the rewiring, so when the peer restarts
+the loop binds the fresh ring and repoints the capability at it. What
+remains is the full multi-process restart test — a `call` after a restart
+reaching the fresh peer, end to end. `cargo xtask ci` green on macOS and
+FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building §5.5 `PeerRestarted`** — the control message, the durable
-  capability, the unified session runtime with re-wire-on-restart, and
-  `AsyncMessageChannel` (the async control channel) are in; what remains
-  is the component-side control loop that decodes a `PeerRestarted` and
-  drives the `Repointer`, and a full multi-process restart test — the
+- **finishing §5.5 `PeerRestarted`** — the control message, the durable
+  capability, the unified session runtime with re-wire-on-restart, the
+  async control channel, and the component-side `Control` loop are all
+  in; what remains is the full multi-process restart test — kill a wired
+  peer, and prove a `call` after the restart reaches the fresh one — the
   next increment;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
