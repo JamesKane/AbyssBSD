@@ -429,6 +429,16 @@ and its unit is already in hand: `#[derive(Method)]` gives every message a
   is no wider than the `R` the receiving type asserts — a capability that
   arrives claiming more authority than its type is rejected.
 
+**The catalogue.** The rights classes are declared at the interface
+definition (the `#[derive(Method)]` site), but the broker links no
+component code — it is *given* the classes as data. That mapping,
+interface → its classes, is the **interface catalogue**: a declarative
+file the broker reads at boot (§5.1), the on-disk counterpart of the
+manifests and owned by the same curated system image. Each `[interface]`
+block names an interface and lists its classes, a class given as the
+method ordinals it covers — `present = 0, 1`. A malformed catalogue, or
+an unknown class named by a system manifest, is a boot fault (§5.1).
+
 **Enforcement is framework-mediated.** A connection's object-rights mask
 rides in the `CapBody` of *both* its grants — the client's, so the holder
 knows (and the type system can check) its authority; the server's, so the
@@ -647,8 +657,9 @@ One format, two trust levels (§10.5):
 component that **never enters capability mode** — it must keep creating
 jails and opening devices for the life of the session — so it is the
 permanently-unsandboxed root of the TCB, and therefore kept smallest and
-most audited. It reads the system manifests; a malformed *system* manifest
-is a **boot fault** and drops to the §9 recovery floor.
+most audited. It reads the system manifests and the interface catalogue
+(§3.3); a malformed *system* manifest, or catalogue, is a **boot fault**
+and drops to the §9 recovery floor.
 
 ### 5.2 The authority graph and pre-wiring
 
