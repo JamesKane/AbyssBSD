@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `1b31a68` Phase 4: abyss-cap — Interface::ID, the interface side of §2.9
+- `21369f0` Bump STATUS: Phase 4 — the Method trait and derive
 - `b610b8d` Phase 4: abyss-msg — the Method trait and #[derive(Method)]
 - `2004c3e` Bump STATUS: Phase 4 — the interface contract design pass
 - `b2c7d17` Phase 4: design — the interface contract, identity and dispatch (§2.9)
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `6b1bc65` Bump STATUS: Phase 4 — the Cap two-backend design pass
 - `266b8a4` Phase 4: design — pin the Cap two-backend crate structure (§2.8)
 - `39ec8f1` Bump STATUS: Phase 4 — the handle table carries fds
-- `1e616df` Phase 4: abyss-msg — the handle table carries fds
-- `b81f3f4` Bump STATUS: Phase 4 — the capability handle-table body layout
 
 ## Site
 
@@ -115,23 +115,24 @@ passes have pinned what the IPC backend lands in: §2.8 — the `Cap`
 two-backend crate structure (`abyss-cap` over `abyss-transport`, `Cap:
 Wire` gated to FreeBSD); §2.9 — the interface contract `Cap::send`/`call`
 dispatch through, its shape checked against the Wayland / FIDL / Cap'n
-Proto / Binder corpus. That contract's message side is built:
+Proto / Binder corpus. That contract layer is built:
 `abyss-msg`'s **`Method`** trait and **`#[derive(Method)]`** give a
 message its routing identity — the method ordinal (by declaration order)
-and the kind. `Connection::send` carries a one-way Command or Event, the
-IPC counterpart of `call`. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+and the kind — and `abyss-cap`'s **`Interface::ID`** gives the interface
+its id; together they name an envelope `Header`. `Connection::send`
+carries a one-way Command or Event, the IPC counterpart of `call`. `cargo
+xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`Interface::ID`** — the `Interface` marker gaining its `const ID:
-  u32`, the interface side of §2.9's contract (the message side, `Method`,
-  is done) — the next increment;
-- the **`Cap` two-backend rework** — `Cap<I, R>`'s IPC backend and `Wire`
-  impl on top of that layer (§2.8, §3.4);
+- the **`Cap` two-backend rework** — `Cap<I, R>` gaining its `Backend`
+  enum and IPC variant, `send`/`call` dispatching on it, then `Cap: Wire`
+  on top. Every input is now in place: the §2.8/§2.9 design, and the
+  `Method` / `Interface::ID` / `CapBody` / fd-handle-table pieces
+  (§2.8, §3.4) — the next increment;
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
