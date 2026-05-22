@@ -7,6 +7,7 @@ name = "abyss-bootstrap"
 version = "0.0.0"
 dependencies = [
  "abyss-broker",
+ "abyss-bundle",
  "abyss-msg",
  "abyss-transport",
  "freebsd-capsicum-sys",
@@ -16,10 +17,19 @@ dependencies = [
 name = "abyss-broker"
 version = "0.0.0"
 dependencies = [
+ "abyss-bundle",
  "abyss-msg",
  "abyss-transport",
  "freebsd-jail-sys",
  "freebsd-procdesc-sys",
+]
+
+[[package]]
+name = "abyss-bundle"
+version = "0.0.0"
+dependencies = [
+ "abyss-cap",
+ "abyss-msg",
 ]
 
 [[package]]

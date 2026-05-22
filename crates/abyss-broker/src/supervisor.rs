@@ -124,9 +124,13 @@ impl Drop for Supervisor {
 }
 
 /// Spawn the component described by `spec`.
+///
+/// The bundle carries no capability descriptors yet — wiring a supervised
+/// component's rings, and re-wiring them on restart, is the `PeerRestarted`
+/// work (§5.5).
 fn start(spec: &ComponentSpec) -> io::Result<Component> {
     let args: Vec<&str> = spec.args.iter().map(String::as_str).collect();
-    spawn_component(&spec.name, &spec.program, &args, &spec.bundle)
+    spawn_component(&spec.name, &spec.program, &args, &spec.bundle, &[])
 }
 
 #[cfg(test)]

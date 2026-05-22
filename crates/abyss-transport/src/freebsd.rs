@@ -75,6 +75,13 @@ impl Channel {
         Channel { fd }
     }
 
+    /// Consume the channel, surrendering its descriptor — used when the
+    /// broker pre-creates a ring and hands each end into a bundle grant
+    /// (§5.2).
+    pub fn into_fd(self) -> OwnedFd {
+        self.fd
+    }
+
     /// Send one datagram: `data` as the body, `fds` passed via `SCM_RIGHTS`.
     ///
     /// The descriptors are borrowed — the receiver is handed its own owned

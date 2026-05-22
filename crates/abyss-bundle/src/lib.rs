@@ -25,8 +25,12 @@
 
 use std::os::fd::{AsFd, OwnedFd};
 
-use abyss_cap::{CapBody, KIND_FD_CAPABILITY};
+use abyss_cap::KIND_FD_CAPABILITY;
 use abyss_msg::{HandleSink, HandleStore, RawHandle, Value, Wire, WireError};
+
+/// A capability's rights metadata (`broker-and-transport.md` §3.2),
+/// re-exported so a [`Grant`] can be built without naming `abyss-cap`.
+pub use abyss_cap::CapBody;
 
 /// The dict key naming a grant's interface.
 const KEY_INTERFACE: &str = "interface";

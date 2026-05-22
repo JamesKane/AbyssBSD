@@ -12,6 +12,7 @@ publish = false
 # empty and the probe binary is a stub, so the macOS dev bed still builds.
 [target.'cfg(target_os = "freebsd")'.dependencies]
 abyss-msg = { path = "../abyss-msg" }
+abyss-bundle = { path = "../abyss-bundle" }
 abyss-transport = { path = "../abyss-transport" }
 freebsd-capsicum-sys = { path = "../../sys/freebsd-capsicum-sys" }
 

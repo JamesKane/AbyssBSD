@@ -7,10 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
-# The spawn module is FreeBSD-only; its dependencies are pulled only there,
-# so the host slice (manifest, graph) stays minimal on the macOS dev bed.
+# The spawn and session modules are FreeBSD-only; their dependencies are
+# pulled only there, so the host slice (manifest, graph) stays minimal on
+# the macOS dev bed.
 [target.'cfg(target_os = "freebsd")'.dependencies]
 abyss-msg = { path = "../abyss-msg" }
+abyss-bundle = { path = "../abyss-bundle" }
 abyss-transport = { path = "../abyss-transport" }
 freebsd-jail-sys = { path = "../../sys/freebsd-jail-sys" }
 freebsd-procdesc-sys = { path = "../../sys/freebsd-procdesc-sys" }

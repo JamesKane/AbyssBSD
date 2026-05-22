@@ -64,12 +64,16 @@ impl Component {
 /// Spawn `program` as the component `name`: create its jail, hand it the
 /// bootstrap channel as fd 3, and send it `bundle`.
 ///
-/// `args` is the argument vector after `argv[0]`.
+/// `args` is the argument vector after `argv[0]`. `bundle_fds` are the
+/// descriptors the bundle's handle table refers to — the component's
+/// granted capabilities — passed to it via `SCM_RIGHTS` (§5.3); empty for
+/// a bundle that carries no capabilities.
 pub fn spawn_component(
     name: &str,
     program: &Path,
     args: &[&str],
     bundle: &Envelope,
+    bundle_fds: &[BorrowedFd<'_>],
 ) -> io::Result<Component> {
     // The component's jail. `path = "/"` until the broker stages a root
     // filesystem per component (§5.3); the process confinement is real
@@ -98,8 +102,9 @@ pub fn spawn_component(
     // The component holds fd 3 now; the broker's copy of that end is spent.
     drop(child_end);
 
-    // Hand the component its bootstrap bundle.
-    if let Err(err) = broker_end.send(bundle, &[]) {
+    // Hand the component its bootstrap bundle, with its capability
+    // descriptors riding `SCM_RIGHTS`.
+    if let Err(err) = broker_end.send(bundle, bundle_fds) {
         let _ = remove(jid);
         return Err(err);
     }
@@ -143,8 +148,9 @@ mod tests {
             encoded.len()
         );
         let name = format!("spawn-test-{}", std::process::id());
-        let component = spawn_component(&name, Path::new("/bin/sh"), &["-c", &script], &bundle)
-            .expect("spawn the component");
+        let component =
+            spawn_component(&name, Path::new("/bin/sh"), &["-c", &script], &bundle, &[])
+                .expect("spawn the component");
         component.wait().expect("the component runs and exits");
 
         let log_contents = fs::read_to_string(&log).unwrap_or_else(|e| format!("<no log: {e}>"));

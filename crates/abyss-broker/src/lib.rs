@@ -18,6 +18,8 @@
 //!
 //! - `spawn` — component spawn: the component's jail, its bootstrap
 //!   channel, the `pdfork` into the jail, and the bootstrap bundle (§5.3).
+//! - `session` — wiring a manifest set: a `SOCK_SEQPACKET` ring per
+//!   connection, each component's bundle assembled, then spawned (§5.2).
 //! - `supervisor` — keeping components alive: a component that exits is
 //!   spawned again (§5.5).
 //!
@@ -34,6 +36,9 @@ pub mod manifest;
 
 #[cfg(target_os = "freebsd")]
 pub mod spawn;
+
+#[cfg(target_os = "freebsd")]
+pub mod session;
 
 #[cfg(target_os = "freebsd")]
 pub mod supervisor;

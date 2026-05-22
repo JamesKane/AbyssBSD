@@ -60,6 +60,25 @@ scale, text does not.
 caches a distinct entry — cheap. Deferred only because the toolkit picks a
 pixel size directly and rarely scales text through the canvas transform.
 
+## abyss-broker — the session mints zero-rights capabilities
+
+`Session::wire` (`crates/abyss-broker/src/session.rs`) gives every ring
+endpoint it grants a `CapBody` of all zeros — an empty `cap_rights` mask
+and no object rights — through `minted_rights()`.
+
+**Why it is debt.** A bundle grant should carry the rights the manifest
+asked for: the `broker-and-transport.md` §3.3 mapping turns a manifest's
+`rights` tokens into a `cap_rights_t` mask (kernel-enforced) and an
+object-rights set (service-enforced). The wiring is correct in every other
+respect, but the capabilities it mints are unattenuated.
+
+**Proper fix.** Build the §3.3 rights mapping — a per-interface table from
+rights tokens to object-rights bits, and the socket `cap_rights` a ring
+endpoint needs — and have `Session::wire` mint each grant's `CapBody` from
+the requesting `CapabilityRequest`. The kernel side also needs
+`cap_rights_limit` applied to the fd before it is sent; that is a Capsicum
+step not yet built.
+
 ---
 
 ## Watch items
