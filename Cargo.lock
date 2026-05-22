@@ -9,7 +9,9 @@ dependencies = [
  "abyss-broker",
  "abyss-bundle",
  "abyss-cap",
+ "abyss-looper",
  "abyss-msg",
+ "abyss-msg-derive",
  "abyss-transport",
  "freebsd-capsicum-sys",
 ]

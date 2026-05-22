@@ -36,18 +36,18 @@ fn peer(interface: &str) -> String {
     format!("[capability]\nkind = peer\ninterface = {interface}\nrights = recv\n")
 }
 
-/// The `(confined, grant count, client capabilities claimed)` a probe
-/// reports back.
-fn read_report(report: &Envelope) -> (i64, i64, i64) {
+/// A probe's four-field report: `[confined, grant count, client
+/// capabilities claimed, role outcome]`.
+fn read_report(report: &Envelope) -> [i64; 4] {
     let Value::List(items) = &report.payload else {
         panic!("unexpected probe report payload: {:?}", report.payload);
     };
-    assert_eq!(items.len(), 3, "the probe report has three fields");
+    assert_eq!(items.len(), 4, "the probe report has four fields");
     let field = |index: usize| match &items[index] {
         Value::Int(n) => *n,
         other => panic!("report[{index}] is not an int: {other:?}"),
     };
-    (field(0), field(1), field(2))
+    [field(0), field(1), field(2), field(3)]
 }
 
 #[test]
@@ -77,17 +77,18 @@ fn a_spawned_component_bootstraps_and_confines_itself() {
         .expect("the component reports back over the bootstrap channel");
     component.shutdown().expect("remove the component jail");
 
-    let (confined, grants, client_caps) = read_report(&report);
+    let [confined, grants, client_caps, outcome] = read_report(&report);
     assert_eq!(
         confined, 1,
         "the component entered Capsicum capability mode"
     );
     assert_eq!(grants, 0, "an empty bundle carried no grants");
     assert_eq!(client_caps, 0, "and so no client capabilities to claim");
+    assert_eq!(outcome, 0, "and no peer to converse with");
 }
 
 #[test]
-fn a_wired_session_delivers_each_components_grants() {
+fn a_wired_session_lets_its_components_converse() {
     // compositor → input is one connection; `log` peers no one.
     let graph = Graph::build(vec![
         manifest("compositor", "display", &peer("input")),
@@ -108,8 +109,7 @@ fn a_wired_session_delivers_each_components_grants() {
         .expect("spawn the wired session");
     assert_eq!(wired.len(), 3);
 
-    // Per component: (grant count, client capabilities claimed).
-    let mut reports: HashMap<String, (i64, i64)> = HashMap::new();
+    let mut reports: HashMap<String, [i64; 4]> = HashMap::new();
     for wired_component in wired {
         wired_component
             .component
@@ -120,24 +120,28 @@ fn a_wired_session_delivers_each_components_grants() {
             .bootstrap()
             .recv()
             .expect("the component reports back");
-        let (confined, grants, client_caps) = read_report(&report);
+        let fields = read_report(&report);
         assert_eq!(
-            confined, 1,
+            fields[0], 1,
             "{} is in capability mode",
             wired_component.name
         );
-        reports.insert(wired_component.name.clone(), (grants, client_caps));
+        reports.insert(wired_component.name.clone(), fields);
         wired_component
             .component
             .shutdown()
             .expect("remove the component jail");
     }
 
-    // Each component received exactly the grants its connections imply,
-    // and claimed a client capability for each connection it requested:
-    // compositor requests `input` (one client grant); input provides it
-    // (one grant, but a server one — no client cap); log peers no one.
-    assert_eq!(reports["compositor"], (1, 1));
-    assert_eq!(reports["input"], (1, 0));
-    assert_eq!(reports["log"], (0, 0));
+    // The conversation, end to end: each report is
+    // `[confined, grants, client caps, outcome]`.
+    //
+    // compositor — the requester — claims one client capability, binds it,
+    // and `call`s; its outcome is the `Ping` value (41) the server echoed.
+    assert_eq!(reports["compositor"], [1, 1, 1, 41]);
+    // input — the provider — has one grant, the server end (no client
+    // cap); it served one request.
+    assert_eq!(reports["input"], [1, 1, 0, 1]);
+    // log peers no one: nothing claimed, no peer to converse with.
+    assert_eq!(reports["log"], [1, 0, 0, 0]);
 }

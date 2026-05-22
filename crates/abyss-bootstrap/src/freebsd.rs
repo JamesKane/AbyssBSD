@@ -51,6 +51,22 @@ impl Startup {
         let grant = self.bundle.grants.remove(index);
         Some(unbound_ipc_cap(grant.endpoint, grant.rights))
     }
+
+    /// Claim the server endpoint for `interface` — the `Role::Server`
+    /// grant, the service side of a ring.
+    ///
+    /// Returned as the raw [`Grant`]: its `endpoint` descriptor is the
+    /// service end the component drives a `Connection` over. As with
+    /// [`take_client_cap`](Self::take_client_cap), the grant is removed
+    /// from the bundle, so it is claimed exactly once.
+    pub fn take_server_grant(&mut self, interface: &str) -> Option<Grant> {
+        let index = self
+            .bundle
+            .grants
+            .iter()
+            .position(|grant| grant.role == Role::Server && grant.interface == interface)?;
+        Some(self.bundle.grants.remove(index))
+    }
 }
 
 /// Run the component startup shim: receive the bootstrap bundle, then enter
