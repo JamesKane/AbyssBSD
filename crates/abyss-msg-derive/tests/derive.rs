@@ -3,8 +3,8 @@
 //! `#[derive(Wire)]` integration tests — derived types round-trip and
 //! fail as specified (`docs/design/wire-format.md` §7).
 
-use abyss_msg::{HandleSink, HandleStore, MessageKind, Method, Value, Wire, WireError};
-use abyss_msg_derive::{Method, Wire};
+use abyss_msg::{HandleSink, HandleStore, MessageKind, Method, Request, Value, Wire, WireError};
+use abyss_msg_derive::{Method, Request, Wire};
 
 /// Round-trip a typed value through its derived `Wire` impl.
 fn roundtrip<T: Wire + PartialEq + std::fmt::Debug + Clone>(value: T) -> T {
@@ -269,4 +269,51 @@ fn derived_method_assigns_ordinals_by_declaration_and_kinds_by_attribute() {
 
     assert_eq!(Op::Ping.method_id(), 3);
     assert_eq!(Op::Ping.kind(), MessageKind::Request);
+}
+
+#[derive(Wire, Debug, PartialEq)]
+struct Open {
+    path: String,
+}
+
+#[derive(Wire, Debug, PartialEq)]
+struct Opened {
+    handle: i64,
+}
+
+#[derive(Wire)]
+struct Note {
+    text: String,
+}
+
+/// A §2.10-conformant message enum: every variant a single-field tuple
+/// wrapping its payload type.
+#[derive(Wire, Method, Request)]
+enum FileIface {
+    #[request(reply = Opened)]
+    Open(Open),
+    #[command]
+    Note(Note),
+}
+
+#[test]
+fn derived_request_links_payloads_to_the_enum_and_their_reply_types() {
+    // `From<payload>` for the message enum — every variant.
+    assert!(matches!(
+        FileIface::from(Open {
+            path: String::new()
+        }),
+        FileIface::Open(_)
+    ));
+    assert!(matches!(
+        FileIface::from(Note {
+            text: String::new()
+        }),
+        FileIface::Note(_)
+    ));
+
+    // `Request::Reply` — an `Open` request is answered with `Opened`. A
+    // wrong reply type would not type-check here.
+    let reply: <Open as Request>::Reply = Opened { handle: 3 };
+    assert_eq!(reply, Opened { handle: 3 });
 }

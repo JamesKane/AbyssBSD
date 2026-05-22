@@ -38,6 +38,17 @@ pub fn derive_method(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Derive the typed-request layer (§2.10) for an interface's message enum:
+/// `From<payload>` for each variant, and `Request` for each `#[request]`
+/// variant's payload type.
+#[proc_macro_derive(Request, attributes(request, command, event))]
+pub fn derive_request(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_request(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let rule = container_rename_rule(&input.attrs)?;
     let (to_body, from_body) = match &input.data {
@@ -156,6 +167,86 @@ fn variant_kind(variant: &Variant) -> syn::Result<TokenStream2> {
             "a message variant must be marked `#[request]`, `#[command]`, or `#[event]`",
         )
     })
+}
+
+// --- Request: the typed-request layer of a message enum --------------------
+
+fn expand_request(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new_spanned(
+            input,
+            "Request can only be derived for an interface's message enum",
+        ));
+    };
+
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let mut items = Vec::new();
+    for variant in &data.variants {
+        let vident = &variant.ident;
+        let payload = request_payload(variant)?;
+
+        // Every variant's payload converts into the message enum, so the
+        // `Cap` surface can take a payload value (§2.10).
+        items.push(quote! {
+            #[automatically_derived]
+            impl #impl_generics ::core::convert::From<#payload>
+                for #name #ty_generics #where_clause
+            {
+                fn from(__payload: #payload) -> Self {
+                    Self::#vident(__payload)
+                }
+            }
+        });
+
+        // A `#[request]` variant's payload is a `Request`, paired with the
+        // reply type from `reply = ...`.
+        if let Some(reply) = request_reply(variant)? {
+            items.push(quote! {
+                #[automatically_derived]
+                impl ::abyss_msg::Request for #payload {
+                    type Reply = #reply;
+                }
+            });
+        }
+    }
+    Ok(quote! { #(#items)* })
+}
+
+/// The single tuple-field payload type of a message-enum variant — §2.10
+/// requires every variant to be `Variant(Payload)`.
+fn request_payload(variant: &Variant) -> syn::Result<&Type> {
+    match &variant.fields {
+        Fields::Unnamed(fields) if fields.unnamed.len() == 1 => Ok(&fields.unnamed[0].ty),
+        _ => Err(syn::Error::new_spanned(
+            variant,
+            "a message-enum variant is a single-field tuple — `Variant(Payload)` (§2.10)",
+        )),
+    }
+}
+
+/// The reply type of a `#[request(reply = T)]` variant, or `None` when the
+/// variant is not a `#[request]`.
+fn request_reply(variant: &Variant) -> syn::Result<Option<Type>> {
+    for attr in &variant.attrs {
+        if !attr.path().is_ident("request") {
+            continue;
+        }
+        let mut reply: Option<Type> = None;
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("reply") {
+                reply = Some(meta.value()?.parse::<Type>()?);
+                Ok(())
+            } else {
+                Err(meta.error("expected `reply = <type>`"))
+            }
+        })?;
+        return reply.map(Some).ok_or_else(|| {
+            syn::Error::new_spanned(attr, "a `#[request]` needs `reply = <type>` (§2.10)")
+        });
+    }
+    Ok(None)
 }
 
 // --- structs → dict --------------------------------------------------------
