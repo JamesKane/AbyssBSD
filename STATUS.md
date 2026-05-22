@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `d46716d` Phase 4: abyss-bootstrap — decode the bundle, claim client capabilities (§5.4)
+- `ca5c84d` Bump STATUS: Phase 4 — the object-rights model designed (§3.3)
 - `d14e81a` Phase 4: design — the object-rights model (§3.3)
 - `8086e9e` Bump STATUS: Phase 4 — abyss-looper correctness fixes
 - `943141e` Phase 4: abyss-looper — fix a lost wakeup, a responder leak, and slot growth
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `c693146` Bump STATUS: Phase 4 — the bootstrap-bundle schema
 - `bc490e9` Phase 4: abyss-bundle — the bootstrap-bundle schema (§5.8)
 - `88680e0` Phase 4: design — the bootstrap-bundle schema (§5.8)
-- `7ba1632` Bump STATUS: Phase 4 — Cap: Wire; align §3.5 with the built bind signature
-- `031f5a6` Phase 4: abyss-cap — Cap: Wire, and binding a received capability (§3.4–§3.5)
 
 ## Site
 
@@ -182,16 +182,26 @@ freed slot woke no one; a **responder leak** — `attach_service` held an
 unanswered request's responder past the handler, leaving its caller to
 hang; and **unbounded task-arena growth** — a completed task's slot was
 never reclaimed, now a generational slotmap that frees and reuses slots.
-`cargo xtask ci` green on macOS and FreeBSD; tree clean.
+
+And the **startup shim decodes the bundle** (§5.4): `abyss-bootstrap`'s
+`enter` decodes the received envelope into a `Bundle`, and `Startup`
+claims each `client` grant as an unbound `Cap<I, R>`
+(`abyss-cap::unbound_ipc_cap`) — the capability the framework binds to a
+looper before use (§3.5). Verified in the VM: a wired three-component
+session delivers each component a client capability for exactly the
+connections it requested. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **startup shim decoding the bundle** — `abyss-bootstrap` turning
-  each `Grant` into the capability its `Role` calls for, the client grants
-  becoming bound `Cap`s (§5.4, §3.5) — the next increment;
+- **binding, the server side, and a wired conversation** — a component
+  building its looper and binding its claimed client `Cap`s (§3.5), the
+  service end of a `Role::Server` grant becoming a usable accept-side, and
+  a two-component `call`/reply over a broker-wired ring, end to end (§5.4)
+  — the next increment;
 - the **§3.3 rights layers**, now designed — minting the kernel
   `cap_rights` mask (and `cap_rights_limit`-ing each ring fd), rights
   classes beside `#[derive(Method)]`, the object-rights mask minted from
