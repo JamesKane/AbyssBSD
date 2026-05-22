@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `463130d` Phase 4: abyss-msg — rights classes on #[derive(Method)] (§3.3)
+- `cc63532` Bump STATUS: Phase 4 — the kernel cap_rights layer (§3.3)
 - `6b36486` Phase 4: abyss-broker — mint and enforce the kernel cap_rights layer (§3.3)
 - `a6ce496` Bump STATUS: Phase 4 — two components converse over a wired ring
 - `132d6f3` Phase 4: abyss-bootstrap — two components converse over a wired ring (§5.4)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `ca5c84d` Bump STATUS: Phase 4 — the object-rights model designed (§3.3)
 - `d14e81a` Phase 4: design — the object-rights model (§3.3)
 - `8086e9e` Bump STATUS: Phase 4 — abyss-looper correctness fixes
-- `943141e` Phase 4: abyss-looper — fix a lost wakeup, a responder leak, and slot growth
-- `36ca290` Bump STATUS: Phase 4 — the broker wires an authority graph into a session
 
 ## Site
 
@@ -202,18 +202,23 @@ descriptor to it, and records it in the grant's `CapBody`;
 `freebsd-capsicum-sys` gained `CAP_FCNTL`. The conversation still runs end
 to end over the now-restricted rings — proof the mask covers what the
 transport exercises. The object-rights layer (§3.3's per-method bitmask)
-remains. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+has begun: a message enum's command and request variants may be tagged
+`#[rights(name)]`, and `#[derive(Method)]` collects the tags into the
+interface's `Method::RIGHTS_CLASSES` — each class a name and the bitmask
+of method ordinals it covers. Nothing resolves or enforces that table
+yet. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **§3.3 object-rights layer** — rights classes declared beside
-  `#[derive(Method)]`, the object-rights mask resolved from a manifest's
-  `rights` tokens and minted into both grants, the `abyss-looper`
-  service-loop check, and the `Cap<I, R>` typestate connected to the
-  runtime mask (`TECH-DEBT.md`) — the next increment;
+- the **rest of the §3.3 object-rights layer** — rights classes are
+  declared (`Method::RIGHTS_CLASSES`); what remains is an interface
+  catalogue resolving a manifest's `rights` tokens to a mask, `Session::
+  wire` minting it into both grants, the `abyss-looper` service-loop
+  check, and the `Cap<I, R>` typestate connected to the runtime mask
+  (`TECH-DEBT.md`) — the next increment;
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
   component (§5.5);
 - a reusable **IPC service framework** — the probe drives its `server`
