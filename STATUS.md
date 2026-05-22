@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `e13ce72` Phase 4: abyss-broker — wire an authority graph into a spawned session (§5.2)
+- `c693146` Bump STATUS: Phase 4 — the bootstrap-bundle schema
 - `bc490e9` Phase 4: abyss-bundle — the bootstrap-bundle schema (§5.8)
 - `88680e0` Phase 4: design — the bootstrap-bundle schema (§5.8)
 - `7ba1632` Bump STATUS: Phase 4 — Cap: Wire; align §3.5 with the built bind signature
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `c8fdb0e` Phase 4: abyss-looper — a Spawner for a running looper
 - `5df312f` Phase 4: design — Cap: Wire in code, and binding (§3.5)
 - `abc68e9` Bump STATUS: Phase 4 — Cap::call reshaped to the typed request
-- `4942140` Phase 4: abyss-cap — Cap::call reshaped to the typed request (§2.10)
-- `9ca81ba` Bump STATUS: Phase 4 — in-process request delivery
 
 ## Site
 
@@ -153,28 +153,35 @@ through `to_wire` / `from_wire` across a socket, binds onto a looper, and
 `call`s over the bound ring with the reply routed by the spawned `serve`
 loop.
 
-The broker's authority-graph wiring (§5.2) has begun. A design pass pinned
-the **bootstrap-bundle schema** (§5.8) — the payload format §5.3 left
-open — and the new **`abyss-bundle`** crate *is* that schema: `Bundle`, a
-`Wire`-round-tripping list of capability `Grant`s, each an `interface`, a
-`Role` (client / server), a `CapBody`, and a ring-endpoint descriptor. It
-is the contract the broker (encoder) and every component's startup shim
-(decoder) share — a host-slice crate, depending only on `abyss-msg` and
-`abyss-cap`. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+The broker now **wires an authority graph into a spawned session** (§5.2).
+A design pass pinned the **bootstrap-bundle schema** (§5.8) — the payload
+format §5.3 left open — and the new **`abyss-bundle`** crate *is* that
+schema: `Bundle`, a `Wire`-round-tripping list of capability `Grant`s,
+each an `interface`, a `Role` (client / server), a `CapBody`, and a
+ring-endpoint descriptor; the contract the broker and every startup shim
+share. On it, `abyss-broker`'s new **`session`** module turns a `Graph`
+into a running set: `Session::wire` pre-creates a `SOCK_SEQPACKET` ring
+per connection and assembles each component's `Bundle` (requester ↦
+client end, provider ↦ server end), `Session::spawn` brings each
+component into being holding it. Verified in the VM: a three-component
+graph is wired and spawned, and each component decodes its bundle and
+finds exactly the grants its connections imply. The minted capabilities
+carry zero rights for now — the §3.3 rights mapping is deferred
+(`TECH-DEBT.md`). This increment is `cargo xtask ci`-green on macOS and
+FreeBSD.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the broker **wiring an authority graph** — from a manifest set's
-  `Graph`, minting a `SOCK_SEQPACKET` ring per connection, building each
-  component's `Bundle`, and spawning it (§5.2–§5.3) — the next increment;
 - the **startup shim decoding the bundle** — `abyss-bootstrap` turning
   each `Grant` into the capability its `Role` calls for, the client grants
-  becoming bound `Cap`s (§5.4, §3.5);
+  becoming bound `Cap`s (§5.4, §3.5) — the next increment;
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
-  component, once components are wired (§5.5).
+  component (§5.5);
+- the §3.3 **rights mapping** — minting each grant's `CapBody` from the
+  manifest rather than zero (`TECH-DEBT.md`).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
 This reaches the bulk of **M1**.
