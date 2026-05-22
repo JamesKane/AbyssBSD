@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `7f2ce2c` Phase 4: design — the Cap<I, R> typestate, pinned (§3.3)
+- `44e97c6` Bump STATUS: Phase 4 — §5.6 delegated spawn proven end to end
 - `031bff8` Phase 4: §5.6 — the delegated-spawn handler, end to end
 - `eac18b5` Bump STATUS: Phase 4 — growable graph, pre-resolved spawn programs (§5.6)
 - `6a68f31` Phase 4: abyss-broker — a growable graph and pre-resolved spawn programs (§5.6)
@@ -44,8 +46,6 @@ the FreeBSD remainder.
 - `139e450` Phase 4: abyss-broker — the bidirectional control connection (§5.6)
 - `e0278bd` Bump STATUS: Phase 4 — the spawnable manifest set (§5.6)
 - `d394731` Phase 4: abyss-broker — the spawnable manifest set (§5.6)
-- `eb9a93a` Bump STATUS: Phase 4 — the SpawnChild control protocol (§5.6)
-- `a031ebb` Phase 4: abyss-bundle — the SpawnChild control protocol (§5.6)
 - `b117b24` Bump STATUS: Phase 4 — delegated spawn designed (§5.6)
 
 ## Site
@@ -300,19 +300,29 @@ body is now the shared `wire_connections` — restart and delegated spawn
 read from the same wire. Refusals (no `spawn` capability, unknown
 manifest, name collision, unresolvable authority, spawn failure) all
 return a `Refused` with a reason and leave the session untouched; only a
-full success mutates. `cargo xtask ci` green on macOS and FreeBSD; tree
-clean.
+full success mutates.
+
+And the last Phase 4 design point, **the `Cap<I, R>` typestate**, is now
+**pinned** (§3.3): the `Rights` trait carries `const MASK: u32`, every
+`Cap` holds the runtime mask in a field set to `R::MASK` at construction,
+`narrow::<R2>` ANDs with `R2::MASK`, and `bind` rejects a `Cap` whose
+arrived mask is wider than the receiving `R::MASK` — the refusal at the
+seam §3.3 already named. `R` stays interface-agnostic in this pass;
+tying it to `I` through an associated type is noted as a later
+tightening. The build is the next increment. `cargo xtask ci` green on
+macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
+- **building the `Cap<I, R>` typestate** — design pinned (see In flight);
+  add `const MASK: u32` to `Rights`, carry the runtime mask on every
+  `Cap`, AND it on `narrow`, return a `Result` from `bind` that rejects a
+  too-wide arrived mask, and add `MASK` impls to the existing markers;
 - **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
   a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
-  crate, and a design pass first;
-- the `Cap<I, R>` typestate connected to the runtime object-rights mask
-  (`narrow`, the `bind`-time check) — the client-side compile-time safety
-  net beside the now-enforced service-side check (§3.3).
+  crate, and a design pass first.
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
