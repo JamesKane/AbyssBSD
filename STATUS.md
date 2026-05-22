@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `101bca6` Phase 4: abyss-cap — the durable capability (§5.5)
+- `6314afb` Bump STATUS: Phase 4 — the PeerRestarted control message (§5.5)
 - `e381452` Phase 4: abyss-bundle — the PeerRestarted control message (§5.5)
 - `3f2a4d8` Bump STATUS: Phase 4 — PeerRestarted designed (§5.5)
 - `31f9b17` Phase 4: design — PeerRestarted, re-wiring a restarted component (§5.5)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `0d972cf` Bump STATUS: Phase 4 — the IPC service framework and rights enforcement
 - `e2d2d93` Phase 4: abyss-cap — the IPC service framework and rights enforcement (§3.6)
 - `ed1d097` Bump STATUS: Phase 4 — the transport Error frame (§3.6)
-- `a8f45fc` Phase 4: abyss-transport — the Error frame, a refused request (§3.6)
-- `308f68f` Bump STATUS: Phase 4 — the IPC service framework designed (§3.6)
 
 ## Site
 
@@ -226,19 +226,23 @@ connection*, a `PeerRestarted` message carrying one fresh `Grant`, the
 component-side **durable capability** the framework repoints at the fresh
 ring so a `call` after a restart travels it transparently. Building it has
 begun: `abyss-bundle` gained the **`PeerRestarted`** control message — one
-fresh `Grant`, `Wire` like `Bundle`. The `Session`/`Supervisor`
-unification and the durable capability are next. `cargo xtask ci` green on
-macOS and FreeBSD; tree clean.
+fresh `Grant` — and `abyss-cap` gained the **durable capability**:
+`DurableCap` carries the `Cap` in use, and a paired `Repointer` swaps it
+for a fresh ring, so a `call` after a restart travels the new ring. The
+`Session`/`Supervisor` unification with the re-wire-on-restart logic, and
+the component-side control loop, are what remain. `cargo xtask ci` green
+on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building §5.5 `PeerRestarted`** — the control message is in; what
-  remains is the `Session`/`Supervisor` unification with the re-wire-on-
-  restart logic, the durable capability, and the component-side re-wiring
-  — the next increment;
+- **building §5.5 `PeerRestarted`** — the control message and the durable
+  capability are in; what remains is the `Session`/`Supervisor`
+  unification with the re-wire-on-restart logic, the component-side
+  control loop that drives the `Repointer`, and a wired restart test —
+  the next increment;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
   net beside the now-enforced service-side check (§3.3).
