@@ -15,6 +15,9 @@
 //! - [`Wire`] — typed views over [`Value`], the layer AbyssBSD's own code
 //!   programs against. [`Envelope::from_message`] / [`Envelope::into_message`]
 //!   bridge a typed message and an envelope.
+//! - [`Method`] — a message's routing identity: the method ordinal and
+//!   kind that, with the interface id, name an envelope's [`Header`]
+//!   (`docs/design/broker-and-transport.md` §2.9).
 //!
 //! Decoding is total: malformed input is always a [`WireError`], never a
 //! panic.
@@ -24,10 +27,12 @@
 mod cursor;
 mod envelope;
 mod error;
+mod method;
 mod value;
 mod wire;
 
 pub use envelope::{Envelope, Header, MessageKind, RawHandle, WIRE_VERSION};
 pub use error::WireError;
+pub use method::Method;
 pub use value::{MAX_DEPTH, Value};
 pub use wire::{Bytes, HandleSink, HandleStore, Wire};

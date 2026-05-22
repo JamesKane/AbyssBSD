@@ -28,6 +28,16 @@ pub fn derive_wire(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Derive [`Method`](https://docs.rs/abyss-msg) for an interface's message
+/// enum — the per-variant method ordinal and kind (§2.9).
+#[proc_macro_derive(Method, attributes(request, command, event))]
+pub fn derive_method(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_method(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let rule = container_rename_rule(&input.attrs)?;
     let (to_body, from_body) = match &input.data {
@@ -62,6 +72,89 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #from_body
             }
         }
+    })
+}
+
+// --- Method: a message enum → its routing identity -------------------------
+
+fn expand_method(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new_spanned(
+            input,
+            "Method can only be derived for an enum — a message type is an \
+             enum of an interface's requests, commands, and events",
+        ));
+    };
+
+    let mut method_arms = Vec::new();
+    let mut kind_arms = Vec::new();
+    for (index, variant) in data.variants.iter().enumerate() {
+        let ordinal = u16::try_from(index).map_err(|_| {
+            syn::Error::new_spanned(variant, "an interface cannot have more than 65536 methods")
+        })?;
+        let pattern = variant_pattern(variant);
+        let kind = variant_kind(variant)?;
+        method_arms.push(quote! { #pattern => #ordinal, });
+        kind_arms.push(quote! { #pattern => #kind, });
+    }
+
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    Ok(quote! {
+        #[automatically_derived]
+        impl #impl_generics ::abyss_msg::Method for #name #ty_generics #where_clause {
+            fn method_id(&self) -> u16 {
+                match self { #(#method_arms)* }
+            }
+
+            fn kind(&self) -> ::abyss_msg::MessageKind {
+                match self { #(#kind_arms)* }
+            }
+        }
+    })
+}
+
+/// A `Self::Variant` pattern matching the variant whatever its field shape.
+fn variant_pattern(variant: &Variant) -> TokenStream2 {
+    let vident = &variant.ident;
+    match &variant.fields {
+        Fields::Unit => quote!(Self::#vident),
+        Fields::Unnamed(_) => quote!(Self::#vident(..)),
+        Fields::Named(_) => quote!(Self::#vident { .. }),
+    }
+}
+
+/// The `MessageKind` a variant is marked with — exactly one of
+/// `#[request]`, `#[command]`, `#[event]`.
+fn variant_kind(variant: &Variant) -> syn::Result<TokenStream2> {
+    let mut kind: Option<TokenStream2> = None;
+    for attr in &variant.attrs {
+        let marked = if attr.path().is_ident("request") {
+            Some(quote!(::abyss_msg::MessageKind::Request))
+        } else if attr.path().is_ident("command") {
+            Some(quote!(::abyss_msg::MessageKind::Command))
+        } else if attr.path().is_ident("event") {
+            Some(quote!(::abyss_msg::MessageKind::Event))
+        } else {
+            None
+        };
+        if let Some(marked) = marked {
+            if kind.is_some() {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "a message variant has exactly one kind: \
+                     `#[request]`, `#[command]`, or `#[event]`",
+                ));
+            }
+            kind = Some(marked);
+        }
+    }
+    kind.ok_or_else(|| {
+        syn::Error::new_spanned(
+            variant,
+            "a message variant must be marked `#[request]`, `#[command]`, or `#[event]`",
+        )
     })
 }
 

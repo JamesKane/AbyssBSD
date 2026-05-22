@@ -3,8 +3,8 @@
 //! `#[derive(Wire)]` integration tests — derived types round-trip and
 //! fail as specified (`docs/design/wire-format.md` §7).
 
-use abyss_msg::{HandleSink, HandleStore, Value, Wire, WireError};
-use abyss_msg_derive::Wire;
+use abyss_msg::{HandleSink, HandleStore, MessageKind, Method, Value, Wire, WireError};
+use abyss_msg_derive::{Method, Wire};
 
 /// Round-trip a typed value through its derived `Wire` impl.
 fn roundtrip<T: Wire + PartialEq + std::fmt::Debug + Clone>(value: T) -> T {
@@ -236,4 +236,37 @@ fn wrong_shape_entirely_is_an_error() {
             ..
         })
     ));
+}
+
+/// An interface's message enum — requests, commands, and events. A real
+/// message type derives both: `Wire` for the payload, `Method` for the
+/// routing identity (§2.9).
+#[derive(Method, Wire)]
+enum Op {
+    #[request]
+    Connect(i64),
+    #[command]
+    SetTitle { title: String },
+    #[event]
+    Closed,
+    #[request]
+    Ping,
+}
+
+#[test]
+fn derived_method_assigns_ordinals_by_declaration_and_kinds_by_attribute() {
+    assert_eq!(Op::Connect(0).method_id(), 0);
+    assert_eq!(Op::Connect(0).kind(), MessageKind::Request);
+
+    let set_title = Op::SetTitle {
+        title: String::new(),
+    };
+    assert_eq!(set_title.method_id(), 1);
+    assert_eq!(set_title.kind(), MessageKind::Command);
+
+    assert_eq!(Op::Closed.method_id(), 2);
+    assert_eq!(Op::Closed.kind(), MessageKind::Event);
+
+    assert_eq!(Op::Ping.method_id(), 3);
+    assert_eq!(Op::Ping.kind(), MessageKind::Request);
 }
