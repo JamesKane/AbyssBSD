@@ -37,6 +37,12 @@ fn peer(interface: &str) -> String {
     format!("[capability]\nkind = peer\ninterface = {interface}\nrights = recv\n")
 }
 
+/// A `peer` capability that requests no rights — the broker grants it an
+/// empty object-rights mask.
+fn peer_unrighted(interface: &str) -> String {
+    format!("[capability]\nkind = peer\ninterface = {interface}\n")
+}
+
 /// A probe's four-field report: `[confined, grant count, client
 /// capabilities claimed, role outcome]`.
 fn read_report(report: &Envelope) -> [i64; 4] {
@@ -148,4 +154,58 @@ fn a_wired_session_lets_its_components_converse() {
     assert_eq!(reports["input"], [1, 1, 0, 1]);
     // log peers no one: nothing claimed, no peer to converse with.
     assert_eq!(reports["log"], [1, 0, 0, 0]);
+}
+
+#[test]
+fn a_wired_session_refuses_an_ungranted_call() {
+    // `caller` peers `callee`'s interface, but its peer capability
+    // requests no rights — the broker grants it an empty object-rights
+    // mask. Distinct component names from the other session test, so the
+    // two can run in parallel without colliding on jail names.
+    let graph = Graph::build(vec![
+        manifest("caller", "caller-view", &peer_unrighted("callee-svc")),
+        manifest("callee", "callee-svc", ""),
+    ])
+    .expect("the graph builds");
+
+    let mut catalogue = InterfaceCatalogue::new();
+    catalogue.register("callee-svc", &[("recv", 1)]);
+    let session = Session::wire(&graph, &catalogue).expect("the session wires");
+
+    let binary = probe();
+    let wired = session
+        .spawn(|_name| Program {
+            path: binary.clone(),
+            args: Vec::new(),
+        })
+        .expect("spawn the wired session");
+    assert_eq!(wired.len(), 2);
+
+    let mut caller_report = None;
+    for wired_component in wired {
+        wired_component
+            .component
+            .wait()
+            .expect("the component runs and exits");
+        // The client reports the call's outcome; the server refuses the
+        // call and never reports — it just winds down once the client
+        // exits and closes the ring.
+        if wired_component.name == "caller" {
+            let (report, _fds) = wired_component
+                .component
+                .bootstrap()
+                .recv()
+                .expect("caller reports back");
+            caller_report = Some(read_report(&report));
+        }
+        wired_component
+            .component
+            .shutdown()
+            .expect("remove the component jail");
+    }
+
+    // `caller`'s call named `Ping`, outside the empty mask it was granted;
+    // the service refused it and `Cap::call` reported it — the outcome
+    // field is -1, the rights-denied sentinel.
+    assert_eq!(caller_report, Some([1, 1, 1, -1]));
 }

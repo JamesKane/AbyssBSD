@@ -21,18 +21,20 @@ mod component {
 
     use abyss_bootstrap::Startup;
     use abyss_bundle::Role;
-    use abyss_cap::{Cap, Interface, Rights};
+    use abyss_cap::{CallError, Cap, Interface, Reply, Rights, Service, bind_service};
     use abyss_looper::Looper;
     use abyss_msg::{Envelope, Header, MessageKind, Value};
     use abyss_msg_derive::{Method, Request, Wire};
-    use abyss_transport::{AsyncChannel, Connection, FramedChannel, MessageChannel, ReactorSource};
+    use abyss_transport::{MessageChannel, ReactorSource};
 
     /// The probe's test interface — one request, `Ping`, answered with its
     /// value. Both ends of a wired pair run this one binary, so a single
-    /// interface definition serves the client and the server alike.
+    /// interface definition serves the client and the server alike. `Ping`
+    /// belongs to the `recv` rights class (§3.3).
     #[derive(Wire, Method, Request)]
     enum EchoMsg {
         #[request(reply = i64)]
+        #[rights(recv)]
         Ping(Ping),
     }
 
@@ -54,6 +56,23 @@ mod component {
 
     /// The value a client `Ping`s with; the server echoes it back.
     const PING_VALUE: i64 = 41;
+
+    /// The probe's service over `Echo` — answers one `Ping`, then reports.
+    /// `bind_service` runs the accept loop and its object-rights check; a
+    /// request the broker did not grant never reaches `handle`.
+    struct ProbeService {
+        bootstrap: MessageChannel,
+        confined: i64,
+        grant_count: i64,
+    }
+    impl Service for ProbeService {
+        type Interface = Echo;
+        async fn handle(&mut self, message: EchoMsg, reply: Reply) {
+            let EchoMsg::Ping(ping) = message;
+            let _ = reply.answer(ping.value).await;
+            report_and_exit(&self.bootstrap, [self.confined, self.grant_count, 0, 1]);
+        }
+    }
 
     /// The header of a bootstrap-channel report, and of a reply envelope —
     /// neither rides an interface ring, so the ids are zero.
@@ -121,16 +140,21 @@ mod component {
             // Binding spawns the connection's serve loop onto this looper,
             // so the call's reply routes back (§3.5).
             let cap = cap.bind(reactor, &spawner);
-            let reply = cap
-                .call(Ping { value: PING_VALUE })
-                .await
-                .expect("call over the broker-wired ring");
-            report_and_exit(&bootstrap, [confined, grant_count, 1, reply]);
+            // The outcome: the reply value, or a sentinel — -1 if the
+            // service refused the call for want of rights (§3.6), -2 if
+            // the peer was gone.
+            let outcome = match cap.call(Ping { value: PING_VALUE }).await {
+                Ok(reply) => reply,
+                Err(CallError::RightsDenied) => -1,
+                Err(CallError::PeerGone) => -2,
+            };
+            report_and_exit(&bootstrap, [confined, grant_count, 1, outcome]);
         });
         looper.run();
     }
 
-    /// Claim the server endpoint, serve the ring, and answer one request.
+    /// Claim the server endpoint and serve the ring through `bind_service`,
+    /// which runs the accept loop and the §3.6 object-rights check.
     fn run_server(mut startup: Startup, interface: &str, confined: i64, grant_count: i64) {
         let grant = startup
             .take_server_grant(interface)
@@ -138,27 +162,19 @@ mod component {
         let bootstrap = startup.bootstrap;
 
         let reactor = Arc::new(ReactorSource::new().expect("kqueue reactor"));
-        let channel =
-            AsyncChannel::new(FramedChannel::from_fd(grant.endpoint), Arc::clone(&reactor))
-                .expect("drive the service ring");
-        let (connection, mut inbox) = Connection::open(channel);
-
-        let mut looper = Looper::with_event_source(reactor);
-        looper.spawn(connection.serve());
-        looper.spawn(async move {
-            let inbound = inbox.accept().await.expect("a request arrives");
-            let EchoMsg::Ping(ping) = inbound
-                .envelope
-                .into_message::<EchoMsg>(inbound.fds)
-                .expect("decode the request");
-            let responder = inbound.responder.expect("a request carries a responder");
-            let (reply, _fds) = Envelope::from_message(plain_header(), &ping.value);
-            responder
-                .respond(&reply, &[])
-                .await
-                .expect("answer the request");
-            report_and_exit(&bootstrap, [confined, grant_count, 0, 1]);
-        });
+        let looper = Looper::with_event_source(reactor.clone());
+        let spawner = looper.spawner();
+        bind_service::<ProbeService>(
+            grant.endpoint,
+            grant.rights,
+            ProbeService {
+                bootstrap,
+                confined,
+                grant_count,
+            },
+            reactor,
+            &spawner,
+        );
         looper.run();
     }
 }
