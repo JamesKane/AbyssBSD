@@ -30,6 +30,13 @@ use abyss_looper::{Receiver, RingClosed, Sender, TrySendError, channel};
 /// carries. `Message` is typically an enum of the interface's requests,
 /// commands, and events.
 pub trait Interface: 'static {
+    /// This interface's id — stamped into the header of every envelope on
+    /// its IPC ring (`docs/design/broker-and-transport.md` §2.9). Unique
+    /// per interface; assigned in the interface catalogue. The id belongs
+    /// to the interface, not the message: a ring speaks one interface, so
+    /// `Cap` stamps it once rather than deriving it per message.
+    const ID: u32;
+
     /// The message type carried by this interface's ring.
     type Message: Send + 'static;
 }
@@ -87,7 +94,7 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// use abyss_cap::{Cap, Interface, Rights, SubsetOf, cap_channel};
     ///
     /// struct Iface;
-    /// impl Interface for Iface { type Message = i32; }
+    /// impl Interface for Iface { const ID: u32 = 1; type Message = i32; }
     ///
     /// struct Broad;
     /// struct Narrow;

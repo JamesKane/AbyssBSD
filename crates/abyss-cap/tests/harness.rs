@@ -18,6 +18,7 @@ use abyss_looper::{Ctx, Handler, Looper, RingClosed, Sender, block_on};
 #[allow(dead_code)] // a marker type — only ever used as a type parameter
 struct Echo;
 impl Interface for Echo {
+    const ID: u32 = 1;
     type Message = EchoMsg;
 }
 
@@ -29,6 +30,7 @@ enum EchoMsg {
 #[allow(dead_code)]
 struct Work;
 impl Interface for Work {
+    const ID: u32 = 2;
     type Message = i32;
 }
 
