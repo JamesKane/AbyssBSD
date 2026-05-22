@@ -143,11 +143,20 @@ impl Session {
     where
         F: Fn(&str) -> Program,
     {
-        let programs: HashMap<String, Program> = graph
+        let mut programs: HashMap<String, Program> = graph
             .components()
             .iter()
             .map(|manifest| (manifest.name.clone(), program(&manifest.name)))
             .collect();
+        // A delegated spawn may name any spawnable manifest later (§5.6);
+        // resolve each one's program now, so the resolver is not needed
+        // past launch. A name shared with a boot component keeps the boot
+        // entry.
+        for name in spawnable.names() {
+            programs
+                .entry(name.to_owned())
+                .or_insert_with(|| program(name));
+        }
         let bundles = wire_bundles(&graph, &catalogue)?;
         let reactor = Reactor::new()?;
 

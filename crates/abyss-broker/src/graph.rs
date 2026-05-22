@@ -20,7 +20,6 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_map::Entry;
 use std::fmt;
 
 use crate::manifest::{CapabilityKind, Manifest};
@@ -47,10 +46,12 @@ pub struct Connection {
     pub rights: Vec<String>,
 }
 
-/// The validated static authority graph.
+/// The validated authority graph.
 ///
-/// Built by [`Graph::build`]; immutable thereafter. Component identity is
-/// the manifest `name`, which the graph guarantees is unique.
+/// Built by [`Graph::build`] from the boot manifest set; a delegated
+/// child may join it later through [`Graph::add`] (§5.6), validated the
+/// same way. Component identity is the manifest `name`, which the graph
+/// guarantees is unique.
 #[derive(Debug, Clone)]
 pub struct Graph {
     components: Vec<Manifest>,
@@ -122,67 +123,99 @@ impl Graph {
     /// Rejects duplicate component names, duplicate exported interfaces,
     /// `peer` capabilities that name no exporter, and self-connections.
     pub fn build(manifests: Vec<Manifest>) -> Result<Self, GraphError> {
-        let mut by_name: HashMap<String, usize> = HashMap::with_capacity(manifests.len());
-        let mut by_interface: HashMap<String, usize> = HashMap::with_capacity(manifests.len());
-
-        for (i, m) in manifests.iter().enumerate() {
-            match by_name.entry(m.name.clone()) {
-                Entry::Occupied(_) => {
-                    return Err(GraphError::DuplicateComponent {
-                        name: m.name.clone(),
-                    });
-                }
-                Entry::Vacant(slot) => slot.insert(i),
-            };
-            match by_interface.entry(m.interface.clone()) {
-                Entry::Occupied(prior) => {
-                    return Err(GraphError::DuplicateInterface {
-                        interface: m.interface.clone(),
-                        first: manifests[*prior.get()].name.clone(),
-                        second: m.name.clone(),
-                    });
-                }
-                Entry::Vacant(slot) => slot.insert(i),
-            };
+        let mut graph = Graph {
+            components: Vec::with_capacity(manifests.len()),
+            by_name: HashMap::with_capacity(manifests.len()),
+            by_interface: HashMap::with_capacity(manifests.len()),
+            connections: Vec::new(),
+        };
+        // Two passes: every node first, so a `peer` may resolve to a
+        // component declared either before or after the requester.
+        for manifest in manifests {
+            graph.insert_node(manifest)?;
         }
-
         let mut connections = Vec::new();
-        for m in &manifests {
-            // A component naming the same peer interface twice still wants
-            // just one ring.
-            let mut wired: HashSet<&str> = HashSet::new();
-            for cap in &m.capabilities {
-                if cap.kind != CapabilityKind::Peer || !wired.insert(cap.target.as_str()) {
-                    continue;
-                }
-                let provider = by_interface
-                    .get(&cap.target)
-                    .map(|&i| &manifests[i])
-                    .ok_or_else(|| GraphError::UnresolvedPeer {
-                        component: m.name.clone(),
-                        interface: cap.target.clone(),
-                    })?;
-                if provider.name == m.name {
-                    return Err(GraphError::SelfConnection {
-                        component: m.name.clone(),
-                        interface: cap.target.clone(),
-                    });
-                }
-                connections.push(Connection {
-                    requester: m.name.clone(),
-                    provider: provider.name.clone(),
+        for manifest in &graph.components {
+            connections.extend(graph.connections_for(manifest)?);
+        }
+        graph.connections = connections;
+        Ok(graph)
+    }
+
+    /// Add one component to a built graph — a delegated child joining a
+    /// running session (`broker-and-transport.md` §5.6).
+    ///
+    /// Validates and connects the new node exactly as [`build`](Self::build)
+    /// does — a duplicate name or interface, or a `peer` capability that
+    /// resolves to no exporter, is rejected. Its connections resolve
+    /// against the components already in the graph. A rejected add leaves
+    /// the graph unchanged.
+    pub fn add(&mut self, manifest: Manifest) -> Result<(), GraphError> {
+        // Resolve the new node's connections first — it is not yet in the
+        // graph, so this mutates nothing and a rejection leaves it pristine.
+        let connections = self.connections_for(&manifest)?;
+        self.insert_node(manifest)?;
+        self.connections.extend(connections);
+        Ok(())
+    }
+
+    /// Insert a node — its name and interface — rejecting a duplicate of
+    /// either. Checks both before mutating, so a rejection changes nothing.
+    fn insert_node(&mut self, manifest: Manifest) -> Result<(), GraphError> {
+        if self.by_name.contains_key(&manifest.name) {
+            return Err(GraphError::DuplicateComponent {
+                name: manifest.name.clone(),
+            });
+        }
+        if let Some(&prior) = self.by_interface.get(&manifest.interface) {
+            return Err(GraphError::DuplicateInterface {
+                interface: manifest.interface.clone(),
+                first: self.components[prior].name.clone(),
+                second: manifest.name.clone(),
+            });
+        }
+        let index = self.components.len();
+        self.by_name.insert(manifest.name.clone(), index);
+        self.by_interface.insert(manifest.interface.clone(), index);
+        self.components.push(manifest);
+        Ok(())
+    }
+
+    /// The `peer` connections `manifest` forms against the components
+    /// already in the graph — non-mutating.
+    ///
+    /// Rejects a `peer` capability that resolves to no exporter, or to the
+    /// requester itself. A component naming the same peer interface twice
+    /// still forms just one connection.
+    pub fn connections_for(&self, manifest: &Manifest) -> Result<Vec<Connection>, GraphError> {
+        let mut connections = Vec::new();
+        let mut wired: HashSet<&str> = HashSet::new();
+        for cap in &manifest.capabilities {
+            if cap.kind != CapabilityKind::Peer || !wired.insert(cap.target.as_str()) {
+                continue;
+            }
+            let provider = self
+                .by_interface
+                .get(&cap.target)
+                .map(|&i| &self.components[i])
+                .ok_or_else(|| GraphError::UnresolvedPeer {
+                    component: manifest.name.clone(),
                     interface: cap.target.clone(),
-                    rights: cap.rights.clone(),
+                })?;
+            if provider.name == manifest.name {
+                return Err(GraphError::SelfConnection {
+                    component: manifest.name.clone(),
+                    interface: cap.target.clone(),
                 });
             }
+            connections.push(Connection {
+                requester: manifest.name.clone(),
+                provider: provider.name.clone(),
+                interface: cap.target.clone(),
+                rights: cap.rights.clone(),
+            });
         }
-
-        Ok(Self {
-            components: manifests,
-            by_name,
-            by_interface,
-            connections,
-        })
+        Ok(connections)
     }
 
     /// Every component in the graph, in manifest order.
@@ -340,5 +373,64 @@ mod tests {
         .expect("the graph builds");
         // Two identical peer requests, one ring.
         assert_eq!(g.connections().len(), 1);
+    }
+
+    #[test]
+    fn add_extends_a_built_graph_with_a_delegated_child() {
+        let mut g = Graph::build(vec![manifest("input", "input", "")]).expect("the graph builds");
+        assert!(g.connections().is_empty());
+
+        // A delegated child that peers the already-running `input`.
+        g.add(manifest("compositor", "display", &peer("input")))
+            .expect("the child joins the graph");
+
+        assert_eq!(
+            g.component("compositor").map(|m| m.name.as_str()),
+            Some("compositor"),
+        );
+        assert_eq!(g.connections().len(), 1);
+        let c = &g.connections()[0];
+        assert_eq!(c.requester, "compositor");
+        assert_eq!(c.provider, "input");
+        assert_eq!(g.connections_of("input").count(), 1);
+        assert_eq!(g.connections_of("compositor").count(), 1);
+    }
+
+    #[test]
+    fn add_rejects_a_duplicate_name_and_changes_nothing() {
+        let mut g = Graph::build(vec![manifest("twin", "alpha", "")]).expect("the graph builds");
+        let err = g.add(manifest("twin", "beta", "")).unwrap_err();
+        assert_eq!(
+            err,
+            GraphError::DuplicateComponent {
+                name: "twin".to_string(),
+            },
+        );
+        assert_eq!(
+            g.components().len(),
+            1,
+            "the rejected add left the graph unchanged"
+        );
+    }
+
+    #[test]
+    fn add_rejects_an_unresolved_peer_and_changes_nothing() {
+        let mut g = Graph::build(vec![manifest("input", "input", "")]).expect("the graph builds");
+        let err = g
+            .add(manifest("shell", "shell", &peer("nonesuch")))
+            .unwrap_err();
+        assert_eq!(
+            err,
+            GraphError::UnresolvedPeer {
+                component: "shell".to_string(),
+                interface: "nonesuch".to_string(),
+            },
+        );
+        assert_eq!(
+            g.components().len(),
+            1,
+            "the rejected add left the graph unchanged"
+        );
+        assert!(g.connections().is_empty());
     }
 }

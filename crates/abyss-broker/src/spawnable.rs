@@ -63,6 +63,11 @@ impl SpawnableSet {
         self.by_name.get(name)
     }
 
+    /// The name of every spawnable manifest, in no particular order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.by_name.keys().map(String::as_str)
+    }
+
     /// How many manifests the set holds.
     pub fn len(&self) -> usize {
         self.by_name.len()
