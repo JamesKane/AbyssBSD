@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `132d6f3` Phase 4: abyss-bootstrap — two components converse over a wired ring (§5.4)
+- `6b12c1f` Bump STATUS: Phase 4 — the startup shim decodes the bundle (§5.4)
 - `d46716d` Phase 4: abyss-bootstrap — decode the bundle, claim client capabilities (§5.4)
 - `ca5c84d` Bump STATUS: Phase 4 — the object-rights model designed (§3.3)
 - `d14e81a` Phase 4: design — the object-rights model (§3.3)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `36ca290` Bump STATUS: Phase 4 — the broker wires an authority graph into a session
 - `e13ce72` Phase 4: abyss-broker — wire an authority graph into a spawned session (§5.2)
 - `c693146` Bump STATUS: Phase 4 — the bootstrap-bundle schema
-- `bc490e9` Phase 4: abyss-bundle — the bootstrap-bundle schema (§5.8)
-- `88680e0` Phase 4: design — the bootstrap-bundle schema (§5.8)
 
 ## Site
 
@@ -183,32 +183,34 @@ unanswered request's responder past the handler, leaving its caller to
 hang; and **unbounded task-arena growth** — a completed task's slot was
 never reclaimed, now a generational slotmap that frees and reuses slots.
 
-And the **startup shim decodes the bundle** (§5.4): `abyss-bootstrap`'s
-`enter` decodes the received envelope into a `Bundle`, and `Startup`
-claims each `client` grant as an unbound `Cap<I, R>`
-(`abyss-cap::unbound_ipc_cap`) — the capability the framework binds to a
-looper before use (§3.5). Verified in the VM: a wired three-component
-session delivers each component a client capability for exactly the
-connections it requested. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+And the **startup shim brings the bundle to life** (§5.4).
+`abyss-bootstrap`'s `enter` decodes the received envelope into a `Bundle`;
+`Startup` claims each grant — a `client` grant as an unbound `Cap<I, R>`
+(`abyss-cap::unbound_ipc_cap`), a `server` grant as the service end of its
+ring. A component then builds its looper, binds a claimed `Cap` to it
+(§3.5), and uses it. **Two components now converse over a broker-wired
+ring**: the end-to-end test wires a three-component session and spawns it,
+and the `compositor` probe `call`s a request over the ring to the `input`
+probe, which serves it and replies — a request and its reply crossing a
+`SOCK_SEQPACKET` ring between two jailed, capability-mode components the
+broker spawned and wired. This reaches the bulk of **M1**. `cargo xtask
+ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **binding, the server side, and a wired conversation** — a component
-  building its looper and binding its claimed client `Cap`s (§3.5), the
-  service end of a `Role::Server` grant becoming a usable accept-side, and
-  a two-component `call`/reply over a broker-wired ring, end to end (§5.4)
-  — the next increment;
 - the **§3.3 rights layers**, now designed — minting the kernel
   `cap_rights` mask (and `cap_rights_limit`-ing each ring fd), rights
   classes beside `#[derive(Method)]`, the object-rights mask minted from
   the manifest, and the service-loop check (`TECH-DEBT.md` has the
-  increment breakdown);
+  increment breakdown) — the next increment;
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
-  component (§5.5).
+  component (§5.5);
+- a reusable **IPC service framework** — the probe drives its `server`
+  grant with `abyss-transport` primitives directly; a typed,
+  `Handler`-based accept side — the server counterpart of `Cap::bind` — is
+  still owed.
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
-This reaches the bulk of **M1**.
