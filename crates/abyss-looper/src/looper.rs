@@ -8,6 +8,13 @@
 //! runnable — so an idle looper costs zero CPU. A task's waker may fire
 //! from another thread (a reply arriving from another looper), so the
 //! ready set is shared and the event source is woken.
+//!
+//! Tasks added before [`run`](Looper::run) go on with [`spawn`](Looper::spawn).
+//! A running looper takes new tasks through a [`Spawner`] — a cloneable,
+//! `Send` handle (looper-framework §10): a task already on the looper, or
+//! another thread, queues a future, and the looper installs it at its next
+//! turn. `Cap::bind` uses one to spawn a received capability's `serve`
+//! loop onto the looper that received it (`broker-and-transport.md` §3.5).
 
 use std::collections::VecDeque;
 use std::future::Future;
@@ -28,11 +35,36 @@ pub struct Looper {
     shared: Arc<Shared>,
 }
 
-/// Cross-thread state: the ready set and the event source that wakes the
-/// looper's thread.
+/// Cross-thread state: the ready set, the queue of tasks awaiting
+/// installation, and the event source that wakes the looper's thread.
 struct Shared {
     ready: Mutex<VecDeque<usize>>,
+    /// Tasks queued through a [`Spawner`], not yet given a task slot. The
+    /// run loop drains this at the start of every turn.
+    incoming: Mutex<Vec<Task>>,
     event_source: Arc<dyn EventSource>,
+}
+
+/// A cloneable, `Send` handle for adding tasks to a looper while it runs
+/// (looper-framework §10).
+///
+/// [`spawn`](Self::spawn) queues a future; the looper installs it — gives
+/// it a task slot and an initial poll — at its next turn. A `Spawner` may
+/// be used from a task already running on the looper, or from another
+/// thread entirely.
+#[derive(Clone)]
+pub struct Spawner {
+    shared: Arc<Shared>,
+}
+
+impl Spawner {
+    /// Queue `future` to run on the looper. It is installed and first
+    /// polled at the looper's next turn; queuing wakes the looper so an
+    /// idle one picks the task up at once.
+    pub fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
+        self.shared.incoming.lock().unwrap().push(Box::pin(future));
+        self.shared.event_source.wake();
+    }
 }
 
 /// The waker for one task. Marking the task ready and waking the looper's
@@ -71,13 +103,15 @@ impl Looper {
             live: 0,
             shared: Arc::new(Shared {
                 ready: Mutex::new(VecDeque::new()),
+                incoming: Mutex::new(Vec::new()),
                 event_source,
             }),
         }
     }
 
     /// Add a task — a future the looper will drive to completion. Tasks
-    /// are added before [`run`](Self::run).
+    /// are added before [`run`](Self::run); a running looper takes new
+    /// tasks through a [`Spawner`].
     pub fn spawn(&mut self, future: impl Future<Output = ()> + Send + 'static) {
         let id = self.tasks.len();
         let waker = Waker::from(Arc::new(TaskWaker {
@@ -87,6 +121,28 @@ impl Looper {
         self.tasks.push(Some(Box::pin(future)));
         self.wakers.push(waker);
         self.live += 1;
+    }
+
+    /// A [`Spawner`] for this looper — a handle that adds tasks to it while
+    /// it runs. Cloneable and `Send`.
+    pub fn spawner(&self) -> Spawner {
+        Spawner {
+            shared: self.shared.clone(),
+        }
+    }
+
+    /// Install a task queued through a [`Spawner`]: give it a task slot, a
+    /// waker, and a place in the ready set for its initial poll.
+    fn install(&mut self, task: Task) {
+        let id = self.tasks.len();
+        let waker = Waker::from(Arc::new(TaskWaker {
+            shared: self.shared.clone(),
+            id,
+        }));
+        self.tasks.push(Some(task));
+        self.wakers.push(waker);
+        self.live += 1;
+        self.shared.ready.lock().unwrap().push_back(id);
     }
 
     /// Run on the current thread until every task has completed. A task
@@ -102,6 +158,16 @@ impl Looper {
             }
         }
         loop {
+            // Install any tasks queued through a `Spawner` since the last
+            // turn — before snapshotting the ready set, so a freshly
+            // installed task gets its initial poll this turn.
+            let incoming: Vec<Task> = {
+                let mut queue = self.shared.incoming.lock().unwrap();
+                queue.drain(..).collect()
+            };
+            for task in incoming {
+                self.install(task);
+            }
             let batch: Vec<usize> = {
                 let mut ready = self.shared.ready.lock().unwrap();
                 ready.drain(..).collect()
@@ -137,5 +203,58 @@ impl Looper {
 impl Default for Looper {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::channel;
+    use std::sync::Mutex;
+
+    #[test]
+    fn a_task_spawns_another_through_a_spawner() {
+        let mut looper = Looper::new();
+        let spawner = looper.spawner();
+        let log = Arc::new(Mutex::new(Vec::new()));
+
+        let log_outer = Arc::clone(&log);
+        looper.spawn(async move {
+            log_outer.lock().unwrap().push("outer");
+            // While the looper runs, queue a second task onto it.
+            let log_inner = Arc::clone(&log_outer);
+            spawner.spawn(async move {
+                log_inner.lock().unwrap().push("inner");
+            });
+        });
+        looper.run();
+
+        assert_eq!(*log.lock().unwrap(), vec!["outer", "inner"]);
+    }
+
+    #[test]
+    fn a_spawner_reaches_a_looper_from_another_thread() {
+        let mut looper = Looper::new();
+        let spawner = looper.spawner();
+        let (tx, mut rx) = channel::<i32>(1);
+
+        // A pre-run task keeps the looper alive until the message lands.
+        let seen = Arc::new(Mutex::new(None));
+        let seen_writer = Arc::clone(&seen);
+        looper.spawn(async move {
+            *seen_writer.lock().unwrap() = rx.recv().await.ok();
+        });
+
+        // Another thread spawns the task that sends — the spawn wakes the
+        // looper whether it has parked on `recv` yet or not.
+        let sender = std::thread::spawn(move || {
+            spawner.spawn(async move {
+                tx.send(7).await.expect("send onto the live looper");
+            });
+        });
+        looper.run();
+        sender.join().unwrap();
+
+        assert_eq!(*seen.lock().unwrap(), Some(7));
     }
 }

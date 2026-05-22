@@ -8,6 +8,7 @@
 //!
 //! - [`channel`] — a bounded, ordered ring; [`Sender`] / [`Receiver`].
 //! - [`Looper`] — a thread that hosts handlers and drives their futures.
+//! - [`Spawner`] — a cloneable handle that adds tasks to a running looper.
 //! - [`Handler`] — `async fn handle`, attached to a looper.
 //! - [`Responder`] — a handler's one-shot reply handle for a request.
 //! - [`block_on`] — drive a future on a non-looper thread (tests, `main`).
@@ -33,5 +34,5 @@ pub use channel::{Receiver, Sender, channel};
 pub use error::{RingClosed, TryRecvError, TrySendError};
 pub use event_source::EventSource;
 pub use handler::{Ctx, Delivery, Handler};
-pub use looper::Looper;
+pub use looper::{Looper, Spawner};
 pub use responder::{Responder, responder};
