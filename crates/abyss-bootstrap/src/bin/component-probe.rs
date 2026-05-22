@@ -128,9 +128,17 @@ mod component {
             (Some(interface), _) => run_client(startup, &interface, confined, grant_count),
             (None, Some(interface)) => run_server(startup, &interface, confined, grant_count),
             // A `spawn-request` argument selects the §5.6 path: the probe
-            // asks the broker to spawn a child and checks the answer.
+            // asks the broker to spawn a child and checks the answer
+            // against an expected outcome.
+            //   args[1] = "spawn-request"
+            //   args[2] = "spawned" or "refused"  (the expectation)
+            //   args[3] = the manifest name to ask for (any string for a
+            //             "refused" run)
             (None, None) if std::env::args().any(|arg| arg == "spawn-request") => {
-                run_spawn_requester(startup)
+                let args: Vec<String> = std::env::args().collect();
+                let expectation = args.get(2).cloned().unwrap_or_else(|| "refused".to_owned());
+                let manifest = args.get(3).cloned().unwrap_or_else(|| "any".to_owned());
+                run_spawn_requester(startup, &expectation, manifest)
             }
             // No grants: nothing to do but report.
             (None, None) => report_and_exit(&startup.bootstrap, [confined, grant_count, 0, 0]),
@@ -138,19 +146,16 @@ mod component {
     }
 
     /// The §5.6 spawn requester: send the broker a `SpawnChild` over the
-    /// control connection and check its answer.
+    /// control connection and check its answer matches `expectation`.
     ///
-    /// The broker's delegated-spawn handler is a refusing stub for now, so
-    /// this probe expects a refusal: it exits 0 if the broker answered with
-    /// one, and 1 otherwise — the broker reads the exit status off the
-    /// process descriptor.
-    fn run_spawn_requester(startup: Startup) -> ! {
+    /// `expectation` is `"spawned"` or `"refused"`. The probe exits 0 if
+    /// the broker's reply matches, 1 otherwise — the broker reads the
+    /// exit status off the process descriptor.
+    fn run_spawn_requester(startup: Startup, expectation: &str, manifest: String) -> ! {
         let bootstrap = startup.bootstrap;
 
         // Ask the broker to spawn a child.
-        let request = SpawnChild {
-            manifest: "any-app".to_owned(),
-        };
+        let request = SpawnChild { manifest };
         let (envelope, _fds) = Envelope::from_message(plain_header(), &request);
         bootstrap
             .send(&envelope, &[])
@@ -161,10 +166,11 @@ mod component {
         let reply = reply_envelope
             .into_message::<SpawnReply>(handles)
             .expect("decode the SpawnReply");
-        match reply {
-            SpawnReply::Refused(_) => std::process::exit(0),
-            SpawnReply::Spawned => std::process::exit(1),
-        }
+        let matched = matches!(
+            (&reply, expectation),
+            (SpawnReply::Spawned, "spawned") | (SpawnReply::Refused(_), "refused"),
+        );
+        std::process::exit(if matched { 0 } else { 1 });
     }
 
     /// Reduce a call's result to a probe report field: the reply value, or

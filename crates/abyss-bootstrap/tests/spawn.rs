@@ -26,10 +26,15 @@ fn probe() -> PathBuf {
 /// A complete, valid manifest with the given name, interface, and an
 /// optional run of `[capability]` blocks spliced in.
 fn manifest(name: &str, interface: &str, caps: &str) -> Manifest {
+    manifest_with_policy(name, interface, caps, "always")
+}
+
+/// As [`manifest`], with a chosen restart policy.
+fn manifest_with_policy(name: &str, interface: &str, caps: &str, policy: &str) -> Manifest {
     let text = format!(
         "name = {name}\ninterface = {interface}\nversion = 1\n{caps}\
          [jail]\nroot = /\nnetwork = none\nuser = _{name}\n\
-         [budget]\nmemory = 1M\nfds = 8\n[restart]\npolicy = always\n",
+         [budget]\nmemory = 1M\nfds = 8\n[restart]\npolicy = {policy}\n",
     );
     Manifest::parse(&text).expect("the test manifest parses")
 }
@@ -266,7 +271,7 @@ fn the_broker_answers_a_spawn_request_over_the_control_connection() {
         SpawnableSet::new(),
         |_name| Program {
             path: binary.clone(),
-            args: vec!["spawn-request".to_owned()],
+            args: vec!["spawn-request".to_owned(), "refused".to_owned()],
         },
     )
     .expect("launch the session");
@@ -279,5 +284,68 @@ fn the_broker_answers_a_spawn_request_over_the_control_connection() {
     assert_eq!(
         exits[0].status, 0,
         "the requester received the broker's reply to its SpawnChild",
+    );
+}
+
+#[test]
+fn the_broker_spawns_a_delegated_child_on_request() {
+    // A `kind = spawn` shell-like component asks the broker to launch a
+    // named app from the spawnable set, and verifies the broker answered
+    // `Spawned` — proof the §5.6 handler ran end to end: capability check,
+    // spawnable lookup, wire-via-`PeerRestarted` (vacuously: the child has
+    // no peers), spawn, join the graph and supervised set, reply.
+    let pid = std::process::id();
+    let requester = format!("ds-shell-{pid}");
+    let child = format!("ds-app-{pid}");
+
+    let graph = Graph::build(vec![manifest_with_policy(
+        &requester,
+        "ds-shell-iface",
+        "[capability]\nkind = spawn\n",
+        "never",
+    )])
+    .expect("the graph builds");
+
+    let spawnable = SpawnableSet::build(vec![manifest_with_policy(
+        &child,
+        "ds-app-iface",
+        "",
+        "never",
+    )])
+    .expect("the spawnable set assembles");
+
+    // The requester runs the spawn-request probe expecting `Spawned`; the
+    // child is the same probe with no arguments — it bootstraps, sees no
+    // grants, reports, and exits.
+    let binary = probe();
+    let requester_name = requester.clone();
+    let child_arg = child.clone();
+    let mut session = Session::launch(graph, InterfaceCatalogue::new(), spawnable, move |name| {
+        Program {
+            path: binary.clone(),
+            args: if name == requester_name {
+                vec![
+                    "spawn-request".to_owned(),
+                    "spawned".to_owned(),
+                    child_arg.clone(),
+                ]
+            } else {
+                Vec::new()
+            },
+        }
+    })
+    .expect("launch the session");
+
+    // `step` processes the requester's `SpawnChild`, spawns the named
+    // child into the running session, replies `Spawned`; the requester
+    // verifies and exits 0. The child also finishes promptly; either or
+    // both may appear in this batch — the requester's clean exit is the
+    // proof.
+    let exits = session.step().expect("supervise the delegated spawn");
+    assert!(
+        exits
+            .iter()
+            .any(|exit| exit.name == requester && exit.status == 0),
+        "the requester received `Spawned` and exited 0; got {exits:?}",
     );
 }

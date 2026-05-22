@@ -34,8 +34,8 @@ use freebsd_capsicum_sys::{CapRights, Rights};
 use freebsd_jail_sys::remove;
 
 use crate::catalogue::{CatalogueError, InterfaceCatalogue};
-use crate::graph::Graph;
-use crate::manifest::RestartPolicy;
+use crate::graph::{Connection, Graph};
+use crate::manifest::{CapabilityKind, RestartPolicy};
 use crate::spawn::{Component, spawn_component};
 use crate::spawnable::SpawnableSet;
 
@@ -346,38 +346,162 @@ impl Session {
     /// `fd` is a control channel the reactor reported readable, so the
     /// receive does not block — it yields a datagram, or end-of-file as
     /// the component winds down. The only request defined is [`SpawnChild`];
-    /// delegated spawn is not yet wired, so every request is refused for
-    /// now. A datagram from a since-departed component, or one that is not
-    /// a recognised request, is dropped.
-    fn handle_control(&self, fd: RawFd) -> io::Result<()> {
-        let Some(live) = self
+    /// a datagram from a since-departed component, or one that is not a
+    /// recognised request, is dropped. The reply travels back on the same
+    /// control connection.
+    fn handle_control(&mut self, fd: RawFd) -> io::Result<()> {
+        let Some(idx) = self
             .components
             .iter()
-            .find(|live| live.component.bootstrap().as_fd().as_raw_fd() == fd)
+            .position(|live| live.component.bootstrap().as_fd().as_raw_fd() == fd)
         else {
             // A readable event for a control channel no live component
             // owns — a component that has since departed.
             return Ok(());
         };
-        let channel = live.component.bootstrap();
+        let requester = self.components[idx].name.clone();
 
-        let (envelope, handles) = match channel.recv() {
+        let (envelope, handles) = match self.components[idx].component.bootstrap().recv() {
             Ok(message) => message,
             // End-of-file, or a malformed datagram — the component is
             // winding down; there is nothing to answer.
             Err(_) => return Ok(()),
         };
-        if envelope.into_message::<SpawnChild>(handles).is_err() {
+        let Ok(request) = envelope.into_message::<SpawnChild>(handles) else {
             // Not a request the broker understands — drop it.
             return Ok(());
-        }
+        };
 
-        // Delegated spawn's request handler is not yet wired (§5.6); the
-        // control connection round-trips, but every request is refused.
-        let reply = SpawnReply::Refused("delegated spawn is not yet available".to_owned());
+        let reply = self.try_spawn_child(&requester, request);
+
+        // Send the reply on the same control connection. After
+        // `try_spawn_child`, `idx` may no longer be valid (a successful
+        // spawn pushes a new component), so the requester is found again
+        // by name — its `Live` was not removed.
+        let channel = self
+            .components
+            .iter()
+            .find(|live| live.name == requester)
+            .map(|live| live.component.bootstrap());
+        let Some(channel) = channel else {
+            return Ok(());
+        };
         let (reply_envelope, fds) = Envelope::from_message(control_header(), &reply);
         let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
         channel.send(&reply_envelope, &borrowed)
+    }
+
+    /// Carry out a [`SpawnChild`] request, mutating the session only if
+    /// every check and the spawn itself succeed (§5.6).
+    ///
+    /// On any failure, returns a [`SpawnReply::Refused`] naming the reason
+    /// and leaves the session as it was. On success, the child has joined
+    /// the authority graph, been spawned, and every live peer has been
+    /// notified by [`PeerRestarted`] — and the reply is [`SpawnReply::Spawned`].
+    fn try_spawn_child(&mut self, requester: &str, request: SpawnChild) -> SpawnReply {
+        // The requester must declare `kind = spawn`: only then may it ask
+        // the broker for a child (§5.6).
+        let permitted = self
+            .graph
+            .component(requester)
+            .map(|manifest| {
+                manifest
+                    .capabilities
+                    .iter()
+                    .any(|cap| cap.kind == CapabilityKind::Spawn)
+            })
+            .unwrap_or(false);
+        if !permitted {
+            return SpawnReply::Refused(format!("`{requester}` holds no `spawn` capability",));
+        }
+
+        // The named manifest must be in the spawnable set.
+        let Some(child_manifest) = self.spawnable.get(&request.manifest).cloned() else {
+            return SpawnReply::Refused(format!(
+                "no spawnable manifest named `{}`",
+                request.manifest,
+            ));
+        };
+        let child_name = child_manifest.name.clone();
+
+        // The child's name must not collide with a component already in
+        // the session.
+        if self.graph.component(&child_name).is_some() {
+            return SpawnReply::Refused(format!(
+                "a component named `{child_name}` is already in the session",
+            ));
+        }
+
+        // Resolve the child's connections against the running graph — does
+        // every peer interface exist? — non-mutating.
+        let connections = match self.graph.connections_for(&child_manifest) {
+            Ok(connections) => connections,
+            Err(err) => {
+                return SpawnReply::Refused(format!(
+                    "the child's authority does not resolve: {err}",
+                ));
+            }
+        };
+
+        // Wire those connections — fresh rings, the child's ends in a
+        // bundle, peers' ends as grants. Still no mutation of the session.
+        let (bundle, peer_grants) =
+            match wire_connections(&self.catalogue, connections.iter(), &child_name) {
+                Ok(wired) => wired,
+                Err(err) => {
+                    return SpawnReply::Refused(format!(
+                        "could not wire the child's connections: {err}",
+                    ));
+                }
+            };
+
+        // Last fallible step before mutation: the spawn itself.
+        let Some(program) = self.programs.get(&child_name) else {
+            return SpawnReply::Refused(format!("no program resolved for `{child_name}`",));
+        };
+        let component = match spawn_bundle(&child_name, program, &bundle) {
+            Ok(component) => component,
+            Err(err) => {
+                return SpawnReply::Refused(format!("could not spawn the child: {err}",));
+            }
+        };
+
+        // The session mutates from here on. Watch the child for exit,
+        // record it in the graph and supervised set, then notify every
+        // live peer that its ring now leads to a freshly delegated child —
+        // the §5.5 `PeerRestarted` mechanism, reused.
+        if let Err(err) = self
+            .reactor
+            .register(component.descriptor(), Interest::ProcessExit)
+        {
+            // The broker's own reactor failed — the child is up but
+            // unsupervised; tearing it down here keeps the session
+            // consistent. The graph has not yet been mutated.
+            let _ = component.shutdown();
+            return SpawnReply::Refused(format!(
+                "could not watch the child's process descriptor: {err}",
+            ));
+        }
+        if let Err(err) = self.graph.add(child_manifest) {
+            // `connections_for` already validated the same thing, so this
+            // is effectively unreachable; report it cleanly if it happens.
+            let _ = component.shutdown();
+            return SpawnReply::Refused(format!("the child's graph add failed: {err}",));
+        }
+        self.components.push(Live {
+            name: child_name,
+            component,
+        });
+
+        for (peer, grant) in peer_grants {
+            if let Some(live) = self.components.iter().find(|live| live.name == peer) {
+                // A failed peer-notify leaves that one connection dangling
+                // — the child is up; the broker stays up.
+                let _ = send_peer_restarted(live.component.bootstrap(), grant);
+            }
+        }
+
+        SpawnReply::Spawned
     }
 }
 
@@ -470,13 +594,28 @@ fn rewire(
     catalogue: &InterfaceCatalogue,
     component: &str,
 ) -> Result<(Bundle, Vec<(String, Grant)>), SessionError> {
+    wire_connections(catalogue, graph.connections_of(component), component)
+}
+
+/// Wire a list of connections for one component: a fresh ring per
+/// connection, the component's ends in a [`Bundle`] and each peer's end as
+/// a [`Grant`] paired with that peer's name.
+///
+/// This is the shared core of [`rewire`] (a restarted component's
+/// `connections_of`) and the §5.6 delegated-spawn handler (a delegated
+/// child's `connections_for`).
+fn wire_connections<'c>(
+    catalogue: &InterfaceCatalogue,
+    connections: impl Iterator<Item = &'c Connection>,
+    component: &str,
+) -> Result<(Bundle, Vec<(String, Grant)>), SessionError> {
     let ring_rights = CapRights::new(service_ring_rights());
     let cap_rights = ring_cap_rights(&ring_rights);
 
     let mut own_grants: Vec<Grant> = Vec::new();
     let mut peer_grants: Vec<(String, Grant)> = Vec::new();
 
-    for connection in graph.connections_of(component) {
+    for connection in connections {
         let object_rights = catalogue.resolve(&connection.interface, &connection.rights)?;
         let body = CapBody {
             cap_rights,
@@ -484,9 +623,9 @@ fn rewire(
         };
         let (client_end, server_end) = Channel::pair()?;
 
-        // The restarted component is one end of the connection; the
-        // surviving peer is the other. The requester holds the client end,
-        // the provider the server end — exactly as at first wiring (§5.2).
+        // The wired component is one end of the connection; the peer is
+        // the other. The requester holds the client end, the provider the
+        // server end — exactly as at first wiring (§5.2).
         let (own_role, own_end, peer_name, peer_role, peer_end) =
             if connection.requester == component {
                 (
