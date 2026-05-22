@@ -53,6 +53,10 @@ pub enum WireError {
     /// every handle is an fd capability, so the two must correspond
     /// (`broker-and-transport.md` §2.2, §3.2).
     HandleFdMismatch { handles: usize, fds: usize },
+    /// A handle's `kind` or `body` was not what the decoding type expected.
+    /// `abyss-msg` keeps handle bodies opaque (§3.4); the type that decodes
+    /// one — `abyss-cap`'s `Cap` — raises this when the bytes are malformed.
+    MalformedHandle(String),
 }
 
 impl fmt::Display for WireError {
@@ -86,6 +90,7 @@ impl fmt::Display for WireError {
                 f,
                 "handle table has {handles} entries but {fds} descriptors arrived"
             ),
+            WireError::MalformedHandle(why) => write!(f, "malformed handle: {why}"),
         }
     }
 }

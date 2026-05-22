@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::os::fd::{BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -120,6 +120,19 @@ impl Connection {
         self.inner.channel.send(frame, message, fds).await
     }
 
+    /// Send a one-way message without suspending — the non-blocking
+    /// counterpart of [`send`](Self::send). On a momentarily full send
+    /// buffer the socket's `WouldBlock` is surfaced rather than awaited.
+    /// A `SOCK_SEQPACKET` datagram is sent whole or not at all, so a
+    /// rejected send leaves no partial frame on the ring.
+    pub fn try_send(&self, message: &Envelope, fds: &[BorrowedFd<'_>]) -> io::Result<()> {
+        let frame = RingFrame {
+            kind: FrameKind::Message,
+            correlation: 0,
+        };
+        self.inner.channel.try_send(frame, message, fds)
+    }
+
     /// The receive loop — drive this as a task on the looper. It reads
     /// each datagram and routes it: a reply frame to the `call` awaiting
     /// its id, a message frame to the [`Inbox`]. It ends when the
@@ -166,6 +179,14 @@ impl Connection {
                 }
             }
         }
+    }
+}
+
+impl AsFd for Connection {
+    /// The ring socket underneath the connection — what `Cap::to_wire`
+    /// duplicates onto `SCM_RIGHTS` to pass the capability on (§3.5).
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.inner.channel.as_fd()
     }
 }
 
@@ -302,6 +323,27 @@ mod tests {
         looper.run();
 
         peer.join().expect("peer thread");
+    }
+
+    #[test]
+    fn try_send_delivers_a_one_way_message_without_suspending() {
+        let message = envelope(MessageKind::Command, 99);
+
+        let (client_framed, server_framed) = FramedChannel::pair().expect("socketpair");
+        let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+        let client = AsyncChannel::new(client_framed, source).expect("async channel");
+        let (connection, _inbox) = Connection::open(client);
+
+        // The send buffer is empty, so the datagram goes through at once —
+        // no looper, no await.
+        connection
+            .try_send(&message, &[])
+            .expect("try_send onto an idle ring");
+
+        let (frame, got, _) = server_framed.recv().expect("peer recv");
+        assert_eq!(frame.kind, FrameKind::Message);
+        assert_eq!(frame.correlation, 0);
+        assert_eq!(got, message);
     }
 
     #[test]

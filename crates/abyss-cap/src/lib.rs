@@ -10,9 +10,11 @@
 //! - [`CapBody`] — the handle-table body a capability serializes to when
 //!   it crosses a process boundary (`broker-and-transport.md` §3.2).
 //!
-//! The `Wire` impl that puts a `Cap` through that body — pulling its fd
-//! onto `SCM_RIGHTS` — is the next Gate D step; in-process (Phase 2) a
-//! capability moves as an ordinary value, with no serialization to do.
+//! On FreeBSD a `Cap` is [`Wire`](abyss_msg::Wire) (§3.4–§3.5): `to_wire`
+//! duplicates its ring socket onto `SCM_RIGHTS` and pushes the [`CapBody`];
+//! `from_wire` yields an *unbound* `Cap`, and [`Cap::bind`] attaches that
+//! to a looper to make it usable. In-process (Phase 2) a capability moves
+//! as an ordinary value, with no serialization to do.
 
 #![forbid(unsafe_code)]
 
@@ -29,11 +31,17 @@ use abyss_msg::Request;
 
 #[cfg(target_os = "freebsd")]
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+#[cfg(target_os = "freebsd")]
+use std::sync::Arc;
 
 #[cfg(target_os = "freebsd")]
-use abyss_msg::{Envelope, Header, Method, Wire};
+use abyss_looper::Spawner;
 #[cfg(target_os = "freebsd")]
-use abyss_transport::Connection;
+use abyss_msg::{
+    Envelope, HandleSink, HandleStore, Header, Method, RawHandle, Value, Wire, WireError,
+};
+#[cfg(target_os = "freebsd")]
+use abyss_transport::{AsyncChannel, Connection, FramedChannel, ReactorSource};
 
 /// An interface — the set of messages a capability of this interface
 /// carries. `Message` is typically an enum of the interface's requests,
@@ -50,22 +58,32 @@ pub trait Interface: 'static {
     type Message: Send + 'static;
 }
 
-/// The ring a [`Cap`] dispatches to (`broker-and-transport.md` §2.8).
-/// `Local` is the in-process ring (looper-framework §3); the IPC backend
-/// joins it as the FreeBSD transport work lands.
+/// The ring a [`Cap`] dispatches to (`broker-and-transport.md` §2.8). A
+/// `Cap`'s backend has three forms (§3.5): `Local` is the in-process ring
+/// (looper-framework §3); `Ipc` is a live IPC ring; `IpcUnbound` is a
+/// capability received over IPC but not yet attached to a looper.
 enum Backend<I: Interface> {
     /// An in-process `abyss-looper` channel. It carries a [`Delivery`] —
     /// a message and, for a request, the responder that answers it.
     Local(Sender<Delivery<I::Message>>),
-    /// An IPC ring — a `SOCK_SEQPACKET` connection. `encode` is the
+    /// A live IPC ring — a `SOCK_SEQPACKET` connection. `encode` is the
     /// message-to-envelope function captured when the ring was built,
     /// where `I::Message: Wire + Method` was in scope (§2.8, §2.9); it
     /// lets the `Cap` methods serialize without that bound themselves.
+    /// `body` is the §3.2 handle-table body the broker minted for this
+    /// capability — what `to_wire` re-emits when the cap is passed on.
     #[cfg(target_os = "freebsd")]
     Ipc {
         connection: Connection,
         encode: fn(&I::Message) -> (Envelope, Vec<OwnedFd>),
+        body: CapBody,
     },
+    /// A capability decoded from a message but not yet usable (§3.5):
+    /// `from_wire` reaches no reactor, so it yields this — the received
+    /// ring socket and its [`CapBody`], no live `Connection`. [`Cap::bind`]
+    /// is the single edge that turns it into [`Ipc`](Self::Ipc).
+    #[cfg(target_os = "freebsd")]
+    IpcUnbound { fd: OwnedFd, body: CapBody },
 }
 
 /// A typed, rights-bearing **send** capability — the send endpoint of a
@@ -103,16 +121,16 @@ pub fn cap_channel<I: Interface, R: Rights>(
 }
 
 /// Build an IPC-backed capability over `connection` — its `SOCK_SEQPACKET`
-/// ring (`broker-and-transport.md` §2.8). The broker builds these as it
-/// wires the authority graph (§5.2); [`cap_channel`] is the in-process
-/// counterpart.
+/// ring (`broker-and-transport.md` §2.8) — carrying the rights `body` the
+/// broker minted for it (§3.2). The broker builds these as it wires the
+/// authority graph (§5.2); [`cap_channel`] is the in-process counterpart.
 ///
 /// The `Wire` and `Method` bounds are this constructor's, not the
 /// [`Interface`] trait's (§2.9): they are needed only to build an IPC
 /// ring, so the message serializer is captured here, and `Cap`'s own
 /// methods carry no such bound.
 #[cfg(target_os = "freebsd")]
-pub fn ipc_cap<I, R>(connection: Connection) -> Cap<I, R>
+pub fn ipc_cap<I, R>(connection: Connection, body: CapBody) -> Cap<I, R>
 where
     I: Interface,
     R: Rights,
@@ -122,6 +140,7 @@ where
         backend: Backend::Ipc {
             connection,
             encode: encode_message::<I>,
+            body,
         },
         _marker: PhantomData,
     }
@@ -157,7 +176,9 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                     .await
             }
             #[cfg(target_os = "freebsd")]
-            Backend::Ipc { connection, encode } => {
+            Backend::Ipc {
+                connection, encode, ..
+            } => {
                 let (envelope, fds) = (*encode)(&msg);
                 let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
                 // A broken IPC ring is, to the holder of the capability,
@@ -167,6 +188,8 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                     .await
                     .map_err(|_| RingClosed)
             }
+            #[cfg(target_os = "freebsd")]
+            Backend::IpcUnbound { .. } => unbound_use_panic(),
         }
     }
 
@@ -186,7 +209,25 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                 }
             }
             #[cfg(target_os = "freebsd")]
-            Backend::Ipc { .. } => todo!("Cap::try_send over an IPC ring is not yet wired"),
+            Backend::Ipc {
+                connection, encode, ..
+            } => {
+                let (envelope, fds) = (*encode)(&msg);
+                let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
+                // The ring socket is non-blocking and a `SOCK_SEQPACKET`
+                // datagram is sent whole or not at all: a momentarily full
+                // send buffer is `WouldBlock` — the message is returned,
+                // not buffered. Any other error is a dead ring.
+                match connection.try_send(&envelope, &borrowed) {
+                    Ok(()) => Ok(()),
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        Err(TrySendError::Full(msg))
+                    }
+                    Err(_) => Err(TrySendError::Closed(msg)),
+                }
+            }
+            #[cfg(target_os = "freebsd")]
+            Backend::IpcUnbound { .. } => unbound_use_panic(),
         }
     }
 
@@ -245,7 +286,9 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                 reply_rx.recv().await
             }
             #[cfg(target_os = "freebsd")]
-            Backend::Ipc { connection, encode } => {
+            Backend::Ipc {
+                connection, encode, ..
+            } => {
                 let (envelope, fds) = (*encode)(&request.into());
                 let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
                 let (reply_envelope, reply_fds) = connection
@@ -256,6 +299,128 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                     .into_message::<Q::Reply>(reply_fds)
                     .map_err(|_| RingClosed)
             }
+            #[cfg(target_os = "freebsd")]
+            Backend::IpcUnbound { .. } => unbound_use_panic(),
+        }
+    }
+}
+
+/// The contract violation §3.5 names: using an unbound capability — to
+/// `send`, `try_send`, `call`, or serialize it — before the framework has
+/// bound it to a looper. A handler only ever receives bound capabilities,
+/// so reaching this is a framework bug, not a runtime input error.
+#[cfg(target_os = "freebsd")]
+fn unbound_use_panic() -> ! {
+    panic!("an unbound Cap must be bound to a looper before use (broker-and-transport.md §3.5)")
+}
+
+/// A `Cap` crosses a process boundary as an fd capability
+/// (`broker-and-transport.md` §3.4–§3.5): `to_wire` duplicates its ring
+/// socket onto `SCM_RIGHTS` beside the [`CapBody`]; `from_wire` yields an
+/// *unbound* `Cap` — a decode reaches no reactor — which [`Cap::bind`]
+/// then makes usable.
+#[cfg(target_os = "freebsd")]
+impl<I: Interface, R: Rights> Wire for Cap<I, R> {
+    fn to_wire(&self, handles: &mut HandleSink) -> Value {
+        match &self.backend {
+            // An in-process ring has no fd to cross a boundary (§2.8); an
+            // unbound cap is not the framework's to pass on (§3.5).
+            Backend::Local(_) => {
+                panic!("an in-process Cap cannot cross a process boundary (§2.8, §3.5)")
+            }
+            Backend::IpcUnbound { .. } => unbound_use_panic(),
+            Backend::Ipc {
+                connection, body, ..
+            } => {
+                // `&self`: duplicate the ring socket rather than move it —
+                // the duplicate rides `SCM_RIGHTS`, this `Cap` keeps its
+                // own live ring.
+                let fd = connection
+                    .as_fd()
+                    .try_clone_to_owned()
+                    .expect("duplicate the capability's ring socket");
+                let handle = RawHandle {
+                    kind: KIND_FD_CAPABILITY,
+                    body: body.encode(),
+                };
+                Value::Handle(handles.push(handle, fd))
+            }
+        }
+    }
+
+    fn from_wire(value: &Value, handles: &mut HandleStore) -> Result<Self, WireError> {
+        let index = match value {
+            Value::Handle(index) => *index,
+            other => {
+                return Err(WireError::TypeMismatch {
+                    expected: "handle",
+                    found: other.kind_name(),
+                });
+            }
+        };
+        let (handle, fd) = handles.take(index)?;
+        if handle.kind != KIND_FD_CAPABILITY {
+            return Err(WireError::MalformedHandle(format!(
+                "expected an fd capability (kind {KIND_FD_CAPABILITY}), got kind {}",
+                handle.kind
+            )));
+        }
+        let body = CapBody::decode(&handle.body)
+            .map_err(|err| WireError::MalformedHandle(err.to_string()))?;
+        // Unbound: the received socket and its rights, no live ring — a
+        // decode reaches no reactor (§3.5). `Cap::bind` completes it.
+        Ok(Cap {
+            backend: Backend::IpcUnbound { fd, body },
+            _marker: PhantomData,
+        })
+    }
+}
+
+#[cfg(target_os = "freebsd")]
+impl<I: Interface, R: Rights> Cap<I, R>
+where
+    I::Message: Wire + Method,
+{
+    /// Bind a capability received over IPC to a looper, making it usable
+    /// (`broker-and-transport.md` §3.5).
+    ///
+    /// [`from_wire`](Wire::from_wire) yields an *unbound* `Cap` — a ring
+    /// socket with no live connection, because a decode reaches no
+    /// reactor. `bind` lifts that socket into a live [`Connection`] on
+    /// `reactor`, and spawns the connection's `serve` loop onto the looper
+    /// through `spawner` so replies to this cap's `call`s route. It
+    /// consumes the unbound `Cap` and returns the bound one.
+    ///
+    /// The *framework* binds — never component code: the startup shim
+    /// binds the capabilities the bootstrap bundle delivered, and a
+    /// capability arriving in a later message is bound as the looper
+    /// dispatches that message. A handler only ever sees a bound `Cap`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on a `Cap` that is not unbound — a `Local` or already-`Ipc`
+    /// capability has nothing to bind.
+    pub fn bind(self, reactor: Arc<ReactorSource>, spawner: &Spawner) -> Cap<I, R> {
+        let (fd, body) = match self.backend {
+            Backend::IpcUnbound { fd, body } => (fd, body),
+            Backend::Local(_) => panic!("a Local Cap is in-process — nothing to bind (§3.5)"),
+            Backend::Ipc { .. } => panic!("this Cap is already bound (§3.5)"),
+        };
+        let framed = FramedChannel::from_fd(fd);
+        let channel = AsyncChannel::new(framed, reactor)
+            .expect("drive the received ring on the looper's reactor");
+        let (connection, _inbox) = Connection::open(channel);
+        // The receive loop routes replies back to this cap's `call`s; a
+        // send capability accepts no inbound requests, so the `Inbox` is
+        // dropped.
+        spawner.spawn(connection.clone().serve());
+        Cap {
+            backend: Backend::Ipc {
+                connection,
+                encode: encode_message::<I>,
+                body,
+            },
+            _marker: PhantomData,
         }
     }
 }

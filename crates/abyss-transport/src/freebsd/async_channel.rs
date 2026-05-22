@@ -78,6 +78,24 @@ impl AsyncChannel {
         })
         .await
     }
+
+    /// Send one ring datagram without suspending. On a momentarily full
+    /// send buffer the socket's `WouldBlock` is surfaced rather than
+    /// awaited; the datagram is sent whole or not at all.
+    pub fn try_send(
+        &self,
+        frame: RingFrame,
+        envelope: &Envelope,
+        fds: &[BorrowedFd<'_>],
+    ) -> io::Result<()> {
+        self.framed.send(frame, envelope, fds)
+    }
+}
+
+impl AsFd for AsyncChannel {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.framed.as_fd()
+    }
 }
 
 #[cfg(test)]

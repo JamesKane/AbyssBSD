@@ -242,6 +242,15 @@ impl FramedChannel {
         FramedChannel { channel }
     }
 
+    /// Carry ring datagrams over an already-open socket — the descriptor a
+    /// received capability rode in on, which `Cap::bind` lifts back into a
+    /// live ring (`docs/design/broker-and-transport.md` §3.5).
+    pub fn from_fd(fd: OwnedFd) -> FramedChannel {
+        FramedChannel {
+            channel: Channel::from_fd(fd),
+        }
+    }
+
     /// Send one ring datagram: `frame`, then `envelope`, with the
     /// envelope's handle descriptors carried alongside via `SCM_RIGHTS`.
     pub fn send(
