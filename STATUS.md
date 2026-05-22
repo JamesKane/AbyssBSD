@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `e65c309` Phase 4: design — binding a service, and enforcing object rights (§3.6)
+- `6537dd4` Bump STATUS: Phase 4 — the broker resolves and mints object rights
 - `303d9cd` Phase 4: abyss-broker — resolve and mint object rights (§3.3)
 - `1013973` Bump STATUS: Phase 4 — rights classes on #[derive(Method)]
 - `463130d` Phase 4: abyss-msg — rights classes on #[derive(Method)] (§3.3)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `a6ce496` Bump STATUS: Phase 4 — two components converse over a wired ring
 - `132d6f3` Phase 4: abyss-bootstrap — two components converse over a wired ring (§5.4)
 - `6b12c1f` Bump STATUS: Phase 4 — the startup shim decodes the bundle (§5.4)
-- `d46716d` Phase 4: abyss-bootstrap — decode the bundle, claim client capabilities (§5.4)
-- `ca5c84d` Bump STATUS: Phase 4 — the object-rights model designed (§3.3)
 
 ## Site
 
@@ -209,25 +209,27 @@ bitmask of method ordinals it covers. The broker's new `catalogue` module
 (`InterfaceCatalogue`) maps an interface name to that table; `Session::
 wire` takes one, resolves each connection's `rights` tokens to an
 `object_rights` mask, and mints it into both grants' `CapBody`. Nothing
-*enforces* the minted mask yet — the `abyss-looper` service-loop check is
-what remains. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+*enforces* the minted mask yet, but a design pass (§3.6) has pinned how:
+`abyss-cap` gains `bind_service`, the server counterpart of `Cap::bind`,
+whose accept loop checks each inbound `method_id` against the mask before
+a `Service` handler sees the message; a refused request is answered with
+a new `Error` frame, which `Cap::call` surfaces as a `CallError`. Building
+it is the next increment. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **rest of the §3.3 object-rights layer** — classes are declared and
-  the broker mints the mask; what remains is *enforcement*: the
-  `abyss-looper` service loop rejecting an inbound `method_id` outside the
-  connection's mask, and the `Cap<I, R>` typestate connected to the
-  runtime mask (`narrow`, `to_wire` / `from_wire`, the `bind` check) — the
-  next increment;
+- **building §3.6** — the IPC service framework and object-rights
+  enforcement, designed and now to be built, in increments: the
+  `abyss-transport` `Error` frame; `abyss-cap`'s `bind_service`, the
+  `Service` handler, and the accept-loop rights check; the probe's server
+  side reworked onto it, with a rights-denied test — the next increment;
+- the `Cap<I, R>` typestate connected to the runtime mask (`narrow`,
+  the `bind`-time check) — the client-side safety net (§3.3);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
-  component (§5.5);
-- a reusable **IPC service framework** — the probe drives its `server`
-  grant with `abyss-transport` primitives directly; a typed,
-  `Handler`-based accept side — the server counterpart of `Cap::bind` — is
-  still owed.
+  component (§5.5).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
