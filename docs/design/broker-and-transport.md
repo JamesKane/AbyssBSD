@@ -267,6 +267,62 @@ bound costs nothing real.
 With identity and dispatch pinned, the §2.8 backend rework and `Cap:
 Wire` (§3.4) are mechanical.
 
+### 2.10 Typed request and reply
+
+§2.7 fixed that request and reply correlate by the ring frame; this fixes
+how they are *typed*. The caller of `Cap::call` gets back the reply type
+of the request it sent — checked, not asserted. A Rust function cannot
+return a type that varies by enum variant, so a request must be its own
+type; this is the gRPC / FIDL / Cap'n Proto shape, where every method has
+a distinct request and response.
+
+**A request is the payload type of its message-enum variant.** §2.9's
+message enum stays — it is still what a handler dispatches on and what
+`#[derive(Method)]` ordinals. A Request-kind variant is single-field, and
+that field's type *is* the request type:
+
+```
+enum CompositorMessage {
+    #[request(reply = SurfaceId)]
+    CreateSurface(CreateSurface),   // `CreateSurface` is the request type
+    #[command]
+    SetTitle(SetTitle),
+    // ...
+}
+```
+
+No request structs are invented — the interface author already writes
+`CreateSurface` and `SurfaceId` as ordinary `Wire` types. The derive ties
+them: per Request variant it emits `impl Request for CreateSurface { type
+Reply = SurfaceId; }` and `impl From<CreateSurface> for CompositorMessage`.
+
+**The `Request` trait** carries the reply type — `trait Request { type
+Reply: Wire; }`. `Reply: Wire` is intrinsic (a reply crosses a process
+like any message); being on `Request`, scoped to requests, it taxes
+nothing else.
+
+**`Cap::call`** is then precise and backend-uniform:
+
+```
+fn call<Q>(&self, request: Q) -> Result<Q::Reply, RingClosed>
+where Q: Request + Into<I::Message>
+```
+
+The caller hands a request value and `await`s exactly its reply. Over IPC
+the request serializes through the `I::Message` it embeds into (the
+captured encoder, §2.8), rides a Request frame, and the reply envelope
+decodes as `Q::Reply`; in-process the framework routes the reply over a
+reply ring. Neither path is named at the call site (§2.7).
+
+**The handler side** receives the message enum as before and answers a
+`Responder` (§2.7); for a Request the `Responder` is typed by the reply —
+`Responder<Q::Reply>` — so a handler cannot answer with the wrong type.
+
+`Cap::send` likewise takes a message value — a command or event — by
+`Into<I::Message>`, so the `call` and `send` surfaces are symmetric.
+§2.9's enum, `Method`, and `#[derive(Method)]` are unchanged; §2.10 is the
+typed request layer above them.
+
 ---
 
 ## 3. Capabilities across a process boundary
