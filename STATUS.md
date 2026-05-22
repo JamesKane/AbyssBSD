@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `139e450` Phase 4: abyss-broker — the bidirectional control connection (§5.6)
+- `e0278bd` Bump STATUS: Phase 4 — the spawnable manifest set (§5.6)
 - `d394731` Phase 4: abyss-broker — the spawnable manifest set (§5.6)
 - `eb9a93a` Bump STATUS: Phase 4 — the SpawnChild control protocol (§5.6)
 - `a031ebb` Phase 4: abyss-bundle — the SpawnChild control protocol (§5.6)
@@ -45,8 +47,6 @@ the FreeBSD remainder.
 - `b117b24` Bump STATUS: Phase 4 — delegated spawn designed (§5.6)
 - `8d87188` Phase 4: design — delegated spawn, the mechanism (§5.6)
 - `7c663e7` Track abyss-log in Cargo.lock
-- `72dd695` Bump STATUS: Phase 4 — supervision honours the restart policy (§5.5)
-- `48ca9c3` Phase 4: abyss-broker — supervision honours the manifest restart policy (§5.5)
 
 ## Site
 
@@ -292,12 +292,16 @@ capability** in the manifest schema, the permission the broker checks
 before honouring a request; the **`SpawnChild` / `SpawnReply`** control
 messages — the request a component sends the broker (naming a manifest,
 carrying no authority) and the broker's answer — alongside `PeerRestarted`
-in the `abyss-bundle` schema crate; and the **spawnable manifest set** —
+in the `abyss-bundle` schema crate; the **spawnable manifest set** —
 `SpawnableSet`, the broker's name-indexed catalogue of on-demand
 manifests, read at boot and held by the `Session`, spawned from only on
-request. What remains is the broker's bidirectional control connection
-and the handler that, on a `SpawnChild`, mints a child and wires it to
-running peers. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+request; and the **bidirectional control connection** — `Session::step`
+watches every component's control channel on the `kqueue` alongside the
+process descriptors, and answers a `SpawnChild` over it. The connection
+round-trips end to end (a wired test runs a lone component as a spawn
+requester), though the handler refuses every request for now. What
+remains is the real handler: mint the named child and wire it to running
+peers. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
@@ -305,11 +309,14 @@ running peers. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 `docs/design/broker-and-transport.md`:
 
 - **building delegated spawn (§5.6)** — the `kind = spawn` capability,
-  the `SpawnChild` / `SpawnReply` messages, and the spawnable manifest
-  set are in; what remains is the broker's bidirectional control
-  connection — watching every control channel on the `kqueue` — and the
-  handler that, on a `SpawnChild`, mints a child and wires it to running
-  peers through `PeerRestarted`;
+  the `SpawnChild` / `SpawnReply` messages, the spawnable manifest set,
+  and the bidirectional control connection are in; what remains is the
+  real `SpawnChild` handler — check the requester's `spawn` capability,
+  mint the named child, spawn it into the running session, and wire it to
+  live peers through `PeerRestarted`. A mid-session child must join the
+  authority graph, which is `build`-once today — so this needs either a
+  `Graph::add` or an equivalent, and the `Session` keeping the program
+  resolver rather than dropping it after `launch`;
 - **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
   a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
   crate, and a design pass first;
