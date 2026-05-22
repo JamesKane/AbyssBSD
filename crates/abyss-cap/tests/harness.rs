@@ -10,8 +10,8 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::Duration;
 
-use abyss_cap::{Cap, Interface, Rights, SubsetOf, cap_channel};
-use abyss_looper::{Ctx, Handler, Looper, RingClosed, block_on};
+use abyss_cap::{CallError, Cap, Interface, Rights, SubsetOf, cap_channel};
+use abyss_looper::{Ctx, Handler, Looper, block_on};
 use abyss_msg_derive::{Method, Request};
 
 // --- test interfaces -------------------------------------------------------
@@ -287,11 +287,11 @@ fn a_narrowed_capability_still_works() {
 }
 
 #[test]
-fn a_call_to_a_gone_service_is_ring_closed() {
+fn a_call_to_a_gone_service_reports_the_peer_gone() {
     let (echo_cap, echo_rx) = cap_channel::<Echo, Full>(2);
     drop(echo_rx); // no service ever attached
     let result = block_on(echo_cap.call(Ping { value: 1 }));
-    assert_eq!(result, Err(RingClosed));
+    assert_eq!(result, Err(CallError::PeerGone));
 }
 
 #[test]

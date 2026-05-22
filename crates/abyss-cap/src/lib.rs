@@ -30,6 +30,8 @@ use abyss_looper::{Delivery, Receiver, RingClosed, Sender, TrySendError, channel
 use abyss_msg::Request;
 
 #[cfg(target_os = "freebsd")]
+use std::future::Future;
+#[cfg(target_os = "freebsd")]
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 #[cfg(target_os = "freebsd")]
 use std::sync::Arc;
@@ -38,10 +40,13 @@ use std::sync::Arc;
 use abyss_looper::Spawner;
 #[cfg(target_os = "freebsd")]
 use abyss_msg::{
-    Envelope, HandleSink, HandleStore, Header, Method, RawHandle, Value, Wire, WireError,
+    Envelope, HandleSink, HandleStore, Header, MessageKind, Method, RawHandle, Value, Wire,
+    WireError,
 };
 #[cfg(target_os = "freebsd")]
-use abyss_transport::{AsyncChannel, CallOutcome, Connection, FramedChannel, ReactorSource};
+use abyss_transport::{
+    AsyncChannel, CallOutcome, Connection, FramedChannel, Inbound, Inbox, ReactorSource, Responder,
+};
 
 /// An interface — the set of messages a capability of this interface
 /// carries. `Message` is typically an enum of the interface's requests,
@@ -96,6 +101,23 @@ enum Backend<I: Interface> {
 pub struct Cap<I: Interface, R: Rights> {
     backend: Backend<I>,
     _marker: PhantomData<fn() -> (I, R)>,
+}
+
+/// Why a [`Cap::call`] did not return a reply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallError {
+    /// The peer was gone before it could answer — the ring closed.
+    PeerGone,
+    /// The service refused the request: it named a method outside the
+    /// caller's object rights (`broker-and-transport.md` §3.6). Reached
+    /// only over an IPC ring; an in-process call never yields it.
+    RightsDenied,
+}
+
+impl From<RingClosed> for CallError {
+    fn from(_: RingClosed) -> Self {
+        CallError::PeerGone
+    }
 }
 
 /// Create a connected capability and its receiver over an in-process ring
@@ -289,8 +311,10 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// correlates back. Awaiting suspends the calling handler, never the
     /// looper thread.
     ///
-    /// `Err(RingClosed)` means the peer was gone before it could reply.
-    pub async fn call<Q>(&self, request: Q) -> Result<Q::Reply, RingClosed>
+    /// A [`CallError`] tells a gone peer ([`PeerGone`](CallError::PeerGone))
+    /// from a service that refused the request
+    /// ([`RightsDenied`](CallError::RightsDenied), §3.6).
+    pub async fn call<Q>(&self, request: Q) -> Result<Q::Reply, CallError>
     where
         Q: Request + Into<I::Message>,
     {
@@ -303,7 +327,7 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                         responder: Some(Box::new(reply)),
                     })
                     .await?;
-                reply_rx.recv().await
+                reply_rx.recv().await.map_err(CallError::from)
             }
             #[cfg(target_os = "freebsd")]
             Backend::Ipc {
@@ -314,14 +338,12 @@ impl<I: Interface, R: Rights> Cap<I, R> {
                 match connection
                     .call(&envelope, &borrowed)
                     .await
-                    .map_err(|_| RingClosed)?
+                    .map_err(|_| CallError::PeerGone)?
                 {
                     CallOutcome::Answered(reply_envelope, reply_fds) => reply_envelope
                         .into_message::<Q::Reply>(reply_fds)
-                        .map_err(|_| RingClosed),
-                    // A refused request — until `Cap::call` carries a
-                    // `CallError` (§3.6), it is surfaced as a closed ring.
-                    CallOutcome::Refused => Err(RingClosed),
+                        .map_err(|_| CallError::PeerGone),
+                    CallOutcome::Refused => Err(CallError::RightsDenied),
                 }
             }
             #[cfg(target_os = "freebsd")]
@@ -448,4 +470,128 @@ where
             _marker: PhantomData,
         }
     }
+}
+
+/// A service over an interface — it answers the messages a `Cap<I>` sends
+/// (`broker-and-transport.md` §3.6).
+///
+/// The IPC counterpart of an `abyss-looper` `Handler`. A service answers
+/// with an *encoded* reply, where a `Handler` moves a value through a
+/// `Responder` channel, so a `Service` takes a typed [`Reply`] handle.
+#[cfg(target_os = "freebsd")]
+pub trait Service: Send + 'static {
+    /// The interface this service exports.
+    type Interface: Interface;
+
+    /// Handle one inbound message. For a request, answer it through
+    /// `reply`; a command or event carries no reply (§2.7). The framework
+    /// has already checked the message against the connection's object
+    /// rights — a handler sees only what it was authorized (§3.6).
+    fn handle(
+        &mut self,
+        message: <Self::Interface as Interface>::Message,
+        reply: Reply,
+    ) -> impl Future<Output = ()> + Send;
+}
+
+/// The handle a [`Service`] answers a request through (§3.6).
+#[cfg(target_os = "freebsd")]
+pub struct Reply {
+    /// `Some` for a request; `None` for a command or event.
+    responder: Option<Responder>,
+}
+
+#[cfg(target_os = "freebsd")]
+impl Reply {
+    /// Answer the request with `value`, encoded onto the ring. A command
+    /// or event carries no responder, so answering one is a no-op.
+    pub async fn answer<R: Wire>(self, value: R) -> Result<(), RingClosed> {
+        let Some(responder) = self.responder else {
+            return Ok(());
+        };
+        let (envelope, fds) = Envelope::from_message(reply_header(), &value);
+        let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
+        responder
+            .respond(&envelope, &borrowed)
+            .await
+            .map_err(|_| RingClosed)
+    }
+}
+
+/// The envelope header a reply rides under. A reply is a bare `Wire` value,
+/// not a `Method`, and `Cap::call` decodes it by the request's `Q::Reply`
+/// type without consulting the header — so the ids are zero.
+#[cfg(target_os = "freebsd")]
+fn reply_header() -> Header {
+    Header {
+        kind: MessageKind::Event,
+        interface_id: 0,
+        method_id: 0,
+    }
+}
+
+/// Bind a `Role::Server` grant — a service ring's descriptor and the
+/// rights minted for it — to a looper, serving `service` over it (§3.6).
+///
+/// The server counterpart of [`Cap::bind`]: it lifts the descriptor into
+/// a live `Connection`, spawns the connection's `serve` loop, and spawns
+/// the accept loop. The accept loop checks each inbound `method_id`
+/// against the grant's object-rights mask before `service` sees the
+/// message — a method outside the mask is refused, never dispatched.
+#[cfg(target_os = "freebsd")]
+pub fn bind_service<S>(
+    endpoint: OwnedFd,
+    rights: CapBody,
+    service: S,
+    reactor: Arc<ReactorSource>,
+    spawner: &Spawner,
+) where
+    S: Service,
+    <S::Interface as Interface>::Message: Wire + Method,
+{
+    let framed = FramedChannel::from_fd(endpoint);
+    let channel =
+        AsyncChannel::new(framed, reactor).expect("drive the service ring on the looper's reactor");
+    let (connection, inbox) = Connection::open(channel);
+    spawner.spawn(connection.serve());
+    spawner.spawn(serve_loop::<S>(inbox, rights.object_rights, service));
+}
+
+/// The accept loop [`bind_service`] spawns: decode each inbound message,
+/// check it against `object_rights`, and dispatch it — or refuse it.
+#[cfg(target_os = "freebsd")]
+async fn serve_loop<S>(mut inbox: Inbox, object_rights: u32, mut service: S)
+where
+    S: Service,
+    <S::Interface as Interface>::Message: Wire + Method,
+{
+    while let Some(Inbound {
+        envelope,
+        fds,
+        responder,
+    }) = inbox.accept().await
+    {
+        let message = match envelope.into_message::<<S::Interface as Interface>::Message>(fds) {
+            Ok(message) => message,
+            // A malformed message — drop it; a well-formed peer sends
+            // none.
+            Err(_) => continue,
+        };
+        // The §3.3 object-rights check, before the handler sees anything.
+        if !rights_allow(object_rights, message.method_id()) {
+            if let Some(responder) = responder {
+                let _ = responder.refuse().await;
+            }
+            continue;
+        }
+        service.handle(message, Reply { responder }).await;
+    }
+}
+
+/// Whether `object_rights` grants the method of ordinal `method_id`. A
+/// method past ordinal 31 has no bit in the `u32` mask, so it is never
+/// granted (§3.3).
+#[cfg(target_os = "freebsd")]
+fn rights_allow(object_rights: u32, method_id: u16) -> bool {
+    method_id < 32 && (object_rights & (1u32 << method_id)) != 0
 }

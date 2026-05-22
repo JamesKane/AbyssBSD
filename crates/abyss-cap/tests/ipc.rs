@@ -10,12 +10,15 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use abyss_cap::{Cap, CapBody, Interface, KIND_FD_CAPABILITY, Rights, cap_channel, ipc_cap};
+use abyss_cap::{
+    Cap, CapBody, Interface, KIND_FD_CAPABILITY, Reply, Rights, Service, bind_service, cap_channel,
+    ipc_cap,
+};
 use abyss_looper::Looper;
 use abyss_msg::{Envelope, HandleSink, HandleStore, Header, MessageKind, Value, Wire};
 use abyss_msg_derive::{Method, Request, Wire as WireDerive};
 use abyss_transport::{
-    AsyncChannel, Connection, FrameKind, FramedChannel, ReactorSource, RingFrame,
+    AsyncChannel, Channel, Connection, FrameKind, FramedChannel, ReactorSource, RingFrame,
 };
 
 /// A one-method command interface.
@@ -55,6 +58,24 @@ impl Interface for Echo {
 #[allow(dead_code)] // a marker type — only ever a type parameter
 struct Full;
 impl Rights for Full {}
+
+/// A service over `Echo` — answers each `Ping` with its value.
+struct EchoService;
+impl Service for EchoService {
+    type Interface = Echo;
+    async fn handle(&mut self, message: EchoMsg, reply: Reply) {
+        let EchoMsg::Ping(ping) = message;
+        let _ = reply.answer(ping.value).await;
+    }
+}
+
+/// A `CapBody` carrying just an object-rights mask.
+fn rights(object_rights: u32) -> CapBody {
+    CapBody {
+        cap_rights: [0u8; 16],
+        object_rights,
+    }
+}
 
 /// A distinctive capability body, so a round-trip can be checked exactly.
 fn sample_body() -> CapBody {
@@ -199,4 +220,99 @@ fn a_received_cap_binds_to_a_looper_and_calls_over_its_ring() {
 
     peer.join().expect("peer thread");
     assert_eq!(answer.lock().unwrap().take(), Some(7));
+}
+
+#[test]
+fn a_service_answers_a_request_within_its_rights() {
+    let (client_chan, server_chan) = Channel::pair().expect("socketpair");
+    let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+
+    // A raw client: send one request, receive the reply, then exit —
+    // closing the ring so the service's looper winds down.
+    let (request, _fds) = Envelope::from_message(
+        Header {
+            kind: MessageKind::Request,
+            interface_id: Echo::ID,
+            method_id: 0,
+        },
+        &EchoMsg::Ping(Ping { value: 99 }),
+    );
+    let client = thread::spawn(move || {
+        let client = FramedChannel::new(client_chan);
+        client
+            .send(
+                RingFrame {
+                    kind: FrameKind::Message,
+                    correlation: 1,
+                },
+                &request,
+                &[],
+            )
+            .expect("send the request");
+        client.recv().expect("receive the reply")
+    });
+
+    // Bind the service, granting `Ping` — ordinal 0, bit 0 of the mask.
+    let looper = Looper::with_event_source(source.clone());
+    let spawner = looper.spawner();
+    bind_service::<EchoService>(
+        server_chan.into_fd(),
+        rights(0b1),
+        EchoService,
+        source,
+        &spawner,
+    );
+    looper.run();
+
+    let (frame, reply, fds) = client.join().expect("client thread");
+    assert_eq!(frame.kind, FrameKind::Reply);
+    assert_eq!(reply.into_message::<i32>(fds), Ok(99));
+}
+
+#[test]
+fn a_service_refuses_a_request_outside_its_rights() {
+    let (client_chan, server_chan) = Channel::pair().expect("socketpair");
+    let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+
+    let (request, _fds) = Envelope::from_message(
+        Header {
+            kind: MessageKind::Request,
+            interface_id: Echo::ID,
+            method_id: 0,
+        },
+        &EchoMsg::Ping(Ping { value: 99 }),
+    );
+    let client = thread::spawn(move || {
+        let client = FramedChannel::new(client_chan);
+        client
+            .send(
+                RingFrame {
+                    kind: FrameKind::Message,
+                    correlation: 1,
+                },
+                &request,
+                &[],
+            )
+            .expect("send the request");
+        client.recv().expect("receive the outcome")
+    });
+
+    // Bind the service granting *no* rights — `Ping` is outside the mask.
+    let looper = Looper::with_event_source(source.clone());
+    let spawner = looper.spawner();
+    bind_service::<EchoService>(
+        server_chan.into_fd(),
+        rights(0),
+        EchoService,
+        source,
+        &spawner,
+    );
+    looper.run();
+
+    let (frame, _envelope, _fds) = client.join().expect("client thread");
+    assert_eq!(
+        frame.kind,
+        FrameKind::Error,
+        "a request outside the granted rights is refused",
+    );
 }
