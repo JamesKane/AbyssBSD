@@ -79,13 +79,18 @@ pub enum CapabilityKind {
     Casper,
     /// A scoped connection to the settings service.
     Settings,
+    /// Permission to ask the broker to spawn a child — delegated spawn
+    /// (`broker-and-transport.md` §5.6). Chiefly the shell holds it.
+    Spawn,
 }
 
 /// One capability a component requests in its manifest.
 ///
 /// The request names a [`CapabilityKind`], a `target` (the peer interface,
-/// the device class, the settings subtree, the Casper service — empty only
-/// for [`CapabilityKind::Memory`]), and the object rights asked for. The
+/// the device class, the settings subtree, the Casper service — empty for
+/// a [`Memory`](CapabilityKind::Memory) handle or a
+/// [`Spawn`](CapabilityKind::Spawn) grant), and the object rights asked
+/// for. The
 /// broker maps the object rights to a `cap_rights_t` mask before handing
 /// over the fd (§3.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -505,10 +510,13 @@ impl Builder {
                 section: "capability",
                 field: "kind",
             })?;
-            // Every kind names a target except a memory handle.
+            // Every kind names a target except a memory handle and a
+            // spawn grant — neither points at anything.
             let target = match cap.target {
                 Some(t) => t,
-                None if kind == CapabilityKind::Memory => String::new(),
+                None if matches!(kind, CapabilityKind::Memory | CapabilityKind::Spawn) => {
+                    String::new()
+                }
                 None => {
                     return Err(ManifestError::Missing {
                         section: "capability",
@@ -575,6 +583,7 @@ fn parse_kind(value: &str) -> Option<CapabilityKind> {
         "memory" => CapabilityKind::Memory,
         "casper" => CapabilityKind::Casper,
         "settings" => CapabilityKind::Settings,
+        "spawn" => CapabilityKind::Spawn,
         _ => return None,
     })
 }
@@ -706,6 +715,22 @@ policy = always
         )
         .expect("memory capability parses without a target");
         assert_eq!(m.capabilities[0].kind, CapabilityKind::Memory);
+        assert_eq!(m.capabilities[0].target, "");
+    }
+
+    /// A `spawn` capability — permission to ask the broker to spawn a
+    /// child (§5.6) — points at nothing, so it too needs no target.
+    #[test]
+    fn spawn_capability_needs_no_target() {
+        let m = Manifest::parse(
+            "name = shell\ninterface = shell\nversion = 1\n\
+             [capability]\nkind = spawn\n\
+             [jail]\nroot = /\nnetwork = none\nuser = _shell\n\
+             [budget]\nmemory = 1M\nfds = 8\n\
+             [restart]\npolicy = always\n",
+        )
+        .expect("a spawn capability parses without a target");
+        assert_eq!(m.capabilities[0].kind, CapabilityKind::Spawn);
         assert_eq!(m.capabilities[0].target, "");
     }
 
