@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `6b36486` Phase 4: abyss-broker — mint and enforce the kernel cap_rights layer (§3.3)
+- `a6ce496` Bump STATUS: Phase 4 — two components converse over a wired ring
 - `132d6f3` Phase 4: abyss-bootstrap — two components converse over a wired ring (§5.4)
 - `6b12c1f` Bump STATUS: Phase 4 — the startup shim decodes the bundle (§5.4)
 - `d46716d` Phase 4: abyss-bootstrap — decode the bundle, claim client capabilities (§5.4)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `8086e9e` Bump STATUS: Phase 4 — abyss-looper correctness fixes
 - `943141e` Phase 4: abyss-looper — fix a lost wakeup, a responder leak, and slot growth
 - `36ca290` Bump STATUS: Phase 4 — the broker wires an authority graph into a session
-- `e13ce72` Phase 4: abyss-broker — wire an authority graph into a spawned session (§5.2)
-- `c693146` Bump STATUS: Phase 4 — the bootstrap-bundle schema
 
 ## Site
 
@@ -193,19 +193,27 @@ ring**: the end-to-end test wires a three-component session and spawns it,
 and the `compositor` probe `call`s a request over the ring to the `input`
 probe, which serves it and replies — a request and its reply crossing a
 `SOCK_SEQPACKET` ring between two jailed, capability-mode components the
-broker spawned and wired. This reaches the bulk of **M1**. `cargo xtask
-ci` green on macOS and FreeBSD; tree clean.
+broker spawned and wired. This reaches the bulk of **M1**.
+
+The first of §3.3's two rights layers is now enforced: `Session::wire`
+builds the fixed service-ring `cap_rights_t` mask (`CAP_SEND`, `CAP_RECV`,
+`CAP_EVENT`, `CAP_FCNTL`, `CAP_FSTAT`), `cap_rights_limit`s each ring
+descriptor to it, and records it in the grant's `CapBody`;
+`freebsd-capsicum-sys` gained `CAP_FCNTL`. The conversation still runs end
+to end over the now-restricted rings — proof the mask covers what the
+transport exercises. The object-rights layer (§3.3's per-method bitmask)
+remains. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **§3.3 rights layers**, now designed — minting the kernel
-  `cap_rights` mask (and `cap_rights_limit`-ing each ring fd), rights
-  classes beside `#[derive(Method)]`, the object-rights mask minted from
-  the manifest, and the service-loop check (`TECH-DEBT.md` has the
-  increment breakdown) — the next increment;
+- the **§3.3 object-rights layer** — rights classes declared beside
+  `#[derive(Method)]`, the object-rights mask resolved from a manifest's
+  `rights` tokens and minted into both grants, the `abyss-looper`
+  service-loop check, and the `Cap<I, R>` typestate connected to the
+  runtime mask (`TECH-DEBT.md`) — the next increment;
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
   component (§5.5);
 - a reusable **IPC service framework** — the probe drives its `server`
