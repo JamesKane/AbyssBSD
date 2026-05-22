@@ -1,0 +1,18 @@
+[package]
+name = "abyss-bundle"
+description = "AbyssBSD bootstrap-bundle schema — the broker/component contract (broker-and-transport.md §5.8)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# A host-slice crate: the bundle schema and its `Wire` round-trip use no
+# FreeBSD facility, so it builds and tests on any host. Only the broker's
+# use of it — minting real rings — is FreeBSD-gated.
+[dependencies]
+abyss-msg = { path = "../abyss-msg" }
+abyss-cap = { path = "../abyss-cap" }
+
+[lints]
+workspace = true
