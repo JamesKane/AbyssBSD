@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `48ca9c3` Phase 4: abyss-broker — supervision honours the manifest restart policy (§5.5)
+- `7af83c6` Bump STATUS: Phase 4 — the broker binary boots a session from disk (§5.1)
 - `84bda29` Phase 4: abyss-broker — the broker binary, booting a session from disk (§5.1)
 - `e6a226c` Phase 4: abyss-broker — the interface catalogue's on-disk form (§3.3)
 - `8b99f3f` Bump STATUS: Phase 4 — load a directory of manifests (§5.1)
@@ -45,8 +47,6 @@ the FreeBSD remainder.
 - `14f2288` Phase 4: §5.5 — the multi-process peer-restart test, end to end
 - `488d60b` Bump STATUS: Phase 4 — Control, the component-side control loop (§5.5)
 - `4cacbae` Phase 4: abyss-bootstrap — Control, the component-side §5.5 control loop
-- `3713eae` Bump STATUS: Phase 4 — AsyncMessageChannel, the async control channel (§5.5)
-- `442ba6c` Phase 4: abyss-transport — AsyncMessageChannel, the async control channel
 
 ## Site
 
@@ -272,8 +272,14 @@ graph, launch the session — and **`src/bin/broker.rs`** is the broker
 proper: the desktop's root process, a thin shell that boots a session and
 drives `Session::step` in a loop for its life, logging each restart. A
 wired test boots a three-component session entirely from files on disk
-and sees the components converse. `cargo xtask ci` green on macOS and
-FreeBSD; tree clean.
+and sees the components converse.
+
+And supervision now honours the manifest's **restart policy**: `step`
+consults each exited component's `always` / `on-failure` / `never` policy
+— `on-failure` reading the exit status the kqueue reactor's
+`ProcessExited` event now carries — and a component the policy does not
+restart is stopped, its jail reclaimed and its peers' rings left closed
+(§5.5). `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
@@ -286,9 +292,6 @@ FreeBSD; tree clean.
   `cap_channel_t` per declared Casper service;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
-  net beside the now-enforced service-side check (§3.3);
-- the broker's restart *policy* — `step` restarts unconditionally; the
-  manifest's `restart` policy (`always` / `on-failure` / `never`, already
-  parsed) should gate it, and a `never` component's peers stay closed.
+  net beside the now-enforced service-side check (§3.3).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
