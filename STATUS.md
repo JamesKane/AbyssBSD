@@ -33,6 +33,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `442ba6c` Phase 4: abyss-transport — AsyncMessageChannel, the async control channel
+- `ba39aac` Bump STATUS: Phase 4 — Session/Supervisor unified (§5.5)
 - `edea028` Phase 4: §5.5 — Session and Supervisor unified into one runtime
 - `101bca6` Phase 4: abyss-cap — the durable capability (§5.5)
 - `6314afb` Bump STATUS: Phase 4 — the PeerRestarted control message (§5.5)
@@ -41,8 +43,6 @@ the FreeBSD remainder.
 - `31f9b17` Phase 4: design — PeerRestarted, re-wiring a restarted component (§5.5)
 - `a9b7d26` Bump STATUS: Phase 4 — the object-rights layer enforced end to end
 - `04eed42` Phase 4: abyss-bootstrap — the probe serves through bind_service (§3.6)
-- `0d972cf` Bump STATUS: Phase 4 — the IPC service framework and rights enforcement
-- `e2d2d93` Phase 4: abyss-cap — the IPC service framework and rights enforcement (§3.6)
 
 ## Site
 
@@ -238,9 +238,13 @@ component exit it *re-wires*, creating a fresh ring per connection the
 dead component touched, respawning it into a fresh bundle, and sending
 each surviving peer a `PeerRestarted` over that peer's control channel.
 Verified in the VM: a component that exits is re-wired and restarted, its
-live peer untouched. The component-side control loop that drives the
-`Repointer` is what remains. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+live peer untouched. The component side has begun: `abyss-transport`
+gained **`AsyncMessageChannel`**, the bare-envelope async sibling of
+`AsyncChannel` — a component wraps its bootstrap channel in one to await
+`PeerRestarted` without blocking its looper thread. What remains is the
+control loop itself — decoding a received `PeerRestarted` and driving the
+`Repointer` — and a full multi-process restart test. `cargo xtask ci`
+green on macOS and FreeBSD; tree clean.
 
 ## Next
 
@@ -248,10 +252,11 @@ tree clean.
 `docs/design/broker-and-transport.md`:
 
 - **building §5.5 `PeerRestarted`** — the control message, the durable
-  capability, and the unified session runtime with re-wire-on-restart are
-  in; what remains is the component-side control loop that drives the
-  `Repointer` when a `PeerRestarted` arrives over the control channel,
-  and a full multi-process restart test — the next increment;
+  capability, the unified session runtime with re-wire-on-restart, and
+  `AsyncMessageChannel` (the async control channel) are in; what remains
+  is the component-side control loop that decodes a `PeerRestarted` and
+  drives the `Repointer`, and a full multi-process restart test — the
+  next increment;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
   net beside the now-enforced service-side check (§3.3).
