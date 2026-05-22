@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
-//! The async IPC channel — compiled only on FreeBSD.
+//! The async IPC channels — compiled only on FreeBSD.
 //!
 //! [`AsyncChannel`] drives a [`FramedChannel`] on a [`ReactorSource`]: its
 //! `recv` and `send` suspend the *calling task* — never the looper thread
 //! — when the socket would block (`docs/design/broker-and-transport.md`
 //! §2.3). The request/reply layer (§2.7) builds on it.
+//!
+//! [`AsyncMessageChannel`] is its bare-envelope sibling: it drives a
+//! [`MessageChannel`] the same way, for a channel that carries whole
+//! envelopes with no ring frame — the broker's control connection, which a
+//! component watches for `PeerRestarted` after boot (§5.5).
 
 use std::future::poll_fn;
 use std::io;
@@ -15,7 +20,7 @@ use std::task::Poll;
 
 use abyss_msg::Envelope;
 
-use super::{FramedChannel, Interest, ReactorSource};
+use super::{FramedChannel, Interest, MessageChannel, ReactorSource};
 use crate::frame::RingFrame;
 
 /// A [`FramedChannel`] driven asynchronously on a [`ReactorSource`].
@@ -95,6 +100,55 @@ impl AsyncChannel {
 impl AsFd for AsyncChannel {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.framed.as_fd()
+    }
+}
+
+/// A [`MessageChannel`] driven asynchronously on a [`ReactorSource`].
+///
+/// The bare-envelope counterpart of [`AsyncChannel`]: one `recv` is one
+/// whole envelope, no ring frame. A component wraps its bootstrap channel
+/// in one of these to await `PeerRestarted` control messages without
+/// blocking its looper thread (§5.5). The socket is held in non-blocking
+/// mode.
+pub struct AsyncMessageChannel {
+    channel: MessageChannel,
+    source: Arc<ReactorSource>,
+}
+
+impl AsyncMessageChannel {
+    /// Drive `channel` asynchronously on `source`; puts the socket into
+    /// non-blocking mode. `source` must be the event source of the looper
+    /// this channel is used from.
+    pub fn new(
+        channel: MessageChannel,
+        source: Arc<ReactorSource>,
+    ) -> io::Result<AsyncMessageChannel> {
+        channel.set_nonblocking()?;
+        Ok(AsyncMessageChannel { channel, source })
+    }
+
+    /// Receive one envelope, suspending the task until one arrives.
+    pub async fn recv(&self) -> io::Result<(Envelope, Vec<OwnedFd>)> {
+        poll_fn(|cx| match self.channel.recv() {
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                match self.source.register(
+                    self.channel.as_fd(),
+                    Interest::Readable,
+                    cx.waker().clone(),
+                ) {
+                    Ok(()) => Poll::Pending,
+                    Err(err) => Poll::Ready(Err(err)),
+                }
+            }
+            other => Poll::Ready(other),
+        })
+        .await
+    }
+}
+
+impl AsFd for AsyncMessageChannel {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.channel.as_fd()
     }
 }
 
@@ -184,5 +238,38 @@ mod tests {
         assert_eq!(peer_frame.kind, FrameKind::Reply);
         assert_eq!(peer_frame.correlation, 99);
         assert_eq!(peer_env, reply);
+    }
+
+    #[test]
+    fn async_message_recv_over_a_looper() {
+        let message = envelope(MessageKind::Event, 7);
+
+        let (server_chan, client_chan) = MessageChannel::pair().expect("socketpair");
+        let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+        let server =
+            AsyncMessageChannel::new(server_chan, Arc::clone(&source)).expect("async channel");
+
+        // The peer is a plain blocking channel on another thread; it sends
+        // one bare envelope once the looper has parked on its `recv`.
+        let peer_message = message.clone();
+        let peer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            client_chan.send(&peer_message, &[]).expect("peer send");
+        });
+
+        // One looper task: async-recv the envelope, never blocking the
+        // looper thread while the peer is still asleep.
+        let seen = Arc::new(Mutex::new(None));
+        let task_seen = Arc::clone(&seen);
+        let mut looper = Looper::with_event_source(source);
+        looper.spawn(async move {
+            let (env, fds) = server.recv().await.expect("server recv");
+            assert!(fds.is_empty(), "this envelope carried no descriptors");
+            *task_seen.lock().unwrap() = Some(env);
+        });
+        looper.run();
+        peer.join().expect("peer thread");
+
+        assert_eq!(seen.lock().unwrap().take(), Some(message));
     }
 }

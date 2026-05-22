@@ -18,7 +18,7 @@ mod async_channel;
 mod connection;
 mod reactor;
 
-pub use async_channel::AsyncChannel;
+pub use async_channel::{AsyncChannel, AsyncMessageChannel};
 pub use connection::{CallOutcome, Connection, Inbound, Inbox, Responder};
 pub use reactor::{Event, Interest, Reactor, ReactorSource};
 
@@ -217,6 +217,13 @@ impl MessageChannel {
             )
         })?;
         Ok((envelope, fds))
+    }
+
+    /// Put the underlying socket into non-blocking mode — see
+    /// [`Channel::set_nonblocking`]. The mode [`AsyncMessageChannel`] drives
+    /// the channel in.
+    pub fn set_nonblocking(&self) -> io::Result<()> {
+        self.channel.set_nonblocking()
     }
 }
 
