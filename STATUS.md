@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `a031ebb` Phase 4: abyss-bundle — the SpawnChild control protocol (§5.6)
+- `a0599cd` Bump STATUS: Phase 4 — the kind = spawn capability (§5.6)
 - `8d23f75` Phase 4: abyss-broker — the `kind = spawn` capability (§5.6)
 - `b117b24` Bump STATUS: Phase 4 — delegated spawn designed (§5.6)
 - `8d87188` Phase 4: design — delegated spawn, the mechanism (§5.6)
@@ -45,8 +47,6 @@ the FreeBSD remainder.
 - `48ca9c3` Phase 4: abyss-broker — supervision honours the manifest restart policy (§5.5)
 - `7af83c6` Bump STATUS: Phase 4 — the broker binary boots a session from disk (§5.1)
 - `84bda29` Phase 4: abyss-broker — the broker binary, booting a session from disk (§5.1)
-- `e6a226c` Phase 4: abyss-broker — the interface catalogue's on-disk form (§3.3)
-- `8b99f3f` Bump STATUS: Phase 4 — load a directory of manifests (§5.1)
 
 ## Site
 
@@ -287,20 +287,26 @@ design: a spawnable manifest set the broker reads at boot but does not
 spawn; a bidirectional control connection carrying a `SpawnChild` request
 and its reply; a `kind = spawn` capability gating who may ask; and a
 mid-session child wired to running peers by reusing the §5.5
-`PeerRestarted` re-wiring. The first brick is down — the **`kind = spawn`
-capability** is in the manifest schema, the permission the broker will
-check before honouring a spawn request. `cargo xtask ci` green on macOS
-and FreeBSD; tree clean.
+`PeerRestarted` re-wiring. Two bricks are down — the **`kind = spawn`
+capability** in the manifest schema, the permission the broker checks
+before honouring a request; and the **`SpawnChild` / `SpawnReply`**
+control messages — the request a component sends the broker (naming a
+manifest, carrying no authority) and the broker's answer — alongside
+`PeerRestarted` in the `abyss-bundle` schema crate. What remains is the
+broker side: the spawnable manifest set, and the bidirectional control
+connection with its request handler. `cargo xtask ci` green on macOS and
+FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building delegated spawn (§5.6)** — the `kind = spawn` capability is
-  in; what remains is the spawnable manifest set, the bidirectional
-  control connection and its `SpawnChild` request, and wiring a
-  mid-session child through `PeerRestarted`;
+- **building delegated spawn (§5.6)** — the `kind = spawn` capability and
+  the `SpawnChild` / `SpawnReply` messages are in; what remains is the
+  spawnable manifest set, and the broker's bidirectional control
+  connection with the handler that mints a child and wires it to running
+  peers through `PeerRestarted`;
 - **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
   a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
   crate, and a design pass first;
