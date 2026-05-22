@@ -21,6 +21,7 @@ name = "abyss-broker"
 version = "0.0.0"
 dependencies = [
  "abyss-bundle",
+ "abyss-log",
  "abyss-msg",
  "abyss-transport",
  "freebsd-capsicum-sys",
