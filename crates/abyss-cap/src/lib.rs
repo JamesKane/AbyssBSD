@@ -24,7 +24,8 @@ pub use wire::{CAP_BODY_LEN, CapBody, CapBodyError, KIND_FD_CAPABILITY};
 
 use std::marker::PhantomData;
 
-use abyss_looper::{Receiver, RingClosed, Sender, TrySendError, channel};
+use abyss_looper::{Delivery, Receiver, RingClosed, Sender, TrySendError, channel, responder};
+use abyss_msg::Request;
 
 #[cfg(target_os = "freebsd")]
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
@@ -53,8 +54,9 @@ pub trait Interface: 'static {
 /// `Local` is the in-process ring (looper-framework §3); the IPC backend
 /// joins it as the FreeBSD transport work lands.
 enum Backend<I: Interface> {
-    /// An in-process `abyss-looper` channel of typed messages.
-    Local(Sender<I::Message>),
+    /// An in-process `abyss-looper` channel. It carries a [`Delivery`] —
+    /// a message and, for a request, the responder that answers it.
+    Local(Sender<Delivery<I::Message>>),
     /// An IPC ring — a `SOCK_SEQPACKET` connection. `encode` is the
     /// message-to-envelope function captured when the ring was built,
     /// where `I::Message: Wire + Method` was in scope (§2.8, §2.9); it
@@ -87,7 +89,9 @@ pub struct Cap<I: Interface, R: Rights> {
 /// # Panics
 ///
 /// Panics if `capacity` is zero.
-pub fn cap_channel<I: Interface, R: Rights>(capacity: usize) -> (Cap<I, R>, Receiver<I::Message>) {
+pub fn cap_channel<I: Interface, R: Rights>(
+    capacity: usize,
+) -> (Cap<I, R>, Receiver<Delivery<I::Message>>) {
     let (sender, receiver) = channel(capacity);
     (
         Cap {
@@ -144,7 +148,14 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// looper thread — if the ring is full (§3.1).
     pub async fn send(&self, msg: I::Message) -> Result<(), RingClosed> {
         match &self.backend {
-            Backend::Local(sender) => sender.send(msg).await,
+            Backend::Local(sender) => {
+                sender
+                    .send(Delivery {
+                        message: msg,
+                        responder: None,
+                    })
+                    .await
+            }
             #[cfg(target_os = "freebsd")]
             Backend::Ipc { connection, encode } => {
                 let (envelope, fds) = (*encode)(&msg);
@@ -162,7 +173,18 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// Send without waiting; on a full ring the message is returned.
     pub fn try_send(&self, msg: I::Message) -> Result<(), TrySendError<I::Message>> {
         match &self.backend {
-            Backend::Local(sender) => sender.try_send(msg),
+            Backend::Local(sender) => {
+                // The message is wrapped in a `Delivery` to send; unwrap it
+                // back out of the error so the caller is handed its message.
+                match sender.try_send(Delivery {
+                    message: msg,
+                    responder: None,
+                }) {
+                    Ok(()) => Ok(()),
+                    Err(TrySendError::Full(d)) => Err(TrySendError::Full(d.message)),
+                    Err(TrySendError::Closed(d)) => Err(TrySendError::Closed(d.message)),
+                }
+            }
             #[cfg(target_os = "freebsd")]
             Backend::Ipc { .. } => todo!("Cap::try_send over an IPC ring is not yet wired"),
         }
@@ -196,28 +218,43 @@ impl<I: Interface, R: Rights> Cap<I, R> {
         }
     }
 
-    /// Request/reply (§6). `build` is handed a fresh reply [`Sender`] to
-    /// embed in the request message; the reply is awaited on the matching
-    /// receiver. Awaiting suspends the calling handler, never the thread.
+    /// Send a request and await its reply (`broker-and-transport.md`
+    /// §2.10). The reply type is the request's own — `Q::Reply` — so the
+    /// caller is handed back exactly what the request is answered with.
+    ///
+    /// The reply path is framework-mediated, never an embedded `Sender`
+    /// (§2.7): in-process the request rides a [`Delivery`] carrying a
+    /// `Responder`; over IPC it rides a Request frame and the reply
+    /// correlates back. Awaiting suspends the calling handler, never the
+    /// looper thread.
     ///
     /// `Err(RingClosed)` means the peer was gone before it could reply.
-    ///
-    /// Over an IPC ring the reply path is framework-mediated rather than an
-    /// embedded `Sender` (§2.7); that reshape is a later increment.
-    pub async fn call<Rep, F>(&self, build: F) -> Result<Rep, RingClosed>
+    pub async fn call<Q>(&self, request: Q) -> Result<Q::Reply, RingClosed>
     where
-        Rep: Send + 'static,
-        F: FnOnce(Sender<Rep>) -> I::Message,
+        Q: Request + Into<I::Message>,
     {
         match &self.backend {
             Backend::Local(sender) => {
-                let (reply_tx, mut reply_rx) = channel::<Rep>(1);
-                sender.send(build(reply_tx)).await?;
+                let (reply, mut reply_rx) = responder::<Q::Reply>();
+                sender
+                    .send(Delivery {
+                        message: request.into(),
+                        responder: Some(Box::new(reply)),
+                    })
+                    .await?;
                 reply_rx.recv().await
             }
             #[cfg(target_os = "freebsd")]
-            Backend::Ipc { .. } => {
-                todo!("Cap::call over an IPC ring — the framework-mediated reply path, §2.7")
+            Backend::Ipc { connection, encode } => {
+                let (envelope, fds) = (*encode)(&request.into());
+                let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
+                let (reply_envelope, reply_fds) = connection
+                    .call(&envelope, &borrowed)
+                    .await
+                    .map_err(|_| RingClosed)?;
+                reply_envelope
+                    .into_message::<Q::Reply>(reply_fds)
+                    .map_err(|_| RingClosed)
             }
         }
     }

@@ -35,6 +35,7 @@ pub trait Method {
 /// interface's message enum — `#[derive(Request)]` writes it. `Cap::call`
 /// sends a request and hands the caller back exactly this `Reply`.
 pub trait Request {
-    /// The reply this request is answered with.
-    type Reply: Wire;
+    /// The reply this request is answered with. `Send + 'static` so it can
+    /// ride a reply ring; `Wire` so it can cross a process.
+    type Reply: Wire + Send + 'static;
 }

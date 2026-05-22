@@ -11,7 +11,8 @@ use std::thread;
 use std::time::Duration;
 
 use abyss_cap::{Cap, Interface, Rights, SubsetOf, cap_channel};
-use abyss_looper::{Ctx, Handler, Looper, RingClosed, Sender, block_on};
+use abyss_looper::{Ctx, Handler, Looper, RingClosed, block_on};
+use abyss_msg_derive::{Method, Request};
 
 // --- test interfaces -------------------------------------------------------
 
@@ -22,9 +23,16 @@ impl Interface for Echo {
     type Message = EchoMsg;
 }
 
-/// One request: reply to `reply` with `value`.
+/// The one request `Echo` carries — `Ping`, answered with its value.
+#[derive(Method, Request)]
 enum EchoMsg {
-    Ping { value: i32, reply: Sender<i32> },
+    #[request(reply = i32)]
+    Ping(Ping),
+}
+
+/// A `Ping` request payload.
+struct Ping {
+    value: i32,
 }
 
 #[allow(dead_code)]
@@ -54,13 +62,16 @@ enum Step {
     Note(i32),
 }
 
-/// Replies to every `Ping` with its value.
+/// Replies to every `Ping` with its value, through the responder the
+/// framework delivered in the `Ctx`.
 struct EchoHandler;
 impl Handler for EchoHandler {
     type Message = EchoMsg;
-    async fn handle(&mut self, msg: EchoMsg, _ctx: &Ctx) {
-        let EchoMsg::Ping { value, reply } = msg;
-        let _ = reply.send(value).await;
+    async fn handle(&mut self, msg: EchoMsg, ctx: &Ctx) {
+        let EchoMsg::Ping(ping) = msg;
+        if let Some(responder) = ctx.responder::<i32>() {
+            let _ = responder.send(ping.value);
+        }
     }
 }
 
@@ -74,10 +85,7 @@ impl Handler for WorkHandler {
     type Message = i32;
     async fn handle(&mut self, n: i32, _ctx: &Ctx) {
         self.log.lock().unwrap().push(Step::Start(n));
-        let _ = self
-            .helper
-            .call(|reply| EchoMsg::Ping { value: n, reply })
-            .await;
+        let _ = self.helper.call(Ping { value: n }).await;
         self.log.lock().unwrap().push(Step::End(n));
     }
 }
@@ -168,10 +176,10 @@ impl Handler for GateOpener {
 fn call_reply_across_loopers() {
     let (echo_cap, echo_rx) = cap_channel::<Echo, Full>(8);
     let mut svc = Looper::new();
-    svc.attach(EchoHandler, echo_rx);
+    svc.attach_service(EchoHandler, echo_rx);
     let svc_thread = thread::spawn(move || svc.run());
 
-    let reply = block_on(echo_cap.call(|reply| EchoMsg::Ping { value: 99, reply })).unwrap();
+    let reply = block_on(echo_cap.call(Ping { value: 99 })).unwrap();
     assert_eq!(reply, 99);
 
     drop(echo_cap); // service inbox closes → serve loop ends → run returns
@@ -182,13 +190,13 @@ fn call_reply_across_loopers() {
 fn per_handler_serialization_holds_across_await() {
     let (helper_cap, helper_rx) = cap_channel::<Echo, Full>(8);
     let mut helper = Looper::new();
-    helper.attach(EchoHandler, helper_rx);
+    helper.attach_service(EchoHandler, helper_rx);
     let helper_thread = thread::spawn(move || helper.run());
 
     let log = Arc::new(Mutex::new(Vec::new()));
     let (work_cap, work_rx) = cap_channel::<Work, Full>(8);
     let mut worker = Looper::new();
-    worker.attach(
+    worker.attach_service(
         WorkHandler {
             helper: helper_cap,
             log: Arc::clone(&log),
@@ -237,14 +245,14 @@ fn other_handlers_progress_while_one_awaits() {
     drop(b_cap);
 
     let mut looper = Looper::new();
-    looper.attach(
+    looper.attach_service(
         GateWaiter {
             gate: gate.clone(),
             log: Arc::clone(&log),
         },
         a_rx,
     );
-    looper.attach(
+    looper.attach_service(
         GateOpener {
             gate,
             log: Arc::clone(&log),
@@ -267,11 +275,11 @@ fn other_handlers_progress_while_one_awaits() {
 fn a_narrowed_capability_still_works() {
     let (echo_cap, echo_rx) = cap_channel::<Echo, Full>(8);
     let mut svc = Looper::new();
-    svc.attach(EchoHandler, echo_rx);
+    svc.attach_service(EchoHandler, echo_rx);
     let svc_thread = thread::spawn(move || svc.run());
 
     let limited: Cap<Echo, ReadOnly> = echo_cap.narrow::<ReadOnly>();
-    let reply = block_on(limited.call(|reply| EchoMsg::Ping { value: 5, reply })).unwrap();
+    let reply = block_on(limited.call(Ping { value: 5 })).unwrap();
     assert_eq!(reply, 5);
 
     drop(limited);
@@ -282,7 +290,7 @@ fn a_narrowed_capability_still_works() {
 fn a_call_to_a_gone_service_is_ring_closed() {
     let (echo_cap, echo_rx) = cap_channel::<Echo, Full>(2);
     drop(echo_rx); // no service ever attached
-    let result = block_on(echo_cap.call(|reply| EchoMsg::Ping { value: 1, reply }));
+    let result = block_on(echo_cap.call(Ping { value: 1 }));
     assert_eq!(result, Err(RingClosed));
 }
 
@@ -290,14 +298,14 @@ fn a_call_to_a_gone_service_is_ring_closed() {
 fn a_looper_survives_an_idle_period() {
     let (echo_cap, echo_rx) = cap_channel::<Echo, Full>(8);
     let mut svc = Looper::new();
-    svc.attach(EchoHandler, echo_rx);
+    svc.attach_service(EchoHandler, echo_rx);
     let svc_thread = thread::spawn(move || svc.run());
 
     // The looper goes fully idle — it must park (zero CPU), not spin or
     // exit — and still be responsive afterward.
     thread::sleep(Duration::from_millis(50));
 
-    let reply = block_on(echo_cap.call(|reply| EchoMsg::Ping { value: 42, reply })).unwrap();
+    let reply = block_on(echo_cap.call(Ping { value: 42 })).unwrap();
     assert_eq!(reply, 42);
 
     drop(echo_cap);
