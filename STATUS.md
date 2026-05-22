@@ -13,9 +13,11 @@ for the rest now exists (`tools/vm`, see In flight).
 
 - `crates/abyss-broker` — the broker. Its host slice: the `manifest`
   parser — the component-manifest schema and its fixed-schema declarative
-  text format, a first-party parser with no vendored config crate
-  (`broker-and-transport.md` §4) — and the `graph` module, the static
-  authority graph computed and validated from a manifest set (§5.2). And,
+  text format, a first-party parser with no vendored config crate, and
+  `Manifest::load_dir`, reading a directory of them into a manifest set
+  (`broker-and-transport.md` §4, §5.1) — and the `graph` module, the
+  static authority graph computed and validated from a manifest set
+  (§5.2). And,
   on FreeBSD, the `spawn` and `session` modules — component spawn, and the
   session runtime that wires, spawns, and supervises a manifest set (§5.3,
   §5.5); see In flight. No `unsafe`.
@@ -33,6 +35,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `2598449` Phase 4: abyss-broker — load a directory of manifests (§5.1)
+- `33287ed` Bump STATUS: Phase 4 — §5.5 PeerRestarted proven end to end
 - `14f2288` Phase 4: §5.5 — the multi-process peer-restart test, end to end
 - `488d60b` Bump STATUS: Phase 4 — Control, the component-side control loop (§5.5)
 - `4cacbae` Phase 4: abyss-bootstrap — Control, the component-side §5.5 control loop
@@ -41,8 +45,6 @@ the FreeBSD remainder.
 - `ba39aac` Bump STATUS: Phase 4 — Session/Supervisor unified (§5.5)
 - `edea028` Phase 4: §5.5 — Session and Supervisor unified into one runtime
 - `101bca6` Phase 4: abyss-cap — the durable capability (§5.5)
-- `6314afb` Bump STATUS: Phase 4 — the PeerRestarted control message (§5.5)
-- `e381452` Phase 4: abyss-bundle — the PeerRestarted control message (§5.5)
 
 ## Site
 
@@ -252,18 +254,26 @@ test launches a client/server probe pair, lets the server answer one call
 and exit, `step`s the broker to re-wire and respawn it — and the client's
 *second* call, over the durable capability the control loop repointed,
 reaches the freshly restarted server. The broker re-wires a dead peer and
-the call after it still lands. `cargo xtask ci` green on macOS and
-FreeBSD; tree clean.
+the call after it still lands.
+
+With §5.5 closed, the broker's own boot path is next. The first piece is
+down: **`Manifest::load_dir`** reads the broker's manifest set from a
+directory at boot (§5.1) — every regular, non-dotfile entry parsed, the
+set returned in file-name order so the authority graph is deterministic,
+a malformed manifest a `LoadError` naming the file. `cargo xtask ci`
+green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **the broker's main event loop (§5.6–§5.7)** — §5.5 leaves the session
-  runtime supervising one `step` at a time; the broker proper drives that
-  in a long-running loop, the desktop's root process, with the manifest
-  set read from disk rather than built in a test;
+- **the broker's boot path and main loop (§5.1)** — `load_dir` is in;
+  what remains is the broker binary itself: read the manifest set, build
+  the graph and catalogue, launch the session, and drive `step` in a
+  long-running loop as the desktop's root process. How the interface
+  catalogue (§3.3) is populated in production — the tests hand-register
+  it — is the open question here;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
   net beside the now-enforced service-side check (§3.3).
