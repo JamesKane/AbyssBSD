@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `4942140` Phase 4: abyss-cap — Cap::call reshaped to the typed request (§2.10)
+- `9ca81ba` Bump STATUS: Phase 4 — in-process request delivery
 - `64f139c` Phase 4: abyss-looper — in-process request delivery to a handler
 - `ad29a24` Bump STATUS: Phase 4 — the Responder reply handle
 - `751cf93` Phase 4: abyss-looper — the Responder reply handle
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `e7ee089` Bump STATUS: Phase 4 — typed request and reply design pass
 - `0a52e92` Phase 4: design — typed request and reply (§2.10)
 - `b337cd8` Bump STATUS: Phase 4 — the Cap IPC backend, send dispatch
-- `1ed3820` Phase 4: abyss-cap — the Cap IPC backend, send dispatch
-- `1963a6d` Bump STATUS: Phase 4 — Cap holds a Backend
 
 ## Site
 
@@ -131,20 +131,22 @@ per-request, each request its own type carrying its reply type, the
 gRPC / FIDL shape — and that layer's trait and derive are built:
 `abyss-msg`'s **`Request`** (`type Reply`) and **`#[derive(Request)]`**,
 which links each request payload to its message enum and to its reply
-type. The `Cap::call` reshape (§2.7) is under way, sliced: `abyss-looper` now
-has the in-process reply path — the **`Responder`** handle, and
-`Delivery` / `Ctx` / `Looper::attach_service` carrying a request's
-responder to its handler. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+type. The `Cap::call` reshape (§2.7, §2.10) is **done**. `abyss-looper` gained
+the in-process reply path — the **`Responder`** handle, and `Delivery` /
+`Ctx` / `Looper::attach_service` carrying a request's responder to its
+handler — and `Cap::call` is reshaped onto it: `call<Q>` hands the caller
+exactly the request's `Q::Reply`, framework-mediated over either backend,
+no embedded `Sender`. The multi-looper harness passes on the reshaped
+path. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`Cap::call<Q>`** — reshaped per §2.10 over both backends, and the
-  abyss-cap harness moved onto the new reply path — the next increment;
-- **`Cap: Wire`** — a `Cap` itself delivered inside a message (§3.4);
+- **`Cap: Wire`** — a `Cap` itself delivered inside a message: `to_wire`
+  pushing its `CapBody` and ring fd onto the handle table, `from_wire`
+  claiming them back (§3.4) — the next increment;
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
