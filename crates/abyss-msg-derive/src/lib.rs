@@ -29,8 +29,9 @@ pub fn derive_wire(input: TokenStream) -> TokenStream {
 }
 
 /// Derive [`Method`](https://docs.rs/abyss-msg) for an interface's message
-/// enum — the per-variant method ordinal and kind (§2.9).
-#[proc_macro_derive(Method, attributes(request, command, event))]
+/// enum — the per-variant method ordinal and kind (§2.9), and the
+/// interface's rights classes from `#[rights(...)]` tags (§3.3).
+#[proc_macro_derive(Method, attributes(request, command, event, rights))]
 pub fn derive_method(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand_method(&input)
@@ -41,7 +42,7 @@ pub fn derive_method(input: TokenStream) -> TokenStream {
 /// Derive the typed-request layer (§2.10) for an interface's message enum:
 /// `From<payload>` for each variant, and `Request` for each `#[request]`
 /// variant's payload type.
-#[proc_macro_derive(Request, attributes(request, command, event))]
+#[proc_macro_derive(Request, attributes(request, command, event, rights))]
 pub fn derive_request(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand_request(&input)
@@ -99,6 +100,9 @@ fn expand_method(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let mut method_arms = Vec::new();
     let mut kind_arms = Vec::new();
+    // Rights classes, in first-encountered order: each name, and the
+    // bitmask of the method ordinals tagged with it (§3.3).
+    let mut classes: Vec<(String, u32)> = Vec::new();
     for (index, variant) in data.variants.iter().enumerate() {
         let ordinal = u16::try_from(index).map_err(|_| {
             syn::Error::new_spanned(variant, "an interface cannot have more than 65536 methods")
@@ -107,7 +111,29 @@ fn expand_method(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let kind = variant_kind(variant)?;
         method_arms.push(quote! { #pattern => #ordinal, });
         kind_arms.push(quote! { #pattern => #kind, });
+
+        if let Some(class) = variant_rights_class(variant)? {
+            // The object-rights mask is a `u32`, so a classed method's
+            // ordinal must fit one (§3.3).
+            if index >= 32 {
+                return Err(syn::Error::new_spanned(
+                    variant,
+                    "a method with a `#[rights(...)]` class must have ordinal < 32 — \
+                     the object-rights mask is a u32 (broker-and-transport.md §3.3)",
+                ));
+            }
+            let bit = 1u32 << index;
+            let name = class.to_string();
+            match classes.iter_mut().find(|(existing, _)| *existing == name) {
+                Some((_, mask)) => *mask |= bit,
+                None => classes.push((name, bit)),
+            }
+        }
     }
+    let class_entries: Vec<TokenStream2> = classes
+        .iter()
+        .map(|(name, mask)| quote! { (#name, #mask) })
+        .collect();
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -115,6 +141,8 @@ fn expand_method(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics ::abyss_msg::Method for #name #ty_generics #where_clause {
+            const RIGHTS_CLASSES: &'static [(&'static str, u32)] = &[ #(#class_entries),* ];
+
             fn method_id(&self) -> u16 {
                 match self { #(#method_arms)* }
             }
@@ -124,6 +152,24 @@ fn expand_method(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     })
+}
+
+/// The rights class a variant is tagged with — `#[rights(name)]`, at most
+/// one. `None` for an untagged variant (an event, or a method in no class).
+fn variant_rights_class(variant: &Variant) -> syn::Result<Option<syn::Ident>> {
+    let mut class: Option<syn::Ident> = None;
+    for attr in &variant.attrs {
+        if attr.path().is_ident("rights") {
+            if class.is_some() {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "a message variant has at most one `#[rights(...)]` class",
+                ));
+            }
+            class = Some(attr.parse_args()?);
+        }
+    }
+    Ok(class)
 }
 
 /// A `Self::Variant` pattern matching the variant whatever its field shape.

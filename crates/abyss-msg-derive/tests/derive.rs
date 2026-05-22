@@ -317,3 +317,35 @@ fn derived_request_links_payloads_to_the_enum_and_their_reply_types() {
     let reply: <Open as Request>::Reply = Opened { handle: 3 };
     assert_eq!(reply, Opened { handle: 3 });
 }
+
+/// An interface whose methods are grouped into `#[rights(...)]` classes.
+/// Only its derived `RIGHTS_CLASSES` is read, never a value of it.
+#[derive(Method)]
+#[allow(dead_code)]
+enum Console {
+    #[command]
+    #[rights(write)]
+    Print(i64),
+    #[request]
+    #[rights(read)]
+    Lines(i64),
+    #[request]
+    #[rights(read)]
+    Width(i64),
+    #[event]
+    Resized(i64),
+}
+
+#[test]
+fn derived_method_collects_rights_classes() {
+    // `write` covers `Print` (ordinal 0 → bit 0); `read` covers `Lines`
+    // and `Width` (ordinals 1, 2 → bits 1, 2), in first-encountered order.
+    // The untagged `Resized` event joins no class.
+    assert_eq!(
+        Console::RIGHTS_CLASSES,
+        &[("write", 0b001_u32), ("read", 0b110_u32)],
+    );
+
+    // An interface that tags no method has no rights classes.
+    assert!(FileIface::RIGHTS_CLASSES.is_empty());
+}

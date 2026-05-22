@@ -21,6 +21,15 @@ use crate::wire::Wire;
 
 /// A message that knows which interface method it invokes.
 pub trait Method {
+    /// The interface's **rights classes** (`docs/design/broker-and-transport.md`
+    /// §3.3): each a name, and the bitmask of the method ordinals it
+    /// covers. A manifest's `rights` tokens name classes; the broker
+    /// resolves them against this table to mint a connection's
+    /// object-rights mask, and the service checks an inbound `method_id`
+    /// against that mask. Empty for an interface whose message enum tags
+    /// no variant `#[rights(...)]`.
+    const RIGHTS_CLASSES: &'static [(&'static str, u32)];
+
     /// This message's method ordinal — its variant's declaration index.
     fn method_id(&self) -> u16;
 
