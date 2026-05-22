@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `751cf93` Phase 4: abyss-looper — the Responder reply handle
+- `fa0c688` Bump STATUS: Phase 4 — the Request trait and derive
 - `689c97a` Phase 4: abyss-msg — the Request trait and #[derive(Request)]
 - `e7ee089` Bump STATUS: Phase 4 — typed request and reply design pass
 - `0a52e92` Phase 4: design — typed request and reply (§2.10)
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `1963a6d` Bump STATUS: Phase 4 — Cap holds a Backend
 - `e8bddbe` Phase 4: abyss-cap — Cap holds a Backend
 - `90341b7` Bump STATUS: Phase 4 — Interface::ID, the §2.9 contract layer complete
-- `1b31a68` Phase 4: abyss-cap — Interface::ID, the interface side of §2.9
-- `21369f0` Bump STATUS: Phase 4 — the Method trait and derive
 
 ## Site
 
@@ -131,16 +131,19 @@ per-request, each request its own type carrying its reply type, the
 gRPC / FIDL shape — and that layer's trait and derive are built:
 `abyss-msg`'s **`Request`** (`type Reply`) and **`#[derive(Request)]`**,
 which links each request payload to its message enum and to its reply
-type. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+type. The `Cap::call` reshape (§2.7) is now under way, sliced:
+`abyss-looper`'s **`Responder`** — the framework's one-shot typed reply
+handle — is the first piece in. `cargo xtask ci` green on macOS and
+FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`Cap::call<Q>`** reshaped per §2.10 — taking a request payload value,
-  returning its `Q::Reply`, dispatching over both backends — the next
-  increment;
+- the **in-process request delivery** — `abyss-looper`'s message ring
+  carrying a `Responder`, and `Ctx` delivering it to the handler (§2.7) —
+  the next increment; then `Cap::call<Q>` and the harness on top;
 - **`Cap: Wire`** — a `Cap` itself delivered inside a message (§3.4);
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
