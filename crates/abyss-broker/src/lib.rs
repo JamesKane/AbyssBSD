@@ -24,9 +24,9 @@
 //! - `session` — the session runtime: wiring a manifest set, spawning every
 //!   component, and supervising it — a component that exits is re-wired and
 //!   spawned again, its peers told over their control channels (§5.2, §5.5).
-//!
-//! The broker's full event loop (§5.6–§5.7) arrives with the rest of the
-//! FreeBSD work; see `STATUS.md`.
+//! - [`boot`] — the boot path: read a manifest set and the catalogue from
+//!   disk, build the graph, and launch the session (§5.1). The broker
+//!   binary (`src/bin/broker.rs`) is a thin shell around it.
 //!
 //! The broker itself holds no `unsafe`: every kernel call is a safe API
 //! exported by a `sys/*` crate (`broker-and-transport.md` §6).
@@ -42,3 +42,9 @@ pub mod spawn;
 
 #[cfg(target_os = "freebsd")]
 pub mod session;
+
+#[cfg(target_os = "freebsd")]
+mod boot;
+
+#[cfg(target_os = "freebsd")]
+pub use boot::{BootError, boot};
