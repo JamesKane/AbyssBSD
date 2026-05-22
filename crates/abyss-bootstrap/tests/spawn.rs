@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use abyss_broker::catalogue::InterfaceCatalogue;
 use abyss_broker::graph::Graph;
 use abyss_broker::manifest::Manifest;
-use abyss_broker::session::{Program, Session};
+use abyss_broker::session::{Exit, Program, Session};
 use abyss_broker::spawn::spawn_component;
 use abyss_bundle::Bundle;
 use abyss_msg::{Envelope, Header, MessageKind, Value};
@@ -218,7 +218,13 @@ fn a_restarted_peer_is_re_wired_and_a_call_after_it_still_answers() {
     // re-wires the connection and respawns the server, sending the client
     // a `PeerRestarted` over its control channel.
     let restarted = session.step().expect("supervise the server's exit");
-    assert_eq!(restarted, vec!["rt-server".to_owned()]);
+    assert_eq!(
+        restarted,
+        vec![Exit {
+            name: "rt-server".to_owned(),
+            restarted: true,
+        }],
+    );
 
     // The client reports once its *second* call has returned — which it
     // can only do after the re-wire reached it.

@@ -42,13 +42,28 @@ fn main() -> std::process::ExitCode {
         session.components().count(),
     );
 
-    // The session's main loop: wait for a component to exit, re-wire and
-    // restart it (§5.5). The broker runs this for the life of the session.
+    // The session's main loop: wait for a component to exit, then act on
+    // its restart policy (§5.5). The broker runs this for the life of the
+    // session — until every component has stopped.
     loop {
+        if session.is_empty() {
+            abyss_log::info!("all components have stopped — the session is over");
+            return ExitCode::SUCCESS;
+        }
         match session.step() {
-            Ok(restarted) => {
-                for name in restarted {
-                    abyss_log::warn!("component `{name}` exited — re-wired and restarted");
+            Ok(exits) => {
+                for exit in exits {
+                    if exit.restarted {
+                        abyss_log::warn!(
+                            "component `{}` exited — re-wired and restarted",
+                            exit.name,
+                        );
+                    } else {
+                        abyss_log::info!(
+                            "component `{}` exited — its restart policy stopped it",
+                            exit.name,
+                        );
+                    }
                 }
             }
             Err(err) => {

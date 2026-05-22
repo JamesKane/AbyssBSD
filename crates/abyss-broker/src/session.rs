@@ -35,6 +35,7 @@ use freebsd_jail_sys::remove;
 
 use crate::catalogue::{CatalogueError, InterfaceCatalogue};
 use crate::graph::Graph;
+use crate::manifest::RestartPolicy;
 use crate::spawn::{Component, spawn_component};
 
 /// The program to exec for a component — its binary and argument vector.
@@ -83,6 +84,16 @@ impl std::error::Error for SessionError {}
 struct Live {
     name: String,
     component: Component,
+}
+
+/// What [`Session::step`] did with one component that exited (§5.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exit {
+    /// The component that exited.
+    pub name: String,
+    /// `true` if its restart policy re-wired and restarted it; `false` if
+    /// the policy stopped it — it is no longer supervised.
+    pub restarted: bool,
 }
 
 /// The broker's running session — one wired, spawned, supervised manifest
@@ -172,18 +183,30 @@ impl Session {
             .map(|live| (live.name.as_str(), &live.component))
     }
 
-    /// Wait for one or more components to exit, re-wire and respawn each,
-    /// and return their names. Blocks until at least one exits.
+    /// Whether any component is still supervised. The session is over once
+    /// this is false — every component has exited under a policy that did
+    /// not restart it.
+    pub fn is_empty(&self) -> bool {
+        self.components.is_empty()
+    }
+
+    /// Wait for one or more components to exit and act on each per its
+    /// restart policy (§5.5), returning what was done. Blocks until at
+    /// least one exits.
     ///
-    /// A restart re-creates the dead component's rings and notifies its
-    /// surviving peers with a [`PeerRestarted`] — see [`restart`](Self::restart).
-    pub fn step(&mut self) -> io::Result<Vec<String>> {
+    /// A component whose policy restarts it is re-wired and respawned —
+    /// see [`handle_exit`](Self::handle_exit); one whose policy does not is
+    /// stopped, its jail reclaimed and its peers' rings left closed.
+    pub fn step(&mut self) -> io::Result<Vec<Exit>> {
+        if self.components.is_empty() {
+            return Ok(Vec::new());
+        }
         loop {
             let events = self.reactor.wait(None)?;
-            let exited: Vec<RawFd> = events
+            let exited: Vec<(RawFd, i32)> = events
                 .iter()
                 .filter_map(|event| match event {
-                    Event::ProcessExited(fd) => Some(*fd),
+                    Event::ProcessExited { fd, status } => Some((*fd, *status)),
                     _ => None,
                 })
                 .collect();
@@ -191,27 +214,55 @@ impl Session {
                 // A wake with no process-exit event — keep waiting.
                 continue;
             }
-            let mut restarted = Vec::with_capacity(exited.len());
-            for fd in exited {
-                restarted.push(self.restart(fd)?);
+            let mut exits = Vec::with_capacity(exited.len());
+            for (fd, status) in exited {
+                exits.push(self.handle_exit(fd, status)?);
             }
-            return Ok(restarted);
+            return Ok(exits);
         }
     }
 
-    /// Re-wire and restart the component whose process descriptor is `pd_fd`.
+    /// Act on the exit of the component whose process descriptor is
+    /// `pd_fd`, which exited with `status` (§5.5).
     ///
-    /// A fresh ring is created for every connection the dead component
-    /// touched: the component is respawned holding its ends, and each
-    /// surviving peer is sent a [`PeerRestarted`] carrying the peer's fresh
-    /// end over that peer's control channel (§5.5).
-    fn restart(&mut self, pd_fd: RawFd) -> io::Result<String> {
+    /// Its manifest's restart policy decides: `always` restarts it,
+    /// `on-failure` restarts it only on a non-zero `status`, `never` never.
+    /// A restart re-creates a fresh ring for every connection the component
+    /// touched, respawns it holding its ends, and sends each surviving peer
+    /// a [`PeerRestarted`] over that peer's control channel. A component
+    /// that is *not* restarted is stopped: its jail is reclaimed and it is
+    /// dropped from the session, and its peers' rings stay closed.
+    fn handle_exit(&mut self, pd_fd: RawFd, status: i32) -> io::Result<Exit> {
         let idx = self
             .components
             .iter()
             .position(|live| live.component.descriptor().as_raw_fd() == pd_fd)
             .ok_or_else(|| io::Error::other("process-exit event for an unknown component"))?;
         let name = self.components[idx].name.clone();
+
+        // The component's restart policy, from its manifest (§5.5). A
+        // non-zero exit status is a failure — a non-zero exit code or a
+        // signal.
+        let policy = self
+            .graph
+            .component(&name)
+            .map_or(RestartPolicy::Always, |manifest| manifest.restart);
+        let restart = match policy {
+            RestartPolicy::Always => true,
+            RestartPolicy::OnFailure => status != 0,
+            RestartPolicy::Never => false,
+        };
+
+        if !restart {
+            // Stop: reclaim the jail and drop the component. Its peers'
+            // rings are left closed — they are not re-wired (§5.5).
+            let stopped = self.components.remove(idx);
+            remove(stopped.component.jid())?;
+            return Ok(Exit {
+                name,
+                restarted: false,
+            });
+        }
 
         // Re-wire: fresh rings for every connection the dead component
         // touched. Its own ends go into a fresh bundle; each peer's end
@@ -237,7 +288,10 @@ impl Session {
                 send_peer_restarted(live.component.bootstrap(), grant)?;
             }
         }
-        Ok(name)
+        Ok(Exit {
+            name,
+            restarted: true,
+        })
     }
 }
 
@@ -491,12 +545,18 @@ mod tests {
     use crate::manifest::Manifest;
 
     /// A complete, valid manifest with the given name, interface, and an
-    /// optional run of `[capability]` blocks spliced in.
+    /// optional run of `[capability]` blocks spliced in — restart policy
+    /// `always`.
     fn manifest(name: &str, interface: &str, caps: &str) -> Manifest {
+        manifest_with_policy(name, interface, caps, "always")
+    }
+
+    /// As [`manifest`], with a chosen restart policy.
+    fn manifest_with_policy(name: &str, interface: &str, caps: &str, policy: &str) -> Manifest {
         let text = format!(
             "name = {name}\ninterface = {interface}\nversion = 1\n{caps}\
              [jail]\nroot = /\nnetwork = none\nuser = _{name}\n\
-             [budget]\nmemory = 1M\nfds = 8\n[restart]\npolicy = always\n",
+             [budget]\nmemory = 1M\nfds = 8\n[restart]\npolicy = {policy}\n",
         );
         Manifest::parse(&text).expect("the test manifest parses")
     }
@@ -672,7 +732,13 @@ mod tests {
         let caller_first = session.component(&caller).expect("caller is live").pid();
 
         let restarted = session.step().expect("supervise one exit");
-        assert_eq!(restarted, vec![callee.clone()]);
+        assert_eq!(
+            restarted,
+            vec![Exit {
+                name: callee.clone(),
+                restarted: true,
+            }],
+        );
 
         let callee_second = session
             .component(&callee)
@@ -691,5 +757,57 @@ mod tests {
             caller_first, caller_second,
             "the caller, a surviving peer, was not restarted",
         );
+    }
+
+    /// A single-component session whose one component runs `script` under
+    /// `policy`, stepped once — the exit, and whether the component is
+    /// still supervised after it.
+    fn step_one_under_policy(tag: &str, policy: &str, script: &'static str) -> (Exit, bool) {
+        let name = format!("rp-{tag}-{}", std::process::id());
+        let graph = Graph::build(vec![manifest_with_policy(
+            &name,
+            &format!("rp-{tag}-iface"),
+            "",
+            policy,
+        )])
+        .expect("the graph builds");
+
+        let mut session = Session::launch(graph, InterfaceCatalogue::new(), |_name| Program {
+            path: PathBuf::from("/bin/sh"),
+            args: vec!["-c".to_owned(), script.to_owned()],
+        })
+        .expect("the session launches");
+
+        let exits = session.step().expect("supervise one exit");
+        assert_eq!(exits.len(), 1, "one component, one exit");
+        let supervised = session.component(&name).is_some();
+        (exits.into_iter().next().unwrap(), supervised)
+    }
+
+    #[test]
+    fn a_never_policy_component_is_not_restarted() {
+        // `never`: the component exits cleanly and is left stopped.
+        let (exit, supervised) = step_one_under_policy("never", "never", "sleep 0.3");
+        assert!(!exit.restarted, "a `never` component is not restarted");
+        assert!(
+            !supervised,
+            "a stopped component is dropped from the session"
+        );
+    }
+
+    #[test]
+    fn an_on_failure_component_restarts_on_a_crash() {
+        // `on-failure`: a non-zero exit is a failure — restart it.
+        let (exit, supervised) = step_one_under_policy("crash", "on-failure", "sleep 0.3; exit 1");
+        assert!(exit.restarted, "on-failure restarts a crashed component");
+        assert!(supervised, "the restarted component is supervised again");
+    }
+
+    #[test]
+    fn an_on_failure_component_is_left_stopped_on_a_clean_exit() {
+        // `on-failure`: a clean exit is not a failure — do not restart.
+        let (exit, supervised) = step_one_under_policy("clean", "on-failure", "sleep 0.3");
+        assert!(!exit.restarted, "on-failure does not restart a clean exit",);
+        assert!(!supervised, "the component is left stopped");
     }
 }

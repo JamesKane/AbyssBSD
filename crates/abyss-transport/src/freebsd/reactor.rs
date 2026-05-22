@@ -27,6 +27,8 @@ const MAX_EVENTS: usize = 64;
 #[derive(Clone, Copy)]
 struct AbyssEvent {
     ident: i64,
+    /// The kevent data word — for a process-exit event, the exit status.
+    data: i64,
     kind: c_int,
 }
 
@@ -67,8 +69,9 @@ pub enum Event {
     Readable(RawFd),
     /// A registered descriptor became writable.
     Writable(RawFd),
-    /// The process behind a registered process descriptor exited.
-    ProcessExited(RawFd),
+    /// The process behind a registered process descriptor exited, with the
+    /// exit status as from `wait(2)` — zero is a clean exit (§5.5).
+    ProcessExited { fd: RawFd, status: i32 },
     /// [`Reactor::wake`] was called — a cross-thread or in-process nudge.
     Woken,
 }
@@ -138,7 +141,11 @@ impl Reactor {
     /// Block until a registered descriptor is ready, the reactor is woken,
     /// or `timeout` elapses. `None` blocks indefinitely.
     pub fn wait(&self, timeout: Option<Duration>) -> io::Result<Vec<Event>> {
-        let mut raw = [AbyssEvent { ident: 0, kind: 0 }; MAX_EVENTS];
+        let mut raw = [AbyssEvent {
+            ident: 0,
+            data: 0,
+            kind: 0,
+        }; MAX_EVENTS];
         let timeout_ms = match timeout {
             None => -1,
             Some(d) => c_int::try_from(d.as_millis()).unwrap_or(c_int::MAX),
@@ -161,7 +168,10 @@ impl Reactor {
             .map(|e| match e.kind {
                 1 => Event::Writable(e.ident as RawFd),
                 2 => Event::Woken,
-                3 => Event::ProcessExited(e.ident as RawFd),
+                3 => Event::ProcessExited {
+                    fd: e.ident as RawFd,
+                    status: e.data as i32,
+                },
                 _ => Event::Readable(e.ident as RawFd),
             })
             .collect();
@@ -224,7 +234,7 @@ impl EventSource for ReactorSource {
             let key = match event {
                 Event::Readable(fd) => (fd, Interest::Readable),
                 Event::Writable(fd) => (fd, Interest::Writable),
-                Event::ProcessExited(fd) => (fd, Interest::ProcessExit),
+                Event::ProcessExited { fd, .. } => (fd, Interest::ProcessExit),
                 Event::Woken => continue,
             };
             if let Some(waker) = waiters.remove(&key) {
@@ -287,10 +297,11 @@ mod tests {
         use std::path::Path;
 
         // A child that lives just long enough for its descriptor to be
-        // registered before it exits.
+        // registered before it exits — non-zero, so the reported status is
+        // distinguishable from a clean exit.
         let child = spawn(
             Path::new("/bin/sh"),
-            &["-c", "sleep 0.3"],
+            &["-c", "sleep 0.3; exit 7"],
             &SpawnOptions::default(),
         )
         .expect("spawn a child");
@@ -304,6 +315,13 @@ mod tests {
         let ready = reactor
             .wait(Some(Duration::from_secs(5)))
             .expect("wait for the child to exit");
-        assert_eq!(ready, vec![Event::ProcessExited(pd.as_raw_fd())]);
+        assert_eq!(ready.len(), 1, "exactly one event — the child's exit");
+        match ready[0] {
+            Event::ProcessExited { fd, status } => {
+                assert_eq!(fd, pd.as_raw_fd());
+                assert_ne!(status, 0, "a non-zero exit reports a non-zero status");
+            }
+            other => panic!("expected a process-exit event, got {other:?}"),
+        }
     }
 }

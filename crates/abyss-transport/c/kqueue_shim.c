@@ -27,10 +27,12 @@
 /*
  * A flat readiness event handed back to Rust. The layout must match
  * `AbyssEvent` in src/freebsd/reactor.rs. `kind`: 0 readable, 1 writable,
- * 2 woken, 3 process-exited.
+ * 2 woken, 3 process-exited. `data` carries the kevent's data word — for a
+ * process-exit event that is the child's exit status, as from wait(2).
  */
 struct abyss_event {
 	int64_t ident;
+	int64_t data;
 	int kind;
 };
 
@@ -120,6 +122,7 @@ abyss_kqueue_wait(int kq, struct abyss_event *out, int max, int timeout_ms)
 
 	for (int i = 0; i < n; i++) {
 		out[i].ident = (int64_t)evs[i].ident;
+		out[i].data = (int64_t)evs[i].data;
 		if (evs[i].filter == EVFILT_USER)
 			out[i].kind = 2;
 		else if (evs[i].filter == EVFILT_WRITE)
