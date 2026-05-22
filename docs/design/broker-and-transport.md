@@ -607,6 +607,43 @@ declares the Casper services it needs (`kind = casper`); the broker sets
 up each `cap_channel_t` — itself an fd — into the bundle. The broker is
 *modeled on* Casper and *composes with* it; it is not built on it (§10.4).
 
+### 5.8 The bundle schema — the `abyss-bundle` crate
+
+§5.3 said the bundle *is* an envelope: its handle table carries the
+granted capability descriptors, its payload names them. This pins that
+payload — the **bundle schema** — and the crate that owns it.
+
+A bundle's payload is a `Bundle`: a list of **grants**. Each grant pairs
+one capability's metadata with the descriptor that carries it:
+
+- **`interface`** — the interface the capability speaks (`input`,
+  `display`, …), resolved against the component's own manifest;
+- **`role`** — `client` or `server`: whether the component *uses* the
+  interface (it holds the ring's send end, which the startup shim turns
+  into a `Cap`) or *exports* it (it holds the service end and accepts
+  requests). Both ends of a `SOCK_SEQPACKET` ring are descriptors; the
+  role says which face the component puts on its end.
+- **`rights`** — the `CapBody` (§3.2): the `cap_rights` mask and the
+  object-rights set the broker minted for this capability;
+- **the descriptor** — the ring endpoint, riding `SCM_RIGHTS`, named from
+  the payload by a `Value::Handle` into the envelope's handle table.
+
+`Bundle` has its own `Wire` impl — `to_wire` duplicates each grant's
+descriptor onto the handle table beside its `CapBody` (the §3.4 pattern
+`Cap` follows), `from_wire` claims each back from the `HandleStore`. The
+broker builds a `Bundle` and sends it; the startup shim (§5.4) decodes
+one, and for each grant turns the descriptor into the capability the
+`role` calls for — a client grant becomes an unbound `Cap` the framework
+then binds (§3.5).
+
+This schema is the contract between the broker (the encoder) and every
+component's startup shim (the decoder), so it lives in its own crate,
+**`abyss-bundle`**, that both depend on — itself depending only on
+`abyss-msg` (the wire layer) and `abyss-cap` (`CapBody`). It is a
+host-slice crate: the schema and its `Wire` round-trip carry no FreeBSD
+facility and build and test on any host; only the broker's *use* of it —
+minting real rings — is FreeBSD-gated.
+
 ---
 
 ## 6. The FreeBSD FFI — the `sys/*` crates
