@@ -3,39 +3,66 @@
 //! A minimal AbyssBSD component — the bootstrap probe.
 //!
 //! It runs the startup shim and reports back to the broker over the
-//! bootstrap channel: it echoes the bundle's header, reports whether the
-//! process is in Capsicum capability mode, and decodes its bootstrap
-//! bundle and reports how many capability grants it carried. It is the
-//! fixture the broker's spawn, wiring, and bootstrap path
+//! bootstrap channel: whether the process is in Capsicum capability mode,
+//! how many capability grants its bootstrap bundle carried, and how many
+//! of them it could claim as typed client capabilities. It is the fixture
+//! the broker's spawn, wiring, and bootstrap path
 //! (`broker-and-transport.md` §5.2–§5.4) is tested against.
 
 #[cfg(target_os = "freebsd")]
 fn main() {
-    use abyss_bundle::Bundle;
-    use abyss_msg::{Envelope, Value};
+    use abyss_bundle::Role;
+    use abyss_cap::{Cap, Interface, Rights};
+    use abyss_msg::{Envelope, Header, MessageKind, Value};
 
-    let startup = abyss_bootstrap::enter().expect("component bootstrap");
+    // A marker interface, enough to name a `Cap`'s type. The probe never
+    // sends on it — binding a claimed capability and using it is a later
+    // step (§3.5).
+    #[allow(dead_code)] // a marker type — only ever a type parameter
+    struct ProbeInterface;
+    impl Interface for ProbeInterface {
+        const ID: u32 = 1;
+        type Message = i64;
+    }
+    #[allow(dead_code)] // a marker type — only ever a type parameter
+    struct AnyRights;
+    impl Rights for AnyRights {}
+
+    let mut startup = abyss_bootstrap::enter().expect("component bootstrap");
 
     // `enter` has called `cap_enter`; confirm the process is confined.
     let confined = freebsd_capsicum_sys::cap_getmode().expect("cap_getmode");
 
-    // Decode the bootstrap bundle: each grant is a capability the broker
-    // wired in (§5.2). The probe only counts them — turning a grant into a
-    // live capability is the startup shim's job (§5.4, §3.5).
-    let header = startup.bundle.header.clone();
-    let bundle = startup
-        .bundle
-        .into_message::<Bundle>(startup.handles)
-        .expect("decode the bootstrap bundle");
-    let grant_count = i64::try_from(bundle.grants.len()).expect("the grant count fits an i64");
+    let grant_count = startup.grants().len();
+
+    // Claim each `client` grant as an unbound typed capability — exercising
+    // the shim's bundle decoding and role discrimination (§5.4).
+    let client_interfaces: Vec<String> = startup
+        .grants()
+        .iter()
+        .filter(|grant| grant.role == Role::Client)
+        .map(|grant| grant.interface.clone())
+        .collect();
+    let mut client_caps: i64 = 0;
+    for interface in &client_interfaces {
+        let claimed: Option<Cap<ProbeInterface, AnyRights>> = startup.take_client_cap(interface);
+        if claimed.is_some() {
+            client_caps += 1;
+        }
+    }
 
     // Report to the broker over the bootstrap channel — which, being an
     // already-open descriptor, stays usable in capability mode.
     let report = Envelope {
-        header,
+        header: Header {
+            kind: MessageKind::Event,
+            interface_id: 0,
+            method_id: 0,
+        },
         payload: Value::List(vec![
             Value::Int(i64::from(confined)),
-            Value::Int(grant_count),
+            Value::Int(i64::try_from(grant_count).expect("the grant count fits an i64")),
+            Value::Int(client_caps),
         ]),
         handles: Vec::new(),
     };

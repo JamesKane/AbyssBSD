@@ -36,22 +36,18 @@ fn peer(interface: &str) -> String {
     format!("[capability]\nkind = peer\ninterface = {interface}\nrights = recv\n")
 }
 
-/// The `confined` flag and grant count a probe reports back.
-fn read_report(report: &Envelope) -> (i64, i64) {
-    match &report.payload {
-        Value::List(items) if items.len() == 2 => {
-            let confined = match &items[0] {
-                Value::Int(n) => *n,
-                other => panic!("report[0] not an int: {other:?}"),
-            };
-            let grants = match &items[1] {
-                Value::Int(n) => *n,
-                other => panic!("report[1] not an int: {other:?}"),
-            };
-            (confined, grants)
-        }
-        other => panic!("unexpected probe report payload: {other:?}"),
-    }
+/// The `(confined, grant count, client capabilities claimed)` a probe
+/// reports back.
+fn read_report(report: &Envelope) -> (i64, i64, i64) {
+    let Value::List(items) = &report.payload else {
+        panic!("unexpected probe report payload: {:?}", report.payload);
+    };
+    assert_eq!(items.len(), 3, "the probe report has three fields");
+    let field = |index: usize| match &items[index] {
+        Value::Int(n) => *n,
+        other => panic!("report[{index}] is not an int: {other:?}"),
+    };
+    (field(0), field(1), field(2))
 }
 
 #[test]
@@ -81,16 +77,13 @@ fn a_spawned_component_bootstraps_and_confines_itself() {
         .expect("the component reports back over the bootstrap channel");
     component.shutdown().expect("remove the component jail");
 
-    assert_eq!(
-        report.header, envelope.header,
-        "the component received the bundle the broker sent",
-    );
-    let (confined, grants) = read_report(&report);
+    let (confined, grants, client_caps) = read_report(&report);
     assert_eq!(
         confined, 1,
         "the component entered Capsicum capability mode"
     );
     assert_eq!(grants, 0, "an empty bundle carried no grants");
+    assert_eq!(client_caps, 0, "and so no client capabilities to claim");
 }
 
 #[test]
@@ -115,7 +108,8 @@ fn a_wired_session_delivers_each_components_grants() {
         .expect("spawn the wired session");
     assert_eq!(wired.len(), 3);
 
-    let mut grant_counts: HashMap<String, i64> = HashMap::new();
+    // Per component: (grant count, client capabilities claimed).
+    let mut reports: HashMap<String, (i64, i64)> = HashMap::new();
     for wired_component in wired {
         wired_component
             .component
@@ -126,22 +120,24 @@ fn a_wired_session_delivers_each_components_grants() {
             .bootstrap()
             .recv()
             .expect("the component reports back");
-        let (confined, grants) = read_report(&report);
+        let (confined, grants, client_caps) = read_report(&report);
         assert_eq!(
             confined, 1,
             "{} is in capability mode",
             wired_component.name
         );
-        grant_counts.insert(wired_component.name.clone(), grants);
+        reports.insert(wired_component.name.clone(), (grants, client_caps));
         wired_component
             .component
             .shutdown()
             .expect("remove the component jail");
     }
 
-    // Each component received exactly the grants its connections imply:
-    // the requester and the provider one ring end each, `log` none.
-    assert_eq!(grant_counts["compositor"], 1);
-    assert_eq!(grant_counts["input"], 1);
-    assert_eq!(grant_counts["log"], 0);
+    // Each component received exactly the grants its connections imply,
+    // and claimed a client capability for each connection it requested:
+    // compositor requests `input` (one client grant); input provides it
+    // (one grant, but a server one — no client cap); log peers no one.
+    assert_eq!(reports["compositor"], (1, 1));
+    assert_eq!(reports["input"], (1, 0));
+    assert_eq!(reports["log"], (0, 0));
 }

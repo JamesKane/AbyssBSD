@@ -146,6 +146,26 @@ where
     }
 }
 
+/// Build an *unbound* IPC capability from a received ring descriptor and
+/// its rights (`broker-and-transport.md` §3.5) — the form a bootstrap
+/// bundle's client grant takes before the framework binds it to a looper.
+///
+/// This is what [`Wire::from_wire`] yields, exposed as a constructor so the
+/// startup shim can build the same unbound `Cap` from a bundle [`CapBody`]
+/// it has already decoded. The result is unusable until [`Cap::bind`]
+/// attaches it to a looper.
+#[cfg(target_os = "freebsd")]
+pub fn unbound_ipc_cap<I, R>(endpoint: OwnedFd, body: CapBody) -> Cap<I, R>
+where
+    I: Interface,
+    R: Rights,
+{
+    Cap {
+        backend: Backend::IpcUnbound { fd: endpoint, body },
+        _marker: PhantomData,
+    }
+}
+
 /// Encode an interface message into an envelope and the descriptors its
 /// capabilities surrender. The header's interface id is the ring's
 /// (`I::ID`); its method id and kind are the message's (§2.9).

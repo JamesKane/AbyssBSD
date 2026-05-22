@@ -13,6 +13,7 @@ publish = false
 [target.'cfg(target_os = "freebsd")'.dependencies]
 abyss-msg = { path = "../abyss-msg" }
 abyss-bundle = { path = "../abyss-bundle" }
+abyss-cap = { path = "../abyss-cap" }
 abyss-transport = { path = "../abyss-transport" }
 freebsd-capsicum-sys = { path = "../../sys/freebsd-capsicum-sys" }
 
