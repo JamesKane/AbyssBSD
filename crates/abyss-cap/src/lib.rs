@@ -41,7 +41,7 @@ use abyss_msg::{
     Envelope, HandleSink, HandleStore, Header, Method, RawHandle, Value, Wire, WireError,
 };
 #[cfg(target_os = "freebsd")]
-use abyss_transport::{AsyncChannel, Connection, FramedChannel, ReactorSource};
+use abyss_transport::{AsyncChannel, CallOutcome, Connection, FramedChannel, ReactorSource};
 
 /// An interface — the set of messages a capability of this interface
 /// carries. `Message` is typically an enum of the interface's requests,
@@ -311,13 +311,18 @@ impl<I: Interface, R: Rights> Cap<I, R> {
             } => {
                 let (envelope, fds) = (*encode)(&request.into());
                 let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
-                let (reply_envelope, reply_fds) = connection
+                match connection
                     .call(&envelope, &borrowed)
                     .await
-                    .map_err(|_| RingClosed)?;
-                reply_envelope
-                    .into_message::<Q::Reply>(reply_fds)
-                    .map_err(|_| RingClosed)
+                    .map_err(|_| RingClosed)?
+                {
+                    CallOutcome::Answered(reply_envelope, reply_fds) => reply_envelope
+                        .into_message::<Q::Reply>(reply_fds)
+                        .map_err(|_| RingClosed),
+                    // A refused request — until `Cap::call` carries a
+                    // `CallError` (§3.6), it is surfaced as a closed ring.
+                    CallOutcome::Refused => Err(RingClosed),
+                }
             }
             #[cfg(target_os = "freebsd")]
             Backend::IpcUnbound { .. } => unbound_use_panic(),

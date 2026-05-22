@@ -22,6 +22,10 @@ pub enum FrameKind {
     Message,
     /// A reply to an earlier Request, matched by `correlation`.
     Reply,
+    /// A refusal of an earlier Request, matched by `correlation` — the
+    /// service declined it, for want of rights or otherwise (§3.6). It
+    /// carries no meaningful payload.
+    Error,
 }
 
 /// The fixed 8-byte header an IPC ring puts ahead of every envelope.
@@ -45,6 +49,7 @@ impl RingFrame {
         out[0] = match self.kind {
             FrameKind::Message => 0,
             FrameKind::Reply => 1,
+            FrameKind::Error => 2,
         };
         // out[1..4] are reserved and stay zero.
         out[4..8].copy_from_slice(&self.correlation.to_le_bytes());
@@ -61,6 +66,7 @@ impl RingFrame {
         let kind = match bytes[0] {
             0 => FrameKind::Message,
             1 => FrameKind::Reply,
+            2 => FrameKind::Error,
             other => return Err(FrameError::BadKind(other)),
         };
         let correlation = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
@@ -112,6 +118,15 @@ mod tests {
         let frame = RingFrame {
             kind: FrameKind::Reply,
             correlation: 0xDEAD_BEEF,
+        };
+        assert_eq!(RingFrame::decode(&frame.encode()), Ok(frame));
+    }
+
+    #[test]
+    fn round_trips_an_error_frame() {
+        let frame = RingFrame {
+            kind: FrameKind::Error,
+            correlation: 0x00C0_FFEE,
         };
         assert_eq!(RingFrame::decode(&frame.encode()), Ok(frame));
     }

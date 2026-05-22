@@ -35,6 +35,6 @@ mod freebsd;
 
 #[cfg(target_os = "freebsd")]
 pub use freebsd::{
-    AsyncChannel, Channel, Connection, Event, FramedChannel, Inbound, Inbox, Interest,
+    AsyncChannel, CallOutcome, Channel, Connection, Event, FramedChannel, Inbound, Inbox, Interest,
     MessageChannel, Reactor, ReactorSource, Responder,
 };

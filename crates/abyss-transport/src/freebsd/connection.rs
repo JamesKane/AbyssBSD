@@ -16,13 +16,21 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use abyss_looper::{Receiver, Sender, channel};
-use abyss_msg::Envelope;
+use abyss_msg::{Envelope, Header, MessageKind, Value};
 
 use super::AsyncChannel;
 use crate::frame::{FrameKind, RingFrame};
 
-/// A reply: the envelope, and any descriptors that rode with it.
-type Reply = (Envelope, Vec<OwnedFd>);
+/// The outcome of a [`Connection::call`] — an answer, or a refusal.
+#[derive(Debug)]
+pub enum CallOutcome {
+    /// The request was answered: the reply envelope, and any descriptors
+    /// that rode with it.
+    Answered(Envelope, Vec<OwnedFd>),
+    /// The service refused the request (`broker-and-transport.md` §3.6) —
+    /// it named, for instance, a method outside the caller's rights.
+    Refused,
+}
 
 /// How many inbound messages the [`Inbox`] buffers before the receive
 /// loop has to drop the overflow. Backpressure is a later refinement.
@@ -53,8 +61,8 @@ pub struct Connection {
 struct Inner {
     channel: AsyncChannel,
     next_correlation: AtomicU32,
-    /// The reply slot for each call still awaiting an answer, by id.
-    pending: Mutex<HashMap<u32, Sender<Reply>>>,
+    /// The outcome slot for each call still awaiting an answer, by id.
+    pending: Mutex<HashMap<u32, Sender<CallOutcome>>>,
     /// Where the receive loop posts inbound messages; taken (dropped) when
     /// the loop ends, which closes the [`Inbox`].
     inbox: Mutex<Option<Sender<Inbound>>>,
@@ -78,13 +86,19 @@ impl Connection {
         (connection, Inbox { rx: inbox_rx })
     }
 
-    /// Send `request` and suspend the task until its reply arrives.
+    /// Send `request` and suspend the task until its outcome arrives — an
+    /// answer, or a refusal (`broker-and-transport.md` §3.6).
     ///
     /// The request goes out as a message frame with a fresh correlation
-    /// id; the [`serve`](Self::serve) loop matches the reply by that id.
-    pub async fn call(&self, request: &Envelope, fds: &[BorrowedFd<'_>]) -> io::Result<Reply> {
+    /// id; the [`serve`](Self::serve) loop matches the reply — or the
+    /// error — by that id.
+    pub async fn call(
+        &self,
+        request: &Envelope,
+        fds: &[BorrowedFd<'_>],
+    ) -> io::Result<CallOutcome> {
         let correlation = self.inner.next_correlation.fetch_add(1, Ordering::Relaxed);
-        let (reply_tx, mut reply_rx) = channel::<Reply>(1);
+        let (reply_tx, mut reply_rx) = channel::<CallOutcome>(1);
         self.inner
             .pending
             .lock()
@@ -149,8 +163,21 @@ impl Connection {
                             .unwrap()
                             .remove(&frame.correlation)
                         {
-                            // The slot holds exactly this one reply.
-                            let _ = reply_tx.try_send((envelope, fds));
+                            // The slot holds exactly this one outcome.
+                            let _ = reply_tx.try_send(CallOutcome::Answered(envelope, fds));
+                        }
+                    }
+                    FrameKind::Error => {
+                        // A refusal — the `Error` frame carries no payload;
+                        // its correlation names the request it refuses.
+                        if let Some(reply_tx) = self
+                            .inner
+                            .pending
+                            .lock()
+                            .unwrap()
+                            .remove(&frame.correlation)
+                        {
+                            let _ = reply_tx.try_send(CallOutcome::Refused);
                         }
                     }
                     FrameKind::Message => {
@@ -206,6 +233,39 @@ impl Responder {
             correlation: self.correlation,
         };
         self.connection.inner.channel.send(frame, reply, fds).await
+    }
+
+    /// Refuse the request — the service declined it
+    /// (`broker-and-transport.md` §3.6). The caller's `call` then yields
+    /// [`CallOutcome::Refused`]. Like [`respond`](Self::respond), a
+    /// responder refuses once.
+    pub async fn refuse(self) -> io::Result<()> {
+        let frame = RingFrame {
+            kind: FrameKind::Error,
+            correlation: self.correlation,
+        };
+        // An `Error` frame carries no meaningful payload, but a ring
+        // datagram is always a frame plus an envelope — send an empty one.
+        self.connection
+            .inner
+            .channel
+            .send(frame, &empty_envelope(), &[])
+            .await
+    }
+}
+
+/// The placeholder envelope an `Error` frame carries: a ring datagram is a
+/// frame plus an envelope, but a refusal's payload is the frame alone, so
+/// the envelope is empty and the receiver discards it.
+fn empty_envelope() -> Envelope {
+    Envelope {
+        header: Header {
+            kind: MessageKind::Event,
+            interface_id: 0,
+            method_id: 0,
+        },
+        payload: Value::List(Vec::new()),
+        handles: Vec::new(),
     }
 }
 
@@ -282,16 +342,64 @@ mod tests {
         let mut looper = Looper::with_event_source(source);
         looper.spawn(connection.serve());
         looper.spawn(async move {
-            let (reply_env, _) = task_connection
+            match task_connection
                 .call(&request, &[])
                 .await
-                .expect("call returns a reply");
-            *task_answer.lock().unwrap() = Some(reply_env);
+                .expect("call returns an outcome")
+            {
+                CallOutcome::Answered(reply_env, _) => {
+                    *task_answer.lock().unwrap() = Some(reply_env);
+                }
+                CallOutcome::Refused => panic!("the request was answered, not refused"),
+            }
         });
         looper.run();
 
         peer.join().expect("peer thread");
         assert_eq!(answer.lock().unwrap().take(), Some(reply));
+    }
+
+    #[test]
+    fn call_learns_a_refused_request() {
+        let request = envelope(MessageKind::Request, 7);
+
+        let (client_framed, server_framed) = FramedChannel::pair().expect("socketpair");
+        let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+        let client = AsyncChannel::new(client_framed, Arc::clone(&source)).expect("async channel");
+        let (connection, _inbox) = Connection::open(client);
+
+        // The peer refuses the request — an `Error` frame echoing its id.
+        let peer = thread::spawn(move || {
+            let (frame, _request, _) = server_framed.recv().expect("peer recv");
+            assert_eq!(frame.kind, FrameKind::Message);
+            server_framed
+                .send(
+                    RingFrame {
+                        kind: FrameKind::Error,
+                        correlation: frame.correlation,
+                    },
+                    &envelope(MessageKind::Event, 0),
+                    &[],
+                )
+                .expect("peer refusal");
+        });
+
+        let refused = Arc::new(Mutex::new(false));
+        let task_refused = Arc::clone(&refused);
+        let task_connection = connection.clone();
+        let mut looper = Looper::with_event_source(source);
+        looper.spawn(connection.serve());
+        looper.spawn(async move {
+            let outcome = task_connection
+                .call(&request, &[])
+                .await
+                .expect("call returns an outcome");
+            *task_refused.lock().unwrap() = matches!(outcome, CallOutcome::Refused);
+        });
+        looper.run();
+
+        peer.join().expect("peer thread");
+        assert!(*refused.lock().unwrap(), "the call learned it was refused");
     }
 
     #[test]
