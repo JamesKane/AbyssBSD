@@ -58,13 +58,15 @@ fn main() -> std::process::ExitCode {
                 for exit in exits {
                     if exit.restarted {
                         abyss_log::warn!(
-                            "component `{}` exited — re-wired and restarted",
+                            "component `{}` exited (status {}) — re-wired and restarted",
                             exit.name,
+                            exit.status,
                         );
                     } else {
                         abyss_log::info!(
-                            "component `{}` exited — its restart policy stopped it",
+                            "component `{}` exited (status {}) — its restart policy stopped it",
                             exit.name,
+                            exit.status,
                         );
                     }
                 }

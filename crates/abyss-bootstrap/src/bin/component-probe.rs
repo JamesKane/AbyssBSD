@@ -21,7 +21,7 @@ mod component {
     use std::sync::Arc;
 
     use abyss_bootstrap::{Control, Startup};
-    use abyss_bundle::Role;
+    use abyss_bundle::{Role, SpawnChild, SpawnReply};
     use abyss_cap::{CallError, Cap, Interface, Reply, Rights, Service, bind_service};
     use abyss_looper::Looper;
     use abyss_msg::{Envelope, Header, MessageKind, Value};
@@ -127,8 +127,43 @@ mod component {
             }
             (Some(interface), _) => run_client(startup, &interface, confined, grant_count),
             (None, Some(interface)) => run_server(startup, &interface, confined, grant_count),
+            // A `spawn-request` argument selects the §5.6 path: the probe
+            // asks the broker to spawn a child and checks the answer.
+            (None, None) if std::env::args().any(|arg| arg == "spawn-request") => {
+                run_spawn_requester(startup)
+            }
             // No grants: nothing to do but report.
             (None, None) => report_and_exit(&startup.bootstrap, [confined, grant_count, 0, 0]),
+        }
+    }
+
+    /// The §5.6 spawn requester: send the broker a `SpawnChild` over the
+    /// control connection and check its answer.
+    ///
+    /// The broker's delegated-spawn handler is a refusing stub for now, so
+    /// this probe expects a refusal: it exits 0 if the broker answered with
+    /// one, and 1 otherwise — the broker reads the exit status off the
+    /// process descriptor.
+    fn run_spawn_requester(startup: Startup) -> ! {
+        let bootstrap = startup.bootstrap;
+
+        // Ask the broker to spawn a child.
+        let request = SpawnChild {
+            manifest: "any-app".to_owned(),
+        };
+        let (envelope, _fds) = Envelope::from_message(plain_header(), &request);
+        bootstrap
+            .send(&envelope, &[])
+            .expect("send the SpawnChild request");
+
+        // Await the broker's reply over the same control connection.
+        let (reply_envelope, handles) = bootstrap.recv().expect("receive the SpawnReply");
+        let reply = reply_envelope
+            .into_message::<SpawnReply>(handles)
+            .expect("decode the SpawnReply");
+        match reply {
+            SpawnReply::Refused(_) => std::process::exit(0),
+            SpawnReply::Spawned => std::process::exit(1),
         }
     }
 

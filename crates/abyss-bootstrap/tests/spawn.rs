@@ -223,6 +223,7 @@ fn a_restarted_peer_is_re_wired_and_a_call_after_it_still_answers() {
         restarted,
         vec![Exit {
             name: "rt-server".to_owned(),
+            status: 0,
             restarted: true,
         }],
     );
@@ -245,5 +246,38 @@ fn a_restarted_peer_is_re_wired_and_a_call_after_it_still_answers() {
     assert_eq!(
         second, 77,
         "the second call reached the re-wired, freshly restarted server",
+    );
+}
+
+#[test]
+fn the_broker_answers_a_spawn_request_over_the_control_connection() {
+    // A lone component, run as the §5.6 spawn requester: it sends the
+    // broker a `SpawnChild` over its control connection and exits 0 once
+    // the broker answers. The broker's delegated-spawn handler is a
+    // refusing stub for now — this proves the bidirectional control
+    // connection round-trips.
+    let name = format!("sr-requester-{}", std::process::id());
+    let graph = Graph::build(vec![manifest(&name, "sr-iface", "")]).expect("the graph builds");
+
+    let binary = probe();
+    let mut session = Session::launch(
+        graph,
+        InterfaceCatalogue::new(),
+        SpawnableSet::new(),
+        |_name| Program {
+            path: binary.clone(),
+            args: vec!["spawn-request".to_owned()],
+        },
+    )
+    .expect("launch the session");
+
+    // `step` receives the `SpawnChild` on the control connection and
+    // replies; the requester verifies the reply and exits 0.
+    let exits = session.step().expect("supervise the requester's exit");
+    assert_eq!(exits.len(), 1);
+    assert_eq!(exits[0].name, name);
+    assert_eq!(
+        exits[0].status, 0,
+        "the requester received the broker's reply to its SpawnChild",
     );
 }

@@ -27,7 +27,7 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::path::PathBuf;
 
-use abyss_bundle::{Bundle, CapBody, Grant, PeerRestarted, Role};
+use abyss_bundle::{Bundle, CapBody, Grant, PeerRestarted, Role, SpawnChild, SpawnReply};
 use abyss_msg::{Envelope, Header, MessageKind};
 use abyss_transport::{Channel, Event, Interest, MessageChannel, Reactor};
 use freebsd_capsicum_sys::{CapRights, Rights};
@@ -92,6 +92,8 @@ struct Live {
 pub struct Exit {
     /// The component that exited.
     pub name: String,
+    /// The exit status as from `wait(2)` — zero is a clean exit.
+    pub status: i32,
     /// `true` if its restart policy re-wired and restarted it; `false` if
     /// the policy stopped it — it is no longer supervised.
     pub restarted: bool,
@@ -205,7 +207,8 @@ impl Session {
 
     /// Wait for one or more components to exit and act on each per its
     /// restart policy (§5.5), returning what was done. Blocks until at
-    /// least one exits.
+    /// least one exits; control requests that arrive meanwhile (§5.6) are
+    /// answered along the way.
     ///
     /// A component whose policy restarts it is re-wired and respawned —
     /// see [`handle_exit`](Self::handle_exit); one whose policy does not is
@@ -215,16 +218,35 @@ impl Session {
             return Ok(Vec::new());
         }
         loop {
+            // Watch every component's control connection for an incoming
+            // request, alongside the process descriptors (§5.6). A
+            // readiness registration is one-shot, so it is renewed here on
+            // each wait; a process descriptor, registered once, is not.
+            for live in &self.components {
+                self.reactor
+                    .register(live.component.bootstrap().as_fd(), Interest::Readable)?;
+            }
             let events = self.reactor.wait(None)?;
-            let exited: Vec<(RawFd, i32)> = events
-                .iter()
-                .filter_map(|event| match event {
-                    Event::ProcessExited { fd, status } => Some((*fd, *status)),
-                    _ => None,
-                })
-                .collect();
+
+            let mut readable: Vec<RawFd> = Vec::new();
+            let mut exited: Vec<(RawFd, i32)> = Vec::new();
+            for event in events {
+                match event {
+                    Event::Readable(fd) => readable.push(fd),
+                    Event::ProcessExited { fd, status } => exited.push((fd, status)),
+                    _ => {}
+                }
+            }
+
+            // Answer control requests first: every `fd` here was just
+            // reported readable and no component has been restarted since,
+            // so a receive on it does not block.
+            for fd in readable {
+                self.handle_control(fd)?;
+            }
             if exited.is_empty() {
-                // A wake with no process-exit event — keep waiting.
+                // Only control traffic, or a bare wake — keep waiting for
+                // an exit to report.
                 continue;
             }
             let mut exits = Vec::with_capacity(exited.len());
@@ -273,6 +295,7 @@ impl Session {
             remove(stopped.component.jid())?;
             return Ok(Exit {
                 name,
+                status,
                 restarted: false,
             });
         }
@@ -303,8 +326,49 @@ impl Session {
         }
         Ok(Exit {
             name,
+            status,
             restarted: true,
         })
+    }
+
+    /// Handle a control connection that became readable: receive the
+    /// component's request and answer it (§5.6).
+    ///
+    /// `fd` is a control channel the reactor reported readable, so the
+    /// receive does not block — it yields a datagram, or end-of-file as
+    /// the component winds down. The only request defined is [`SpawnChild`];
+    /// delegated spawn is not yet wired, so every request is refused for
+    /// now. A datagram from a since-departed component, or one that is not
+    /// a recognised request, is dropped.
+    fn handle_control(&self, fd: RawFd) -> io::Result<()> {
+        let Some(live) = self
+            .components
+            .iter()
+            .find(|live| live.component.bootstrap().as_fd().as_raw_fd() == fd)
+        else {
+            // A readable event for a control channel no live component
+            // owns — a component that has since departed.
+            return Ok(());
+        };
+        let channel = live.component.bootstrap();
+
+        let (envelope, handles) = match channel.recv() {
+            Ok(message) => message,
+            // End-of-file, or a malformed datagram — the component is
+            // winding down; there is nothing to answer.
+            Err(_) => return Ok(()),
+        };
+        if envelope.into_message::<SpawnChild>(handles).is_err() {
+            // Not a request the broker understands — drop it.
+            return Ok(());
+        }
+
+        // Delegated spawn's request handler is not yet wired (§5.6); the
+        // control connection round-trips, but every request is refused.
+        let reply = SpawnReply::Refused("delegated spawn is not yet available".to_owned());
+        let (reply_envelope, fds) = Envelope::from_message(control_header(), &reply);
+        let borrowed: Vec<BorrowedFd<'_>> = fds.iter().map(AsFd::as_fd).collect();
+        channel.send(&reply_envelope, &borrowed)
     }
 }
 
@@ -749,6 +813,7 @@ mod tests {
             restarted,
             vec![Exit {
                 name: callee.clone(),
+                status: 0,
                 restarted: true,
             }],
         );
