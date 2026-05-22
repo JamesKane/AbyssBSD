@@ -697,7 +697,47 @@ are gone — each surviving peer's ring yields `RingClosed` (Gate B §3.2).
 The broker then **re-wires**: over each peer's control connection to the
 broker it sends a **`PeerRestarted`** message carrying the *fresh* ring
 endpoint (a new fd via `SCM_RIGHTS`); the peer's looper swaps the dead
-ring for it. This is the s6-grade supervision of §11.9.
+ring for it. This is the s6-grade supervision of §11.9. The rest of this
+section pins it.
+
+**The control connection.** A component's bootstrap channel (§5.3) is not
+spent once the bundle arrives — it persists for the component's life as
+its **control connection** to the broker. Its broker-to-component
+direction is a small control protocol: the bootstrap `Bundle` first, then
+a `PeerRestarted` message each time one of the component's peers is
+re-wired. The component's startup shim receives the bundle; its looper
+thereafter watches the control connection for `PeerRestarted`.
+
+**The `PeerRestarted` message.** A re-wiring delivers one fresh grant —
+the same `interface` and `role` as a grant in the original bundle, but a
+new ring endpoint and a freshly minted `CapBody`. So `PeerRestarted`
+reuses the §5.8 `Grant`: the message is a control envelope carrying a
+single `Grant`, the unit a `Bundle` is a list of.
+
+**The broker side.** Re-wiring needs the authority graph, the catalogue,
+and every component's control connection — so the broker's wiring
+(`Session`, §5.2) and its supervision (`Supervisor`) are one runtime, not
+two. When a component restarts, the broker re-creates a `socketpair` for
+every connection that component is in (`graph.connections_of`): the
+restarted component's fresh ends go in its fresh bundle, and each peer's
+fresh end is sent to that peer as a `PeerRestarted`, its object rights
+re-minted through the catalogue exactly as at first wiring (§3.3). Both
+ends of every such connection are re-wired — the restarted component's
+clients *and* the services it depended on. A component whose policy is
+`never` is not restarted, and its peers' rings stay closed.
+
+**The component side — the durable capability.** A component does not
+hold a raw `Cap`; it holds a **durable capability**, a framework-managed
+handle that outlives a peer restart. The durable handle points at the
+currently bound ring; when a `PeerRestarted` for that interface arrives,
+the framework binds the fresh grant (§3.5, §3.6) and repoints the handle
+at the new ring. A `call` issued after the restart goes transparently to
+the new peer — restart-resilience is the framework's, never the component
+author's, which is what "the peer's looper swaps the dead ring" means.
+The one call in flight at the instant of the crash still fails with
+`CallError::PeerGone` — a lost message cannot be un-lost — but every call
+after it travels the fresh ring. The durable handle has the two forms a
+ring has: a durable client capability, and a durable service binding.
 
 ### 5.6 Delegated spawn
 
