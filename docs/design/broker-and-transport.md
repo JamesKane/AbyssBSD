@@ -439,6 +439,44 @@ block names an interface and lists its classes, a class given as the
 method ordinals it covers — `present = 0, 1`. A malformed catalogue, or
 an unknown class named by a system manifest, is a boot fault (§5.1).
 
+**The `Rights` trait, pinned.** The compile-time form of an object-rights
+mask is `Cap<I, R>`'s `R`, "one fact with the runtime mask in two forms."
+This pins the trait shape that makes it so. `Rights` carries one
+associated item, the mask:
+
+```text
+trait Rights {
+    const MASK: u32;
+}
+```
+
+A rights *class* (`recv`, `present`) is a Rust type whose `MASK` is the
+bitmask of the method ordinals (§2.9) the class covers; a *union* of
+classes is a type whose `MASK` is the OR of theirs. The interface author
+defines them alongside `#[derive(Method)]` — a derive may emit one type
+per `#[rights(name)]` for routine cases. `SubsetOf<Super>` stays a manual
+marker: it tells the type checker `R2 ⊆ R` (so `narrow::<R2>` is
+allowed); correctness — `R2::MASK & !R::MASK == 0` — is on the interface
+author, the same way a manifest's rights tokens are.
+
+Every `Cap<I, R>` carries the runtime mask in a field set, at
+construction, to `R::MASK`: both the in-process `Local` and the IPC
+`Ipc` backend (the `CapBody.object_rights` that crosses the wire is the
+same value, written on `to_wire` and read on `from_wire`).
+`Cap::narrow::<R2>` ANDs the field with `R2::MASK` — recursive
+attenuation, never amplification (§10.1). `Cap::bind` *checks* the
+arrived mask is no wider than the receiving `R::MASK` and **rejects** the
+capability if it is: a `Cap` claiming more authority than its type asserts
+is refused at the seam, not later.
+
+`R` is, in this pass, **interface-agnostic** — `Rights` does not name its
+interface. A class type is conventionally used with the interface that
+defined it; using `input::Recv` with `Cap<Display, _>` is meaningless but
+compiles. Tying `R` to its `I` through an associated type
+(`type Interface: Interface`) is a possible later tightening; not doing
+it now keeps the trait one item, and the broad test markers (`Full`,
+`AnyRights` — `MASK = u32::MAX`) usable across interfaces.
+
 **Enforcement is framework-mediated.** A connection's object-rights mask
 rides in the `CapBody` of *both* its grants — the client's, so the holder
 knows (and the type system can check) its authority; the server's, so the
