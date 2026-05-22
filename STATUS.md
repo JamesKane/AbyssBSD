@@ -24,14 +24,17 @@ for the rest now exists (`tools/vm`, see In flight).
   must run in C); jail is a direct `extern` block. Each is gated on
   `target_os = "freebsd"` and compiles to an empty library on macOS.
 
-The workspace is nine `crates/` + three `sys/` + `xtask`, `cargo xtask
-ci` green. Gate D (`docs/design/broker-and-transport.md`) specifies the
-FreeBSD remainder.
+The workspace is thirteen `crates/` + three `sys/` + `xtask`, `cargo
+xtask ci` green. Gate D (`docs/design/broker-and-transport.md`) specifies
+the FreeBSD remainder.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `bc490e9` Phase 4: abyss-bundle — the bootstrap-bundle schema (§5.8)
+- `88680e0` Phase 4: design — the bootstrap-bundle schema (§5.8)
+- `7ba1632` Bump STATUS: Phase 4 — Cap: Wire; align §3.5 with the built bind signature
 - `031f5a6` Phase 4: abyss-cap — Cap: Wire, and binding a received capability (§3.4–§3.5)
 - `22c60ed` Bump STATUS: Phase 4 — a Spawner for a running looper
 - `c8fdb0e` Phase 4: abyss-looper — a Spawner for a running looper
@@ -39,9 +42,6 @@ FreeBSD remainder.
 - `abc68e9` Bump STATUS: Phase 4 — Cap::call reshaped to the typed request
 - `4942140` Phase 4: abyss-cap — Cap::call reshaped to the typed request (§2.10)
 - `9ca81ba` Bump STATUS: Phase 4 — in-process request delivery
-- `64f139c` Phase 4: abyss-looper — in-process request delivery to a handler
-- `ad29a24` Bump STATUS: Phase 4 — the Responder reply handle
-- `751cf93` Phase 4: abyss-looper — the Responder reply handle
 
 ## Site
 
@@ -151,15 +151,28 @@ the supporting API: `AsFd` for `Connection` / `AsyncChannel`,
 wires `Cap::try_send`'s IPC arm. Verified in the VM: a `Cap` round-trips
 through `to_wire` / `from_wire` across a socket, binds onto a looper, and
 `call`s over the bound ring with the reply routed by the spawned `serve`
-loop. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+loop.
+
+The broker's authority-graph wiring (§5.2) has begun. A design pass pinned
+the **bootstrap-bundle schema** (§5.8) — the payload format §5.3 left
+open — and the new **`abyss-bundle`** crate *is* that schema: `Bundle`, a
+`Wire`-round-tripping list of capability `Grant`s, each an `interface`, a
+`Role` (client / server), a `CapBody`, and a ring-endpoint descriptor. It
+is the contract the broker (encoder) and every component's startup shim
+(decoder) share — a host-slice crate, depending only on `abyss-msg` and
+`abyss-cap`. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the broker **wiring an authority graph** — spawning a manifest set and
-  connecting the components with rings (§5.2) — the next increment;
+- the broker **wiring an authority graph** — from a manifest set's
+  `Graph`, minting a `SOCK_SEQPACKET` ring per connection, building each
+  component's `Bundle`, and spawning it (§5.2–§5.3) — the next increment;
+- the **startup shim decoding the bundle** — `abyss-bootstrap` turning
+  each `Grant` into the capability its `Role` calls for, the client grants
+  becoming bound `Cap`s (§5.4, §3.5);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
   component, once components are wired (§5.5).
 
