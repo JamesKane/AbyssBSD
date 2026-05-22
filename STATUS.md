@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `031bff8` Phase 4: §5.6 — the delegated-spawn handler, end to end
+- `eac18b5` Bump STATUS: Phase 4 — growable graph, pre-resolved spawn programs (§5.6)
 - `6a68f31` Phase 4: abyss-broker — a growable graph and pre-resolved spawn programs (§5.6)
 - `25cce69` Bump STATUS: Phase 4 — the bidirectional control connection (§5.6)
 - `139e450` Phase 4: abyss-broker — the bidirectional control connection (§5.6)
@@ -44,8 +46,6 @@ the FreeBSD remainder.
 - `d394731` Phase 4: abyss-broker — the spawnable manifest set (§5.6)
 - `eb9a93a` Bump STATUS: Phase 4 — the SpawnChild control protocol (§5.6)
 - `a031ebb` Phase 4: abyss-bundle — the SpawnChild control protocol (§5.6)
-- `a0599cd` Bump STATUS: Phase 4 — the kind = spawn capability (§5.6)
-- `8d23f75` Phase 4: abyss-broker — the `kind = spawn` capability (§5.6)
 - `b117b24` Bump STATUS: Phase 4 — delegated spawn designed (§5.6)
 
 ## Site
@@ -281,46 +281,33 @@ consults each exited component's `always` / `on-failure` / `never` policy
 restart is stopped, its jail reclaimed and its peers' rings left closed
 (§5.5).
 
-The next broker feature, **delegated spawn (§5.6)** — the shell asking
-the broker to launch an app — is **designed** and the build has begun. The
-design: a spawnable manifest set the broker reads at boot but does not
-spawn; a bidirectional control connection carrying a `SpawnChild` request
-and its reply; a `kind = spawn` capability gating who may ask; and a
-mid-session child wired to running peers by reusing the §5.5
-`PeerRestarted` re-wiring. Five bricks are down — the **`kind = spawn`
-capability** in the manifest schema, the permission the broker checks
-before honouring a request; the **`SpawnChild` / `SpawnReply`** control
-messages — the request a component sends the broker (naming a manifest,
-carrying no authority) and the broker's answer — alongside `PeerRestarted`
-in the `abyss-bundle` schema crate; the **spawnable manifest set** —
-`SpawnableSet`, the broker's name-indexed catalogue of on-demand
-manifests, read at boot and held by the `Session`, spawned from only on
-request; the **bidirectional control connection** — `Session::step`
-watches every component's control channel on the `kqueue` alongside the
-process descriptors, and answers a `SpawnChild` over it (the connection
-round-trips end to end, though the handler refuses every request for
-now); and the **runtime support** the real handler needs — a growable
-authority graph (`Graph::add` joins a mid-session child, validated as
-`build` does) and a name→binary lookup that outlives the launch-time
-resolver (spawn programs pre-resolved for every spawnable manifest), the
-two frictions the design isolated. What remains is the handler itself:
-on a `SpawnChild`, check the `spawn` capability, mint the named child,
-spawn it, and wire it to live peers. `cargo xtask ci` green on macOS and
-FreeBSD; tree clean.
+And **§5.6 delegated spawn is proven end to end**. A `kind = spawn`
+component asks the broker to launch a named app from the spawnable set
+over its control connection; the broker checks the capability, looks up
+the manifest, validates the child's authority against the running
+session, wires its connections to live peers, spawns it into the session,
+joins it to the graph and the supervised set, sends each peer a
+`PeerRestarted`, and replies `Spawned`. A wired test runs the dance: a
+spawn-capable requester probe gets `Spawned` back and exits 0, the named
+child joins the session. Five bricks supported the handler — the
+**`kind = spawn`** capability, the **`SpawnChild` / `SpawnReply`** control
+messages in the `abyss-bundle` schema crate, the **spawnable manifest
+set** (`SpawnableSet`), the **bidirectional control connection**
+(`Session::step` watching every control channel on the `kqueue`), and the
+**runtime support** the handler needed (a growable authority graph and
+spawn programs pre-resolved for every spawnable manifest). `rewire`'s
+body is now the shared `wire_connections` — restart and delegated spawn
+read from the same wire. Refusals (no `spawn` capability, unknown
+manifest, name collision, unresolvable authority, spawn failure) all
+return a `Refused` with a reason and leave the session untouched; only a
+full success mutates. `cargo xtask ci` green on macOS and FreeBSD; tree
+clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building delegated spawn (§5.6)** — the `kind = spawn` capability,
-  the `SpawnChild` / `SpawnReply` messages, the spawnable manifest set,
-  the bidirectional control connection, and the runtime support a
-  mid-session spawn needs (a growable graph, pre-resolved programs) are
-  all in; what remains is the real `SpawnChild` handler — check the
-  requester's `spawn` capability, mint the named child, spawn it into the
-  running session, and wire it to live peers through `PeerRestarted` — and
-  a wired end-to-end test of a `spawn`-capable component launching one;
 - **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
   a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
   crate, and a design pass first;
