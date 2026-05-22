@@ -14,6 +14,9 @@
 //!   rights, and the ring-endpoint descriptor.
 //! - [`PeerRestarted`] — a control message delivered after boot, carrying
 //!   one fresh `Grant` that re-wires a restarted peer (§5.5).
+//! - [`SpawnChild`] / [`SpawnReply`] — the delegated-spawn request a
+//!   component sends the broker over its control connection, and the
+//!   broker's answer (§5.6).
 //!
 //! `Bundle` is [`Wire`]: `to_wire` duplicates each grant's descriptor onto
 //! the handle table beside its `CapBody` (the §3.4 pattern `Cap` follows),
@@ -45,6 +48,15 @@ const KEY_CAPABILITY: &str = "capability";
 const ROLE_CLIENT: &str = "client";
 /// The `role` wire token for [`Role::Server`].
 const ROLE_SERVER: &str = "server";
+
+/// The dict key naming a [`SpawnReply`]'s outcome.
+const KEY_OUTCOME: &str = "outcome";
+/// The dict key carrying a [`SpawnReply::Refused`] reason.
+const KEY_REASON: &str = "reason";
+/// The `outcome` wire token for [`SpawnReply::Spawned`].
+const OUTCOME_SPAWNED: &str = "spawned";
+/// The `outcome` wire token for [`SpawnReply::Refused`].
+const OUTCOME_REFUSED: &str = "refused";
 
 /// Which face a component puts on its end of a granted ring.
 ///
@@ -112,6 +124,31 @@ pub struct Bundle {
 pub struct PeerRestarted {
     /// The fresh grant for the re-wired connection.
     pub grant: Grant,
+}
+
+/// A request to the broker to spawn a child — delegated spawn
+/// (`broker-and-transport.md` §5.6).
+///
+/// A component (chiefly the shell) sends this to the broker over the
+/// component→broker direction of its control connection. It names a
+/// manifest in the broker's *spawnable* set; a component never supplies a
+/// manifest, because authoring authority is the broker's alone. The broker
+/// answers with a [`SpawnReply`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnChild {
+    /// The name of the manifest to spawn, in the broker's spawnable set.
+    pub manifest: String,
+}
+
+/// The broker's answer to a [`SpawnChild`] request (§5.6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpawnReply {
+    /// The child was spawned, wired, and is now supervised.
+    Spawned,
+    /// The request was refused; the string says why — no such spawnable
+    /// manifest, the requester holds no `spawn` capability, or the child's
+    /// authority graph does not resolve.
+    Refused(String),
 }
 
 impl Wire for Grant {
@@ -200,6 +237,56 @@ impl Wire for Bundle {
         Ok(Bundle {
             grants: <Vec<Grant>>::from_wire(value, handles)?,
         })
+    }
+}
+
+impl Wire for SpawnChild {
+    fn to_wire(&self, handles: &mut HandleSink) -> Value {
+        // Just the manifest name — a `SpawnChild` carries no descriptors.
+        self.manifest.to_wire(handles)
+    }
+
+    fn from_wire(value: &Value, handles: &mut HandleStore) -> Result<Self, WireError> {
+        Ok(SpawnChild {
+            manifest: String::from_wire(value, handles)?,
+        })
+    }
+}
+
+impl Wire for SpawnReply {
+    fn to_wire(&self, _handles: &mut HandleSink) -> Value {
+        match self {
+            SpawnReply::Spawned => Value::Dict(vec![(
+                KEY_OUTCOME.to_owned(),
+                Value::Str(OUTCOME_SPAWNED.to_owned()),
+            )]),
+            SpawnReply::Refused(reason) => Value::Dict(vec![
+                (
+                    KEY_OUTCOME.to_owned(),
+                    Value::Str(OUTCOME_REFUSED.to_owned()),
+                ),
+                (KEY_REASON.to_owned(), Value::Str(reason.clone())),
+            ]),
+        }
+    }
+
+    fn from_wire(value: &Value, _handles: &mut HandleStore) -> Result<Self, WireError> {
+        let fields = match value {
+            Value::Dict(fields) => fields,
+            other => {
+                return Err(WireError::TypeMismatch {
+                    expected: "dict",
+                    found: other.kind_name(),
+                });
+            }
+        };
+        match dict_str(fields, KEY_OUTCOME)? {
+            OUTCOME_SPAWNED => Ok(SpawnReply::Spawned),
+            OUTCOME_REFUSED => Ok(SpawnReply::Refused(
+                dict_str(fields, KEY_REASON)?.to_owned(),
+            )),
+            other => Err(WireError::UnknownVariant(other.to_owned())),
+        }
     }
 }
 
@@ -377,5 +464,48 @@ mod tests {
         assert_eq!(decoded.grant.interface, "input");
         assert_eq!(decoded.grant.role, Role::Client);
         assert_eq!(decoded.grant.rights, rights(0x33));
+    }
+
+    #[test]
+    fn a_spawn_child_request_round_trips() {
+        let request = SpawnChild {
+            manifest: "text-editor".to_owned(),
+        };
+        let mut sink = HandleSink::new();
+        let value = request.to_wire(&mut sink);
+        let (handles, fds) = sink.into_parts();
+        assert!(handles.is_empty(), "a SpawnChild carries no descriptors");
+
+        let mut store = HandleStore::new(handles, fds).expect("the handle store builds");
+        let decoded = SpawnChild::from_wire(&value, &mut store).expect("the request decodes");
+        assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn a_spawn_reply_round_trips_both_outcomes() {
+        for reply in [
+            SpawnReply::Spawned,
+            SpawnReply::Refused("no such spawnable manifest".to_owned()),
+        ] {
+            let mut sink = HandleSink::new();
+            let value = reply.to_wire(&mut sink);
+            let (handles, fds) = sink.into_parts();
+            let mut store = HandleStore::new(handles, fds).expect("the handle store builds");
+            let decoded = SpawnReply::from_wire(&value, &mut store).expect("the reply decodes");
+            assert_eq!(decoded, reply);
+        }
+    }
+
+    #[test]
+    fn an_unknown_spawn_outcome_is_rejected() {
+        let value = Value::Dict(vec![(
+            KEY_OUTCOME.to_owned(),
+            Value::Str("maybe".to_owned()),
+        )]);
+        let mut store = HandleStore::new(vec![], vec![]).expect("store");
+        match SpawnReply::from_wire(&value, &mut store) {
+            Err(WireError::UnknownVariant(token)) => assert_eq!(token, "maybe"),
+            other => panic!("expected UnknownVariant, got {other:?}"),
+        }
     }
 }
