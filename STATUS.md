@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `d14e81a` Phase 4: design — the object-rights model (§3.3)
+- `8086e9e` Bump STATUS: Phase 4 — abyss-looper correctness fixes
 - `943141e` Phase 4: abyss-looper — fix a lost wakeup, a responder leak, and slot growth
 - `36ca290` Bump STATUS: Phase 4 — the broker wires an authority graph into a session
 - `e13ce72` Phase 4: abyss-broker — wire an authority graph into a spawned session (§5.2)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `88680e0` Phase 4: design — the bootstrap-bundle schema (§5.8)
 - `7ba1632` Bump STATUS: Phase 4 — Cap: Wire; align §3.5 with the built bind signature
 - `031f5a6` Phase 4: abyss-cap — Cap: Wire, and binding a received capability (§3.4–§3.5)
-- `22c60ed` Bump STATUS: Phase 4 — a Spawner for a running looper
-- `c8fdb0e` Phase 4: abyss-looper — a Spawner for a running looper
 
 ## Site
 
@@ -166,8 +166,14 @@ client end, provider ↦ server end), `Session::spawn` brings each
 component into being holding it. Verified in the VM: a three-component
 graph is wired and spawned, and each component decodes its bundle and
 finds exactly the grants its connections imply. The minted capabilities
-carry zero rights for now — the §3.3 rights mapping is deferred
-(`TECH-DEBT.md`).
+carry zero rights for now (`TECH-DEBT.md`) — but the model they will be
+minted from is no longer open: a first-principles design pass, grounded in
+Capsicum / seL4 / Cap'n Proto / Fuchsia / Wayland, **pinned the
+object-rights model in §3.3**. A service ring is a multiplexor, so object
+rights are a bitmask over an interface's method ordinals (the unit
+`#[derive(Method)]` already assigns), service-enforced — the kernel
+`cap_rights_t` mask's counterpart one layer up. §3.3 rewritten end to end;
+the kernel-layer table corrected (the service-ring mask gains `CAP_FCNTL`).
 
 Three correctness defects in **`abyss-looper`** were then found and fixed,
 each with a regression test: a **lost wakeup** in the ring — a send
@@ -186,10 +192,13 @@ never reclaimed, now a generational slotmap that frees and reuses slots.
 - the **startup shim decoding the bundle** — `abyss-bootstrap` turning
   each `Grant` into the capability its `Role` calls for, the client grants
   becoming bound `Cap`s (§5.4, §3.5) — the next increment;
+- the **§3.3 rights layers**, now designed — minting the kernel
+  `cap_rights` mask (and `cap_rights_limit`-ing each ring fd), rights
+  classes beside `#[derive(Method)]`, the object-rights mask minted from
+  the manifest, and the service-loop check (`TECH-DEBT.md` has the
+  increment breakdown);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
-  component (§5.5);
-- the §3.3 **rights mapping** — minting each grant's `CapBody` from the
-  manifest rather than zero (`TECH-DEBT.md`).
+  component (§5.5).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
 This reaches the bulk of **M1**.
