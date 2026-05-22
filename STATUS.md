@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `a8f45fc` Phase 4: abyss-transport — the Error frame, a refused request (§3.6)
+- `308f68f` Bump STATUS: Phase 4 — the IPC service framework designed (§3.6)
 - `e65c309` Phase 4: design — binding a service, and enforcing object rights (§3.6)
 - `6537dd4` Bump STATUS: Phase 4 — the broker resolves and mints object rights
 - `303d9cd` Phase 4: abyss-broker — resolve and mint object rights (§3.3)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `cc63532` Bump STATUS: Phase 4 — the kernel cap_rights layer (§3.3)
 - `6b36486` Phase 4: abyss-broker — mint and enforce the kernel cap_rights layer (§3.3)
 - `a6ce496` Bump STATUS: Phase 4 — two components converse over a wired ring
-- `132d6f3` Phase 4: abyss-bootstrap — two components converse over a wired ring (§5.4)
-- `6b12c1f` Bump STATUS: Phase 4 — the startup shim decodes the bundle (§5.4)
 
 ## Site
 
@@ -214,8 +214,11 @@ wire` takes one, resolves each connection's `rights` tokens to an
 whose accept loop checks each inbound `method_id` against the mask before
 a `Service` handler sees the message; a refused request is answered with
 a new `Error` frame, which `Cap::call` surfaces as a `CallError`. Building
-it is the next increment. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+it has begun: `abyss-transport`'s ring frame gained the **`Error` frame**
+— `Connection::call` now returns a `CallOutcome` (answered or refused),
+`serve` routes a refusal, and `Responder::refuse` sends one. `abyss-cap`'s
+`bind_service` and the accept-loop rights check are the next increment.
+`cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
@@ -223,10 +226,10 @@ tree clean.
 `docs/design/broker-and-transport.md`:
 
 - **building §3.6** — the IPC service framework and object-rights
-  enforcement, designed and now to be built, in increments: the
-  `abyss-transport` `Error` frame; `abyss-cap`'s `bind_service`, the
-  `Service` handler, and the accept-loop rights check; the probe's server
-  side reworked onto it, with a rights-denied test — the next increment;
+  enforcement; the `abyss-transport` `Error` frame is in. What remains:
+  `abyss-cap`'s `bind_service`, the `Service` handler, and the accept-loop
+  rights check; then the probe's server side reworked onto it, with a
+  rights-denied test — the next increment;
 - the `Cap<I, R>` typestate connected to the runtime mask (`narrow`,
   the `bind`-time check) — the client-side safety net (§3.3);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
