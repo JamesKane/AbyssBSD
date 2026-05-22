@@ -17,10 +17,12 @@ for the rest now exists (`tools/vm`, see In flight).
   `Manifest::load_dir`, reading a directory of them into a manifest set
   (`broker-and-transport.md` §4, §5.1) — and the `graph` module, the
   static authority graph computed and validated from a manifest set
-  (§5.2). And,
-  on FreeBSD, the `spawn` and `session` modules — component spawn, and the
-  session runtime that wires, spawns, and supervises a manifest set (§5.3,
-  §5.5); see In flight. No `unsafe`.
+  (§5.2), and the `catalogue` module, the interface catalogue (§3.3) with
+  its on-disk form. And, on FreeBSD, the `spawn`, `session`, and `boot`
+  modules — component spawn, the session runtime that wires, spawns, and
+  supervises a manifest set, and the boot path — plus the `broker` binary
+  itself, the desktop's root process (§5.1, §5.3, §5.5); see In flight.
+  No `unsafe`.
 - `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6),
   all three now built out and VM-verified. Capsicum and procdesc carry C
   shims (Capsicum's rights API is C macros; procdesc's `pdfork`-then-`exec`
@@ -35,6 +37,9 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `84bda29` Phase 4: abyss-broker — the broker binary, booting a session from disk (§5.1)
+- `e6a226c` Phase 4: abyss-broker — the interface catalogue's on-disk form (§3.3)
+- `8b99f3f` Bump STATUS: Phase 4 — load a directory of manifests (§5.1)
 - `2598449` Phase 4: abyss-broker — load a directory of manifests (§5.1)
 - `33287ed` Bump STATUS: Phase 4 — §5.5 PeerRestarted proven end to end
 - `14f2288` Phase 4: §5.5 — the multi-process peer-restart test, end to end
@@ -42,9 +47,6 @@ the FreeBSD remainder.
 - `4cacbae` Phase 4: abyss-bootstrap — Control, the component-side §5.5 control loop
 - `3713eae` Bump STATUS: Phase 4 — AsyncMessageChannel, the async control channel (§5.5)
 - `442ba6c` Phase 4: abyss-transport — AsyncMessageChannel, the async control channel
-- `ba39aac` Bump STATUS: Phase 4 — Session/Supervisor unified (§5.5)
-- `edea028` Phase 4: §5.5 — Session and Supervisor unified into one runtime
-- `101bca6` Phase 4: abyss-cap — the durable capability (§5.5)
 
 ## Site
 
@@ -256,26 +258,37 @@ and exit, `step`s the broker to re-wire and respawn it — and the client's
 reaches the freshly restarted server. The broker re-wires a dead peer and
 the call after it still lands.
 
-With §5.5 closed, the broker's own boot path is next. The first piece is
-down: **`Manifest::load_dir`** reads the broker's manifest set from a
-directory at boot (§5.1) — every regular, non-dotfile entry parsed, the
-set returned in file-name order so the authority graph is deterministic,
-a malformed manifest a `LoadError` naming the file. `cargo xtask ci`
-green on macOS and FreeBSD; tree clean.
+With §5.5 closed, the broker's own boot path is **built — the broker is
+now a program**. **`Manifest::load_dir`** reads the manifest set from a
+directory (§5.1), in file-name order so the authority graph is
+deterministic. The **interface catalogue** now has a settled on-disk
+form: the broker links no component code, so the rights classes reach it
+as data — **`InterfaceCatalogue::load`** parses a declarative catalogue
+file, the on-disk counterpart of the manifests, each `[interface]` block
+listing a rights class as the method ordinals it covers. That pins the
+design's open question (§3.3 updated). On those two, **`abyss_broker::
+boot`** is the boot path — load the manifests and catalogue, build the
+graph, launch the session — and **`src/bin/broker.rs`** is the broker
+proper: the desktop's root process, a thin shell that boots a session and
+drives `Session::step` in a loop for its life, logging each restart. A
+wired test boots a three-component session entirely from files on disk
+and sees the components converse. `cargo xtask ci` green on macOS and
+FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **the broker's boot path and main loop (§5.1)** — `load_dir` is in;
-  what remains is the broker binary itself: read the manifest set, build
-  the graph and catalogue, launch the session, and drive `step` in a
-  long-running loop as the desktop's root process. How the interface
-  catalogue (§3.3) is populated in production — the tests hand-register
-  it — is the open question here;
+- **delegated spawn and Casper (§5.6–§5.7)** — a component (the shell)
+  asking the broker to spawn a child, born with the *child's* manifest as
+  its bundle; and `kind = casper` capabilities, the broker setting up a
+  `cap_channel_t` per declared Casper service;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
-  net beside the now-enforced service-side check (§3.3).
+  net beside the now-enforced service-side check (§3.3);
+- the broker's restart *policy* — `step` restarts unconditionally; the
+  manifest's `restart` policy (`always` / `on-failure` / `never`, already
+  parsed) should gate it, and a `never` component's peers stay closed.
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
