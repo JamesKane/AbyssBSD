@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `e8bddbe` Phase 4: abyss-cap — Cap holds a Backend
+- `90341b7` Bump STATUS: Phase 4 — Interface::ID, the §2.9 contract layer complete
 - `1b31a68` Phase 4: abyss-cap — Interface::ID, the interface side of §2.9
 - `21369f0` Bump STATUS: Phase 4 — the Method trait and derive
 - `b610b8d` Phase 4: abyss-msg — the Method trait and #[derive(Method)]
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `b0ebdd3` Bump STATUS: Phase 4 — Connection::send, the one-way message
 - `f330979` Phase 4: abyss-transport — Connection::send, the one-way message
 - `6b1bc65` Bump STATUS: Phase 4 — the Cap two-backend design pass
-- `266b8a4` Phase 4: design — pin the Cap two-backend crate structure (§2.8)
-- `39ec8f1` Bump STATUS: Phase 4 — the handle table carries fds
 
 ## Site
 
@@ -120,19 +120,22 @@ Proto / Binder corpus. That contract layer is built:
 message its routing identity — the method ordinal (by declaration order)
 and the kind — and `abyss-cap`'s **`Interface::ID`** gives the interface
 its id; together they name an envelope `Header`. `Connection::send`
-carries a one-way Command or Event, the IPC counterpart of `call`. `cargo
-xtask ci` green on macOS and FreeBSD; tree clean.
+carries a one-way Command or Event, the IPC counterpart of `call`. And
+the **`Cap` rework** has begun — `Cap<I, R>` now holds a `Backend` it
+dispatches to, the seam its in-process and IPC rings slot into, the
+`Local` variant in place. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **`Cap` two-backend rework** — `Cap<I, R>` gaining its `Backend`
-  enum and IPC variant, `send`/`call` dispatching on it, then `Cap: Wire`
-  on top. Every input is now in place: the §2.8/§2.9 design, and the
-  `Method` / `Interface::ID` / `CapBody` / fd-handle-table pieces
-  (§2.8, §3.4) — the next increment;
+- the **`Cap` IPC backend** — the `Backend::Ipc` variant over an
+  `abyss-transport` `Connection` (`abyss-cap` taking on `abyss-transport`),
+  `Cap::send` dispatching a one-way message over it (§2.8) — the next
+  increment; then `Cap::call`'s framework-mediated reshape (§2.7) and
+  `Cap: Wire` (§3.4) follow;
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
