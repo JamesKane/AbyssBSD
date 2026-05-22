@@ -1,13 +1,22 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 //! The component bootstrap shim — compiled only on FreeBSD.
+//!
+//! [`enter`] receives the bootstrap bundle and confines the process;
+//! [`Control`] then keeps the same channel as a control connection and
+//! re-wires the component's durable capabilities when a peer restarts
+//! (`broker-and-transport.md` §5.5).
 
+use std::collections::HashMap;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd, RawFd};
+use std::sync::Arc;
 
-use abyss_bundle::{Bundle, Grant, Role};
-use abyss_cap::{Cap, Interface, Rights, unbound_ipc_cap};
-use abyss_transport::{Channel, MessageChannel};
+use abyss_bundle::{Bundle, Grant, PeerRestarted, Role};
+use abyss_cap::{Cap, DurableCap, Interface, Rights, durable, unbound_ipc_cap};
+use abyss_looper::Spawner;
+use abyss_msg::{Method, Wire};
+use abyss_transport::{AsyncMessageChannel, Channel, MessageChannel, ReactorSource};
 
 /// The descriptor a component is spawned holding — its bootstrap socket
 /// (`broker-and-transport.md` §5.3). Matches `ABYSS_BOOTSTRAP_FD` in the
@@ -96,4 +105,166 @@ pub fn enter() -> io::Result<Startup> {
     })?;
 
     Ok(Startup { bundle, bootstrap })
+}
+
+/// The component's control loop — watching the bootstrap channel for
+/// post-boot control messages (`broker-and-transport.md` §5.5).
+///
+/// Once [`enter`] has taken the bundle off it, the bootstrap channel
+/// becomes a *control connection*: the broker sends a [`PeerRestarted`]
+/// over it whenever one of the component's peers is re-wired. `Control`
+/// watches for those and repoints the affected [`DurableCap`] at the fresh
+/// ring, so a `call` made after a restart travels it transparently.
+pub struct Control {
+    channel: AsyncMessageChannel,
+    /// One rewire handler per interface, invoked with the fresh [`Grant`]
+    /// when a [`PeerRestarted`] for that interface arrives.
+    rewires: HashMap<String, Box<dyn FnMut(Grant) + Send>>,
+}
+
+impl Control {
+    /// Begin watching `bootstrap` — the channel [`enter`] received the
+    /// bundle on — for control messages. `source` is the event source of
+    /// the looper the control loop will run on.
+    pub fn watch(bootstrap: MessageChannel, source: Arc<ReactorSource>) -> io::Result<Control> {
+        Ok(Control {
+            channel: AsyncMessageChannel::new(bootstrap, source)?,
+            rewires: HashMap::new(),
+        })
+    }
+
+    /// Register a rewire handler for `interface`: `handler` is called with
+    /// the fresh [`Grant`] each time a [`PeerRestarted`] for that interface
+    /// arrives. [`durable_cap`](Self::durable_cap) is the usual way to set
+    /// one up.
+    pub fn on_rewire(&mut self, interface: &str, handler: impl FnMut(Grant) + Send + 'static) {
+        self.rewires.insert(interface.to_owned(), Box::new(handler));
+    }
+
+    /// Make `cap` — an already-bound client capability for `interface` — a
+    /// [`DurableCap`], and register its re-wiring.
+    ///
+    /// The returned `DurableCap` is what the component holds and `call`s
+    /// through. When the peer providing `interface` is restarted, the
+    /// control loop binds the fresh ring the broker delivers and repoints
+    /// this capability at it (§5.5); `reactor` and `spawner` are the
+    /// looper's, used to bind that fresh ring.
+    pub fn durable_cap<I, R>(
+        &mut self,
+        interface: &str,
+        cap: Cap<I, R>,
+        reactor: Arc<ReactorSource>,
+        spawner: Spawner,
+    ) -> DurableCap<I, R>
+    where
+        I: Interface + 'static,
+        R: Rights + 'static,
+        I::Message: Wire + Method,
+    {
+        let (durable_cap, repointer) = durable(cap);
+        self.on_rewire(interface, move |grant| {
+            // The fresh ring the broker re-wired: bind it onto the looper,
+            // then repoint the durable capability at it.
+            let fresh: Cap<I, R> = unbound_ipc_cap(grant.endpoint, grant.rights);
+            let bound = fresh.bind(Arc::clone(&reactor), &spawner);
+            repointer.repoint(bound);
+        });
+        durable_cap
+    }
+
+    /// Watch the control channel for the rest of the component's life,
+    /// dispatching each [`PeerRestarted`] to its rewire handler.
+    ///
+    /// Spawn this as a task on the component's looper. It returns when the
+    /// broker closes the control connection — the session winding down.
+    pub async fn run(mut self) {
+        loop {
+            let (envelope, handles) = match self.channel.recv().await {
+                Ok(message) => message,
+                // The broker closed the control connection.
+                Err(_) => return,
+            };
+            // Every message after the bundle is a `PeerRestarted`; a
+            // malformed one is skipped rather than fatal.
+            let Ok(restarted) = envelope.into_message::<PeerRestarted>(handles) else {
+                continue;
+            };
+            let grant = restarted.grant;
+            if let Some(handler) = self.rewires.get_mut(&grant.interface) {
+                handler(grant);
+            }
+            // A `PeerRestarted` for an interface with no registered handler
+            // — nothing the component holds to repoint — is ignored.
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use abyss_bundle::CapBody;
+    use abyss_looper::Looper;
+    use abyss_msg::{Envelope, Header, MessageKind};
+    use std::os::fd::AsFd;
+    use std::sync::Mutex;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn control_dispatches_a_peer_restarted_to_its_rewire_handler() {
+        let (broker_end, component_end) = MessageChannel::pair().expect("socketpair");
+        let source = Arc::new(ReactorSource::new().expect("kqueue source"));
+
+        let mut control = Control::watch(component_end, Arc::clone(&source)).expect("control");
+        let seen: Arc<Mutex<Vec<(String, Role)>>> = Arc::new(Mutex::new(Vec::new()));
+        let recorder = Arc::clone(&seen);
+        control.on_rewire("display", move |grant| {
+            recorder
+                .lock()
+                .unwrap()
+                .push((grant.interface.clone(), grant.role));
+            // `grant.endpoint`, a throwaway ring end, drops here.
+        });
+
+        // The broker sends one `PeerRestarted`, then closes the control
+        // connection — which is what ends the control loop.
+        let peer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            let (endpoint, _other_end) = Channel::pair().expect("a throwaway ring");
+            let grant = Grant {
+                interface: "display".to_owned(),
+                role: Role::Client,
+                rights: CapBody {
+                    cap_rights: [0u8; 16],
+                    object_rights: 0,
+                },
+                endpoint: endpoint.into_fd(),
+            };
+            let (envelope, fds) = Envelope::from_message(
+                Header {
+                    kind: MessageKind::Event,
+                    interface_id: 0,
+                    method_id: 1,
+                },
+                &PeerRestarted { grant },
+            );
+            let borrowed: Vec<_> = fds.iter().map(AsFd::as_fd).collect();
+            broker_end
+                .send(&envelope, &borrowed)
+                .expect("send the PeerRestarted");
+            // `broker_end` drops here, closing the control connection.
+        });
+
+        let mut looper = Looper::with_event_source(source);
+        looper.spawn(control.run());
+        looper.run();
+        peer.join().expect("peer thread");
+
+        // The control loop decoded the `PeerRestarted` and routed its grant
+        // to the handler registered for that interface.
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![("display".to_owned(), Role::Client)],
+        );
+    }
 }

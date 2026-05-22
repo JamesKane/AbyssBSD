@@ -10,6 +10,10 @@
 //! hold (§5.4). Everything the component is allowed to do, it does with
 //! what the bundle handed it.
 //!
+//! After boot the bootstrap socket stays open as a *control connection*:
+//! [`Control`] watches it for `PeerRestarted` messages and repoints the
+//! component's durable capabilities when a peer is restarted (§5.5).
+//!
 //! **FreeBSD only.** Empty on every other host — the IPC transport and
 //! Capsicum are FreeBSD facilities — so the macOS dev bed still builds.
 
@@ -21,4 +25,4 @@
 mod freebsd;
 
 #[cfg(target_os = "freebsd")]
-pub use freebsd::{Startup, enter};
+pub use freebsd::{Control, Startup, enter};
