@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `1ed3820` Phase 4: abyss-cap — the Cap IPC backend, send dispatch
+- `1963a6d` Bump STATUS: Phase 4 — Cap holds a Backend
 - `e8bddbe` Phase 4: abyss-cap — Cap holds a Backend
 - `90341b7` Bump STATUS: Phase 4 — Interface::ID, the §2.9 contract layer complete
 - `1b31a68` Phase 4: abyss-cap — Interface::ID, the interface side of §2.9
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `2004c3e` Bump STATUS: Phase 4 — the interface contract design pass
 - `b2c7d17` Phase 4: design — the interface contract, identity and dispatch (§2.9)
 - `b0ebdd3` Bump STATUS: Phase 4 — Connection::send, the one-way message
-- `f330979` Phase 4: abyss-transport — Connection::send, the one-way message
-- `6b1bc65` Bump STATUS: Phase 4 — the Cap two-backend design pass
 
 ## Site
 
@@ -121,21 +121,23 @@ message its routing identity — the method ordinal (by declaration order)
 and the kind — and `abyss-cap`'s **`Interface::ID`** gives the interface
 its id; together they name an envelope `Header`. `Connection::send`
 carries a one-way Command or Event, the IPC counterpart of `call`. And
-the **`Cap` rework** has begun — `Cap<I, R>` now holds a `Backend` it
-dispatches to, the seam its in-process and IPC rings slot into, the
-`Local` variant in place. `cargo xtask ci` green on macOS and FreeBSD;
-tree clean.
+the **`Cap` rework** is under way — `Cap<I, R>` holds a `Backend`, both
+variants now in: `Local` (the in-process ring) and `Ipc` (an
+`abyss-transport` `Connection`). `Cap::send` dispatches over either;
+sent over IPC, a message is framed with its interface and method identity
+and crosses a real `SOCK_SEQPACKET` ring. `cargo xtask ci` green on macOS
+and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **`Cap` IPC backend** — the `Backend::Ipc` variant over an
-  `abyss-transport` `Connection` (`abyss-cap` taking on `abyss-transport`),
-  `Cap::send` dispatching a one-way message over it (§2.8) — the next
-  increment; then `Cap::call`'s framework-mediated reshape (§2.7) and
-  `Cap: Wire` (§3.4) follow;
+- **`Cap::call` over IPC** — reshaping the request/reply path from the
+  in-process embedded-`Sender` form to §2.7's framework-mediated
+  `Responder`; it needs per-Request reply types, a further slice of the
+  interface contract — the next increment;
+- **`Cap: Wire`** — a `Cap` itself delivered inside a message (§3.4);
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
