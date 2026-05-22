@@ -14,12 +14,13 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::path::PathBuf;
 
 use abyss_bundle::{Bundle, CapBody, Grant, Role};
 use abyss_msg::{Envelope, Header, MessageKind};
 use abyss_transport::Channel;
+use freebsd_capsicum_sys::{CapRights, Rights};
 
 use crate::graph::Graph;
 use crate::spawn::{Component, spawn_component};
@@ -56,6 +57,11 @@ impl Session {
     /// connection and assemble each component's bundle. No process is
     /// spawned — every ring is created here, before [`spawn`](Self::spawn).
     pub fn wire(graph: &Graph) -> io::Result<Session> {
+        // The §3.3 kernel mask every service ring carries, built once and
+        // applied to each ring descriptor before it enters a bundle.
+        let ring_rights = CapRights::new(service_ring_rights());
+        let body = ring_cap_body(&ring_rights);
+
         // Seed every component with a grant list — one with no connections
         // still gets a bundle, an empty one.
         let mut grants: HashMap<String, Vec<Grant>> = graph
@@ -74,14 +80,18 @@ impl Session {
                 &connection.interface,
                 Role::Client,
                 client_end,
-            );
+                &ring_rights,
+                body,
+            )?;
             push_grant(
                 &mut grants,
                 &connection.provider,
                 &connection.interface,
                 Role::Server,
                 server_end,
-            );
+                &ring_rights,
+                body,
+            )?;
         }
 
         // Assemble the bundles in graph component order.
@@ -136,33 +146,59 @@ impl Session {
     }
 }
 
-/// Push one ring endpoint onto a component's grant list.
+/// Push one ring endpoint onto a component's grant list, limiting the
+/// descriptor to its §3.3 kernel rights first.
 fn push_grant(
     grants: &mut HashMap<String, Vec<Grant>>,
     component: &str,
     interface: &str,
     role: Role,
     endpoint: Channel,
-) {
+    ring_rights: &CapRights,
+    body: CapBody,
+) -> io::Result<()> {
+    let endpoint = endpoint.into_fd();
+    // Limit the descriptor before it is handed over (§3.3); a duplicate
+    // the bundle later passes inherits the limit.
+    ring_rights.limit(endpoint.as_raw_fd())?;
     grants
         .get_mut(component)
         .expect("a connection names only components in the graph")
         .push(Grant {
             interface: interface.to_owned(),
             role,
-            rights: minted_rights(),
-            endpoint: endpoint.into_fd(),
+            rights: body,
+            endpoint,
         });
+    Ok(())
 }
 
-/// The rights a freshly minted ring capability carries.
-///
-/// Zero for now: the §3.3 mapping from a manifest's rights tokens to a
-/// `cap_rights` mask and an object-rights set is not yet built, and nothing
-/// enforces the mask until it is. See `docs/TECH-DEBT.md`.
-fn minted_rights() -> CapBody {
+/// The §3.3 kernel rights a service-ring socket carries: send and receive,
+/// `kqueue` readiness, and `fcntl` (the async transport sets the ring
+/// non-blocking).
+fn service_ring_rights() -> Rights {
+    Rights::SEND
+        .with(Rights::RECV)
+        .with(Rights::EVENT)
+        .with(Rights::FCNTL)
+        .with(Rights::FSTAT)
+}
+
+/// The §3.2 handle-table body for a service-ring grant: the kernel
+/// `cap_rights` mask `ring` was built from, recorded as the metadata that
+/// rides with the descriptor. The object-rights set is still zero — the
+/// §3.3 object layer is the next increment (`docs/TECH-DEBT.md`).
+fn ring_cap_body(ring: &CapRights) -> CapBody {
+    let bytes = ring.as_bytes();
+    let mut cap_rights = [0u8; 16];
+    assert_eq!(
+        bytes.len(),
+        cap_rights.len(),
+        "a cap_rights_t is 16 bytes (broker-and-transport.md §3.2)",
+    );
+    cap_rights.copy_from_slice(bytes);
     CapBody {
-        cap_rights: [0u8; 16],
+        cap_rights,
         object_rights: 0,
     }
 }
@@ -231,6 +267,13 @@ mod tests {
         assert_eq!(input.grants.len(), 1);
         assert_eq!(input.grants[0].interface, "input");
         assert_eq!(input.grants[0].role, Role::Server);
+
+        // Both ends carry the minted §3.3 kernel mask — not the zero body.
+        assert_ne!(compositor.grants[0].rights.cap_rights, [0u8; 16]);
+        assert_eq!(
+            compositor.grants[0].rights.cap_rights, input.grants[0].rights.cap_rights,
+            "both ends of a ring carry the same service-ring mask",
+        );
 
         // A component that peers no one is wired an empty bundle.
         assert!(bundle_of(&session, "log").grants.is_empty());

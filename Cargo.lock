@@ -23,6 +23,7 @@ dependencies = [
  "abyss-bundle",
  "abyss-msg",
  "abyss-transport",
+ "freebsd-capsicum-sys",
  "freebsd-jail-sys",
  "freebsd-procdesc-sys",
 ]

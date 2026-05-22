@@ -35,6 +35,9 @@ impl Rights {
     pub const SEND: Self = Self(1 << 6);
     /// `CAP_RECV` — receive on a socket.
     pub const RECV: Self = Self(1 << 7);
+    /// `CAP_FCNTL` — issue `fcntl`s (the async transport sets a ring
+    /// non-blocking with `fcntl(F_SETFL)`).
+    pub const FCNTL: Self = Self(1 << 8);
 
     /// No rights at all.
     pub const fn empty() -> Self {
@@ -88,6 +91,13 @@ pub struct CapRights {
 }
 
 impl CapRights {
+    /// The built `cap_rights_t` as raw bytes — exactly
+    /// `abyss_cap_rights_size()` of them. The broker records these in a
+    /// capability's handle-table body (`broker-and-transport.md` §3.2).
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
     /// Build a `cap_rights_t` from an object-rights set.
     pub fn new(rights: Rights) -> Self {
         // SAFETY: `abyss_cap_rights_size` returns `sizeof(cap_rights_t)`;

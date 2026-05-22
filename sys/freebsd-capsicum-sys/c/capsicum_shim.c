@@ -26,6 +26,7 @@
 #define ABYSS_CAP_FSTAT (1u << 5)
 #define ABYSS_CAP_SEND  (1u << 6)
 #define ABYSS_CAP_RECV  (1u << 7)
+#define ABYSS_CAP_FCNTL (1u << 8)
 
 /* sizeof(cap_rights_t), so the Rust side can allocate the opaque struct
  * exactly rather than hard-coding a width that the kernel may version. */
@@ -62,6 +63,8 @@ abyss_cap_rights_build(void *out, uint64_t flags)
 		cap_rights_set(rights, CAP_SEND);
 	if (flags & ABYSS_CAP_RECV)
 		cap_rights_set(rights, CAP_RECV);
+	if (flags & ABYSS_CAP_FCNTL)
+		cap_rights_set(rights, CAP_FCNTL);
 }
 
 /* Limit `fd` to the rights in `rights`. Wraps cap_rights_limit(2). */

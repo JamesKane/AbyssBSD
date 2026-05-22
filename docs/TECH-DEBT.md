@@ -60,24 +60,21 @@ scale, text does not.
 caches a distinct entry — cheap. Deferred only because the toolkit picks a
 pixel size directly and rarely scales text through the canvas transform.
 
-## abyss-broker — the session mints zero-rights capabilities
+## abyss-broker — the session mints no object rights
 
-`Session::wire` (`crates/abyss-broker/src/session.rs`) gives every ring
-endpoint it grants a `CapBody` of all zeros — an empty `cap_rights` mask
-and no object rights — through `minted_rights()`.
+`Session::wire` (`crates/abyss-broker/src/session.rs`) mints each ring
+grant's kernel `cap_rights` mask and `cap_rights_limit`s the descriptor
+(`broker-and-transport.md` §3.3) — but its `object_rights` set is still
+zero.
 
-**Why it is debt.** A bundle grant should carry the two rights layers
-`broker-and-transport.md` §3.3 defines: the `cap_rights_t` kernel mask,
-and the object-rights bitmask over the interface's method ordinals. The
-wiring is correct in every other respect, but the capabilities it mints
-are unattenuated.
+**Why it is debt.** §3.3 defines two rights layers: the kernel
+`cap_rights_t` mask — now minted and enforced — and the object-rights
+bitmask over the interface's method ordinals, service-enforced. A grant's
+object rights should be the rights classes its manifest requested; they
+are zero, so no per-method authority is carried or checked.
 
-**Proper fix.** §3.3 now pins the model in full; the remainder is
-implementation, in increments:
+**Proper fix.** Per §3.3, in increments:
 
-- `Session::wire` mints the kernel mask — the fixed §3.3 service-ring mask
-  — into `CapBody.cap_rights`, and applies it to each ring fd with
-  `cap_rights_limit` (`freebsd-capsicum-sys` already wraps it).
 - An interface declares its **rights classes** beside `#[derive(Method)]`;
   a manifest's `rights` tokens are validated against them and resolved to
   an `object_rights` mask, which `Session::wire` mints into both grants of
