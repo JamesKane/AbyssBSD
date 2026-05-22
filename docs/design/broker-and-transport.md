@@ -401,6 +401,42 @@ This is the last connection between `abyss-cap`, `abyss-msg`'s
 `HandleSink`/`HandleStore`/`RawHandle`, and the transport. Authority
 travelling in a message (§10.1) is now a real fd crossing a real socket.
 
+### 3.5 `Cap: Wire` in code, and binding a received capability
+
+§3.4 gave the shape; this pins how it lands, and the part §3.4 left open
+— a decoded capability is not yet a usable one.
+
+**`to_wire`.** An in-process `Cap` cannot cross a process boundary (§2.8);
+`to_wire` on one is a contract violation and panics. An IPC `Cap` carries
+its own `CapBody` — the `cap_rights` and object rights the broker set when
+it minted the cap — so `to_wire` has the §3.2 body in hand. Because
+`to_wire` takes `&self`, it *duplicates* the ring socket fd rather than
+moving it (`dup`), and pushes that duplicate, with the `RawHandle`, into
+the `HandleSink`; the duplicate is what rides `SCM_RIGHTS`.
+
+**`from_wire` yields an *unbound* capability.** It claims the `(RawHandle,
+fd)` pair from the `HandleStore`, checks the kind, and decodes the
+`CapBody`. But it cannot return a *usable* `Cap`: a usable IPC `Cap` drives
+its socket through the receiving looper's `kqueue` reactor (§2.3), and
+`Wire::from_wire(value, handles)` carries no reactor — a decode reaches
+none. So `from_wire` builds an **unbound** `Cap`: the received fd and the
+`CapBody`, no live ring yet.
+
+**Binding.** A decoded `Cap` is bound to a looper before use —
+`Cap::bind(reactor)` turns the unbound fd into a live `Connection` on that
+looper's reactor. The *framework* binds, never component code: the startup
+shim binds the capabilities the bootstrap bundle delivered (§5.3), and a
+capability arriving in a later message is bound by the framework as it
+dispatches that message on the looper — the point where the looper's
+reactor is in hand. A handler only ever receives a bound, usable `Cap`.
+
+So a `Cap`'s backend has three forms: `Local` (in-process), `Ipc` (a live
+IPC ring), and `IpcUnbound` (a received fd awaiting its reactor). `to_wire`
+serializes `Ipc`; `from_wire` produces `IpcUnbound`; `bind` is the single
+edge between them. Operating an `IpcUnbound` cap — `send`, `call` — is the
+same contract violation as serializing an in-process one: the framework
+binds before any handler sees it.
+
 ---
 
 ## 4. The manifest
