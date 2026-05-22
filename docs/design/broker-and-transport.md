@@ -358,32 +358,101 @@ defined here. A handle entry is `kind: u8`, `body_len: u32`, `body`:
 The fd itself is **not** in the body — it rides `SCM_RIGHTS` (§2.2). The
 body is the metadata that travels in the datagram alongside it.
 
-### 3.3 Two rights layers, and the mapping
+### 3.3 Two rights layers
 
-DESIGN §10.5's two rights layers, made concrete:
+DESIGN §10.5's two rights layers, made concrete — and *why* there are two.
+A capability is an fd, and the kernel governs an fd; but a service ring is
+a **multiplexor** — one socket carrying every method of an interface — and
+the kernel cannot read an AbyssBSD envelope, so it cannot tell one method
+from the next. The kernel can gate the *socket*; only the *service* can
+gate the *method*. So authority is limited twice, by the two parties that
+each see their own unit:
 
-1. **`cap_rights_t`** — kernel-enforced, on *every* fd. The broker applies
-   it with `cap_rights_limit(2)` before the fd is ever handed over.
-2. **Object rights** — per-interface, enforced by the **exporting service**
-   at runtime (a `Cap<Settings>`'s read vs read-write, scoped to a
-   subtree; a service checks each request against the rights recorded for
-   that connection).
+1. **`cap_rights_t`** — coarse, per-fd, **kernel-enforced**. Gates the fd
+   *operations* (send, recv, mmap, ioctl). The broker applies it with
+   `cap_rights_limit(2)` before the fd is handed over.
+2. **Object rights** — fine, per-connection, **service-enforced**. Gates
+   the interface *methods* — which of an interface's messages a holder may
+   invoke. Minted by the broker, checked by the exporting service.
 
-A manifest (§4) requests a capability in **object-rights** terms. The
-broker translates an fd request to a `cap_rights_t` mask by this **fixed
-mapping** and applies it before passing the fd:
+This is FreeBSD's own split: `cap_rights_limit` for the descriptor,
+`cap_ioctls_limit` for the operations multiplexed through one `ioctl` fd.
+A service ring is `ioctl`-shaped — one fd, many operations — so it takes
+the same shape of answer, one layer up.
+
+**The kernel layer.** The broker translates a capability request to a
+`cap_rights_t` mask by this fixed mapping, by capability kind, and applies
+it before passing the fd:
 
 | Capability kind / class | `cap_rights_t` mask |
 |---|---|
-| service ring (a socket) | `CAP_SEND` `CAP_RECV` `CAP_EVENT` `CAP_FSTAT` |
+| service ring (a socket) | `CAP_SEND` `CAP_RECV` `CAP_EVENT` `CAP_FCNTL` `CAP_FSTAT` |
 | GPU device | `CAP_MMAP_RW` `CAP_IOCTL` `CAP_EVENT` `CAP_FSTAT` |
 | input device | `CAP_READ` `CAP_EVENT` `CAP_IOCTL` `CAP_FSTAT` |
 | memory handle (`memfd`/shm) | `CAP_MMAP_RW` `CAP_FSTAT` (`CAP_MMAP_R` if read-only) |
 | Casper channel | `CAP_SEND` `CAP_RECV` `CAP_EVENT` |
 
-Both layers obey one **monotonic law** (§10.1): `cap_rights_limit` only
-ever restricts, and `narrow` (abyss-cap) only ever shrinks the
-object-rights set. Authority is attenuated, never amplified.
+`CAP_FCNTL` is on the service-ring row because the async transport sets
+the ring non-blocking with `fcntl(F_SETFL)` (`abyss-transport`); without
+it a received ring is unusable. Each row is the rights the transport or
+driver for that kind actually exercises, audited against its code as that
+kind is built — the service-ring row is audited (Gate D). Rights are
+**per-fd, not per-object**: the broker `dup`s a ring end to pass it, so
+what a component receives is limited independently of any fd the broker
+keeps.
+
+**The object-rights layer.** The kernel mask says a holder may `send` on
+the ring; it cannot say *which messages*. That is the object-rights layer,
+and its unit is already in hand: `#[derive(Method)]` gives every message a
+**method ordinal** (§2.9), and every envelope `Header` carries the
+`method_id`. So:
+
+- A connection's **object rights** are a **bitmask over the interface's
+  method ordinals** — bit *i* set iff the holder may invoke method *i*.
+  This is the `object_rights` field of the §3.2 `CapBody`. A `u32` holds
+  an interface of up to 32 methods; a wider interface widens the field —
+  a width question, not a model one.
+- Methods group into named **rights classes** — `read`, `write`,
+  `present`, `capture` — each class a labelled sub-mask, declared in the
+  interface definition beside the methods it covers (alongside
+  `#[derive(Method)]`). A manifest (§4) names *classes*, never raw
+  ordinals, so a grant reads `rights = read, write` and stays auditable;
+  the broker resolves the named classes to a mask, and an unknown class in
+  a system manifest is a boot fault (§5.1).
+- The classes are exactly the `Cap<I, R>` rights typestate (§7,
+  abyss-cap): a concrete `R` is a class, or a union of classes, and
+  `SubsetOf` is class containment. The compile-time `R` and the runtime
+  `object_rights` mask are **one fact in two forms** — `R` is the mask the
+  type system tracks, the mask is `R` after type erasure. A `Cap` carries
+  the mask at runtime; `narrow` ANDs it; `to_wire` writes it into the
+  `CapBody`; `from_wire` reads it back, and `bind` checks the arrived mask
+  is no wider than the `R` the receiving type asserts — a capability that
+  arrives claiming more authority than its type is rejected.
+
+**Enforcement is framework-mediated.** A connection's object-rights mask
+rides in the `CapBody` of *both* its grants — the client's, so the holder
+knows (and the type system can check) its authority; the server's, so the
+service knows what that connection was granted. The `abyss-looper` service
+loop, before it dispatches an inbound message, tests the `method_id`
+against that mask: an out-of-rights `Request` is answered with a rights
+error, an out-of-rights `Command` or `Event` is dropped and logged. A
+handler never sees a message it was not authorized — it cannot forget the
+check, just as it cannot forget to take a `Responder` (§2.7).
+
+**Delegation.** A component may pass a `Cap` it holds into a message
+(§3.4, §5.6), `narrow`ing it first to attenuate. `to_wire` writes the
+narrowed mask, so a recipient is handed no more than the sender chose, and
+— by the type lattice — no more than the sender held. The service still
+enforces, per connection, the mask the **broker** minted for that ring:
+`narrow` is honest attenuation for cooperating code and a compile-time
+safety net, and it is monotonic — it cannot amplify. A component is
+bounded, in the end, by the masks on the rings the broker gave it; that is
+the boundary, and it holds even against a component that ignores its own
+`Cap` types entirely.
+
+**The monotonic law.** Both layers obey §10.1: `cap_rights_limit` only
+restricts, `narrow` only shrinks the object-rights mask. Authority is
+attenuated, never amplified — at every hop.
 
 ### 3.4 `Cap: Wire`
 

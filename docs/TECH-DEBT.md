@@ -66,18 +66,25 @@ pixel size directly and rarely scales text through the canvas transform.
 endpoint it grants a `CapBody` of all zeros — an empty `cap_rights` mask
 and no object rights — through `minted_rights()`.
 
-**Why it is debt.** A bundle grant should carry the rights the manifest
-asked for: the `broker-and-transport.md` §3.3 mapping turns a manifest's
-`rights` tokens into a `cap_rights_t` mask (kernel-enforced) and an
-object-rights set (service-enforced). The wiring is correct in every other
-respect, but the capabilities it mints are unattenuated.
+**Why it is debt.** A bundle grant should carry the two rights layers
+`broker-and-transport.md` §3.3 defines: the `cap_rights_t` kernel mask,
+and the object-rights bitmask over the interface's method ordinals. The
+wiring is correct in every other respect, but the capabilities it mints
+are unattenuated.
 
-**Proper fix.** Build the §3.3 rights mapping — a per-interface table from
-rights tokens to object-rights bits, and the socket `cap_rights` a ring
-endpoint needs — and have `Session::wire` mint each grant's `CapBody` from
-the requesting `CapabilityRequest`. The kernel side also needs
-`cap_rights_limit` applied to the fd before it is sent; that is a Capsicum
-step not yet built.
+**Proper fix.** §3.3 now pins the model in full; the remainder is
+implementation, in increments:
+
+- `Session::wire` mints the kernel mask — the fixed §3.3 service-ring mask
+  — into `CapBody.cap_rights`, and applies it to each ring fd with
+  `cap_rights_limit` (`freebsd-capsicum-sys` already wraps it).
+- An interface declares its **rights classes** beside `#[derive(Method)]`;
+  a manifest's `rights` tokens are validated against them and resolved to
+  an `object_rights` mask, which `Session::wire` mints into both grants of
+  each connection.
+- The `abyss-looper` service loop checks each inbound `method_id` against
+  the connection's mask; the `Cap<I, R>` typestate is connected to the
+  runtime mask (`narrow`, `to_wire` / `from_wire`, the `bind` check).
 
 ---
 
