@@ -10,7 +10,8 @@
 //! Host slice — the parts that depend on no FreeBSD facility and so build
 //! and test on any host:
 //!
-//! - [`manifest`] — the component manifest: the schema and its parser (§4).
+//! - [`manifest`] — the component manifest: the schema, its parser, and
+//!   loading a directory of them into a manifest set (§4, §5.1).
 //! - [`graph`] — the static authority graph: components and the connections
 //!   between them, computed and validated from a manifest set (§5.2).
 //! - [`catalogue`] — the interface catalogue: resolving a manifest's rights

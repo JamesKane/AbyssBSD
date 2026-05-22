@@ -43,7 +43,9 @@
 //! boot fault (§5.1), so every rejection path is tested.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
 /// A parsed component manifest — a component's whole declared authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +200,35 @@ impl fmt::Display for ManifestError {
 
 impl std::error::Error for ManifestError {}
 
+/// Why loading a directory of manifests failed ([`Manifest::load_dir`]).
+#[derive(Debug)]
+pub enum LoadError {
+    /// The manifest directory itself could not be read.
+    Directory { path: PathBuf, error: io::Error },
+    /// A manifest file could not be read.
+    File { path: PathBuf, error: io::Error },
+    /// A manifest file did not parse — a malformed manifest (§4.2).
+    Parse { path: PathBuf, error: ManifestError },
+}
+
+impl fmt::Display for LoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LoadError::Directory { path, error } => {
+                write!(f, "reading manifest directory {}: {error}", path.display())
+            }
+            LoadError::File { path, error } => {
+                write!(f, "reading manifest {}: {error}", path.display())
+            }
+            LoadError::Parse { path, error } => {
+                write!(f, "manifest {} is malformed: {error}", path.display())
+            }
+        }
+    }
+}
+
+impl std::error::Error for LoadError {}
+
 impl Manifest {
     /// Parse a manifest from its text form.
     ///
@@ -235,6 +266,60 @@ impl Manifest {
         }
 
         b.finish()
+    }
+
+    /// Load and parse every manifest in `dir`, in file-name order.
+    ///
+    /// Each regular file in `dir` whose name does not begin with `.` is
+    /// taken to be a component manifest and parsed (§4.2); subdirectories
+    /// and dotfiles — editor and OS scratch files — are skipped. The
+    /// directory is one of the broker's manifest sets, the system layer or
+    /// the session layer (§5.1, §5.2); an empty directory loads to an
+    /// empty set.
+    ///
+    /// The manifests are returned sorted by file name, so the authority
+    /// graph is computed in a deterministic order however the filesystem
+    /// happens to enumerate the directory. A malformed manifest is a
+    /// [`LoadError`] naming the offending file — a boot fault (§5.1).
+    pub fn load_dir(dir: &Path) -> Result<Vec<Manifest>, LoadError> {
+        let entries = fs::read_dir(dir).map_err(|error| LoadError::Directory {
+            path: dir.to_path_buf(),
+            error,
+        })?;
+
+        // Collect the manifest files, then sort: the load order must not
+        // depend on the filesystem's directory enumeration order.
+        let mut files: Vec<PathBuf> = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|error| LoadError::Directory {
+                path: dir.to_path_buf(),
+                error,
+            })?;
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let file_type = entry.file_type().map_err(|error| LoadError::File {
+                path: entry.path(),
+                error,
+            })?;
+            if file_type.is_dir() {
+                continue;
+            }
+            files.push(entry.path());
+        }
+        files.sort();
+
+        let mut manifests = Vec::with_capacity(files.len());
+        for path in files {
+            let text = fs::read_to_string(&path).map_err(|error| LoadError::File {
+                path: path.clone(),
+                error,
+            })?;
+            let manifest =
+                Manifest::parse(&text).map_err(|error| LoadError::Parse { path, error })?;
+            manifests.push(manifest);
+        }
+        Ok(manifests)
     }
 }
 
@@ -757,5 +842,101 @@ policy = always
                 key: "target".to_string(),
             }),
         );
+    }
+
+    // --- load_dir --------------------------------------------------------
+
+    /// A temp directory unique to the calling test, removed when dropped.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(tag: &str) -> TempDir {
+            let mut path = std::env::temp_dir();
+            path.push(format!("abyss-manifest-load-{}-{tag}", std::process::id()));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir(&path).expect("create the temp manifest directory");
+            TempDir(path)
+        }
+
+        fn write(&self, name: &str, contents: &str) {
+            fs::write(self.0.join(name), contents).expect("write a temp manifest");
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The text of a minimal valid manifest for `name`.
+    fn manifest_text(name: &str) -> String {
+        format!(
+            "name = {name}\ninterface = {name}-iface\nversion = 1\n\
+             [jail]\nroot = /\nnetwork = none\nuser = _{name}\n\
+             [budget]\nmemory = 1M\nfds = 8\n[restart]\npolicy = always\n",
+        )
+    }
+
+    #[test]
+    fn load_dir_reads_every_manifest_in_name_order() {
+        let dir = TempDir::new("ordered");
+        // Written out of order; load_dir must return them sorted by name.
+        dir.write("20-input.manifest", &manifest_text("input"));
+        dir.write("10-compositor.manifest", &manifest_text("compositor"));
+
+        let manifests = Manifest::load_dir(&dir.0).expect("the directory loads");
+        let names: Vec<&str> = manifests.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["compositor", "input"]);
+    }
+
+    #[test]
+    fn load_dir_of_an_empty_directory_is_an_empty_set() {
+        let dir = TempDir::new("empty");
+        assert!(
+            Manifest::load_dir(&dir.0)
+                .expect("an empty directory loads")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn load_dir_skips_dotfiles_and_subdirectories() {
+        let dir = TempDir::new("skip");
+        dir.write("real.manifest", &manifest_text("real"));
+        // A dotfile — an editor or OS scratch file — is not a manifest.
+        dir.write(".swp", "garbage that would never parse");
+        // A subdirectory is skipped, not descended into or read as a file.
+        fs::create_dir(dir.0.join("subdir")).expect("create a subdirectory");
+
+        let manifests = Manifest::load_dir(&dir.0).expect("the directory loads");
+        assert_eq!(manifests.len(), 1);
+        assert_eq!(manifests[0].name, "real");
+    }
+
+    #[test]
+    fn load_dir_reports_a_malformed_manifest_by_path() {
+        let dir = TempDir::new("malformed");
+        dir.write("broken.manifest", "this is not a valid manifest line");
+
+        match Manifest::load_dir(&dir.0) {
+            Err(LoadError::Parse { path, .. }) => {
+                assert!(
+                    path.ends_with("broken.manifest"),
+                    "names the offending file"
+                );
+            }
+            other => panic!("expected a parse error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn load_dir_of_a_missing_directory_is_a_directory_error() {
+        let mut missing = std::env::temp_dir();
+        missing.push(format!("abyss-manifest-absent-{}", std::process::id()));
+        match Manifest::load_dir(&missing) {
+            Err(LoadError::Directory { path, .. }) => assert_eq!(path, missing),
+            other => panic!("expected a directory error, got {other:?}"),
+        }
     }
 }
