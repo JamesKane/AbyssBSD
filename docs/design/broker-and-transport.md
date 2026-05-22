@@ -756,11 +756,60 @@ A component — chiefly the shell, launching an app — may ask the broker to
 spawn a child. The child's **birth bundle is the broker's grant**, per the
 *child's* manifest (for an app, ∩ user approval, §4.3) — it is **not**
 bounded by the launcher (§11.9). The shell need not itself hold
-microphone, network, or file authority to launch apps that use them.
+microphone, network, or file authority to launch apps that use them. The
+rest of this section pins the mechanism.
+
+**The spawnable set.** The boot manifest set (§5.2) is everything spawned
+*at* boot. A second set — the **spawnable manifests** — is everything that
+*may* be spawned later, on request: the apps and on-demand services. The
+broker reads it at boot, the same way and into the same form as the boot
+set, but spawns nothing from it; it is the catalogue of what a delegated
+spawn may name. A spawn request names a manifest *in* this set — a
+component never supplies a manifest, because authoring a manifest is
+authoring authority, which is the broker's alone (§11.9).
+
+**The request.** A component's control connection (§5.5) is bidirectional:
+the broker→component direction carries the bundle then `PeerRestarted`;
+the component→broker direction carries control *requests*. The first is
+`SpawnChild`, naming a manifest in the spawnable set. The broker watches
+every component's control connection on its `kqueue`, alongside the
+process descriptors — one event loop, both supervision and delegation. It
+answers each request with a reply: the child is up, or a refusal naming
+why (no such spawnable manifest, the requester may not spawn, the child's
+authority graph does not resolve).
+
+**Who may ask.** Delegated spawn is itself an authority, so it is itself a
+declared capability: a manifest carries `kind = spawn` to be allowed to
+request spawns at all, and the broker refuses a `SpawnChild` from a
+component without it. Chiefly the shell holds it. For an *app* the launch
+is further `∩` user approval (§4.3) — the shell mediates that prompt
+before it ever sends the request; the broker enforces the manifest, the
+shell enforces the human.
+
+**Wiring into a running session.** A boot component is pre-wired before
+anything is spawned (§5.2); a delegated child arrives mid-session, so its
+rings are created against components already running. The broker mints
+the child's bundle from its manifest exactly as at boot, and for each of
+its `peer` connections to a live component it creates the ring, places
+the child's end in the bundle, and delivers the live peer its end as a
+`PeerRestarted` over that peer's control connection — the §5.5 re-wiring
+mechanism, reused: to a running service, a freshly delegated client is
+indistinguishable from a restarted one. The child is then supervised, and
+restarted under its policy (§5.5), like any other.
+
+**The authority rule.** The child's bundle is minted from the *child's*
+manifest by the broker; the launcher contributes nothing to it and cannot
+— it named a manifest, no more. So a shell holding no microphone, network,
+or file authority launches an app that holds all three. The launcher is
+bounded only in *what it may ask to spawn* — the spawnable set, gated by
+its `spawn` capability — never in *what the child receives*.
 
 Capabilities a component instead **delegates from its own holdings** —
 passing a `Cap` it already holds into a message (§3.4) — *are* bounded by
-what it holds: recursive attenuation, never amplification (§10.1).
+what it holds: recursive attenuation, never amplification (§10.1). The two
+are different acts: a delegated *spawn* asks the broker to mint fresh
+authority for a new process; a delegated *capability* hands on authority
+already held. Only the broker mints; a component can only attenuate.
 
 ### 5.7 Casper, composed
 
