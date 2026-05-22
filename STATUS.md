@@ -32,6 +32,8 @@ FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `5df312f` Phase 4: design — Cap: Wire in code, and binding (§3.5)
+- `abc68e9` Bump STATUS: Phase 4 — Cap::call reshaped to the typed request
 - `4942140` Phase 4: abyss-cap — Cap::call reshaped to the typed request (§2.10)
 - `9ca81ba` Bump STATUS: Phase 4 — in-process request delivery
 - `64f139c` Phase 4: abyss-looper — in-process request delivery to a handler
@@ -40,8 +42,6 @@ FreeBSD remainder.
 - `fa0c688` Bump STATUS: Phase 4 — the Request trait and derive
 - `689c97a` Phase 4: abyss-msg — the Request trait and #[derive(Request)]
 - `e7ee089` Bump STATUS: Phase 4 — typed request and reply design pass
-- `0a52e92` Phase 4: design — typed request and reply (§2.10)
-- `b337cd8` Bump STATUS: Phase 4 — the Cap IPC backend, send dispatch
 
 ## Site
 
@@ -137,16 +137,19 @@ the in-process reply path — the **`Responder`** handle, and `Delivery` /
 handler — and `Cap::call` is reshaped onto it: `call<Q>` hands the caller
 exactly the request's `Q::Reply`, framework-mediated over either backend,
 no embedded `Sender`. The multi-looper harness passes on the reshaped
-path. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+path. A design pass (§3.5) has since pinned `Cap: Wire`'s mechanics —
+`to_wire`'s fd dup, the unbound `Cap` `from_wire` yields, and `Cap::bind`
+attaching a received capability to its looper's reactor. `cargo xtask ci`
+green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **`Cap: Wire`** — a `Cap` itself delivered inside a message: `to_wire`
-  pushing its `CapBody` and ring fd onto the handle table, `from_wire`
-  claiming them back (§3.4) — the next increment;
+- **`Cap: Wire`** — `impl Wire for Cap`: `to_wire` dups the ring fd and
+  pushes the `CapBody`, `from_wire` builds an unbound cap, with `Cap::bind`
+  attaching it to a looper, per §3.5 — the next increment;
 - the broker **wiring an authority graph** — spawning a manifest set and
   connecting the components with rings (§5.2);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
