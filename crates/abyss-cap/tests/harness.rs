@@ -10,7 +10,7 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::Duration;
 
-use abyss_cap::{CallError, Cap, Interface, Rights, SubsetOf, cap_channel};
+use abyss_cap::{CallError, Cap, Interface, Rights, SubsetOf, cap_channel, durable};
 use abyss_looper::{Ctx, Handler, Looper, block_on};
 use abyss_msg_derive::{Method, Request};
 
@@ -71,6 +71,19 @@ impl Handler for EchoHandler {
         let EchoMsg::Ping(ping) = msg;
         if let Some(responder) = ctx.responder::<i32>() {
             let _ = responder.send(ping.value);
+        }
+    }
+}
+
+/// Replies to every request with a fixed tag, so a test can tell which
+/// service a call reached.
+struct Tagged(i32);
+impl Handler for Tagged {
+    type Message = EchoMsg;
+    async fn handle(&mut self, msg: EchoMsg, ctx: &Ctx) {
+        let EchoMsg::Ping(_) = msg;
+        if let Some(responder) = ctx.responder::<i32>() {
+            let _ = responder.send(self.0);
         }
     }
 }
@@ -310,4 +323,33 @@ fn a_looper_survives_an_idle_period() {
 
     drop(echo_cap);
     svc_thread.join().unwrap();
+}
+
+#[test]
+fn a_durable_cap_repoints_to_a_fresh_ring() {
+    // Two services, each answering with its own tag.
+    let (cap_a, rx_a) = cap_channel::<Echo, Full>(8);
+    let mut svc_a = Looper::new();
+    svc_a.attach_service(Tagged(11), rx_a);
+    let thread_a = thread::spawn(move || svc_a.run());
+
+    let (cap_b, rx_b) = cap_channel::<Echo, Full>(8);
+    let mut svc_b = Looper::new();
+    svc_b.attach_service(Tagged(22), rx_b);
+    let thread_b = thread::spawn(move || svc_b.run());
+
+    // A durable cap over the first service answers with its tag.
+    let (cap, repointer) = durable(cap_a);
+    assert_eq!(block_on(cap.call(Ping { value: 0 })).unwrap(), 11);
+
+    // Repointed at the second — as `PeerRestarted` would (§5.5) — the same
+    // durable cap now reaches it; repointing drops the first ring, so its
+    // service winds down.
+    repointer.repoint(cap_b);
+    assert_eq!(block_on(cap.call(Ping { value: 0 })).unwrap(), 22);
+    thread_a.join().unwrap();
+
+    drop(cap);
+    drop(repointer);
+    thread_b.join().unwrap();
 }

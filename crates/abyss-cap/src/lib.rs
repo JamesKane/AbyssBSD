@@ -5,6 +5,8 @@
 //!
 //! - [`Cap`] — a typed send capability, parameterized by the interface it
 //!   speaks and the rights its holder was granted. Move-only.
+//! - [`DurableCap`] — a `Cap` the framework repoints at a fresh ring when
+//!   the peer is restarted (`broker-and-transport.md` §5.5).
 //! - [`Interface`] — what messages a capability of an interface carries.
 //! - [`Rights`] / [`SubsetOf`] — rights as compile-time phantom typestate.
 //! - [`CapBody`] — the handle-table body a capability serializes to when
@@ -25,6 +27,7 @@ pub use rights::{Rights, SubsetOf};
 pub use wire::{CAP_BODY_LEN, CapBody, CapBodyError, KIND_FD_CAPABILITY};
 
 use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 
 use abyss_looper::{Delivery, Receiver, RingClosed, Sender, TrySendError, channel, responder};
 use abyss_msg::Request;
@@ -33,8 +36,6 @@ use abyss_msg::Request;
 use std::future::Future;
 #[cfg(target_os = "freebsd")]
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
-#[cfg(target_os = "freebsd")]
-use std::sync::Arc;
 
 #[cfg(target_os = "freebsd")]
 use abyss_looper::Spawner;
@@ -349,6 +350,67 @@ impl<I: Interface, R: Rights> Cap<I, R> {
             #[cfg(target_os = "freebsd")]
             Backend::IpcUnbound { .. } => unbound_use_panic(),
         }
+    }
+}
+
+/// A capability that survives a peer restart (`broker-and-transport.md`
+/// §5.5).
+///
+/// A component holds a `DurableCap`, not a raw [`Cap`]: it carries the
+/// capability currently in use, and when the peer is restarted the
+/// framework repoints it — through the paired [`Repointer`] — at the fresh
+/// ring. A `call` or `send` begun after that travels the new ring
+/// transparently; the one call in flight at the instant of the restart
+/// still fails, but every call after it does not.
+pub struct DurableCap<I: Interface, R: Rights> {
+    current: Arc<Mutex<Arc<Cap<I, R>>>>,
+}
+
+/// The framework's handle for repointing a [`DurableCap`] at the fresh
+/// ring after a peer restart (§5.5).
+pub struct Repointer<I: Interface, R: Rights> {
+    current: Arc<Mutex<Arc<Cap<I, R>>>>,
+}
+
+/// Wrap `cap` as a [`DurableCap`], paired with the [`Repointer`] the
+/// framework repoints it through on a peer restart (§5.5).
+pub fn durable<I: Interface, R: Rights>(cap: Cap<I, R>) -> (DurableCap<I, R>, Repointer<I, R>) {
+    let current = Arc::new(Mutex::new(Arc::new(cap)));
+    (
+        DurableCap {
+            current: Arc::clone(&current),
+        },
+        Repointer { current },
+    )
+}
+
+impl<I: Interface, R: Rights> DurableCap<I, R> {
+    /// Send a message over the capability currently in use ([`Cap::send`]).
+    pub async fn send(&self, msg: I::Message) -> Result<(), RingClosed> {
+        // Clone the current capability out under the lock, then release it
+        // — the call must not hold the lock across its `.await`, or a
+        // repoint could not run while a call is in flight.
+        let cap = Arc::clone(&self.current.lock().unwrap());
+        cap.send(msg).await
+    }
+
+    /// Send a request and await its reply over the capability currently in
+    /// use ([`Cap::call`]).
+    pub async fn call<Q>(&self, request: Q) -> Result<Q::Reply, CallError>
+    where
+        Q: Request + Into<I::Message>,
+    {
+        let cap = Arc::clone(&self.current.lock().unwrap());
+        cap.call(request).await
+    }
+}
+
+impl<I: Interface, R: Rights> Repointer<I, R> {
+    /// Repoint the durable capability at `cap` — the fresh ring delivered
+    /// by a `PeerRestarted` (§5.5). A `call` or `send` begun after this
+    /// travels the new ring.
+    pub fn repoint(&self, cap: Cap<I, R>) {
+        *self.current.lock().unwrap() = Arc::new(cap);
     }
 }
 
