@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `303d9cd` Phase 4: abyss-broker — resolve and mint object rights (§3.3)
+- `1013973` Bump STATUS: Phase 4 — rights classes on #[derive(Method)]
 - `463130d` Phase 4: abyss-msg — rights classes on #[derive(Method)] (§3.3)
 - `cc63532` Bump STATUS: Phase 4 — the kernel cap_rights layer (§3.3)
 - `6b36486` Phase 4: abyss-broker — mint and enforce the kernel cap_rights layer (§3.3)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `6b12c1f` Bump STATUS: Phase 4 — the startup shim decodes the bundle (§5.4)
 - `d46716d` Phase 4: abyss-bootstrap — decode the bundle, claim client capabilities (§5.4)
 - `ca5c84d` Bump STATUS: Phase 4 — the object-rights model designed (§3.3)
-- `d14e81a` Phase 4: design — the object-rights model (§3.3)
-- `8086e9e` Bump STATUS: Phase 4 — abyss-looper correctness fixes
 
 ## Site
 
@@ -202,23 +202,27 @@ descriptor to it, and records it in the grant's `CapBody`;
 `freebsd-capsicum-sys` gained `CAP_FCNTL`. The conversation still runs end
 to end over the now-restricted rings — proof the mask covers what the
 transport exercises. The object-rights layer (§3.3's per-method bitmask)
-has begun: a message enum's command and request variants may be tagged
-`#[rights(name)]`, and `#[derive(Method)]` collects the tags into the
-interface's `Method::RIGHTS_CLASSES` — each class a name and the bitmask
-of method ordinals it covers. Nothing resolves or enforces that table
-yet. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+is most of the way in. A message enum's command and request variants may
+be tagged `#[rights(name)]`, and `#[derive(Method)]` collects the tags
+into the interface's `Method::RIGHTS_CLASSES` — each class a name and the
+bitmask of method ordinals it covers. The broker's new `catalogue` module
+(`InterfaceCatalogue`) maps an interface name to that table; `Session::
+wire` takes one, resolves each connection's `rights` tokens to an
+`object_rights` mask, and mints it into both grants' `CapBody`. Nothing
+*enforces* the minted mask yet — the `abyss-looper` service-loop check is
+what remains. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- the **rest of the §3.3 object-rights layer** — rights classes are
-  declared (`Method::RIGHTS_CLASSES`); what remains is an interface
-  catalogue resolving a manifest's `rights` tokens to a mask, `Session::
-  wire` minting it into both grants, the `abyss-looper` service-loop
-  check, and the `Cap<I, R>` typestate connected to the runtime mask
-  (`TECH-DEBT.md`) — the next increment;
+- the **rest of the §3.3 object-rights layer** — classes are declared and
+  the broker mints the mask; what remains is *enforcement*: the
+  `abyss-looper` service loop rejecting an inbound `method_id` outside the
+  connection's mask, and the `Cap<I, R>` typestate connected to the
+  runtime mask (`narrow`, `to_wire` / `from_wire`, the `bind` check) — the
+  next increment;
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
   component (§5.5);
 - a reusable **IPC service framework** — the probe drives its `server`
