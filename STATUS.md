@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `e2d2d93` Phase 4: abyss-cap — the IPC service framework and rights enforcement (§3.6)
+- `ed1d097` Bump STATUS: Phase 4 — the transport Error frame (§3.6)
 - `a8f45fc` Phase 4: abyss-transport — the Error frame, a refused request (§3.6)
 - `308f68f` Bump STATUS: Phase 4 — the IPC service framework designed (§3.6)
 - `e65c309` Phase 4: design — binding a service, and enforcing object rights (§3.6)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `1013973` Bump STATUS: Phase 4 — rights classes on #[derive(Method)]
 - `463130d` Phase 4: abyss-msg — rights classes on #[derive(Method)] (§3.3)
 - `cc63532` Bump STATUS: Phase 4 — the kernel cap_rights layer (§3.3)
-- `6b36486` Phase 4: abyss-broker — mint and enforce the kernel cap_rights layer (§3.3)
-- `a6ce496` Bump STATUS: Phase 4 — two components converse over a wired ring
 
 ## Site
 
@@ -213,23 +213,29 @@ wire` takes one, resolves each connection's `rights` tokens to an
 `abyss-cap` gains `bind_service`, the server counterpart of `Cap::bind`,
 whose accept loop checks each inbound `method_id` against the mask before
 a `Service` handler sees the message; a refused request is answered with
-a new `Error` frame, which `Cap::call` surfaces as a `CallError`. Building
-it has begun: `abyss-transport`'s ring frame gained the **`Error` frame**
-— `Connection::call` now returns a `CallOutcome` (answered or refused),
-`serve` routes a refusal, and `Responder::refuse` sends one. `abyss-cap`'s
-`bind_service` and the accept-loop rights check are the next increment.
-`cargo xtask ci` green on macOS and FreeBSD; tree clean.
+a new `Error` frame, which `Cap::call` surfaces as a `CallError`. §3.6
+is most of the way built. `abyss-transport`'s ring frame gained the
+**`Error` frame** — `Connection::call` returns a `CallOutcome`, `serve`
+routes a refusal, `Responder::refuse` sends one. And `abyss-cap` gained
+**`bind_service`**, the server counterpart of `Cap::bind`: it binds a
+`Role::Server` grant, runs an accept loop that **checks each inbound
+`method_id` against the object-rights mask before any handler sees the
+message**, and dispatches to a `Service` handler — the §3.3 enforcement
+point. `Cap::call` now yields a `CallError` (`PeerGone` or
+`RightsDenied`). Verified in the VM: a service answers a request within
+its rights and refuses one outside them. What remains is reworking the
+probe's server side onto `bind_service`, with a wired rights-denied
+end-to-end test. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building §3.6** — the IPC service framework and object-rights
-  enforcement; the `abyss-transport` `Error` frame is in. What remains:
-  `abyss-cap`'s `bind_service`, the `Service` handler, and the accept-loop
-  rights check; then the probe's server side reworked onto it, with a
-  rights-denied test — the next increment;
+- **finishing §3.6** — the `Error` frame and `abyss-cap`'s `bind_service`
+  with the accept-loop rights check are in. What remains: the probe's
+  server side reworked onto `bind_service`, with a wired rights-denied
+  end-to-end test — the next increment;
 - the `Cap<I, R>` typestate connected to the runtime mask (`narrow`,
   the `bind`-time check) — the client-side safety net (§3.3);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
