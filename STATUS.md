@@ -16,8 +16,9 @@ for the rest now exists (`tools/vm`, see In flight).
   text format, a first-party parser with no vendored config crate
   (`broker-and-transport.md` §4) — and the `graph` module, the static
   authority graph computed and validated from a manifest set (§5.2). And,
-  on FreeBSD, the `spawn` and `supervisor` modules — component spawn and
-  restart-on-death (§5.3, §5.5); see In flight. No `unsafe`.
+  on FreeBSD, the `spawn` and `session` modules — component spawn, and the
+  session runtime that wires, spawns, and supervises a manifest set (§5.3,
+  §5.5); see In flight. No `unsafe`.
 - `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FreeBSD FFI crates (§6),
   all three now built out and VM-verified. Capsicum and procdesc carry C
   shims (Capsicum's rights API is C macros; procdesc's `pdfork`-then-`exec`
@@ -32,6 +33,7 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `edea028` Phase 4: §5.5 — Session and Supervisor unified into one runtime
 - `101bca6` Phase 4: abyss-cap — the durable capability (§5.5)
 - `6314afb` Bump STATUS: Phase 4 — the PeerRestarted control message (§5.5)
 - `e381452` Phase 4: abyss-bundle — the PeerRestarted control message (§5.5)
@@ -41,7 +43,6 @@ the FreeBSD remainder.
 - `04eed42` Phase 4: abyss-bootstrap — the probe serves through bind_service (§3.6)
 - `0d972cf` Bump STATUS: Phase 4 — the IPC service framework and rights enforcement
 - `e2d2d93` Phase 4: abyss-cap — the IPC service framework and rights enforcement (§3.6)
-- `ed1d097` Bump STATUS: Phase 4 — the transport Error frame (§3.6)
 
 ## Site
 
@@ -101,11 +102,11 @@ The `component-probe` binary is the first AbyssBSD component; an
 end-to-end VM test spawns it through the broker and sees it report back
 from inside capability mode, having received exactly the bundle the
 broker sent. And the kqueue substrate now watches process descriptors for
-exit (`EVFILT_PROCDESC` / `NOTE_EXIT`); the broker's **`Supervisor`** is
-built on that signal — it watches its components' process descriptors
-and, when one exits, spawns it again, reclaiming its jail first. Verified
-in the VM: a supervised component that exits is respawned as a fresh
-process. And `Cap: Wire` is under way — `abyss-cap`'s **`CapBody`** is the §3.2
+exit (`EVFILT_PROCDESC` / `NOTE_EXIT`); the broker's **process
+supervision** is built on that signal — it watches its components'
+process descriptors and, when one exits, spawns it again, reclaiming its
+jail first. Verified in the VM: a supervised component that exits is
+respawned as a fresh process. And `Cap: Wire` is under way — `abyss-cap`'s **`CapBody`** is the §3.2
 handle-table body a capability serializes to (the `cap_rights` mask and
 the object-rights set that ride beside an fd), and `abyss-msg`'s handle
 table now **carries those fds**: `HandleSink` / `HandleStore` pair each
@@ -228,21 +229,29 @@ ring so a `call` after a restart travels it transparently. Building it has
 begun: `abyss-bundle` gained the **`PeerRestarted`** control message — one
 fresh `Grant` — and `abyss-cap` gained the **durable capability**:
 `DurableCap` carries the `Cap` in use, and a paired `Repointer` swaps it
-for a fresh ring, so a `call` after a restart travels the new ring. The
-`Session`/`Supervisor` unification with the re-wire-on-restart logic, and
-the component-side control loop, are what remain. `cargo xtask ci` green
-on macOS and FreeBSD; tree clean.
+for a fresh ring, so a `call` after a restart travels the new ring. And
+**`Session` and `Supervisor` are now one runtime**: `supervisor.rs` is
+gone, its restart-on-exit logic folded into the `session` module.
+`Session::launch` wires, spawns, and registers every component's process
+descriptor on a kqueue reactor; `Session::step` supervises — and on a
+component exit it *re-wires*, creating a fresh ring per connection the
+dead component touched, respawning it into a fresh bundle, and sending
+each surviving peer a `PeerRestarted` over that peer's control channel.
+Verified in the VM: a component that exits is re-wired and restarted, its
+live peer untouched. The component-side control loop that drives the
+`Repointer` is what remains. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building §5.5 `PeerRestarted`** — the control message and the durable
-  capability are in; what remains is the `Session`/`Supervisor`
-  unification with the re-wire-on-restart logic, the component-side
-  control loop that drives the `Repointer`, and a wired restart test —
-  the next increment;
+- **building §5.5 `PeerRestarted`** — the control message, the durable
+  capability, and the unified session runtime with re-wire-on-restart are
+  in; what remains is the component-side control loop that drives the
+  `Repointer` when a `PeerRestarted` arrives over the control channel,
+  and a full multi-process restart test — the next increment;
 - the `Cap<I, R>` typestate connected to the runtime object-rights mask
   (`narrow`, the `bind`-time check) — the client-side compile-time safety
   net beside the now-enforced service-side check (§3.3).
