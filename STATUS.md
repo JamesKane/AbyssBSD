@@ -32,6 +32,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `04eed42` Phase 4: abyss-bootstrap — the probe serves through bind_service (§3.6)
+- `0d972cf` Bump STATUS: Phase 4 — the IPC service framework and rights enforcement
 - `e2d2d93` Phase 4: abyss-cap — the IPC service framework and rights enforcement (§3.6)
 - `ed1d097` Bump STATUS: Phase 4 — the transport Error frame (§3.6)
 - `a8f45fc` Phase 4: abyss-transport — the Error frame, a refused request (§3.6)
@@ -40,8 +42,6 @@ the FreeBSD remainder.
 - `6537dd4` Bump STATUS: Phase 4 — the broker resolves and mints object rights
 - `303d9cd` Phase 4: abyss-broker — resolve and mint object rights (§3.3)
 - `1013973` Bump STATUS: Phase 4 — rights classes on #[derive(Method)]
-- `463130d` Phase 4: abyss-msg — rights classes on #[derive(Method)] (§3.3)
-- `cc63532` Bump STATUS: Phase 4 — the kernel cap_rights layer (§3.3)
 
 ## Site
 
@@ -201,44 +201,34 @@ builds the fixed service-ring `cap_rights_t` mask (`CAP_SEND`, `CAP_RECV`,
 descriptor to it, and records it in the grant's `CapBody`;
 `freebsd-capsicum-sys` gained `CAP_FCNTL`. The conversation still runs end
 to end over the now-restricted rings — proof the mask covers what the
-transport exercises. The object-rights layer (§3.3's per-method bitmask)
-is most of the way in. A message enum's command and request variants may
-be tagged `#[rights(name)]`, and `#[derive(Method)]` collects the tags
-into the interface's `Method::RIGHTS_CLASSES` — each class a name and the
-bitmask of method ordinals it covers. The broker's new `catalogue` module
-(`InterfaceCatalogue`) maps an interface name to that table; `Session::
-wire` takes one, resolves each connection's `rights` tokens to an
-`object_rights` mask, and mints it into both grants' `CapBody`. Nothing
-*enforces* the minted mask yet, but a design pass (§3.6) has pinned how:
-`abyss-cap` gains `bind_service`, the server counterpart of `Cap::bind`,
-whose accept loop checks each inbound `method_id` against the mask before
-a `Service` handler sees the message; a refused request is answered with
-a new `Error` frame, which `Cap::call` surfaces as a `CallError`. §3.6
-is most of the way built. `abyss-transport`'s ring frame gained the
-**`Error` frame** — `Connection::call` returns a `CallOutcome`, `serve`
-routes a refusal, `Responder::refuse` sends one. And `abyss-cap` gained
-**`bind_service`**, the server counterpart of `Cap::bind`: it binds a
-`Role::Server` grant, runs an accept loop that **checks each inbound
-`method_id` against the object-rights mask before any handler sees the
-message**, and dispatches to a `Service` handler — the §3.3 enforcement
-point. `Cap::call` now yields a `CallError` (`PeerGone` or
-`RightsDenied`). Verified in the VM: a service answers a request within
-its rights and refuses one outside them. What remains is reworking the
-probe's server side onto `bind_service`, with a wired rights-denied
-end-to-end test. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
+transport exercises.
+
+The **§3.3 object-rights layer is built and enforced end to end**, and
+with it §3.6, the IPC service framework. A message enum's command and
+request variants are tagged `#[rights(name)]`, and `#[derive(Method)]`
+collects the tags into `Method::RIGHTS_CLASSES`. The broker's `catalogue`
+module resolves a manifest's `rights` tokens to an `object_rights` mask,
+and `Session::wire` mints it into both grants. `abyss-transport`'s ring
+frame gained an **`Error`** kind; `abyss-cap` gained **`bind_service`**,
+the server counterpart of `Cap::bind` — it binds a `Role::Server` grant,
+runs an accept loop that **checks each inbound `method_id` against the
+object-rights mask before a `Service` handler sees the message**, and
+refuses what is out of rights; `Cap::call` yields a `CallError`. A wired
+test grants a component no rights on a peer, and its `call` is refused —
+the broker's mint, the framework's check, the `Error` frame, and
+`CallError::RightsDenied` at the caller, across two jailed,
+capability-mode components. `cargo xtask ci` green on macOS and FreeBSD;
+tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **finishing §3.6** — the `Error` frame and `abyss-cap`'s `bind_service`
-  with the accept-loop rights check are in. What remains: the probe's
-  server side reworked onto `bind_service`, with a wired rights-denied
-  end-to-end test — the next increment;
-- the `Cap<I, R>` typestate connected to the runtime mask (`narrow`,
-  the `bind`-time check) — the client-side safety net (§3.3);
 - supervision's **`PeerRestarted`** — re-wiring the peers of a restarted
-  component (§5.5).
+  component (§5.5) — the next increment;
+- the `Cap<I, R>` typestate connected to the runtime object-rights mask
+  (`narrow`, the `bind`-time check) — the client-side compile-time safety
+  net beside the now-enforced service-side check (§3.3).
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
