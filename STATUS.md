@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `13e1be8` Phase 4: design — Casper, the mechanism (§5.7)
+- `639e84b` Bump STATUS: Phase 4 — Cap<I, R> typestate built and connected (§3.3)
 - `6a5d7ce` Phase 4: abyss-cap — the Cap<I, R> typestate, connected to the runtime mask (§3.3)
 - `80b64e6` Bump STATUS: Phase 4 — Cap<I, R> typestate designed (§3.3)
 - `7f2ce2c` Phase 4: design — the Cap<I, R> typestate, pinned (§3.3)
@@ -45,8 +47,6 @@ the FreeBSD remainder.
 - `eac18b5` Bump STATUS: Phase 4 — growable graph, pre-resolved spawn programs (§5.6)
 - `6a68f31` Phase 4: abyss-broker — a growable graph and pre-resolved spawn programs (§5.6)
 - `25cce69` Bump STATUS: Phase 4 — the bidirectional control connection (§5.6)
-- `139e450` Phase 4: abyss-broker — the bidirectional control connection (§5.6)
-- `e0278bd` Bump STATUS: Phase 4 — the spawnable manifest set (§5.6)
 
 ## Site
 
@@ -314,17 +314,29 @@ receiving `R::MASK`: a contract violation, panicking like `bind`'s
 existing misuse panics. A `Cap::mask()` accessor exposes the carried
 mask; the harness asserts `narrow` ANDs it (`Full` → `ReadOnly` →
 `ReadOnly::MASK`). `R` is interface-agnostic in this pass; the
-associated-type tightening is noted in §3.3 for later. `cargo xtask ci`
-green on macOS and FreeBSD; tree clean.
+associated-type tightening is noted in §3.3 for later.
+
+And the last open item, **§5.7 Casper**, is now **designed**: a Casper
+channel travels the bundle in a new list alongside `grants` (no
+interface, no role, no `CapBody` mask — it is not a peer ring); the
+broker, unsandboxed, calls `cap_init` / `cap_service_open` per declared
+`kind = casper` capability and passes the channel's underlying fd
+(`cap_sock`) by `SCM_RIGHTS`; the component wraps the fd back into a
+`cap_channel_t` and uses libcasper's per-service client API directly.
+The new `sys/freebsd-libcasper-sys` crate carries the broker-side FFI.
+AbyssBSD stays *modeled on* Casper, composing with it. Build is the next
+increment. `cargo xtask ci` green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
-  a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
-  crate, and a design pass first. The last open item on Phase 4's
-  FreeBSD list.
+- **building Casper (§5.7)** — design pinned (see In flight); the build
+  is the new `sys/freebsd-libcasper-sys` crate (broker-side FFI), the
+  `Bundle` schema's second list (`casper_channels`), the broker wiring
+  (`cap_init` / `cap_service_open` per declared `kind = casper`
+  capability), and the startup shim's claim. The last open item on
+  Phase 4's FreeBSD list.
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
