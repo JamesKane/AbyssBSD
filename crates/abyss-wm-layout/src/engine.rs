@@ -144,7 +144,7 @@ impl TilingLayoutEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tree::TilingTree;
+    use crate::tree::{TilingTree, root_container_mut};
     use crate::types::WindowId;
 
     fn w(n: u32) -> WindowId {
@@ -210,10 +210,9 @@ mod tests {
         let mut tree = TilingTree::new();
         tree.insert(w(1));
         tree.insert(w(2));
-        // Mutate the root to SplitV so we can test it without the user-action API.
-        if let Some(TilingNode::Container(c)) = &mut tree.root {
-            c.layout = ContainerLayout::SplitV;
-        }
+        // The user-action API to flip the layout doesn't exist yet on the
+        // engine side; reach in directly to flip it.
+        root_container_mut(&mut tree).layout = ContainerLayout::SplitV;
         let res = TilingLayoutEngine::default().layout(&tree, work_area());
         assert_eq!(res.placements[0].rect, Rect::new(0, 0, 800, 300));
         assert_eq!(res.placements[1].rect, Rect::new(0, 300, 800, 300));
@@ -225,17 +224,15 @@ mod tests {
         tree.insert(w(1));
         tree.insert(w(2));
         tree.insert(w(3));
-        if let Some(TilingNode::Container(c)) = &mut tree.root {
-            c.layout = ContainerLayout::Tabbed;
-            c.focused = 1; // window 2 is the visible tab
-        }
+        let c = root_container_mut(&mut tree);
+        c.layout = ContainerLayout::Tabbed;
+        c.focused = 1;
         let res = TilingLayoutEngine::default().layout(&tree, work_area());
         assert_eq!(res.headers.len(), 1);
         assert_eq!(res.headers[0].kind, HeaderKind::Tabs);
         assert_eq!(res.headers[0].rect, Rect::new(0, 0, 800, 24));
         assert_eq!(res.headers[0].tabs.len(), 3);
         assert_eq!(res.headers[0].tabs[1].window, w(2));
-        // Only the focused tab is placed.
         assert_eq!(res.placements.len(), 1);
         assert_eq!(res.placements[0].window, w(2));
         assert_eq!(res.placements[0].rect, Rect::new(0, 24, 800, 576));
@@ -246,9 +243,7 @@ mod tests {
         let mut tree = TilingTree::new();
         tree.insert(w(1));
         tree.insert(w(2));
-        if let Some(TilingNode::Container(c)) = &mut tree.root {
-            c.layout = ContainerLayout::Stacked;
-        }
+        root_container_mut(&mut tree).layout = ContainerLayout::Stacked;
         let res = TilingLayoutEngine::default().layout(&tree, work_area());
         assert_eq!(res.headers[0].kind, HeaderKind::Stack);
     }
@@ -258,9 +253,7 @@ mod tests {
         let mut tree = TilingTree::new();
         tree.insert(w(1));
         tree.insert(w(2));
-        if let Some(TilingNode::Container(c)) = &mut tree.root {
-            c.layout = ContainerLayout::Tabbed;
-        }
+        root_container_mut(&mut tree).layout = ContainerLayout::Tabbed;
         // Very thin work area — the header should clamp, not negative-overflow.
         let res = TilingLayoutEngine::default().layout(&tree, Rect::new(0, 0, 800, 10));
         assert_eq!(res.headers[0].rect.height, 10);
