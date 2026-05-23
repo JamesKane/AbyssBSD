@@ -35,6 +35,8 @@ The two pre-code gates are both *closed*:
 
 *(≤10 most recent, newest first)*
 
+- `a3d917c` Phase 5: abyss-wm-layout — user-action operations (Gate E §5)
+- `3b2591d` Bump STATUS: abyss-wm-layout first increment landed
 - `5033fd9` Phase 5: abyss-wm-layout — the layout engine and tiling tree (Gate E §4/§5)
 - `7206ee3` Bump STATUS: Gate F closed — display M1 subset + DRM/KMS bring-up
 - `051a7e4` Phase 5: Gate F — DRM/KMS bring-up doc, the CPU scanout path
@@ -43,8 +45,6 @@ The two pre-code gates are both *closed*:
 - `2f4e041` Phase 5: Gate E closed — window-management pinned for M1
 - `07fc336` Refresh ONBOARDING.md for Phase 4 closed
 - `bcc2021` Bump STATUS: Phase 4 follow-ups wrapped (§5.7 success-path + restart/delegated-spawn casper)
-- `1a772df` Phase 4: §5.7 success-path — broker wires a working Casper DNS channel
-- `b4e95a2` Phase 4: abyss-broker — restart-casper and delegated-spawn casper (§5.7)
 
 ## Site
 
@@ -58,22 +58,20 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-**`crates/abyss-wm-layout` — first increment landed.** The layout
-engine and tiling tree from Gate E §4/§5 are built: `LayoutEngine`
-trait, default `TilingLayoutEngine` (SplitH/SplitV/Tabbed/Stacked, all
-four), tree types, and `insert` / `remove` — the minimum the WM core
-needs to drive layout from `on_surface_added` / `on_surface_destroyed`.
-18 unit tests, green on macOS and via `vm.sh build`. Two small
-Gate-E doc cleanups the implementation surfaced (TabEntry's title
-dropped; "every visible leaf appears in Placement").
-
-**Follow-up increment**: the user-action operations from §5 —
-`focus_move`, `split`, `set_layout`, `move_leaf`, `resize`. Pure tree
-mutation, host-buildable, no new types.
+**`crates/abyss-wm-layout` — built; Gate E §4/§5 is satisfied
+host-side.** Layout engine, tiling tree, and the full closed operation
+set: `insert` / `remove` (surface lifecycle), `focused_window`,
+`focus_move` (i3-style outward-escape), `split` (transient
+single-child container, the i3 model in tree form), `set_layout`,
+`move_leaf` (M1 subset: adjacent-sibling swap), `resize` (per-edge
+ratio adjust). 35 unit tests, green via `cargo xtask ci` on macOS and
+`vm.sh build`. Two small Gate-E doc cleanups the implementation
+surfaced (`TabEntry`'s title field dropped; "every visible leaf
+appears in Placement").
 
 ## Next
 
-After the user-action operations, the VM-only work in order:
+The next Phase 5 increment moves to the VM track. In order:
 
 - **`sys/drm-sys`** — the FreeBSD-gated DRM/KMS FFI per Gate F's
   bring-up doc; `bindgen` + the C-shim pattern for the `_IOC*` macros.
