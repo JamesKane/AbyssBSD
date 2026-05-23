@@ -13,7 +13,7 @@
 //! (`focus_move`, `split`, `set_layout`, `move_leaf`, `resize`) are a
 //! follow-up increment.
 
-use crate::types::{ContainerId, WindowId};
+use crate::types::{ContainerId, Direction, Edge, Orientation, WindowId};
 
 /// A container's layout shape — `docs/design/window-management.md` §5.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,6 +154,296 @@ impl TilingTree {
         };
         self.root = new_root;
         removed
+    }
+
+    /// The window currently focused, by walking `children[focused]` from
+    /// the root. `None` iff the tree is empty.
+    pub fn focused_window(&self) -> Option<WindowId> {
+        let mut node = self.root.as_ref()?;
+        loop {
+            match node {
+                TilingNode::Leaf(w) => return Some(*w),
+                TilingNode::Container(c) => {
+                    if c.children.is_empty() {
+                        return None;
+                    }
+                    let i = c.focused.min(c.children.len() - 1);
+                    node = &c.children[i].node;
+                }
+            }
+        }
+    }
+
+    /// Move focus in `dir`.
+    ///
+    /// Walks up from the focused leaf looking for the deepest ancestor
+    /// whose layout matches `dir` (SplitH / Tabbed match Left/Right;
+    /// SplitV / Stacked match Up/Down) and where a sibling exists in
+    /// the direction. The matched ancestor's `focused` index steps; the
+    /// new focused leaf is then reached by descending `children[focused]`.
+    ///
+    /// Returns the new focused window, or `None` if no movement was
+    /// possible (the leaf is at the edge of every matching container).
+    pub fn focus_move(&mut self, dir: Direction) -> Option<WindowId> {
+        let path = focused_path(self)?;
+        let (depth, new_index) = find_focus_move_target(self, &path, dir)?;
+        if let Some(c) = container_at_mut(self, &path[..depth]) {
+            c.focused = new_index;
+        }
+        self.focused_window()
+    }
+
+    /// Wrap the focused leaf in a fresh container of orientation
+    /// `orient`. The next [`Self::insert`] will pair the new window
+    /// with the focused leaf inside this container — the i3 model.
+    ///
+    /// A no-op on an empty tree.
+    pub fn split(&mut self, orient: Orientation) {
+        let layout = match orient {
+            Orientation::Horizontal => ContainerLayout::SplitH,
+            Orientation::Vertical => ContainerLayout::SplitV,
+        };
+        let Some(path) = focused_path(self) else {
+            return;
+        };
+        let new_id = self.next_id();
+        if path.is_empty() {
+            // Root is a bare leaf — wrap it directly.
+            let Some(TilingNode::Leaf(w)) = self.root.take() else {
+                return;
+            };
+            self.root = Some(TilingNode::Container(Container {
+                id: new_id,
+                layout,
+                children: vec![Child {
+                    node: TilingNode::Leaf(w),
+                    ratio: 1.0,
+                }],
+                focused: 0,
+            }));
+            return;
+        }
+        // Walk to the focused leaf's parent and wrap the slot.
+        let leaf_index = path[path.len() - 1];
+        let Some(parent) = container_at_mut(self, &path[..path.len() - 1]) else {
+            return;
+        };
+        let Some(slot) = parent.children.get_mut(leaf_index) else {
+            return;
+        };
+        let TilingNode::Leaf(w) = slot.node else {
+            return;
+        };
+        slot.node = TilingNode::Container(Container {
+            id: new_id,
+            layout,
+            children: vec![Child {
+                node: TilingNode::Leaf(w),
+                ratio: 1.0,
+            }],
+            focused: 0,
+        });
+    }
+
+    /// Change the focused leaf's parent container's layout.
+    ///
+    /// A no-op on an empty tree or when the root itself is a bare leaf
+    /// (no parent container to relayout — use [`Self::split`] first to
+    /// create one).
+    pub fn set_layout(&mut self, layout: ContainerLayout) {
+        let Some(path) = focused_path(self) else {
+            return;
+        };
+        if path.is_empty() {
+            return;
+        }
+        if let Some(parent) = container_at_mut(self, &path[..path.len() - 1]) {
+            parent.layout = layout;
+        }
+    }
+
+    /// Move the focused leaf within the tree by direction.
+    ///
+    /// M1: swap with the adjacent sibling in the focused leaf's parent
+    /// container, if the parent's layout matches the direction
+    /// (`SplitH`/`Tabbed` for Left/Right, `SplitV`/`Stacked` for
+    /// Up/Down) and a sibling exists in the direction. Otherwise a
+    /// no-op.
+    ///
+    /// A follow-up may extend this to "escape outward" — moving a leaf
+    /// out of its container and into a grandparent — but that adds tree
+    /// rewriting that the M1 keyboard set does not strictly need.
+    pub fn move_leaf(&mut self, dir: Direction) {
+        let Some(path) = focused_path(self) else {
+            return;
+        };
+        if path.is_empty() {
+            return;
+        }
+        let leaf_index = path[path.len() - 1];
+        let Some(parent) = container_at_mut(self, &path[..path.len() - 1]) else {
+            return;
+        };
+        if !matches_direction(parent.layout, dir) {
+            return;
+        }
+        let new_index = leaf_index as i32 + dir_step(dir);
+        if new_index < 0 || (new_index as usize) >= parent.children.len() {
+            return;
+        }
+        let new_index = new_index as usize;
+        parent.children.swap(leaf_index, new_index);
+        parent.focused = new_index;
+    }
+
+    /// Adjust split ratios at the focused leaf's edge.
+    ///
+    /// `delta` is a fraction: the focused leaf grows by `delta` at the
+    /// named edge, and its adjacent sibling on that edge shrinks by the
+    /// same amount. Positive `delta` grows the focused leaf; negative
+    /// shrinks it.
+    ///
+    /// A no-op when the focused leaf's parent's layout doesn't match
+    /// the edge (`Edge::Left`/`Right` need `SplitH`; `Top`/`Bottom`
+    /// need `SplitV`), when there is no sibling on the named edge, or
+    /// when the requested change would push a ratio non-positive.
+    pub fn resize(&mut self, edge: Edge, delta: f32) {
+        let Some(path) = focused_path(self) else {
+            return;
+        };
+        if path.is_empty() {
+            return;
+        }
+        let leaf_index = path[path.len() - 1];
+        let (needed_layout, sibling_offset) = match edge {
+            Edge::Left => (ContainerLayout::SplitH, -1_i32),
+            Edge::Right => (ContainerLayout::SplitH, 1),
+            Edge::Top => (ContainerLayout::SplitV, -1),
+            Edge::Bottom => (ContainerLayout::SplitV, 1),
+        };
+        let Some(parent) = container_at_mut(self, &path[..path.len() - 1]) else {
+            return;
+        };
+        if parent.layout != needed_layout {
+            return;
+        }
+        let sibling_index = leaf_index as i32 + sibling_offset;
+        if sibling_index < 0 || (sibling_index as usize) >= parent.children.len() {
+            return;
+        }
+        let sibling_index = sibling_index as usize;
+        let new_focus = parent.children[leaf_index].ratio + delta;
+        let new_sibling = parent.children[sibling_index].ratio - delta;
+        if new_focus <= 0.0 || new_sibling <= 0.0 {
+            return;
+        }
+        parent.children[leaf_index].ratio = new_focus;
+        parent.children[sibling_index].ratio = new_sibling;
+    }
+}
+
+/// The path of child indices from the root to the focused leaf.
+/// `Some(vec)` even for a bare-leaf root (returns an empty vec —
+/// "no descents needed"); `None` only for an empty tree.
+fn focused_path(tree: &TilingTree) -> Option<Vec<usize>> {
+    let mut node = tree.root.as_ref()?;
+    let mut path = Vec::new();
+    loop {
+        match node {
+            TilingNode::Leaf(_) => return Some(path),
+            TilingNode::Container(c) => {
+                if c.children.is_empty() {
+                    return Some(path);
+                }
+                let i = c.focused.min(c.children.len() - 1);
+                path.push(i);
+                node = &c.children[i].node;
+            }
+        }
+    }
+}
+
+/// Walk `indices` from the root and return the container at the tip.
+fn container_at_mut<'a>(tree: &'a mut TilingTree, indices: &[usize]) -> Option<&'a mut Container> {
+    let mut node = tree.root.as_mut()?;
+    for &i in indices {
+        match node {
+            TilingNode::Container(c) => {
+                let child = c.children.get_mut(i)?;
+                node = &mut child.node;
+            }
+            TilingNode::Leaf(_) => return None,
+        }
+    }
+    match node {
+        TilingNode::Container(c) => Some(c),
+        TilingNode::Leaf(_) => None,
+    }
+}
+
+/// Immutable counterpart of [`container_at_mut`].
+fn container_at<'a>(tree: &'a TilingTree, indices: &[usize]) -> Option<&'a Container> {
+    let mut node = tree.root.as_ref()?;
+    for &i in indices {
+        match node {
+            TilingNode::Container(c) => {
+                node = &c.children.get(i)?.node;
+            }
+            TilingNode::Leaf(_) => return None,
+        }
+    }
+    match node {
+        TilingNode::Container(c) => Some(c),
+        TilingNode::Leaf(_) => None,
+    }
+}
+
+/// Find the deepest ancestor of the focused leaf whose layout matches
+/// `dir` and where a sibling exists in the direction. Returns
+/// `(depth, new_index)` — the depth of the container to mutate, and the
+/// child index its `focused` should become.
+fn find_focus_move_target(
+    tree: &TilingTree,
+    path: &[usize],
+    dir: Direction,
+) -> Option<(usize, usize)> {
+    let step = dir_step(dir);
+    for depth in (0..path.len()).rev() {
+        let Some(container) = container_at(tree, &path[..depth]) else {
+            continue;
+        };
+        if !matches_direction(container.layout, dir) {
+            continue;
+        }
+        let curr = path[depth];
+        let candidate = curr as i32 + step;
+        if candidate >= 0 && (candidate as usize) < container.children.len() {
+            return Some((depth, candidate as usize));
+        }
+    }
+    None
+}
+
+/// Which directional inputs a layout responds to. `SplitH` and `Tabbed`
+/// participate in left/right navigation; `SplitV` and `Stacked` in
+/// up/down. The Tabbed/Stacked mapping matches i3's tab cycling.
+fn matches_direction(layout: ContainerLayout, dir: Direction) -> bool {
+    matches!(
+        (layout, dir),
+        (
+            ContainerLayout::SplitH | ContainerLayout::Tabbed,
+            Direction::Left | Direction::Right
+        ) | (
+            ContainerLayout::SplitV | ContainerLayout::Stacked,
+            Direction::Up | Direction::Down
+        )
+    )
+}
+
+fn dir_step(dir: Direction) -> i32 {
+    match dir {
+        Direction::Left | Direction::Up => -1,
+        Direction::Right | Direction::Down => 1,
     }
 }
 
@@ -410,5 +700,276 @@ mod tests {
             panic!("not a container");
         };
         assert_eq!(c.focused, 1, "focused should shift from 2 to 1");
+    }
+
+    // ---- focused_window ----
+
+    #[test]
+    fn focused_window_is_none_for_empty_tree() {
+        let t = TilingTree::new();
+        assert_eq!(t.focused_window(), None);
+    }
+
+    #[test]
+    fn focused_window_descends_children_focused() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        t.insert(w(3)); // focused = 2 → w(3)
+        assert_eq!(t.focused_window(), Some(w(3)));
+    }
+
+    // ---- focus_move ----
+
+    #[test]
+    fn focus_move_right_in_splith_steps_focus() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        t.insert(w(3)); // focused = 2 (rightmost)
+        // Move focus left twice → w(1)
+        assert_eq!(t.focus_move(Direction::Left), Some(w(2)));
+        assert_eq!(t.focus_move(Direction::Left), Some(w(1)));
+        // Already at left edge — no further movement.
+        assert_eq!(t.focus_move(Direction::Left), None);
+    }
+
+    #[test]
+    fn focus_move_up_in_splith_is_a_noop() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        // SplitH parent doesn't respond to Up/Down.
+        assert_eq!(t.focus_move(Direction::Up), None);
+    }
+
+    #[test]
+    fn focus_move_escapes_outward_through_matching_ancestor() {
+        // Tree: SplitH [ Leaf(1), SplitV [ Leaf(2), Leaf(3) ] ]
+        // Focus the inner v's top child (w(2)). focus_move(Left) should
+        // escape the SplitV (which doesn't match Left/Right) up to the
+        // outer SplitH, and step left → w(1).
+        let inner = Container {
+            id: ContainerId(2),
+            layout: ContainerLayout::SplitV,
+            children: vec![
+                Child {
+                    node: TilingNode::Leaf(w(2)),
+                    ratio: 0.5,
+                },
+                Child {
+                    node: TilingNode::Leaf(w(3)),
+                    ratio: 0.5,
+                },
+            ],
+            focused: 0, // w(2)
+        };
+        let outer = Container {
+            id: ContainerId(1),
+            layout: ContainerLayout::SplitH,
+            children: vec![
+                Child {
+                    node: TilingNode::Leaf(w(1)),
+                    ratio: 0.5,
+                },
+                Child {
+                    node: TilingNode::Container(inner),
+                    ratio: 0.5,
+                },
+            ],
+            focused: 1, // descend into the SplitV
+        };
+        let mut t = TilingTree::from_root(TilingNode::Container(outer));
+        assert_eq!(t.focused_window(), Some(w(2)));
+        assert_eq!(t.focus_move(Direction::Left), Some(w(1)));
+    }
+
+    #[test]
+    fn focus_move_in_tabbed_cycles_tabs() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        t.insert(w(3));
+        if let Some(TilingNode::Container(c)) = &mut t.root {
+            c.layout = ContainerLayout::Tabbed;
+            c.focused = 0;
+        }
+        assert_eq!(t.focus_move(Direction::Right), Some(w(2)));
+        assert_eq!(t.focus_move(Direction::Right), Some(w(3)));
+        assert_eq!(t.focus_move(Direction::Right), None);
+    }
+
+    // ---- split ----
+
+    #[test]
+    fn split_on_root_leaf_wraps_in_a_single_child_container() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.split(Orientation::Vertical);
+        let Some(TilingNode::Container(c)) = &t.root else {
+            panic!("expected root container after split");
+        };
+        assert_eq!(c.layout, ContainerLayout::SplitV);
+        assert_eq!(c.children.len(), 1);
+        assert_eq!(c.children[0].node, TilingNode::Leaf(w(1)));
+    }
+
+    #[test]
+    fn insert_after_split_pairs_inside_the_new_container() {
+        // Start: w(1), w(2) in a SplitH root (the default).
+        // split(Vertical) on focused w(2) wraps it in a SplitV container.
+        // Then insert(w(3)) — w(3) should pair with w(2) in the SplitV,
+        // not as a third child of the outer SplitH.
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        t.split(Orientation::Vertical);
+        t.insert(w(3));
+        let Some(TilingNode::Container(outer)) = &t.root else {
+            panic!("outer not a container");
+        };
+        assert_eq!(outer.layout, ContainerLayout::SplitH);
+        assert_eq!(outer.children.len(), 2, "still two outer slots");
+        // Outer slot 1 should be the SplitV holding w(2) and w(3).
+        let TilingNode::Container(inner) = &outer.children[1].node else {
+            panic!("expected SplitV at outer[1]");
+        };
+        assert_eq!(inner.layout, ContainerLayout::SplitV);
+        assert_eq!(inner.children.len(), 2);
+        assert_eq!(inner.children[0].node, TilingNode::Leaf(w(2)));
+        assert_eq!(inner.children[1].node, TilingNode::Leaf(w(3)));
+        assert_eq!(t.focused_window(), Some(w(3)));
+    }
+
+    #[test]
+    fn split_assigns_a_fresh_container_id() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        let outer_id = if let Some(TilingNode::Container(c)) = &t.root {
+            c.id
+        } else {
+            panic!()
+        };
+        t.split(Orientation::Vertical);
+        // Inner container's id should differ from the outer's.
+        let inner_id = if let Some(TilingNode::Container(outer)) = &t.root {
+            if let TilingNode::Container(inner) = &outer.children[1].node {
+                inner.id
+            } else {
+                panic!()
+            }
+        } else {
+            panic!()
+        };
+        assert_ne!(outer_id, inner_id);
+    }
+
+    // ---- set_layout ----
+
+    #[test]
+    fn set_layout_changes_the_focused_leafs_parent_layout() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        t.set_layout(ContainerLayout::SplitV);
+        let Some(TilingNode::Container(c)) = &t.root else {
+            panic!("not a container");
+        };
+        assert_eq!(c.layout, ContainerLayout::SplitV);
+    }
+
+    #[test]
+    fn set_layout_is_a_noop_for_a_bare_leaf_root() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.set_layout(ContainerLayout::Tabbed); // no parent — no-op
+        assert_eq!(t.root, Some(TilingNode::Leaf(w(1))));
+    }
+
+    // ---- move_leaf ----
+
+    #[test]
+    fn move_leaf_right_swaps_focused_with_right_sibling() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        t.insert(w(3)); // focused = 2 (rightmost)
+        // Step focus left so the focused leaf is in the middle.
+        t.focus_move(Direction::Left);
+        assert_eq!(t.focused_window(), Some(w(2)));
+        t.move_leaf(Direction::Right);
+        let Some(TilingNode::Container(c)) = &t.root else {
+            panic!()
+        };
+        // Order should be [w(1), w(3), w(2)] and focused should track w(2).
+        assert_eq!(c.children[0].node, TilingNode::Leaf(w(1)));
+        assert_eq!(c.children[1].node, TilingNode::Leaf(w(3)));
+        assert_eq!(c.children[2].node, TilingNode::Leaf(w(2)));
+        assert_eq!(c.focused, 2);
+        assert_eq!(t.focused_window(), Some(w(2)));
+    }
+
+    #[test]
+    fn move_leaf_against_mismatched_layout_is_a_noop() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2)); // SplitH parent
+        let before = t.clone();
+        t.move_leaf(Direction::Up); // SplitH doesn't respond to Up
+        assert_eq!(t, before);
+    }
+
+    // ---- resize ----
+
+    #[test]
+    fn resize_left_grows_focused_and_shrinks_left_sibling() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2)); // focused = 1 (right), both 0.5
+        t.resize(Edge::Left, 0.1);
+        let Some(TilingNode::Container(c)) = &t.root else {
+            panic!()
+        };
+        assert!(
+            (c.children[0].ratio - 0.4).abs() < 1e-6,
+            "left = {}",
+            c.children[0].ratio
+        );
+        assert!(
+            (c.children[1].ratio - 0.6).abs() < 1e-6,
+            "right = {}",
+            c.children[1].ratio
+        );
+    }
+
+    #[test]
+    fn resize_with_no_sibling_on_the_named_edge_is_a_noop() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2)); // focused = 1, no right sibling
+        let before = t.clone();
+        t.resize(Edge::Right, 0.1);
+        assert_eq!(t, before);
+    }
+
+    #[test]
+    fn resize_against_mismatched_orientation_is_a_noop() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2)); // SplitH parent
+        let before = t.clone();
+        t.resize(Edge::Top, 0.1); // Top needs SplitV
+        assert_eq!(t, before);
+    }
+
+    #[test]
+    fn resize_that_would_zero_a_sibling_is_a_noop() {
+        let mut t = TilingTree::new();
+        t.insert(w(1));
+        t.insert(w(2));
+        let before = t.clone();
+        t.resize(Edge::Left, 0.6); // would push left sibling to -0.1
+        assert_eq!(t, before);
     }
 }
