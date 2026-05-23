@@ -37,6 +37,8 @@ the FreeBSD remainder.
 
 *(≤10 most recent, newest first)*
 
+- `6a5d7ce` Phase 4: abyss-cap — the Cap<I, R> typestate, connected to the runtime mask (§3.3)
+- `80b64e6` Bump STATUS: Phase 4 — Cap<I, R> typestate designed (§3.3)
 - `7f2ce2c` Phase 4: design — the Cap<I, R> typestate, pinned (§3.3)
 - `44e97c6` Bump STATUS: Phase 4 — §5.6 delegated spawn proven end to end
 - `031bff8` Phase 4: §5.6 — the delegated-spawn handler, end to end
@@ -45,8 +47,6 @@ the FreeBSD remainder.
 - `25cce69` Bump STATUS: Phase 4 — the bidirectional control connection (§5.6)
 - `139e450` Phase 4: abyss-broker — the bidirectional control connection (§5.6)
 - `e0278bd` Bump STATUS: Phase 4 — the spawnable manifest set (§5.6)
-- `d394731` Phase 4: abyss-broker — the spawnable manifest set (§5.6)
-- `b117b24` Bump STATUS: Phase 4 — delegated spawn designed (§5.6)
 
 ## Site
 
@@ -302,27 +302,29 @@ manifest, name collision, unresolvable authority, spawn failure) all
 return a `Refused` with a reason and leave the session untouched; only a
 full success mutates.
 
-And the last Phase 4 design point, **the `Cap<I, R>` typestate**, is now
-**pinned** (§3.3): the `Rights` trait carries `const MASK: u32`, every
-`Cap` holds the runtime mask in a field set to `R::MASK` at construction,
-`narrow::<R2>` ANDs with `R2::MASK`, and `bind` rejects a `Cap` whose
-arrived mask is wider than the receiving `R::MASK` — the refusal at the
-seam §3.3 already named. `R` stays interface-agnostic in this pass;
-tying it to `I` through an associated type is noted as a later
-tightening. The build is the next increment. `cargo xtask ci` green on
-macOS and FreeBSD; tree clean.
+And the last Phase 4 design point is now **built**: **the `Cap<I, R>`
+typestate is connected to the runtime mask** (§3.3). The `Rights` trait
+carries `const MASK: u32`; every `Cap` holds the runtime mask (the
+`Local` backend in a new field, the IPC backends in their `CapBody`),
+set at construction to `R::MASK`. `narrow::<R2>` ANDs the carried mask
+with `R2::MASK` — recursive attenuation, never amplification —
+type-narrowing and the runtime mask now move together. `bind` rejects,
+at the seam, a `Cap` whose arrived `object_rights` is wider than the
+receiving `R::MASK`: a contract violation, panicking like `bind`'s
+existing misuse panics. A `Cap::mask()` accessor exposes the carried
+mask; the harness asserts `narrow` ANDs it (`Full` → `ReadOnly` →
+`ReadOnly::MASK`). `R` is interface-agnostic in this pass; the
+associated-type tightening is noted in §3.3 for later. `cargo xtask ci`
+green on macOS and FreeBSD; tree clean.
 
 ## Next
 
 **The rest of Phase 4's FreeBSD remainder**, per
 `docs/design/broker-and-transport.md`:
 
-- **building the `Cap<I, R>` typestate** — design pinned (see In flight);
-  add `const MASK: u32` to `Rights`, carry the runtime mask on every
-  `Cap`, AND it on `narrow`, return a `Result` from `bind` that rejects a
-  too-wide arrived mask, and add `MASK` impls to the existing markers;
 - **Casper (§5.7)** — `kind = casper` capabilities, the broker setting up
   a `cap_channel_t` per declared Casper service; needs a `libcasper` FFI
-  crate, and a design pass first.
+  crate, and a design pass first. The last open item on Phase 4's
+  FreeBSD list.
 
 The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
