@@ -856,7 +856,78 @@ A Capsicum-sandboxed component cannot resolve DNS, read `passwd`, or call
 (`libcasper`) provides exactly these as sandboxed services. A component
 declares the Casper services it needs (`kind = casper`); the broker sets
 up each `cap_channel_t` — itself an fd — into the bundle. The broker is
-*modeled on* Casper and *composes with* it; it is not built on it (§10.4).
+*modeled on* Casper and *composes with* it; it is not built on it
+(§10.4). The rest of this section pins the mechanism.
+
+**The services, uniformly.** Casper offers a small set of service
+providers — `system.dns`, `system.pwd`, `system.grp`, `system.sysctl`,
+`system.net`, `system.fileargs`, `system.syslog`. The design treats them
+uniformly: each is named by its Casper string in the manifest's `target`
+slot (which already accepts the `service` alias, §4.2). A component asks
+for what it needs:
+
+```text
+[capability]
+kind    = casper
+service = system.dns
+```
+
+The first build wires whichever service is needed first — DNS for a
+networked component is the natural starter.
+
+**The bundle carries Casper channels separately from peer grants.** A
+Casper channel is *not* a typed peer ring: it has no interface, no role,
+no `CapBody` object-rights mask — its restriction is the Casper-side
+limit the broker placed on it when it opened the channel. So the
+`Bundle` schema (§5.8) gains a second list alongside `grants`, rather
+than overloading the `Grant` type:
+
+```text
+Bundle {
+    grants:           Vec<Grant>,             // peer rings, §5.8
+    casper_channels:  Vec<CasperChannel>,     // §5.7
+}
+CasperChannel { service: String, channel: OwnedFd }
+```
+
+`Grant` is unchanged. A component with no Casper services sees an empty
+`casper_channels` list; the startup shim claims a channel by service
+name, the symmetric op to claiming a `Grant`.
+
+**The broker side.** The broker — the one component that runs
+unsandboxed (§5.1) — calls `cap_init()` (once, lazily; `libcasper` forks
+the `casperd` helper in the broker's process tree) and
+`cap_service_open(casperd, service)` for each declared Casper capability.
+It takes the channel's underlying fd via `cap_sock()`, records it in the
+component's `CasperChannel` list, and (after `SCM_RIGHTS` passes the fd
+to the child) drops its own reference. Wiring is, like §5.2's, eager:
+every Casper channel a component will hold exists before that component
+is spawned.
+
+**The component side.** The startup shim claims its Casper channels from
+the bundle the same way it claims its peer grants. Each is an `OwnedFd`
+the component wraps back into a `cap_channel_t` (libcasper's
+`cap_wrap`); per-service queries (`cap_getaddrinfo` for DNS,
+`cap_getpwnam` for `passwd`, …) go through that channel. The component
+links libcasper directly for now — the per-service client API is small,
+stable, and per-service in shape; an AbyssBSD-typed face for each
+service is per-service work better done as each service is first used
+than up front. A thin wrapper crate is a possible later refinement.
+
+**The FFI crate.** `sys/freebsd-libcasper-sys` is the new sys-crate,
+exposing the broker's needs: `cap_init`, `cap_service_open`, `cap_close`,
+and `cap_sock`. The per-service client functions stay direct libcasper
+for now. It is FreeBSD-only, mirroring `freebsd-capsicum-sys`, with a C
+shim only where libcasper macros or constructors need one.
+
+**Composition, not foundation (§10.4 recalled).** AbyssBSD is *modeled
+on* Casper and *composes with* it: a Casper channel is just another fd
+the broker passes by `SCM_RIGHTS`; the broker's authority graph and
+spawn machinery do not know about Casper internals, only that some
+components are owed channels of a named service. AbyssBSD's own service
+rings stay first-class — Casper is what a component reaches for when a
+service genuinely lives outside AbyssBSD's authority graph (DNS, the
+password file, the kernel sysctl table).
 
 ### 5.8 The bundle schema — the `abyss-bundle` crate
 
