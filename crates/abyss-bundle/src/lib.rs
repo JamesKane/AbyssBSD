@@ -8,10 +8,14 @@
 //! handle table carries every capability the component was granted (each a
 //! descriptor via `SCM_RIGHTS`); its payload, a [`Bundle`], names them.
 //!
-//! - [`Bundle`] — a component's whole grant: a list of [`Grant`]s.
+//! - [`Bundle`] — a component's whole grant: a list of [`Grant`]s and a
+//!   list of [`CasperChannel`]s.
 //! - [`Grant`] — one capability: the [interface](Grant::interface) it
 //!   speaks, the [`Role`] the component plays on it, the [`CapBody`]
 //!   rights, and the ring-endpoint descriptor.
+//! - [`CasperChannel`] — one Casper service channel, a `cap_channel_t`
+//!   the broker opened to a named service (§5.7); carries no AbyssBSD
+//!   rights — its restriction is the Casper-side limit.
 //! - [`PeerRestarted`] — a control message delivered after boot, carrying
 //!   one fresh `Grant` that re-wires a restarted peer (§5.5).
 //! - [`SpawnChild`] / [`SpawnReply`] — the delegated-spawn request a
@@ -57,6 +61,20 @@ const KEY_REASON: &str = "reason";
 const OUTCOME_SPAWNED: &str = "spawned";
 /// The `outcome` wire token for [`SpawnReply::Refused`].
 const OUTCOME_REFUSED: &str = "refused";
+
+/// The dict key naming a [`CasperChannel`]'s Casper service.
+const KEY_SERVICE: &str = "service";
+/// The dict key carrying a [`CasperChannel`]'s channel handle.
+const KEY_CHANNEL: &str = "channel";
+/// The dict key carrying a [`Bundle`]'s peer grants.
+const KEY_GRANTS: &str = "grants";
+/// The dict key carrying a [`Bundle`]'s Casper channels (§5.7).
+const KEY_CASPER_CHANNELS: &str = "casper_channels";
+
+/// The handle-table kind of a [`CasperChannel`] descriptor — distinct from
+/// `KIND_FD_CAPABILITY` (an AbyssBSD ring), so the decoder knows whether
+/// it is unwrapping a typed peer ring or a Casper service channel (§5.7).
+const KIND_CASPER_CHANNEL: u8 = 2;
 
 /// Which face a component puts on its end of a granted ring.
 ///
@@ -105,11 +123,32 @@ pub struct Grant {
     pub endpoint: OwnedFd,
 }
 
+/// One Casper service channel a component was granted (§5.7) — a
+/// `cap_channel_t` the broker opened to a named Casper service, passed as
+/// its underlying fd via `SCM_RIGHTS`.
+///
+/// A Casper channel carries no AbyssBSD-side rights: its restriction is
+/// the Casper-side limit the broker placed on it when it opened the
+/// channel. The component wraps the fd back into a `cap_channel_t` via
+/// libcasper's `cap_wrap` and uses libcasper's per-service client API.
+#[derive(Debug)]
+pub struct CasperChannel {
+    /// The Casper service this channel is opened to — `system.dns`,
+    /// `system.pwd`, …
+    pub service: String,
+    /// The channel's underlying socket descriptor — `cap_channel_t`'s
+    /// `cap_sock()`.
+    pub channel: OwnedFd,
+}
+
 /// A bootstrap bundle's payload: every capability a component was granted.
 #[derive(Debug)]
 pub struct Bundle {
-    /// The grants, in the order the broker laid them out.
+    /// The peer-ring grants, in the order the broker laid them out.
     pub grants: Vec<Grant>,
+    /// The Casper service channels (§5.7), independent of `grants` — a
+    /// Casper channel is not a peer ring.
+    pub casper_channels: Vec<CasperChannel>,
 }
 
 /// A control message re-wiring one of a component's peers
@@ -228,14 +267,89 @@ impl Wire for PeerRestarted {
     }
 }
 
-impl Wire for Bundle {
+impl Wire for CasperChannel {
     fn to_wire(&self, handles: &mut HandleSink) -> Value {
-        self.grants.to_wire(handles)
+        // Duplicate the channel descriptor rather than move it — the §3.4
+        // pattern; the duplicate rides `SCM_RIGHTS`, this struct keeps its
+        // own. The handle's body is empty: a Casper channel carries no
+        // AbyssBSD-side rights metadata (§5.7).
+        let channel = self
+            .channel
+            .as_fd()
+            .try_clone_to_owned()
+            .expect("duplicate a Casper channel descriptor");
+        let handle = RawHandle {
+            kind: KIND_CASPER_CHANNEL,
+            body: Vec::new(),
+        };
+        let index = handles.push(handle, channel);
+        Value::Dict(vec![
+            (KEY_SERVICE.to_owned(), Value::Str(self.service.clone())),
+            (KEY_CHANNEL.to_owned(), Value::Handle(index)),
+        ])
     }
 
     fn from_wire(value: &Value, handles: &mut HandleStore) -> Result<Self, WireError> {
+        let fields = match value {
+            Value::Dict(fields) => fields,
+            other => {
+                return Err(WireError::TypeMismatch {
+                    expected: "dict",
+                    found: other.kind_name(),
+                });
+            }
+        };
+        let service = dict_str(fields, KEY_SERVICE)?.to_owned();
+        let index = match dict_get(fields, KEY_CHANNEL)? {
+            Value::Handle(index) => *index,
+            other => {
+                return Err(WireError::TypeMismatch {
+                    expected: "handle",
+                    found: other.kind_name(),
+                });
+            }
+        };
+        let (handle, channel) = handles.take(index)?;
+        if handle.kind != KIND_CASPER_CHANNEL {
+            return Err(WireError::MalformedHandle(format!(
+                "a Casper channel must be kind {KIND_CASPER_CHANNEL}, got kind {}",
+                handle.kind,
+            )));
+        }
+        Ok(CasperChannel { service, channel })
+    }
+}
+
+impl Wire for Bundle {
+    fn to_wire(&self, handles: &mut HandleSink) -> Value {
+        // A dict, so the bundle can carry more than one list — peer grants
+        // and Casper channels are independent (§5.7). The bundle previously
+        // wired as a bare grant list; the dict is the durable form.
+        Value::Dict(vec![
+            (KEY_GRANTS.to_owned(), self.grants.to_wire(handles)),
+            (
+                KEY_CASPER_CHANNELS.to_owned(),
+                self.casper_channels.to_wire(handles),
+            ),
+        ])
+    }
+
+    fn from_wire(value: &Value, handles: &mut HandleStore) -> Result<Self, WireError> {
+        let fields = match value {
+            Value::Dict(fields) => fields,
+            other => {
+                return Err(WireError::TypeMismatch {
+                    expected: "dict",
+                    found: other.kind_name(),
+                });
+            }
+        };
+        let grants = <Vec<Grant>>::from_wire(dict_get(fields, KEY_GRANTS)?, handles)?;
+        let casper_channels =
+            <Vec<CasperChannel>>::from_wire(dict_get(fields, KEY_CASPER_CHANNELS)?, handles)?;
         Ok(Bundle {
-            grants: <Vec<Grant>>::from_wire(value, handles)?,
+            grants,
+            casper_channels,
         })
     }
 }
@@ -348,6 +462,7 @@ mod tests {
                     endpoint: a_descriptor(),
                 },
             ],
+            casper_channels: Vec::new(),
         }
     }
 
@@ -395,24 +510,39 @@ mod tests {
     #[test]
     fn an_empty_bundle_round_trips() {
         let mut sink = HandleSink::new();
-        let value = Bundle { grants: Vec::new() }.to_wire(&mut sink);
+        let value = Bundle {
+            grants: Vec::new(),
+            casper_channels: Vec::new(),
+        }
+        .to_wire(&mut sink);
         let (handles, fds) = sink.into_parts();
         assert!(handles.is_empty());
 
         let mut store = HandleStore::new(handles, fds).expect("store");
         let decoded = Bundle::from_wire(&value, &mut store).expect("decode");
         assert!(decoded.grants.is_empty());
+        assert!(decoded.casper_channels.is_empty());
+    }
+
+    /// A `Bundle` wire form holding one grant dict, with empty Casper
+    /// channels — for tests that build malformed grants to assert the
+    /// rejection paths.
+    fn bundle_value_with_one_grant(grant: Value) -> Value {
+        Value::Dict(vec![
+            (KEY_GRANTS.to_owned(), Value::List(vec![grant])),
+            (KEY_CASPER_CHANNELS.to_owned(), Value::List(Vec::new())),
+        ])
     }
 
     #[test]
     fn a_grant_handle_of_the_wrong_kind_is_rejected() {
         // A handle table entry that is not an fd capability — the grant
         // must not decode.
-        let value = Value::List(vec![Value::Dict(vec![
+        let value = bundle_value_with_one_grant(Value::Dict(vec![
             (KEY_INTERFACE.to_owned(), Value::Str("input".to_owned())),
             (KEY_ROLE.to_owned(), Value::Str(ROLE_CLIENT.to_owned())),
             (KEY_CAPABILITY.to_owned(), Value::Handle(0)),
-        ])]);
+        ]));
         let handles = vec![RawHandle {
             kind: KIND_FD_CAPABILITY + 1,
             body: rights(0).encode(),
@@ -427,11 +557,11 @@ mod tests {
 
     #[test]
     fn an_unknown_role_token_is_rejected() {
-        let value = Value::List(vec![Value::Dict(vec![
+        let value = bundle_value_with_one_grant(Value::Dict(vec![
             (KEY_INTERFACE.to_owned(), Value::Str("input".to_owned())),
             (KEY_ROLE.to_owned(), Value::Str("bystander".to_owned())),
             (KEY_CAPABILITY.to_owned(), Value::Handle(0)),
-        ])]);
+        ]));
         let handles = vec![RawHandle {
             kind: KIND_FD_CAPABILITY,
             body: rights(0).encode(),
@@ -506,6 +636,79 @@ mod tests {
         match SpawnReply::from_wire(&value, &mut store) {
             Err(WireError::UnknownVariant(token)) => assert_eq!(token, "maybe"),
             other => panic!("expected UnknownVariant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_casper_channel_round_trips_through_the_handle_table() {
+        let channel = CasperChannel {
+            service: "system.dns".to_owned(),
+            channel: a_descriptor(),
+        };
+        let mut sink = HandleSink::new();
+        let value = channel.to_wire(&mut sink);
+        let (handles, fds) = sink.into_parts();
+        assert_eq!(handles.len(), 1, "the channel rides one handle");
+        assert_eq!(
+            handles[0].kind, KIND_CASPER_CHANNEL,
+            "kind tags it a Casper channel, not an fd capability",
+        );
+        assert!(handles[0].body.is_empty(), "no AbyssBSD rights metadata");
+
+        let mut store = HandleStore::new(handles, fds).expect("the handle store builds");
+        let decoded = CasperChannel::from_wire(&value, &mut store).expect("the channel decodes");
+        assert_eq!(decoded.service, "system.dns");
+    }
+
+    #[test]
+    fn a_bundle_carries_grants_and_casper_channels_side_by_side() {
+        let bundle = Bundle {
+            grants: vec![Grant {
+                interface: "input".to_owned(),
+                role: Role::Client,
+                rights: rights(0x55),
+                endpoint: a_descriptor(),
+            }],
+            casper_channels: vec![CasperChannel {
+                service: "system.dns".to_owned(),
+                channel: a_descriptor(),
+            }],
+        };
+        let mut sink = HandleSink::new();
+        let value = bundle.to_wire(&mut sink);
+        let (handles, fds) = sink.into_parts();
+        // One handle per grant + one per Casper channel; their kinds
+        // distinguish them on the wire (§5.7).
+        assert_eq!(handles.len(), 2);
+        assert_eq!(fds.len(), 2);
+        let kinds: Vec<u8> = handles.iter().map(|h| h.kind).collect();
+        assert!(kinds.contains(&KIND_FD_CAPABILITY));
+        assert!(kinds.contains(&KIND_CASPER_CHANNEL));
+
+        let mut store = HandleStore::new(handles, fds).expect("the handle store builds");
+        let decoded = Bundle::from_wire(&value, &mut store).expect("the bundle decodes");
+        assert_eq!(decoded.grants.len(), 1);
+        assert_eq!(decoded.grants[0].interface, "input");
+        assert_eq!(decoded.casper_channels.len(), 1);
+        assert_eq!(decoded.casper_channels[0].service, "system.dns");
+    }
+
+    #[test]
+    fn a_casper_handle_of_the_wrong_kind_is_rejected() {
+        // A Casper channel dict pointing at an fd-capability-kind handle —
+        // the decoder must catch the kind mismatch.
+        let value = Value::Dict(vec![
+            (KEY_SERVICE.to_owned(), Value::Str("system.dns".to_owned())),
+            (KEY_CHANNEL.to_owned(), Value::Handle(0)),
+        ]);
+        let handles = vec![RawHandle {
+            kind: KIND_FD_CAPABILITY,
+            body: Vec::new(),
+        }];
+        let mut store = HandleStore::new(handles, vec![a_descriptor()]).expect("store");
+        match CasperChannel::from_wire(&value, &mut store) {
+            Err(WireError::MalformedHandle(_)) => {}
+            other => panic!("expected MalformedHandle, got {other:?}"),
         }
     }
 }

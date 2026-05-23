@@ -72,7 +72,10 @@ fn a_spawned_component_bootstraps_and_confines_itself() {
             interface_id: 9,
             method_id: 2,
         },
-        &Bundle { grants: Vec::new() },
+        &Bundle {
+            grants: Vec::new(),
+            casper_channels: Vec::new(),
+        },
     );
     assert!(fds.is_empty(), "an empty bundle carries no descriptors");
 

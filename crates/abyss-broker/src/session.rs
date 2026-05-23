@@ -579,7 +579,13 @@ fn wire_bundles(
             let grants = grants
                 .remove(&manifest.name)
                 .expect("every component was seeded with a grant list");
-            (manifest.name.clone(), Bundle { grants })
+            (
+                manifest.name.clone(),
+                Bundle {
+                    grants,
+                    casper_channels: Vec::new(),
+                },
+            )
         })
         .collect())
 }
@@ -664,7 +670,13 @@ fn wire_connections<'c>(
         ));
     }
 
-    Ok((Bundle { grants: own_grants }, peer_grants))
+    Ok((
+        Bundle {
+            grants: own_grants,
+            casper_channels: Vec::new(),
+        },
+        peer_grants,
+    ))
 }
 
 /// Build one ring-endpoint [`Grant`], limiting the descriptor to its §3.3
