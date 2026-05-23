@@ -35,6 +35,8 @@ The two pre-code gates are both *closed*:
 
 *(≤10 most recent, newest first)*
 
+- `5033fd9` Phase 5: abyss-wm-layout — the layout engine and tiling tree (Gate E §4/§5)
+- `7206ee3` Bump STATUS: Gate F closed — display M1 subset + DRM/KMS bring-up
 - `051a7e4` Phase 5: Gate F — DRM/KMS bring-up doc, the CPU scanout path
 - `50cead0` Phase 5: Gate F — display.md annotated with the M1 subset
 - `116f280` Bump STATUS: Phase 5 begins — Gate E closed, Gate F next
@@ -43,8 +45,6 @@ The two pre-code gates are both *closed*:
 - `bcc2021` Bump STATUS: Phase 4 follow-ups wrapped (§5.7 success-path + restart/delegated-spawn casper)
 - `1a772df` Phase 4: §5.7 success-path — broker wires a working Casper DNS channel
 - `b4e95a2` Phase 4: abyss-broker — restart-casper and delegated-spawn casper (§5.7)
-- `1ff5761` Bump STATUS: Phase 4 closed — Casper wired at the broker (§5.7)
-- `745f3ff` Phase 4: abyss-broker — open Casper channels at wire time (§5.7)
 
 ## Site
 
@@ -56,14 +56,24 @@ the design moves — last refreshed alongside the window-management,
 screen-capture, and capability-coverage design work (`9fb7995`). It is a
 presentation layer, deliberately outside the Cargo workspace.
 
+## In flight
+
+**`crates/abyss-wm-layout` — first increment landed.** The layout
+engine and tiling tree from Gate E §4/§5 are built: `LayoutEngine`
+trait, default `TilingLayoutEngine` (SplitH/SplitV/Tabbed/Stacked, all
+four), tree types, and `insert` / `remove` — the minimum the WM core
+needs to drive layout from `on_surface_added` / `on_surface_destroyed`.
+18 unit tests, green on macOS and via `vm.sh build`. Two small
+Gate-E doc cleanups the implementation surfaced (TabEntry's title
+dropped; "every visible leaf appears in Placement").
+
+**Follow-up increment**: the user-action operations from §5 —
+`focus_move`, `split`, `set_layout`, `move_leaf`, `resize`. Pure tree
+mutation, host-buildable, no new types.
+
 ## Next
 
-**Phase 5 code begins**, host-buildable first:
-**`crates/abyss-wm-layout`** (and possibly a sibling `abyss-wm-core`),
-satisfying the Gate-E §4 `LayoutEngine` trait — pure geometry / pure
-logic, unit-tested on macOS before the FreeBSD compositor crate exists.
-
-After that, the VM-only work in order:
+After the user-action operations, the VM-only work in order:
 
 - **`sys/drm-sys`** — the FreeBSD-gated DRM/KMS FFI per Gate F's
   bring-up doc; `bindgen` + the C-shim pattern for the `_IOC*` macros.
