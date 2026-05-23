@@ -35,6 +35,8 @@ The two pre-code gates are both *closed*:
 
 *(≤10 most recent, newest first)*
 
+- `a397ca4` Phase 5: sys/drm-sys — the DRM/KMS FFI's first cut
+- `61a10f0` Bump STATUS: abyss-wm-layout user-action ops landed
 - `a3d917c` Phase 5: abyss-wm-layout — user-action operations (Gate E §5)
 - `3b2591d` Bump STATUS: abyss-wm-layout first increment landed
 - `5033fd9` Phase 5: abyss-wm-layout — the layout engine and tiling tree (Gate E §4/§5)
@@ -43,8 +45,6 @@ The two pre-code gates are both *closed*:
 - `50cead0` Phase 5: Gate F — display.md annotated with the M1 subset
 - `116f280` Bump STATUS: Phase 5 begins — Gate E closed, Gate F next
 - `2f4e041` Phase 5: Gate E closed — window-management pinned for M1
-- `07fc336` Refresh ONBOARDING.md for Phase 4 closed
-- `bcc2021` Bump STATUS: Phase 4 follow-ups wrapped (§5.7 success-path + restart/delegated-spawn casper)
 
 ## Site
 
@@ -58,23 +58,31 @@ presentation layer, deliberately outside the Cargo workspace.
 
 ## In flight
 
-**`crates/abyss-wm-layout` — built; Gate E §4/§5 is satisfied
-host-side.** Layout engine, tiling tree, and the full closed operation
-set: `insert` / `remove` (surface lifecycle), `focused_window`,
-`focus_move` (i3-style outward-escape), `split` (transient
-single-child container, the i3 model in tree form), `set_layout`,
-`move_leaf` (M1 subset: adjacent-sibling swap), `resize` (per-edge
-ratio adjust). 35 unit tests, green via `cargo xtask ci` on macOS and
-`vm.sh build`. Two small Gate-E doc cleanups the implementation
-surfaced (`TabEntry`'s title field dropped; "every visible leaf
-appears in Placement").
+**Phase 5 is on the VM track now.** Host-side: `crates/abyss-wm-layout`
+is complete — Gate E §4/§5 satisfied (layout engine, tiling tree,
+insert/remove, focus_move/split/set_layout/move_leaf/resize). 35 unit
+tests, green on both.
+
+**VM side: `sys/drm-sys` — first cut landed.** The eleven M1 DRM/KMS
+ioctls exposed as `extern const unsigned long abyss_drm_ioctl_*` plus
+the `abyss_drm_ioctl(2)` wrapper, via a C shim that evaluates the
+`DRM_IOCTL_MODE_*` macros (libdrm headers). VM provisioning added
+`libdrm` to the package set. Two smoke tests in the VM (constants
+link, are nonzero, mutually distinct) prove the FFI bootstrap works.
+Struct types for the ioctl payloads are a follow-up — the compositor
+will add them as it starts calling each ioctl.
 
 ## Next
 
-The next Phase 5 increment moves to the VM track. In order:
+In order:
 
-- **`sys/drm-sys`** — the FreeBSD-gated DRM/KMS FFI per Gate F's
-  bring-up doc; `bindgen` + the C-shim pattern for the `_IOC*` macros.
+- **`sys/drm-sys` follow-ups** — the per-ioctl payload struct types
+  (`drm_mode_card_res`, `drm_mode_get_connector`, `drm_mode_create_dumb`,
+  …), added as the compositor reaches for each ioctl.
+- **VM provisioning: virtio-gpu** — `tools/vm/vm.sh` boot gains
+  `-device virtio-gpu` and the kernel modules to load it, so `card0`
+  appears in `/dev/dri/`. The one environment delta Phase 5 carries
+  before Phase 6's bare-metal box.
 - **`abyss-compositor` skeleton** — boots under the broker (manifest,
   bundle, `cap_enter`, looper); opens `card0` from its bundle, performs
   initial modeset, allocates dumb buffers, presents a blank frame.
