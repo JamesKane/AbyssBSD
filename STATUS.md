@@ -6,10 +6,13 @@ plan is the roadmap.
 
 ## Epic
 
-**Phase 4 — the broker, host slice.** Phase 4 is the first FreeBSD work,
-the boundary the roadmap was ordered around. Its FreeBSD-independent
-parts are built and tested on the macOS dev bed; the FreeBSD environment
-for the rest now exists (`tools/vm`, see In flight).
+**Phase 4 — the broker and the FreeBSD IPC transport — is closed.** The
+first FreeBSD-bearing phase, and the boundary the roadmap was ordered
+around. Gate D (`docs/design/broker-and-transport.md`) is built and
+proven in the VM: the broker reads its manifests, builds the authority
+graph, launches each component into its jail in Capsicum capability
+mode, supervises them, re-wires on restart, honours delegated spawn,
+and composes with Casper.
 
 - `crates/abyss-broker` — the broker. Its host slice: the `manifest`
   parser — the component-manifest schema and its fixed-schema declarative
@@ -31,13 +34,14 @@ for the rest now exists (`tools/vm`, see In flight).
   to an empty library on macOS.
 
 The workspace is thirteen `crates/` + four `sys/` + `xtask`, `cargo
-xtask ci` green. Gate D (`docs/design/broker-and-transport.md`) specifies
-the FreeBSD remainder.
+xtask ci` green on macOS and FreeBSD.
 
 ## Recent commits
 
 *(≤10 most recent, newest first)*
 
+- `745f3ff` Phase 4: abyss-broker — open Casper channels at wire time (§5.7)
+- `770a2d4` Bump STATUS: Phase 4 — freebsd-libcasper-sys, the broker's Casper FFI (§5.7)
 - `cf0520c` Phase 4: sys/freebsd-libcasper-sys — the broker's Casper FFI (§5.7)
 - `4537581` Bump STATUS: Phase 4 — claim Casper channels from the bundle (§5.7)
 - `b79339f` Phase 4: abyss-bootstrap — claim Casper channels from the bundle (§5.7)
@@ -46,8 +50,6 @@ the FreeBSD remainder.
 - `29f7720` Bump STATUS: Phase 4 — Casper designed (§5.7)
 - `13e1be8` Phase 4: design — Casper, the mechanism (§5.7)
 - `639e84b` Bump STATUS: Phase 4 — Cap<I, R> typestate built and connected (§3.3)
-- `6a5d7ce` Phase 4: abyss-cap — the Cap<I, R> typestate, connected to the runtime mask (§3.3)
-- `80b64e6` Bump STATUS: Phase 4 — Cap<I, R> typestate designed (§3.3)
 
 ## Site
 
@@ -317,35 +319,46 @@ mask; the harness asserts `narrow` ANDs it (`Full` → `ReadOnly` →
 `ReadOnly::MASK`). `R` is interface-agnostic in this pass; the
 associated-type tightening is noted in §3.3 for later.
 
-And the last open item, **§5.7 Casper**, is now **designed**: a Casper
-channel travels the bundle in a new list alongside `grants` (no
-interface, no role, no `CapBody` mask — it is not a peer ring); the
-broker, unsandboxed, calls `cap_init` / `cap_service_open` per declared
-`kind = casper` capability and passes the channel's underlying fd
-(`cap_sock`) by `SCM_RIGHTS`; the component wraps the fd back into a
-`cap_channel_t` and uses libcasper's per-service client API directly.
-The new `sys/freebsd-libcasper-sys` crate carries the broker-side FFI.
-AbyssBSD stays *modeled on* Casper, composing with it. Three bricks down
-— **`abyss-bundle` now carries Casper channels** alongside peer grants
-(`Bundle.casper_channels: Vec<CasperChannel>`, distinct handle kind, the
-wire form round-trips both lists); the **startup shim claims them**
-(`Startup::casper_channels` / `take_casper_channel`, symmetric with the
-grant-claim API); and the broker's **libcasper FFI** is in —
-`sys/freebsd-libcasper-sys` binds `cap_init` / `cap_service_open` /
-`cap_close` / `cap_sock`, with `CapChannel` the safe wrapper that
-`AsFd`s the channel's underlying socket and `cap_close`s on drop.
-`cargo xtask ci` green on macOS and FreeBSD; tree clean.
+And **§5.7 Casper is built**: the design pinned it, then four bricks
+landed it. **`abyss-bundle` carries Casper channels** alongside peer
+grants (`Bundle.casper_channels: Vec<CasperChannel>`, distinct handle
+kind, the wire form round-trips both lists); the **startup shim claims
+them** (`Startup::casper_channels` / `take_casper_channel`, symmetric
+with the grant-claim API); the broker's **libcasper FFI** is in
+(`sys/freebsd-libcasper-sys`'s `CapChannel`, `cap_init` /
+`cap_service_open` / `cap_close` / `cap_sock`); and the broker's
+**wire-time open** is wired — `Session::launch`'s `wire_bundles` opens a
+`CapChannel` per declared `kind = casper` capability and populates each
+component's bundle, lazily initialising the broker's root channel to
+`casperd` on first use. A wired error-path test proves the wiring: a
+manifest naming a Casper service libcasper does not know fails the
+launch with `SessionError::Io`. The full success-path end-to-end (a
+component actually doing a DNS lookup over its channel) wants the
+broker linked against a service library such as `libcap_dns` — worth a
+focused follow-up. `cargo xtask ci` green on macOS and FreeBSD; tree
+clean.
 
 ## Next
 
-**The rest of Phase 4's FreeBSD remainder**, per
-`docs/design/broker-and-transport.md`:
+**Phase 4 is closed.** Gate D's broker-and-transport work — the manifest
+parser and authority graph; the interface catalogue; the FreeBSD IPC
+transport (`Channel` / `MessageChannel` / `FramedChannel`,
+request/reply `Connection`, the kqueue `Reactor` / `ReactorSource` /
+`AsyncChannel` / `AsyncMessageChannel`); the broker (manifest set,
+catalogue, spawnable set, `Session` wiring + supervision; the boot
+binary; restart policies; delegated spawn end to end; Casper) — is built
+and proven in the VM.
 
-- **building Casper (§5.7)** — the `Bundle` schema, the startup shim's
-  claim API, and the libcasper FFI are in; what remains is the broker
-  wiring — `Session`'s `wire_bundles` opening a `CapChannel` per declared
-  `kind = casper` capability and populating `casper_channels` at wire
-  time — and a wired end-to-end test. The last open item on Phase 4's
-  FreeBSD list.
+Focused follow-ups, none blocking the next phase:
 
-The `freebsd-src` submodule (`ROADMAP.md` §6) is populated for that work.
+- **Casper success-path e2e** — link the broker against `libcap_dns`
+  (or another service library), wire a probe component that does a real
+  DNS lookup over its channel. Pins the §5.7 round-trip in a wired test.
+- **Delegated-spawn casper and restart-casper** — a delegated child
+  with `kind = casper` caps; a restarted component's Casper channels
+  re-opened. Both reuse the `casper_root` the `Session` already keeps.
+- **`Cap<I, R>`'s associated-type tightening** — tie `R` to its `I` so
+  `input::Recv` cannot be used with `Cap<Display, _>` (§3.3).
+
+Phase 5 (the desktop layer — compositor, input, the toolkit's first
+wired components) is what's next on the roadmap. See `ROADMAP.md`.
