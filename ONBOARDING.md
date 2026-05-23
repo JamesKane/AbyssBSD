@@ -10,8 +10,7 @@ session — read `STATUS.md` next for the increment-level detail.
 An opinionated desktop OS layer, written in Rust, on a FreeBSD base. It is
 capability-based: every authority a component holds is an explicit,
 attenuable capability; components run jailed and Capsicum-confined. See
-`DESIGN.md` and `docs/ROADMAP.md`. The design proceeds in gates A–I; Gate
-D, the broker and transport, is the Phase 4 design.
+`DESIGN.md` and `docs/ROADMAP.md`. The design proceeds in gates A–I.
 
 ## The workspace
 
@@ -23,31 +22,49 @@ FFI crates; `xtask` the build/CI harness.
   and `Method` / `Request` (a message's routing identity and reply type).
   `#[derive(Wire/Method/Request)]`.
 - `abyss-looper` — the cooperative executor: `Looper`, `Handler`, the
-  typed ring (`channel` / `Sender` / `Receiver`), the `EventSource` seam,
-  and `Responder` / `Delivery` (the framework-mediated reply path).
-- `abyss-cap` — the capability layer: `Cap<I, R>`, a typed, rights-bearing
-  send capability over an in-process or an IPC backend; `Interface`,
-  `Rights`, `CapBody`.
+  typed ring (`channel` / `Sender` / `Receiver`), `Spawner`, the
+  `EventSource` seam, `Responder` / `Delivery` (the framework-mediated
+  reply path).
+- `abyss-cap` — the capability layer: `Cap<I, R>`, a typed,
+  rights-bearing send capability over an in-process or an IPC backend;
+  `Interface`, `Rights` (with `const MASK: u32`), `CapBody`,
+  `DurableCap` / `Repointer`, `Service` + `bind_service`.
 - `abyss-transport` — the FreeBSD IPC substrate: `Channel`
-  (`SOCK_SEQPACKET` + `SCM_RIGHTS`), `FramedChannel`, the `kqueue`
-  `Reactor`, `AsyncChannel`, `Connection` (the request/reply protocol).
-- `abyss-broker` — the broker: the manifest parser, the authority graph,
-  and (FreeBSD) component spawn plus the restart `Supervisor`.
-- `abyss-bootstrap` — the component startup shim: receive the bundle,
-  `cap_enter`. Ships the `component-probe` fixture component.
+  (`SOCK_SEQPACKET` + `SCM_RIGHTS`), `MessageChannel`, `FramedChannel`,
+  the `kqueue` `Reactor`/`ReactorSource`, `AsyncChannel` /
+  `AsyncMessageChannel`, `Connection` (the request/reply protocol).
+- `abyss-bundle` — the bootstrap-bundle schema: `Bundle`, `Grant`,
+  `CasperChannel`, `PeerRestarted`, `SpawnChild` / `SpawnReply`. The
+  contract the broker and every startup shim share. Host-testable.
+- `abyss-broker` — the broker: manifest parser + directory loader, the
+  authority graph, the interface catalogue (in-code and on-disk forms),
+  the spawnable manifest set, `Session` (wires + spawns + supervises +
+  re-wires on restart + honours `kind = spawn` delegated spawn + opens
+  `kind = casper` channels), `boot` (the disk-to-running-session path),
+  plus the `broker` binary itself — the desktop's root process.
+- `abyss-bootstrap` — the component startup shim: `enter` receives the
+  bundle and calls `cap_enter`; `Startup` claims grants and Casper
+  channels; `Control` watches the control connection for `PeerRestarted`
+  and drives the durable capability's `Repointer`. Ships the
+  `component-probe` fixture component.
 - `abyss-log` — the first-party logging crate.
-- `abyss-font` — font handling (an earlier phase).
-- `sys/freebsd-{capsicum,jail,procdesc}-sys` — the FFI crates, each gated
-  on `target_os = "freebsd"`, an empty library elsewhere; all verified.
+- `abyss-font` / `abyss-render` / `abyss-toolkit` / `abyss-test-support`
+  — earlier-phase crates (font handling, the renderer, the toolkit, and
+  the test helpers).
+- `sys/freebsd-{capsicum,jail,procdesc,libcasper,libcap-dns}-sys` — the
+  FFI crates, each gated on `target_os = "freebsd"`, empty libraries
+  elsewhere. Capsicum and procdesc carry C shims (Capsicum's rights API
+  is C macros; `pdfork`-then-`exec` must run in C); jail, libcasper, and
+  libcap-dns are direct `extern` blocks.
 
-## Current state — Phase 4
+## Current state — Phase 4 closed
 
-Phase 4 is well advanced. Built and green: the whole IPC / capability /
-broker stack — the transport; the broker's jailed `pdfork`+`exec` spawn
-with the bootstrap bundle and the `cap_enter` startup shim; the
-restart-on-death `Supervisor`; and the capability layer's `Cap`
-two-backend rework, with typed `send` and `call` dispatching over both
-the in-process and the IPC backend. `STATUS.md` has the
+Phase 4 (Gate D — the broker and the FreeBSD IPC transport) is **done**:
+the broker reads its manifests, builds the authority graph, launches
+each component into its jail in Capsicum capability mode, supervises
+them, re-wires on restart, honours delegated spawn, and composes with
+Casper. Every piece is proven in the VM with multi-process end-to-end
+tests across jailed, capability-mode components. See `STATUS.md` for the
 increment-by-increment detail and recent commits.
 
 Branch: `main`. Every increment is `cargo xtask ci`-green on macOS *and*
@@ -55,39 +72,40 @@ in the FreeBSD VM.
 
 ## What's next
 
-In order, per `broker-and-transport.md`:
+**Phase 5** (`docs/ROADMAP.md`): the desktop layer — `abyss-compositor`
+(CPU backend) and `abyss-svc-input`, the first wired system components
+on the broker, toward **M1**. From the AbyssBSD layer's point of view
+this is "the first apps the broker spawns into real wired interfaces."
+Per the roadmap it needs FreeBSD plus GPU/display surface — the next
+environment step the project hasn't taken yet.
 
-1. **`Cap: Wire`** (§3.4–§3.5) — `impl Wire for Cap`: `to_wire` dups the
-   ring fd and pushes the `CapBody`; `from_wire` yields an *unbound*
-   `Cap`; `Cap::bind` attaches it to a looper. Best done as one increment
-   — it does not sub-slice cleanly (`bind` is untestable until `from_wire`
-   produces an unbound cap). Note: §3.5 says `Cap::bind(reactor)`, but
-   `bind` also needs the looper, to spawn the connection's `serve` loop so
-   `call` replies route — settle that signature when implementing.
-   `Cap::try_send`'s IPC arm is a `todo!` — wire or retire it here.
-2. **The broker wiring an authority graph** (§5.2–§5.3) — spawn a manifest
-   set, mint and deliver the IPC rings that connect the components.
-3. **`PeerRestarted`** (§5.5) — when the supervisor restarts a component,
-   re-wire the components that held rings to it.
+Open Phase-4 follow-ups, all explicitly closed in `STATUS.md`'s Next
+section (read there for the position). One was kept deferred: the
+`Cap<I, R>` associated-type tightening (`R::Interface = I`), traded
+against the runtime check that already catches the same misuse.
 
 ## How to work
 
 - **Two environments.** The macOS dev bed builds and tests everything
   FreeBSD-independent. FreeBSD-gated code (`#[cfg(target_os = "freebsd")]`
-  — the transport, the spawn, Capsicum) compiles and runs only in the VM.
-- **The VM.** `tools/vm/vm.sh` drives a QEMU + HVF FreeBSD 15 aarch64 VM.
-  `vm.sh build` syncs the source and runs `cargo xtask ci` inside it;
-  `vm.sh boot` / `ssh` / `status` / `provision` are the rest. The VM's
-  `abyssroot` password is deliberately committed in
+  — the transport, the spawn, Capsicum, libcasper) compiles and runs
+  only in the VM.
+- **The VM.** `tools/vm/vm.sh` drives a QEMU + HVF FreeBSD 15 aarch64
+  VM. `vm.sh build` syncs the source and runs `cargo xtask ci` inside
+  it; `vm.sh boot` / `ssh` / `status` / `provision` are the rest. The
+  VM's `abyssroot` password is deliberately committed in
   `tools/vm/cloud-init/user-data` — the VM is local, NAT'd, reachable
   only via a localhost port-forward.
 - **The gate.** `cargo xtask ci` — fmt-check, clippy (`-D warnings`),
   build, test. An increment is done when it is green on macOS *and* via
   `vm.sh build`.
 - **The rhythm.** Small increments. Each: code, green on both, commit to
-  `main`, then a follow-up commit bumping `STATUS.md`.
-- **Toolchain.** Dev toolchain pinned 1.95.0 (`rust-toolchain.toml`); MSRV
-  `1.94.0`, what FreeBSD packages — the workspace must build with it.
+  `main`, then a follow-up commit bumping `STATUS.md`. STATUS keeps ≤10
+  recent commits with hashes.
+- **Toolchain.** Dev toolchain pinned 1.95.0 (`rust-toolchain.toml`);
+  MSRV `1.94.0`, what FreeBSD packages — the workspace must build with
+  it. On macOS, `cargo` isn't on `$PATH`; use the rustup toolchain bin
+  directly (`$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin`).
 
 ## Conventions
 
@@ -105,10 +123,19 @@ In order, per `broker-and-transport.md`:
 ## Gotchas
 
 - A macOS editor's clang flags FreeBSD-only headers (`<sys/jail.h>`,
-  `<sys/capsicum.h>`, `<sys/procdesc.h>`) and their symbols as errors.
-  Those are false positives — that code compiles only in the VM; trust
-  `vm.sh build`, not the IDE.
-- The Gate D design was extended through implementation: §2.8, §2.9,
-  §2.10, and §3.5 pin the `Cap` two-backend, the interface contract,
-  typed request/reply, and `Cap: Wire`. The late §3 material was sketched
-  and pinned as it was built — keep the design doc and the code in step.
+  `<sys/capsicum.h>`, `<sys/procdesc.h>`, `<libcasper.h>`) and their
+  symbols as errors. False positives — that code compiles only in the
+  VM; trust `vm.sh build`, not the IDE.
+- `cargo test` builds every bin as a test by default. The `broker` and
+  `component-probe` bins have no `#[test]` functions, and their test
+  builds lose libcasper as DT_NEEDED (an `--as-needed` quirk specific to
+  the test-build variant — the prod bins are fine). Both bins opt out
+  via `test = false` in their `[[bin]]`; integration tests still spawn
+  the prod bins through `CARGO_BIN_EXE_*`.
+- libcap_dns.so calls `service_register` from libcasper at load but
+  doesn't declare libcasper.so as DT_NEEDED — `freebsd-libcap-dns-sys`
+  holds `#[used]` statics that keep both `-lcap_dns` and `-lcasper` on
+  the link line.
+- Gate D's design was extended through implementation: §2.8, §2.9,
+  §2.10, §3.3, §3.5, §5.5, §5.6, §5.7 each pinned material as it was
+  built. Keep the design doc and the code in step.
