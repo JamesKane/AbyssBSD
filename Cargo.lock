@@ -14,6 +14,8 @@ dependencies = [
  "abyss-msg-derive",
  "abyss-transport",
  "freebsd-capsicum-sys",
+ "freebsd-libcap-dns-sys",
+ "freebsd-libcasper-sys",
 ]
 
 [[package]]
@@ -26,6 +28,8 @@ dependencies = [
  "abyss-transport",
  "freebsd-capsicum-sys",
  "freebsd-jail-sys",
+ "freebsd-libcap-dns-sys",
+ "freebsd-libcasper-sys",
  "freebsd-procdesc-sys",
 ]
 
@@ -115,6 +119,13 @@ version = "0.0.0"
 [[package]]
 name = "freebsd-jail-sys"
 version = "0.0.0"
+
+[[package]]
+name = "freebsd-libcap-dns-sys"
+version = "0.0.0"
+dependencies = [
+ "freebsd-libcasper-sys",
+]
 
 [[package]]
 name = "freebsd-libcasper-sys"

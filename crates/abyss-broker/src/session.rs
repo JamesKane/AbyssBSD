@@ -651,6 +651,11 @@ fn open_casper_channels_for(
         return Ok(Vec::new());
     }
     if casper_root.is_none() {
+        // Pin every Casper service library the broker supports into the
+        // broker's address space before `cap_init` forks `casperd` — each
+        // library's constructor registers its service (`system.dns`, …)
+        // with libcasper, and the fork inherits the registration table.
+        freebsd_libcap_dns_sys::ensure_loaded();
         *casper_root = Some(CapChannel::root()?);
     }
     let root = casper_root.as_ref().expect("just opened");

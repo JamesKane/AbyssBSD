@@ -17,8 +17,18 @@ abyss-log = { path = "../abyss-log" }
 abyss-transport = { path = "../abyss-transport" }
 freebsd-capsicum-sys = { path = "../../sys/freebsd-capsicum-sys" }
 freebsd-jail-sys = { path = "../../sys/freebsd-jail-sys" }
+freebsd-libcap-dns-sys = { path = "../../sys/freebsd-libcap-dns-sys" }
 freebsd-libcasper-sys = { path = "../../sys/freebsd-libcasper-sys" }
 freebsd-procdesc-sys = { path = "../../sys/freebsd-procdesc-sys" }
+
+# `cargo test` builds every binary as a test by default; the broker has
+# no `#[test]` functions in the bin, and on FreeBSD the test-build is
+# missing libcasper as DT_NEEDED (a `--as-needed` quirk with `#[link]`
+# for test builds — the prod bin is fine). Opt the broker bin out of
+# cargo-test execution.
+[[bin]]
+name = "broker"
+test = false
 
 [lints]
 workspace = true

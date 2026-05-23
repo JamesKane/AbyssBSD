@@ -390,6 +390,44 @@ fn launch_fails_when_a_declared_casper_service_is_unknown() {
 }
 
 #[test]
+fn the_broker_wires_a_working_casper_dns_channel() {
+    // §5.7 end to end on the success path: a component declares
+    // `kind = casper; service = system.dns`; the broker opens the channel
+    // from `casperd` (libcap_dns linked into the test binary registers
+    // the service before `cap_init`); the probe receives the channel,
+    // wraps it back into a `cap_channel_t`, and resolves `localhost`.
+    let name = format!("cdns-test-{}", std::process::id());
+    let graph = Graph::build(vec![manifest_with_policy(
+        &name,
+        "cdns-test-iface",
+        "[capability]\nkind = casper\nservice = system.dns\n",
+        "never",
+    )])
+    .expect("the graph builds");
+
+    let binary = probe();
+    let mut session = Session::launch(
+        graph,
+        InterfaceCatalogue::new(),
+        SpawnableSet::new(),
+        |_name| Program {
+            path: binary.clone(),
+            args: vec!["casper-dns".to_owned()],
+        },
+    )
+    .expect("launch the session — broker opens system.dns");
+
+    let exits = session.step().expect("supervise the probe's exit");
+    assert!(
+        exits
+            .iter()
+            .any(|exit| exit.name == name && exit.status == 0),
+        "the probe resolved `localhost` over the Casper DNS channel and \
+         exited 0; got {exits:?}",
+    );
+}
+
+#[test]
 fn delegated_spawn_refuses_a_child_with_an_unknown_casper_service() {
     // A `kind = spawn` requester asks for a child whose manifest declares
     // a Casper service libcasper does not know — the broker's delegated-

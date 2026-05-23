@@ -1,0 +1,23 @@
+[package]
+name = "freebsd-libcap-dns-sys"
+description = "FreeBSD libcap_dns FFI — the Casper DNS service's client API (broker-and-transport.md §5.7, §6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# libcap_dns.so is one of FreeBSD's Casper service libraries: it carries
+# the per-service client API (`cap_getaddrinfo`, …) and a global
+# constructor that registers `system.dns` with libcasper. The constructor
+# runs at process startup if the library is linked into the process —
+# which the broker needs so its `cap_init` forks a casperd with the DNS
+# service available. The crate is FreeBSD-only; on every other host it
+# compiles to an empty library so the workspace still builds on the
+# macOS dev bed.
+
+[target.'cfg(target_os = "freebsd")'.dependencies]
+freebsd-libcasper-sys = { path = "../freebsd-libcasper-sys" }
+
+[lints]
+workspace = true

@@ -18,10 +18,23 @@ abyss-cap = { path = "../abyss-cap" }
 abyss-looper = { path = "../abyss-looper" }
 abyss-transport = { path = "../abyss-transport" }
 freebsd-capsicum-sys = { path = "../../sys/freebsd-capsicum-sys" }
+freebsd-libcap-dns-sys = { path = "../../sys/freebsd-libcap-dns-sys" }
+freebsd-libcasper-sys = { path = "../../sys/freebsd-libcasper-sys" }
 
 # The end-to-end test spawns the probe through the broker's spawn module.
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 abyss-broker = { path = "../abyss-broker" }
+
+# `cargo test` builds every binary as a test by default, running it for
+# `#[test]`-attributed functions; the probe has none, and on FreeBSD the
+# test-build of the probe is missing libcasper as DT_NEEDED (a quirk in
+# how `--as-needed` resolves `#[link]` for test builds), so loading
+# libcap_dns at startup fails. The prod bin built normally is correct
+# and is what the integration tests actually spawn — opt the probe out
+# of cargo-test execution.
+[[bin]]
+name = "component-probe"
+test = false
 
 [lints]
 workspace = true

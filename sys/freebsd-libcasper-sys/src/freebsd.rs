@@ -9,7 +9,7 @@
 
 use std::ffi::{CString, c_char, c_int, c_void};
 use std::io;
-use std::os::fd::{AsFd, BorrowedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::ptr::NonNull;
 
 #[link(name = "casper")]
@@ -18,6 +18,7 @@ unsafe extern "C" {
     fn cap_service_open(chan: *const c_void, name: *const c_char) -> *mut c_void;
     fn cap_close(chan: *mut c_void);
     fn cap_sock(chan: *const c_void) -> c_int;
+    fn cap_wrap(sock: c_int, flags: c_int) -> *mut c_void;
 }
 
 /// A `cap_channel_t` — the broker's handle to libcasper.
@@ -73,6 +74,33 @@ impl CapChannel {
     pub fn as_raw_fd(&self) -> RawFd {
         // SAFETY: `self.handle` is a live cap_channel_t.
         unsafe { cap_sock(self.handle.as_ptr()) }
+    }
+
+    /// Wrap a received socket into a `cap_channel_t` — `cap_wrap(3)`,
+    /// the component side's counterpart to the broker's `cap_sock` +
+    /// `SCM_RIGHTS` (§5.7). The new `CapChannel` owns the fd; dropping it
+    /// (`cap_close`) closes it.
+    pub fn wrap(fd: OwnedFd, flags: c_int) -> io::Result<CapChannel> {
+        let raw = fd.into_raw_fd();
+        // SAFETY: `raw` is a fresh owned descriptor we just released; on
+        // success libcasper takes ownership, and `cap_close` (Drop) will
+        // close it. On failure libcasper does not take it — we must close
+        // it ourselves to avoid a leak.
+        let handle = unsafe { cap_wrap(raw, flags) };
+        match NonNull::new(handle) {
+            Some(handle) => Ok(CapChannel { handle }),
+            None => {
+                // SAFETY: ownership is back with us; close exactly once.
+                drop(unsafe { OwnedFd::from_raw_fd(raw) });
+                Err(io::Error::last_os_error())
+            }
+        }
+    }
+
+    /// The raw `cap_channel_t*` — for layered libraries (libcap_dns,
+    /// libcap_pwd, …) that take a channel as their first argument.
+    pub fn as_raw_handle(&self) -> *mut c_void {
+        self.handle.as_ptr()
     }
 }
 

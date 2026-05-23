@@ -27,6 +27,8 @@ mod component {
     use abyss_msg::{Envelope, Header, MessageKind, Value};
     use abyss_msg_derive::{Method, Request, Wire};
     use abyss_transport::{Channel, MessageChannel, ReactorSource};
+    use freebsd_libcap_dns_sys as cap_dns;
+    use freebsd_libcasper_sys::CapChannel;
 
     /// The probe's test interface — one request, `Ping`, answered with its
     /// value. Both ends of a wired pair run this one binary, so a single
@@ -142,6 +144,12 @@ mod component {
                 let manifest = args.get(3).cloned().unwrap_or_else(|| "any".to_owned());
                 run_spawn_requester(startup, &expectation, manifest)
             }
+            // A `casper-dns` argument selects the §5.7 success-path: the
+            // probe claims its `system.dns` channel from the bundle,
+            // wraps it back into a `cap_channel_t`, and does a lookup.
+            (None, None) if std::env::args().any(|arg| arg == "casper-dns") => {
+                run_casper_dns(startup)
+            }
             // No grants: nothing to do but report.
             (None, None) => report_and_exit(&startup.bootstrap, [confined, grant_count, 0, 0]),
         }
@@ -173,6 +181,18 @@ mod component {
             (SpawnReply::Spawned, "spawned") | (SpawnReply::Refused(_), "refused"),
         );
         std::process::exit(if matched { 0 } else { 1 });
+    }
+
+    /// The §5.7 Casper success-path probe: claim the `system.dns` channel
+    /// the bundle delivered, wrap it back into a `cap_channel_t`, and
+    /// resolve `localhost` through it. Exits 0 on success, 1 otherwise.
+    fn run_casper_dns(mut startup: Startup) -> ! {
+        let casper = startup
+            .take_casper_channel("system.dns")
+            .expect("the bundle delivered a system.dns channel");
+        let chan = CapChannel::wrap(casper.channel, 0).expect("cap_wrap succeeds");
+        let outcome = cap_dns::lookup(&chan, "localhost");
+        std::process::exit(if outcome.is_ok() { 0 } else { 1 });
     }
 
     /// Reduce a call's result to a probe report field: the reply value, or
