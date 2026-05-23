@@ -1,0 +1,11 @@
+[package]
+name = "abyss-wm-layout"
+description = "AbyssBSD window-manager tiling layout — pure geometry behind the §4 LayoutEngine seam"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true

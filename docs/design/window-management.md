@@ -169,12 +169,14 @@ struct LayoutResult {
 }
 struct Placement { window : WindowId, rect : Rect, decoration : DecorationMode }
 struct Header    { container : ContainerId, rect : Rect, kind : HeaderKind, tabs : Vec<TabEntry> }
-struct TabEntry  { window : WindowId, title : Range<usize> }   // title source — see §5
+struct TabEntry  { window : WindowId }   // title looked up by the compositor — see §5
 ```
 
 `work_area` is the output's rectangle minus reserved struts (§10). Every
-leaf in `tree` appears in exactly one `Placement`; every `Tabbed` or
-`Stacked` container appears in exactly one `Header`. The WM core takes the
+**visible** leaf in `tree` appears in exactly one `Placement` — the hidden
+children of a `Tabbed` / `Stacked` container appear only in that
+container's `Header.tabs`, with no geometry until they become focused.
+Every `Tabbed` or `Stacked` container appears in exactly one `Header`. The WM core takes the
 result, emits a `Configure` per `Placement.window` (`size = rect`,
 `focused = (window == focus)`) and a `Decorate` per placement and header
 (§2.1).
