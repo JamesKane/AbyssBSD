@@ -388,3 +388,59 @@ fn launch_fails_when_a_declared_casper_service_is_unknown() {
         Err(other) => panic!("expected SessionError::Io from libcasper, got {other:?}",),
     }
 }
+
+#[test]
+fn delegated_spawn_refuses_a_child_with_an_unknown_casper_service() {
+    // A `kind = spawn` requester asks for a child whose manifest declares
+    // a Casper service libcasper does not know — the broker's delegated-
+    // spawn handler must catch the failure at the casper-open step (the
+    // §5.7 wiring reused for delegated children) and refuse the spawn.
+    let pid = std::process::id();
+    let requester = format!("dcs-shell-{pid}");
+    let child = format!("dcs-app-{pid}");
+
+    let graph = Graph::build(vec![manifest_with_policy(
+        &requester,
+        "dcs-shell-iface",
+        "[capability]\nkind = spawn\n",
+        "never",
+    )])
+    .expect("the graph builds");
+
+    let spawnable = SpawnableSet::build(vec![manifest_with_policy(
+        &child,
+        "dcs-app-iface",
+        "[capability]\nkind = casper\nservice = system.never-existed\n",
+        "never",
+    )])
+    .expect("the spawnable set assembles");
+
+    let binary = probe();
+    let requester_name = requester.clone();
+    let child_arg = child.clone();
+    let mut session = Session::launch(graph, InterfaceCatalogue::new(), spawnable, move |name| {
+        Program {
+            path: binary.clone(),
+            args: if name == requester_name {
+                // The requester expects `refused` — the broker's handler
+                // should report the casper-open failure as a Refusal.
+                vec![
+                    "spawn-request".to_owned(),
+                    "refused".to_owned(),
+                    child_arg.clone(),
+                ]
+            } else {
+                Vec::new()
+            },
+        }
+    })
+    .expect("launch the session — only the requester is at boot");
+
+    let exits = session.step().expect("supervise the requester's exit");
+    assert!(
+        exits
+            .iter()
+            .any(|exit| exit.name == requester && exit.status == 0),
+        "the requester saw `Refused` and exited 0; got {exits:?}",
+    );
+}
