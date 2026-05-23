@@ -111,10 +111,11 @@ the front. A third buffer (triple-buffering) is not needed for M1 and is
 left for measurement.
 
 **`cap_ioctls_limit`**, the §3.3 second-layer kernel restriction: the
-audited M1 set is exactly the ten ioctls above. The broker applies the
-limit after opening the fd, before passing it in the bundle. A
-compositor that tries an ioctl outside the set takes an `ENOTCAPABLE` —
-the kernel-enforced floor under the M1 surface.
+audited M1 set is exactly the eleven ioctls above (mmap, in the table
+for context, is not an ioctl). The broker applies the limit after
+opening the fd, before passing it in the bundle. A compositor that
+tries an ioctl outside the set takes an `ENOTCAPABLE` — the
+kernel-enforced floor under the M1 surface.
 
 ---
 

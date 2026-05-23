@@ -26,7 +26,7 @@ The two pre-code gates are both *closed*:
   marked M2 and made optional on M1 wire. Gate-E co-design points settled:
   no configure-serial in M1 (next `Commit` is the ack); no decoration on
   the wire (internal to the compositor); `Configure`'s field set is
-  sufficient. New `drm-kms-bringup.md` pins the ten-ioctl M1 surface
+  sufficient. New `drm-kms-bringup.md` pins the eleven-ioctl M1 surface
   (legacy KMS), the DRM fd as a kqueue `EventSource`, the `card0` fd
   passed in the broker bundle with `cap_rights_limit` + `cap_ioctls_limit`,
   and `sys/drm-sys` as the FreeBSD-gated FFI crate.

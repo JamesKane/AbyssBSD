@@ -117,6 +117,10 @@ name = "abyss-wm-layout"
 version = "0.0.0"
 
 [[package]]
+name = "drm-sys"
+version = "0.0.0"
+
+[[package]]
 name = "freebsd-capsicum-sys"
 version = "0.0.0"
 

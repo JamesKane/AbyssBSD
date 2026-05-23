@@ -1,0 +1,17 @@
+[package]
+name = "drm-sys"
+description = "FreeBSD DRM/KMS FFI — the M1 ioctl surface for the CPU/dumb-buffer scanout path (drm-kms-bringup.md §6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# build.rs compiles c/drm_shim.c with the system toolchain (cc, ar). The
+# DRM_IOCTL_MODE_* macros expand at C-compile time against the kernel uAPI
+# headers (libdrm package — drm-kms-bringup.md §6); Rust links to the
+# resulting `extern const unsigned long abyss_drm_ioctl_*` symbols. The
+# shim does not link libdrm.so — it borrows libdrm only for the headers.
+
+[lints]
+workspace = true
