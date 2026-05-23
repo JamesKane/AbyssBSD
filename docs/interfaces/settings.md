@@ -136,3 +136,16 @@ only on `audio.*`):
 → Set    path = "input.keyboard.layout"  value = "dvorak"
 ← Error  code = out-of-scope  detail = "audio cannot write input.*"
 ```
+
+## Schemas of note
+
+Other documents pin the schema for their own subtree. This service holds
+that key tree at runtime; the cross-links here are how the doc graph
+closes. (The schema *files* the service loads are owned by each
+component's manifest, as `DESIGN.md` §11.5 describes.)
+
+- **`wm.bindings.*` / `wm.modes.*`** — the window-manager binding table.
+  Pinned in `docs/design/window-management.md` §8: each key is a
+  chord-string naming an `Action`, and modes scope a sub-table. M1's
+  compositor reads a compiled-in default; the settings-backed override
+  lands in Phase 7 / M3.

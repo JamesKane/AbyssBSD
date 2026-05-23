@@ -8,7 +8,7 @@
 > The WM core and the tiling engine come up with the compositor
 > (Phase 5 / M1–M2); the floating GNOME-2 desktop follows at M3 (Phase 7).
 >
-> Status: draft.
+> Status: closed for M1; M3 additions noted in §11.
 
 ---
 
@@ -63,6 +63,72 @@ The core does **not** compute tiled geometry. It hands a workspace's
 tiling tree and the output's work area to the **tiling layout engine**
 (§4, §5) and emits the geometries the engine returns.
 
+### 2.1 The core's state and entry points
+
+The core's state, named — the data that §3 describes laid out:
+
+```text
+Wm {
+  outputs   : Vec<Output>           // one per connected display
+  focus     : Map<SeatId, WindowId> // exactly one focused window per seat
+  bindings  : BindingTable          // §8
+}
+Output {
+  id, geometry : Rect, work_area : Rect, scale : f64
+  workspaces  : Vec<Workspace>      // per §10
+  active_ws   : usize
+}
+Workspace {
+  id
+  tiling     : TilingTree           // §5
+  floating   : Vec<FloatingWindow>  // §6
+}
+```
+
+`WindowId` names a top-level surface — the §3 windows the WM model
+manages. It corresponds to a display-protocol `SurfaceId` whose role is
+`toplevel` (`interfaces/display.md`); popups, dialogs, and the other
+non-toplevel roles do not appear in this model — see §3.
+
+The compositor drives the core through a small entry-point set. Each call
+returns the **events** the compositor should then emit on the display
+protocol (`Configure`, `CloseRequested`) and an internal **decoration
+hint** for each placed window:
+
+```text
+on_surface_added(WindowId, role, output_hint)         → Vec<WmEvent>
+on_surface_destroyed(WindowId)                        → Vec<WmEvent>
+on_role_set(WindowId, Role)                           → Vec<WmEvent>
+on_input_event(SeatId, InputEvent)                    → Vec<WmEvent>
+on_output_added(Output)  /  on_output_removed(id)     → Vec<WmEvent>
+on_commit(WindowId, buffer_size)                      → ()    // client caught up to a Configure
+
+enum WmEvent {
+  Configure  { window, size, focused, output, scale, state }
+  CloseRequested { window }
+  Decorate   { window, mode: DecorationMode }    // internal — drives the compositor's chrome pass
+}
+
+enum DecorationMode {
+  LeafBorder,                                    // a tiled or floating leaf
+  ContainerHeader(HeaderKind),                   // a tabbed/stacked container header
+  TitleBar,                                      // M3 — full GNOME-2 chrome on a floating window
+}
+enum HeaderKind { Tabs, Stack }
+```
+
+The `Configure` fields mirror `interfaces/display.md`'s `Configure`
+message verbatim — this is the wire mapping. `Decorate` is internal: it
+tells the compositor's chrome pass what to draw around the window and is
+not part of the display protocol. The decoration *mode* is set by the
+core (which container the window lives in, whether it is floating or
+tiled); the compositor draws it.
+
+The core is a **pure function** over `Wm` and its inputs: every entry
+point is a `&mut self` method that mutates state and returns events. No
+I/O, no FFI. That is what makes it host-testable alongside the §4
+engine — see §11.
+
 ---
 
 ## 3. The window model
@@ -88,11 +154,30 @@ and, in the floating policy, the pointer and clicks (§6).
 ## 4. The layout-policy seam
 
 §7.7's "bounded module behind a defined internal seam" is the **tiling
-layout engine**. The seam is an internal interface, roughly:
+layout engine**. The seam is one trait — the contract the §11
+`crates/abyss-wm-layout` crate satisfies and the WM core invokes per
+workspace per relayout:
 
-> *input* — a workspace's tiling tree, and the output work-area rectangle.
-> *output* — a geometry (rect) for every window leaf, plus its decoration
-> hint (border, container/tab header).
+```text
+trait LayoutEngine {
+    fn layout(&self, tree: &TilingTree, work_area: Rect) -> LayoutResult;
+}
+
+struct LayoutResult {
+    placements : Vec<Placement>,   // one per leaf in `tree`
+    headers    : Vec<Header>,      // one per Tabbed/Stacked container
+}
+struct Placement { window : WindowId, rect : Rect, decoration : DecorationMode }
+struct Header    { container : ContainerId, rect : Rect, kind : HeaderKind, tabs : Vec<TabEntry> }
+struct TabEntry  { window : WindowId, title : Range<usize> }   // title source — see §5
+```
+
+`work_area` is the output's rectangle minus reserved struts (§10). Every
+leaf in `tree` appears in exactly one `Placement`; every `Tabbed` or
+`Stacked` container appears in exactly one `Header`. The WM core takes the
+result, emits a `Configure` per `Placement.window` (`size = rect`,
+`focused = (window == focus)`) and a `Decorate` per placement and header
+(§2.1).
 
 The engine is **pure geometry**: a tree and a rectangle in, a set of rects
 out. No surfaces, no I/O, no compositor state. That has two payoffs:
@@ -111,37 +196,65 @@ one genuinely non-trivial layout — tiling.
 
 ## 5. The tiling layout engine
 
-Sway/i3-grade. A workspace's tiling layout is a **tree**:
+Sway/i3-grade. A workspace's tiling layout is a **tree** of leaves and
+containers:
 
-- **leaves** are windows;
-- **internal nodes** are containers, each in one of four layouts: **split-H**
-  and **split-V** (children laid side by side, left-to-right or
-  top-to-bottom) and **tabbed** and **stacked** (children overlaid, one
-  visible, the rest reachable by a header — tabs across, or a title stack).
+```text
+enum TilingNode {
+    Leaf(WindowId),
+    Container(Container),
+}
+struct Container {
+    id       : ContainerId,
+    layout   : ContainerLayout,
+    children : Vec<Child>,        // declaration order = visual order
+    focused  : usize,              // index into `children`
+}
+struct Child { node : TilingNode, ratio : f32 }   // ratio used iff layout ∈ {SplitH, SplitV}
+enum ContainerLayout { SplitH, SplitV, Tabbed, Stacked }
 
-**Geometry.** A split container divides its rectangle among its children
-by per-child **split ratios**; a tabbed/stacked container gives each child
-the full rectangle (one shown) and reserves a header strip. Recursion down
-the tree yields every leaf's rect. Windows fill the output without overlap.
+struct TilingTree { root : Option<TilingNode> }
+```
 
-**Operations** — the closed set the core invokes on the engine:
+- A **split** container (`SplitH` / `SplitV`) lays its children side by
+  side — left-to-right or top-to-bottom — dividing its rectangle by the
+  per-child `ratio`. Ratios within a container sum to 1.
+- A **tabbed** / **stacked** container overlays its children: one is
+  visible (the `focused` child) and the rest are reachable by a header
+  strip — tabs across the top for `Tabbed`, a title stack for `Stacked`.
+  Recursion down the tree yields every leaf's rect. Windows fill the
+  output without overlap.
 
-- **focus-move** *(left/right/up/down)* — directional navigation across the
-  tree.
-- **split-h / split-v** — wrap the focused window in a fresh container of
-  that orientation, so the next-opened window pairs with it (the i3 model).
-- **layout** *(tabbed / stacked / toggle-split)* — change the focused
-  container's layout.
-- **move** *(left/right/up/down)* — relocate the focused leaf within the
-  tree, or to an adjacent workspace.
-- **resize** — adjust the split ratios at the focused container's edge.
+**The operation set** — closed, the only mutations the core invokes:
 
-**New windows** insert as a sibling of the focused window, in its
-container — so opening a window is predictable and keyboard-reachable.
+```text
+fn focus_move (&mut TilingTree, Direction) -> Option<WindowId>
+fn split      (&mut TilingTree, Orientation)               // wraps the focused leaf
+fn set_layout (&mut TilingTree, ContainerLayout)           // on the focused leaf's container
+fn move_leaf  (&mut TilingTree, Direction)                 // within the tree
+fn resize     (&mut TilingTree, Edge, delta: f32)          // at the focused container's edge
+fn insert     (&mut TilingTree, WindowId)                  // see "New windows" below
+fn remove     (&mut TilingTree, WindowId)
+```
 
-**Decoration** is server-side (§7.4) and follows the layout: a thin border
-per leaf, and a header per container — tab headers for *tabbed*, a title
-stack for *stacked*.
+`Direction = Left | Right | Up | Down`; `Orientation = Horizontal |
+Vertical`; `Edge = Left | Right | Top | Bottom`. Cross-workspace `move`
+(to an adjacent workspace) is core-level, not engine-level — the engine
+mutates one tree.
+
+**New windows** are inserted by the core via `insert`, which places them
+as a **sibling of the focused leaf in its container** — so opening a
+window is predictable and keyboard-reachable (the i3 model). If the
+workspace is empty, the new window becomes the root leaf.
+
+**Decoration** is server-side (`DESIGN.md` §7.4) and follows the layout:
+each `Placement` carries `DecorationMode::LeafBorder` (a thin border);
+each `Tabbed` or `Stacked` container yields a `Header` of the matching
+`HeaderKind`. The header rect is reserved out of the container's rectangle
+before its children are laid out. Header title text comes from the WM
+core's per-window `SetTitle` state (`interfaces/display.md`) — the engine
+records which `WindowId`s the header refers to and the compositor draws
+the titles.
 
 ---
 
@@ -161,7 +274,20 @@ shipped default (§3.3).
   buttons (§7.4).
 
 Floating geometry is free; the core stores each floating window's rect
-directly. There is no layout engine to consult (§4).
+directly. There is no layout engine to consult (§4):
+
+```text
+struct FloatingWindow {
+    window : WindowId,
+    rect   : Rect,        // free geometry, stored directly on the core
+    z      : u32,         // per-workspace stacking order; focus raises
+}
+```
+
+A workspace's `floating: Vec<FloatingWindow>` is sorted by `z`. Focus
+raises by setting the focused window's `z` above every other in the
+workspace (§7's `float-toggle` moves a window between this list and the
+tiling tree).
 
 ---
 
@@ -204,15 +330,47 @@ that re-scopes the keys that follow, i3's "mode" (a `resize` mode where the
 arrow keys resize) — are both supported.
 
 **The action vocabulary** is a **closed, curated set** (restraint, §7.7) —
-the engine operations of §5, plus:
+the engine operations of §5, plus the core-level commands:
 
-- **workspace** — switch to, move the focused window to;
-- **float-toggle**, **fullscreen-toggle**, **close**;
-- **enter-mode / exit-mode**;
-- **spawn** — launch an application.
+```text
+enum Action {
+    // engine (§5)
+    FocusMove(Direction)  | Split(Orientation) | SetLayout(ContainerLayout)
+    MoveLeaf(Direction)   | Resize(Edge, f32)
+    // core
+    Workspace(WorkspaceSelect)   // switch to N, or move focused window to N
+    FloatToggle                   // §7
+    FullscreenToggle
+    Close                         // sends CloseRequested to the focused window
+    EnterMode(ModeName)           // §8 modes
+    ExitMode
+    Spawn(AppId)                  // delegated to the broker (§5.6, broker-and-transport)
+}
+```
 
 The set is small and fixed. "Power-user-first" is the *input model* — it is
 not licence for a thousand knobs (§7.7).
+
+**The binding-table schema.** The settings tree (`interfaces/settings.md`)
+holds:
+
+```text
+wm.bindings.<name>       : string    // a chord-string, e.g. "mod+shift+Return"
+                                      //   value names the Action it triggers
+wm.modes.<mode>.bindings.<name> : string   // bindings active inside a named mode
+```
+
+Chord-string grammar: a `+`-separated modifier list (`mod`, `shift`,
+`ctrl`, `alt`) ending in a keysym (`Return`, `q`, `Left`). A sequence is
+a chord-string with a space between chords (`mod+a space`). The settings
+service holds the table; the compositor reads `wm.*` at startup and
+subscribes to it (§11.5 retained-sink subscription).
+
+**M1 ships chords only.** Sequences and modes are part of the design but
+not part of M1's implementation — the M1 compositor matches chords
+against the **default binding table** compiled in (§11). Sequences,
+modes, and settings-backed override land with the settings service in
+Phase 7 / M3.
 
 ---
 
@@ -255,15 +413,23 @@ Per §7.6, the outputs form one coordinate space, but window management is
 
 | Milestone | Phase | Window management |
 |---|---|---|
-| **M1** | 5 | The WM core (§2) and the tiling layout engine (§5) come up with the CPU-backend compositor. Keyboard-driven tiling works the moment the compositor manages more than one window — over the minimal-UI stage (§9), with no toolkit and no bar. |
+| **M1** | 5 | The WM core (§2), the tiling layout engine (§4–§5), and the chord matcher (§8 on the default binding table) come up with the CPU-backend compositor. Per-output workspaces (§10), focus, input routing (§2.1) all work. Keyboard-driven tiling works the moment the compositor manages more than one window — over the minimal-UI stage (§9), with no toolkit and no bar. |
 | **M2** | 6 | The same WM, unchanged, on the GPU compositor. |
-| **M3** | 7 | The floating policy's pointer-driven move/resize furniture, and the GNOME-2 desktop — floating default plus the shell's full panels. The floating *model* exists from M1 (dialogs float); the pointer *experience* and panels are M3. |
+| **M3** | 7 | The floating policy's pointer-driven move/resize furniture (§6 — title-bar drag, min/max/close, cascaded placement); the GNOME-2 desktop (floating default plus the shell's full panels, §9); settings-backed bindings (§8) and the sequences/modes the chord matcher gains then; global shortcuts (`DESIGN.md` §13). The floating *model* exists from M1 (dialogs float, §3); the pointer *experience*, panels, and settings-backed bindings are M3. |
 
-**Host-testable now.** The tiling layout engine (§4, §5) is pure geometry
-— a tree and a rectangle in, rects out. Its logic is unit-tested on the
-host even though the compositor that hosts it is a Phase-5 (FreeBSD) crate.
-The engine can be written and proven as a standalone crate ahead of the
-compositor.
+**The engine is a host-buildable crate.** The tiling layout engine
+(§4–§5) is pure geometry — a tree and a rectangle in, rects out — and
+the §4 `LayoutEngine` trait is its public contract. It lives in
+**`crates/abyss-wm-layout`**, a Phase-0-style host crate: built and
+unit-tested on macOS, alongside the existing `abyss-msg`, `abyss-render`,
+and `abyss-toolkit`. It is the first piece of Phase 5 code, landing
+before the FreeBSD `abyss-compositor` crate exists.
+
+The WM **core** (§2.1) is also pure-logic — `&mut Wm` in, `Vec<WmEvent>`
+out, no I/O — and is unit-tested host-side in the same crate
+arrangement: either alongside the engine in `abyss-wm-layout`, or as a
+sibling host crate `abyss-wm-core`. The compositor links both and adds
+only the I/O (display protocol, input service, DRM/KMS) on top.
 
 ---
 
@@ -273,9 +439,10 @@ compositor.
   events, server-side decoration drawing — are `interfaces/display.md`,
   the Phase-5 display gate. The WM design and the display protocol
   co-design: the `configure` set here shapes that schema.
-- **The binding-table schema** — the concrete settings keys for chords,
-  sequences, and modes — is the settings interface (§11.5,
-  `interfaces/settings.md`).
+- **The binding-table schema** is pinned in §8 — the `wm.bindings.*` and
+  `wm.modes.*` subtree, and the chord-string grammar. Formalized into
+  `interfaces/settings.md` when the settings service lands (Phase 7);
+  M1's compositor reads from a compiled-in default table.
 - **The bar / panel rendering** is the shell (§11.10, `interfaces/shell.md`)
   — the Phase-7 shell gate.
 - **Global shortcuts** (§13) share this chord matcher; their non-WM action
