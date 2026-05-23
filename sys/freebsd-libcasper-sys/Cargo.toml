@@ -7,10 +7,13 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
-# No build.rs: libcasper exports plain C functions (no macros), so the
-# extern block links against libcasper directly via #[link(name="casper")].
-# The crate is FreeBSD-only; on every other host it compiles to an empty
-# library so the workspace still builds on the macOS dev bed.
+# No build.rs: libcasper exports plain C functions (no macros at the
+# call sites this crate uses), so the extern block links against
+# libcasper directly via #[link(name="casper")]. The header's inline
+# stubs apply only when WITH_CASPER is undefined; the linker resolves
+# the symbol against libcasper.so. The crate is FreeBSD-only; on every
+# other host it compiles to an empty library so the workspace still
+# builds on the macOS dev bed.
 
 [lints]
 workspace = true

@@ -17,6 +17,7 @@ abyss-log = { path = "../abyss-log" }
 abyss-transport = { path = "../abyss-transport" }
 freebsd-capsicum-sys = { path = "../../sys/freebsd-capsicum-sys" }
 freebsd-jail-sys = { path = "../../sys/freebsd-jail-sys" }
+freebsd-libcasper-sys = { path = "../../sys/freebsd-libcasper-sys" }
 freebsd-procdesc-sys = { path = "../../sys/freebsd-procdesc-sys" }
 
 [lints]

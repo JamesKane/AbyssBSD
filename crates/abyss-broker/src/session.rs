@@ -27,11 +27,14 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::path::PathBuf;
 
-use abyss_bundle::{Bundle, CapBody, Grant, PeerRestarted, Role, SpawnChild, SpawnReply};
+use abyss_bundle::{
+    Bundle, CapBody, CasperChannel, Grant, PeerRestarted, Role, SpawnChild, SpawnReply,
+};
 use abyss_msg::{Envelope, Header, MessageKind};
 use abyss_transport::{Channel, Event, Interest, MessageChannel, Reactor};
 use freebsd_capsicum_sys::{CapRights, Rights};
 use freebsd_jail_sys::remove;
+use freebsd_libcasper_sys::CapChannel;
 
 use crate::catalogue::{CatalogueError, InterfaceCatalogue};
 use crate::graph::{Connection, Graph};
@@ -114,6 +117,13 @@ pub struct Session {
     /// The manifests a delegated spawn may name — read at boot, spawned
     /// only on a `SpawnChild` request (§5.6).
     spawnable: SpawnableSet,
+    /// The broker's root channel to `casperd` — opened lazily on the
+    /// first component that declares a `kind = casper` capability (§5.7),
+    /// kept for the session's life so later opens reuse it. The field's
+    /// role is *ownership*: dropping the `Session` `cap_close`s the root
+    /// channel; later opens (delegated-spawn-casper) will read it.
+    #[allow(dead_code)]
+    casper_root: Option<CapChannel>,
     /// The reactor every component's process descriptor is watched on.
     reactor: Reactor,
     /// Every component, live, in graph order.
@@ -157,7 +167,8 @@ impl Session {
                 .entry(name.to_owned())
                 .or_insert_with(|| program(name));
         }
-        let bundles = wire_bundles(&graph, &catalogue)?;
+        let mut casper_root: Option<CapChannel> = None;
+        let bundles = wire_bundles(&graph, &catalogue, &mut casper_root)?;
         let reactor = Reactor::new()?;
 
         let mut components: Vec<Live> = Vec::with_capacity(bundles.len());
@@ -182,6 +193,7 @@ impl Session {
             catalogue,
             programs,
             spawnable,
+            casper_root,
             reactor,
             components,
         })
@@ -523,6 +535,7 @@ impl Drop for Session {
 fn wire_bundles(
     graph: &Graph,
     catalogue: &InterfaceCatalogue,
+    casper_root: &mut Option<CapChannel>,
 ) -> Result<Vec<(String, Bundle)>, SessionError> {
     // The §3.3 kernel mask every service ring carries, built once and
     // applied to each ring descriptor before it enters a bundle.
@@ -571,6 +584,11 @@ fn wire_bundles(
             )?);
     }
 
+    // Open the Casper channels each manifest declared (§5.7). Lazy:
+    // `cap_init` only runs if some manifest holds at least one `kind =
+    // casper` capability.
+    let mut casper_per_component = open_casper_channels(graph, casper_root)?;
+
     // Assemble the bundles in graph component order.
     Ok(graph
         .components()
@@ -579,15 +597,63 @@ fn wire_bundles(
             let grants = grants
                 .remove(&manifest.name)
                 .expect("every component was seeded with a grant list");
+            let casper_channels = casper_per_component
+                .remove(&manifest.name)
+                .unwrap_or_default();
             (
                 manifest.name.clone(),
                 Bundle {
                     grants,
-                    casper_channels: Vec::new(),
+                    casper_channels,
                 },
             )
         })
         .collect())
+}
+
+/// Open every component's Casper service channels (§5.7), per its
+/// manifest's `kind = casper` capabilities.
+///
+/// `casper_root` is the broker's root channel to `casperd`, lazily
+/// opened on first use — a session with no Casper-using component never
+/// forks the helper. Each per-service channel is opened from the root;
+/// its underlying fd is duplicated into a [`CasperChannel`] for the
+/// bundle, and the broker's own `CapChannel` is dropped (closing the
+/// broker's reference) — the kernel has the dup for `SCM_RIGHTS`.
+fn open_casper_channels(
+    graph: &Graph,
+    casper_root: &mut Option<CapChannel>,
+) -> Result<HashMap<String, Vec<CasperChannel>>, SessionError> {
+    let mut per_component: HashMap<String, Vec<CasperChannel>> = HashMap::new();
+    for manifest in graph.components() {
+        let services: Vec<&str> = manifest
+            .capabilities
+            .iter()
+            .filter(|cap| cap.kind == CapabilityKind::Casper)
+            .map(|cap| cap.target.as_str())
+            .collect();
+        if services.is_empty() {
+            continue;
+        }
+        if casper_root.is_none() {
+            *casper_root = Some(CapChannel::root()?);
+        }
+        let root = casper_root.as_ref().expect("just opened");
+
+        let mut channels = Vec::with_capacity(services.len());
+        for service in services {
+            let service_chan = root.open_service(service)?;
+            // The `CasperChannel` owns its own dup of the fd; the broker
+            // drops the `CapChannel` next, closing its reference.
+            let channel = service_chan.as_fd().try_clone_to_owned()?;
+            channels.push(CasperChannel {
+                service: service.to_owned(),
+                channel,
+            });
+        }
+        per_component.insert(manifest.name.clone(), channels);
+    }
+    Ok(per_component)
 }
 
 /// Re-wire one restarted component: a fresh ring per connection it touches.
@@ -825,7 +891,7 @@ mod tests {
         let mut catalogue = InterfaceCatalogue::new();
         catalogue.register("input", &[("recv", 0b01), ("send", 0b10)]);
 
-        let bundles = wire_bundles(&graph, &catalogue).expect("the session wires");
+        let bundles = wire_bundles(&graph, &catalogue, &mut None).expect("the session wires");
         assert_eq!(bundles.len(), 3);
 
         // The requester holds the client end of the ring …
@@ -859,7 +925,7 @@ mod tests {
     #[test]
     fn an_empty_manifest_set_wires_to_nothing() {
         let graph = Graph::build(vec![]).expect("graph");
-        let bundles = wire_bundles(&graph, &InterfaceCatalogue::new()).expect("wire");
+        let bundles = wire_bundles(&graph, &InterfaceCatalogue::new(), &mut None).expect("wire");
         assert!(bundles.is_empty());
     }
 
@@ -876,7 +942,7 @@ mod tests {
         let mut catalogue = InterfaceCatalogue::new();
         catalogue.register("input", &[("send", 0b10)]);
 
-        match wire_bundles(&graph, &catalogue) {
+        match wire_bundles(&graph, &catalogue, &mut None) {
             Err(SessionError::Rights(CatalogueError::UnknownRightsClass { class, .. })) => {
                 assert_eq!(class, "recv");
             }

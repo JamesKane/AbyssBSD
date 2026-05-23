@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use abyss_broker::catalogue::InterfaceCatalogue;
 use abyss_broker::graph::Graph;
 use abyss_broker::manifest::Manifest;
-use abyss_broker::session::{Exit, Program, Session};
+use abyss_broker::session::{Exit, Program, Session, SessionError};
 use abyss_broker::spawn::spawn_component;
 use abyss_broker::spawnable::SpawnableSet;
 use abyss_bundle::Bundle;
@@ -351,4 +351,40 @@ fn the_broker_spawns_a_delegated_child_on_request() {
             .any(|exit| exit.name == requester && exit.status == 0),
         "the requester received `Spawned` and exited 0; got {exits:?}",
     );
+}
+
+#[test]
+fn launch_fails_when_a_declared_casper_service_is_unknown() {
+    // A lone component declares `kind = casper; service = …` for a service
+    // libcasper does not know — the broker must catch this at wire-time,
+    // before any component is spawned, and surface it as a SessionError.
+    // The test does not need a working Casper service plugin; it tests
+    // the §5.7 wiring's error path.
+    let name = format!("cspr-test-{}", std::process::id());
+    let graph = Graph::build(vec![manifest(
+        &name,
+        "cspr-test-iface",
+        "[capability]\nkind = casper\nservice = system.never-existed\n",
+    )])
+    .expect("the graph builds");
+
+    let binary = probe();
+    let outcome = Session::launch(
+        graph,
+        InterfaceCatalogue::new(),
+        SpawnableSet::new(),
+        |_name| Program {
+            path: binary.clone(),
+            args: Vec::new(),
+        },
+    );
+    match outcome {
+        Ok(_) => panic!("launch must not succeed when a declared Casper service is unknown"),
+        Err(SessionError::Io(err)) => {
+            // libcasper reports an errno; the exact code depends on its
+            // policy — the broker surfaces it through SessionError::Io.
+            assert!(!err.to_string().is_empty());
+        }
+        Err(other) => panic!("expected SessionError::Io from libcasper, got {other:?}",),
+    }
 }

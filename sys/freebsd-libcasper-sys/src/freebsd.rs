@@ -15,7 +15,7 @@ use std::ptr::NonNull;
 #[link(name = "casper")]
 unsafe extern "C" {
     fn cap_init() -> *mut c_void;
-    fn cap_service_open(chan: *mut c_void, name: *const c_char) -> *mut c_void;
+    fn cap_service_open(chan: *const c_void, name: *const c_char) -> *mut c_void;
     fn cap_close(chan: *mut c_void);
     fn cap_sock(chan: *const c_void) -> c_int;
 }
