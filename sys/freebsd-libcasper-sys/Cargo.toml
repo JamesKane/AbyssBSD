@@ -1,0 +1,16 @@
+[package]
+name = "freebsd-libcasper-sys"
+description = "FreeBSD libcasper FFI — cap_init / cap_service_open / cap_close / cap_sock, the broker's Casper bindings (broker-and-transport.md §5.7, §6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# No build.rs: libcasper exports plain C functions (no macros), so the
+# extern block links against libcasper directly via #[link(name="casper")].
+# The crate is FreeBSD-only; on every other host it compiles to an empty
+# library so the workspace still builds on the macOS dev bed.
+
+[lints]
+workspace = true
