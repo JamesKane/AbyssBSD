@@ -70,8 +70,13 @@ pub trait Interface: 'static {
 /// capability received over IPC but not yet attached to a looper.
 enum Backend<I: Interface> {
     /// An in-process `abyss-looper` channel. It carries a [`Delivery`] —
-    /// a message and, for a request, the responder that answers it.
-    Local(Sender<Delivery<I::Message>>),
+    /// a message and, for a request, the responder that answers it. The
+    /// `mask` is the runtime object-rights mask (§3.3); a `Local` cap
+    /// crosses no process boundary, so there is no `CapBody` here.
+    Local {
+        sender: Sender<Delivery<I::Message>>,
+        mask: u32,
+    },
     /// A live IPC ring — a `SOCK_SEQPACKET` connection. `encode` is the
     /// message-to-envelope function captured when the ring was built,
     /// where `I::Message: Wire + Method` was in scope (§2.8, §2.9); it
@@ -136,7 +141,10 @@ pub fn cap_channel<I: Interface, R: Rights>(
     let (sender, receiver) = channel(capacity);
     (
         Cap {
-            backend: Backend::Local(sender),
+            backend: Backend::Local {
+                sender,
+                mask: R::MASK,
+            },
             _marker: PhantomData,
         },
         receiver,
@@ -210,7 +218,7 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// looper thread — if the ring is full (§3.1).
     pub async fn send(&self, msg: I::Message) -> Result<(), RingClosed> {
         match &self.backend {
-            Backend::Local(sender) => {
+            Backend::Local { sender, .. } => {
                 sender
                     .send(Delivery {
                         message: msg,
@@ -239,7 +247,7 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     /// Send without waiting; on a full ring the message is returned.
     pub fn try_send(&self, msg: I::Message) -> Result<(), TrySendError<I::Message>> {
         match &self.backend {
-            Backend::Local(sender) => {
+            Backend::Local { sender, .. } => {
                 // The message is wrapped in a `Delivery` to send; unwrap it
                 // back out of the error so the caller is handed its message.
                 match sender.try_send(Delivery {
@@ -287,17 +295,43 @@ impl<I: Interface, R: Rights> Cap<I, R> {
     ///
     /// struct Broad;
     /// struct Narrow;
-    /// impl Rights for Broad {}
-    /// impl Rights for Narrow {}
+    /// impl Rights for Broad { const MASK: u32 = 0xFF; }
+    /// impl Rights for Narrow { const MASK: u32 = 0x0F; }
     /// impl SubsetOf<Broad> for Narrow {}
     ///
     /// let (cap, _rx) = cap_channel::<Iface, Narrow>(1);
     /// // Broad is not a subset of Narrow — this must not compile.
     /// let _wider: Cap<Iface, Broad> = cap.narrow::<Broad>();
     /// ```
+    /// The runtime object-rights mask this capability carries (§3.3) — the
+    /// `R::MASK` it was constructed with, ANDed by every `narrow` it has
+    /// passed through.
+    pub fn mask(&self) -> u32 {
+        match &self.backend {
+            Backend::Local { mask, .. } => *mask,
+            #[cfg(target_os = "freebsd")]
+            Backend::Ipc { body, .. } => body.object_rights,
+            #[cfg(target_os = "freebsd")]
+            Backend::IpcUnbound { body, .. } => body.object_rights,
+        }
+    }
+
     pub fn narrow<R2: SubsetOf<R>>(self) -> Cap<I, R2> {
+        // The type-level narrowing is mirrored at runtime: AND the carried
+        // mask with `R2::MASK` (§3.3) — recursive attenuation, never
+        // amplification (§10.1). `SubsetOf<R>` asserts `R2::MASK` is no
+        // wider than `R::MASK`, so the AND is the new mask exactly.
+        let mut backend = self.backend;
+        let r2_mask = R2::MASK;
+        match &mut backend {
+            Backend::Local { mask, .. } => *mask &= r2_mask,
+            #[cfg(target_os = "freebsd")]
+            Backend::Ipc { body, .. } => body.object_rights &= r2_mask,
+            #[cfg(target_os = "freebsd")]
+            Backend::IpcUnbound { body, .. } => body.object_rights &= r2_mask,
+        }
         Cap {
-            backend: self.backend,
+            backend,
             _marker: PhantomData,
         }
     }
@@ -320,7 +354,7 @@ impl<I: Interface, R: Rights> Cap<I, R> {
         Q: Request + Into<I::Message>,
     {
         match &self.backend {
-            Backend::Local(sender) => {
+            Backend::Local { sender, .. } => {
                 let (reply, mut reply_rx) = responder::<Q::Reply>();
                 sender
                     .send(Delivery {
@@ -434,7 +468,7 @@ impl<I: Interface, R: Rights> Wire for Cap<I, R> {
         match &self.backend {
             // An in-process ring has no fd to cross a boundary (§2.8); an
             // unbound cap is not the framework's to pass on (§3.5).
-            Backend::Local(_) => {
+            Backend::Local { .. } => {
                 panic!("an in-process Cap cannot cross a process boundary (§2.8, §3.5)")
             }
             Backend::IpcUnbound { .. } => unbound_use_panic(),
@@ -508,13 +542,26 @@ where
     /// # Panics
     ///
     /// Panics on a `Cap` that is not unbound — a `Local` or already-`Ipc`
-    /// capability has nothing to bind.
+    /// capability has nothing to bind. Panics, too, if the arrived
+    /// `object_rights` mask is wider than `R::MASK` — the §3.3 typestate
+    /// check, refusing at the seam a `Cap` that claims more authority
+    /// than its type asserts.
     pub fn bind(self, reactor: Arc<ReactorSource>, spawner: &Spawner) -> Cap<I, R> {
         let (fd, body) = match self.backend {
             Backend::IpcUnbound { fd, body } => (fd, body),
-            Backend::Local(_) => panic!("a Local Cap is in-process — nothing to bind (§3.5)"),
+            Backend::Local { .. } => panic!("a Local Cap is in-process — nothing to bind (§3.5)"),
             Backend::Ipc { .. } => panic!("this Cap is already bound (§3.5)"),
         };
+        // §3.3: the arrived mask must be covered by `R::MASK`. A wider
+        // mask would mean the broker minted, or a sender narrowed to, more
+        // authority than this receiving type acknowledges — a contract
+        // violation; refuse it rather than carry on.
+        assert!(
+            body.object_rights & !R::MASK == 0,
+            "a Cap arrived with object rights {:#x} wider than R::MASK {:#x} (§3.3)",
+            body.object_rights,
+            R::MASK,
+        );
         let framed = FramedChannel::from_fd(fd);
         let channel = AsyncChannel::new(framed, reactor)
             .expect("drive the received ring on the looper's reactor");

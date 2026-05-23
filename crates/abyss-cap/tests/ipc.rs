@@ -57,7 +57,9 @@ impl Interface for Echo {
 
 #[allow(dead_code)] // a marker type — only ever a type parameter
 struct Full;
-impl Rights for Full {}
+impl Rights for Full {
+    const MASK: u32 = u32::MAX;
+}
 
 /// A service over `Echo` — answers each `Ping` with its value.
 struct EchoService;

@@ -48,8 +48,12 @@ impl Interface for Work {
 struct Full;
 #[allow(dead_code)]
 struct ReadOnly;
-impl Rights for Full {}
-impl Rights for ReadOnly {}
+impl Rights for Full {
+    const MASK: u32 = u32::MAX;
+}
+impl Rights for ReadOnly {
+    const MASK: u32 = 1;
+}
 impl SubsetOf<Full> for ReadOnly {}
 
 // --- handlers --------------------------------------------------------------
@@ -352,4 +356,15 @@ fn a_durable_cap_repoints_to_a_fresh_ring() {
     drop(cap);
     drop(repointer);
     thread_b.join().unwrap();
+}
+
+#[test]
+fn narrow_ands_the_runtime_mask() {
+    // Type-level narrowing carries through to the runtime mask (§3.3):
+    // `Full::MASK & ReadOnly::MASK` is `ReadOnly::MASK` — the subset.
+    let (cap, _rx) = cap_channel::<Echo, Full>(8);
+    assert_eq!(cap.mask(), u32::MAX, "Full::MASK is u32::MAX");
+
+    let narrowed: Cap<Echo, ReadOnly> = cap.narrow::<ReadOnly>();
+    assert_eq!(narrowed.mask(), 1, "Full::MASK & ReadOnly::MASK == 1");
 }

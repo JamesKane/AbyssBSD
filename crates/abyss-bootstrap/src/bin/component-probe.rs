@@ -53,7 +53,9 @@ mod component {
 
     #[allow(dead_code)] // a marker type — only ever a type parameter
     struct AnyRights;
-    impl Rights for AnyRights {}
+    impl Rights for AnyRights {
+        const MASK: u32 = u32::MAX;
+    }
 
     /// The value a client `Ping`s with; the server echoes it back.
     const PING_VALUE: i64 = 41;
