@@ -12,7 +12,7 @@ use std::io;
 use std::os::fd::{FromRawFd, OwnedFd, RawFd};
 use std::sync::Arc;
 
-use abyss_bundle::{Bundle, Grant, PeerRestarted, Role};
+use abyss_bundle::{Bundle, CasperChannel, Grant, PeerRestarted, Role};
 use abyss_cap::{Cap, DurableCap, Interface, Rights, durable, unbound_ipc_cap};
 use abyss_looper::{Receiver, Spawner, channel};
 use abyss_msg::{Method, Wire};
@@ -75,6 +75,27 @@ impl Startup {
             .iter()
             .position(|grant| grant.role == Role::Server && grant.interface == interface)?;
         Some(self.bundle.grants.remove(index))
+    }
+
+    /// The Casper service channels the broker opened for this component
+    /// (`broker-and-transport.md` §5.7), still unclaimed.
+    pub fn casper_channels(&self) -> &[CasperChannel] {
+        &self.bundle.casper_channels
+    }
+
+    /// Claim the [`CasperChannel`] for `service` (§5.7) — its fd is the
+    /// `cap_channel_t`'s underlying socket; libcasper's `cap_wrap` lifts
+    /// it back into a `cap_channel_t` for the per-service client API.
+    ///
+    /// The channel is removed from the bundle, so it is claimed exactly
+    /// once; `None` if no channel for `service` is left.
+    pub fn take_casper_channel(&mut self, service: &str) -> Option<CasperChannel> {
+        let index = self
+            .bundle
+            .casper_channels
+            .iter()
+            .position(|ch| ch.service == service)?;
+        Some(self.bundle.casper_channels.remove(index))
     }
 }
 
@@ -273,5 +294,32 @@ mod tests {
             *seen.lock().unwrap(),
             vec![("display".to_owned(), Role::Client)],
         );
+    }
+
+    #[test]
+    fn take_casper_channel_claims_by_service_exactly_once() {
+        let (bootstrap_a, _bootstrap_b) = MessageChannel::pair().expect("socketpair");
+        let (channel_a, _channel_b) = Channel::pair().expect("a channel for the casper grant");
+        let mut startup = Startup {
+            bundle: Bundle {
+                grants: Vec::new(),
+                casper_channels: vec![CasperChannel {
+                    service: "system.dns".to_owned(),
+                    channel: channel_a.into_fd(),
+                }],
+            },
+            bootstrap: bootstrap_a,
+        };
+        assert_eq!(startup.casper_channels().len(), 1);
+
+        let claimed = startup
+            .take_casper_channel("system.dns")
+            .expect("a system.dns channel was offered");
+        assert_eq!(claimed.service, "system.dns");
+
+        // The channel is removed from the bundle on claim — the next take
+        // for the same service finds nothing.
+        assert!(startup.take_casper_channel("system.dns").is_none());
+        assert!(startup.casper_channels().is_empty());
     }
 }
