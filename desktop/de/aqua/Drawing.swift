@@ -169,9 +169,22 @@ public enum Draw {
              size: Theme.fontSize)
     }
 
-    /// Draw text centred on a point.
+    /// Draw text centred on a point. Uses shaped FreeType/HarfBuzz glyphs when
+    /// a font is loaded; falls back to cairo toy-text otherwise.
     public static func text(_ cr: OpaquePointer, _ s: String, centerX: Double,
                             centerY: Double, color: Color, size: Double) {
+        if Text.available {
+            let px = Text.px(size)
+            let glyphs = Text.shape(s, px: px)
+            let m = Text.metrics(px: px)
+            setColor(cr, color)
+            // Centre the line box (top = baseline−ascent, bottom = baseline+descent)
+            // on centerY; left-align the run around centerX.
+            Text.drawShaped(cr, glyphs,
+                            x: centerX - Text.width(glyphs) / 2,
+                            baselineY: centerY + (m.ascent - m.descent) / 2, px: px)
+            return
+        }
         selectFont(cr, size: size)
         setColor(cr, color)
         s.withCString { c in
@@ -187,6 +200,12 @@ public enum Draw {
     /// Draw left-aligned text with the baseline at (x, baselineY).
     public static func textLeft(_ cr: OpaquePointer, _ s: String, x: Double,
                                 baselineY: Double, color: Color, size: Double) {
+        if Text.available {
+            let px = Text.px(size)
+            setColor(cr, color)
+            Text.drawShaped(cr, Text.shape(s, px: px), x: x, baselineY: baselineY, px: px)
+            return
+        }
         selectFont(cr, size: size)
         setColor(cr, color)
         s.withCString { c in
@@ -195,10 +214,23 @@ public enum Draw {
         }
     }
 
+    /// Width in points of `s` at `size` — shaped metrics when a font is loaded,
+    /// else cairo toy-text extents. Used for layout (centring, wrapping).
+    public static func textWidth(_ cr: OpaquePointer, _ s: String, size: Double) -> Double {
+        if Text.available {
+            return Text.width(Text.shape(s, px: Text.px(size)))
+        }
+        selectFont(cr, size: size)
+        return s.withCString { c in
+            var ext = cairo_text_extents_t()
+            cairo_text_extents(cr, c, &ext)
+            return ext.width
+        }
+    }
+
     private static func selectFont(_ cr: OpaquePointer, size: Double) {
-        // Prefer Lucida Grande; cairo's toy API falls back to a sans face when
-        // it is absent (the Linux dev box). FreeType/HarfBuzz integration with
-        // the real face lands later.
+        // Toy-text fallback path only (no FreeType face available). cairo picks
+        // a sans face when Lucida Grande is absent.
         cairo_select_font_face(cr, Theme.fontFamily, CAIRO_FONT_SLANT_NORMAL,
                                CAIRO_FONT_WEIGHT_NORMAL)
         cairo_set_font_size(cr, size)

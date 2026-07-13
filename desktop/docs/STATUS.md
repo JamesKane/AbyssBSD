@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-06-27.
+Last updated: 2026-07-12.
 
 ## What this is
 
@@ -29,13 +29,19 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     shm-fd helper + a shim exporting libwayland's static-inline requests so
     Swift can call them (`de/cwayland/`). Regenerate protocols with
     `de/cwayland/generate-protocols.sh`.
-  - `CCairo` — system cairo (pkgConfig), the Phase-1 software 2D backend.
+  - `CCairo` — system cairo (pkgConfig), the Phase-1 software 2D backend;
+    now also exposes cairo-ft for real text.
+  - `CText` — real text: FreeType face management + HarfBuzz shaping behind a
+    small C API (`de/ctext`), with `CFreeType`/`CHarfBuzz` systemLibraries
+    supplying the pkg-config flags. Aqua paints the shaped run via cairo-ft.
   - `Surface` — Wayland client runtime: `Display` (connection, registry,
     globals, dispatch loop) + `Window` (xdg-shell toplevel, 2× shm buffers,
     frame-callback pacing, pointer input) + `WindowDelegate`/`PixelBuffer`.
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
-    traffic lights, gradients, pinstripe, text), `Scene` (the window painter),
-    `AquaWindow` (a live window + working gel button).
+    traffic lights, gradients, pinstripe, text), `Text` (FreeType/HarfBuzz
+    shaping via `CText`, painted through cairo-ft — with a cairo toy-text
+    fallback when no font is found), `Scene` (the window painter), `AquaWindow`
+    (a live window + working gel button).
   - `AquaDemo` — the runnable demo.
 
 A **System Preferences** demo scene reproduces the Jaguar layout (toolbar with
@@ -73,9 +79,11 @@ AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/Aqu
 ## What's next
 
 - **Phase 1 polish:** more widgets (checkboxes/radios, text fields, scrollbars,
-  menus, sheets, brushed-metal window variant); real Lucida Grande via
-  FreeType/HarfBuzz (cairo toy-text is the placeholder); per-output scale from
+  menus, sheets, brushed-metal window variant); per-output scale from
   `wl_output` instead of `AQUA_SCALE`; install `sway` for live testing.
+  Real text now shapes via FreeType/HarfBuzz (Noto Sans as the stand-in — drop
+  Lucida Grande in via `$AQUA_FONT` for pixel-faithful text); remaining text
+  refinements are device-pixel hinting under HiDPI and glyph caching.
 - **Phase 2:** `CurrentIPC` (bind libnv) + `PoolConfig`; the shell apps (MenuBar,
   Dock, Finder, Desktop), generate the layer-shell / foreign-toplevel /
   xdg-activation protocols (XMLs already vendored in `protocols/`).

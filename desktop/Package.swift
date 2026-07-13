@@ -24,7 +24,8 @@ let package = Package(
             publicHeadersPath: "include",
             linkerSettings: [.linkedLibrary("wayland-client")]
         ),
-        // System cairo (software 2D backend for the Aqua toolkit).
+        // System cairo (software 2D backend for the Aqua toolkit; cairo-ft
+        // bridges the shaped glyphs from CText into cairo_show_glyphs).
         .systemLibrary(
             name: "CCairo",
             path: "de/ccairo",
@@ -33,6 +34,32 @@ let package = Package(
                 .apt(["libcairo2-dev"]),
                 .brew(["cairo"]),
             ]
+        ),
+        // FreeType + HarfBuzz, reached via pkg-config so the include dirs and
+        // link flags stay portable (Fedora/Debian now, FreeBSD later) rather
+        // than hard-coded. CText compiles against these; nothing imports them
+        // from Swift directly.
+        .systemLibrary(
+            name: "CFreeType",
+            path: "de/cfreetype",
+            pkgConfig: "freetype2",
+            providers: [.apt(["libfreetype-dev"]), .brew(["freetype"])]
+        ),
+        .systemLibrary(
+            name: "CHarfBuzz",
+            path: "de/charfbuzz",
+            pkgConfig: "harfbuzz",
+            providers: [.apt(["libharfbuzz-dev"]), .brew(["harfbuzz"])]
+        ),
+        // Real text: FreeType face management + HarfBuzz shaping behind a small
+        // C API (the FT header macros and hb buffer lifecycle are awkward from
+        // Swift; Aqua paints the shaped run via cairo-ft).
+        .target(
+            name: "CText",
+            dependencies: ["CFreeType", "CHarfBuzz"],
+            path: "de/ctext",
+            sources: ["ctext.c"],
+            publicHeadersPath: "include"
         ),
         // Wayland client runtime: connection, registry, surfaces, shm, input.
         .target(
@@ -43,7 +70,7 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["Surface", "CCairo"],
+            dependencies: ["Surface", "CCairo", "CText"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.

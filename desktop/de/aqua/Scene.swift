@@ -195,10 +195,7 @@ private func toolbarItem(_ cr: OpaquePointer, _ icon: PrefIcon, _ label: String,
 private func centeredLabel(_ cr: OpaquePointer, _ s: String, centerX: Double,
                            top: Double, maxWidth: Double) {
     let size = 11.0
-    cairo_select_font_face(cr, Theme.fontFamily, CAIRO_FONT_SLANT_NORMAL,
-                           CAIRO_FONT_WEIGHT_NORMAL)
-    cairo_set_font_size(cr, size)
-    if textWidth(cr, s) <= maxWidth {
+    if Draw.textWidth(cr, s, size: size) <= maxWidth {
         Draw.text(cr, s, centerX: centerX, centerY: top + size / 2,
                   color: Color(hex: 0x202020), size: size)
         return
@@ -218,14 +215,6 @@ private func centeredLabel(_ cr: OpaquePointer, _ s: String, centerX: Double,
     if !second.isEmpty {
         Draw.text(cr, second, centerX: centerX, centerY: top + size * 1.5 + 1,
                   color: Color(hex: 0x202020), size: size)
-    }
-}
-
-private func textWidth(_ cr: OpaquePointer, _ s: String) -> Double {
-    s.withCString { c in
-        var ext = cairo_text_extents_t()
-        cairo_text_extents(cr, c, &ext)
-        return ext.width
     }
 }
 

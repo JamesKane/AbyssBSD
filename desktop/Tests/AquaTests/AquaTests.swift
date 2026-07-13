@@ -23,4 +23,30 @@ final class AquaTests: XCTestCase {
         XCTAssertFalse(r.contains(5, 5))
         XCTAssertFalse(r.contains(200, 200))
     }
+
+    // Text shaping is only meaningful when a real font is loaded. On a box with
+    // no font these assertions are skipped (the toolkit uses toy-text there).
+    func testShapeEmptyIsEmpty() {
+        XCTAssertTrue(Text.shape("", px: 13).isEmpty)
+    }
+
+    func testShapeProducesGlyphs() throws {
+        try XCTSkipUnless(Text.available, "no font on this host")
+        let g = Text.shape("Displays", px: 13)
+        XCTAssertEqual(g.count, 8, "one glyph per Latin letter")
+        XCTAssertTrue(g.allSatisfy { $0.face == 0 }, "Latin covered by the primary face")
+        XCTAssertTrue(g.allSatisfy { $0.x_advance > 0 }, "every glyph advances the pen")
+        // A glyph INDEX, not the codepoint 'D' (0x44).
+        XCTAssertNotEqual(g.first?.index, UInt(UInt8(ascii: "D")))
+    }
+
+    func testWidthScalesAndMetricsPositive() throws {
+        try XCTSkipUnless(Text.available, "no font on this host")
+        let narrow = Text.width(Text.shape("ii", px: 13))
+        let wide = Text.width(Text.shape("WW", px: 13))
+        XCTAssertGreaterThan(wide, narrow, "W is wider than i")
+        let m = Text.metrics(px: 13)
+        XCTAssertGreaterThan(m.ascent, 0)
+        XCTAssertGreaterThan(m.descent, 0)
+    }
 }

@@ -73,7 +73,31 @@ the next icon's leading `arc` drew a stray line across the window. Fixes:
 arcs that follow a `fill_preserve`. Symptom to recognize: a thin diagonal line in
 the *stroke colour* of a shape, originating from a previously drawn label.
 
-### 2.6 The linter lies about C includes
+### 2.6 Real text: give cairo its OWN FT_Face (the shared-face trap)
+Text now shapes with HarfBuzz and paints via cairo-ft (`de/ctext` + `Aqua/Text`).
+FreeType/HarfBuzz/cairo-ft are **real** exported functions — no static-inline
+trap — so Swift could call them directly; we keep a thin C shim only because the
+FreeType header macros (`ft2build.h` + `FT_FREETYPE_H`) and the hb buffer
+lifecycle are awkward from Swift.
+
+The trap that cost time: an `FT_Face` has a single mutable pixel size. We
+resized the face for HarfBuzz shaping (`hb_ft_font_create_referenced` even
+installs its own `FT_Size`) while *also* handing that same face to cairo via
+`cairo_ft_font_face_create_for_ft_face`. cairo assumes it owns its face's size
+across all point sizes; when shaping mutated it underneath, cairo rendered
+glyphs at stale cached sizes — the symptom was labels with mixed glyph sizes and
+blown-out letter spacing, and it was *order-dependent* (the same string drew
+fine the first time, wrong the second). Fix: the shim opens **two** faces per
+font from the same file — one it resizes for shaping, one it never touches and
+hands to cairo. Rule: never mutate an FT_Face you've given to cairo.
+
+Include/link flags stay portable via `CFreeType`/`CHarfBuzz` systemLibraries
+(pkgConfig `freetype2`/`harfbuzz`) that `CText` depends on — no hard-coded
+`/usr/include` paths, so the FreeBSD port inherits the right flags. No Lucida
+Grande ships free; Noto Sans is the stand-in, overridable via `$AQUA_FONT`
+(colon-separated `$AQUA_FONT_FALLBACK` for coverage).
+
+### 2.7 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -107,15 +131,19 @@ no blue pinstripe); **rounded top / square bottom** corners; the toolbar toggle
 Known-not-faithful, on purpose:
 - **Icons are original procedural glyphs**, not Apple artwork (copyright). They
   read correctly but aren't pixel-identical.
-- **Text is cairo toy-text**, not Lucida Grande. Real fonts via FreeType/HarfBuzz
-  (the sibling proved the pairing in `reef/wl/font.rs`) is the next fidelity win.
+- **Text is real** now (FreeType/HarfBuzz shaping via cairo-ft) but the face is
+  **Noto Sans**, not Lucida Grande (which ships with no free equivalent) — the
+  metrics/letterforms differ. Set `$AQUA_FONT` to a Lucida Grande file for
+  pixel-faithful text. cairo toy-text remains only as the no-font fallback.
 
 ---
 
 ## 5. What I'd do next (in order)
 
-1. **Real text** — wire FreeType + HarfBuzz (or cairo-ft) for Lucida Grande
-   metrics; the toy-text is the most visible fidelity gap.
+1. **Real text** — ✅ done: FreeType + HarfBuzz shaping painted via cairo-ft
+   (`de/ctext`, `Aqua/Text`). Noto Sans stands in for Lucida Grande (`$AQUA_FONT`
+   to override). Follow-ups: device-pixel hinting under HiDPI, glyph caching,
+   and bold/italic faces (only regular is loaded today).
 2. **Install `sway`** and do a live on-screen run + interaction pass (validate
    the input path and frame pacing on real hardware paths, not just PNGs).
 3. **Per-output scale** from `wl_output` instead of `AQUA_SCALE`.
