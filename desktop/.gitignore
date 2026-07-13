@@ -1,0 +1,17 @@
+# SwiftPM
+/.build/
+.build/
+*.o
+*.swiftmodule
+.swiftpm/
+Package.resolved
+
+# Editors
+.idea/
+*.swp
+
+# VM artifacts live outside the repo (../abyss-vm), but ignore any local copies
+/abyss-vm/
+*.qcow2
+serial.log
+qemu.pid
