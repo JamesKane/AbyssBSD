@@ -97,21 +97,44 @@ Include/link flags stay portable via `CFreeType`/`CHarfBuzz` systemLibraries
 Grande ships free; Noto Sans is the stand-in, overridable via `$AQUA_FONT`
 (colon-separated `$AQUA_FONT_FALLBACK` for coverage).
 
-### 2.7 The linter lies about C includes
+### 2.7 The window must be owned across the event loop (live-only crash)
+`Display.window` and `Window.delegate` are both **weak** (deliberately — the
+window holds its delegate and Display references it back, so weak breaks the
+cycle). That means the *caller* is the sole owner of the window. `AquaDemo`
+originally did `guard let _ = AquaWindow(...)`, discarding that only strong
+reference; the window (and the `Unmanaged.passUnretained(self)` data pointers
+its Wayland listeners carry) was freed before the first `xdg_surface.configure`,
+so the configure callback did `takeUnretainedValue()` on freed memory →
+`incrementSlow` SIGSEGV. Fix: bind it and `withExtendedLifetime(window) {
+display.run() }`. The PNG path never builds a `Window`, so only the live run
+surfaced this — see §3.
+
+### 2.8 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
 
 ---
 
-## 3. How we verify without a compositor
+## 3. How we verify
 
-`sway`/`labwc` aren't installed and the live session is GNOME, so we added an
-**offscreen PNG path**: `AQUA_RENDER_PNG=/path [AQUA_SCENE=sysprefs] [AQUA_SCALE=2]
-.build/debug/AquaDemo`. The same `paint*` functions drive both the live Wayland
-window and the PNG, so the PNG is a true render of production code, viewable
-inline. This is the fastest fidelity loop we have and should stay first-class —
-consider turning it into golden-image tests later.
+**Offscreen PNG path** (fastest fidelity loop): `AQUA_RENDER_PNG=/path
+[AQUA_SCENE=sysprefs] [AQUA_SCALE=2] .build/debug/AquaDemo`. The same `paint*`
+functions drive both the live Wayland window and the PNG, so the PNG is a true
+render of production code, viewable inline. Consider golden-image tests later.
+It renders straight to a cairo surface, though — it never builds a
+`Surface.Window`, so it can't catch bugs in the live path.
+
+**Live path** (`sway` is now installed): `abyss/tests/live-sway.sh
+[window|sysprefs] [out.png]` runs AquaDemo against a headless sway (pixman
+software renderer, `--unsupported-gpu` — no GPU touched) and grabs the frame
+with grim. This exercises what the PNG path can't: the xdg-shell handshake, shm
+double-buffering, frame-callback pacing, configure/resize, and object lifetimes
+(it's what caught the §2.7 crash). Caveat: the headless backend attaches no
+input devices (seat `capabilities:0`), so the pointer path isn't exercised —
+`--click` drives sway's cursor over IPC but the events aren't delivered; testing
+input headlessly needs a wlr-virtual-pointer client (TODO). Evidence:
+`docs/screenshots/live-sway.png`.
 
 Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
 render). Tests are pure toolkit logic (no compositor).
@@ -144,8 +167,12 @@ Known-not-faithful, on purpose:
    (`de/ctext`, `Aqua/Text`). Noto Sans stands in for Lucida Grande (`$AQUA_FONT`
    to override). Follow-ups: device-pixel hinting under HiDPI, glyph caching,
    and bold/italic faces (only regular is loaded today).
-2. **Install `sway`** and do a live on-screen run + interaction pass (validate
-   the input path and frame pacing on real hardware paths, not just PNGs).
+2. **Live compositor run** — ✅ done: `abyss/tests/live-sway.sh` runs AquaDemo
+   under headless sway + grim (found and fixed the §2.7 lifetime crash;
+   validated xdg-shell configure/resize + shm + frame pacing). Remaining: an
+   interaction pass over real input — headless sway has no input device, so
+   wire a wlr-virtual-pointer client (or run nested with devices) to drive
+   clicks/hover.
 3. **Per-output scale** from `wl_output` instead of `AQUA_SCALE`.
 4. **More widgets** — checkboxes/radios, text fields, scrollbars, menus, sheets,
    brushed-metal window variant — toward a real toolkit.

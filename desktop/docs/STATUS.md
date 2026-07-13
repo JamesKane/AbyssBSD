@@ -22,7 +22,8 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
 
 - **Swift 6.3.1** is installed on this Linux box; all client-side C libs are
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
-  `sway`/`labwc` and `libjpeg` are **not** yet installed.
+  `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
+  are not.
 - Build: `swift build`. Tests: `swift test` (3/3 green — pure toolkit logic).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
@@ -49,6 +50,11 @@ Show All + favorites, the four category sections in order, separators, a 7-colum
 labeled icon grid with original procedural Aqua icons — `de/aqua/Icons.swift`):
 ![system preferences](screenshots/system-preferences.png)
 
+It also runs **live** now: `abyss/tests/live-sway.sh` brings the window up under
+a headless sway and captures it with grim — a true test of the xdg-shell /
+shm / frame-callback path the PNG render skips
+(![live under sway](screenshots/live-sway.png)).
+
 ## How to run
 
 ```sh
@@ -59,8 +65,11 @@ AQUA_RENDER_PNG=/tmp/aqua.png AQUA_SCALE=2 .build/debug/AquaDemo
 AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/AquaDemo
 
 # Live, against a running Wayland compositor that offers xdg-shell
-# (install sway/labwc first; sets WAYLAND_DISPLAY):
+# (WAYLAND_DISPLAY must be set):
 .build/debug/AquaDemo                       # AQUA_SCALE=2 forces 2x; AQUA_SCENE=sysprefs
+
+# Live smoke test under a headless sway, captured with grim (no display needed):
+abyss/tests/live-sway.sh sysprefs /tmp/live.png
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -80,10 +89,12 @@ AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/Aqu
 
 - **Phase 1 polish:** more widgets (checkboxes/radios, text fields, scrollbars,
   menus, sheets, brushed-metal window variant); per-output scale from
-  `wl_output` instead of `AQUA_SCALE`; install `sway` for live testing.
-  Real text now shapes via FreeType/HarfBuzz (Noto Sans as the stand-in — drop
-  Lucida Grande in via `$AQUA_FONT` for pixel-faithful text); remaining text
-  refinements are device-pixel hinting under HiDPI and glyph caching.
+  `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz
+  (Noto Sans as the stand-in — drop Lucida Grande in via `$AQUA_FONT` for
+  pixel-faithful text); remaining text refinements are device-pixel hinting
+  under HiDPI and glyph caching. Live runs work under headless sway
+  (`abyss/tests/live-sway.sh`); an input/interaction pass still needs a
+  wlr-virtual-pointer client (headless sway has no input device).
 - **Phase 2:** `CurrentIPC` (bind libnv) + `PoolConfig`; the shell apps (MenuBar,
   Dock, Finder, Desktop), generate the layer-shell / foreign-toplevel /
   xdg-activation protocols (XMLs already vendored in `protocols/`).

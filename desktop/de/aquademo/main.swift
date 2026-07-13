@@ -39,11 +39,18 @@ guard let display = Display() else {
     exit(1)
 }
 
-guard let _ = AquaWindow(display: display, title: title, scene: scene,
-                         width: width, height: height) else {
+// The caller owns the window: Display.window and Window.delegate are both weak
+// (to avoid a retain cycle), so this strong reference is the only thing keeping
+// the window — and its Wayland listeners' data pointers — alive. Discarding it
+// (e.g. `guard let _ =`) frees the window before the first configure event and
+// crashes in the listener callback. withExtendedLifetime pins it across run().
+guard let window = AquaWindow(display: display, title: title, scene: scene,
+                              width: width, height: height) else {
     print("AquaDemo: failed to create the window.")
     exit(1)
 }
 
 print("AquaDemo: window is up. Close it to quit.")
-display.run()
+withExtendedLifetime(window) {
+    display.run()
+}
