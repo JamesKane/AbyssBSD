@@ -52,11 +52,21 @@ each listener (`UnsafeMutablePointer.allocate`), keeps it, and frees it in
 `@convention(c)` callback with `Unmanaged.fromOpaque(...).takeUnretainedValue()`.
 (`passUnretained` because the owner outlives the proxy; don't retain.)
 
-### 2.3 Build C listener structs by zero-init, not memberwise
+### 2.3 Build C listener structs by zero-init — but fill every event the
+### compositor emits
 Imported C structs get a synthesized `init()` that zeroes. Use
-`var l = wl_pointer_listener(); l.enter = {…}; l.button = {…}` and leave the rest
-nil. This is robust against libwayland adding fields (the pointer listener has
-~11 across versions); the memberwise initializer would break on a version bump.
+`var l = wl_pointer_listener(); l.enter = {…}; l.button = {…}` (not the
+memberwise initializer, which would break when libwayland adds fields — the
+pointer listener has ~11 across versions). **But a zeroed slot is a NULL
+callback, and libwayland calls `wl_abort` the moment it dispatches an event
+whose slot is NULL** (`listener function for opcode N is NULL`). So every event
+the compositor can send *at the version you bound* needs a handler — a no-op is
+fine. This bit us on `wl_pointer`: we bound the seat at v5 and handled
+enter/leave/motion/button but left `frame` (opcode 5, sent after every event
+group by wlroots) and the axis events NULL → SIGABRT on the first pointer input.
+It hid until real input existed (headless sway has no pointer; the PNG path has
+no seat) — the virtual-pointer interaction pass surfaced it (see §3). `wl_seat`
+has the same trap with its `name` event (v2+), which is why we set `sl.name`.
 
 ### 2.4 Swift 6 strict concurrency bites global state
 - Value types used in `static let` theme/data tables must be **`Sendable`**
@@ -126,15 +136,21 @@ It renders straight to a cairo surface, though — it never builds a
 `Surface.Window`, so it can't catch bugs in the live path.
 
 **Live path** (`sway` is now installed): `abyss/tests/live-sway.sh
-[window|sysprefs] [out.png]` runs AquaDemo against a headless sway (pixman
-software renderer, `--unsupported-gpu` — no GPU touched) and grabs the frame
-with grim. This exercises what the PNG path can't: the xdg-shell handshake, shm
-double-buffering, frame-callback pacing, configure/resize, and object lifetimes
-(it's what caught the §2.7 crash). Caveat: the headless backend attaches no
-input devices (seat `capabilities:0`), so the pointer path isn't exercised —
-`--click` drives sway's cursor over IPC but the events aren't delivered; testing
-input headlessly needs a wlr-virtual-pointer client (TODO). Evidence:
-`docs/screenshots/live-sway.png`.
+[window|sysprefs] [out.png] [--click]` runs AquaDemo against a headless sway
+(pixman software renderer, `--unsupported-gpu` — no GPU touched) and grabs the
+frame with grim. This exercises what the PNG path can't: the xdg-shell
+handshake, shm double-buffering, frame-callback pacing, configure/resize, and
+object lifetimes (it caught the §2.7 crash).
+
+`--click` exercises the **input path** too. Headless sway attaches no input
+device (seat `capabilities:0`), so the script builds and runs `vpointer`
+(`abyss/tests/vpointer.c` + the vendored `wlr-virtual-pointer-*.xml`): it creates
+a wlr-virtual-pointer, which registers as an input device so the seat gains a
+pointer capability, AquaDemo binds `wl_pointer`, and injected motion/button
+events flow through to the toolkit. It clicks the default gel button and the
+`Clicks:` counter increments (found the §2.3 NULL-`frame` crash). Evidence:
+`docs/screenshots/live-sway.png` (render), `docs/screenshots/live-click.png`
+(a registered click).
 
 Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
 render). Tests are pure toolkit logic (no compositor).
@@ -167,12 +183,13 @@ Known-not-faithful, on purpose:
    (`de/ctext`, `Aqua/Text`). Noto Sans stands in for Lucida Grande (`$AQUA_FONT`
    to override). Follow-ups: device-pixel hinting under HiDPI, glyph caching,
    and bold/italic faces (only regular is loaded today).
-2. **Live compositor run** — ✅ done: `abyss/tests/live-sway.sh` runs AquaDemo
-   under headless sway + grim (found and fixed the §2.7 lifetime crash;
-   validated xdg-shell configure/resize + shm + frame pacing). Remaining: an
-   interaction pass over real input — headless sway has no input device, so
-   wire a wlr-virtual-pointer client (or run nested with devices) to drive
-   clicks/hover.
+2. **Live compositor run + interaction** — ✅ done: `abyss/tests/live-sway.sh
+   [--click]` runs AquaDemo under headless sway + grim, and drives real clicks
+   via a wlr-virtual-pointer helper (`vpointer.c`). Found and fixed two
+   live-only crashes (§2.7 window lifetime, §2.3 NULL `wl_pointer.frame`) and
+   validated xdg-shell configure/resize + shm + frame pacing + the pointer
+   path. Follow-ups: keyboard input (needs xkbcommon wiring + a virtual
+   keyboard) and hover/scroll.
 3. **Per-output scale** from `wl_output` instead of `AQUA_SCALE`.
 4. **More widgets** — checkboxes/radios, text fields, scrollbars, menus, sheets,
    brushed-metal window variant — toward a real toolkit.

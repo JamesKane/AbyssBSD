@@ -53,7 +53,9 @@ labeled icon grid with original procedural Aqua icons — `de/aqua/Icons.swift`)
 It also runs **live** now: `abyss/tests/live-sway.sh` brings the window up under
 a headless sway and captures it with grim — a true test of the xdg-shell /
 shm / frame-callback path the PNG render skips
-(![live under sway](screenshots/live-sway.png)).
+(![live under sway](screenshots/live-sway.png)). With `--click` it drives a real
+pointer click through a wlr-virtual-pointer and the counter increments
+(![a registered click](screenshots/live-click.png)).
 
 ## How to run
 
@@ -92,9 +94,9 @@ abyss/tests/live-sway.sh sysprefs /tmp/live.png
   `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz
   (Noto Sans as the stand-in — drop Lucida Grande in via `$AQUA_FONT` for
   pixel-faithful text); remaining text refinements are device-pixel hinting
-  under HiDPI and glyph caching. Live runs work under headless sway
-  (`abyss/tests/live-sway.sh`); an input/interaction pass still needs a
-  wlr-virtual-pointer client (headless sway has no input device).
+  under HiDPI and glyph caching. Live runs + pointer interaction work under
+  headless sway (`abyss/tests/live-sway.sh [--click]`, driving a
+  wlr-virtual-pointer); keyboard input is the next live path to wire.
 - **Phase 2:** `CurrentIPC` (bind libnv) + `PoolConfig`; the shell apps (MenuBar,
   Dock, Finder, Desktop), generate the layer-shell / foreign-toplevel /
   xdg-activation protocols (XMLs already vendored in `protocols/`).

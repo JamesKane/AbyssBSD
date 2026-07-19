@@ -143,6 +143,16 @@ public final class Display {
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
                 d.window?.pointerButton(button, pressed: state == 1)
             }
+            // libwayland aborts if it dispatches an event whose listener slot is
+            // NULL, so EVERY event of the bound version (5) needs a handler even
+            // when we ignore it. wlroots emits `frame` after every event group;
+            // the axis events fire on scroll. (Only surfaces with a real pointer
+            // hit this, so it stayed hidden until virtual-pointer input.)
+            pl.frame = { _, _ in }
+            pl.axis = { _, _, _, _, _ in }
+            pl.axis_source = { _, _, _ in }
+            pl.axis_stop = { _, _, _, _ in }
+            pl.axis_discrete = { _, _, _, _ in }
             addListener(to: p, listener: pl, data: me)
         }
     }
