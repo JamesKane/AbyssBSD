@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-07-12.
+Last updated: 2026-07-19.
 
 ## What this is
 
@@ -37,7 +37,9 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     supplying the pkg-config flags. Aqua paints the shaped run via cairo-ft.
   - `Surface` — Wayland client runtime: `Display` (connection, registry,
     globals, dispatch loop) + `Window` (xdg-shell toplevel, 2× shm buffers,
-    frame-callback pacing, pointer input) + `WindowDelegate`/`PixelBuffer`.
+    frame-callback pacing, pointer input) + `Keyboard` (`wl_keyboard` +
+    xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
+    `WindowDelegate`/`PixelBuffer`.
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text), `Text` (FreeType/HarfBuzz
     shaping via `CText`, painted through cairo-ft — with a cairo toy-text
@@ -55,7 +57,10 @@ a headless sway and captures it with grim — a true test of the xdg-shell /
 shm / frame-callback path the PNG render skips
 (![live under sway](screenshots/live-sway.png)). With `--click` it drives a real
 pointer click through a wlr-virtual-pointer and the counter increments
-(![a registered click](screenshots/live-click.png)).
+(![a registered click](screenshots/live-click.png)). With `--type` it drives
+real keystrokes through a virtual keyboard into the window's text field
+(![typed text](screenshots/live-type.png)) — the full `wl_keyboard` + xkbcommon
+path.
 
 ## How to run
 
@@ -72,6 +77,8 @@ AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/Aqu
 
 # Live smoke test under a headless sway, captured with grim (no display needed):
 abyss/tests/live-sway.sh sysprefs /tmp/live.png
+abyss/tests/live-sway.sh --click /tmp/click.png   # drive a real pointer click
+abyss/tests/live-sway.sh --type  /tmp/type.png    # drive real keystrokes
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -89,14 +96,16 @@ abyss/tests/live-sway.sh sysprefs /tmp/live.png
 
 ## What's next
 
-- **Phase 1 polish:** more widgets (checkboxes/radios, text fields, scrollbars,
-  menus, sheets, brushed-metal window variant); per-output scale from
-  `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz
-  (Noto Sans as the stand-in — drop Lucida Grande in via `$AQUA_FONT` for
-  pixel-faithful text); remaining text refinements are device-pixel hinting
-  under HiDPI and glyph caching. Live runs + pointer interaction work under
-  headless sway (`abyss/tests/live-sway.sh [--click]`, driving a
-  wlr-virtual-pointer); keyboard input is the next live path to wire.
+- **Phase 1 polish:** more widgets (a first **text field** exists — wired to
+  live keyboard input; still: checkboxes/radios, scrollbars, menus, sheets,
+  brushed-metal window variant); per-output scale from `wl_output` instead of
+  `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+  stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
+  remaining text refinements are device-pixel hinting under HiDPI and glyph
+  caching. Live runs + **pointer and keyboard** interaction work under headless
+  sway (`abyss/tests/live-sway.sh [--click] [--type]`, driving a
+  wlr-virtual-pointer / a zwp-virtual-keyboard); follow-ups are hover/scroll and
+  key repeat.
 - **Phase 2:** `CurrentIPC` (bind libnv) + `PoolConfig`; the shell apps (MenuBar,
   Dock, Finder, Desktop), generate the layer-shell / foreign-toplevel /
   xdg-activation protocols (XMLs already vendored in `protocols/`).

@@ -74,7 +74,8 @@ public func paintWindowChrome(_ cr: OpaquePointer, w: Double, h: Double,
 @discardableResult
 public func paintAquaWindow(_ cr: OpaquePointer, w: Double, h: Double,
                             title: String, clickCount: Int,
-                            buttonPressed: Bool) -> Rect {
+                            buttonPressed: Bool, typed: String = "",
+                            focused: Bool = false) -> Rect {
     paintWindowChrome(cr, w: w, h: h, title: title)
 
     Draw.textLeft(cr, "Welcome to AbyssBSD", x: 24, baselineY: 70,
@@ -83,6 +84,10 @@ public func paintAquaWindow(_ cr: OpaquePointer, w: Double, h: Double,
                   color: Theme.bodyText.with(a: 0.7), size: Theme.fontSize)
     Draw.textLeft(cr, "Clicks: \(clickCount)", x: 24, baselineY: 132,
                   color: Theme.bodyText, size: Theme.fontSize)
+
+    // A live text field: real keyboard input lands here (see AquaWindow).
+    let field = Rect(24, 150, w - 48, 26)
+    Draw.textField(cr, field, text: typed, caret: focused)
 
     let bw = 120.0, bh = 30.0
     let buttonRect = Rect(w - bw - 20, h - bh - 20, bw, bh)

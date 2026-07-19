@@ -169,6 +169,73 @@ public enum Draw {
              size: Theme.fontSize)
     }
 
+    /// An Aqua text field: a white well with an inset top-shadow and a 1px
+    /// border, the focused variant ringed in Aqua blue. `text` is drawn
+    /// left-aligned and vertically centred; `caret` adds an insertion bar after
+    /// it (shown when the field has keyboard focus). `placeholder` greys in when
+    /// `text` is empty.
+    public static func textField(_ cr: OpaquePointer, _ r: Rect, text: String,
+                                 caret: Bool, placeholder: String = "") {
+        let radius = 3.0
+
+        // Focus ring: a soft blue halo just outside the field.
+        if caret {
+            roundedRect(cr, Rect(r.x - 1.5, r.y - 1.5, r.w + 3, r.h + 3),
+                        radius: radius + 1.5)
+            setColor(cr, Theme.fieldFocusRing)
+            cairo_set_line_width(cr, 2.5)
+            cairo_stroke(cr)
+        }
+
+        // White well.
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.fieldBackground)
+        cairo_fill(cr)
+
+        // Inset shadow along the top inner edge (the recessed-well look).
+        cairo_save(cr)
+        roundedRect(cr, r, radius: radius)
+        cairo_clip(cr)
+        let sg = cairo_pattern_create_linear(0, r.y, 0, r.y + 4)
+        let s = Theme.fieldInsetShadow
+        cairo_pattern_add_color_stop_rgba(sg, 0, s.r, s.g, s.b, s.a)
+        cairo_pattern_add_color_stop_rgba(sg, 1, s.r, s.g, s.b, 0)
+        cairo_rectangle(cr, r.x, r.y, r.w, 5)
+        cairo_set_source(cr, sg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(sg)
+        cairo_restore(cr)
+
+        // Border.
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.fieldBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+
+        // Text (or placeholder), clipped to a small inner padding.
+        let pad = 6.0
+        cairo_save(cr)
+        cairo_rectangle(cr, r.x + pad - 2, r.y, r.w - 2 * (pad - 2), r.h)
+        cairo_clip(cr)
+        let baseline = r.y + r.h / 2 + Theme.fontSize * 0.35
+        if text.isEmpty && !placeholder.isEmpty {
+            textLeft(cr, placeholder, x: r.x + pad, baselineY: baseline,
+                     color: Theme.fieldPlaceholder, size: Theme.fontSize)
+        } else {
+            textLeft(cr, text, x: r.x + pad, baselineY: baseline,
+                     color: Theme.fieldText, size: Theme.fontSize)
+        }
+        if caret {
+            let cx = r.x + pad + textWidth(cr, text, size: Theme.fontSize) + 1
+            setColor(cr, Theme.fieldCaret)
+            cairo_set_line_width(cr, 1)
+            cairo_move_to(cr, cx, r.y + 5)
+            cairo_line_to(cr, cx, r.y + r.h - 5)
+            cairo_stroke(cr)
+        }
+        cairo_restore(cr)
+    }
+
     /// Draw text centred on a point. Uses shaped FreeType/HarfBuzz glyphs when
     /// a font is loaded; falls back to cairo toy-text otherwise.
     public static func text(_ cr: OpaquePointer, _ s: String, centerX: Double,

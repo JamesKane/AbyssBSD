@@ -18,8 +18,9 @@ import CWayland
     p.map(OpaquePointer.init)
 }
 
-// wl_seat_capability bit for a pointer (avoids importing the C enum).
+// wl_seat_capability bits (avoids importing the C enum).
 private let kSeatCapabilityPointer: UInt32 = 1
+private let kSeatCapabilityKeyboard: UInt32 = 2
 
 public final class Display {
     let display: OpaquePointer
@@ -30,6 +31,10 @@ public final class Display {
     var seat: OpaquePointer?
     var wmBase: OpaquePointer?
     var pointer: OpaquePointer?
+    var keyboard: OpaquePointer?
+
+    // xkbcommon translation for keyboard input; created lazily with the seat.
+    let keyboardState = KeyboardState()
 
     // The (single, for now) window that receives input + drives frames.
     public weak var window: Window?
@@ -122,6 +127,9 @@ public final class Display {
 
     private func seatCapabilities(_ caps: UInt32) {
         guard let seat else { return }
+        if caps & kSeatCapabilityKeyboard != 0, keyboard == nil {
+            bindKeyboard(seat)
+        }
         if caps & kSeatCapabilityPointer != 0, pointer == nil {
             guard let p = opt(aw_seat_get_pointer(raw(seat))) else { return }
             pointer = p
@@ -155,6 +163,40 @@ public final class Display {
             pl.axis_discrete = { _, _, _, _ in }
             addListener(to: p, listener: pl, data: me)
         }
+    }
+
+    private func bindKeyboard(_ seat: OpaquePointer) {
+        guard let k = opt(aw_seat_get_keyboard(raw(seat))) else { return }
+        keyboard = k
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        var kl = wl_keyboard_listener()
+        // The compositor hands us its active keymap over a fd; xkbcommon
+        // compiles it so key events resolve to the right keysyms/text.
+        kl.keymap = { data, _, format, fd, size in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            d.keyboardState?.loadKeymap(fd: fd, size: size, format: format)
+        }
+        kl.enter = { _, _, _, _, _ in }
+        kl.leave = { _, _, _, _ in }
+        kl.key = { data, _, _, _, key, state in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            // wl_keyboard.key_state: 1 == pressed.
+            guard let ev = d.keyboardState?.event(evdev: key, pressed: state == 1)
+            else { return }
+            d.window?.keyEvent(ev)
+        }
+        kl.modifiers = { data, _, _, dep, lat, lock, group in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            d.keyboardState?.updateModifiers(depressed: dep, latched: lat,
+                                             locked: lock, group: group)
+        }
+        // Bound at seat v5, so every slot must be non-NULL (the NULL-listener
+        // abort trap); repeat_info arrived in wl_keyboard v4.
+        kl.repeat_info = { _, _, _, _ in }
+        addListener(to: k, listener: kl, data: me)
     }
 
     /// Block dispatching events until the window is closed (or the connection

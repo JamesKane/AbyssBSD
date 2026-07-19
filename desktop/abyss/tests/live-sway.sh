@@ -7,29 +7,34 @@
 # configure/resize, pointer input, listener/object lifetimes). This script runs
 # AquaDemo against a headless sway and captures the result with grim.
 #
-# Usage: abyss/tests/live-sway.sh [window|sysprefs] [out.png] [--click]
-# Needs: sway (>=1.11), grim. With --click also: wayland-scanner + libwayland
-# dev (to build the virtual-pointer helper). Uses the headless backend + pixman
-# software renderer, so no GPU/DRM is touched (--unsupported-gpu is harmless).
+# Usage: abyss/tests/live-sway.sh [window|sysprefs] [out.png] [--click] [--type]
+# Needs: sway (>=1.11), grim. With --click/--type also: wayland-scanner +
+# libwayland dev (to build the virtual-input helpers; --type also needs
+# xkbcommon). Uses the headless backend + pixman software renderer, so no
+# GPU/DRM is touched (--unsupported-gpu is harmless).
 #
-# --click drives a real pointer click. The headless backend attaches no input
-# devices (seat capabilities:0), so we create a wlr-virtual-pointer via the
-# vpointer helper: it registers as an input device, the seat gains the pointer
-# capability, and AquaDemo binds wl_pointer and receives events. --click forces
-# the .window scene (it has the gel button + a Clicks counter); the output PNG
-# should read "Clicks: 1".
+# The headless backend attaches no input devices (seat capabilities:0), so a
+# client never binds wl_pointer/wl_keyboard and the input paths can't be tested.
+# --click and --type each create a virtual input device (a wlr-virtual-pointer /
+# a zwp_virtual_keyboard) which registers with the seat: the seat gains the
+# matching capability and AquaDemo binds the input and receives events. Both
+# force the .window scene (the only one with the gel button + Clicks counter +
+# text field). With --click the PNG should read "Clicks: 1"; with --type the
+# text field should read "Abyss".
 set -eu
 
-scene="sysprefs"; out=""; click=""
+scene="sysprefs"; out=""; click=""; type=""
 for a in "$@"; do
   case "$a" in
     --click)          click="--click" ;;
+    --type)           type="--type" ;;
     window|sysprefs)  scene="$a" ;;
     *)                out="$a" ;;
   esac
 done
 [ -n "$out" ] || out="${TMPDIR:-/tmp}/aqua-live-$$.png"
-[ "$click" = "--click" ] && scene="window"   # only the window scene is clickable
+# Only the window scene carries the interactive controls.
+{ [ "$click" = "--click" ] || [ "$type" = "--type" ]; } && scene="window"
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -39,17 +44,27 @@ command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }
 
 swift build
 
-# Build the virtual-pointer helper up front (fail fast) when we'll click.
+# Build the virtual-input helpers up front (fail fast) when we'll inject.
 vp_dir=""
-if [ "$click" = "--click" ]; then
+if [ "$click" = "--click" ] || [ "$type" = "--type" ]; then
   command -v wayland-scanner >/dev/null || { echo "FAIL: wayland-scanner missing"; exit 1; }
   pkg-config --exists wayland-client || { echo "FAIL: wayland-client dev missing"; exit 1; }
   vp_dir=$(mktemp -d)
+fi
+if [ "$click" = "--click" ]; then
   xml="$root/abyss/tests/wlr-virtual-pointer-unstable-v1.xml"
   wayland-scanner client-header "$xml" "$vp_dir/vpointer-proto.h"
   wayland-scanner private-code  "$xml" "$vp_dir/vpointer-proto.c"
   cc -I"$vp_dir" "$root/abyss/tests/vpointer.c" "$vp_dir/vpointer-proto.c" \
      $(pkg-config --cflags --libs wayland-client) -o "$vp_dir/vpointer"
+fi
+if [ "$type" = "--type" ]; then
+  pkg-config --exists xkbcommon || { echo "FAIL: xkbcommon dev missing"; exit 1; }
+  xml="$root/abyss/tests/virtual-keyboard-unstable-v1.xml"
+  wayland-scanner client-header "$xml" "$vp_dir/vkeyboard-proto.h"
+  wayland-scanner private-code  "$xml" "$vp_dir/vkeyboard-proto.c"
+  cc -I"$vp_dir" "$root/abyss/tests/vkeyboard.c" "$vp_dir/vkeyboard-proto.c" \
+     $(pkg-config --cflags --libs wayland-client xkbcommon) -o "$vp_dir/vkeyboard"
 fi
 
 # Size the headless output to the scene's natural window size so the (tiled)
@@ -69,10 +84,11 @@ sway_pid=$!
 
 cleanup() {
   [ -n "${vp_pid:-}" ] && kill "$vp_pid" 2>/dev/null || true
+  [ -n "${vk_pid:-}" ] && kill "$vk_pid" 2>/dev/null || true
   [ -n "${app_pid:-}" ] && kill "$app_pid" 2>/dev/null || true
   [ -n "${SWAYSOCK:-}" ] && swaymsg exit >/dev/null 2>&1 || true
   kill "$sway_pid" 2>/dev/null || true
-  rm -f "$cfg" "$log" "${fifo:-}" "${vp_log:-}"
+  rm -f "$cfg" "$log" "${fifo:-}" "${vp_log:-}" "${vk_fifo:-}" "${vk_log:-}"
   [ -n "$vp_dir" ] && rm -rf "$vp_dir" || true
 }
 trap cleanup EXIT
@@ -131,6 +147,27 @@ if [ "$click" = "--click" ]; then
   exec 3>&-
 fi
 
+if [ "$type" = "--type" ]; then
+  # Virtual keyboard, fed via a FIFO so it stays alive (holding the keyboard
+  # capability) while we inject. It uploads its own US keymap, which sway makes
+  # the seat's active keymap and forwards to AquaDemo.
+  vk_log=$(mktemp)
+  vk_fifo=$(mktemp -u); mkfifo "$vk_fifo"
+  WAYLAND_DISPLAY="$wd" "$vp_dir/vkeyboard" < "$vk_fifo" > "$vk_log" 2>&1 &
+  vk_pid=$!
+  exec 4>"$vk_fifo"
+  for _ in $(seq 1 20); do grep -q ready "$vk_log" && break; sleep 0.15; done
+  grep -q ready "$vk_log" || { echo "FAIL: virtual keyboard not ready"; cat "$vk_log"; exit 1; }
+  caps=$(swaymsg -t get_seats | grep -o '"capabilities": [0-9]*' | grep -o '[0-9]*' | head -1)
+  # wl_seat capability bit 1 (value 2) is keyboard.
+  [ $(( ${caps:-0} & 2 )) -ne 0 ] || { echo "FAIL: seat gained no keyboard capability (caps=$caps)"; exit 1; }
+  echo "virtual keyboard ready; seat capabilities=$caps"
+  sleep 0.5  # let AquaDemo bind wl_keyboard + receive the keymap
+  printf 't Abyss\n' >&4     # type into the focused text field
+  sleep 0.5
+  exec 4>&-
+fi
+
 WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }
-echo "ok: live render -> $out (window mapped, no crash${click:+, clicked})"
+echo "ok: live render -> $out (window mapped, no crash${click:+, clicked}${type:+, typed})"

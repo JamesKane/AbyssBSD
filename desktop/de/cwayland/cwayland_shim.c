@@ -109,3 +109,7 @@ void aw_xdg_toplevel_set_app_id(void *toplevel, const char *app_id) {
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }
+
+void *aw_seat_get_keyboard(void *seat) {
+    return wl_seat_get_keyboard((struct wl_seat *)seat);
+}

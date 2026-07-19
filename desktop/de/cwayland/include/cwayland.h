@@ -67,5 +67,6 @@ void aw_xdg_toplevel_set_app_id(void *toplevel, const char *app_id);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);
+void *aw_seat_get_keyboard(void *seat);
 
 #endif /* ABYSS_CWAYLAND_H */

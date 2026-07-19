@@ -15,7 +15,8 @@ renders faithful Jaguar UI:
   xdg-shell + a Swift-callable shim; system cairo as the software 2D backend.
 - **`Surface`** — a real Wayland client runtime: connect, registry/globals,
   xdg-shell toplevel, double-buffered `wl_shm`, frame-callback pacing, pointer
-  input, a dispatch loop.
+  **and keyboard** input (the latter translated through xkbcommon), a dispatch
+  loop.
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe), two scenes (a simple
   window and a **System Preferences** clone), and original procedural pref icons.
@@ -119,7 +120,25 @@ so the configure callback did `takeUnretainedValue()` on freed memory →
 display.run() }`. The PNG path never builds a `Window`, so only the live run
 surfaced this — see §3.
 
-### 2.8 The linter lies about C includes
+### 2.8 Keyboard: xkbcommon owns the keycode→text translation
+`wl_keyboard` hands the client a **keymap over a fd** (`keymap` event: format,
+fd, size) plus raw **evdev** keycodes (`key` event) and a running modifier mask
+(`modifiers` event). None of that is text — you translate with **xkbcommon**
+(`de/cxkb`, `Surface/Keyboard.swift`):
+- mmap the keymap fd `PROT_READ, MAP_PRIVATE` (the compositor may seal it
+  read-only), `xkb_keymap_new_from_string`, `xkb_state_new`. Always `close(fd)`.
+- `xkb_state_key_get_one_sym` / `xkb_state_key_get_utf8` per key. The **evdev →
+  xkb keycode offset is +8** — forget it and every key resolves one off.
+- feed every `modifiers` event to `xkb_state_update_mask` or Shift/Caps never
+  register (uppercase silently fails).
+
+Unlike libwayland's requests, xkbcommon symbols are **ordinary exported
+functions**, so `CXkb` is a plain system module Swift calls directly — no `aw_*`
+shim. `wl_keyboard` is bound at seat v5, so the NULL-slot trap (§2.3) applies:
+all six events (keymap/enter/leave/key/modifiers/**repeat_info**) need a handler.
+Verified live by `--type` (§3); found no new crash — the §2.3 discipline held.
+
+### 2.9 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -151,6 +170,14 @@ events flow through to the toolkit. It clicks the default gel button and the
 `Clicks:` counter increments (found the §2.3 NULL-`frame` crash). Evidence:
 `docs/screenshots/live-sway.png` (render), `docs/screenshots/live-click.png`
 (a registered click).
+
+`--type` exercises the **keyboard path** the same way with `vkeyboard`
+(`abyss/tests/vkeyboard.c` + the vendored `virtual-keyboard-*.xml`): a
+`zwp_virtual_keyboard` registers a keyboard device (seat gains the keyboard
+capability), and — because the protocol makes the client upload its own keymap —
+it builds a US keymap with xkbcommon and hands it up, which sway then forwards to
+AquaDemo. It types `Abyss` (Shift for the capital) into the focused text field,
+which renders it via §2.8. Evidence: `docs/screenshots/live-type.png`.
 
 Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
 render). Tests are pure toolkit logic (no compositor).
@@ -188,11 +215,14 @@ Known-not-faithful, on purpose:
    via a wlr-virtual-pointer helper (`vpointer.c`). Found and fixed two
    live-only crashes (§2.7 window lifetime, §2.3 NULL `wl_pointer.frame`) and
    validated xdg-shell configure/resize + shm + frame pacing + the pointer
-   path. Follow-ups: keyboard input (needs xkbcommon wiring + a virtual
-   keyboard) and hover/scroll.
+   path. **Keyboard input** is now done too (§2.8): `wl_keyboard` + xkbcommon in
+   `Surface`, driven live by `live-sway.sh --type` via a virtual keyboard
+   (`vkeyboard.c`). Follow-ups: hover/scroll, key repeat (`repeat_info` is
+   handled but ignored), and keyboard focus tracking (enter/leave → caret).
 3. **Per-output scale** from `wl_output` instead of `AQUA_SCALE`.
-4. **More widgets** — checkboxes/radios, text fields, scrollbars, menus, sheets,
-   brushed-metal window variant — toward a real toolkit.
+4. **More widgets** — a first Aqua **text field** now exists (`Draw.textField`,
+   wired to real keyboard input); still to do: checkboxes/radios, scrollbars,
+   menus, sheets, brushed-metal window variant — toward a real toolkit.
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,

@@ -24,6 +24,7 @@ public final class AquaWindow: WindowDelegate {
     private var buttonPressed = false
     private var pointerX = 0.0
     private var pointerY = 0.0
+    private var typedText = ""
 
     public init?(display: Display, title: String, scene: SceneKind = .window,
                  width: Int32 = 440, height: Int32 = 300) {
@@ -78,7 +79,8 @@ public final class AquaWindow: WindowDelegate {
         case .window:
             buttonRect = paintAquaWindow(cr, w: w, h: h, title: title,
                                          clickCount: clickCount,
-                                         buttonPressed: buttonPressed)
+                                         buttonPressed: buttonPressed,
+                                         typed: typedText, focused: true)
         case .systemPreferences:
             paintSystemPreferences(cr, w: w, h: h)
         }
@@ -103,5 +105,22 @@ public final class AquaWindow: WindowDelegate {
                 window?.setNeedsDisplay()
             }
         }
+    }
+
+    public func keyEvent(_ event: KeyEvent) {
+        guard event.pressed else { return }  // act on press; release is a no-op
+        switch event.keysym {
+        case KeySym.backspace:
+            if !typedText.isEmpty { typedText.removeLast() }
+        case KeySym.escape:
+            typedText = ""
+        case KeySym.enter, KeySym.tab:
+            break  // no multiline / focus traversal yet
+        default:
+            // Any key that produced text lands in the field; ignore the rest
+            // (arrows, modifiers, function keys report empty text).
+            if !event.text.isEmpty { typedText += event.text }
+        }
+        window?.setNeedsDisplay()
     }
 }

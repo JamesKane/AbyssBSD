@@ -61,6 +61,16 @@ public enum Theme {
     public static let buttonTextOnBlue = Color(hex: 0xffffff)
     public static let buttonTextOnWhite = Color(hex: 0x202020)
 
+    // Text field: white well with a soft inset top-shadow; the focused variant
+    // gets the Aqua blue focus ring.
+    public static let fieldBackground = Color(hex: 0xffffff)
+    public static let fieldBorder = Color(hex: 0x9a9a9a)
+    public static let fieldInsetShadow = Color(0, 0, 0, 0.14)
+    public static let fieldText = Color(hex: 0x141414)
+    public static let fieldPlaceholder = Color(hex: 0x9a9a9a)
+    public static let fieldFocusRing = Color(hex: 0x74a6ee, a: 0.85)
+    public static let fieldCaret = Color(hex: 0x2061c9)
+
     public static let bodyText = Color(hex: 0x202020)
     public static let fontFamily = "Lucida Grande"
     public static let fontSize: Double = 13

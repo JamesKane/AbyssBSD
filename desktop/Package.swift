@@ -51,6 +51,14 @@ let package = Package(
             pkgConfig: "harfbuzz",
             providers: [.apt(["libharfbuzz-dev"]), .brew(["harfbuzz"])]
         ),
+        // xkbcommon: turns raw evdev keycodes from wl_keyboard into keysyms +
+        // UTF-8, honouring the compositor's keymap. Imported from Surface.
+        .systemLibrary(
+            name: "CXkb",
+            path: "de/cxkb",
+            pkgConfig: "xkbcommon",
+            providers: [.apt(["libxkbcommon-dev"]), .brew(["libxkbcommon"])]
+        ),
         // Real text: FreeType face management + HarfBuzz shaping behind a small
         // C API (the FT header macros and hb buffer lifecycle are awkward from
         // Swift; Aqua paints the shaped run via cairo-ft).
@@ -64,7 +72,7 @@ let package = Package(
         // Wayland client runtime: connection, registry, surfaces, shm, input.
         .target(
             name: "Surface",
-            dependencies: ["CWayland"],
+            dependencies: ["CWayland", "CXkb"],
             path: "de/surface"
         ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.

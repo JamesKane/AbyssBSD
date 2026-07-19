@@ -27,6 +27,12 @@ public protocol WindowDelegate: AnyObject {
     func render(_ buffer: PixelBuffer)
     func pointerMoved(x: Double, y: Double)
     func pointerButton(_ button: UInt32, pressed: Bool)
+    func keyEvent(_ event: KeyEvent)
+}
+
+public extension WindowDelegate {
+    // Keyboard is optional for a delegate; default to ignoring it.
+    func keyEvent(_ event: KeyEvent) {}
 }
 
 final class ShmBuffer {
@@ -224,6 +230,10 @@ public final class Window {
 
     func pointerButton(_ button: UInt32, pressed: Bool) {
         delegate?.pointerButton(button, pressed: pressed)
+    }
+
+    func keyEvent(_ event: KeyEvent) {
+        delegate?.keyEvent(event)
     }
 
     /// Logical (surface) size, useful to the toolkit for layout.
