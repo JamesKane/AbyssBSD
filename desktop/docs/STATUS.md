@@ -32,9 +32,10 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     `de/cwayland/generate-protocols.sh`.
   - `CCairo` — system cairo (pkgConfig), the Phase-1 software 2D backend;
     now also exposes cairo-ft for real text.
-  - `CText` — real text: FreeType face management + HarfBuzz shaping behind a
-    small C API (`de/ctext`), with `CFreeType`/`CHarfBuzz` systemLibraries
-    supplying the pkg-config flags. Aqua paints the shaped run via cairo-ft.
+  - `CText` — real text: FreeType face management (regular + bold/italic/
+    bold-italic) + HarfBuzz shaping behind a small C API (`de/ctext`), with
+    `CFreeType`/`CHarfBuzz` systemLibraries supplying the pkg-config flags. Aqua
+    paints the shaped run via cairo-ft, caching runs and shaping at device px.
   - `Surface` — Wayland client runtime: `Display` (connection, registry,
     globals, dispatch loop, per-surface pointer routing, `wl_output` scale
     tracking) + `Window` (xdg-shell toplevel, 2× shm buffers, frame-callback
@@ -171,9 +172,13 @@ abyss/tests/live-sway.sh widgets /tmp/hidpi.png   --hidpi # scale-2 output → a
   **auto-scales per output** from `wl_output` (`AQUA_SCALE` is just an optional
   pin now). (A brushed-metal window variant is deliberately out of scope — it's a
   Panther/Tiger-era texture, not era-faithful to 10.2.) Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
-  stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
-  remaining text refinements are device-pixel hinting under HiDPI and glyph
-  caching. Live runs + **pointer and keyboard** interaction work under headless
+  stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text),
+  with **bold/italic faces** (the sheet's question renders bold, as in Aqua), a
+  **shaped-run cache** (static labels aren't re-shaped every frame), and
+  **device-pixel hinting** (text is shaped on the render scale's device grid, so
+  glyph advances line up with the device-rasterised glyphs at HiDPI). The one
+  remaining text nicety is per-glyph caching of rasterised bitmaps (cairo already
+  caches internally, so low priority). Live runs + **pointer and keyboard** interaction work under headless
   sway (`abyss/tests/live-sway.sh [--click] [--type]`, driving a
   wlr-virtual-pointer / a zwp-virtual-keyboard); follow-ups are hover/scroll and
   key repeat.

@@ -688,15 +688,19 @@ public enum Draw {
                             centerY: Double, color: Color, size: Double,
                             style: Text.Style = .regular) {
         if Text.available {
-            let px = Text.px(size)
+            let px = Text.px(size)   // device px
             let glyphs = Text.shape(s, px: px, style: style)
             let m = Text.metrics(px: px)
+            // Positions are logical; px-shaped metrics/width are device px, so
+            // convert down by the render scale for the centring math.
+            let sc = Double(Text.renderScale)
+            let w = Text.width(glyphs) / sc
+            let ascent = m.ascent / sc, descent = m.descent / sc
             setColor(cr, color)
             // Centre the line box (top = baseline−ascent, bottom = baseline+descent)
             // on centerY; left-align the run around centerX.
-            Text.drawShaped(cr, glyphs,
-                            x: centerX - Text.width(glyphs) / 2,
-                            baselineY: centerY + (m.ascent - m.descent) / 2, px: px)
+            Text.drawShaped(cr, glyphs, x: centerX - w / 2,
+                            baselineY: centerY + (ascent - descent) / 2, px: px)
             return
         }
         selectFont(cr, size: size)
@@ -735,7 +739,9 @@ public enum Draw {
     public static func textWidth(_ cr: OpaquePointer, _ s: String, size: Double,
                                  style: Text.Style = .regular) -> Double {
         if Text.available {
+            // Shaped at device px; return the logical width for layout.
             return Text.width(Text.shape(s, px: Text.px(size), style: style))
+                / Double(Text.renderScale)
         }
         selectFont(cr, size: size)
         return s.withCString { c in

@@ -239,6 +239,9 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, bw, bh),
           let cr = cairo_create(cs) else { return false }
     cairo_scale(cr, Double(scale), Double(scale))
+    Text.renderScale = scale   // shape/hint on the device pixel grid
+
+    defer { Text.renderScale = 1 }
 
     // Desktop-grey backdrop so the window edges read.
     let g = cairo_pattern_create_linear(0, 0, 0, Double(height))

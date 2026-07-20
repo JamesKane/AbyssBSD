@@ -123,6 +123,28 @@ Include/link flags stay portable via `CFreeType`/`CHarfBuzz` systemLibraries
 Grande ships free; Noto Sans is the stand-in, overridable via `$AQUA_FONT`
 (colon-separated `$AQUA_FONT_FALLBACK` for coverage).
 
+**Refinements (later pass).** Three things, all in `Aqua/Text` + `de/ctext`:
+- **Bold/italic.** `at_font_shape` takes a style; the C face table is flat and
+  each `at_glyph.face` indexes it directly, so styles are just ordered index
+  groups (regular / bold / italic / bold-italic), each loading its own primary
+  ($AQUA_FONT_{BOLD,…} or sans candidates) with the regular fallbacks appended.
+  A style with no own face resolves against regular — text always renders.
+  `Text.Style` threads through `Draw.text/textLeft/textWidth`; first use is the
+  sheet's bold question.
+- **Shaped-run cache.** Runs are position-independent (advances keyed only by
+  string+px+style), so `Text.shape` memoises them — static labels were re-run
+  through HarfBuzz every redraw. Wholesale-cleared past a cap.
+- **Device-pixel hinting.** cairo already rasterises at device px (the CTM scales
+  the font), but we *shaped* at logical px, so advances were computed on a coarser
+  grid than the glyphs were drawn on. Now `Text.renderScale` (set by the renderer
+  each frame) makes `Text.px` return device px; shaping happens there, and
+  `drawShaped` divides positions/advances **and the font size** by the scale so
+  the run renders in *user* space — the CTM scales it back to device px. Doing it
+  in user space (not by resetting to identity) is essential: the sliding sheet
+  draws text under a translated CTM, and an identity reset would misplace it.
+  `Draw.textWidth`/centring convert the device-px width/metrics back to logical.
+  At scale 1 every path is a no-op, so 1× output is byte-identical.
+
 ### 2.7 The window must be owned across the event loop (live-only crash)
 `Display.window` and `Window.delegate` are both **weak** (deliberately — the
 window holds its delegate and Display references it back, so weak breaks the
@@ -324,10 +346,11 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-1. **Real text** — ✅ done: FreeType + HarfBuzz shaping painted via cairo-ft
-   (`de/ctext`, `Aqua/Text`). Noto Sans stands in for Lucida Grande (`$AQUA_FONT`
-   to override). Follow-ups: device-pixel hinting under HiDPI, glyph caching,
-   and bold/italic faces (only regular is loaded today).
+1. **Real text** — ✅ done, incl. the refinements (§2.6): FreeType + HarfBuzz
+   shaping painted via cairo-ft (`de/ctext`, `Aqua/Text`), now with bold/italic
+   faces, a shaped-run cache, and device-pixel hinting under HiDPI. Noto Sans
+   stands in for Lucida Grande (`$AQUA_FONT` to override). Only nicety left is
+   rasterised-bitmap caching, and cairo already does that internally.
 2. **Live compositor run + interaction** — ✅ done: `abyss/tests/live-sway.sh
    [--click]` runs AquaDemo under headless sway + grim, and drives real clicks
    via a wlr-virtual-pointer helper (`vpointer.c`). Found and fixed two

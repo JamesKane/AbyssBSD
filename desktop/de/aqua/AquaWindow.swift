@@ -80,6 +80,8 @@ public final class AquaWindow: WindowDelegate {
     // MARK: WindowDelegate
 
     public func render(_ buffer: PixelBuffer) {
+        // Shape/hint text on this frame's device pixel grid.
+        Text.renderScale = buffer.scale
         let w = Double(buffer.width / buffer.scale)
         let h = Double(buffer.height / buffer.scale)
         let cs = cairo_image_surface_create_for_data(

@@ -36,6 +36,12 @@ public enum Text {
     nonisolated(unsafe) private static var shapeCache: [ShapeKey: [at_glyph]] = [:]
     private static let shapeCacheCap = 1024
 
+    /// The current render buffer scale (device px per logical px). The renderer
+    /// sets this before painting a frame so text is shaped and hinted on the
+    /// device pixel grid — advances then line up with the device-rasterised
+    /// glyphs instead of a coarser logical grid. Single-threaded UI paint.
+    nonisolated(unsafe) public static var renderScale: Int32 = 1
+
     /// Font vertical metrics at a pixel size — both positive (px above/below
     /// the baseline).
     public struct Metrics: Sendable {
@@ -91,11 +97,16 @@ public enum Text {
         Metrics(ascent: at_font_ascent(px), descent: at_font_descent(px))
     }
 
-    /// Paint a shaped run with its origin pen at `x` on text `baselineY`. The
-    /// caller sets the source colour first. Consecutive glyphs from the same
-    /// face are batched into one cairo_show_glyphs call.
+    /// Paint a shaped run with its origin pen at logical (`x`, `baselineY`). The
+    /// run was shaped at device px (`px`); positions/advances are divided by the
+    /// render scale into user space, and the font size likewise, so the current
+    /// CTM (which scales user→device by `renderScale`) rasterises them back at
+    /// device px — crisp, without disturbing the CTM (so translated contexts like
+    /// the sliding sheet still position text correctly). The caller sets the
+    /// source colour first. Consecutive glyphs from one face are batched.
     public static func drawShaped(_ cr: OpaquePointer, _ glyphs: [at_glyph],
                                   x: Double, baselineY: Double, px: Int32) {
+        let s = Double(renderScale)
         var penX = x, penY = baselineY, i = 0
         while i < glyphs.count {
             let face = glyphs[i].face
@@ -104,22 +115,26 @@ public enum Text {
                 let g = glyphs[i]
                 var cg = cairo_glyph_t()
                 cg.index = g.index
-                cg.x = penX + g.x_offset
-                cg.y = penY - g.y_offset // HarfBuzz y is up; cairo y is down
+                cg.x = penX + g.x_offset / s
+                cg.y = penY - g.y_offset / s // HarfBuzz y is up; cairo y is down
                 batch.append(cg)
-                penX += g.x_advance
-                penY -= g.y_advance
+                penX += g.x_advance / s
+                penY -= g.y_advance / s
                 i += 1
             }
             guard let cf = cairoFace(face) else { continue }
             cairo_set_font_face(cr, cf)
-            cairo_set_font_size(cr, Double(px))
+            cairo_set_font_size(cr, Double(px) / s)
             batch.withUnsafeBufferPointer {
                 cairo_show_glyphs(cr, $0.baseAddress, Int32($0.count))
             }
         }
     }
 
-    /// Round a logical point size to the integer pixel size we shape/hint at.
-    static func px(_ size: Double) -> Int32 { Int32(size.rounded()) }
+    /// The integer device pixel size to shape/hint at for a logical point
+    /// `size` — scaled by `renderScale` so glyphs snap to the device grid. At
+    /// scale 1 this is just `round(size)`.
+    static func px(_ size: Double) -> Int32 {
+        Int32((size * Double(renderScale)).rounded())
+    }
 }
