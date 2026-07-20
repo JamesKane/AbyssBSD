@@ -41,16 +41,23 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
     `WindowDelegate`/`PixelBuffer`.
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
-    traffic lights, gradients, pinstripe, text), `Text` (FreeType/HarfBuzz
-    shaping via `CText`, painted through cairo-ft — with a cairo toy-text
-    fallback when no font is found), `Scene` (the window painter), `AquaWindow`
-    (a live window + working gel button).
+    traffic lights, gradients, pinstripe, text, and the control set: checkbox,
+    radio, slider, pop-up button, progress bar, text field, group box), `Text`
+    (FreeType/HarfBuzz shaping via `CText`, painted through cairo-ft — with a
+    cairo toy-text fallback when no font is found), `Scene`/`Widgets` (the window
+    painters), `AquaWindow` (a live window wiring pointer/keyboard to the
+    controls).
   - `AquaDemo` — the runnable demo.
 
 A **System Preferences** demo scene reproduces the Jaguar layout (toolbar with
 Show All + favorites, the four category sections in order, separators, a 7-column
 labeled icon grid with original procedural Aqua icons — `de/aqua/Icons.swift`):
 ![system preferences](screenshots/system-preferences.png)
+
+An **Aqua Controls** scene (`AQUA_SCENE=widgets`) shows the classic control set —
+checkboxes, radio group, slider, pop-up button, a candy-striped progress bar and
+OK/Cancel gel buttons — all interactive (`de/aqua/Widgets.swift` + `Draw`
+primitives): ![aqua controls](screenshots/widgets.png)
 
 It also runs **live** now: `abyss/tests/live-sway.sh` brings the window up under
 a headless sway and captures it with grim — a true test of the xdg-shell /
@@ -60,7 +67,9 @@ pointer click through a wlr-virtual-pointer and the counter increments
 (![a registered click](screenshots/live-click.png)). With `--type` it drives
 real keystrokes through a virtual keyboard into the window's text field
 (![typed text](screenshots/live-type.png)) — the full `wl_keyboard` + xkbcommon
-path.
+path. On the widgets scene, `--click` toggles a checkbox and moves the slider —
+real pointer-driven control interaction
+(![live controls](screenshots/live-widgets.png)).
 
 ## How to run
 
@@ -70,6 +79,7 @@ swift build && swift test
 # Headless visual check — renders one frame to PNG, no compositor needed:
 AQUA_RENDER_PNG=/tmp/aqua.png AQUA_SCALE=2 .build/debug/AquaDemo
 AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/AquaDemo
+AQUA_SCENE=widgets  AQUA_RENDER_PNG=/tmp/widgets.png AQUA_SCALE=2 .build/debug/AquaDemo
 
 # Live, against a running Wayland compositor that offers xdg-shell
 # (WAYLAND_DISPLAY must be set):
@@ -77,8 +87,9 @@ AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/Aqu
 
 # Live smoke test under a headless sway, captured with grim (no display needed):
 abyss/tests/live-sway.sh sysprefs /tmp/live.png
-abyss/tests/live-sway.sh --click /tmp/click.png   # drive a real pointer click
-abyss/tests/live-sway.sh --type  /tmp/type.png    # drive real keystrokes
+abyss/tests/live-sway.sh --click /tmp/click.png          # drive a real pointer click
+abyss/tests/live-sway.sh --type  /tmp/type.png           # drive real keystrokes
+abyss/tests/live-sway.sh widgets /tmp/widgets.png --click # toggle a checkbox + move the slider
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -96,10 +107,12 @@ abyss/tests/live-sway.sh --type  /tmp/type.png    # drive real keystrokes
 
 ## What's next
 
-- **Phase 1 polish:** more widgets (a first **text field** exists — wired to
-  live keyboard input; still: checkboxes/radios, scrollbars, menus, sheets,
-  brushed-metal window variant); per-output scale from `wl_output` instead of
-  `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+- **Phase 1 polish:** the core control set now exists and is interactive
+  (checkbox, radio, slider, pop-up button, progress bar, text field, group box —
+  `de/aqua/Widgets.swift`); still to do: scrollbars, real pop-up **menus** (need
+  an xdg-popup surface — today's pop-up button just cycles), tabs/segmented
+  controls, sheets, brushed-metal window variant, and keyboard focus/traversal
+  for the controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
   remaining text refinements are device-pixel hinting under HiDPI and glyph
   caching. Live runs + **pointer and keyboard** interaction work under headless

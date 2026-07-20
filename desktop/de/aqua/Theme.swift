@@ -71,6 +71,19 @@ public enum Theme {
     public static let fieldFocusRing = Color(hex: 0x74a6ee, a: 0.85)
     public static let fieldCaret = Color(hex: 0x2061c9)
 
+    // Controls (checkbox / radio / slider / pop-up / progress). White gel bodies
+    // share this palette; the "on" state reuses the blue gel button colours.
+    public static let controlWhiteTop = Color(hex: 0xffffff)
+    public static let controlWhiteBottom = Color(hex: 0xe3e3e3)
+    public static let controlBorder = Color(hex: 0x8b8b8b)
+    public static let controlInsetShadow = Color(0, 0, 0, 0.13)
+    public static let controlGlyph = Color(hex: 0xffffff)      // check / dot on blue
+    public static let controlLabel = Color(hex: 0x1a1a1a)
+    public static let sliderTrack = Color(hex: 0xcccccc)
+    public static let sliderTrackEdge = Color(0, 0, 0, 0.30)
+    public static let progressTrack = Color(hex: 0xd6d6d6)
+    public static let groupBoxBorder = Color(0, 0, 0, 0.16)
+
     public static let bodyText = Color(hex: 0x202020)
     public static let fontFamily = "Lucida Grande"
     public static let fontSize: Double = 13

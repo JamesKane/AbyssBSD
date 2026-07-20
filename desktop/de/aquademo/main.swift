@@ -19,11 +19,19 @@ func envString(_ name: String) -> String? {
     getenv(name).map { String(cString: $0) }
 }
 
-let sysPrefs = envString("AQUA_SCENE") == "sysprefs"
-let scene: SceneKind = sysPrefs ? .systemPreferences : .window
-let title = sysPrefs ? "System Preferences" : "AbyssBSD"
-let width: Int32 = sysPrefs ? 760 : 440
-let height: Int32 = sysPrefs ? 620 : 300
+let sceneName = envString("AQUA_SCENE")
+let scene: SceneKind
+let title: String
+let width: Int32
+let height: Int32
+switch sceneName {
+case "sysprefs":
+    scene = .systemPreferences; title = "System Preferences"; width = 760; height = 620
+case "widgets":
+    scene = .widgets; title = "Aqua Controls"; width = 460; height = 360
+default:
+    scene = .window; title = "AbyssBSD"; width = 440; height = 300
+}
 
 if let out = envString("AQUA_RENDER_PNG") {
     let scale = Int32(envString("AQUA_SCALE") ?? "") ?? 1

@@ -236,6 +236,263 @@ public enum Draw {
         cairo_restore(cr)
     }
 
+    // MARK: Controls
+
+    /// The white gel body shared by checkboxes, pop-up buttons and field-like
+    /// controls: a top-lit white gradient, a soft inset top-shadow, a 1px rim.
+    private static func whiteWell(_ cr: OpaquePointer, _ r: Rect, radius: Double) {
+        roundedRect(cr, r, radius: radius)
+        fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
+            (0, Theme.controlWhiteTop), (1, Theme.controlWhiteBottom)])
+        cairo_save(cr)
+        roundedRect(cr, r, radius: radius)
+        cairo_clip(cr)
+        let sg = cairo_pattern_create_linear(0, r.y, 0, r.y + 3)
+        let s = Theme.controlInsetShadow
+        cairo_pattern_add_color_stop_rgba(sg, 0, s.r, s.g, s.b, s.a)
+        cairo_pattern_add_color_stop_rgba(sg, 1, s.r, s.g, s.b, 0)
+        cairo_rectangle(cr, r.x, r.y, r.w, 4)
+        cairo_set_source(cr, sg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(sg)
+        cairo_restore(cr)
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.controlBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+    }
+
+    /// Fill the current (already-constructed) path with the blue gel gradient
+    /// over the vertical band [y, y+h], then a translucent top gloss capsule.
+    private static func fillBlueGel(_ cr: OpaquePointer, y: Double, h: Double) {
+        fillVerticalGradient(cr, y: y, h: h, stops: [
+            (0, Theme.buttonBlueTop), (0.5, Theme.buttonBlueMid),
+            (1, Theme.buttonBlueBottom)])
+    }
+
+    /// An Aqua checkbox: white gel when off, blue gel + white check when on.
+    public static func checkbox(_ cr: OpaquePointer, _ r: Rect, checked: Bool) {
+        let radius = 3.0
+        if !checked {
+            whiteWell(cr, r, radius: radius)
+            return
+        }
+        roundedRect(cr, r, radius: radius)
+        fillBlueGel(cr, y: r.y, h: r.h)
+        // Top gloss.
+        let gloss = Rect(r.x + 1, r.y + 1, r.w - 2, r.h * 0.42)
+        roundedRect(cr, gloss, radius: 2)
+        let gg = cairo_pattern_create_linear(0, gloss.y, 0, gloss.y + gloss.h)
+        cairo_pattern_add_color_stop_rgba(gg, 0, 1, 1, 1, 0.6)
+        cairo_pattern_add_color_stop_rgba(gg, 1, 1, 1, 1, 0.05)
+        cairo_set_source(cr, gg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(gg)
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.buttonBlueBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+        // White check mark.
+        setColor(cr, Theme.controlGlyph)
+        cairo_set_line_width(cr, 1.8)
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND)
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND)
+        cairo_move_to(cr, r.x + r.w * 0.24, r.y + r.h * 0.52)
+        cairo_line_to(cr, r.x + r.w * 0.43, r.y + r.h * 0.72)
+        cairo_line_to(cr, r.x + r.w * 0.78, r.y + r.h * 0.28)
+        cairo_stroke(cr)
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT)
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER)
+    }
+
+    /// An Aqua radio button centred at (cx, cy): white gel ring when off, blue
+    /// gel + white centre dot when selected.
+    public static func radioButton(_ cr: OpaquePointer, cx: Double, cy: Double,
+                                   radius: Double, selected: Bool) {
+        let twoPi = 2 * Double.pi
+        cairo_new_sub_path(cr)
+        cairo_arc(cr, cx, cy, radius, 0, twoPi)
+        if selected {
+            fillBlueGel(cr, y: cy - radius, h: radius * 2)
+        } else {
+            fillVerticalGradient(cr, y: cy - radius, h: radius * 2, stops: [
+                (0, Theme.controlWhiteTop), (1, Theme.controlWhiteBottom)])
+        }
+        // Rim (strokes the gradient-filled circle preserved above).
+        setColor(cr, selected ? Theme.buttonBlueBorder : Theme.controlBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+        // Upper gloss arc.
+        cairo_new_sub_path(cr)
+        cairo_arc(cr, cx, cy - radius * 0.35, radius * 0.62, 0, twoPi)
+        let gg = cairo_pattern_create_linear(0, cy - radius, 0, cy)
+        cairo_pattern_add_color_stop_rgba(gg, 0, 1, 1, 1, selected ? 0.5 : 0.7)
+        cairo_pattern_add_color_stop_rgba(gg, 1, 1, 1, 1, 0)
+        cairo_set_source(cr, gg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(gg)
+        if selected {
+            cairo_new_sub_path(cr)
+            cairo_arc(cr, cx, cy, radius * 0.34, 0, twoPi)
+            setColor(cr, Theme.controlGlyph)
+            cairo_fill(cr)
+        }
+    }
+
+    /// A horizontal Aqua slider inside `track` (the full interactive rect): a
+    /// recessed groove with a round white gel thumb at `value` (0…1).
+    public static let sliderThumbRadius = 8.0
+    public static func slider(_ cr: OpaquePointer, _ track: Rect, value: Double) {
+        let v = max(0, min(1, value))
+        let tr = sliderThumbRadius
+        let grooveH = 5.0
+        let groove = Rect(track.x, track.y + (track.h - grooveH) / 2,
+                          track.w, grooveH)
+        roundedRect(cr, groove, radius: grooveH / 2)
+        setColor(cr, Theme.sliderTrack)
+        cairo_fill(cr)
+        // Inset shadow along the groove's top.
+        cairo_save(cr)
+        roundedRect(cr, groove, radius: grooveH / 2)
+        cairo_clip(cr)
+        setColor(cr, Theme.sliderTrackEdge)
+        cairo_rectangle(cr, groove.x, groove.y, groove.w, 1.5)
+        cairo_fill(cr)
+        cairo_restore(cr)
+        roundedRect(cr, groove, radius: grooveH / 2)
+        setColor(cr, Theme.controlBorder.with(a: 0.6))
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+        // Round thumb.
+        let cx = track.x + tr + v * (track.w - 2 * tr)
+        let cy = track.y + track.h / 2
+        let twoPi = 2 * Double.pi
+        cairo_new_sub_path(cr)
+        cairo_arc(cr, cx, cy, tr, 0, twoPi)
+        fillVerticalGradient(cr, y: cy - tr, h: tr * 2, stops: [
+            (0, Theme.controlWhiteTop), (1, Color(hex: 0xc8c8c8))])
+        setColor(cr, Theme.controlBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+        cairo_new_sub_path(cr)
+        cairo_arc(cr, cx, cy - tr * 0.3, tr * 0.6, 0, twoPi)
+        let gg = cairo_pattern_create_linear(0, cy - tr, 0, cy)
+        cairo_pattern_add_color_stop_rgba(gg, 0, 1, 1, 1, 0.85)
+        cairo_pattern_add_color_stop_rgba(gg, 1, 1, 1, 1, 0)
+        cairo_set_source(cr, gg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(gg)
+    }
+
+    /// An Aqua pop-up (menu) button: a white gel body with the label, and a
+    /// blue gel end-cap on the right bearing a white up/down double chevron.
+    public static func popUpButton(_ cr: OpaquePointer, _ r: Rect, label: String) {
+        let radius = 4.0
+        whiteWell(cr, r, radius: radius)
+        let capW = r.h
+        let capX = r.x + r.w - capW
+        // Blue cap, clipped to the body's rounded right side.
+        cairo_save(cr)
+        roundedRect(cr, r, radius: radius)
+        cairo_clip(cr)
+        cairo_rectangle(cr, capX, r.y, capW, r.h)
+        fillBlueGel(cr, y: r.y, h: r.h)
+        let gloss = Rect(capX, r.y + 1, capW, r.h * 0.42)
+        cairo_rectangle(cr, gloss.x, gloss.y, gloss.w, gloss.h)
+        let gg = cairo_pattern_create_linear(0, gloss.y, 0, gloss.y + gloss.h)
+        cairo_pattern_add_color_stop_rgba(gg, 0, 1, 1, 1, 0.5)
+        cairo_pattern_add_color_stop_rgba(gg, 1, 1, 1, 1, 0.02)
+        cairo_set_source(cr, gg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(gg)
+        cairo_restore(cr)
+        // Divider left of the cap.
+        setColor(cr, Theme.buttonBlueBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_move_to(cr, capX + 0.5, r.y + 1)
+        cairo_line_to(cr, capX + 0.5, r.y + r.h - 1)
+        cairo_stroke(cr)
+        // White double chevron.
+        let ccx = capX + capW / 2, ccy = r.y + r.h / 2
+        setColor(cr, Theme.controlGlyph)
+        cairo_set_line_width(cr, 1.3)
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND)
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND)
+        cairo_move_to(cr, ccx - 3, ccy - 2.5)
+        cairo_line_to(cr, ccx, ccy - 5)
+        cairo_line_to(cr, ccx + 3, ccy - 2.5)
+        cairo_stroke(cr)
+        cairo_move_to(cr, ccx - 3, ccy + 2.5)
+        cairo_line_to(cr, ccx, ccy + 5)
+        cairo_line_to(cr, ccx + 3, ccy + 2.5)
+        cairo_stroke(cr)
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT)
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER)
+        // Label, left-aligned in the body.
+        text(cr, label, centerX: (r.x + capX) / 2, centerY: r.y + r.h / 2,
+             color: Theme.fieldText, size: Theme.fontSize)
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.controlBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+    }
+
+    /// A determinate Aqua progress bar: a recessed track with a blue gel fill
+    /// carrying the diagonal candy-stripe, `value` in 0…1.
+    public static func progressBar(_ cr: OpaquePointer, _ r: Rect, value: Double) {
+        let v = max(0, min(1, value))
+        let radius = r.h / 2
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.progressTrack)
+        cairo_fill(cr)
+        cairo_save(cr)
+        roundedRect(cr, r, radius: radius)
+        cairo_clip(cr)
+        setColor(cr, Theme.controlInsetShadow)
+        cairo_rectangle(cr, r.x, r.y, r.w, 1.5)
+        cairo_fill(cr)
+        cairo_restore(cr)
+        if v > 0 {
+            let fw = max(r.h, v * r.w)
+            cairo_save(cr)
+            roundedRect(cr, r, radius: radius)
+            cairo_clip(cr)
+            cairo_rectangle(cr, r.x, r.y, fw, r.h)
+            fillBlueGel(cr, y: r.y, h: r.h)
+            cairo_clip(cr)  // now bounded to the filled portion too
+            // Candy stripes.
+            setColor(cr, Color(1, 1, 1, 0.20))
+            cairo_set_line_width(cr, 3.5)
+            var sx = r.x - r.h
+            while sx < r.x + fw {
+                cairo_move_to(cr, sx, r.y + r.h)
+                cairo_line_to(cr, sx + r.h, r.y)
+                cairo_stroke(cr)
+                sx += 9
+            }
+            cairo_restore(cr)
+        }
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.controlBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+    }
+
+    /// A titled group box: a faint rounded outline with the title notched into
+    /// its top-left. Returns nothing; purely decorative grouping.
+    public static func groupBox(_ cr: OpaquePointer, _ r: Rect, title: String) {
+        roundedRect(cr, r, radius: 5)
+        setColor(cr, Theme.groupBoxBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+        let tw = textWidth(cr, title, size: 11) + 8
+        setColor(cr, Theme.contentBackground)
+        cairo_rectangle(cr, r.x + 10, r.y - 6, tw, 12)
+        cairo_fill(cr)
+        textLeft(cr, title, x: r.x + 14, baselineY: r.y + 4,
+                 color: Theme.controlLabel.with(a: 0.75), size: 11)
+    }
+
     /// Draw text centred on a point. Uses shaped FreeType/HarfBuzz glyphs when
     /// a font is loaded; falls back to cairo toy-text otherwise.
     public static func text(_ cr: OpaquePointer, _ s: String, centerX: Double,

@@ -7,7 +7,7 @@
 # configure/resize, pointer input, listener/object lifetimes). This script runs
 # AquaDemo against a headless sway and captures the result with grim.
 #
-# Usage: abyss/tests/live-sway.sh [window|sysprefs] [out.png] [--click] [--type]
+# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type]
 # Needs: sway (>=1.11), grim. With --click/--type also: wayland-scanner +
 # libwayland dev (to build the virtual-input helpers; --type also needs
 # xkbcommon). Uses the headless backend + pixman software renderer, so no
@@ -17,24 +17,30 @@
 # client never binds wl_pointer/wl_keyboard and the input paths can't be tested.
 # --click and --type each create a virtual input device (a wlr-virtual-pointer /
 # a zwp_virtual_keyboard) which registers with the seat: the seat gains the
-# matching capability and AquaDemo binds the input and receives events. Both
-# force the .window scene (the only one with the gel button + Clicks counter +
-# text field). With --click the PNG should read "Clicks: 1"; with --type the
-# text field should read "Abyss".
+# matching capability and AquaDemo binds the input and receives events.
+# --click's injected events adapt to the scene: the .window gel button (PNG
+# should read "Clicks: 1"), or the .widgets checkbox + slider (checkbox 2 ticks
+# on, slider/progress jump right). --type drives the .window text field (should
+# read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene="sysprefs"; out=""; click=""; type=""
+scene=""; out=""; click=""; type=""
 for a in "$@"; do
   case "$a" in
-    --click)          click="--click" ;;
-    --type)           type="--type" ;;
-    window|sysprefs)  scene="$a" ;;
-    *)                out="$a" ;;
+    --click)                  click="--click" ;;
+    --type)                   type="--type" ;;
+    window|sysprefs|widgets)  scene="$a" ;;
+    *)                        out="$a" ;;
   esac
 done
 [ -n "$out" ] || out="${TMPDIR:-/tmp}/aqua-live-$$.png"
-# Only the window scene carries the interactive controls.
-{ [ "$click" = "--click" ] || [ "$type" = "--type" ]; } && scene="window"
+# Pick a default scene: an interacting run wants a control-bearing scene.
+if [ -z "$scene" ]; then
+  if [ "$click" = "--click" ] || [ "$type" = "--type" ]; then scene="window"
+  else scene="sysprefs"; fi
+fi
+# --type only makes sense where there's a focused text field.
+[ "$type" = "--type" ] && scene="window"
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -72,6 +78,7 @@ fi
 # it actually requests. Keep in sync with the sizes in de/aquademo/main.swift.
 case "$scene" in
   sysprefs) res="760x620" ;;
+  widgets)  res="460x360" ;;
   *)        res="440x300" ;;
 esac
 cfg=$(mktemp)
@@ -127,11 +134,12 @@ sleep 1  # let a couple of frames paint
 
 if [ "$click" = "--click" ]; then
   # Virtual pointer, fed via a FIFO so it stays alive (holding the pointer
-  # capability) while we inject. Targets the default gel button — center
-  # (360,265) of the 440x300 window scene, which fills the output at 0,0.
+  # capability) while we inject. The output size (for absolute coords) matches
+  # the scene's window, which fills the headless output at 0,0.
+  case "$scene" in widgets) vpw=460; vph=360 ;; *) vpw=440; vph=300 ;; esac
   vp_log=$(mktemp)
   fifo=$(mktemp -u); mkfifo "$fifo"
-  WAYLAND_DISPLAY="$wd" "$vp_dir/vpointer" 440 300 < "$fifo" > "$vp_log" 2>&1 &
+  WAYLAND_DISPLAY="$wd" "$vp_dir/vpointer" "$vpw" "$vph" < "$fifo" > "$vp_log" 2>&1 &
   vp_pid=$!
   exec 3>"$fifo"
   for _ in $(seq 1 20); do grep -q ready "$vp_log" && break; sleep 0.15; done
@@ -140,9 +148,17 @@ if [ "$click" = "--click" ]; then
   [ "${caps:-0}" -ne 0 ] || { echo "FAIL: seat gained no pointer capability"; exit 1; }
   echo "virtual pointer ready; seat capabilities=$caps"
   sleep 0.5  # let AquaDemo bind wl_pointer
-  printf 'm 360 265\n' >&3   # move over the button
-  printf 'p\n' >&3           # press
-  printf 'r\n' >&3           # release -> one click
+  case "$scene" in
+    widgets)
+      # Toggle the 2nd checkbox ("Show all file extensions"), then click near
+      # the right of the slider track (press sets the value there).
+      printf 'm 60 94\np\nr\n'   >&3
+      printf 'm 384 197\np\nr\n' >&3
+      ;;
+    *)
+      printf 'm 360 265\np\nr\n' >&3   # move over the gel button, click once
+      ;;
+  esac
   sleep 0.5
   exec 3>&-
 fi

@@ -40,6 +40,41 @@ final class AquaTests: XCTestCase {
         XCTAssertNotEqual(g.first?.index, UInt(UInt8(ascii: "D")))
     }
 
+    func testWidgetsLayoutIsSaneAndInBounds() {
+        let w = 460.0, h = 360.0
+        let L = widgetsLayout(w: w, h: h)
+
+        XCTAssertEqual(L.checks.count, widgetCheckLabels.count)
+        XCTAssertEqual(L.checkBoxes.count, widgetCheckLabels.count)
+        XCTAssertEqual(L.radios.count, widgetRadioLabels.count)
+        XCTAssertEqual(L.radioCenters.count, widgetRadioLabels.count)
+
+        // Every interactive rect stays inside the window.
+        func inBounds(_ r: Rect) -> Bool {
+            r.x >= 0 && r.y >= 0 && r.x + r.w <= w && r.y + r.h <= h
+        }
+        for r in L.checks + L.checkBoxes + L.radios {
+            XCTAssertTrue(inBounds(r))
+        }
+        for r in [L.sliderTrack, L.progress, L.popup, L.okButton, L.cancelButton] {
+            XCTAssertTrue(inBounds(r))
+            XCTAssertGreaterThan(r.w, 0)
+        }
+
+        // Checkbox boxes are the standard 14px squares, stacked top to bottom.
+        for b in L.checkBoxes {
+            XCTAssertEqual(b.w, 14, accuracy: 0.01)
+            XCTAssertEqual(b.h, 14, accuracy: 0.01)
+        }
+        XCTAssertLessThan(L.checkBoxes[0].y, L.checkBoxes[1].y)
+        XCTAssertLessThan(L.checkBoxes[1].y, L.checkBoxes[2].y)
+
+        // Cancel sits to the left of OK, both pinned to the bottom band.
+        XCTAssertLessThan(L.cancelButton.x + L.cancelButton.w, L.okButton.x + L.okButton.w)
+        XCTAssertEqual(L.cancelButton.y, L.okButton.y, accuracy: 0.01)
+        XCTAssertGreaterThan(L.okButton.y, h / 2)
+    }
+
     func testWidthScalesAndMetricsPositive() throws {
         try XCTSkipUnless(Text.available, "no font on this host")
         let narrow = Text.width(Text.shape("ii", px: 13))

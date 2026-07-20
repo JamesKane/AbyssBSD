@@ -18,8 +18,10 @@ renders faithful Jaguar UI:
   **and keyboard** input (the latter translated through xkbcommon), a dispatch
   loop.
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
-  buttons, glassy traffic lights, gradients, pinstripe), two scenes (a simple
-  window and a **System Preferences** clone), and original procedural pref icons.
+  buttons, glassy traffic lights, gradients, pinstripe) and the classic control
+  set (checkbox, radio, slider, pop-up button, progress bar, text field, group
+  box), three scenes (a simple window, a **System Preferences** clone, and an
+  **Aqua Controls** gallery), and original procedural pref icons.
 - **`AquaDemo`** — runs live against a compositor *or* renders a scene to PNG.
 - **Infra** — borrowed/adapted FreeBSD VM + test harness under `abyss/`, plus
   the `docs/`.
@@ -138,7 +140,18 @@ shim. `wl_keyboard` is bound at seat v5, so the NULL-slot trap (§2.3) applies:
 all six events (keymap/enter/leave/key/modifiers/**repeat_info**) need a handler.
 Verified live by `--type` (§3); found no new crash — the §2.3 discipline held.
 
-### 2.9 The linter lies about C includes
+### 2.9 One layout function feeds both paint and hit-test
+The widgets scene keeps all control geometry in a single pure function
+(`widgetsLayout(w:h:) -> WidgetLayout`); `paintWidgets` draws from it and
+`AquaWindow` hit-tests against the *same* returned rects (stored each render).
+This is the immediate-mode discipline that keeps "what you see" and "what you can
+click" from drifting: never compute a control's rect twice. It also makes the
+geometry unit-testable with no compositor (`testWidgetsLayoutIsSaneAndInBounds`
+checks counts, in-bounds, stacking, button order). Interaction state is a plain
+`Sendable` struct the delegate owns; the slider maps pointer-x through the same
+thumb-radius inset the painter uses, so drag tracks the thumb exactly.
+
+### 2.10 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -220,9 +233,13 @@ Known-not-faithful, on purpose:
    (`vkeyboard.c`). Follow-ups: hover/scroll, key repeat (`repeat_info` is
    handled but ignored), and keyboard focus tracking (enter/leave → caret).
 3. **Per-output scale** from `wl_output` instead of `AQUA_SCALE`.
-4. **More widgets** — a first Aqua **text field** now exists (`Draw.textField`,
-   wired to real keyboard input); still to do: checkboxes/radios, scrollbars,
-   menus, sheets, brushed-metal window variant — toward a real toolkit.
+4. **More widgets** — ✅ the core Aqua control set now exists and is interactive
+   (checkbox, radio, slider, pop-up button, progress bar, text field, group box
+   in `Draw`; the **Aqua Controls** scene in `de/aqua/Widgets.swift`, driven live
+   by `live-sway.sh widgets --click`). Still to do: scrollbars, **real** pop-up
+   menus (need an xdg-popup child surface — today's pop-up button just cycles its
+   value), tabs/segmented controls, sheets, a brushed-metal window variant, and
+   keyboard focus/traversal (Tab between controls, Space to toggle).
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,

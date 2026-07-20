@@ -13,6 +13,7 @@ import Darwin
 public enum SceneKind: Sendable {
     case window
     case systemPreferences
+    case widgets
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
@@ -254,6 +255,8 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                         buttonPressed: false)
     case .systemPreferences:
         paintSystemPreferences(cr, w: cw, h: ch)
+    case .widgets:
+        paintWidgets(cr, w: cw, h: ch, state: WidgetState())
     }
     cairo_restore(cr)
 

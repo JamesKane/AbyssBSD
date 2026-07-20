@@ -26,6 +26,11 @@ public final class AquaWindow: WindowDelegate {
     private var pointerY = 0.0
     private var typedText = ""
 
+    // Widgets-scene state.
+    private var widgets = WidgetState()
+    private var widgetLayout = WidgetLayout()
+    private var draggingSlider = false
+
     public init?(display: Display, title: String, scene: SceneKind = .window,
                  width: Int32 = 440, height: Int32 = 300) {
         self.title = title
@@ -83,16 +88,29 @@ public final class AquaWindow: WindowDelegate {
                                          typed: typedText, focused: true)
         case .systemPreferences:
             paintSystemPreferences(cr, w: w, h: h)
+        case .widgets:
+            widgetLayout = paintWidgets(cr, w: w, h: h, state: widgets)
         }
     }
 
     public func pointerMoved(x: Double, y: Double) {
         pointerX = x
         pointerY = y
+        if sceneKind == .widgets, draggingSlider {
+            widgets.slider = sliderValue(at: x)
+            window?.setNeedsDisplay()
+        }
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft else { return }
+        switch sceneKind {
+        case .widgets: widgetsPointerButton(pressed: pressed)
+        default:       windowPointerButton(pressed: pressed)
+        }
+    }
+
+    private func windowPointerButton(pressed: Bool) {
         if pressed {
             if buttonRect.contains(pointerX, pointerY) {
                 buttonPressed = true
@@ -104,6 +122,43 @@ public final class AquaWindow: WindowDelegate {
                 buttonPressed = false
                 window?.setNeedsDisplay()
             }
+        }
+    }
+
+    // MARK: Widgets-scene input
+
+    private func sliderValue(at x: Double) -> Double {
+        let t = widgetLayout.sliderTrack
+        let usable = t.w - 2 * Draw.sliderThumbRadius
+        guard usable > 0 else { return 0 }
+        return max(0, min(1, (x - t.x - Draw.sliderThumbRadius) / usable))
+    }
+
+    private func widgetsPointerButton(pressed: Bool) {
+        guard pressed else {
+            draggingSlider = false
+            if widgets.okPressed { widgets.okPressed = false; window?.setNeedsDisplay() }
+            return
+        }
+        for (i, r) in widgetLayout.checks.enumerated()
+        where r.contains(pointerX, pointerY) {
+            widgets.checks[i].toggle(); window?.setNeedsDisplay(); return
+        }
+        for (i, r) in widgetLayout.radios.enumerated()
+        where r.contains(pointerX, pointerY) {
+            widgets.radio = i; window?.setNeedsDisplay(); return
+        }
+        if widgetLayout.sliderTrack.contains(pointerX, pointerY) {
+            draggingSlider = true
+            widgets.slider = sliderValue(at: pointerX)
+            window?.setNeedsDisplay(); return
+        }
+        if widgetLayout.popup.contains(pointerX, pointerY) {
+            widgets.popup = (widgets.popup + 1) % widgetPopupOptions.count
+            window?.setNeedsDisplay(); return
+        }
+        if widgetLayout.okButton.contains(pointerX, pointerY) {
+            widgets.okPressed = true; window?.setNeedsDisplay()
         }
     }
 
