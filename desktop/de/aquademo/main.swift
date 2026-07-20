@@ -3,7 +3,8 @@
 //
 //   WAYLAND_DISPLAY must point at a running compositor.
 //   AQUA_SCENE=sysprefs  picks the System Preferences demo (else a simple window).
-//   AQUA_SCALE=2         forces 2x rendering to check HiDPI crispness.
+//   AQUA_SCALE=2         pins 2x rendering (overrides the automatic per-output
+//                        scale, which the window otherwise tracks from wl_output).
 //   AQUA_RENDER_PNG=path renders one frame to PNG and exits (no compositor).
 
 import Surface

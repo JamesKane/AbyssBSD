@@ -58,20 +58,23 @@ public final class AquaWindow: WindowDelegate {
                  width: Int32 = 440, height: Int32 = 300) {
         self.title = title
         self.sceneKind = scene
+        // AQUA_SCALE, when set, pins the buffer scale (handy for forcing HiDPI
+        // without a HiDPI output); otherwise the window auto-tracks its outputs.
+        let (scale, auto) = AquaWindow.scaleConfig()
         guard let win = Window(display: display, title: title,
                                appID: "org.abyssbsd.aquademo",
                                width: width, height: height,
-                               scale: AquaWindow.envScale(),
+                               scale: scale, autoScale: auto,
                                delegate: self) else { return nil }
         window = win
         display.window = win
     }
 
-    private static func envScale() -> Int32 {
+    private static func scaleConfig() -> (scale: Int32, auto: Bool) {
         if let s = getenv("AQUA_SCALE"), let v = Int32(String(cString: s)), v > 0 {
-            return v
+            return (v, false)   // pinned override — don't follow outputs
         }
-        return 1
+        return (1, true)        // auto-detect from wl_output
     }
 
     // MARK: WindowDelegate

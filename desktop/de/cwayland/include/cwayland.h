@@ -42,6 +42,7 @@ void *aw_bind_compositor(void *registry, uint32_t name, uint32_t version);
 void *aw_bind_shm(void *registry, uint32_t name, uint32_t version);
 void *aw_bind_seat(void *registry, uint32_t name, uint32_t version);
 void *aw_bind_xdg_wm_base(void *registry, uint32_t name, uint32_t version);
+void *aw_bind_output(void *registry, uint32_t name, uint32_t version);
 
 /* Compositor / surface / shm / buffer. */
 void *aw_compositor_create_surface(void *compositor);

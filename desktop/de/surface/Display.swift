@@ -22,6 +22,17 @@ import CWayland
 private let kSeatCapabilityPointer: UInt32 = 1
 private let kSeatCapabilityKeyboard: UInt32 = 2
 
+// A bound wl_output and its integer scale factor. wl_output batches its
+// properties and only makes them current on the `done` event, so we stage the
+// scale in `pendingScale` and commit it on `done`.
+final class OutputInfo {
+    let name: UInt32          // registry name, for global_remove
+    let proxy: OpaquePointer
+    var scale: Int32 = 1
+    var pendingScale: Int32 = 1
+    init(name: UInt32, proxy: OpaquePointer) { self.name = name; self.proxy = proxy }
+}
+
 public final class Display {
     let display: OpaquePointer
     let registry: OpaquePointer
@@ -32,6 +43,10 @@ public final class Display {
     var wmBase: OpaquePointer?
     var pointer: OpaquePointer?
     var keyboard: OpaquePointer?
+
+    // Every wl_output we've bound, with its current scale. The window consults
+    // these (via outputScale) for the surfaces it's shown on.
+    private var outputs: [OutputInfo] = []
 
     // xkbcommon translation for keyboard input; created lazily with the seat.
     let keyboardState = KeyboardState()
@@ -71,7 +86,11 @@ public final class Display {
             d.handleGlobal(name: name, interface: String(cString: iface),
                            version: version)
         }
-        rl.global_remove = { _, _, _ in }
+        rl.global_remove = { data, _, name in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            d.handleGlobalRemove(name: name)
+        }
         addListener(to: registry, listener: rl, data: me)
 
         // Two roundtrips: first delivers globals, second delivers follow-ups
@@ -128,9 +147,53 @@ public final class Display {
                 aw_xdg_wm_base_pong(raw(d.wmBase!), serial)
             }
             addListener(to: b, listener: bl, data: me)
+        case "wl_output":
+            // v2 is where the `scale` event lands (and `done` batches props).
+            guard let o = opt(aw_bind_output(raw(registry), name, min(version, 2)))
+            else { return }
+            outputs.append(OutputInfo(name: name, proxy: o))
+            var ol = wl_output_listener()
+            ol.geometry = { _, _, _, _, _, _, _, _, _, _ in }
+            ol.mode = { _, _, _, _, _, _ in }
+            ol.done = { data, output in
+                guard let data, let output else { return }
+                let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+                d.outputDone(output)
+            }
+            ol.scale = { data, output, factor in
+                guard let data, let output else { return }
+                let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+                d.outputScaleChanged(output, factor)
+            }
+            addListener(to: o, listener: ol, data: me)
         default:
             break
         }
+    }
+
+    private func handleGlobalRemove(name: UInt32) {
+        guard let i = outputs.firstIndex(where: { $0.name == name }) else { return }
+        outputs.remove(at: i)      // compositor destroys the proxy on its side
+        window?.recomputeScale()
+    }
+
+    // The pending scale for `proxy` (staged until the next `done`).
+    private func outputScaleChanged(_ proxy: OpaquePointer, _ factor: Int32) {
+        for o in outputs where o.proxy == proxy { o.pendingScale = max(1, factor) }
+    }
+
+    // Commit staged properties; a scale change re-evaluates the window's scale.
+    private func outputDone(_ proxy: OpaquePointer) {
+        for o in outputs where o.proxy == proxy && o.scale != o.pendingScale {
+            o.scale = o.pendingScale
+            window?.recomputeScale()
+        }
+    }
+
+    /// The integer scale of a bound output (1 if we don't know it).
+    func outputScale(_ proxy: OpaquePointer) -> Int32 {
+        for o in outputs where o.proxy == proxy { return o.scale }
+        return 1
     }
 
     private func seatCapabilities(_ caps: UInt32) {

@@ -103,7 +103,11 @@ public final class Window {
 
     public weak var delegate: WindowDelegate?
 
-    let scale: Int32
+    // Buffer scale (device pixels per logical pixel). Mutable: when `autoScale`
+    // is on it tracks the outputs the surface is shown on; otherwise it's pinned.
+    public private(set) var scale: Int32
+    private let autoScale: Bool
+    private var enteredOutputs: [OpaquePointer] = []
     private var logicalW: Int32
     private var logicalH: Int32
     private var pendingW: Int32
@@ -115,13 +119,14 @@ public final class Window {
 
     public init?(display: Display, title: String, appID: String,
                  width: Int32, height: Int32, scale: Int32 = 1,
-                 delegate: WindowDelegate) {
+                 autoScale: Bool = true, delegate: WindowDelegate) {
         guard let compositor = display.compositor, let wmBase = display.wmBase,
               let surf = opt(aw_compositor_create_surface(raw(compositor)))
         else { return nil }
         self.display = display
         self.surface = surf
         self.scale = max(1, scale)
+        self.autoScale = autoScale
         self.logicalW = width
         self.logicalH = height
         self.pendingW = width
@@ -158,6 +163,22 @@ public final class Window {
         }
         display.addListener(to: tl, listener: tll, data: me)
 
+        // Track which outputs the surface is shown on, to pick the buffer scale
+        // (enter/leave carry a wl_output). Only enter/leave exist at wl_surface
+        // v4, so the other (v6) listener slots stay NULL and are never dispatched.
+        var sl = wl_surface_listener()
+        sl.enter = { data, _, output in
+            guard let data, let output else { return }
+            let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
+            w.surfaceEntered(output)
+        }
+        sl.leave = { data, _, output in
+            guard let data, let output else { return }
+            let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
+            w.surfaceLeft(output)
+        }
+        display.addListener(to: surf, listener: sl, data: me)
+
         title.withCString { aw_xdg_toplevel_set_title(raw(tl), $0) }
         appID.withCString { aw_xdg_toplevel_set_app_id(raw(tl), $0) }
 
@@ -178,6 +199,42 @@ public final class Window {
         aw_xdg_surface_ack_configure(raw(xdgSurface), serial)
         needsRedraw = true
         if !framePending { renderAndCommit() }
+    }
+
+    private func surfaceEntered(_ output: OpaquePointer) {
+        if !enteredOutputs.contains(output) { enteredOutputs.append(output) }
+        recomputeScale()
+    }
+
+    private func surfaceLeft(_ output: OpaquePointer) {
+        enteredOutputs.removeAll { $0 == output }
+        recomputeScale()
+    }
+
+    /// Re-evaluate the buffer scale from the outputs the surface is shown on
+    /// (HiDPI rule: use the max). Called by Display on enter/leave and whenever a
+    /// relevant output's scale changes. A no-op when the scale is pinned.
+    func recomputeScale() {
+        guard autoScale else { return }
+        var s: Int32 = 1
+        for o in enteredOutputs { s = max(s, display.outputScale(o)) }
+        updateScale(s)
+    }
+
+    private func updateScale(_ newScale: Int32) {
+        let s = max(1, newScale)
+        guard s != scale else { return }
+        scale = s
+        // Log to fd 2 directly — the `stderr` global is a nonisolated mutable
+        // var that Swift 6 strict concurrency rejects (see HANDOFF §2.4).
+        let msg = "Surface.Window: buffer scale -> \(s)x\n"
+        msg.withCString { _ = write(2, $0, strlen($0)) }
+        // Buffers are sized in device pixels, so re-cut them and repaint.
+        if !buffers.isEmpty {
+            allocateBuffers()
+            needsRedraw = true
+            if !framePending { renderAndCommit() }
+        }
     }
 
     private func allocateBuffers() {

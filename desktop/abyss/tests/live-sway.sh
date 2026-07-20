@@ -7,7 +7,7 @@
 # configure/resize, pointer input, listener/object lifetimes). This script runs
 # AquaDemo against a headless sway and captures the result with grim.
 #
-# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type] [--keys]
+# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type] [--keys] [--hidpi]
 # Needs: sway (>=1.11), grim. With --click/--type also: wayland-scanner +
 # libwayland dev (to build the virtual-input helpers; --type also needs
 # xkbcommon). Uses the headless backend + pixman software renderer, so no
@@ -24,12 +24,13 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
     --keys)                   keys="--keys" ;;   # drive keyboard focus/traversal
+    --hidpi)                  hidpi="--hidpi" ;; # scale-2 output; assert auto-scale
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     window|sysprefs|widgets|scroll|tabs|sheet)  scene="$a" ;;
     *)                        out="$a" ;;
@@ -47,6 +48,8 @@ fi
 [ "$type" = "--type" ] && scene="window"
 # --keys drives control focus/traversal; the widgets scene is the showcase.
 [ "$keys" = "--keys" ] && [ -z "$scene" -o "$scene" = "window" ] && scene="widgets"
+# --hidpi is a display-only check; default it to the widgets scene.
+[ "$hidpi" = "--hidpi" ] && [ -z "$scene" ] && scene="widgets"
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -90,8 +93,16 @@ case "$scene" in
   sheet)    res="440x320" ;;
   *)        res="440x300" ;;
 esac
+outline="output HEADLESS-1 resolution $res position 0 0"
+if [ "$hidpi" = "--hidpi" ]; then
+  # A HiDPI output: double the physical resolution and set scale 2, so the
+  # logical area still equals the window size but the framebuffer is 2x. A
+  # scale-following client should render a 2x buffer and grim captures it at 2x.
+  w=${res%x*}; h=${res#*x}
+  outline="output HEADLESS-1 resolution $((w * 2))x$((h * 2)) scale 2 position 0 0"
+fi
 cfg=$(mktemp)
-printf 'output HEADLESS-1 resolution %s position 0 0\ndefault_border none\n' "$res" > "$cfg"
+printf '%s\ndefault_border none\n' "$outline" > "$cfg"
 
 log=$(mktemp)
 env -u WAYLAND_DISPLAY WLR_BACKENDS=headless WLR_RENDERER=pixman \
@@ -104,7 +115,7 @@ cleanup() {
   [ -n "${app_pid:-}" ] && kill "$app_pid" 2>/dev/null || true
   [ -n "${SWAYSOCK:-}" ] && swaymsg exit >/dev/null 2>&1 || true
   kill "$sway_pid" 2>/dev/null || true
-  rm -f "$cfg" "$log" "${fifo:-}" "${vp_log:-}" "${vk_fifo:-}" "${vk_log:-}"
+  rm -f "$cfg" "$log" "${app_log:-}" "${fifo:-}" "${vp_log:-}" "${vk_fifo:-}" "${vk_log:-}"
   [ -n "$vp_dir" ] && rm -rf "$vp_dir" || true
 }
 trap cleanup EXIT
@@ -126,7 +137,11 @@ done
 export SWAYSOCK="$ss"
 echo "sway ready on $wd"
 
-WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" .build/debug/AquaDemo >/dev/null 2>&1 &
+# Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
+# AQUA_SCALE so the window auto-detects scale from wl_output rather than pinning.
+app_log=$(mktemp)
+env -u AQUA_SCALE WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
+    .build/debug/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
 # Wait for the toplevel to map into sway's tree.
@@ -268,6 +283,16 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
   exec 4>&-
 fi
 
+if [ "$hidpi" = "--hidpi" ]; then
+  # The window should have followed the scale-2 output and logged the change.
+  if grep -q 'buffer scale -> 2x' "$app_log"; then
+    echo "hidpi: window auto-scaled to 2x from wl_output"
+  else
+    echo "FAIL: window did not auto-scale to 2x on a scale-2 output"
+    cat "$app_log"; exit 1
+  fi
+fi
+
 WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }
-echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${click:+, clicked}${type:+, typed}${keys:+, keyed})"
+echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${click:+, clicked}${type:+, typed}${keys:+, keyed}${hidpi:+, 2x})"

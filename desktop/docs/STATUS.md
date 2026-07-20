@@ -36,8 +36,9 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     small C API (`de/ctext`), with `CFreeType`/`CHarfBuzz` systemLibraries
     supplying the pkg-config flags. Aqua paints the shaped run via cairo-ft.
   - `Surface` — Wayland client runtime: `Display` (connection, registry,
-    globals, dispatch loop, per-surface pointer routing) + `Window` (xdg-shell
-    toplevel, 2× shm buffers, frame-callback pacing, pointer input) + `Popup` (a
+    globals, dispatch loop, per-surface pointer routing, `wl_output` scale
+    tracking) + `Window` (xdg-shell toplevel, 2× shm buffers, frame-callback
+    pacing, pointer input, per-output buffer scale) + `Popup` (a
     grabbing xdg-popup child surface for menus) + `Keyboard` (`wl_keyboard` +
     xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
     `WindowDelegate`/`PopupDelegate`/`PixelBuffer`.
@@ -87,6 +88,13 @@ from the title bar (animated), dims and blocks the parent, and dismisses via its
 Cancel/Delete buttons — recording the choice below (`de/aqua/Sheet.swift`):
 ![sheet](screenshots/sheet.png)
 
+The window also **tracks its output's scale** (`wl_output` + `wl_surface`
+enter/leave): drop it on a HiDPI (scale-2) output and it re-cuts its buffers and
+repaints crisp at 2× with no `AQUA_SCALE` — that env var is now just an optional
+pin. Verified live at a scale-2 headless output (`live-sway.sh widgets --hidpi`,
+a 920×720 capture of the 460×360 window):
+![hidpi auto-scale](screenshots/live-hidpi.png)
+
 It also runs **live** now: `abyss/tests/live-sway.sh` brings the window up under
 a headless sway and captures it with grim — a true test of the xdg-shell /
 shm / frame-callback path the PNG render skips
@@ -133,6 +141,7 @@ abyss/tests/live-sway.sh tabs    /tmp/tabs.png    --click # switch a segment + a
 abyss/tests/live-sway.sh sheet   /tmp/sheet.png   --click # open a modal sheet
 abyss/tests/live-sway.sh widgets /tmp/keys.png    --keys  # Tab/Space/arrows drive focus
 abyss/tests/live-sway.sh --menu  /tmp/mkeys.png   --keys  # arrow-key the pop-up menu
+abyss/tests/live-sway.sh widgets /tmp/hidpi.png   --hidpi # scale-2 output → auto 2x
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -158,10 +167,10 @@ abyss/tests/live-sway.sh --menu  /tmp/mkeys.png   --keys  # arrow-key the pop-up
   (`de/aqua/Tabs.swift`) and a **modal sheet** (slides from the title bar,
   animated — `de/aqua/Sheet.swift`) and **keyboard focus/traversal** (Tab/Space/
   arrows + Return/Escape through controls, menus and sheets — `Draw.focusRing` +
-  `WidgetFocus`). The Phase-1 control set is now complete; the remaining polish is
-  per-output scale from `wl_output` instead of `AQUA_SCALE`. (A brushed-metal
-  window variant is deliberately out of scope — it's a Panther/Tiger-era texture,
-  not era-faithful to 10.2.) Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+  `WidgetFocus`). The Phase-1 control set is complete, and the window now
+  **auto-scales per output** from `wl_output` (`AQUA_SCALE` is just an optional
+  pin now). (A brushed-metal window variant is deliberately out of scope — it's a
+  Panther/Tiger-era texture, not era-faithful to 10.2.) Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
   remaining text refinements are device-pixel hinting under HiDPI and glyph
   caching. Live runs + **pointer and keyboard** interaction work under headless

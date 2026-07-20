@@ -16,7 +16,8 @@ renders faithful Jaguar UI:
 - **`Surface`** — a real Wayland client runtime: connect, registry/globals,
   xdg-shell toplevel **and grabbing xdg-popup** child surfaces (menus),
   double-buffered `wl_shm`, frame-callback pacing, pointer **and keyboard** input
-  (the latter translated through xkbcommon) with per-surface routing, a dispatch
+  (the latter translated through xkbcommon) with per-surface routing,
+  **per-output HiDPI scale** (`wl_output` + `wl_surface` enter/leave), a dispatch
   loop.
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe) and the classic control
@@ -231,7 +232,28 @@ uses the real key **release** (Space/Return down → `okPressed = true`, up →
 false), so `keyEvent` must act on both edges for the widgets scene (the other
 scenes still act on press only).
 
-### 2.13 The linter lies about C includes
+### 2.13 Per-output HiDPI scale: read the proxy from the callback, not a capture
+The window follows its output's scale (`wl_output.scale`/`done` +
+`wl_surface.enter`/`leave`; buffers are re-cut and `wl_surface.set_buffer_scale`
+updated). Two things bit:
+
+- **A C listener callback can't capture Swift context.** The `wl_output` done/
+  scale handlers are `@convention(c)` function pointers, so `{ data, _ in … o … }`
+  (closing over the bound proxy `o`) fails to compile. libwayland already hands
+  the proxy back as the callback's **2nd argument** — use *that* (as it does for
+  `wl_pointer.enter`'s surface), and key your per-output table off it.
+- **`wl_output` batches; scale is only current on `done`.** Stage the incoming
+  factor in `pendingScale` and commit it on `done` (that's also when you
+  re-evaluate the window's scale). The HiDPI rule is *max* over the outputs a
+  surface is currently on.
+
+`AQUA_SCALE` is now just an optional pin (auto-detect when unset). The scale
+change logs to fd 2 via `write(2,…)` — **not** `fputs(…, stderr)`: `stderr` is a
+nonisolated mutable global that Swift 6 strict concurrency rejects (§2.4).
+Verified live: `live-sway.sh --hidpi` runs a scale-2 headless output and asserts
+the window logs `buffer scale -> 2x`; grim captures the 460×360 window at 920×720.
+
+### 2.14 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -270,7 +292,10 @@ events flow through to the toolkit. It clicks the default gel button and the
 capability), and — because the protocol makes the client upload its own keymap —
 it builds a US keymap with xkbcommon and hands it up, which sway then forwards to
 AquaDemo. It types `Abyss` (Shift for the capital) into the focused text field,
-which renders it via §2.8. Evidence: `docs/screenshots/live-type.png`.
+which renders it via §2.8. Evidence: `docs/screenshots/live-type.png`. `--keys`
+drives keyboard **focus/traversal** (Tab/Space/arrows via `vkeyboard`'s raw
+`k <code>` command; §2.12), and `--hidpi` runs a **scale-2 headless output** to
+prove the window auto-scales (§2.13; `docs/screenshots/live-hidpi.png`).
 
 Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
 render). Tests are pure toolkit logic (no compositor).
@@ -312,7 +337,10 @@ Known-not-faithful, on purpose:
    `Surface`, driven live by `live-sway.sh --type` via a virtual keyboard
    (`vkeyboard.c`). Follow-ups: hover/scroll, key repeat (`repeat_info` is
    handled but ignored), and keyboard focus tracking (enter/leave → caret).
-3. **Per-output scale** from `wl_output` instead of `AQUA_SCALE`.
+3. **Per-output scale** — ✅ done (§2.13): the window tracks its output's scale
+   via `wl_output` + `wl_surface` enter/leave and re-cuts its buffers to render
+   crisp on HiDPI; `AQUA_SCALE` is now just an optional pin. Verified live by
+   `live-sway.sh --hidpi` (a scale-2 headless output).
 4. **More widgets** — ✅ the core Aqua control set now exists and is interactive
    (checkbox, radio, slider, pop-up button, progress bar, text field, group box
    in `Draw`; the **Aqua Controls** scene in `de/aqua/Widgets.swift`, driven live

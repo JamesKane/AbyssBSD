@@ -37,6 +37,11 @@ void *aw_bind_xdg_wm_base(void *registry, uint32_t name, uint32_t version) {
                             &xdg_wm_base_interface, version);
 }
 
+void *aw_bind_output(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &wl_output_interface, version);
+}
+
 void *aw_compositor_create_surface(void *compositor) {
     return wl_compositor_create_surface((struct wl_compositor *)compositor);
 }
