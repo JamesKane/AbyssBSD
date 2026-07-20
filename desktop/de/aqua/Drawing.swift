@@ -548,6 +548,104 @@ public enum Draw {
         cairo_fill(cr)
     }
 
+    /// Equal-width segment rects dividing `r` — the single source of segmented
+    /// geometry, shared by the painter and the hit-tester.
+    public static func segmentRects(_ r: Rect, count: Int) -> [Rect] {
+        guard count > 0 else { return [] }
+        let segW = r.w / Double(count)
+        return (0..<count).map {
+            Rect(r.x + Double($0) * segW, r.y, segW, r.h)
+        }
+    }
+
+    /// An Aqua segmented control: joined gel buttons with a shared rounded
+    /// outline, divider lines, and the selected segment in blue gel.
+    public static func segmentedControl(_ cr: OpaquePointer, _ r: Rect,
+                                        labels: [String], selected: Int) {
+        let radius = 4.0
+        let rects = segmentRects(r, count: labels.count)
+
+        cairo_save(cr)
+        roundedRect(cr, r, radius: radius)
+        cairo_clip(cr)
+        for (i, seg) in rects.enumerated() {
+            cairo_rectangle(cr, seg.x, seg.y, seg.w, seg.h)
+            if i == selected {
+                fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
+                    (0, Theme.buttonBlueTop), (0.5, Theme.buttonBlueMid),
+                    (1, Theme.buttonBlueBottom)])
+            } else {
+                fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
+                    (0, Theme.controlWhiteTop), (1, Theme.controlWhiteBottom)])
+            }
+            // fillVerticalGradient preserves the path; clear it so the next
+            // segment's rectangle doesn't union with (and re-fill) this one.
+            cairo_new_path(cr)
+        }
+        // Top gloss across the whole strip.
+        cairo_rectangle(cr, r.x, r.y, r.w, r.h * 0.45)
+        let gg = cairo_pattern_create_linear(0, r.y, 0, r.y + r.h * 0.45)
+        cairo_pattern_add_color_stop_rgba(gg, 0, 1, 1, 1, 0.55)
+        cairo_pattern_add_color_stop_rgba(gg, 1, 1, 1, 1, 0.03)
+        cairo_set_source(cr, gg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(gg)
+        cairo_restore(cr)
+
+        // Divider lines between segments.
+        setColor(cr, Theme.controlBorder.with(a: 0.55))
+        cairo_set_line_width(cr, 1)
+        for i in 1..<max(1, rects.count) {
+            let x = rects[i].x
+            cairo_move_to(cr, x + 0.5, r.y + 1)
+            cairo_line_to(cr, x + 0.5, r.y + r.h - 1)
+            cairo_stroke(cr)
+        }
+        // Outer border.
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.controlBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+
+        for (i, seg) in rects.enumerated() {
+            text(cr, labels[i], centerX: seg.x + seg.w / 2, centerY: r.y + r.h / 2,
+                 color: i == selected ? Theme.buttonTextOnBlue : Theme.fieldText,
+                 size: Theme.fontSize)
+        }
+    }
+
+    /// The content pane of a tab view: a light rounded box with a 1px border.
+    public static func tabPane(_ cr: OpaquePointer, _ r: Rect) {
+        roundedRect(cr, r, radius: 6)
+        setColor(cr, Theme.tabPaneBackground)
+        cairo_fill(cr)
+        roundedRect(cr, r, radius: 6)
+        setColor(cr, Theme.tabBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+    }
+
+    /// A single tab (rounded top, square bottom) sitting on the pane's top edge.
+    /// The selected tab is bright and (via a caller-side erase) merges into the
+    /// pane; unselected tabs are a flatter grey.
+    public static func tab(_ cr: OpaquePointer, _ r: Rect, label: String,
+                           selected: Bool) {
+        roundedRectTop(cr, r, radius: 6)
+        if selected {
+            fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
+                (0, Theme.tabSelectedTop), (1, Theme.tabSelectedBottom)])
+        } else {
+            fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
+                (0, Theme.tabUnselectedTop), (1, Theme.tabUnselectedBottom)])
+        }
+        roundedRectTop(cr, r, radius: 6)
+        setColor(cr, Theme.tabBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+        text(cr, label, centerX: r.x + r.w / 2, centerY: r.y + r.h / 2 + 0.5,
+             color: Theme.tabText, size: Theme.fontSize)
+    }
+
     /// A titled group box: a faint rounded outline with the title notched into
     /// its top-left. Returns nothing; purely decorative grouping.
     public static func groupBox(_ cr: OpaquePointer, _ r: Rect, title: String) {

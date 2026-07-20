@@ -21,9 +21,9 @@ renders faithful Jaguar UI:
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe) and the classic control
   set (checkbox, radio, slider, pop-up button, progress bar, text field, group
-  box, scrollbar), four scenes (a simple window, a **System Preferences** clone,
-  an **Aqua Controls** gallery, and a **Scroll** list), and original procedural
-  pref icons.
+  box, scrollbar, segmented control, tab view), five scenes (a simple window, a
+  **System Preferences** clone, an **Aqua Controls** gallery, a **Scroll** list,
+  and a **Tab View**), and original procedural pref icons.
 - **`AquaDemo`** — runs live against a compositor *or* renders a scene to PNG.
 - **Infra** — borrowed/adapted FreeBSD VM + test harness under `abyss/`, plus
   the `docs/`.
@@ -87,6 +87,13 @@ the next icon's leading `arc` drew a stray line across the window. Fixes:
 `cairo_new_path()` at the start of each icon, and `cairo_new_sub_path()` before
 arcs that follow a `fill_preserve`. Symptom to recognize: a thin diagonal line in
 the *stroke colour* of a shape, originating from a previously drawn label.
+
+Related: `Draw.fillVerticalGradient` uses `fill_preserve` (so callers can stroke
+the same path). If you fill several shapes in a loop with it, **clear the path
+between them** (`cairo_new_path`) — otherwise each new rectangle *unions* with the
+preserved ones and the fill repaints them all. This bit the segmented control:
+every segment came out the selected colour because the last (selected) fill
+covered the whole accumulated path.
 
 ### 2.6 Real text: give cairo its OWN FT_Face (the shared-face trap)
 Text now shapes with HarfBuzz and paints via cairo-ft (`de/ctext` + `Aqua/Text`).
@@ -273,9 +280,11 @@ Known-not-faithful, on purpose:
    thumb; arrow/page/Home/End keys scroll too). **Real pop-up menus** followed:
    the Appearance pop-up button opens a grabbing xdg-popup child surface
    (`Surface.Popup` + `AquaMenu`; `live-sway.sh --menu`), choosing an item sets
-   the value and dismisses. Still to do: tabs/segmented controls, sheets, a
-   brushed-metal window variant, and keyboard focus/traversal (Tab between
-   controls, Space to toggle; menus should take arrow-key navigation too).
+   the value and dismisses. A **segmented control + tab view** followed
+   (`de/aqua/Tabs.swift`, `live-sway.sh tabs --click`; Left/Right arrows switch
+   tabs). Still to do: sheets, a brushed-metal window variant, and keyboard
+   focus/traversal (Tab between controls, Space to toggle; menus should take
+   arrow-key navigation too).
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,

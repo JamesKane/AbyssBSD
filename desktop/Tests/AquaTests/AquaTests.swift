@@ -85,6 +85,31 @@ final class AquaTests: XCTestCase {
         XCTAssertGreaterThan(m.descent, 0)
     }
 
+    func testSegmentRectsAndTabsLayout() {
+        // segmentRects: equal widths, adjacent, covering the whole rect.
+        let r = Rect(10, 20, 240, 22)
+        let segs = Draw.segmentRects(r, count: 3)
+        XCTAssertEqual(segs.count, 3)
+        XCTAssertEqual(segs[0].x, r.x, accuracy: 0.01)
+        XCTAssertEqual(segs[2].x + segs[2].w, r.x + r.w, accuracy: 0.01)
+        for i in 1..<segs.count {
+            XCTAssertEqual(segs[i].x, segs[i - 1].x + segs[i - 1].w, accuracy: 0.01)
+            XCTAssertEqual(segs[i].w, segs[0].w, accuracy: 0.01)
+        }
+        XCTAssertEqual(Draw.segmentRects(r, count: 0).count, 0)
+
+        // Scene layout: segments + pane stay in bounds.
+        let w = 480.0, h = 380.0
+        let L = tabsLayout(w: w, h: h)
+        XCTAssertEqual(L.segments.count, tabsSegmentLabels.count)
+        func inBounds(_ x: Rect) -> Bool {
+            x.x >= 0 && x.y >= 0 && x.x + x.w <= w && x.y + x.h <= h
+        }
+        XCTAssertTrue(inBounds(L.pane))
+        XCTAssertGreaterThan(L.pane.h, 0)
+        for s in L.segments { XCTAssertTrue(inBounds(s)) }
+    }
+
     func testScrollLayoutAndThumb() {
         let w = 360.0, h = 420.0
         let L = scrollLayout(w: w, h: h)

@@ -31,6 +31,8 @@ case "widgets":
     scene = .widgets; title = "Aqua Controls"; width = 460; height = 360
 case "scroll":
     scene = .scroll; title = "Scroll"; width = 360; height = 420
+case "tabs":
+    scene = .tabs; title = "Tab View"; width = 480; height = 380
 default:
     scene = .window; title = "AbyssBSD"; width = 440; height = 300
 }

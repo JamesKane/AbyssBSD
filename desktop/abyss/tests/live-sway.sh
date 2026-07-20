@@ -30,7 +30,7 @@ for a in "$@"; do
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
-    window|sysprefs|widgets|scroll)  scene="$a" ;;
+    window|sysprefs|widgets|scroll|tabs)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -83,6 +83,7 @@ case "$scene" in
   sysprefs) res="760x620" ;;
   widgets)  res="460x360" ;;
   scroll)   res="360x420" ;;
+  tabs)     res="480x380" ;;
   *)        res="440x300" ;;
 esac
 cfg=$(mktemp)
@@ -143,6 +144,7 @@ if [ "$click" = "--click" ]; then
   case "$scene" in
     widgets) vpw=460; vph=360 ;;
     scroll)  vpw=360; vph=420 ;;
+    tabs)    vpw=480; vph=380 ;;
     *)       vpw=440; vph=300 ;;
   esac
   vp_log=$(mktemp)
@@ -180,6 +182,11 @@ if [ "$click" = "--click" ]; then
       printf 'm 338 120\np\n' >&3   # press on the thumb
       printf 'm 338 330\n'    >&3   # drag toward the bottom
       printf 'r\n'            >&3   # release
+      ;;
+    tabs)
+      # Pick the last segment ("Columns") and the last tab ("Sharing").
+      printf 'm 272 51\np\nr\n'  >&3   # segmented control: Columns
+      printf 'm 333 84\np\nr\n'  >&3   # tab: Sharing
       ;;
     *)
       printf 'm 360 265\np\nr\n' >&3   # move over the gel button, click once

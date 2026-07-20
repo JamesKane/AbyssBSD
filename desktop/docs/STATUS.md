@@ -44,7 +44,7 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text, and the control set: checkbox,
     radio, slider, pop-up button, progress bar, text field, group box,
-    scrollbar), `Text`
+    scrollbar, segmented control, tab view), `Text`
     (FreeType/HarfBuzz shaping via `CText`, painted through cairo-ft — with a
     cairo toy-text fallback when no font is found), `Scene`/`Widgets` (the window
     painters), `AquaWindow` (a live window wiring pointer/keyboard to the
@@ -67,6 +67,11 @@ the bottom (Jaguar's default) — driven by thumb-drag, arrow/track clicks, and 
 arrow/page/Home/End keys (`de/aqua/Scroll.swift`):
 ![scroll](screenshots/scroll.png)
 
+A **Tab View** scene (`AQUA_SCENE=tabs`) shows the two joined-button controls: a
+segmented control (a view switcher) and a tab view whose selected tab merges into
+a content pane that changes with the selection — click or arrow-key to switch
+(`de/aqua/Tabs.swift`): ![tab view](screenshots/tabs.png)
+
 It also runs **live** now: `abyss/tests/live-sway.sh` brings the window up under
 a headless sway and captures it with grim — a true test of the xdg-shell /
 shm / frame-callback path the PNG render skips
@@ -83,7 +88,8 @@ the scrollbar thumb and the list scrolls to the bottom
 pop-up menu** — a grabbing xdg-popup child surface — under the Appearance button,
 with hover-highlight and the current item checkmarked
 (![live menu](screenshots/live-menu.png)); choosing an item sets the value and
-dismisses.
+dismisses. On the tabs scene it clicks the "Columns" segment and the "Sharing"
+tab (![live tabs](screenshots/live-tabs.png)).
 
 ## How to run
 
@@ -106,6 +112,7 @@ abyss/tests/live-sway.sh --type  /tmp/type.png           # drive real keystrokes
 abyss/tests/live-sway.sh widgets /tmp/widgets.png --click # toggle a checkbox + move the slider
 abyss/tests/live-sway.sh scroll  /tmp/scroll.png  --click # drag the scrollbar thumb
 abyss/tests/live-sway.sh --menu  /tmp/menu.png            # open a real xdg-popup menu
+abyss/tests/live-sway.sh tabs    /tmp/tabs.png    --click # switch a segment + a tab
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -127,9 +134,9 @@ abyss/tests/live-sway.sh --menu  /tmp/menu.png            # open a real xdg-popu
   (checkbox, radio, slider, pop-up button, progress bar, text field, group box —
   `de/aqua/Widgets.swift`) plus a **scrollbar** + scrolling list
   (`de/aqua/Scroll.swift`) and **real pop-up menus** (a grabbing xdg-popup child
-  surface — `Surface.Popup` + `AquaMenu`); still to do: tabs/segmented controls,
-  sheets, brushed-metal window variant, and keyboard focus/traversal between
-  controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+  surface — `Surface.Popup` + `AquaMenu`) and **segmented control + tab view**
+  (`de/aqua/Tabs.swift`); still to do: sheets, brushed-metal window variant, and
+  keyboard focus/traversal between controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
   remaining text refinements are device-pixel hinting under HiDPI and glyph
   caching. Live runs + **pointer and keyboard** interaction work under headless

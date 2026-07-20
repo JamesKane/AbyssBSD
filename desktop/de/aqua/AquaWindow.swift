@@ -41,6 +41,10 @@ public final class AquaWindow: WindowDelegate {
     private var menu: AquaMenu?
     private var menuPopup: Popup?
 
+    // Tabs-scene state.
+    private var tabs = TabsState()
+    private var tabsLayoutCache = TabsLayout()
+
     public init?(display: Display, title: String, scene: SceneKind = .window,
                  width: Int32 = 440, height: Int32 = 300) {
         self.title = title
@@ -102,6 +106,8 @@ public final class AquaWindow: WindowDelegate {
             widgetLayout = paintWidgets(cr, w: w, h: h, state: widgets)
         case .scroll:
             scrollLayoutCache = paintScroll(cr, w: w, h: h, offset: scrollOffset)
+        case .tabs:
+            tabsLayoutCache = paintTabs(cr, w: w, h: h, state: tabs)
         }
     }
 
@@ -123,7 +129,31 @@ public final class AquaWindow: WindowDelegate {
         switch sceneKind {
         case .widgets: widgetsPointerButton(pressed: pressed)
         case .scroll:  scrollPointerButton(pressed: pressed)
+        case .tabs:    tabsPointerButton(pressed: pressed)
         default:       windowPointerButton(pressed: pressed)
+        }
+    }
+
+    // MARK: Tabs-scene input
+
+    private func tabsPointerButton(pressed: Bool) {
+        guard pressed else { return }
+        for (i, r) in tabsLayoutCache.segments.enumerated()
+        where r.contains(pointerX, pointerY) {
+            tabs.segment = i; window?.setNeedsDisplay(); return
+        }
+        for (i, r) in tabsLayoutCache.tabs.enumerated()
+        where r.contains(pointerX, pointerY) {
+            tabs.tab = i; window?.setNeedsDisplay(); return
+        }
+    }
+
+    private func tabsKey(_ keysym: UInt32) {
+        let n = tabsTabLabels.count
+        switch keysym {
+        case KeySym.left:  tabs.tab = (tabs.tab - 1 + n) % n; window?.setNeedsDisplay()
+        case KeySym.right: tabs.tab = (tabs.tab + 1) % n; window?.setNeedsDisplay()
+        default: break
         }
     }
 
@@ -267,6 +297,7 @@ public final class AquaWindow: WindowDelegate {
     public func keyEvent(_ event: KeyEvent) {
         guard event.pressed else { return }  // act on press; release is a no-op
         if sceneKind == .scroll { scrollKey(event.keysym); return }
+        if sceneKind == .tabs { tabsKey(event.keysym); return }
         switch event.keysym {
         case KeySym.backspace:
             if !typedText.isEmpty { typedText.removeLast() }

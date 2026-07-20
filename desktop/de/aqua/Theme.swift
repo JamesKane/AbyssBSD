@@ -83,6 +83,16 @@ public enum Theme {
     public static let sliderTrackEdge = Color(0, 0, 0, 0.30)
     public static let progressTrack = Color(hex: 0xd6d6d6)
     public static let groupBoxBorder = Color(0, 0, 0, 0.16)
+    // Tab view: a light pane with rounded-top tabs sitting on its top border.
+    // The selected tab's bottom matches the pane so it reads as "connected".
+    public static let tabPaneBackground = Color(hex: 0xf0f0f0)
+    public static let tabSelectedTop = Color(hex: 0xffffff)
+    public static let tabSelectedBottom = Color(hex: 0xf0f0f0)
+    public static let tabUnselectedTop = Color(hex: 0xdadada)
+    public static let tabUnselectedBottom = Color(hex: 0xc4c4c4)
+    public static let tabBorder = Color(hex: 0x8b8b8b)
+    public static let tabText = Color(hex: 0x1f1f1f)
+
     // Pop-up menu: white sheet, blue selection highlight (classic Aqua menu blue).
     public static let menuBackground = Color(hex: 0xffffff)
     public static let menuBorder = Color(hex: 0x8b8b8b)
