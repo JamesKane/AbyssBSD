@@ -31,6 +31,12 @@ public final class AquaWindow: WindowDelegate {
     private var widgetLayout = WidgetLayout()
     private var draggingSlider = false
 
+    // Scroll-scene state.
+    private var scrollOffset = 0.0
+    private var scrollLayoutCache = ScrollLayout()
+    private var draggingThumb = false
+    private var thumbGrabDy = 0.0
+
     public init?(display: Display, title: String, scene: SceneKind = .window,
                  width: Int32 = 440, height: Int32 = 300) {
         self.title = title
@@ -90,6 +96,8 @@ public final class AquaWindow: WindowDelegate {
             paintSystemPreferences(cr, w: w, h: h)
         case .widgets:
             widgetLayout = paintWidgets(cr, w: w, h: h, state: widgets)
+        case .scroll:
+            scrollLayoutCache = paintScroll(cr, w: w, h: h, offset: scrollOffset)
         }
     }
 
@@ -100,12 +108,17 @@ public final class AquaWindow: WindowDelegate {
             widgets.slider = sliderValue(at: x)
             window?.setNeedsDisplay()
         }
+        if sceneKind == .scroll, draggingThumb {
+            scrollToThumbTop(y - thumbGrabDy)
+            window?.setNeedsDisplay()
+        }
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft else { return }
         switch sceneKind {
         case .widgets: widgetsPointerButton(pressed: pressed)
+        case .scroll:  scrollPointerButton(pressed: pressed)
         default:       windowPointerButton(pressed: pressed)
         }
     }
@@ -162,8 +175,67 @@ public final class AquaWindow: WindowDelegate {
         }
     }
 
+    // MARK: Scroll-scene input
+
+    private func scrollClamp(_ v: Double) -> Double {
+        max(0, min(v, scrollMaxOffset(viewportH: scrollLayoutCache.list.h)))
+    }
+
+    private func scrollBy(_ dy: Double) {
+        let old = scrollOffset
+        scrollOffset = scrollClamp(scrollOffset + dy)
+        if scrollOffset != old { window?.setNeedsDisplay() }
+    }
+
+    /// Move the offset so the thumb's top edge lands at `thumbTopY`.
+    private func scrollToThumbTop(_ thumbTopY: Double) {
+        let L = scrollLayoutCache
+        let vp = L.list.h
+        guard let thumb = scrollThumbRect(track: L.track, offset: scrollOffset,
+                                          viewportH: vp) else { return }
+        let travel = L.track.h - thumb.h
+        guard travel > 0 else { return }
+        let t = max(0, min(1, (thumbTopY - L.track.y) / travel))
+        scrollOffset = t * scrollMaxOffset(viewportH: vp)
+    }
+
+    private func scrollPointerButton(pressed: Bool) {
+        guard pressed else { draggingThumb = false; return }
+        let L = scrollLayoutCache
+        let vp = L.list.h
+        if let thumb = scrollThumbRect(track: L.track, offset: scrollOffset,
+                                       viewportH: vp),
+           thumb.contains(pointerX, pointerY) {
+            draggingThumb = true
+            thumbGrabDy = pointerY - thumb.y
+            return
+        }
+        if L.upArrow.contains(pointerX, pointerY) { scrollBy(-scrollRowHeight); return }
+        if L.downArrow.contains(pointerX, pointerY) { scrollBy(scrollRowHeight); return }
+        if L.track.contains(pointerX, pointerY),
+           let thumb = scrollThumbRect(track: L.track, offset: scrollOffset,
+                                       viewportH: vp) {
+            scrollBy(pointerY < thumb.y ? -vp * 0.9 : vp * 0.9)  // page toward click
+        }
+    }
+
+    private func scrollKey(_ keysym: UInt32) {
+        let vp = scrollLayoutCache.list.h
+        switch keysym {
+        case KeySym.up:       scrollBy(-scrollRowHeight)
+        case KeySym.down:     scrollBy(scrollRowHeight)
+        case KeySym.pageUp:   scrollBy(-vp * 0.9)
+        case KeySym.pageDown: scrollBy(vp * 0.9)
+        case KeySym.home:     scrollOffset = 0; window?.setNeedsDisplay()
+        case KeySym.end:
+            scrollOffset = scrollMaxOffset(viewportH: vp); window?.setNeedsDisplay()
+        default: break
+        }
+    }
+
     public func keyEvent(_ event: KeyEvent) {
         guard event.pressed else { return }  // act on press; release is a no-op
+        if sceneKind == .scroll { scrollKey(event.keysym); return }
         switch event.keysym {
         case KeySym.backspace:
             if !typedText.isEmpty { typedText.removeLast() }

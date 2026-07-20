@@ -20,8 +20,9 @@ renders faithful Jaguar UI:
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe) and the classic control
   set (checkbox, radio, slider, pop-up button, progress bar, text field, group
-  box), three scenes (a simple window, a **System Preferences** clone, and an
-  **Aqua Controls** gallery), and original procedural pref icons.
+  box, scrollbar), four scenes (a simple window, a **System Preferences** clone,
+  an **Aqua Controls** gallery, and a **Scroll** list), and original procedural
+  pref icons.
 - **`AquaDemo`** — runs live against a compositor *or* renders a scene to PNG.
 - **Infra** — borrowed/adapted FreeBSD VM + test harness under `abyss/`, plus
   the `docs/`.
@@ -236,7 +237,9 @@ Known-not-faithful, on purpose:
 4. **More widgets** — ✅ the core Aqua control set now exists and is interactive
    (checkbox, radio, slider, pop-up button, progress bar, text field, group box
    in `Draw`; the **Aqua Controls** scene in `de/aqua/Widgets.swift`, driven live
-   by `live-sway.sh widgets --click`). Still to do: scrollbars, **real** pop-up
+   by `live-sway.sh widgets --click`). A **scrollbar** + scrolling list scene
+   followed (`de/aqua/Scroll.swift`, `live-sway.sh scroll --click` drags the
+   thumb; arrow/page/Home/End keys scroll too). Still to do: **real** pop-up
    menus (need an xdg-popup child surface — today's pop-up button just cycles its
    value), tabs/segmented controls, sheets, a brushed-metal window variant, and
    keyboard focus/traversal (Tab between controls, Space to toggle).

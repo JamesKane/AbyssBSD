@@ -29,6 +29,8 @@ case "sysprefs":
     scene = .systemPreferences; title = "System Preferences"; width = 760; height = 620
 case "widgets":
     scene = .widgets; title = "Aqua Controls"; width = 460; height = 360
+case "scroll":
+    scene = .scroll; title = "Scroll"; width = 360; height = 420
 default:
     scene = .window; title = "AbyssBSD"; width = 440; height = 300
 }

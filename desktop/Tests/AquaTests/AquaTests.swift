@@ -84,4 +84,32 @@ final class AquaTests: XCTestCase {
         XCTAssertGreaterThan(m.ascent, 0)
         XCTAssertGreaterThan(m.descent, 0)
     }
+
+    func testScrollLayoutAndThumb() {
+        let w = 360.0, h = 420.0
+        let L = scrollLayout(w: w, h: h)
+        let vp = L.list.h
+
+        // The content overflows, so there's a real thumb with travel.
+        XCTAssertGreaterThan(scrollMaxOffset(viewportH: vp), 0)
+        // Paired arrows sit at the bottom, up above down, both in the bar.
+        XCTAssertLessThan(L.upArrow.y, L.downArrow.y)
+        XCTAssertEqual(L.upArrow.x, L.track.x, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(L.downArrow.y + L.downArrow.h, h)
+
+        let maxOff = scrollMaxOffset(viewportH: vp)
+        guard let top = scrollThumbRect(track: L.track, offset: 0, viewportH: vp),
+              let bot = scrollThumbRect(track: L.track, offset: maxOff, viewportH: vp)
+        else { return XCTFail("expected a thumb when content overflows") }
+
+        // Thumb stays within the track and travels top→bottom with the offset.
+        XCTAssertGreaterThanOrEqual(top.y, L.track.y - 0.01)
+        XCTAssertLessThan(top.y, bot.y)
+        XCTAssertLessThanOrEqual(bot.y + bot.h, L.track.y + L.track.h + 0.01)
+        XCTAssertEqual(top.h, bot.h, accuracy: 0.01, "thumb length is offset-independent")
+
+        // A viewport taller than the content yields no thumb.
+        XCTAssertNil(scrollThumbRect(track: L.track,
+                                     offset: 0, viewportH: scrollContentHeight() + 10))
+    }
 }

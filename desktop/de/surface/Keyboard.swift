@@ -34,7 +34,13 @@ public enum KeySym {
     public static let escape: UInt32    = 0xff1b
     public static let delete: UInt32    = 0xffff
     public static let left: UInt32      = 0xff51
+    public static let up: UInt32        = 0xff52
     public static let right: UInt32     = 0xff53
+    public static let down: UInt32      = 0xff54
+    public static let home: UInt32      = 0xff50
+    public static let end: UInt32       = 0xff57
+    public static let pageUp: UInt32    = 0xff55
+    public static let pageDown: UInt32  = 0xff56
 }
 
 final class KeyboardState {

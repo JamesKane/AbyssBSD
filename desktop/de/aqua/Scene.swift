@@ -14,6 +14,7 @@ public enum SceneKind: Sendable {
     case window
     case systemPreferences
     case widgets
+    case scroll
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
@@ -257,6 +258,8 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         paintSystemPreferences(cr, w: cw, h: ch)
     case .widgets:
         paintWidgets(cr, w: cw, h: ch, state: WidgetState())
+    case .scroll:
+        paintScroll(cr, w: cw, h: ch, offset: 0)
     }
     cairo_restore(cr)
 

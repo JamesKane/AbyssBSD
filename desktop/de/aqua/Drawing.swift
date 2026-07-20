@@ -20,6 +20,8 @@ public struct Rect {
     }
 }
 
+public enum Arrow { case up, down, left, right }
+
 public enum Draw {
     public static func setColor(_ cr: OpaquePointer, _ c: Color) {
         cairo_set_source_rgba(cr, c.r, c.g, c.b, c.a)
@@ -476,6 +478,74 @@ public enum Draw {
         setColor(cr, Theme.controlBorder)
         cairo_set_line_width(cr, 1)
         cairo_stroke(cr)
+    }
+
+    /// The recessed channel a scrollbar thumb travels in (square corners, sits
+    /// flush to a window edge). `vertical` picks the inset-shadow orientation.
+    public static func scrollTrack(_ cr: OpaquePointer, _ r: Rect, vertical: Bool) {
+        cairo_rectangle(cr, r.x, r.y, r.w, r.h)
+        fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
+            (0, Color(hex: 0xdedede)), (1, Color(hex: 0xeaeaea))])
+        // Inset shadow along the leading inner edge.
+        setColor(cr, Color(0, 0, 0, 0.10))
+        if vertical {
+            cairo_rectangle(cr, r.x, r.y, 1.5, r.h)
+        } else {
+            cairo_rectangle(cr, r.x, r.y, r.w, 1.5)
+        }
+        cairo_fill(cr)
+        setColor(cr, Theme.controlBorder.with(a: 0.55))
+        cairo_set_line_width(cr, 1)
+        cairo_rectangle(cr, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
+        cairo_stroke(cr)
+    }
+
+    /// The blue gel scrollbar thumb (a rounded "gumdrop" capsule) inside `r`.
+    public static func scrollThumb(_ cr: OpaquePointer, _ r: Rect, vertical: Bool) {
+        let radius = (vertical ? r.w : r.h) / 2
+        roundedRect(cr, r, radius: radius)
+        fillBlueGel(cr, y: r.y, h: r.h)
+        // Top gloss capsule.
+        let gloss = Rect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h * 0.42)
+        roundedRect(cr, gloss, radius: min(gloss.w, gloss.h) / 2)
+        let gg = cairo_pattern_create_linear(0, gloss.y, 0, gloss.y + gloss.h)
+        cairo_pattern_add_color_stop_rgba(gg, 0, 1, 1, 1, 0.65)
+        cairo_pattern_add_color_stop_rgba(gg, 1, 1, 1, 1, 0.05)
+        cairo_set_source(cr, gg)
+        cairo_fill(cr)
+        cairo_pattern_destroy(gg)
+        roundedRect(cr, r, radius: radius)
+        setColor(cr, Theme.buttonBlueBorder)
+        cairo_set_line_width(cr, 1)
+        cairo_stroke(cr)
+    }
+
+    /// A scrollbar arrow button: a small white gel square bearing a blue
+    /// triangle pointing in `dir`. `enabled` dims the glyph when there's no
+    /// travel left in that direction.
+    public static func scrollArrow(_ cr: OpaquePointer, _ r: Rect, _ dir: Arrow,
+                                   enabled: Bool = true) {
+        whiteWell(cr, r, radius: 2)
+        let cx = r.x + r.w / 2, cy = r.y + r.h / 2
+        let s = min(r.w, r.h) * 0.26
+        cairo_new_sub_path(cr)
+        switch dir {
+        case .up:
+            cairo_move_to(cr, cx, cy - s); cairo_line_to(cr, cx + s, cy + s)
+            cairo_line_to(cr, cx - s, cy + s)
+        case .down:
+            cairo_move_to(cr, cx, cy + s); cairo_line_to(cr, cx + s, cy - s)
+            cairo_line_to(cr, cx - s, cy - s)
+        case .left:
+            cairo_move_to(cr, cx - s, cy); cairo_line_to(cr, cx + s, cy - s)
+            cairo_line_to(cr, cx + s, cy + s)
+        case .right:
+            cairo_move_to(cr, cx + s, cy); cairo_line_to(cr, cx - s, cy - s)
+            cairo_line_to(cr, cx - s, cy + s)
+        }
+        cairo_close_path(cr)
+        setColor(cr, enabled ? Theme.buttonBlueMid : Theme.controlBorder)
+        cairo_fill(cr)
     }
 
     /// A titled group box: a faint rounded outline with the title notched into

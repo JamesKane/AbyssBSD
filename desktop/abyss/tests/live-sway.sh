@@ -29,7 +29,7 @@ for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
-    window|sysprefs|widgets)  scene="$a" ;;
+    window|sysprefs|widgets|scroll)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -79,6 +79,7 @@ fi
 case "$scene" in
   sysprefs) res="760x620" ;;
   widgets)  res="460x360" ;;
+  scroll)   res="360x420" ;;
   *)        res="440x300" ;;
 esac
 cfg=$(mktemp)
@@ -136,7 +137,11 @@ if [ "$click" = "--click" ]; then
   # Virtual pointer, fed via a FIFO so it stays alive (holding the pointer
   # capability) while we inject. The output size (for absolute coords) matches
   # the scene's window, which fills the headless output at 0,0.
-  case "$scene" in widgets) vpw=460; vph=360 ;; *) vpw=440; vph=300 ;; esac
+  case "$scene" in
+    widgets) vpw=460; vph=360 ;;
+    scroll)  vpw=360; vph=420 ;;
+    *)       vpw=440; vph=300 ;;
+  esac
   vp_log=$(mktemp)
   fifo=$(mktemp -u); mkfifo "$fifo"
   WAYLAND_DISPLAY="$wd" "$vp_dir/vpointer" "$vpw" "$vph" < "$fifo" > "$vp_log" 2>&1 &
@@ -154,6 +159,13 @@ if [ "$click" = "--click" ]; then
       # the right of the slider track (press sets the value there).
       printf 'm 60 94\np\nr\n'   >&3
       printf 'm 384 197\np\nr\n' >&3
+      ;;
+    scroll)
+      # Grab the scrollbar thumb (near the top of its travel) and drag down —
+      # the list should scroll to the bottom (Item 24 visible).
+      printf 'm 338 120\np\n' >&3   # press on the thumb
+      printf 'm 338 330\n'    >&3   # drag toward the bottom
+      printf 'r\n'            >&3   # release
       ;;
     *)
       printf 'm 360 265\np\nr\n' >&3   # move over the gel button, click once
