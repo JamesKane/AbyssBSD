@@ -191,9 +191,13 @@ abyss/tests/live-sway.sh window  /tmp/rep.png     --repeat # hold a key → it r
   driving a wlr-virtual-pointer / a zwp-virtual-keyboard), now including
   **scroll-wheel** (`wl_pointer.axis`) and **key repeat** (a poll-timeout event
   loop off the compositor's `repeat_info`) — the Phase-1 input paths are complete.
-- **Phase 2:** `CurrentIPC` (bind libnv) + `PoolConfig`; the shell apps (MenuBar,
-  Dock, Finder, Desktop), generate the layer-shell / foreign-toplevel /
-  xdg-activation protocols (XMLs already vendored in `protocols/`).
+- **Phase 2:** scoped in detail in [PHASE2.md](PHASE2.md). The shell as Wayland
+  clients against sway (no compositor work — `tide` is reused in Phase 3):
+  layer-shell in `Surface`, then Desktop/wallpaper, `PoolConfig`, MenuBar, Dock
+  (new — magnifying), Finder. `CurrentIPC` (binds FreeBSD-only libnv — absent on
+  this Linux box) is deferred to the phase tail or Phase 3; it carries only the
+  control plane, not the visible desktop. Protocol XMLs already vendored in
+  `protocols/`.
 - **Phase 0 tail (the #1 risk):** Swift toolchain on FreeBSD 15 — see
   [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md). VM/test infra to be borrowed from
   `../AbyssBSD/abyss/{vm,tests}` and adapted.
