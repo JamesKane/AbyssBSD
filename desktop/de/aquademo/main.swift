@@ -33,6 +33,8 @@ case "scroll":
     scene = .scroll; title = "Scroll"; width = 360; height = 420
 case "tabs":
     scene = .tabs; title = "Tab View"; width = 480; height = 380
+case "sheet":
+    scene = .sheet; title = "Sheets"; width = 440; height = 320
 default:
     scene = .window; title = "AbyssBSD"; width = 440; height = 300
 }

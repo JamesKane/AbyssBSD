@@ -53,6 +53,22 @@ public enum Draw {
         cairo_close_path(cr)
     }
 
+    /// Square top corners, rounded bottom — the Aqua sheet shape (flush under
+    /// the title bar, rounded where it hangs into the window).
+    public static func roundedRectBottom(_ cr: OpaquePointer, _ r: Rect,
+                                         radius: Double) {
+        let rad = min(radius, min(r.w, r.h) / 2)
+        let deg = Double.pi / 180
+        cairo_new_sub_path(cr)
+        cairo_move_to(cr, r.x, r.y)
+        cairo_line_to(cr, r.x + r.w, r.y)
+        cairo_line_to(cr, r.x + r.w, r.y + r.h - rad)
+        cairo_arc(cr, r.x + r.w - rad, r.y + r.h - rad, rad, 0, 90 * deg)
+        cairo_arc(cr, r.x + rad, r.y + r.h - rad, rad, 90 * deg, 180 * deg)
+        cairo_line_to(cr, r.x, r.y)
+        cairo_close_path(cr)
+    }
+
     /// Vertical gradient fill of the current path's bounding band [y, y+h].
     public static func fillVerticalGradient(_ cr: OpaquePointer, y: Double,
                                             h: Double, stops: [(Double, Color)]) {

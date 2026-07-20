@@ -28,11 +28,18 @@ public protocol WindowDelegate: AnyObject {
     func pointerMoved(x: Double, y: Double)
     func pointerButton(_ button: UInt32, pressed: Bool)
     func keyEvent(_ event: KeyEvent)
+    // Declared here (not only in the extension) so it dynamically dispatches to
+    // the conformer — an extension-only method would static-dispatch to the
+    // default no-op and the override would never run.
+    func windowDidRenderFrame(_ window: Window)
 }
 
 public extension WindowDelegate {
     // Keyboard is optional for a delegate; default to ignoring it.
     func keyEvent(_ event: KeyEvent) {}
+    // Called after each committed frame is released, so a delegate can drive an
+    // animation by advancing state and calling setNeedsDisplay(). Default no-op.
+    func windowDidRenderFrame(_ window: Window) {}
 }
 
 final class ShmBuffer {
@@ -221,6 +228,10 @@ public final class Window {
 
     private func frameDone() {
         framePending = false
+        // Let the delegate advance any animation (it may call setNeedsDisplay).
+        // framePending is false here, so that render runs cleanly — unlike a
+        // setNeedsDisplay from inside render(), which would re-enter.
+        delegate?.windowDidRenderFrame(self)
         if needsRedraw { renderAndCommit() }
     }
 

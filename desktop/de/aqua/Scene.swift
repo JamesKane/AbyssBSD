@@ -16,6 +16,7 @@ public enum SceneKind: Sendable {
     case widgets
     case scroll
     case tabs
+    case sheet
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
@@ -263,6 +264,10 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         paintScroll(cr, w: cw, h: ch, offset: 0)
     case .tabs:
         paintTabs(cr, w: cw, h: ch, state: TabsState())
+    case .sheet:
+        // Show the sheet fully out for the static shot.
+        paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
+                        lastAction: "—")
     }
     cairo_restore(cr)
 

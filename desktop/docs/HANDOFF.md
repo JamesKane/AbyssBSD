@@ -21,9 +21,10 @@ renders faithful Jaguar UI:
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe) and the classic control
   set (checkbox, radio, slider, pop-up button, progress bar, text field, group
-  box, scrollbar, segmented control, tab view), five scenes (a simple window, a
-  **System Preferences** clone, an **Aqua Controls** gallery, a **Scroll** list,
-  and a **Tab View**), and original procedural pref icons.
+  box, scrollbar, segmented control, tab view, modal sheet), six scenes (a simple
+  window, a **System Preferences** clone, an **Aqua Controls** gallery, a
+  **Scroll** list, a **Tab View**, and a **Sheet**), and original procedural pref
+  icons.
 - **`AquaDemo`** — runs live against a compositor *or* renders a scene to PNG.
 - **Infra** — borrowed/adapted FreeBSD VM + test harness under `abyss/`, plus
   the `docs/`.
@@ -190,7 +191,28 @@ into the window. The moving parts that each bit you if missed:
 highlight redraws don't stall). `AquaMenu` is the `PopupDelegate` that draws the
 items, tracks the hovered row, checkmarks the selection, and reports a choice.
 
-### 2.11 The linter lies about C includes
+### 2.11 Protocol-extension methods static-dispatch (the sheet animation trap)
+A method that exists **only** in a protocol extension (not in the protocol's
+requirement list) is **statically dispatched** when called through the
+protocol-typed reference. Adding an optional delegate hook as just
+`extension WindowDelegate { func windowDidRenderFrame(...) {} }` meant
+`delegate?.windowDidRenderFrame(self)` always called the *no-op default*, never
+the conformer's override — the sheet sat at progress 0 (invisible) because its
+per-frame tick never ran. Fix: declare the method in the `protocol` body too (a
+requirement), keeping the extension default for optionality → dynamic dispatch to
+the override. Rule of thumb: if a conformer must be able to override it, it
+belongs in the protocol body, not only the extension.
+
+Related mechanism: **animation is driven off the frame callback.** `Window`
+calls `windowDidRenderFrame` from `frameDone` (after `framePending = false`), so
+the delegate can advance state and `setNeedsDisplay()` there safely — doing that
+from inside `render()` would re-enter `renderAndCommit` (framePending is still
+false mid-render). The loop self-sustains only while the delegate keeps calling
+`setNeedsDisplay`, so it stops cleanly when the animation completes. (This also
+confirmed headless sway *does* deliver frame callbacks — the interactive scenes'
+redraws already depended on it.)
+
+### 2.12 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -282,9 +304,12 @@ Known-not-faithful, on purpose:
    (`Surface.Popup` + `AquaMenu`; `live-sway.sh --menu`), choosing an item sets
    the value and dismisses. A **segmented control + tab view** followed
    (`de/aqua/Tabs.swift`, `live-sway.sh tabs --click`; Left/Right arrows switch
-   tabs). Still to do: sheets, a brushed-metal window variant, and keyboard
-   focus/traversal (Tab between controls, Space to toggle; menus should take
-   arrow-key navigation too).
+   tabs). A **modal sheet** followed (`de/aqua/Sheet.swift`, `live-sway.sh sheet
+   --click`): it slides down from the title bar (animated off the frame tick),
+   dims + blocks the parent, and its buttons dismiss it. Still to do: a
+   brushed-metal window variant, and keyboard focus/traversal (Tab between
+   controls, Space to toggle; menus/sheets should take Return/Esc + arrow-key
+   navigation too).
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,

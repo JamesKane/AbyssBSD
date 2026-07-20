@@ -45,6 +45,13 @@ public final class AquaWindow: WindowDelegate {
     private var tabs = TabsState()
     private var tabsLayoutCache = TabsLayout()
 
+    // Sheet-scene state (progress 0…1 drives the slide animation).
+    private var sheetVisible = false
+    private var sheetProgress = 0.0
+    private var sheetOpening = false
+    private var sheetAction = "—"
+    private var sheetScene = SheetScene()
+
     public init?(display: Display, title: String, scene: SceneKind = .window,
                  width: Int32 = 440, height: Int32 = 300) {
         self.title = title
@@ -108,6 +115,31 @@ public final class AquaWindow: WindowDelegate {
             scrollLayoutCache = paintScroll(cr, w: w, h: h, offset: scrollOffset)
         case .tabs:
             tabsLayoutCache = paintTabs(cr, w: w, h: h, state: tabs)
+        case .sheet:
+            sheetScene = paintSheetScene(cr, w: w, h: h, progress: sheetProgress,
+                                         visible: sheetVisible,
+                                         lastAction: sheetAction)
+        }
+    }
+
+    // Drive the sheet slide from the per-frame tick (safe to setNeedsDisplay
+    // here — unlike from inside render()).
+    public func windowDidRenderFrame(_ window: Window) {
+        guard sceneKind == .sheet else { return }
+        let step = 0.18
+        if sheetOpening {
+            if sheetProgress < 1 {
+                sheetProgress = min(1, sheetProgress + step)
+                window.setNeedsDisplay()
+            }
+        } else if sheetVisible {
+            if sheetProgress > 0 {
+                sheetProgress = max(0, sheetProgress - step)
+                window.setNeedsDisplay()
+            } else {
+                sheetVisible = false
+                window.setNeedsDisplay()
+            }
         }
     }
 
@@ -130,8 +162,39 @@ public final class AquaWindow: WindowDelegate {
         case .widgets: widgetsPointerButton(pressed: pressed)
         case .scroll:  scrollPointerButton(pressed: pressed)
         case .tabs:    tabsPointerButton(pressed: pressed)
+        case .sheet:   sheetPointerButton(pressed: pressed)
         default:       windowPointerButton(pressed: pressed)
         }
+    }
+
+    // MARK: Sheet-scene input
+
+    private func sheetPointerButton(pressed: Bool) {
+        guard pressed else { return }
+        if sheetVisible {
+            // Modal: only the sheet's own buttons respond, and only once it's
+            // fully out (ignore clicks mid-slide).
+            guard sheetProgress >= 1 else { return }
+            if sheetScene.ok.contains(pointerX, pointerY) {
+                sheetAction = "Deleted"; closeSheet()
+            } else if sheetScene.cancel.contains(pointerX, pointerY) {
+                sheetAction = "Cancelled"; closeSheet()
+            }
+            return
+        }
+        if sheetScene.baseButton.contains(pointerX, pointerY) { openSheet() }
+    }
+
+    private func openSheet() {
+        sheetVisible = true
+        sheetOpening = true
+        sheetProgress = 0
+        window?.setNeedsDisplay()
+    }
+
+    private func closeSheet() {
+        sheetOpening = false     // the frame tick slides it back up
+        window?.setNeedsDisplay()
     }
 
     // MARK: Tabs-scene input

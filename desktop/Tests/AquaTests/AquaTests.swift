@@ -110,6 +110,25 @@ final class AquaTests: XCTestCase {
         for s in L.segments { XCTAssertTrue(inBounds(s)) }
     }
 
+    func testSheetLayoutInBounds() {
+        let w = 440.0, h = 320.0
+        let (panel, cancel, ok) = sheetLayout(w: w, h: h)
+        // The panel hangs from the title bar, centred, within the window.
+        XCTAssertEqual(panel.y, Theme.titleBarHeight, accuracy: 0.01)
+        XCTAssertEqual(panel.x + panel.w / 2, w / 2, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(panel.x + panel.w, w)
+        // Buttons sit inside the panel, Cancel left of Delete.
+        for b in [cancel, ok] {
+            XCTAssertGreaterThanOrEqual(b.x, panel.x)
+            XCTAssertLessThanOrEqual(b.x + b.w, panel.x + panel.w)
+            XCTAssertLessThanOrEqual(b.y + b.h, panel.y + panel.h)
+        }
+        XCTAssertLessThan(cancel.x + cancel.w, ok.x + ok.w)
+        // The base button clears the fully-extended panel.
+        let base = sheetBaseButton(w: w, h: h)
+        XCTAssertGreaterThan(base.y, panel.y + panel.h - 20)
+    }
+
     func testScrollLayoutAndThumb() {
         let w = 360.0, h = 420.0
         let L = scrollLayout(w: w, h: h)

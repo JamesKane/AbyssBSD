@@ -44,7 +44,7 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text, and the control set: checkbox,
     radio, slider, pop-up button, progress bar, text field, group box,
-    scrollbar, segmented control, tab view), `Text`
+    scrollbar, segmented control, tab view, modal sheet), `Text`
     (FreeType/HarfBuzz shaping via `CText`, painted through cairo-ft — with a
     cairo toy-text fallback when no font is found), `Scene`/`Widgets` (the window
     painters), `AquaWindow` (a live window wiring pointer/keyboard to the
@@ -72,6 +72,11 @@ segmented control (a view switcher) and a tab view whose selected tab merges int
 a content pane that changes with the selection — click or arrow-key to switch
 (`de/aqua/Tabs.swift`): ![tab view](screenshots/tabs.png)
 
+A **Sheet** scene (`AQUA_SCENE=sheet`) shows an Aqua modal sheet that slides down
+from the title bar (animated), dims and blocks the parent, and dismisses via its
+Cancel/Delete buttons — recording the choice below (`de/aqua/Sheet.swift`):
+![sheet](screenshots/sheet.png)
+
 It also runs **live** now: `abyss/tests/live-sway.sh` brings the window up under
 a headless sway and captures it with grim — a true test of the xdg-shell /
 shm / frame-callback path the PNG render skips
@@ -89,7 +94,9 @@ pop-up menu** — a grabbing xdg-popup child surface — under the Appearance bu
 with hover-highlight and the current item checkmarked
 (![live menu](screenshots/live-menu.png)); choosing an item sets the value and
 dismisses. On the tabs scene it clicks the "Columns" segment and the "Sharing"
-tab (![live tabs](screenshots/live-tabs.png)).
+tab (![live tabs](screenshots/live-tabs.png)). On the sheet scene it clicks
+"Delete…" and the modal sheet slides out over the dimmed window
+(![live sheet](screenshots/live-sheet.png)).
 
 ## How to run
 
@@ -113,6 +120,7 @@ abyss/tests/live-sway.sh widgets /tmp/widgets.png --click # toggle a checkbox + 
 abyss/tests/live-sway.sh scroll  /tmp/scroll.png  --click # drag the scrollbar thumb
 abyss/tests/live-sway.sh --menu  /tmp/menu.png            # open a real xdg-popup menu
 abyss/tests/live-sway.sh tabs    /tmp/tabs.png    --click # switch a segment + a tab
+abyss/tests/live-sway.sh sheet   /tmp/sheet.png   --click # open a modal sheet
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -135,8 +143,9 @@ abyss/tests/live-sway.sh tabs    /tmp/tabs.png    --click # switch a segment + a
   `de/aqua/Widgets.swift`) plus a **scrollbar** + scrolling list
   (`de/aqua/Scroll.swift`) and **real pop-up menus** (a grabbing xdg-popup child
   surface — `Surface.Popup` + `AquaMenu`) and **segmented control + tab view**
-  (`de/aqua/Tabs.swift`); still to do: sheets, brushed-metal window variant, and
-  keyboard focus/traversal between controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+  (`de/aqua/Tabs.swift`) and a **modal sheet** (slides from the title bar,
+  animated — `de/aqua/Sheet.swift`); still to do: a brushed-metal window variant,
+  and keyboard focus/traversal between controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
   remaining text refinements are device-pixel hinting under HiDPI and glyph
   caching. Live runs + **pointer and keyboard** interaction work under headless

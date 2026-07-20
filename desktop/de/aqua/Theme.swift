@@ -83,6 +83,10 @@ public enum Theme {
     public static let sliderTrackEdge = Color(0, 0, 0, 0.30)
     public static let progressTrack = Color(hex: 0xd6d6d6)
     public static let groupBoxBorder = Color(0, 0, 0, 0.16)
+    // Sheet: a modal panel that slides from the title bar; the parent dims.
+    public static let sheetBackground = Color(hex: 0xededed)
+    public static let sheetDim = Color(0, 0, 0, 0.30)
+
     // Tab view: a light pane with rounded-top tabs sitting on its top border.
     // The selected tab's bottom matches the pane so it reads as "connected".
     public static let tabPaneBackground = Color(hex: 0xf0f0f0)

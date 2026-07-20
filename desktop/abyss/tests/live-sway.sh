@@ -30,7 +30,7 @@ for a in "$@"; do
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
-    window|sysprefs|widgets|scroll|tabs)  scene="$a" ;;
+    window|sysprefs|widgets|scroll|tabs|sheet)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -84,6 +84,7 @@ case "$scene" in
   widgets)  res="460x360" ;;
   scroll)   res="360x420" ;;
   tabs)     res="480x380" ;;
+  sheet)    res="440x320" ;;
   *)        res="440x300" ;;
 esac
 cfg=$(mktemp)
@@ -145,6 +146,7 @@ if [ "$click" = "--click" ]; then
     widgets) vpw=460; vph=360 ;;
     scroll)  vpw=360; vph=420 ;;
     tabs)    vpw=480; vph=380 ;;
+    sheet)   vpw=440; vph=320 ;;
     *)       vpw=440; vph=300 ;;
   esac
   vp_log=$(mktemp)
@@ -187,6 +189,11 @@ if [ "$click" = "--click" ]; then
       # Pick the last segment ("Columns") and the last tab ("Sharing").
       printf 'm 272 51\np\nr\n'  >&3   # segmented control: Columns
       printf 'm 333 84\np\nr\n'  >&3   # tab: Sharing
+      ;;
+    sheet)
+      # Click "Delete…" to open the modal sheet: it slides down from the title
+      # bar and dims the body. Its buttons (Cancel/Delete) dismiss it.
+      printf 'm 220 165\np\nr\n' >&3
       ;;
     *)
       printf 'm 360 265\np\nr\n' >&3   # move over the gel button, click once
