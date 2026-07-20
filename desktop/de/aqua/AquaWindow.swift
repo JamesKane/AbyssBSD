@@ -37,6 +37,10 @@ public final class AquaWindow: WindowDelegate {
     private var draggingThumb = false
     private var thumbGrabDy = 0.0
 
+    // Active pop-up menu (widgets scene), if open.
+    private var menu: AquaMenu?
+    private var menuPopup: Popup?
+
     public init?(display: Display, title: String, scene: SceneKind = .window,
                  width: Int32 = 440, height: Int32 = 300) {
         self.title = title
@@ -167,12 +171,39 @@ public final class AquaWindow: WindowDelegate {
             window?.setNeedsDisplay(); return
         }
         if widgetLayout.popup.contains(pointerX, pointerY) {
-            widgets.popup = (widgets.popup + 1) % widgetPopupOptions.count
-            window?.setNeedsDisplay(); return
+            openAppearanceMenu(); return
         }
         if widgetLayout.okButton.contains(pointerX, pointerY) {
             widgets.okPressed = true; window?.setNeedsDisplay()
         }
+    }
+
+    /// Open a real pop-up menu (an xdg-popup child surface) anchored under the
+    /// Appearance pop-up button; choosing an item sets the value.
+    private func openAppearanceMenu() {
+        guard let window, menuPopup == nil else { return }
+        let r = widgetLayout.popup
+        let m = AquaMenu(items: widgetPopupOptions, selected: widgets.popup)
+        guard let popup = window.openPopup(
+            anchorX: Int32(r.x.rounded()), anchorY: Int32(r.y.rounded()),
+            anchorW: Int32(r.w.rounded()), anchorH: Int32(r.h.rounded()),
+            width: Int32(r.w.rounded()), height: Int32(m.preferredHeight.rounded()),
+            delegate: m) else { return }
+        m.popup = popup
+        m.onChoose = { [weak self] idx in
+            guard let self else { return }
+            self.widgets.popup = idx
+            self.menuPopup?.close()
+            self.menu = nil
+            self.menuPopup = nil
+            self.window?.setNeedsDisplay()
+        }
+        m.onDismiss = { [weak self] in
+            self?.menu = nil
+            self?.menuPopup = nil
+        }
+        menu = m
+        menuPopup = popup
     }
 
     // MARK: Scroll-scene input

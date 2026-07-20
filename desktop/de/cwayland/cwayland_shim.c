@@ -106,6 +106,49 @@ void aw_xdg_toplevel_set_app_id(void *toplevel, const char *app_id) {
     xdg_toplevel_set_app_id((struct xdg_toplevel *)toplevel, app_id);
 }
 
+void *aw_xdg_wm_base_create_positioner(void *wm_base) {
+    return xdg_wm_base_create_positioner((struct xdg_wm_base *)wm_base);
+}
+
+void aw_xdg_positioner_set_size(void *p, int32_t w, int32_t h) {
+    xdg_positioner_set_size((struct xdg_positioner *)p, w, h);
+}
+
+void aw_xdg_positioner_set_anchor_rect(void *p, int32_t x, int32_t y,
+                                       int32_t w, int32_t h) {
+    xdg_positioner_set_anchor_rect((struct xdg_positioner *)p, x, y, w, h);
+}
+
+void aw_xdg_positioner_set_anchor(void *p, uint32_t anchor) {
+    xdg_positioner_set_anchor((struct xdg_positioner *)p, anchor);
+}
+
+void aw_xdg_positioner_set_gravity(void *p, uint32_t gravity) {
+    xdg_positioner_set_gravity((struct xdg_positioner *)p, gravity);
+}
+
+void aw_xdg_positioner_set_constraint_adjustment(void *p, uint32_t adj) {
+    xdg_positioner_set_constraint_adjustment((struct xdg_positioner *)p, adj);
+}
+
+void aw_xdg_positioner_destroy(void *p) {
+    xdg_positioner_destroy((struct xdg_positioner *)p);
+}
+
+void *aw_xdg_surface_get_popup(void *xdg_surface, void *parent, void *positioner) {
+    return xdg_surface_get_popup((struct xdg_surface *)xdg_surface,
+                                 (struct xdg_surface *)parent,
+                                 (struct xdg_positioner *)positioner);
+}
+
+void aw_xdg_popup_grab(void *popup, void *seat, uint32_t serial) {
+    xdg_popup_grab((struct xdg_popup *)popup, (struct wl_seat *)seat, serial);
+}
+
+void aw_xdg_popup_destroy(void *popup) {
+    xdg_popup_destroy((struct xdg_popup *)popup);
+}
+
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }

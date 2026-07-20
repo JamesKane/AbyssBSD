@@ -39,6 +39,14 @@ public final class Display {
     // The (single, for now) window that receives input + drives frames.
     public weak var window: Window?
 
+    // The active grabbing popup (menu), if any. Weak — the caller owns it; we
+    // just route input to it and clear on teardown. Set in Popup.init.
+    weak var activePopup: Popup?
+    // Serial of the most recent pointer button event — xdg_popup.grab needs it.
+    var lastPointerSerial: UInt32 = 0
+    // Whether the pointer is currently over the popup surface (vs the window).
+    private var pointerOnPopup = false
+
     var running = true
 
     // Heap-allocated listener structs; libwayland keeps the pointers, so they
@@ -135,21 +143,31 @@ public final class Display {
             pointer = p
             let me = Unmanaged.passUnretained(self).toOpaque()
             var pl = wl_pointer_listener()
-            pl.enter = { data, _, _, _, sx, sy in
+            // enter carries the surface the pointer entered; we route to the
+            // window or the popup accordingly (a grabbing menu takes the
+            // pointer). The serial is stashed for a subsequent popup grab.
+            pl.enter = { data, _, serial, surfaceRaw, sx, sy in
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
-                d.window?.pointerMoved(fx: sx, fy: sy)
+                d.lastPointerSerial = serial
+                d.updatePointerTarget(surfaceRaw)
+                d.routePointerMotion(sx, sy)
             }
-            pl.leave = { _, _, _, _ in }
+            pl.leave = { data, _, _, _ in
+                guard let data else { return }
+                let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+                d.pointerOnPopup = false
+            }
             pl.motion = { data, _, _, sx, sy in
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
-                d.window?.pointerMoved(fx: sx, fy: sy)
+                d.routePointerMotion(sx, sy)
             }
-            pl.button = { data, _, _, _, button, state in
+            pl.button = { data, _, serial, _, button, state in
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
-                d.window?.pointerButton(button, pressed: state == 1)
+                d.lastPointerSerial = serial
+                d.routePointerButton(button, pressed: state == 1)
             }
             // libwayland aborts if it dispatches an event whose listener slot is
             // NULL, so EVERY event of the bound version (5) needs a handler even
@@ -162,6 +180,32 @@ public final class Display {
             pl.axis_stop = { _, _, _, _ in }
             pl.axis_discrete = { _, _, _, _ in }
             addListener(to: p, listener: pl, data: me)
+        }
+    }
+
+    // Which surface is the pointer over? A live popup surface wins (it has the
+    // grab); otherwise the window.
+    private func updatePointerTarget(_ surface: OpaquePointer?) {
+        if let surface, let popup = activePopup, surface == popup.surface {
+            pointerOnPopup = true
+        } else {
+            pointerOnPopup = false
+        }
+    }
+
+    private func routePointerMotion(_ sx: Int32, _ sy: Int32) {
+        if pointerOnPopup, let popup = activePopup {
+            popup.pointerMoved(fx: sx, fy: sy)
+        } else {
+            window?.pointerMoved(fx: sx, fy: sy)
+        }
+    }
+
+    private func routePointerButton(_ button: UInt32, pressed: Bool) {
+        if pointerOnPopup, let popup = activePopup {
+            if button == 0x110 { popup.pointerButton(pressed: pressed) }  // BTN_LEFT
+        } else {
+            window?.pointerButton(button, pressed: pressed)
         }
     }
 

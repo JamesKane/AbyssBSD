@@ -65,6 +65,20 @@ void aw_xdg_surface_ack_configure(void *xdg_surface, uint32_t serial);
 void aw_xdg_toplevel_set_title(void *toplevel, const char *title);
 void aw_xdg_toplevel_set_app_id(void *toplevel, const char *app_id);
 
+/* xdg-shell popups (menus): a positioner anchors a child popup surface to a
+ * rect in the parent, and grab routes input to it + dismisses on outside click. */
+void *aw_xdg_wm_base_create_positioner(void *wm_base);
+void aw_xdg_positioner_set_size(void *p, int32_t w, int32_t h);
+void aw_xdg_positioner_set_anchor_rect(void *p, int32_t x, int32_t y,
+                                       int32_t w, int32_t h);
+void aw_xdg_positioner_set_anchor(void *p, uint32_t anchor);
+void aw_xdg_positioner_set_gravity(void *p, uint32_t gravity);
+void aw_xdg_positioner_set_constraint_adjustment(void *p, uint32_t adj);
+void aw_xdg_positioner_destroy(void *p);
+void *aw_xdg_surface_get_popup(void *xdg_surface, void *parent, void *positioner);
+void aw_xdg_popup_grab(void *popup, void *seat, uint32_t serial);
+void aw_xdg_popup_destroy(void *popup);
+
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);
 void *aw_seat_get_keyboard(void *seat);

@@ -24,11 +24,12 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""
+scene=""; out=""; click=""; type=""; menu=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
+    --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     window|sysprefs|widgets|scroll)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
@@ -39,6 +40,8 @@ if [ -z "$scene" ]; then
   if [ "$click" = "--click" ] || [ "$type" = "--type" ]; then scene="window"
   else scene="sysprefs"; fi
 fi
+# The pop-up menu lives on the widgets scene.
+[ "$menu" = "--menu" ] && scene="widgets"
 # --type only makes sense where there's a focused text field.
 [ "$type" = "--type" ] && scene="window"
 
@@ -153,6 +156,17 @@ if [ "$click" = "--click" ]; then
   [ "${caps:-0}" -ne 0 ] || { echo "FAIL: seat gained no pointer capability"; exit 1; }
   echo "virtual pointer ready; seat capabilities=$caps"
   sleep 0.5  # let AquaDemo bind wl_pointer
+  if [ "$menu" = "--menu" ]; then
+    # Click the Appearance pop-up button to open a real xdg-popup menu, then
+    # hover the 2nd item ("Graphite"). We leave the menu open for the shot.
+    printf 'm 203 259\np\nr\n' >&3   # open the menu
+    sleep 0.5
+    printf 'm 203 300\n'       >&3   # hover the 2nd item (over the popup surface)
+    sleep 0.4
+    # (sway doesn't surface client xdg-popups in get_tree; the screenshot is the
+    # evidence — the menu should be open with "Graphite" highlighted. Pressing
+    # over an item selects it, sets the value, and dismisses the popup.)
+  else
   case "$scene" in
     widgets)
       # Toggle the 2nd checkbox ("Show all file extensions"), then click near
@@ -171,6 +185,7 @@ if [ "$click" = "--click" ]; then
       printf 'm 360 265\np\nr\n' >&3   # move over the gel button, click once
       ;;
   esac
+  fi
   sleep 0.5
   exec 3>&-
 fi
@@ -198,4 +213,4 @@ fi
 
 WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }
-echo "ok: live render -> $out (window mapped, no crash${click:+, clicked}${type:+, typed})"
+echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${click:+, clicked}${type:+, typed})"

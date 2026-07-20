@@ -71,7 +71,7 @@ final class ShmBuffer {
         self.stride = stride
     }
 
-    func attachReleaseListener(window: Window) {
+    func attachReleaseListener(display: Display) {
         var bl = wl_buffer_listener()
         bl.release = { data, _ in
             guard let data else { return }
@@ -79,7 +79,7 @@ final class ShmBuffer {
             b.busy = false
         }
         let me = Unmanaged.passUnretained(self).toOpaque()
-        window.display.addListener(to: wlBuffer, listener: bl, data: me)
+        display.addListener(to: wlBuffer, listener: bl, data: me)
     }
 
     func destroy() {
@@ -181,7 +181,7 @@ public final class Window {
         for _ in 0..<2 {
             guard let b = ShmBuffer(display: display, width: bw, height: bh)
             else { continue }
-            b.attachReleaseListener(window: self)
+            b.attachReleaseListener(display: display)
             buffers.append(b)
         }
     }
@@ -234,6 +234,18 @@ public final class Window {
 
     func keyEvent(_ event: KeyEvent) {
         delegate?.keyEvent(event)
+    }
+
+    /// Open a grabbing xdg-popup (a menu) anchored to a rect in this window's
+    /// logical surface coordinates. The caller owns the returned Popup; dropping
+    /// it (or the compositor sending popup_done) tears it down. Returns nil if
+    /// the popup can't be created.
+    public func openPopup(anchorX: Int32, anchorY: Int32, anchorW: Int32,
+                          anchorH: Int32, width: Int32, height: Int32,
+                          delegate: PopupDelegate) -> Popup? {
+        Popup(parent: self, anchorX: anchorX, anchorY: anchorY,
+              anchorW: anchorW, anchorH: anchorH, width: width, height: height,
+              delegate: delegate)
     }
 
     /// Logical (surface) size, useful to the toolkit for layout.

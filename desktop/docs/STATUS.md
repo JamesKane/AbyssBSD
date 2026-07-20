@@ -36,10 +36,11 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     small C API (`de/ctext`), with `CFreeType`/`CHarfBuzz` systemLibraries
     supplying the pkg-config flags. Aqua paints the shaped run via cairo-ft.
   - `Surface` — Wayland client runtime: `Display` (connection, registry,
-    globals, dispatch loop) + `Window` (xdg-shell toplevel, 2× shm buffers,
-    frame-callback pacing, pointer input) + `Keyboard` (`wl_keyboard` +
+    globals, dispatch loop, per-surface pointer routing) + `Window` (xdg-shell
+    toplevel, 2× shm buffers, frame-callback pacing, pointer input) + `Popup` (a
+    grabbing xdg-popup child surface for menus) + `Keyboard` (`wl_keyboard` +
     xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
-    `WindowDelegate`/`PixelBuffer`.
+    `WindowDelegate`/`PopupDelegate`/`PixelBuffer`.
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text, and the control set: checkbox,
     radio, slider, pop-up button, progress bar, text field, group box,
@@ -78,7 +79,11 @@ path. On the widgets scene, `--click` toggles a checkbox and moves the slider �
 real pointer-driven control interaction
 (![live controls](screenshots/live-widgets.png)). On the scroll scene it drags
 the scrollbar thumb and the list scrolls to the bottom
-(![live scroll](screenshots/live-scroll.png)).
+(![live scroll](screenshots/live-scroll.png)). With `--menu` it opens a **real
+pop-up menu** — a grabbing xdg-popup child surface — under the Appearance button,
+with hover-highlight and the current item checkmarked
+(![live menu](screenshots/live-menu.png)); choosing an item sets the value and
+dismisses.
 
 ## How to run
 
@@ -100,6 +105,7 @@ abyss/tests/live-sway.sh --click /tmp/click.png          # drive a real pointer 
 abyss/tests/live-sway.sh --type  /tmp/type.png           # drive real keystrokes
 abyss/tests/live-sway.sh widgets /tmp/widgets.png --click # toggle a checkbox + move the slider
 abyss/tests/live-sway.sh scroll  /tmp/scroll.png  --click # drag the scrollbar thumb
+abyss/tests/live-sway.sh --menu  /tmp/menu.png            # open a real xdg-popup menu
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -120,8 +126,8 @@ abyss/tests/live-sway.sh scroll  /tmp/scroll.png  --click # drag the scrollbar t
 - **Phase 1 polish:** the core control set now exists and is interactive
   (checkbox, radio, slider, pop-up button, progress bar, text field, group box —
   `de/aqua/Widgets.swift`) plus a **scrollbar** + scrolling list
-  (`de/aqua/Scroll.swift`); still to do: real pop-up **menus** (need an xdg-popup
-  child surface — today's pop-up button just cycles), tabs/segmented controls,
+  (`de/aqua/Scroll.swift`) and **real pop-up menus** (a grabbing xdg-popup child
+  surface — `Surface.Popup` + `AquaMenu`); still to do: tabs/segmented controls,
   sheets, brushed-metal window variant, and keyboard focus/traversal between
   controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);

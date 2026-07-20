@@ -14,8 +14,9 @@ renders faithful Jaguar UI:
 - **C interop** (`de/cwayland`, `de/ccairo`) — libwayland-client + generated
   xdg-shell + a Swift-callable shim; system cairo as the software 2D backend.
 - **`Surface`** — a real Wayland client runtime: connect, registry/globals,
-  xdg-shell toplevel, double-buffered `wl_shm`, frame-callback pacing, pointer
-  **and keyboard** input (the latter translated through xkbcommon), a dispatch
+  xdg-shell toplevel **and grabbing xdg-popup** child surfaces (menus),
+  double-buffered `wl_shm`, frame-callback pacing, pointer **and keyboard** input
+  (the latter translated through xkbcommon) with per-surface routing, a dispatch
   loop.
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe) and the classic control
@@ -152,7 +153,37 @@ checks counts, in-bounds, stacking, button order). Interaction state is a plain
 `Sendable` struct the delegate owns; the slider maps pointer-x through the same
 thumb-radius inset the painter uses, so drag tracks the thumb exactly.
 
-### 2.10 The linter lies about C includes
+### 2.10 Pop-up menus: an xdg-popup child surface with a grab
+A real menu is a *second* `wl_surface` (`Surface.Popup`), not something painted
+into the window. The moving parts that each bit you if missed:
+- **Positioner.** `xdg_wm_base.create_positioner` → set size + `anchor_rect` (the
+  button's rect, in the parent's logical surface coords) + `anchor`/`gravity`
+  (BOTTOM_LEFT / BOTTOM_RIGHT drops the menu below, left-aligned) + a constraint
+  adjustment (slide/flip) so it stays on-screen. Then `xdg_surface.get_popup`
+  with the *parent's* xdg_surface. Destroy the positioner immediately after.
+- **Grab needs the click's serial.** `xdg_popup.grab(seat, serial)` must use the
+  serial of the pointer button event that opened the menu, or the compositor
+  refuses the grab (or won't dismiss on outside-click). `Display` stashes
+  `lastPointerSerial` from every `wl_pointer.button`/`enter`; `Popup.init` grabs
+  with it. The grab is also what makes the compositor send `popup_done` on an
+  outside click.
+- **Input routes by surface.** `wl_pointer.enter` carries *which* surface the
+  pointer entered (imported as `OpaquePointer?`, not a raw pointer — that's a
+  compile error waiting to happen). `Display` compares it to the window vs the
+  active popup surface and routes motion/button to the right delegate. Without
+  this, menu hover/selection silently goes to the window.
+- **Teardown is a lifecycle trap.** `popup_done` means "dismissed" but you still
+  own the proxies and must `xdg_popup.destroy` them. Guard teardown with a single
+  `tornDown` flag and run it from `popup_done`, an explicit `close()` (after a
+  choice), *and* `deinit` — and tear down the proxies BEFORE notifying the
+  delegate, since the delegate may drop its last strong ref to the popup during
+  that call.
+
+`Popup` reuses the window's `ShmBuffer` + frame-callback pacing (so hover-
+highlight redraws don't stall). `AquaMenu` is the `PopupDelegate` that draws the
+items, tracks the hovered row, checkmarks the selection, and reports a choice.
+
+### 2.11 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -239,10 +270,12 @@ Known-not-faithful, on purpose:
    in `Draw`; the **Aqua Controls** scene in `de/aqua/Widgets.swift`, driven live
    by `live-sway.sh widgets --click`). A **scrollbar** + scrolling list scene
    followed (`de/aqua/Scroll.swift`, `live-sway.sh scroll --click` drags the
-   thumb; arrow/page/Home/End keys scroll too). Still to do: **real** pop-up
-   menus (need an xdg-popup child surface — today's pop-up button just cycles its
-   value), tabs/segmented controls, sheets, a brushed-metal window variant, and
-   keyboard focus/traversal (Tab between controls, Space to toggle).
+   thumb; arrow/page/Home/End keys scroll too). **Real pop-up menus** followed:
+   the Appearance pop-up button opens a grabbing xdg-popup child surface
+   (`Surface.Popup` + `AquaMenu`; `live-sway.sh --menu`), choosing an item sets
+   the value and dismisses. Still to do: tabs/segmented controls, sheets, a
+   brushed-metal window variant, and keyboard focus/traversal (Tab between
+   controls, Space to toggle; menus should take arrow-key navigation too).
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,

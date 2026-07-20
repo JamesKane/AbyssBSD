@@ -83,6 +83,12 @@ public enum Theme {
     public static let sliderTrackEdge = Color(0, 0, 0, 0.30)
     public static let progressTrack = Color(hex: 0xd6d6d6)
     public static let groupBoxBorder = Color(0, 0, 0, 0.16)
+    // Pop-up menu: white sheet, blue selection highlight (classic Aqua menu blue).
+    public static let menuBackground = Color(hex: 0xffffff)
+    public static let menuBorder = Color(hex: 0x8b8b8b)
+    public static let menuHighlight = Color(hex: 0x3f6fdf)
+    public static let menuText = Color(hex: 0x1a1a1a)
+    public static let menuTextOnHighlight = Color(hex: 0xffffff)
 
     public static let bodyText = Color(hex: 0x202020)
     public static let fontFamily = "Lucida Grande"
