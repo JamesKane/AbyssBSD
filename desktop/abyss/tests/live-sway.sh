@@ -34,7 +34,7 @@ for a in "$@"; do
     --wheel)                  wheel="--wheel"; click="--click" ;;  # scroll wheel
     --repeat)                 repeat="--repeat" ;;  # hold a key; assert it repeats
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
-    window|sysprefs|widgets|scroll|tabs|sheet)  scene="$a" ;;
+    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -97,6 +97,7 @@ case "$scene" in
   scroll)   res="360x420" ;;
   tabs)     res="480x380" ;;
   sheet)    res="440x320" ;;
+  wallpaper) res="800x600" ;;  # the layer surface stretches to fill it
   *)        res="440x300" ;;
 esac
 outline="output HEADLESS-1 resolution $res position 0 0"
@@ -150,16 +151,24 @@ env -u AQUA_SCALE WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
     .build/debug/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
-# Wait for the toplevel to map into sway's tree.
+# Wait for the surface to map. A layer-shell surface (wallpaper) isn't a
+# toplevel and never appears in sway's get_tree, so we assert on the app's own
+# "mapped" log — proof the compositor accepted the layer-shell handshake and
+# sent a configure. A normal window we detect by its app_id in the tree.
 mapped=0
 for _ in $(seq 1 32); do
-  if swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.aquademo"'; then
-    mapped=1; break
+  if [ "$scene" = "wallpaper" ]; then
+    grep -q 'LayerSurface: mapped' "$app_log" && { mapped=1; break; }
+  else
+    if swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.aquademo"'; then
+      mapped=1; break
+    fi
   fi
-  kill -0 "$app_pid" 2>/dev/null || { echo "FAIL: AquaDemo exited early"; exit 1; }
+  kill -0 "$app_pid" 2>/dev/null || { echo "FAIL: AquaDemo exited early"; cat "$app_log"; exit 1; }
   sleep 0.25
 done
-[ "$mapped" = 1 ] || { echo "FAIL: window never mapped"; exit 1; }
+[ "$mapped" = 1 ] || { echo "FAIL: surface never mapped"; cat "$app_log"; exit 1; }
+[ "$scene" = "wallpaper" ] && echo "layer surface mapped: $(grep 'LayerSurface: mapped' "$app_log" | head -1)"
 sleep 1  # let a couple of frames paint
 
 if [ "$click" = "--click" ]; then

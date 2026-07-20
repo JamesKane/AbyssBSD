@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 /*
  * Create an anonymous, writable shared-memory fd of `size` bytes, suitable for
@@ -79,6 +80,21 @@ void aw_xdg_positioner_destroy(void *p);
 void *aw_xdg_surface_get_popup(void *xdg_surface, void *parent, void *positioner);
 void aw_xdg_popup_grab(void *popup, void *seat, uint32_t serial);
 void aw_xdg_popup_destroy(void *popup);
+
+/* wlr-layer-shell: an anchored/exclusive surface role (wallpaper, menu bar,
+ * Dock) placed by the compositor into a layer, instead of a floating toplevel.
+ * The layer_surface itself carries configure/ack (there's no xdg_surface). */
+void *aw_bind_layer_shell(void *registry, uint32_t name, uint32_t version);
+void *aw_layer_shell_get_layer_surface(void *shell, void *surface, void *output,
+                                       uint32_t layer, const char *ns);
+void aw_layer_surface_set_size(void *ls, uint32_t w, uint32_t h);
+void aw_layer_surface_set_anchor(void *ls, uint32_t anchor);
+void aw_layer_surface_set_exclusive_zone(void *ls, int32_t zone);
+void aw_layer_surface_set_margin(void *ls, int32_t top, int32_t right,
+                                 int32_t bottom, int32_t left);
+void aw_layer_surface_set_keyboard_interactivity(void *ls, uint32_t ki);
+void aw_layer_surface_ack_configure(void *ls, uint32_t serial);
+void aw_layer_surface_destroy(void *ls);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);

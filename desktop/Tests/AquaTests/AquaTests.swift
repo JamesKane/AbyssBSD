@@ -1,4 +1,6 @@
 import XCTest
+import CCairo
+import Surface
 @testable import Aqua
 
 final class AquaTests: XCTestCase {
@@ -188,5 +190,49 @@ final class AquaTests: XCTestCase {
         // A viewport taller than the content yields no thumb.
         XCTAssertNil(scrollThumbRect(track: L.track,
                                      offset: 0, viewportH: scrollContentHeight() + 10))
+    }
+
+    // MARK: Phase 2 — layer shell / wallpaper
+
+    func testLayerAnchorAndLayerValues() {
+        // Anchor bits match the protocol (top=1, bottom=2, left=4, right=8),
+        // and `.all` is their union — the wallpaper anchors to every edge.
+        XCTAssertEqual(LayerSurface.Anchor.top.rawValue, 1)
+        XCTAssertEqual(LayerSurface.Anchor.bottom.rawValue, 2)
+        XCTAssertEqual(LayerSurface.Anchor.left.rawValue, 4)
+        XCTAssertEqual(LayerSurface.Anchor.right.rawValue, 8)
+        XCTAssertEqual(LayerSurface.Anchor.all.rawValue, 15)
+        XCTAssertTrue(LayerSurface.Anchor.all.contains(.top))
+        XCTAssertTrue(LayerSurface.Anchor.all.contains(.right))
+        // Layers are bottom-to-top, matching zwlr_layer_shell_v1_layer.
+        XCTAssertEqual(LayerSurface.Layer.background.rawValue, 0)
+        XCTAssertEqual(LayerSurface.Layer.overlay.rawValue, 3)
+    }
+
+    func testWallpaperPaintsOpaqueBlue() {
+        // The pure painter should fill the whole surface — no transparent gaps,
+        // and the Jaguar-blue reads as blue-dominant.
+        let w: Int32 = 64, h: Int32 = 48
+        guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h),
+              let cr = cairo_create(cs) else { return XCTFail("no cairo surface") }
+        defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+        paintWallpaper(cr, w: Double(w), h: Double(h))
+        cairo_surface_flush(cs)
+        guard let data = cairo_image_surface_get_data(cs) else {
+            return XCTFail("no pixel data")
+        }
+        let stride = Int(cairo_image_surface_get_stride(cs))
+        func pixel(_ x: Int, _ y: Int) -> (b: UInt8, g: UInt8, r: UInt8, a: UInt8) {
+            let p = data + y * stride + x * 4      // ARGB32 LE: B,G,R,A
+            return (p[0], p[1], p[2], p[3])
+        }
+        for (x, y) in [(0, 0), (Int(w) - 1, 0), (Int(w) / 2, Int(h) / 2),
+                       (0, Int(h) - 1), (Int(w) - 1, Int(h) - 1)] {
+            let px = pixel(x, y)
+            XCTAssertEqual(px.a, 255, "wallpaper must be fully opaque at (\(x),\(y))")
+            XCTAssertGreaterThan(px.b, px.r, "blue should dominate red")
+        }
+        // Bottom is the deep ocean stop, so it's darker than the lighter top.
+        XCTAssertLessThan(pixel(Int(w) / 2, Int(h) - 1).b, pixel(Int(w) / 2, 0).b)
     }
 }

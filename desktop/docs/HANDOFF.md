@@ -301,7 +301,37 @@ axis command).
 ### 2.15 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
-trust `swift build`.
+trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
+in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
+never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.16 Layer-shell: a second surface *role*, and it isn't in the tree
+(Phase 2.1.) The shell's surfaces are `wlr-layer-shell` surfaces, not xdg
+toplevels: the compositor owns placement (layer + anchors + exclusive zone) and
+the client just paints what it's handed. `Surface.LayerSurface` is that role,
+built by mirroring `Window` and trimming:
+- **No xdg_surface in between.** The `zwlr_layer_surface_v1` *itself* carries
+  `configure`/`ack_configure` (and `closed`). Set size/anchor/exclusive-zone/
+  keyboard-interactivity, commit *with no buffer* to trigger the first configure,
+  then allocate/paint/attach on configure. The configure delivers the size the
+  compositor chose (e.g. the full output for an edge-anchored bar); width/height
+  0 on an axis means "you decide" — pass 0 + anchor both edges to fill.
+- **The NULL-listener trap still applies** (§2.3): fill both `configure` and
+  `closed`. Layer-shell has no events on the *manager* (`zwlr_layer_shell_v1`),
+  so binding it needs no listener.
+- **Input routing generalised.** `Display` drove input at `window`; a process
+  runs *either* a window *or* a shell layer surface (reef-style: one surface per
+  process), so it now also holds a weak `layerSurface` and every route
+  (`routePointerMotion/Button/Axis`, the new `routeKeyEvent`, `recomputeScale`)
+  falls through to it when `window` is nil. Reused `WindowDelegate`'s shape as a
+  parallel `LayerSurfaceDelegate` (its frame hook is `layerSurfaceDidRenderFrame`,
+  since there's no `Window` to hand back).
+- **A layer surface is NOT in `sway -t get_tree`.** It has no `app_id` and isn't
+  a toplevel, so the live test can't wait on the tree like it does for windows.
+  Instead `LayerSurface` logs `LayerSurface: mapped WxH [ns]` to fd 2 on its
+  first configure (the proof the handshake was accepted) and `live-sway.sh
+  wallpaper` asserts on that log line. Verified: the wallpaper maps 800×600 under
+  headless sway and grim captures the gradient full-bleed.
 
 ---
 

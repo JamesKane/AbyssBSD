@@ -154,6 +154,49 @@ void aw_xdg_popup_destroy(void *popup) {
     xdg_popup_destroy((struct xdg_popup *)popup);
 }
 
+void *aw_bind_layer_shell(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &zwlr_layer_shell_v1_interface, version);
+}
+
+void *aw_layer_shell_get_layer_surface(void *shell, void *surface, void *output,
+                                       uint32_t layer, const char *namespace) {
+    return zwlr_layer_shell_v1_get_layer_surface(
+        (struct zwlr_layer_shell_v1 *)shell, (struct wl_surface *)surface,
+        (struct wl_output *)output, layer, namespace);
+}
+
+void aw_layer_surface_set_size(void *ls, uint32_t w, uint32_t h) {
+    zwlr_layer_surface_v1_set_size((struct zwlr_layer_surface_v1 *)ls, w, h);
+}
+
+void aw_layer_surface_set_anchor(void *ls, uint32_t anchor) {
+    zwlr_layer_surface_v1_set_anchor((struct zwlr_layer_surface_v1 *)ls, anchor);
+}
+
+void aw_layer_surface_set_exclusive_zone(void *ls, int32_t zone) {
+    zwlr_layer_surface_v1_set_exclusive_zone((struct zwlr_layer_surface_v1 *)ls, zone);
+}
+
+void aw_layer_surface_set_margin(void *ls, int32_t top, int32_t right,
+                                 int32_t bottom, int32_t left) {
+    zwlr_layer_surface_v1_set_margin((struct zwlr_layer_surface_v1 *)ls,
+                                     top, right, bottom, left);
+}
+
+void aw_layer_surface_set_keyboard_interactivity(void *ls, uint32_t ki) {
+    zwlr_layer_surface_v1_set_keyboard_interactivity(
+        (struct zwlr_layer_surface_v1 *)ls, ki);
+}
+
+void aw_layer_surface_ack_configure(void *ls, uint32_t serial) {
+    zwlr_layer_surface_v1_ack_configure((struct zwlr_layer_surface_v1 *)ls, serial);
+}
+
+void aw_layer_surface_destroy(void *ls) {
+    zwlr_layer_surface_v1_destroy((struct zwlr_layer_surface_v1 *)ls);
+}
+
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }

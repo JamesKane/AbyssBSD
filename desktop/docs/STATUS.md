@@ -14,6 +14,12 @@ faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, on **Wayland**. Sibling project
 locked-in decisions (reuse Rust `tide` now / rewrite later; faithful clone;
 Linux-first dev; full phased roadmap).
 
+**Phase 2 has begun.** The first pass (P2.1) added the `wlr-layer-shell` surface
+role to `Surface` and a BACKGROUND **wallpaper** (`AQUA_SCENE=wallpaper`) that
+fills the output with the Jaguar blue gradient — the shell's foundational surface
+type, verified live under sway: ![wallpaper](screenshots/live-wallpaper.png). See
+[PHASE2.md](PHASE2.md) for the ordered scope.
+
 ## Current state — Phase 1 vertical slice works
 
 A Swift 6 package builds on Linux and renders a faithful Jaguar window
@@ -40,10 +46,13 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     globals, a poll-timeout dispatch loop with **key repeat**, per-surface
     pointer routing incl. **scroll-wheel**, `wl_output` scale tracking) + `Window`
     (xdg-shell toplevel, 2× shm buffers, frame-callback pacing, pointer input,
-    per-output buffer scale) + `Popup` (a
+    per-output buffer scale) + **`LayerSurface`** (a `wlr-layer-shell` role for
+    shell components — layer/anchors/exclusive-zone, its own configure/ack,
+    reusing the buffer/frame/scale machinery) + `Popup` (a
     grabbing xdg-popup child surface for menus) + `Keyboard` (`wl_keyboard` +
     xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
-    `WindowDelegate`/`PopupDelegate`/`PixelBuffer`.
+    `WindowDelegate`/`LayerSurfaceDelegate`/`PopupDelegate`/`PixelBuffer`. Input
+    routes to the window *or* the layer surface (one per process).
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text, and the control set: checkbox,
     radio, slider, pop-up button, progress bar, text field, group box,
@@ -151,6 +160,10 @@ abyss/tests/live-sway.sh --menu  /tmp/mkeys.png   --keys  # arrow-key the pop-up
 abyss/tests/live-sway.sh widgets /tmp/hidpi.png   --hidpi # scale-2 output → auto 2x
 abyss/tests/live-sway.sh scroll  /tmp/wheel.png   --wheel # scroll-wheel the list
 abyss/tests/live-sway.sh window  /tmp/rep.png     --repeat # hold a key → it repeats
+abyss/tests/live-sway.sh wallpaper /tmp/wall.png         # a layer-shell BACKGROUND wallpaper
+
+# Wallpaper (layer-shell) PNG preview, no compositor:
+AQUA_SCENE=wallpaper AQUA_RENDER_PNG=/tmp/wall.png .build/debug/AquaDemo
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)

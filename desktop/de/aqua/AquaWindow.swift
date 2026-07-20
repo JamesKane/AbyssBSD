@@ -127,6 +127,8 @@ public final class AquaWindow: WindowDelegate {
             sheetScene = paintSheetScene(cr, w: w, h: h, progress: sheetProgress,
                                          visible: sheetVisible,
                                          lastAction: sheetAction)
+        case .wallpaper:
+            paintWallpaper(cr, w: w, h: h)  // not used live (Wallpaper owns it)
         }
     }
 

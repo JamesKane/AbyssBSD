@@ -36,6 +36,10 @@ case "tabs":
     scene = .tabs; title = "Tab View"; width = 480; height = 380
 case "sheet":
     scene = .sheet; title = "Sheets"; width = 440; height = 320
+case "wallpaper":
+    // A wlr-layer-shell BACKGROUND client. PNG preview uses a fixed size; live,
+    // the compositor stretches it to the output.
+    scene = .wallpaper; title = "Desktop"; width = 800; height = 600
 default:
     scene = .window; title = "AbyssBSD"; width = 440; height = 300
 }
@@ -54,18 +58,26 @@ guard let display = Display() else {
     exit(1)
 }
 
-// The caller owns the window: Display.window and Window.delegate are both weak
-// (to avoid a retain cycle), so this strong reference is the only thing keeping
-// the window — and its Wayland listeners' data pointers — alive. Discarding it
-// (e.g. `guard let _ =`) frees the window before the first configure event and
-// crashes in the listener callback. withExtendedLifetime pins it across run().
-guard let window = AquaWindow(display: display, title: title, scene: scene,
-                              width: width, height: height) else {
-    print("AquaDemo: failed to create the window.")
-    exit(1)
-}
-
-print("AquaDemo: window is up. Close it to quit.")
-withExtendedLifetime(window) {
-    display.run()
+// The caller owns the primary surface: Display's back-reference and the
+// delegate link are both weak (to avoid a retain cycle), so this strong
+// reference is the only thing keeping the surface — and its Wayland listeners'
+// data pointers — alive. Discarding it (e.g. `guard let _ =`) frees the surface
+// before the first configure event and crashes in the listener callback.
+// withExtendedLifetime pins it across run().
+if scene == .wallpaper {
+    guard let wallpaper = Wallpaper(display: display) else {
+        print("AquaDemo: failed to create the wallpaper " +
+              "(does the compositor offer wlr-layer-shell?).")
+        exit(1)
+    }
+    print("AquaDemo: wallpaper (layer-shell BACKGROUND) is up.")
+    withExtendedLifetime(wallpaper) { display.run() }
+} else {
+    guard let window = AquaWindow(display: display, title: title, scene: scene,
+                                  width: width, height: height) else {
+        print("AquaDemo: failed to create the window.")
+        exit(1)
+    }
+    print("AquaDemo: window is up. Close it to quit.")
+    withExtendedLifetime(window) { display.run() }
 }

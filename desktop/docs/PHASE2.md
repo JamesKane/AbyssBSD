@@ -95,13 +95,19 @@ Each is one build→live-verify→test→doc→commit pass, in dependency order.
 layer-shell spike gates everything visible; `PoolConfig` is independent and can
 slot in anywhere.
 
-**P2.1 — Layer-shell in `Surface` (the foundational spike).**
-Generate `wlr-layer-shell-unstable-v1`; add a `LayerSurface` role beside `Window`
-(namespace, layer, anchors, exclusive zone, `configure` w/ serial ack, keyboard
-interactivity). Prove it with a trivial full-screen BACKGROUND fill under sway.
-Riskiest new path; do it first and thin.
+**P2.1 — Layer-shell in `Surface` (the foundational spike). ✅ done.**
+Generated `wlr-layer-shell-unstable-v1`; added a `LayerSurface` role beside
+`Window` (namespace, layer, anchors, exclusive zone, `configure`+ack, keyboard
+interactivity, buffer pool + frame pacing + per-output scale). `Display` binds
+`zwlr_layer_shell_v1` and routes input/scale to a layer surface when no window is
+present (`routeKeyEvent` + the pointer routes fall through). Proved by a
+BACKGROUND wallpaper (`Aqua/Wallpaper.swift`, `AQUA_SCENE=wallpaper`) that fills
+the output with the Jaguar blue gradient — verified live under sway
+(`live-sway.sh wallpaper`, which asserts on the app's `LayerSurface: mapped` log
+since layer surfaces don't appear in `get_tree`). See HANDOFF §2.16.
 
 **P2.2 — Desktop / wallpaper (`reef-desktop` analog).**
+The wallpaper exists as the P2.1 proof; P2.2 makes it the real Desktop.
 First real layer-shell client: BACKGROUND, all-4 anchors, exclusive −1. Solid →
 gradient → PNG (we already bind libpng via `CText`/cairo). This validates the
 whole layer-shell path end-to-end with almost no UI. Add `live-sway.sh desktop`.

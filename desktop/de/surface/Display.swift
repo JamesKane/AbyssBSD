@@ -47,6 +47,7 @@ public final class Display {
     var shm: OpaquePointer?
     var seat: OpaquePointer?
     var wmBase: OpaquePointer?
+    var layerShell: OpaquePointer?
     var pointer: OpaquePointer?
     var keyboard: OpaquePointer?
 
@@ -57,8 +58,11 @@ public final class Display {
     // xkbcommon translation for keyboard input; created lazily with the seat.
     let keyboardState = KeyboardState()
 
-    // The (single, for now) window that receives input + drives frames.
+    // The (single, for now) primary surface that receives input + drives frames.
+    // A process runs either an xdg-shell app (window) or a shell component
+    // (layerSurface) — exactly one is set. Input routes to whichever is present.
     public weak var window: Window?
+    public weak var layerSurface: LayerSurface?
 
     // The active grabbing popup (menu), if any. Weak — the caller owns it; we
     // just route input to it and clear on teardown. Set in Popup.init.
@@ -157,6 +161,10 @@ public final class Display {
                 aw_xdg_wm_base_pong(raw(d.wmBase!), serial)
             }
             addListener(to: b, listener: bl, data: me)
+        case "zwlr_layer_shell_v1":
+            // v4 brings keyboard on_demand + since-4 configure semantics; the
+            // menu bar/Dock will want it. It has no events, so no listener.
+            layerShell = opt(aw_bind_layer_shell(raw(registry), name, min(version, 4)))
         case "wl_output":
             // v2 is where the `scale` event lands (and `done` batches props).
             guard let o = opt(aw_bind_output(raw(registry), name, min(version, 2)))
@@ -185,6 +193,7 @@ public final class Display {
         guard let i = outputs.firstIndex(where: { $0.name == name }) else { return }
         outputs.remove(at: i)      // compositor destroys the proxy on its side
         window?.recomputeScale()
+        layerSurface?.recomputeScale()
     }
 
     // The pending scale for `proxy` (staged until the next `done`).
@@ -197,6 +206,7 @@ public final class Display {
         for o in outputs where o.proxy == proxy && o.scale != o.pendingScale {
             o.scale = o.pendingScale
             window?.recomputeScale()
+            layerSurface?.recomputeScale()
         }
     }
 
@@ -273,22 +283,36 @@ public final class Display {
     private func routePointerMotion(_ sx: Int32, _ sy: Int32) {
         if pointerOnPopup, let popup = activePopup {
             popup.pointerMoved(fx: sx, fy: sy)
+        } else if let window {
+            window.pointerMoved(fx: sx, fy: sy)
         } else {
-            window?.pointerMoved(fx: sx, fy: sy)
+            layerSurface?.pointerMoved(fx: sx, fy: sy)
         }
     }
 
     private func routePointerButton(_ button: UInt32, pressed: Bool) {
         if pointerOnPopup, let popup = activePopup {
             if button == 0x110 { popup.pointerButton(pressed: pressed) }  // BTN_LEFT
+        } else if let window {
+            window.pointerButton(button, pressed: pressed)
         } else {
-            window?.pointerButton(button, pressed: pressed)
+            layerSurface?.pointerButton(button, pressed: pressed)
         }
     }
 
     private func routePointerAxis(_ axis: UInt32, value: Double) {
-        // The window scrolls; an open menu just stays put.
-        if !pointerOnPopup { window?.pointerAxis(axis, value: value) }
+        // The primary surface scrolls; an open menu just stays put.
+        guard !pointerOnPopup else { return }
+        if let window { window.pointerAxis(axis, value: value) }
+        else { layerSurface?.pointerAxis(axis, value: value) }
+    }
+
+    // Keyboard goes to the primary surface (window or shell layer surface). A
+    // grabbing popup does not steal keyboard from our client (see HANDOFF §2.12),
+    // so the window/layer surface forwards to its open menu itself.
+    private func routeKeyEvent(_ ev: KeyEvent) {
+        if let window { window.keyEvent(ev) }
+        else { layerSurface?.keyEvent(ev) }
     }
 
     private func bindKeyboard(_ seat: OpaquePointer) {
@@ -312,7 +336,7 @@ public final class Display {
             let pressed = state == 1
             guard let ev = d.keyboardState?.event(evdev: key, pressed: pressed)
             else { return }
-            d.window?.keyEvent(ev)
+            d.routeKeyEvent(ev)
             if pressed { d.startRepeat(evdev: key, event: ev) }
             else { d.stopRepeat(evdev: key) }
         }
@@ -364,7 +388,7 @@ public final class Display {
         let now = nowMs()
         let interval = max(Int64(1000 / ks.repeatRate), 1)
         while now >= rk.nextMs {
-            window?.keyEvent(rk.event)
+            routeKeyEvent(rk.event)
             rk.nextMs += interval
             if rk.nextMs <= now { rk.nextMs = now + interval }  // don't burst after a stall
         }

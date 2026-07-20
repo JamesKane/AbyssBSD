@@ -20,7 +20,9 @@ let package = Package(
             name: "CWayland",
             path: "de/cwayland",
             exclude: ["generate-protocols.sh"],
-            sources: ["xdg-shell-protocol.c", "cwayland_shm.c", "cwayland_shim.c"],
+            sources: ["xdg-shell-protocol.c",
+                      "wlr-layer-shell-unstable-v1-protocol.c",
+                      "cwayland_shm.c", "cwayland_shim.c"],
             publicHeadersPath: "include",
             linkerSettings: [.linkedLibrary("wayland-client")]
         ),
