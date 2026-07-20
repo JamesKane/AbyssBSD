@@ -158,8 +158,10 @@ abyss/tests/live-sway.sh --menu  /tmp/mkeys.png   --keys  # arrow-key the pop-up
   (`de/aqua/Tabs.swift`) and a **modal sheet** (slides from the title bar,
   animated — `de/aqua/Sheet.swift`) and **keyboard focus/traversal** (Tab/Space/
   arrows + Return/Escape through controls, menus and sheets — `Draw.focusRing` +
-  `WidgetFocus`); still to do: a brushed-metal window variant. Per-output scale
-  from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+  `WidgetFocus`). The Phase-1 control set is now complete; the remaining polish is
+  per-output scale from `wl_output` instead of `AQUA_SCALE`. (A brushed-metal
+  window variant is deliberately out of scope — it's a Panther/Tiger-era texture,
+  not era-faithful to 10.2.) Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
   remaining text refinements are device-pixel hinting under HiDPI and glyph
   caching. Live runs + **pointer and keyboard** interaction work under headless

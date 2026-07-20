@@ -27,9 +27,12 @@ underneath for now, and replace pieces with Swift later where it pays.
    hostile to Swift's ARC). Build the Aqua shell/toolkit/apps in Swift 6 as Wayland
    *clients*. Revisit a Swift compositor only once the toolkit and Embedded-Swift
    hot-path patterns are proven (Phase 6).
-2. **Aqua fidelity: faithful 10.2 clone.** Pinstripes, brushed metal, lickable gel
-   buttons, traffic-light controls, the magnifying Dock, Apple menu, pinstriped menu
-   bar. The 512pixels Aqua screenshot library is the spec.
+2. **Aqua fidelity: faithful 10.2 clone.** Pinstripes, lickable gel buttons,
+   traffic-light controls, the magnifying Dock, Apple menu, pinstriped menu
+   bar. The 512pixels Aqua screenshot library is the spec. (Brushed metal is
+   deliberately out of scope — it only became a widespread window texture in
+   Panther/Tiger; Jaguar used it sparingly and the era-faithful default is the
+   pinstriped/white Aqua window.)
 3. **Dev platform: Linux-first, then port.** Swift 6 is first-class on Linux; build the
    toolkit + shell on this workstation against a stock wlroots compositor (sway/labwc)
    for fast iteration, then bring Swift up on FreeBSD and integrate with `tide`.
@@ -118,10 +121,10 @@ compositor, HiDPI-aware. This is where "faithful clone" gets nailed.
     proved this pairing in `reef/wl/font.rs`). Port the `abyss-image` codec usage
     (PNG/JPEG/SVG) or bind the same C libs.
   - **Theme tokens** distilled from the 512pixels 10.2 screenshot library: the pinstripe
-    pattern, Lucida Grande metrics, gel-button gradient stops, brushed-metal texture,
+    pattern, Lucida Grande metrics, gel-button gradient stops,
     title-bar geometry, traffic-light colors/positions, sheet/menu styling, selection
     blue.
-  - **Widget set (initial):** window frame (aqua + brushed-metal variants) with
+  - **Widget set (initial):** the pinstriped/white Aqua window frame with
     traffic-light close/min/zoom, push buttons (gel), checkboxes/radios, text fields,
     scrollbars, menus + menu bar, sheets, progress/spinner. Built data-oriented and
     redraw-on-damage to respect the latency contract.

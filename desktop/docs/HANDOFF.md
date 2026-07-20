@@ -329,8 +329,10 @@ Known-not-faithful, on purpose:
    focus/traversal** followed (§2.12): a soft `Draw.focusRing`, Tab/Shift-Tab
    over `WidgetFocus`, Space/arrows/Return/Escape driving the widgets scene, plus
    arrow-key + Return/Escape nav in the pop-up menu (during its grab) and the
-   sheet — `live-sway.sh widgets --keys` and `--menu --keys`. Still to do: a
-   brushed-metal window variant.
+   sheet — `live-sway.sh widgets --keys` and `--menu --keys`. That completes the
+   Phase-1 control set. (A brushed-metal window variant is deliberately out of
+   scope: it's a Panther/Tiger-era texture, not era-faithful to 10.2 — the
+   pinstriped/white Aqua window is the Jaguar default.)
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,
