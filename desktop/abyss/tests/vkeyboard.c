@@ -23,6 +23,8 @@
 //   k <code>...     press+release each raw evdev keycode in turn (e.g. Tab=15,
 //                   Space=57, Enter=28, Esc=1, Left=105, Right=106, Up=103,
 //                   Down=108) — for non-text keys the toolkit reacts to by keysym
+//   d <code>        press (hold down) a raw keycode — for testing key repeat
+//   u <code>        release a raw keycode
 //   q              quit (also on EOF)
 
 #define _GNU_SOURCE  /* memfd_create */
@@ -146,6 +148,15 @@ int main(void) {
                 zwp_virtual_keyboard_v1_key(vk, t, code, KEY_PRESSED);
                 zwp_virtual_keyboard_v1_key(vk, t + 1, code, KEY_RELEASED);
             }
+            wl_display_flush(dpy);
+            continue;
+        }
+        if ((line[0] == 'd' || line[0] == 'u') && line[1] == ' ') {
+            // Hold down / release a single raw keycode (to exercise key repeat).
+            unsigned code = (unsigned)strtoul(line + 2, NULL, 10);
+            t += 10;
+            zwp_virtual_keyboard_v1_key(vk, t, code,
+                line[0] == 'd' ? KEY_PRESSED : KEY_RELEASED);
             wl_display_flush(dpy);
             continue;
         }

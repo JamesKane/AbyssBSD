@@ -275,7 +275,30 @@ nonisolated mutable global that Swift 6 strict concurrency rejects (§2.4).
 Verified live: `live-sway.sh --hidpi` runs a scale-2 headless output and asserts
 the window logs `buffer scale -> 2x`; grim captures the 460×360 window at 920×720.
 
-### 2.14 The linter lies about C includes
+### 2.14 Key repeat needs a timeout in the dispatch loop (prepare_read/poll)
+`wl_display_dispatch` blocks until the socket has data, so nothing wakes the
+client to *emit* an auto-repeat. Key repeat therefore rebuilds `Display.run()`
+around the canonical libwayland pattern: `wl_display_prepare_read` (draining
+`dispatch_pending` until it succeeds) → `flush` → `poll(fd, timeout)` →
+`read_events` + `dispatch_pending` on POLLIN, else `cancel_read`. The `timeout`
+is the ms until the next repeat deadline (or −1). After each wake we fire any due
+repeats. **Must cancel or read after a successful prepare_read** — leaving the
+read armed deadlocks the next iteration. All those `wl_display_*` calls are real
+exported symbols (no static-inline trap), so Swift calls them directly.
+
+Which keys repeat and how fast comes from the compositor: `wl_keyboard.repeat_info`
+gives rate (keys/s, 0 = off) + delay (ms), and `xkb_keymap_key_repeats(keymap,
+evdev+8)` says whether a given key auto-repeats (letters yes, modifiers no) — so
+we don't hand-maintain a list. Only the latest held key repeats; release clears
+it. The repeat re-delivers the *same* `KeyEvent` as a press, so the text field /
+scroll / traversal handlers need no special-casing. Scroll-wheel came free in the
+same pass: `wl_pointer.axis` (wl_fixed 24.8 → logical px) routed to a new
+`WindowDelegate.pointerAxis`. Verified live: `--repeat` holds one key and the
+field fills with repeats; `--wheel` spins the wheel and the list scrolls without
+touching the thumb (`vkeyboard` gained `d`/`u` hold/release, `vpointer` an `a`
+axis command).
+
+### 2.15 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -316,8 +339,10 @@ it builds a US keymap with xkbcommon and hands it up, which sway then forwards t
 AquaDemo. It types `Abyss` (Shift for the capital) into the focused text field,
 which renders it via §2.8. Evidence: `docs/screenshots/live-type.png`. `--keys`
 drives keyboard **focus/traversal** (Tab/Space/arrows via `vkeyboard`'s raw
-`k <code>` command; §2.12), and `--hidpi` runs a **scale-2 headless output** to
-prove the window auto-scales (§2.13; `docs/screenshots/live-hidpi.png`).
+`k <code>` command; §2.12), `--hidpi` runs a **scale-2 headless output** to prove
+the window auto-scales (§2.13; `docs/screenshots/live-hidpi.png`), `--wheel`
+spins the **scroll wheel** (`vpointer`'s `a` axis command) and `--repeat` holds a
+key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 
 Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
 render). Tests are pure toolkit logic (no compositor).
@@ -358,8 +383,9 @@ Known-not-faithful, on purpose:
    validated xdg-shell configure/resize + shm + frame pacing + the pointer
    path. **Keyboard input** is now done too (§2.8): `wl_keyboard` + xkbcommon in
    `Surface`, driven live by `live-sway.sh --type` via a virtual keyboard
-   (`vkeyboard.c`). Follow-ups: hover/scroll, key repeat (`repeat_info` is
-   handled but ignored), and keyboard focus tracking (enter/leave → caret).
+   (`vkeyboard.c`). **Scroll-wheel and key repeat** followed (§2.14) — the input
+   paths are complete; the only optional extra is keyboard focus tracking
+   (enter/leave → caret blink).
 3. **Per-output scale** — ✅ done (§2.13): the window tracks its output's scale
    via `wl_output` + `wl_surface` enter/leave and re-cuts its buffers to render
    crisp on HiDPI; `AQUA_SCALE` is now just an optional pin. Verified live by

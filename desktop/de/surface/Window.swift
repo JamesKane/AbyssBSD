@@ -27,6 +27,10 @@ public protocol WindowDelegate: AnyObject {
     func render(_ buffer: PixelBuffer)
     func pointerMoved(x: Double, y: Double)
     func pointerButton(_ button: UInt32, pressed: Bool)
+    // Scroll-wheel / touchpad axis. `axis` 0 = vertical, 1 = horizontal; `value`
+    // is in logical pixels (positive = down/right). Declared in the body so it
+    // dynamically dispatches (see windowDidRenderFrame).
+    func pointerAxis(_ axis: UInt32, value: Double)
     func keyEvent(_ event: KeyEvent)
     // Declared here (not only in the extension) so it dynamically dispatches to
     // the conformer — an extension-only method would static-dispatch to the
@@ -37,6 +41,8 @@ public protocol WindowDelegate: AnyObject {
 public extension WindowDelegate {
     // Keyboard is optional for a delegate; default to ignoring it.
     func keyEvent(_ event: KeyEvent) {}
+    // Axis (scroll) is optional too.
+    func pointerAxis(_ axis: UInt32, value: Double) {}
     // Called after each committed frame is released, so a delegate can drive an
     // animation by advancing state and calling setNeedsDisplay(). Default no-op.
     func windowDidRenderFrame(_ window: Window) {}
@@ -298,6 +304,10 @@ public final class Window {
 
     func pointerButton(_ button: UInt32, pressed: Bool) {
         delegate?.pointerButton(button, pressed: pressed)
+    }
+
+    func pointerAxis(_ axis: UInt32, value: Double) {
+        delegate?.pointerAxis(axis, value: value)
     }
 
     func keyEvent(_ event: KeyEvent) {

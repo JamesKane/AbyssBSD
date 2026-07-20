@@ -17,6 +17,7 @@
 //   m <x> <y>   move the cursor to output pixel (x, y)
 //   p           press   the left button
 //   r           release the left button
+//   a <value>   vertical scroll by <value> logical px (positive = down)
 //   q           quit (also on EOF)
 
 #include <wayland-client.h>
@@ -87,6 +88,17 @@ int main(int argc, char **argv) {
             zwlr_virtual_pointer_v1_button(vp, t, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(vp);
             break;
+        case 'a': {
+            // Vertical scroll by <value> logical px (positive = down). The
+            // protocol's axis value is wl_fixed (24.8), so scale by 256.
+            int v = 0;
+            if (sscanf(line, " a %d", &v) == 1) {
+                zwlr_virtual_pointer_v1_axis(vp, t, WL_POINTER_AXIS_VERTICAL_SCROLL,
+                                             wl_fixed_from_int(v));
+                zwlr_virtual_pointer_v1_frame(vp);
+            }
+            break;
+        }
         case 'q':
             goto done;
         default:

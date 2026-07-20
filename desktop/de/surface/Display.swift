@@ -11,6 +11,12 @@
 
 import CWayland
 
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
 @inline(__always) func raw(_ p: OpaquePointer) -> UnsafeMutableRawPointer {
     UnsafeMutableRawPointer(p)
 }
@@ -61,6 +67,10 @@ public final class Display {
     var lastPointerSerial: UInt32 = 0
     // Whether the pointer is currently over the popup surface (vs the window).
     private var pointerOnPopup = false
+
+    // The currently held auto-repeating key, if any: its evdev code, the event
+    // to re-deliver, and the monotonic-ms deadline for the next repeat.
+    private var repeatKey: (evdev: UInt32, event: KeyEvent, nextMs: Int64)?
 
     var running = true
 
@@ -234,11 +244,15 @@ public final class Display {
             }
             // libwayland aborts if it dispatches an event whose listener slot is
             // NULL, so EVERY event of the bound version (5) needs a handler even
-            // when we ignore it. wlroots emits `frame` after every event group;
-            // the axis events fire on scroll. (Only surfaces with a real pointer
-            // hit this, so it stayed hidden until virtual-pointer input.)
+            // when we ignore it. wlroots emits `frame` after every event group.
             pl.frame = { _, _ in }
-            pl.axis = { _, _, _, _, _ in }
+            // Scroll wheel / touchpad: route the vertical/horizontal axis to the
+            // window (value is wl_fixed 24.8 → logical px). Menus don't scroll.
+            pl.axis = { data, _, _, axis, value in
+                guard let data else { return }
+                let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+                d.routePointerAxis(axis, value: Double(value) / 256.0)
+            }
             pl.axis_source = { _, _, _ in }
             pl.axis_stop = { _, _, _, _ in }
             pl.axis_discrete = { _, _, _, _ in }
@@ -272,6 +286,11 @@ public final class Display {
         }
     }
 
+    private func routePointerAxis(_ axis: UInt32, value: Double) {
+        // The window scrolls; an open menu just stays put.
+        if !pointerOnPopup { window?.pointerAxis(axis, value: value) }
+    }
+
     private func bindKeyboard(_ seat: OpaquePointer) {
         guard let k = opt(aw_seat_get_keyboard(raw(seat))) else { return }
         keyboard = k
@@ -290,9 +309,12 @@ public final class Display {
             guard let data else { return }
             let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
             // wl_keyboard.key_state: 1 == pressed.
-            guard let ev = d.keyboardState?.event(evdev: key, pressed: state == 1)
+            let pressed = state == 1
+            guard let ev = d.keyboardState?.event(evdev: key, pressed: pressed)
             else { return }
             d.window?.keyEvent(ev)
+            if pressed { d.startRepeat(evdev: key, event: ev) }
+            else { d.stopRepeat(evdev: key) }
         }
         kl.modifiers = { data, _, _, dep, lat, lock, group in
             guard let data else { return }
@@ -302,15 +324,77 @@ public final class Display {
         }
         // Bound at seat v5, so every slot must be non-NULL (the NULL-listener
         // abort trap); repeat_info arrived in wl_keyboard v4.
-        kl.repeat_info = { _, _, _, _ in }
+        kl.repeat_info = { data, _, rate, delay in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            d.keyboardState?.setRepeatInfo(rate: rate, delay: delay)
+        }
         addListener(to: k, listener: kl, data: me)
     }
 
-    /// Block dispatching events until the window is closed (or the connection
-    /// errors). Wayland delivers all input/frame callbacks on this thread.
+    // MARK: Key repeat
+
+    private func nowMs() -> Int64 {
+        var ts = timespec()
+        clock_gettime(CLOCK_MONOTONIC, &ts)
+        return Int64(ts.tv_sec) * 1000 + Int64(ts.tv_nsec) / 1_000_000
+    }
+
+    /// Begin auto-repeating `event` if the compositor enabled repeat and the
+    /// keymap marks this key as repeating. Only the latest key repeats.
+    private func startRepeat(evdev: UInt32, event: KeyEvent) {
+        guard let ks = keyboardState, ks.repeatRate > 0,
+              ks.keyRepeats(evdev: evdev) else { repeatKey = nil; return }
+        repeatKey = (evdev, event, nowMs() + Int64(ks.repeatDelayMs))
+    }
+
+    private func stopRepeat(evdev: UInt32) {
+        if repeatKey?.evdev == evdev { repeatKey = nil }
+    }
+
+    // ms until the next repeat is due, for the poll timeout (nil = no repeat).
+    private func repeatTimeoutMs() -> Int32? {
+        guard let rk = repeatKey else { return nil }
+        return Int32(max(0, min(rk.nextMs - nowMs(), 1000)))
+    }
+
+    // Deliver any repeats whose deadline has passed, advancing the next deadline.
+    private func fireDueRepeats() {
+        guard var rk = repeatKey, let ks = keyboardState, ks.repeatRate > 0 else { return }
+        let now = nowMs()
+        let interval = max(Int64(1000 / ks.repeatRate), 1)
+        while now >= rk.nextMs {
+            window?.keyEvent(rk.event)
+            rk.nextMs += interval
+            if rk.nextMs <= now { rk.nextMs = now + interval }  // don't burst after a stall
+        }
+        repeatKey = rk
+    }
+
+    /// Dispatch events until the window closes (or the connection errors). Uses
+    /// the prepare_read/read_events pattern so poll can wake on a key-repeat
+    /// deadline as well as on incoming Wayland events. All input/frame callbacks
+    /// run on this thread.
     public func run() {
+        let fd = wl_display_get_fd(display)
         while running {
-            if wl_display_dispatch(display) == -1 { break }
+            // Dispatch anything already queued, then arm a read.
+            while wl_display_prepare_read(display) != 0 {
+                if wl_display_dispatch_pending(display) == -1 { running = false; break }
+            }
+            if !running { wl_display_cancel_read(display); break }
+            wl_display_flush(display)
+
+            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let timeout = repeatTimeoutMs() ?? -1
+            let pr = withUnsafeMutablePointer(to: &pfd) { poll($0, 1, timeout) }
+            if pr > 0 && (pfd.revents & Int16(POLLIN)) != 0 {
+                if wl_display_read_events(display) == -1 { break }
+                if wl_display_dispatch_pending(display) == -1 { break }
+            } else {
+                wl_display_cancel_read(display)  // timeout or interrupt
+            }
+            fireDueRepeats()
         }
     }
 

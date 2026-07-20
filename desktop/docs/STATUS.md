@@ -37,9 +37,10 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     `CFreeType`/`CHarfBuzz` systemLibraries supplying the pkg-config flags. Aqua
     paints the shaped run via cairo-ft, caching runs and shaping at device px.
   - `Surface` — Wayland client runtime: `Display` (connection, registry,
-    globals, dispatch loop, per-surface pointer routing, `wl_output` scale
-    tracking) + `Window` (xdg-shell toplevel, 2× shm buffers, frame-callback
-    pacing, pointer input, per-output buffer scale) + `Popup` (a
+    globals, a poll-timeout dispatch loop with **key repeat**, per-surface
+    pointer routing incl. **scroll-wheel**, `wl_output` scale tracking) + `Window`
+    (xdg-shell toplevel, 2× shm buffers, frame-callback pacing, pointer input,
+    per-output buffer scale) + `Popup` (a
     grabbing xdg-popup child surface for menus) + `Keyboard` (`wl_keyboard` +
     xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
     `WindowDelegate`/`PopupDelegate`/`PixelBuffer`.
@@ -115,7 +116,12 @@ with hover-highlight and the current item checkmarked
 dismisses. On the tabs scene it clicks the "Columns" segment and the "Sharing"
 tab (![live tabs](screenshots/live-tabs.png)). On the sheet scene it clicks
 "Delete…" and the modal sheet slides out over the dimmed window
-(![live sheet](screenshots/live-sheet.png)).
+(![live sheet](screenshots/live-sheet.png)). With `--wheel` it spins the scroll
+wheel (`wl_pointer.axis`) and the list scrolls to the bottom without touching the
+thumb (![wheel scroll](screenshots/live-wheel.png)); with `--repeat` it holds one
+key and the field fills with repeats — real **key repeat** off the compositor's
+`repeat_info`, driven by a poll-timeout event loop
+(![key repeat](screenshots/live-repeat.png)).
 
 ## How to run
 
@@ -143,6 +149,8 @@ abyss/tests/live-sway.sh sheet   /tmp/sheet.png   --click # open a modal sheet
 abyss/tests/live-sway.sh widgets /tmp/keys.png    --keys  # Tab/Space/arrows drive focus
 abyss/tests/live-sway.sh --menu  /tmp/mkeys.png   --keys  # arrow-key the pop-up menu
 abyss/tests/live-sway.sh widgets /tmp/hidpi.png   --hidpi # scale-2 output → auto 2x
+abyss/tests/live-sway.sh scroll  /tmp/wheel.png   --wheel # scroll-wheel the list
+abyss/tests/live-sway.sh window  /tmp/rep.png     --repeat # hold a key → it repeats
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -179,9 +187,10 @@ abyss/tests/live-sway.sh widgets /tmp/hidpi.png   --hidpi # scale-2 output → a
   glyph advances line up with the device-rasterised glyphs at HiDPI). The one
   remaining text nicety is per-glyph caching of rasterised bitmaps (cairo already
   caches internally, so low priority). Live runs + **pointer and keyboard** interaction work under headless
-  sway (`abyss/tests/live-sway.sh [--click] [--type]`, driving a
-  wlr-virtual-pointer / a zwp-virtual-keyboard); follow-ups are hover/scroll and
-  key repeat.
+  sway (`abyss/tests/live-sway.sh [--click] [--type] [--wheel] [--repeat]`,
+  driving a wlr-virtual-pointer / a zwp-virtual-keyboard), now including
+  **scroll-wheel** (`wl_pointer.axis`) and **key repeat** (a poll-timeout event
+  loop off the compositor's `repeat_info`) — the Phase-1 input paths are complete.
 - **Phase 2:** `CurrentIPC` (bind libnv) + `PoolConfig`; the shell apps (MenuBar,
   Dock, Finder, Desktop), generate the layer-shell / foreign-toplevel /
   xdg-activation protocols (XMLs already vendored in `protocols/`).

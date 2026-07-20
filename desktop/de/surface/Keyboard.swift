@@ -50,6 +50,23 @@ final class KeyboardState {
     private var keymap: OpaquePointer?
     private var state: OpaquePointer?
 
+    // wl_keyboard.repeat_info: how the compositor wants held keys to repeat.
+    // rate is keys/second (0 disables repeat), delay is ms before it starts.
+    private(set) var repeatRate: Int32 = 0
+    private(set) var repeatDelayMs: Int32 = 0
+
+    func setRepeatInfo(rate: Int32, delay: Int32) {
+        repeatRate = rate
+        repeatDelayMs = delay
+    }
+
+    /// Whether the key at `evdev` is one the keymap marks as auto-repeating
+    /// (letters/digits/space/arrows yes; modifiers no).
+    func keyRepeats(evdev: UInt32) -> Bool {
+        guard let keymap else { return false }
+        return xkb_keymap_key_repeats(keymap, evdev + 8) != 0
+    }
+
     init?() {
         guard let ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS) else { return nil }
         context = ctx

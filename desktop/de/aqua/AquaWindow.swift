@@ -164,6 +164,13 @@ public final class AquaWindow: WindowDelegate {
         }
     }
 
+    public func pointerAxis(_ axis: UInt32, value: Double) {
+        // Vertical wheel scrolls the list. `value` is logical px; a small
+        // multiplier makes a notch move a few rows, matching Aqua's feel.
+        guard sceneKind == .scroll, axis == 0 else { return }
+        scrollBy(value * 2)
+    }
+
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft else { return }
         switch sceneKind {

@@ -7,7 +7,7 @@
 # configure/resize, pointer input, listener/object lifetimes). This script runs
 # AquaDemo against a headless sway and captures the result with grim.
 #
-# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type] [--keys] [--hidpi]
+# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type] [--keys] [--hidpi] [--wheel] [--repeat]
 # Needs: sway (>=1.11), grim. With --click/--type also: wayland-scanner +
 # libwayland dev (to build the virtual-input helpers; --type also needs
 # xkbcommon). Uses the headless backend + pixman software renderer, so no
@@ -24,13 +24,15 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
     --keys)                   keys="--keys" ;;   # drive keyboard focus/traversal
     --hidpi)                  hidpi="--hidpi" ;; # scale-2 output; assert auto-scale
+    --wheel)                  wheel="--wheel"; click="--click" ;;  # scroll wheel
+    --repeat)                 repeat="--repeat" ;;  # hold a key; assert it repeats
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     window|sysprefs|widgets|scroll|tabs|sheet)  scene="$a" ;;
     *)                        out="$a" ;;
@@ -50,6 +52,10 @@ fi
 [ "$keys" = "--keys" ] && [ -z "$scene" -o "$scene" = "window" ] && scene="widgets"
 # --hidpi is a display-only check; default it to the widgets scene.
 [ "$hidpi" = "--hidpi" ] && [ -z "$scene" ] && scene="widgets"
+# --wheel scrolls the list, so it wants the scroll scene.
+[ "$wheel" = "--wheel" ] && scene="scroll"
+# --repeat holds a key into the text field, so it wants the window scene.
+[ "$repeat" = "--repeat" ] && scene="window"
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -61,7 +67,7 @@ swift build
 
 # Build the virtual-input helpers up front (fail fast) when we'll inject.
 vp_dir=""
-if [ "$click" = "--click" ] || [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
+if [ "$click" = "--click" ] || [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" ]; then
   command -v wayland-scanner >/dev/null || { echo "FAIL: wayland-scanner missing"; exit 1; }
   pkg-config --exists wayland-client || { echo "FAIL: wayland-client dev missing"; exit 1; }
   vp_dir=$(mktemp -d)
@@ -73,7 +79,7 @@ if [ "$click" = "--click" ]; then
   cc -I"$vp_dir" "$root/abyss/tests/vpointer.c" "$vp_dir/vpointer-proto.c" \
      $(pkg-config --cflags --libs wayland-client) -o "$vp_dir/vpointer"
 fi
-if [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
+if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" ]; then
   pkg-config --exists xkbcommon || { echo "FAIL: xkbcommon dev missing"; exit 1; }
   xml="$root/abyss/tests/virtual-keyboard-unstable-v1.xml"
   wayland-scanner client-header "$xml" "$vp_dir/vkeyboard-proto.h"
@@ -201,11 +207,18 @@ if [ "$click" = "--click" ]; then
       printf 'm 384 197\np\nr\n' >&3
       ;;
     scroll)
-      # Grab the scrollbar thumb (near the top of its travel) and drag down —
-      # the list should scroll to the bottom (Item 24 visible).
-      printf 'm 338 120\np\n' >&3   # press on the thumb
-      printf 'm 338 330\n'    >&3   # drag toward the bottom
-      printf 'r\n'            >&3   # release
+      if [ "$wheel" = "--wheel" ]; then
+        # Put the pointer over the list, then spin the wheel down repeatedly —
+        # the list should scroll to the bottom (Item 24 visible), no thumb drag.
+        printf 'm 160 200\n' >&3
+        for _ in 1 2 3 4 5 6; do printf 'a 60\n' >&3; sleep 0.08; done
+      else
+        # Grab the scrollbar thumb (near the top of its travel) and drag down —
+        # the list should scroll to the bottom (Item 24 visible).
+        printf 'm 338 120\np\n' >&3   # press on the thumb
+        printf 'm 338 330\n'    >&3   # drag toward the bottom
+        printf 'r\n'            >&3   # release
+      fi
       ;;
     tabs)
       # Pick the last segment ("Columns") and the last tab ("Sharing").
@@ -226,7 +239,7 @@ if [ "$click" = "--click" ]; then
   exec 3>&-
 fi
 
-if [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
+if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" ]; then
   # Virtual keyboard, fed via a FIFO so it stays alive (holding the keyboard
   # capability) while we inject. It uploads its own US keymap, which sway makes
   # the seat's active keymap and forwards to AquaDemo.
@@ -242,7 +255,14 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
   [ $(( ${caps:-0} & 2 )) -ne 0 ] || { echo "FAIL: seat gained no keyboard capability (caps=$caps)"; exit 1; }
   echo "virtual keyboard ready; seat capabilities=$caps"
   sleep 0.5  # let AquaDemo bind wl_keyboard + receive the keymap
-  if [ "$keys" = "--keys" ]; then
+  if [ "$repeat" = "--repeat" ]; then
+    # Hold 'x' (evdev 45) into the text field. After the compositor's repeat
+    # delay it should auto-repeat, so a single hold yields many x's.
+    printf 'd 45\n' >&4        # press and hold
+    sleep 1.3                  # past the repeat delay, into the repeat stream
+    printf 'u 45\n' >&4        # release
+    sleep 0.3
+  elif [ "$keys" = "--keys" ]; then
     # Drive keyboard focus/traversal. Raw evdev codes: Tab=15 Space=57 Right=106
     # Enter=28 Down=108.
     if [ "$menu" = "--menu" ]; then
@@ -295,4 +315,4 @@ fi
 
 WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }
-echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${click:+, clicked}${type:+, typed}${keys:+, keyed}${hidpi:+, 2x})"
+echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${wheel:+, wheeled}${wheel:+ }${click:+, clicked}${type:+, typed}${keys:+, keyed}${repeat:+, repeated}${hidpi:+, 2x})"
