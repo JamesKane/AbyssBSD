@@ -108,6 +108,33 @@ public final class AquaMenu: PopupDelegate {
 
     public func popupDismissed() { onDismiss() }
 
+    /// Keyboard navigation while the menu is open. Up/Down move the highlight
+    /// (starting from the current selection), Return/Space choose it, Escape
+    /// dismisses. Returns whether the key was consumed.
+    @discardableResult
+    public func keyDown(_ keysym: UInt32) -> Bool {
+        switch keysym {
+        case KeySym.up:    moveHighlight(-1); return true
+        case KeySym.down:  moveHighlight(1); return true
+        case KeySym.enter, KeySym.space:
+            if hovered >= 0, hovered < items.count { onChoose(hovered) }
+            return true
+        case KeySym.escape:
+            popup?.close()   // teardown notifies popupDismissed → onDismiss
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func moveHighlight(_ d: Int) {
+        let n = items.count
+        guard n > 0 else { return }
+        let start = hovered >= 0 ? hovered : selected
+        hovered = (start + d + n) % n
+        popup?.setNeedsDisplay()
+    }
+
     private func itemAt(_ y: Double) -> Int {
         guard y >= AquaMenu.padV else { return -1 }
         let i = Int((y - AquaMenu.padV) / AquaMenu.itemHeight)

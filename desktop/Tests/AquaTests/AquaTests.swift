@@ -75,6 +75,21 @@ final class AquaTests: XCTestCase {
         XCTAssertGreaterThan(L.okButton.y, h / 2)
     }
 
+    func testWidgetFocusOrderCoversEveryControl() {
+        let order = widgetFocusOrder
+        // One stop per checkbox, then radio, slider, popup, cancel, ok.
+        XCTAssertEqual(order.count, widgetCheckLabels.count + 5)
+        for i in 0..<widgetCheckLabels.count {
+            XCTAssertEqual(order[i], .check(i))
+        }
+        XCTAssertEqual(Array(order.suffix(5)),
+                       [.radio, .slider, .popup, .cancel, .ok])
+        // The default button is last so a fresh scene rings OK, and Tab from it
+        // wraps forward to the first checkbox.
+        XCTAssertEqual(order.last, .ok)
+        XCTAssertEqual(order.first, .check(0))
+    }
+
     func testWidthScalesAndMetricsPositive() throws {
         try XCTSkipUnless(Text.available, "no font on this host")
         let narrow = Text.width(Text.shape("ii", px: 13))

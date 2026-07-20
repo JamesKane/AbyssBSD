@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-07-19.
+Last updated: 2026-07-20.
 
 ## What this is
 
@@ -60,6 +60,16 @@ An **Aqua Controls** scene (`AQUA_SCENE=widgets`) shows the classic control set 
 checkboxes, radio group, slider, pop-up button, a candy-striped progress bar and
 OK/Cancel gel buttons — all interactive (`de/aqua/Widgets.swift` + `Draw`
 primitives): ![aqua controls](screenshots/widgets.png)
+
+It also has full **keyboard focus/traversal**: Tab / Shift-Tab move a soft blue
+focus ring through the controls (starting on the default OK button), Space
+activates the focused control (toggling a checkbox or opening the pop-up menu),
+the arrow keys nudge the focused slider or radio group, and Return / Escape fire
+the default (OK) / Cancel buttons. Pop-up menus and the modal sheet take the
+keyboard too (menu: arrow-keys + Return/Escape during its grab; sheet:
+Return/Escape as default/cancel). Here Tab has walked focus to the slider (its
+ring shows) after Space unchecked the first box and the arrows drove the level up:
+![keyboard traversal](screenshots/live-keys.png)
 
 A **Scroll** scene (`AQUA_SCENE=scroll`) shows a striped list in a clipped
 viewport with a working Aqua scrollbar — blue gel gumdrop thumb, paired arrows at
@@ -121,6 +131,8 @@ abyss/tests/live-sway.sh scroll  /tmp/scroll.png  --click # drag the scrollbar t
 abyss/tests/live-sway.sh --menu  /tmp/menu.png            # open a real xdg-popup menu
 abyss/tests/live-sway.sh tabs    /tmp/tabs.png    --click # switch a segment + a tab
 abyss/tests/live-sway.sh sheet   /tmp/sheet.png   --click # open a modal sheet
+abyss/tests/live-sway.sh widgets /tmp/keys.png    --keys  # Tab/Space/arrows drive focus
+abyss/tests/live-sway.sh --menu  /tmp/mkeys.png   --keys  # arrow-key the pop-up menu
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)
@@ -144,8 +156,10 @@ abyss/tests/live-sway.sh sheet   /tmp/sheet.png   --click # open a modal sheet
   (`de/aqua/Scroll.swift`) and **real pop-up menus** (a grabbing xdg-popup child
   surface — `Surface.Popup` + `AquaMenu`) and **segmented control + tab view**
   (`de/aqua/Tabs.swift`) and a **modal sheet** (slides from the title bar,
-  animated — `de/aqua/Sheet.swift`); still to do: a brushed-metal window variant,
-  and keyboard focus/traversal between controls. Per-output scale from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
+  animated — `de/aqua/Sheet.swift`) and **keyboard focus/traversal** (Tab/Space/
+  arrows + Return/Escape through controls, menus and sheets — `Draw.focusRing` +
+  `WidgetFocus`); still to do: a brushed-metal window variant. Per-output scale
+  from `wl_output` instead of `AQUA_SCALE`. Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
   stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text);
   remaining text refinements are device-pixel hinting under HiDPI and glyph
   caching. Live runs + **pointer and keyboard** interaction work under headless

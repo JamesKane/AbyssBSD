@@ -7,7 +7,7 @@
 # configure/resize, pointer input, listener/object lifetimes). This script runs
 # AquaDemo against a headless sway and captures the result with grim.
 #
-# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type]
+# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type] [--keys]
 # Needs: sway (>=1.11), grim. With --click/--type also: wayland-scanner +
 # libwayland dev (to build the virtual-input helpers; --type also needs
 # xkbcommon). Uses the headless backend + pixman software renderer, so no
@@ -24,11 +24,12 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
     --type)                   type="--type" ;;
+    --keys)                   keys="--keys" ;;   # drive keyboard focus/traversal
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     window|sysprefs|widgets|scroll|tabs|sheet)  scene="$a" ;;
     *)                        out="$a" ;;
@@ -44,6 +45,8 @@ fi
 [ "$menu" = "--menu" ] && scene="widgets"
 # --type only makes sense where there's a focused text field.
 [ "$type" = "--type" ] && scene="window"
+# --keys drives control focus/traversal; the widgets scene is the showcase.
+[ "$keys" = "--keys" ] && [ -z "$scene" -o "$scene" = "window" ] && scene="widgets"
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -55,7 +58,7 @@ swift build
 
 # Build the virtual-input helpers up front (fail fast) when we'll inject.
 vp_dir=""
-if [ "$click" = "--click" ] || [ "$type" = "--type" ]; then
+if [ "$click" = "--click" ] || [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
   command -v wayland-scanner >/dev/null || { echo "FAIL: wayland-scanner missing"; exit 1; }
   pkg-config --exists wayland-client || { echo "FAIL: wayland-client dev missing"; exit 1; }
   vp_dir=$(mktemp -d)
@@ -67,7 +70,7 @@ if [ "$click" = "--click" ]; then
   cc -I"$vp_dir" "$root/abyss/tests/vpointer.c" "$vp_dir/vpointer-proto.c" \
      $(pkg-config --cflags --libs wayland-client) -o "$vp_dir/vpointer"
 fi
-if [ "$type" = "--type" ]; then
+if [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
   pkg-config --exists xkbcommon || { echo "FAIL: xkbcommon dev missing"; exit 1; }
   xml="$root/abyss/tests/virtual-keyboard-unstable-v1.xml"
   wayland-scanner client-header "$xml" "$vp_dir/vkeyboard-proto.h"
@@ -161,12 +164,16 @@ if [ "$click" = "--click" ]; then
   echo "virtual pointer ready; seat capabilities=$caps"
   sleep 0.5  # let AquaDemo bind wl_pointer
   if [ "$menu" = "--menu" ]; then
-    # Click the Appearance pop-up button to open a real xdg-popup menu, then
-    # hover the 2nd item ("Graphite"). We leave the menu open for the shot.
+    # Click the Appearance pop-up button to open a real xdg-popup menu.
     printf 'm 203 259\np\nr\n' >&3   # open the menu
     sleep 0.5
-    printf 'm 203 300\n'       >&3   # hover the 2nd item (over the popup surface)
-    sleep 0.4
+    if [ "$keys" != "--keys" ]; then
+      printf 'm 203 300\n'     >&3   # hover the 2nd item (over the popup surface)
+      sleep 0.4
+    fi
+    # With --keys we leave the pointer off the menu and let the keyboard block
+    # (below) navigate it — a test that keyboard routes to the popup during its
+    # grab.
     # (sway doesn't surface client xdg-popups in get_tree; the screenshot is the
     # evidence — the menu should be open with "Graphite" highlighted. Pressing
     # over an item selects it, sets the value, and dismisses the popup.)
@@ -204,7 +211,7 @@ if [ "$click" = "--click" ]; then
   exec 3>&-
 fi
 
-if [ "$type" = "--type" ]; then
+if [ "$type" = "--type" ] || [ "$keys" = "--keys" ]; then
   # Virtual keyboard, fed via a FIFO so it stays alive (holding the keyboard
   # capability) while we inject. It uploads its own US keymap, which sway makes
   # the seat's active keymap and forwards to AquaDemo.
@@ -220,11 +227,47 @@ if [ "$type" = "--type" ]; then
   [ $(( ${caps:-0} & 2 )) -ne 0 ] || { echo "FAIL: seat gained no keyboard capability (caps=$caps)"; exit 1; }
   echo "virtual keyboard ready; seat capabilities=$caps"
   sleep 0.5  # let AquaDemo bind wl_keyboard + receive the keymap
-  printf 't Abyss\n' >&4     # type into the focused text field
+  if [ "$keys" = "--keys" ]; then
+    # Drive keyboard focus/traversal. Raw evdev codes: Tab=15 Space=57 Right=106
+    # Enter=28 Down=108.
+    if [ "$menu" = "--menu" ]; then
+      # The pop-up menu is open (from the --click block). Navigate it purely by
+      # keyboard: Down highlights the 2nd item, Enter chooses it — which sets the
+      # Appearance value to "Graphite" and dismisses the popup. Proves keyboard
+      # reaches the popup while its grab is active.
+      printf 'k 108\n' >&4   # Down: highlight Graphite
+      sleep 0.3
+      printf 'k 28\n'  >&4   # Enter: choose it
+      sleep 0.3
+    else
+    case "$scene" in
+      sheet)
+        # Space opens the sheet from the keyboard; leave it open for the shot.
+        printf 'k 57\n' >&4
+        sleep 0.6
+        ;;
+      *)
+        # Focus starts on the default button (OK). Tab wraps to the first
+        # checkbox; Space toggles it off; four Tabs walk to the slider; Right
+        # arrows push it up — the final shot shows the focus ring on the slider,
+        # which sits near full.
+        printf 'k 15\n'                 >&4   # Tab: OK -> first checkbox
+        sleep 0.2
+        printf 'k 57\n'                 >&4   # Space: toggle that checkbox off
+        sleep 0.2
+        printf 'k 15 15 15 15\n'        >&4   # Tab x4: -> the slider
+        sleep 0.2
+        printf 'k 106 106 106 106 106 106\n' >&4  # Right x6: slider toward max
+        ;;
+    esac
+    fi
+  else
+    printf 't Abyss\n' >&4     # type into the focused text field
+  fi
   sleep 0.5
   exec 4>&-
 fi
 
 WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }
-echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${click:+, clicked}${type:+, typed})"
+echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${click:+, clicked}${type:+, typed}${keys:+, keyed})"

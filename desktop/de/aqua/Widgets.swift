@@ -14,12 +14,34 @@ public struct WidgetState: Sendable {
     public var slider: Double        // 0…1
     public var popup: Int
     public var okPressed: Bool
+    public var cancelPressed: Bool
 
     public init(checks: [Bool] = [true, false, true], radio: Int = 1,
-                slider: Double = 0.6, popup: Int = 0, okPressed: Bool = false) {
+                slider: Double = 0.6, popup: Int = 0,
+                okPressed: Bool = false, cancelPressed: Bool = false) {
         self.checks = checks; self.radio = radio; self.slider = slider
         self.popup = popup; self.okPressed = okPressed
+        self.cancelPressed = cancelPressed
     }
+}
+
+/// A keyboard-focusable control in the widgets scene. `widgetFocusOrder` is the
+/// Tab traversal sequence; AquaWindow steps an index through it and paintWidgets
+/// rings the focused control.
+public enum WidgetFocus: Equatable, Sendable {
+    case check(Int)
+    case radio
+    case slider
+    case popup
+    case cancel
+    case ok
+}
+
+/// The Tab order: each checkbox, then the radio cluster, slider, pop-up button,
+/// and the two push buttons (Cancel then the default OK).
+public var widgetFocusOrder: [WidgetFocus] {
+    (0..<widgetCheckLabels.count).map { WidgetFocus.check($0) }
+        + [.radio, .slider, .popup, .cancel, .ok]
 }
 
 /// Resolved rects for one widgets scene. Interactive rects are hit-tested;
@@ -90,10 +112,32 @@ public func widgetsLayout(w: Double, h: Double) -> WidgetLayout {
     return L
 }
 
+/// Ring the focused control. Drawn after the controls: the halo sits entirely
+/// outside each control rect, so it never overdraws the control body.
+private func paintFocusRing(_ cr: OpaquePointer, _ focus: WidgetFocus,
+                            _ L: WidgetLayout, _ state: WidgetState) {
+    switch focus {
+    case .check(let i):
+        Draw.focusRing(cr, L.checkBoxes[i], radius: 3)
+    case .radio:
+        let (cx, cy) = L.radioCenters[state.radio]
+        Draw.focusRing(cr, Rect(cx - 7, cy - 7, 14, 14), radius: 7)
+    case .slider:
+        Draw.focusRing(cr, L.sliderTrack, radius: L.sliderTrack.h / 2)
+    case .popup:
+        Draw.focusRing(cr, L.popup, radius: 5)
+    case .cancel:
+        Draw.focusRing(cr, L.cancelButton, radius: L.cancelButton.h / 2)
+    case .ok:
+        Draw.focusRing(cr, L.okButton, radius: L.okButton.h / 2)
+    }
+}
+
 /// Paint the widgets scene and return its layout for hit-testing.
 @discardableResult
 public func paintWidgets(_ cr: OpaquePointer, w: Double, h: Double,
-                         state: WidgetState) -> WidgetLayout {
+                         state: WidgetState,
+                         focus: WidgetFocus? = nil) -> WidgetLayout {
     paintWindowChrome(cr, w: w, h: h, title: "Aqua Controls")
     let L = widgetsLayout(w: w, h: h)
     let m = 22.0
@@ -139,7 +183,10 @@ public func paintWidgets(_ cr: OpaquePointer, w: Double, h: Double,
     Draw.popUpButton(cr, L.popup, label: widgetPopupOptions[state.popup])
 
     // Push buttons.
-    Draw.gelButton(cr, L.cancelButton, label: "Cancel", blue: false, pressed: false)
+    Draw.gelButton(cr, L.cancelButton, label: "Cancel", blue: false,
+                   pressed: state.cancelPressed)
     Draw.gelButton(cr, L.okButton, label: "OK", blue: true, pressed: state.okPressed)
+
+    if let focus { paintFocusRing(cr, focus, L, state) }
     return L
 }

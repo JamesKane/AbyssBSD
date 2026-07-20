@@ -19,8 +19,11 @@
 //
 // Usage:  vkeyboard
 // Commands (one per line on stdin):
-//   t <text>    type <text> (the rest of the line), char by char
-//   q           quit (also on EOF)
+//   t <text>       type <text> (the rest of the line), char by char
+//   k <code>...     press+release each raw evdev keycode in turn (e.g. Tab=15,
+//                   Space=57, Enter=28, Esc=1, Left=105, Right=106, Up=103,
+//                   Down=108) — for non-text keys the toolkit reacts to by keysym
+//   q              quit (also on EOF)
 
 #define _GNU_SOURCE  /* memfd_create */
 #include <wayland-client.h>
@@ -132,6 +135,20 @@ int main(void) {
     char line[512];
     while (fgets(line, sizeof line, stdin) != NULL) {
         if (line[0] == 'q') break;
+        if (line[0] == 'k' && line[1] == ' ') {
+            // Raw evdev keycodes, space-separated: press+release each.
+            char *p = line + 2;
+            while (*p) {
+                while (*p == ' ' || *p == '\n') p++;
+                if (*p < '0' || *p > '9') break;
+                unsigned code = (unsigned)strtoul(p, &p, 10);
+                t += 10;
+                zwp_virtual_keyboard_v1_key(vk, t, code, KEY_PRESSED);
+                zwp_virtual_keyboard_v1_key(vk, t + 1, code, KEY_RELEASED);
+            }
+            wl_display_flush(dpy);
+            continue;
+        }
         if (line[0] != 't' || line[1] != ' ') continue;
         for (const char *p = line + 2; *p && *p != '\n'; p++) {
             unsigned code; int shift;

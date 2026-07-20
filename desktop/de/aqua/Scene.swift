@@ -259,7 +259,7 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     case .systemPreferences:
         paintSystemPreferences(cr, w: cw, h: ch)
     case .widgets:
-        paintWidgets(cr, w: cw, h: ch, state: WidgetState())
+        paintWidgets(cr, w: cw, h: ch, state: WidgetState(), focus: .ok)
     case .scroll:
         paintScroll(cr, w: cw, h: ch, offset: 0)
     case .tabs:

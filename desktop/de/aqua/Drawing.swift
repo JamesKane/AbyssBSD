@@ -69,6 +69,17 @@ public enum Draw {
         cairo_close_path(cr)
     }
 
+    /// The Aqua keyboard-focus halo: a soft blue ring hugging `r`. Drawn just
+    /// outside the control (round-rect or, with `radius: r.h/2`, a pill), so it
+    /// reads as the focused element without disturbing the control's own paint.
+    public static func focusRing(_ cr: OpaquePointer, _ r: Rect, radius: Double) {
+        roundedRect(cr, Rect(r.x - 1.5, r.y - 1.5, r.w + 3, r.h + 3),
+                    radius: radius + 1.5)
+        setColor(cr, Theme.fieldFocusRing)
+        cairo_set_line_width(cr, 2.5)
+        cairo_stroke(cr)
+    }
+
     /// Vertical gradient fill of the current path's bounding band [y, y+h].
     public static func fillVerticalGradient(_ cr: OpaquePointer, y: Double,
                                             h: Double, stops: [(Double, Color)]) {
@@ -197,13 +208,7 @@ public enum Draw {
         let radius = 3.0
 
         // Focus ring: a soft blue halo just outside the field.
-        if caret {
-            roundedRect(cr, Rect(r.x - 1.5, r.y - 1.5, r.w + 3, r.h + 3),
-                        radius: radius + 1.5)
-            setColor(cr, Theme.fieldFocusRing)
-            cairo_set_line_width(cr, 2.5)
-            cairo_stroke(cr)
-        }
+        if caret { focusRing(cr, r, radius: radius) }
 
         // White well.
         roundedRect(cr, r, radius: radius)

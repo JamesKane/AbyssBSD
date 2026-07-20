@@ -21,8 +21,10 @@ renders faithful Jaguar UI:
 - **`Aqua`** — the toolkit: 10.2 theme tokens, cairo drawing grammar (gel
   buttons, glassy traffic lights, gradients, pinstripe) and the classic control
   set (checkbox, radio, slider, pop-up button, progress bar, text field, group
-  box, scrollbar, segmented control, tab view, modal sheet), six scenes (a simple
-  window, a **System Preferences** clone, an **Aqua Controls** gallery, a
+  box, scrollbar, segmented control, tab view, modal sheet) with **keyboard
+  focus/traversal** (a soft `Draw.focusRing`, Tab/Shift-Tab through `WidgetFocus`,
+  Space/arrows/Return/Escape to drive controls, menus and sheets), six scenes (a
+  simple window, a **System Preferences** clone, an **Aqua Controls** gallery, a
   **Scroll** list, a **Tab View**, and a **Sheet**), and original procedural pref
   icons.
 - **`AquaDemo`** — runs live against a compositor *or* renders a scene to PNG.
@@ -212,7 +214,24 @@ false mid-render). The loop self-sustains only while the delegate keeps calling
 confirmed headless sway *does* deliver frame callbacks — the interactive scenes'
 redraws already depended on it.)
 
-### 2.12 The linter lies about C includes
+### 2.12 Keyboard focus/traversal: Shift-Tab is its own keysym, and the popup
+### grab still routes keyboard to *your* client
+Focus traversal (`WidgetFocus` + `Draw.focusRing`) needed two things worth
+noting. (1) **Shift-Tab does not arrive as Tab-with-a-modifier** — xkbcommon
+resolves it to a *distinct* keysym, `XKB_KEY_ISO_Left_Tab` (`0xfe20`). Our
+`KeyEvent` carries no modifier mask, so back-traversal keys off that keysym
+(`KeySym.backTab`), not "Tab + Shift". (2) **A grabbing xdg-popup does not
+steal keyboard from your process.** While the pop-up menu's grab is active,
+`wl_keyboard.key` events still come to the same client and Display still routes
+them to `window.keyEvent` — so AquaWindow forwards them to the open `AquaMenu`
+(arrow-keys move the highlight, Return chooses, Escape closes). Verified live by
+`--menu --keys`: with the pointer kept off the menu, Down+Enter alone selected
+"Graphite" and dismissed the popup. Button "press" feedback from the keyboard
+uses the real key **release** (Space/Return down → `okPressed = true`, up →
+false), so `keyEvent` must act on both edges for the widgets scene (the other
+scenes still act on press only).
+
+### 2.13 The linter lies about C includes
 The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`.
@@ -306,10 +325,12 @@ Known-not-faithful, on purpose:
    (`de/aqua/Tabs.swift`, `live-sway.sh tabs --click`; Left/Right arrows switch
    tabs). A **modal sheet** followed (`de/aqua/Sheet.swift`, `live-sway.sh sheet
    --click`): it slides down from the title bar (animated off the frame tick),
-   dims + blocks the parent, and its buttons dismiss it. Still to do: a
-   brushed-metal window variant, and keyboard focus/traversal (Tab between
-   controls, Space to toggle; menus/sheets should take Return/Esc + arrow-key
-   navigation too).
+   dims + blocks the parent, and its buttons dismiss it. **Keyboard
+   focus/traversal** followed (§2.12): a soft `Draw.focusRing`, Tab/Shift-Tab
+   over `WidgetFocus`, Space/arrows/Return/Escape driving the widgets scene, plus
+   arrow-key + Return/Escape nav in the pop-up menu (during its grab) and the
+   sheet — `live-sway.sh widgets --keys` and `--menu --keys`. Still to do: a
+   brushed-metal window variant.
 5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
 6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
    (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,

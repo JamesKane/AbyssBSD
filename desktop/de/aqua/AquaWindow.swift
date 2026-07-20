@@ -30,6 +30,8 @@ public final class AquaWindow: WindowDelegate {
     private var widgets = WidgetState()
     private var widgetLayout = WidgetLayout()
     private var draggingSlider = false
+    // Keyboard focus starts on the default button (OK), Aqua-style.
+    private var widgetFocus: WidgetFocus = .ok
 
     // Scroll-scene state.
     private var scrollOffset = 0.0
@@ -110,7 +112,8 @@ public final class AquaWindow: WindowDelegate {
         case .systemPreferences:
             paintSystemPreferences(cr, w: w, h: h)
         case .widgets:
-            widgetLayout = paintWidgets(cr, w: w, h: h, state: widgets)
+            widgetLayout = paintWidgets(cr, w: w, h: h, state: widgets,
+                                        focus: widgetFocus)
         case .scroll:
             scrollLayoutCache = paintScroll(cr, w: w, h: h, offset: scrollOffset)
         case .tabs:
@@ -247,26 +250,38 @@ public final class AquaWindow: WindowDelegate {
     private func widgetsPointerButton(pressed: Bool) {
         guard pressed else {
             draggingSlider = false
-            if widgets.okPressed { widgets.okPressed = false; window?.setNeedsDisplay() }
+            if widgets.okPressed || widgets.cancelPressed {
+                widgets.okPressed = false; widgets.cancelPressed = false
+                window?.setNeedsDisplay()
+            }
             return
         }
         for (i, r) in widgetLayout.checks.enumerated()
         where r.contains(pointerX, pointerY) {
+            widgetFocus = .check(i)
             widgets.checks[i].toggle(); window?.setNeedsDisplay(); return
         }
         for (i, r) in widgetLayout.radios.enumerated()
         where r.contains(pointerX, pointerY) {
+            widgetFocus = .radio
             widgets.radio = i; window?.setNeedsDisplay(); return
         }
         if widgetLayout.sliderTrack.contains(pointerX, pointerY) {
+            widgetFocus = .slider
             draggingSlider = true
             widgets.slider = sliderValue(at: pointerX)
             window?.setNeedsDisplay(); return
         }
         if widgetLayout.popup.contains(pointerX, pointerY) {
+            widgetFocus = .popup
             openAppearanceMenu(); return
         }
+        if widgetLayout.cancelButton.contains(pointerX, pointerY) {
+            widgetFocus = .cancel
+            widgets.cancelPressed = true; window?.setNeedsDisplay(); return
+        }
         if widgetLayout.okButton.contains(pointerX, pointerY) {
+            widgetFocus = .ok
             widgets.okPressed = true; window?.setNeedsDisplay()
         }
     }
@@ -357,10 +372,92 @@ public final class AquaWindow: WindowDelegate {
         }
     }
 
+    // MARK: Widgets-scene keyboard focus/traversal
+
+    private func moveWidgetFocus(_ delta: Int) {
+        let order = widgetFocusOrder
+        guard let i = order.firstIndex(of: widgetFocus) else {
+            widgetFocus = order.first ?? .ok; return
+        }
+        widgetFocus = order[(i + delta + order.count) % order.count]
+    }
+
+    /// Nudge the focused slider/radio; a no-op for controls arrows don't drive.
+    private func adjustFocused(_ dir: Int) {
+        switch widgetFocus {
+        case .radio:
+            let n = widgetRadioLabels.count
+            widgets.radio = (widgets.radio + dir + n) % n
+        case .slider:
+            widgets.slider = max(0, min(1, widgets.slider + Double(dir) * 0.05))
+        default: break
+        }
+    }
+
+    /// Activate a control by keyboard: toggle a checkbox, open the pop-up menu,
+    /// or "press" a push button (held until the key releases).
+    private func activateWidget(_ target: WidgetFocus) {
+        switch target {
+        case .check(let i): widgets.checks[i].toggle()
+        case .popup:        openAppearanceMenu()
+        case .ok:           widgets.okPressed = true
+        case .cancel:       widgets.cancelPressed = true
+        case .radio, .slider: break  // arrows drive these
+        }
+    }
+
+    private func widgetsKey(_ event: KeyEvent) {
+        // A live pop-up menu grabs the keyboard while it's open.
+        if let menu, menuPopup != nil {
+            if event.pressed { _ = menu.keyDown(event.keysym) }
+            return
+        }
+        guard event.pressed else {
+            // Release the keyboard-held button, if any.
+            if widgets.okPressed || widgets.cancelPressed {
+                widgets.okPressed = false; widgets.cancelPressed = false
+                window?.setNeedsDisplay()
+            }
+            return
+        }
+        switch event.keysym {
+        case KeySym.tab:     moveWidgetFocus(1)
+        case KeySym.backTab: moveWidgetFocus(-1)
+        case KeySym.enter:   activateWidget(.ok)      // default button
+        case KeySym.escape:  activateWidget(.cancel)
+        case KeySym.space:   activateWidget(widgetFocus)
+        case KeySym.left, KeySym.down:  adjustFocused(-1)
+        case KeySym.right, KeySym.up:   adjustFocused(1)
+        default: break
+        }
+        window?.setNeedsDisplay()
+    }
+
+    // MARK: Sheet-scene keyboard
+
+    private func sheetKey(_ keysym: UInt32) {
+        guard sheetVisible, sheetProgress >= 1 else {
+            if !sheetVisible, keysym == KeySym.enter || keysym == KeySym.space {
+                openSheet()
+            }
+            return
+        }
+        switch keysym {
+        case KeySym.enter:  sheetAction = "Deleted"; closeSheet()    // default
+        case KeySym.escape: sheetAction = "Cancelled"; closeSheet()
+        default: break
+        }
+    }
+
     public func keyEvent(_ event: KeyEvent) {
+        switch sceneKind {
+        case .widgets: widgetsKey(event); return
+        case .scroll:  if event.pressed { scrollKey(event.keysym) }; return
+        case .tabs:    if event.pressed { tabsKey(event.keysym) }; return
+        case .sheet:   if event.pressed { sheetKey(event.keysym) }; return
+        default: break
+        }
         guard event.pressed else { return }  // act on press; release is a no-op
-        if sceneKind == .scroll { scrollKey(event.keysym); return }
-        if sceneKind == .tabs { tabsKey(event.keysym); return }
         switch event.keysym {
         case KeySym.backspace:
             if !typedText.isEmpty { typedText.removeLast() }

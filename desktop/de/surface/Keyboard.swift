@@ -28,8 +28,10 @@ public struct KeyEvent: Sendable {
 /// The handful of non-text keysyms the toolkit reacts to. Values are the
 /// stable X11 keysyms xkbcommon reports (see xkbcommon-keysyms.h).
 public enum KeySym {
+    public static let space: UInt32     = 0x0020
     public static let backspace: UInt32 = 0xff08
     public static let tab: UInt32       = 0xff09
+    public static let backTab: UInt32   = 0xfe20  // ISO_Left_Tab (Shift-Tab)
     public static let enter: UInt32     = 0xff0d
     public static let escape: UInt32    = 0xff1b
     public static let delete: UInt32    = 0xffff
