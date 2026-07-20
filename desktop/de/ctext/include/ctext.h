@@ -25,25 +25,43 @@ typedef struct {
     unsigned int  cluster;
 } at_glyph;
 
+/* Text styles. The value picks the face group at_font_shape draws from; a style
+ * with no dedicated face falls back to AT_REGULAR (so bold text still renders,
+ * just at regular weight). Keep in sync with Aqua/Text.swift `Style`. */
+enum {
+    AT_REGULAR     = 0,
+    AT_BOLD        = 1,
+    AT_ITALIC      = 2,
+    AT_BOLD_ITALIC = 3,
+    AT_NSTYLES     = 4,
+};
+
 /* Open the primary face (first candidate that works) then any fallbacks.
  * Idempotent; returns 1 once a primary face is available, else 0 (the caller
  * then falls back to cairo toy-text). Candidate order: $AQUA_FONT, then a
- * metrically-appropriate sans at its common package paths. */
+ * metrically-appropriate sans at its common package paths. Bold/italic load
+ * from $AQUA_FONT_{BOLD,ITALIC,BOLD_ITALIC} or matching sans candidates. */
 int at_font_init(void);
 
 /* Number of loaded faces (0 if none). */
 int at_font_face_count(void);
 
+/* Whether `style` (AT_*) loaded its OWN face (not just the regular fallback).
+ * AT_REGULAR is available whenever a font is loaded at all. */
+int at_font_style_available(int style);
+
 /* FT_Face for `idx` as an opaque pointer, for
  * cairo_ft_font_face_create_for_ft_face. NULL if `idx` is out of range. */
 void *at_font_face(int idx);
 
-/* Shape UTF-8 `text` (`len` bytes, or -1 for NUL-terminated) at `px` pixels
- * into `out` (capacity `cap` glyphs). Text is itemised by face COVERAGE, so a
- * codepoint the primary face lacks is shaped from the first fallback that has
- * it. Returns the total glyph count. If that exceeds `cap` nothing was written
- * past `cap`; call again with a larger buffer. Returns -1 on error / no font. */
-int at_font_shape(const char *text, int len, int px, at_glyph *out, int cap);
+/* Shape UTF-8 `text` (`len` bytes, or -1 for NUL-terminated) at `px` pixels in
+ * `style` (AT_*) into `out` (capacity `cap` glyphs). Text is itemised by face
+ * COVERAGE, so a codepoint the chosen style's face lacks is shaped from the
+ * first fallback that has it. Returns the total glyph count. If that exceeds
+ * `cap` nothing was written past `cap`; call again with a larger buffer.
+ * Returns -1 on error / no font. */
+int at_font_shape(const char *text, int len, int px, int style,
+                  at_glyph *out, int cap);
 
 /* Vertical metrics of the primary face at `px` pixels, in pixels. `ascent` is
  * positive above the baseline, `descent` positive below. */

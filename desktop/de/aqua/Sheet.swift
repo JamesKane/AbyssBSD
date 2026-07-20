@@ -89,8 +89,9 @@ private func drawSheetPanel(_ cr: OpaquePointer, _ panel: Rect,
     cairo_set_line_width(cr, 1)
     cairo_stroke(cr)
 
+    // The primary question is bold Lucida Grande in Aqua; the secondary is regular.
     Draw.textLeft(cr, "Delete this item?", x: panel.x + 24, baselineY: panel.y + 40,
-                  color: Theme.bodyText, size: 15)
+                  color: Theme.bodyText, size: 15, style: .bold)
     Draw.textLeft(cr, "This action can’t be undone.", x: panel.x + 24,
                   baselineY: panel.y + 64, color: Theme.bodyText.with(a: 0.7),
                   size: Theme.fontSize)

@@ -90,6 +90,24 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(order.first, .check(0))
     }
 
+    func testBoldStyleShapesAndIsWider() throws {
+        try XCTSkipUnless(Text.available, "no font on this host")
+        let s = "Delete this item?"
+        let reg = Text.shape(s, px: 15, style: .regular)
+        let bold = Text.shape(s, px: 15, style: .bold)
+        XCTAssertEqual(reg.count, bold.count, "same glyph count across weights")
+        // When a real bold face is present, the run is wider than regular; if the
+        // host lacks one, bold falls back to regular (equal), so don't fail there.
+        if Text.styleAvailable(.bold) {
+            XCTAssertGreaterThan(Text.width(bold), Text.width(reg),
+                                 "bold is wider than regular")
+        }
+        // Shaping is deterministic (and cached): same input, same run.
+        let again = Text.shape(s, px: 15, style: .bold)
+        XCTAssertEqual(again.count, bold.count)
+        XCTAssertEqual(Text.width(again), Text.width(bold), accuracy: 0.001)
+    }
+
     func testWidthScalesAndMetricsPositive() throws {
         try XCTSkipUnless(Text.available, "no font on this host")
         let narrow = Text.width(Text.shape("ii", px: 13))

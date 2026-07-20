@@ -685,10 +685,11 @@ public enum Draw {
     /// Draw text centred on a point. Uses shaped FreeType/HarfBuzz glyphs when
     /// a font is loaded; falls back to cairo toy-text otherwise.
     public static func text(_ cr: OpaquePointer, _ s: String, centerX: Double,
-                            centerY: Double, color: Color, size: Double) {
+                            centerY: Double, color: Color, size: Double,
+                            style: Text.Style = .regular) {
         if Text.available {
             let px = Text.px(size)
-            let glyphs = Text.shape(s, px: px)
+            let glyphs = Text.shape(s, px: px, style: style)
             let m = Text.metrics(px: px)
             setColor(cr, color)
             // Centre the line box (top = baseline−ascent, bottom = baseline+descent)
@@ -712,11 +713,13 @@ public enum Draw {
 
     /// Draw left-aligned text with the baseline at (x, baselineY).
     public static func textLeft(_ cr: OpaquePointer, _ s: String, x: Double,
-                                baselineY: Double, color: Color, size: Double) {
+                                baselineY: Double, color: Color, size: Double,
+                                style: Text.Style = .regular) {
         if Text.available {
             let px = Text.px(size)
             setColor(cr, color)
-            Text.drawShaped(cr, Text.shape(s, px: px), x: x, baselineY: baselineY, px: px)
+            Text.drawShaped(cr, Text.shape(s, px: px, style: style),
+                            x: x, baselineY: baselineY, px: px)
             return
         }
         selectFont(cr, size: size)
@@ -729,9 +732,10 @@ public enum Draw {
 
     /// Width in points of `s` at `size` — shaped metrics when a font is loaded,
     /// else cairo toy-text extents. Used for layout (centring, wrapping).
-    public static func textWidth(_ cr: OpaquePointer, _ s: String, size: Double) -> Double {
+    public static func textWidth(_ cr: OpaquePointer, _ s: String, size: Double,
+                                 style: Text.Style = .regular) -> Double {
         if Text.available {
-            return Text.width(Text.shape(s, px: Text.px(size)))
+            return Text.width(Text.shape(s, px: Text.px(size), style: style))
         }
         selectFont(cr, size: size)
         return s.withCString { c in

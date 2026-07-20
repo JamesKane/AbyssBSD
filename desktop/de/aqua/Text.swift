@@ -16,6 +16,26 @@ public enum Text {
     /// Whether a real font is loaded. When false, `Draw` falls back to toy text.
     public static let available: Bool = at_font_init() != 0
 
+    /// A weight/slant. Maps to the AT_* face groups in the CText shim; a style
+    /// with no dedicated face falls back to `.regular` (text still renders).
+    public enum Style: Int32, Sendable {
+        case regular = 0, bold = 1, italic = 2, boldItalic = 3
+    }
+
+    /// Whether `style` loaded its own face (vs. falling back to regular).
+    public static func styleAvailable(_ style: Style) -> Bool {
+        at_font_style_available(style.rawValue) != 0
+    }
+
+    // Shaped runs are position-independent (advances/offsets are relative to the
+    // pen, keyed only by string+size+style), so we cache them across frames —
+    // the same static labels are otherwise re-shaped through HarfBuzz every
+    // redraw. Single-threaded UI paints, hence nonisolated(unsafe) (as with the
+    // face cache). Cleared wholesale past a cap so it can't grow unbounded.
+    private struct ShapeKey: Hashable { let s: String; let px: Int32; let style: Int32 }
+    nonisolated(unsafe) private static var shapeCache: [ShapeKey: [at_glyph]] = [:]
+    private static let shapeCacheCap = 1024
+
     /// Font vertical metrics at a pixel size — both positive (px above/below
     /// the baseline).
     public struct Metrics: Sendable {
@@ -37,22 +57,29 @@ public enum Text {
         return cf
     }
 
-    /// Shape `s` at `px` pixels into a glyph run (indices + pixel positions +
-    /// the face each came from). Empty when no font is loaded or `s` is empty.
-    public static func shape(_ s: String, px: Int32) -> [at_glyph] {
+    /// Shape `s` at `px` pixels in `style` into a glyph run (indices + pixel
+    /// positions + the face each came from). Cached across frames. Empty when no
+    /// font is loaded or `s` is empty.
+    public static func shape(_ s: String, px: Int32,
+                             style: Style = .regular) -> [at_glyph] {
         guard available, !s.isEmpty, px > 0 else { return [] }
-        return s.withCString { cstr in
+        let key = ShapeKey(s: s, px: px, style: style.rawValue)
+        if let g = shapeCache[key] { return g }
+        let glyphs: [at_glyph] = s.withCString { cstr in
             var cap = Int32(s.utf8.count + 16)
             while true {
                 var buf = [at_glyph](repeating: at_glyph(), count: Int(cap))
                 let n = buf.withUnsafeMutableBufferPointer {
-                    at_font_shape(cstr, -1, px, $0.baseAddress, cap)
+                    at_font_shape(cstr, -1, px, style.rawValue, $0.baseAddress, cap)
                 }
                 if n < 0 { return [] }
                 if n <= cap { buf.removeLast(Int(cap - n)); return buf }
                 cap = n // buffer was too small (rare: a decomposition overran) — retry
             }
         }
+        if shapeCache.count >= shapeCacheCap { shapeCache.removeAll(keepingCapacity: true) }
+        shapeCache[key] = glyphs
+        return glyphs
     }
 
     /// Total pen advance of a shaped run, in pixels.
