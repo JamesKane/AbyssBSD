@@ -106,8 +106,18 @@ the output with the Jaguar blue gradient — verified live under sway
 (`live-sway.sh wallpaper`, which asserts on the app's `LayerSurface: mapped` log
 since layer surfaces don't appear in `get_tree`). See HANDOFF §2.16.
 
-**P2.2 — Desktop / wallpaper (`reef-desktop` analog).**
-The wallpaper exists as the P2.1 proof; P2.2 makes it the real Desktop.
+**P2.2 — Desktop / wallpaper (`reef-desktop` analog). ✅ done.**
+`Wallpaper` now reads `desktop.ini` via `PoolConfig` and resolves a `DesktopStyle`
+(precedence: `image` PNG → `grad_top`/`grad_bot` gradient → flat `bg` →
+built-in Jaguar blue), painted by the pure `paintDesktop` (image is cover-scaled;
+`Color(cssHex:)` parses `#aarrggbb`). Hot-reload: a `Pool.Watcher` fd is folded
+into the run loop via the new **`Display.addFileDescriptor(_:onReadable:)`** (a
+reusable extra-fd hook — later the menu-bar clock timer and IPC sockets use it
+too), so a rewrite of `desktop.ini` repaints with no polling. Verified live:
+`live-sway.sh --reload` loads a gradient from config, then an atomic swap to a
+flat `bg` hot-reloads the desktop (`docs/screenshots/live-desktop-reload.png`).
+See HANDOFF §2.18. (Desktop *icons* remain future — the backdrop is the P2.2
+scope.)
 First real layer-shell client: BACKGROUND, all-4 anchors, exclusive −1. Solid →
 gradient → PNG (we already bind libpng via `CText`/cairo). This validates the
 whole layer-shell path end-to-end with almost no UI. Add `live-sway.sh desktop`.

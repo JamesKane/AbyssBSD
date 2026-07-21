@@ -305,6 +305,33 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.18 Config-driven desktop + hot-reload: fold the watch fd into the run loop
+(Phase 2.2.) The wallpaper became the real Desktop: `Wallpaper` reads
+`desktop.ini` (`PoolConfig`) into a `DesktopStyle` (image → gradient → flat →
+Aqua default) and repaints when it changes. The reusable mechanism worth
+remembering:
+- **`Display.addFileDescriptor(_ fd:onReadable:)`.** Shell components have extra
+  event sources besides Wayland — a config-watch fd now, timers and IPC sockets
+  later. Rather than a second thread, `run()` polls the Wayland fd (slot 0) *plus*
+  every registered extra fd in one `poll()`, and calls each handler when its fd is
+  readable. **Order matters:** resolve the armed Wayland read (`read_events` or
+  `cancel_read`) *before* running any extra handler, because a handler may issue
+  Wayland requests (the wallpaper's config handler calls `setNeedsDisplay` →
+  commit). The `prepare_read`/`poll` structure from §2.14 already had the right
+  shape; this just widens the pollset.
+- **Watch → drain → reload → repaint.** The handler drains the watcher (clears the
+  inotify queue), reloads the config, and only repaints if the resolved
+  `DesktopStyle` actually changed (avoids redundant frames on unrelated dir
+  churn — the `.lock`/`.tmp` files a `store` creates also wake the watch).
+- **cairo loads PNG itself** (`cairo_image_surface_create_from_png`), no libpng
+  binding needed; check `cairo_surface_status`, cover-scale (`max` ratio, centre),
+  and fall back to the Aqua default on any failure. JPEG/SVG need a real codec
+  (the sibling's `abyss-image`) — future.
+- Verified live end-to-end by `live-sway.sh --reload`: a private `ABYSS_CONFIG_DIR`
+  seeded with a gradient `desktop.ini`, asserted via the app's `Wallpaper: applied
+  gradient` log, then an atomic rewrite to a flat `bg` asserted via `applied flat`
+  — proof the watch fired through the real run loop and repainted.
+
 ### 2.17 PoolConfig: mmap-read / atomic-write / directory-watch, in Swift
 (Phase 2.3.) `PoolConfig` (`de/poolconfig/`) ports the Rust `pool` — same
 `~/.config/abyss/*.ini` files, so Swift and Rust components read each other's

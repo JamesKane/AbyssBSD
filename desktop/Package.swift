@@ -97,7 +97,7 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["Surface", "CCairo", "CText"],
+            dependencies: ["Surface", "CCairo", "CText", "PoolConfig"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.
@@ -108,7 +108,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AquaTests",
-            dependencies: ["Aqua"],
+            dependencies: ["Aqua", "PoolConfig"],
             path: "Tests/AquaTests"
         ),
         .testTarget(

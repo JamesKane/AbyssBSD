@@ -15,13 +15,17 @@ locked-in decisions (reuse Rust `tide` now / rewrite later; faithful clone;
 Linux-first dev; full phased roadmap).
 
 **Phase 2 has begun.** P2.1 added the `wlr-layer-shell` surface role to `Surface`
-and a BACKGROUND **wallpaper** (`AQUA_SCENE=wallpaper`) filling the output with the
-Jaguar blue gradient — the shell's foundational surface type, verified live under
-sway: ![wallpaper](screenshots/live-wallpaper.png). P2.3 added **`PoolConfig`**
+and a BACKGROUND **wallpaper** (`AQUA_SCENE=wallpaper`) — the shell's foundational
+surface type, verified live under sway. P2.3 added **`PoolConfig`**
 (`de/poolconfig/`), the Swift port of the Rust `pool`: read/write/watch the same
 `~/.config/abyss/*.ini` files (mmap read, atomic-rename write, inotify/kqueue
-directory watch) so Swift and Rust components stay config-compatible — pure
-syscalls, its own 9-test suite. See [PHASE2.md](PHASE2.md) for the ordered scope.
+directory watch) so Swift and Rust components stay config-compatible. P2.2 made
+the wallpaper the real **Desktop**: it reads `desktop.ini` (image / gradient /
+flat `bg` / built-in Jaguar blue) and **hot-reloads** when the file changes — the
+watcher fd is folded into the run loop via `Display.addFileDescriptor`. Verified
+live: a config gradient, then an atomic edit repaints the desktop flat
+(![hot-reload](screenshots/live-desktop-reload.png)). See [PHASE2.md](PHASE2.md)
+for the ordered scope.
 
 ## Current state — Phase 1 vertical slice works
 
@@ -33,8 +37,8 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (23 green — Aqua toolkit logic +
-  PoolConfig read/write/watch).
+- Build: `swift build`. Tests: `swift test` (27 green — Aqua toolkit + desktop
+  config logic, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -169,9 +173,12 @@ abyss/tests/live-sway.sh widgets /tmp/hidpi.png   --hidpi # scale-2 output → a
 abyss/tests/live-sway.sh scroll  /tmp/wheel.png   --wheel # scroll-wheel the list
 abyss/tests/live-sway.sh window  /tmp/rep.png     --repeat # hold a key → it repeats
 abyss/tests/live-sway.sh wallpaper /tmp/wall.png         # a layer-shell BACKGROUND wallpaper
+abyss/tests/live-sway.sh --reload  /tmp/wall.png         # desktop.ini config + hot-reload
 
 # Wallpaper (layer-shell) PNG preview, no compositor:
 AQUA_SCENE=wallpaper AQUA_RENDER_PNG=/tmp/wall.png .build/debug/AquaDemo
+# Config-driven live: point AquaDemo at a config dir with a desktop.ini
+ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 ```
 
 ## Conventions (inherited from the sibling, adapted to Swift)

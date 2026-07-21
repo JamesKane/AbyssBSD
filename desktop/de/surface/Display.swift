@@ -76,6 +76,12 @@ public final class Display {
     // to re-deliver, and the monotonic-ms deadline for the next repeat.
     private var repeatKey: (evdev: UInt32, event: KeyEvent, nextMs: Int64)?
 
+    // Extra fds polled in the run loop alongside the Wayland fd, each with a
+    // handler run when it's readable — config-watch (PoolConfig), IPC sockets,
+    // timers. The handler runs after the Wayland read is resolved, so it may
+    // safely issue Wayland requests (e.g. setNeedsDisplay).
+    private var extraFds: [(fd: Int32, handler: () -> Void)] = []
+
     var running = true
 
     // Heap-allocated listener structs; libwayland keeps the pointers, so they
@@ -400,7 +406,7 @@ public final class Display {
     /// deadline as well as on incoming Wayland events. All input/frame callbacks
     /// run on this thread.
     public func run() {
-        let fd = wl_display_get_fd(display)
+        let wlfd = wl_display_get_fd(display)
         while running {
             // Dispatch anything already queued, then arm a read.
             while wl_display_prepare_read(display) != 0 {
@@ -409,17 +415,38 @@ public final class Display {
             if !running { wl_display_cancel_read(display); break }
             wl_display_flush(display)
 
-            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            // Poll the Wayland fd (slot 0) plus any registered extra fds.
+            var pfds = [pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0)]
+            for e in extraFds {
+                pfds.append(pollfd(fd: e.fd, events: Int16(POLLIN), revents: 0))
+            }
             let timeout = repeatTimeoutMs() ?? -1
-            let pr = withUnsafeMutablePointer(to: &pfd) { poll($0, 1, timeout) }
-            if pr > 0 && (pfd.revents & Int16(POLLIN)) != 0 {
+            let pr = pfds.withUnsafeMutableBufferPointer {
+                poll($0.baseAddress, nfds_t($0.count), timeout)
+            }
+
+            // Resolve the armed Wayland read FIRST (read or cancel) before running
+            // any extra-fd handler that might issue Wayland requests.
+            if pr > 0 && (pfds[0].revents & Int16(POLLIN)) != 0 {
                 if wl_display_read_events(display) == -1 { break }
                 if wl_display_dispatch_pending(display) == -1 { break }
             } else {
                 wl_display_cancel_read(display)  // timeout or interrupt
             }
+            if pr > 0 {
+                for (i, e) in extraFds.enumerated()
+                where (pfds[i + 1].revents & Int16(POLLIN)) != 0 {
+                    e.handler()
+                }
+            }
             fireDueRepeats()
         }
+    }
+
+    /// Register an extra fd to poll in the run loop; `onReadable` fires whenever
+    /// it becomes readable. For config-watch (PoolConfig), IPC sockets, timers.
+    public func addFileDescriptor(_ fd: Int32, onReadable: @escaping () -> Void) {
+        extraFds.append((fd, onReadable))
     }
 
     public func stop() { running = false }

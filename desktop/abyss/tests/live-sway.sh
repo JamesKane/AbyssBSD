@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -33,6 +33,7 @@ for a in "$@"; do
     --hidpi)                  hidpi="--hidpi" ;; # scale-2 output; assert auto-scale
     --wheel)                  wheel="--wheel"; click="--click" ;;  # scroll wheel
     --repeat)                 repeat="--repeat" ;;  # hold a key; assert it repeats
+    --reload)                 reload="--reload" ;;  # wallpaper: config + hot-reload
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper)  scene="$a" ;;
     *)                        out="$a" ;;
@@ -56,6 +57,8 @@ fi
 [ "$wheel" = "--wheel" ] && scene="scroll"
 # --repeat holds a key into the text field, so it wants the window scene.
 [ "$repeat" = "--repeat" ] && scene="window"
+# --reload exercises the wallpaper's config load + hot-reload.
+[ "$reload" = "--reload" ] && scene="wallpaper"
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -124,6 +127,7 @@ cleanup() {
   kill "$sway_pid" 2>/dev/null || true
   rm -f "$cfg" "$log" "${app_log:-}" "${fifo:-}" "${vp_log:-}" "${vk_fifo:-}" "${vk_log:-}"
   [ -n "$vp_dir" ] && rm -rf "$vp_dir" || true
+  [ -n "${cfgdir:-}" ] && rm -rf "$cfgdir" || true
 }
 trap cleanup EXIT
 
@@ -144,10 +148,21 @@ done
 export SWAYSOCK="$ss"
 echo "sway ready on $wd"
 
+# --reload: give AquaDemo a private config dir with an initial desktop.ini (a
+# green gradient) so the wallpaper is config-driven; we rewrite it later to
+# prove hot-reload.
+abyss_cfg=""
+if [ "$reload" = "--reload" ]; then
+  cfgdir=$(mktemp -d)
+  printf 'schema_version = 1\n\n[desktop]\ngrad_top = #ff2a6f3a\ngrad_bot = #ff0a2f14\n' \
+    > "$cfgdir/desktop.ini"
+  abyss_cfg="ABYSS_CONFIG_DIR=$cfgdir"
+fi
+
 # Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
 # AQUA_SCALE so the window auto-detects scale from wl_output rather than pinning.
 app_log=$(mktemp)
-env -u AQUA_SCALE WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
+env -u AQUA_SCALE $abyss_cfg WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
     .build/debug/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
@@ -170,6 +185,26 @@ done
 [ "$mapped" = 1 ] || { echo "FAIL: surface never mapped"; cat "$app_log"; exit 1; }
 [ "$scene" = "wallpaper" ] && echo "layer surface mapped: $(grep 'LayerSurface: mapped' "$app_log" | head -1)"
 sleep 1  # let a couple of frames paint
+
+if [ "$reload" = "--reload" ]; then
+  # Config-driven: the initial desktop.ini set a gradient.
+  grep -q 'Wallpaper: applied gradient' "$app_log" \
+    || { echo "FAIL: wallpaper didn't apply the gradient from desktop.ini"; cat "$app_log"; exit 1; }
+  echo "config-driven: applied gradient from desktop.ini"
+  # Hot-reload: atomically swap desktop.ini to a flat red bg; the watcher (folded
+  # into the run loop) should fire and the wallpaper repaint.
+  printf 'schema_version = 1\n\n[desktop]\nbg = #ffcc2020\n' > "$cfgdir/desktop.ini.new"
+  mv "$cfgdir/desktop.ini.new" "$cfgdir/desktop.ini"
+  reloaded=0
+  for _ in $(seq 1 25); do
+    grep -q 'Wallpaper: applied flat' "$app_log" && { reloaded=1; break; }
+    sleep 0.2
+  done
+  [ "$reloaded" = 1 ] \
+    || { echo "FAIL: wallpaper did not hot-reload to the flat bg"; cat "$app_log"; exit 1; }
+  echo "hot-reload: desktop.ini change repainted the desktop (flat)"
+  sleep 0.5  # let the flat repaint land before grim
+fi
 
 if [ "$click" = "--click" ]; then
   # Virtual pointer, fed via a FIFO so it stays alive (holding the pointer

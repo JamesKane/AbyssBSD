@@ -16,6 +16,19 @@ public struct Color: Sendable, Equatable {
                   Double(hex & 0xff) / 255.0, a)
     }
     public func with(a: Double) -> Color { Color(r, g, b, a) }
+
+    /// Parse a config colour string: `#rrggbb` or `#aarrggbb` (alpha first, as
+    /// the sibling's `pool` files use, e.g. `#ff202028`). nil if malformed.
+    public init?(cssHex: String) {
+        var s = Substring(cssHex)
+        if s.hasPrefix("#") { s = s.dropFirst() }
+        guard let v = UInt32(s, radix: 16) else { return nil }
+        switch s.count {
+        case 6: self.init(hex: v, a: 1)
+        case 8: self.init(hex: v & 0x00ff_ffff, a: Double((v >> 24) & 0xff) / 255.0)
+        default: return nil
+        }
+    }
 }
 
 public enum Theme {

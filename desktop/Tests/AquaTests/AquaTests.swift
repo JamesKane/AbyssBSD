@@ -1,7 +1,14 @@
 import XCTest
 import CCairo
 import Surface
+import PoolConfig
 @testable import Aqua
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
 
 final class AquaTests: XCTestCase {
     func testColorHex() {
@@ -235,4 +242,105 @@ final class AquaTests: XCTestCase {
         // Bottom is the deep ocean stop, so it's darker than the lighter top.
         XCTAssertLessThan(pixel(Int(w) / 2, Int(h) - 1).b, pixel(Int(w) / 2, 0).b)
     }
+
+    // MARK: Phase 2.2 — desktop config
+
+    func testColorCssHex() {
+        // #rrggbb (opaque) and #aarrggbb (alpha first, sibling format).
+        let rgb = Color(cssHex: "#20304a")
+        XCTAssertEqual(rgb?.r ?? -1, 0x20 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(rgb?.g ?? -1, 0x30 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(rgb?.b ?? -1, 0x4a / 255.0, accuracy: 0.001)
+        XCTAssertEqual(rgb?.a ?? -1, 1.0, accuracy: 0.001)
+
+        let argb = Color(cssHex: "#80ff0000")   // half-alpha red
+        XCTAssertEqual(argb?.a ?? -1, 0x80 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(argb?.r ?? -1, 1.0, accuracy: 0.001)
+        XCTAssertEqual(argb?.g ?? -1, 0.0, accuracy: 0.001)
+
+        XCTAssertEqual(Color(cssHex: "112233"), Color(cssHex: "#112233"))  // # optional
+        XCTAssertNil(Color(cssHex: "#xyz"))
+        XCTAssertNil(Color(cssHex: "#12345"))   // wrong length
+    }
+
+    func testDesktopStylePrecedence() {
+        // image > gradient > flat > default.
+        var c = Config()
+        XCTAssertEqual(DesktopStyle.from(c).fill, .defaultAqua)
+
+        c.set("desktop", "bg", "#ff112233")
+        XCTAssertEqual(DesktopStyle.from(c).kind, "flat")
+
+        c.set("desktop", "grad_top", "#ff000000")
+        c.set("desktop", "grad_bot", "#ffffffff")
+        XCTAssertEqual(DesktopStyle.from(c).kind, "gradient")
+
+        c.set("desktop", "image", "/tmp/wall.png")
+        XCTAssertEqual(DesktopStyle.from(c).fill, .image("/tmp/wall.png"))
+
+        // A malformed colour is ignored (falls through), never a crash.
+        var bad = Config(); bad.set("desktop", "bg", "not-a-color")
+        XCTAssertEqual(DesktopStyle.from(bad).fill, .defaultAqua)
+    }
+
+    func testPaintDesktopFlatAndGradient() {
+        func sample(_ style: DesktopStyle, _ x: Int, _ y: Int)
+            -> (b: UInt8, g: UInt8, r: UInt8, a: UInt8) {
+            let w: Int32 = 32, h: Int32 = 32
+            let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h)!
+            let cr = cairo_create(cs)!
+            defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+            paintDesktop(cr, w: Double(w), h: Double(h), style: style)
+            cairo_surface_flush(cs)
+            let d = cairo_image_surface_get_data(cs)!
+            let stride = Int(cairo_image_surface_get_stride(cs))
+            let p = d + y * stride + x * 4
+            return (p[0], p[1], p[2], p[3])
+        }
+        // Flat red fills every pixel red.
+        let flat = sample(DesktopStyle(fill: .flat(Color(1, 0, 0))), 16, 16)
+        XCTAssertEqual(flat.r, 255); XCTAssertEqual(flat.g, 0); XCTAssertEqual(flat.b, 0)
+        // Vertical black→white gradient: darker at top than bottom.
+        let g = DesktopStyle(fill: .gradient(top: Color(0, 0, 0), bottom: Color(1, 1, 1)))
+        XCTAssertLessThan(sample(g, 16, 1).r, sample(g, 16, 30).r)
+    }
+
+    func testPaintDesktopImageAndFallback() {
+        // Write a solid-green 4×4 PNG, then paint it as the desktop image.
+        let dir = NSTemporaryDirectoryPath()
+        let path = dir + "/aqua-wall-test.png"
+        let img = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 4, 4)!
+        let icr = cairo_create(img)!
+        cairo_set_source_rgba(icr, 0, 1, 0, 1); cairo_paint(icr)
+        cairo_surface_flush(img)
+        _ = path.withCString { cairo_surface_write_to_png(img, $0) }
+        cairo_destroy(icr); cairo_surface_destroy(img)
+
+        let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 16, 16)!
+        let cr = cairo_create(cs)!
+        defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+        paintDesktop(cr, w: 16, h: 16, style: DesktopStyle(fill: .image(path)))
+        cairo_surface_flush(cs)
+        let d = cairo_image_surface_get_data(cs)!
+        let stride = Int(cairo_image_surface_get_stride(cs))
+        let center = d + 8 * stride + 8 * 4   // ARGB32 LE: B,G,R,A
+        XCTAssertEqual(center[1], 255, "green channel")
+        XCTAssertEqual(center[2], 0, "red channel")
+
+        // A missing image falls back to the Aqua default (blue-dominant), no crash.
+        let cs2 = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 16, 16)!
+        let cr2 = cairo_create(cs2)!
+        defer { cairo_destroy(cr2); cairo_surface_destroy(cs2) }
+        paintDesktop(cr2, w: 16, h: 16, style: DesktopStyle(fill: .image("/no/such.png")))
+        cairo_surface_flush(cs2)
+        let d2 = cairo_image_surface_get_data(cs2)!
+        let c2 = d2 + 8 * Int(cairo_image_surface_get_stride(cs2)) + 8 * 4
+        XCTAssertGreaterThan(c2[0], c2[2], "fallback is blue-dominant")
+        unlink(path)
+    }
+}
+
+// A temp dir without importing Foundation (which the toolkit avoids).
+private func NSTemporaryDirectoryPath() -> String {
+    getenv("TMPDIR").map { String(cString: $0) } ?? "/tmp"
 }
