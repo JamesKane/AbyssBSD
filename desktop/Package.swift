@@ -12,6 +12,7 @@ let package = Package(
     products: [
         .library(name: "Aqua", targets: ["Aqua"]),
         .library(name: "Surface", targets: ["Surface"]),
+        .library(name: "PoolConfig", targets: ["PoolConfig"]),
         .executable(name: "AquaDemo", targets: ["AquaDemo"]),
     ],
     targets: [
@@ -77,6 +78,22 @@ let package = Package(
             dependencies: ["CWayland", "CXkb"],
             path: "de/surface"
         ),
+        // Portable "config directory changed" watch (inotify/kqueue) for
+        // PoolConfig — the one platform-specific piece, isolated in C.
+        .target(
+            name: "CPoolWatch",
+            path: "de/cpoolwatch",
+            sources: ["cpoolwatch.c"],
+            publicHeadersPath: "include"
+        ),
+        // Config: read/write the same ~/.config/abyss/*.ini files as the Rust
+        // `pool` (mmap read, atomic-rename write, directory watch). Pure syscalls;
+        // no Wayland, so the shell components and tests use it independently.
+        .target(
+            name: "PoolConfig",
+            dependencies: ["CPoolWatch"],
+            path: "de/poolconfig"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
@@ -93,6 +110,11 @@ let package = Package(
             name: "AquaTests",
             dependencies: ["Aqua"],
             path: "Tests/AquaTests"
+        ),
+        .testTarget(
+            name: "PoolConfigTests",
+            dependencies: ["PoolConfig"],
+            path: "Tests/PoolConfigTests"
         ),
     ]
 )

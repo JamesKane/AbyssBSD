@@ -14,11 +14,14 @@ faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, on **Wayland**. Sibling project
 locked-in decisions (reuse Rust `tide` now / rewrite later; faithful clone;
 Linux-first dev; full phased roadmap).
 
-**Phase 2 has begun.** The first pass (P2.1) added the `wlr-layer-shell` surface
-role to `Surface` and a BACKGROUND **wallpaper** (`AQUA_SCENE=wallpaper`) that
-fills the output with the Jaguar blue gradient — the shell's foundational surface
-type, verified live under sway: ![wallpaper](screenshots/live-wallpaper.png). See
-[PHASE2.md](PHASE2.md) for the ordered scope.
+**Phase 2 has begun.** P2.1 added the `wlr-layer-shell` surface role to `Surface`
+and a BACKGROUND **wallpaper** (`AQUA_SCENE=wallpaper`) filling the output with the
+Jaguar blue gradient — the shell's foundational surface type, verified live under
+sway: ![wallpaper](screenshots/live-wallpaper.png). P2.3 added **`PoolConfig`**
+(`de/poolconfig/`), the Swift port of the Rust `pool`: read/write/watch the same
+`~/.config/abyss/*.ini` files (mmap read, atomic-rename write, inotify/kqueue
+directory watch) so Swift and Rust components stay config-compatible — pure
+syscalls, its own 9-test suite. See [PHASE2.md](PHASE2.md) for the ordered scope.
 
 ## Current state — Phase 1 vertical slice works
 
@@ -30,7 +33,8 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (3/3 green — pure toolkit logic).
+- Build: `swift build`. Tests: `swift test` (23 green — Aqua toolkit logic +
+  PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -61,6 +65,10 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     cairo toy-text fallback when no font is found), `Scene`/`Widgets` (the window
     painters), `AquaWindow` (a live window wiring pointer/keyboard to the
     controls).
+  - `PoolConfig` — config: read/write/watch the same `~/.config/abyss/*.ini`
+    files as the Rust `pool` (mmap read, atomic-rename write, directory watch via
+    the `CPoolWatch` inotify/kqueue shim). Pure syscalls, no Wayland — the shell
+    components and tests use it independently (`de/poolconfig/`).
   - `AquaDemo` — the runnable demo.
 
 A **System Preferences** demo scene reproduces the Jaguar layout (toolbar with

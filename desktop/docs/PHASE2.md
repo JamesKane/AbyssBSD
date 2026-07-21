@@ -112,13 +112,17 @@ First real layer-shell client: BACKGROUND, all-4 anchors, exclusive −1. Solid 
 gradient → PNG (we already bind libpng via `CText`/cairo). This validates the
 whole layer-shell path end-to-end with almost no UI. Add `live-sway.sh desktop`.
 
-**P2.3 — `PoolConfig` (the `pool` port).**
-Pure-syscall Swift: INI parse, `mmap(MAP_PRIVATE, PROT_READ)` read, temp+`fsync`+
-atomic-`rename` write under a `flock`, and a watch abstraction — **inotify on
-Linux, `kqueue`/`EVFILT_VNODE` on FreeBSD** behind one `#if os(...)` protocol.
-Same `~/.config/abyss/*.ini` files as the sibling (`desktop`, `panel` domains) so
-Swift and Rust stay config-compatible. Fully unit-testable, no compositor. Wire
-the wallpaper (P2.2) to read `desktop.ini` and hot-reload.
+**P2.3 — `PoolConfig` (the `pool` port). ✅ done.**
+Pure-syscall Swift (`de/poolconfig/`, no Wayland): `Config` (INI parse/serialize,
+typed string/uint64/int64/bool reads with the same coercions), `Pool.load`
+(`mmap(MAP_PRIVATE, PROT_READ)` read → parse → empty on missing), `Config.store`
+(temp + `fsync` + atomic `rename` under a `flock`), and `Pool.Watcher`. The one
+platform fork — **inotify on Linux, `kqueue`/`EVFILT_VNODE` on FreeBSD** — is
+isolated in a tiny C shim (`CPoolWatch`) that returns a pollable fd, so a
+component can fold config wakeups into its own loop next to the Wayland fd. Same
+`~/.config/abyss/*.ini` files as the sibling (`desktop`/`panel` domains) so Swift
+and Rust stay config-compatible. 9 unit tests incl. a live watcher wake. P2.2/P2.4
+wire the wallpaper/menu bar to read their `.ini` and hot-reload. See HANDOFF §2.17.
 
 **P2.4 — Menu bar (`reef-panel` top-bar analog, in Aqua dress).**
 layer-shell TOP, exclusive ~22px (Jaguar bar height × scale). Pinstriped bar,

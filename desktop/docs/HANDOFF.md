@@ -305,6 +305,31 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.17 PoolConfig: mmap-read / atomic-write / directory-watch, in Swift
+(Phase 2.3.) `PoolConfig` (`de/poolconfig/`) ports the Rust `pool` — same
+`~/.config/abyss/*.ini` files, so Swift and Rust components read each other's
+config. It's pure syscalls (Glibc/Darwin), no Wayland, so it's its own target
+and test suite. The discipline that matters:
+- **Read = mmap `MAP_PRIVATE, PROT_READ` then parse in place.** Lock-free, and an
+  atomic `rename()` underneath can't tear the read (we hold the old inode until
+  `munmap`). A missing/empty file is an *empty* `Config`, not an error.
+- **Write = temp + `fsync` + atomic `rename`, under an exclusive `flock`.** A
+  reader always maps a whole file — never a torn one. `unlink` the temp on any
+  error (a `committed` flag + `defer`). Best-effort `fsync` the directory after
+  the rename so it's durable.
+- **Watch = a pollable fd, in C.** The one platform-specific piece — inotify on
+  Linux, `kqueue`/`EVFILT_VNODE` on FreeBSD — lives in `CPoolWatch` where the
+  `#ifdef` is natural, behind `awc_watch_open/wait/close`. It watches the
+  *directory* (atomic writes land as a `rename` into it, so per-file
+  registration would miss them) and returns a fd a component can add to its own
+  poll loop next to the Wayland fd. Verified live: a `store` wakes the watcher in
+  ~4 ms.
+- **Two Swift/Glibc gotchas.** (1) `LOCK_EX`/`LOCK_UN` aren't reliably surfaced as
+  Swift constants — define them (`2`/`8`) rather than trust the macro import;
+  `flock` itself imports fine. (2) `mkdtemp` wants a non-optional
+  `UnsafeMutablePointer<CChar>` — pass `buf.baseAddress!` (force-unwrap the
+  buffer base) or it won't type-check.
+
 ### 2.16 Layer-shell: a second surface *role*, and it isn't in the tree
 (Phase 2.1.) The shell's surfaces are `wlr-layer-shell` surfaces, not xdg
 toplevels: the compositor owns placement (layer + anchors + exclusive zone) and
