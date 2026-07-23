@@ -23,9 +23,13 @@ directory watch) so Swift and Rust components stay config-compatible. P2.2 made
 the wallpaper the real **Desktop**: it reads `desktop.ini` (image / gradient /
 flat `bg` / built-in Jaguar blue) and **hot-reloads** when the file changes — the
 watcher fd is folded into the run loop via `Display.addFileDescriptor`. Verified
-live: a config gradient, then an atomic edit repaints the desktop flat
-(![hot-reload](screenshots/live-desktop-reload.png)). See [PHASE2.md](PHASE2.md)
-for the ordered scope.
+live: a config gradient, then an atomic edit repaints the desktop flat. P2.4
+added the **menu bar** (`AQUA_SCENE=menubar`): a layer-shell TOP strip with an
+exclusive zone, the system menu (an original water-drop glyph), the bold app menu,
+File/Edit/View/…, and a live clock — clicking a title opens a real Aqua dropdown
+(a grabbing popup **parented to the layer surface**), verified live
+(![menu bar](screenshots/live-menubar.png)). See [PHASE2.md](PHASE2.md) for the
+ordered scope.
 
 ## Current state — Phase 1 vertical slice works
 
@@ -37,8 +41,8 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (27 green — Aqua toolkit + desktop
-  config logic, PoolConfig read/write/watch).
+- Build: `swift build`. Tests: `swift test` (30 green — Aqua toolkit + desktop
+  config + menu-bar layout, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -174,6 +178,7 @@ abyss/tests/live-sway.sh scroll  /tmp/wheel.png   --wheel # scroll-wheel the lis
 abyss/tests/live-sway.sh window  /tmp/rep.png     --repeat # hold a key → it repeats
 abyss/tests/live-sway.sh wallpaper /tmp/wall.png         # a layer-shell BACKGROUND wallpaper
 abyss/tests/live-sway.sh --reload  /tmp/wall.png         # desktop.ini config + hot-reload
+abyss/tests/live-sway.sh --menubar /tmp/mbar.png         # menu bar (TOP) + open a dropdown
 
 # Wallpaper (layer-shell) PNG preview, no compositor:
 AQUA_SCENE=wallpaper AQUA_RENDER_PNG=/tmp/wall.png .build/debug/AquaDemo

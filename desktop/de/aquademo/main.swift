@@ -40,6 +40,10 @@ case "wallpaper":
     // A wlr-layer-shell BACKGROUND client. PNG preview uses a fixed size; live,
     // the compositor stretches it to the output.
     scene = .wallpaper; title = "Desktop"; width = 800; height = 600
+case "menubar":
+    // A wlr-layer-shell TOP client. PNG preview composites the bar over the
+    // wallpaper at this size; live, it spans the output width at bar height.
+    scene = .menubar; title = "Menu Bar"; width = 800; height = 600
 default:
     scene = .window; title = "AbyssBSD"; width = 440; height = 300
 }
@@ -72,6 +76,14 @@ if scene == .wallpaper {
     }
     print("AquaDemo: wallpaper (layer-shell BACKGROUND) is up.")
     withExtendedLifetime(wallpaper) { display.run() }
+} else if scene == .menubar {
+    guard let menubar = MenuBar(display: display) else {
+        print("AquaDemo: failed to create the menu bar " +
+              "(does the compositor offer wlr-layer-shell?).")
+        exit(1)
+    }
+    print("AquaDemo: menu bar (layer-shell TOP) is up.")
+    withExtendedLifetime(menubar) { display.run() }
 } else {
     guard let window = AquaWindow(display: display, title: title, scene: scene,
                                   width: width, height: height) else {

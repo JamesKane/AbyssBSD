@@ -25,6 +25,13 @@
 int aw_create_shm(size_t size);
 
 /*
+ * Create a periodic timerfd firing every `ms` milliseconds (CLOCK_MONOTONIC,
+ * non-blocking). Pollable; read 8 bytes to clear each expiry. For the menu-bar
+ * clock tick. Returns a fd >= 0, or -1 on failure.
+ */
+int aw_create_interval_timer(unsigned int ms);
+
+/*
  * Shim wrappers.
  *
  * libwayland's generated request/add_listener functions are all `static inline`
@@ -78,6 +85,8 @@ void aw_xdg_positioner_set_gravity(void *p, uint32_t gravity);
 void aw_xdg_positioner_set_constraint_adjustment(void *p, uint32_t adj);
 void aw_xdg_positioner_destroy(void *p);
 void *aw_xdg_surface_get_popup(void *xdg_surface, void *parent, void *positioner);
+/* A popup with no xdg parent, to be parented to a layer surface instead. */
+void *aw_xdg_surface_get_popup_no_parent(void *xdg_surface, void *positioner);
 void aw_xdg_popup_grab(void *popup, void *seat, uint32_t serial);
 void aw_xdg_popup_destroy(void *popup);
 
@@ -95,6 +104,8 @@ void aw_layer_surface_set_margin(void *ls, int32_t top, int32_t right,
 void aw_layer_surface_set_keyboard_interactivity(void *ls, uint32_t ki);
 void aw_layer_surface_ack_configure(void *ls, uint32_t serial);
 void aw_layer_surface_destroy(void *ls);
+/* Parent an xdg_popup to a layer surface (its menus/tooltips). */
+void aw_layer_surface_get_popup(void *ls, void *xdg_popup);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);

@@ -338,6 +338,52 @@ final class AquaTests: XCTestCase {
         XCTAssertGreaterThan(c2[0], c2[2], "fallback is blue-dominant")
         unlink(path)
     }
+
+    // MARK: Phase 2.4 — menu bar
+
+    func testFormatMenuClock() {
+        XCTAssertEqual(formatMenuClock(hour24: 9, minute: 41, wday: 1), "Mon 9:41 AM")
+        XCTAssertEqual(formatMenuClock(hour24: 0, minute: 5, wday: 0), "Sun 12:05 AM")
+        XCTAssertEqual(formatMenuClock(hour24: 12, minute: 0, wday: 6), "Sat 12:00 PM")
+        XCTAssertEqual(formatMenuClock(hour24: 23, minute: 59, wday: 3), "Wed 11:59 PM")
+    }
+
+    func testMenuBarDefaultMenus() {
+        let menus = MenuBar.defaultMenus(appName: "Finder")
+        XCTAssertTrue(menus[0].isSystem, "the system (drop) menu is first")
+        XCTAssertTrue(menus[1].bold, "the application menu is bold")
+        XCTAssertEqual(menus[1].title, "Finder")
+        XCTAssertEqual(menus.map(\.title), ["", "Finder", "File", "Edit", "View",
+                                            "Go", "Window", "Help"])
+        for m in menus { XCTAssertFalse(m.items.isEmpty) }   // every title opens something
+    }
+
+    func testMenuBarLayoutOrderAndClock() {
+        let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 800, 22)!
+        let cr = cairo_create(cs)!
+        defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+        let menus = MenuBar.defaultMenus(appName: "Finder")
+        let L = menuBarLayout(cr, w: 800, h: 22, menus: menus, clock: "Mon 9:41 AM",
+                              showClock: true)
+
+        XCTAssertEqual(L.titleRects.count, menus.count)
+        // Titles march left-to-right without gaps or overlaps, all in the bar.
+        var x = MenuBarMetrics.leftMargin
+        for r in L.titleRects {
+            XCTAssertEqual(r.x, x, accuracy: 0.01)
+            XCTAssertGreaterThan(r.w, 0)
+            XCTAssertEqual(r.h, 22, accuracy: 0.01)
+            x += r.w
+        }
+        // The clock sits at the right, clear of the last title.
+        XCTAssertGreaterThan(L.clockRect.x, L.titleRects.last!.x + L.titleRects.last!.w)
+        XCTAssertLessThanOrEqual(L.clockRect.x + L.clockRect.w, 800)
+
+        // show_clock off → no clock rect.
+        let noClock = menuBarLayout(cr, w: 800, h: 22, menus: menus,
+                                    clock: "Mon 9:41 AM", showClock: false)
+        XCTAssertEqual(noClock.clockRect.w, 0)
+    }
 }
 
 // A temp dir without importing Foundation (which the toolkit avoids).

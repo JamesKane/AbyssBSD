@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -35,7 +35,8 @@ for a in "$@"; do
     --repeat)                 repeat="--repeat" ;;  # hold a key; assert it repeats
     --reload)                 reload="--reload" ;;  # wallpaper: config + hot-reload
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
-    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper)  scene="$a" ;;
+    --menubar)                menubar="--menubar"; click="--click" ;;  # menu bar dropdown
+    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -59,6 +60,10 @@ fi
 [ "$repeat" = "--repeat" ] && scene="window"
 # --reload exercises the wallpaper's config load + hot-reload.
 [ "$reload" = "--reload" ] && scene="wallpaper"
+# --menubar drives the menu bar (a layer-shell TOP surface).
+[ "$menubar" = "--menubar" ] && scene="menubar"
+# Which scenes are layer-shell surfaces (not xdg toplevels — not in get_tree).
+is_layer=""; case "$scene" in wallpaper|menubar) is_layer=1 ;; esac
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -100,7 +105,7 @@ case "$scene" in
   scroll)   res="360x420" ;;
   tabs)     res="480x380" ;;
   sheet)    res="440x320" ;;
-  wallpaper) res="800x600" ;;  # the layer surface stretches to fill it
+  wallpaper|menubar) res="800x600" ;;  # the layer surface stretches to fill it
   *)        res="440x300" ;;
 esac
 outline="output HEADLESS-1 resolution $res position 0 0"
@@ -172,7 +177,7 @@ app_pid=$!
 # sent a configure. A normal window we detect by its app_id in the tree.
 mapped=0
 for _ in $(seq 1 32); do
-  if [ "$scene" = "wallpaper" ]; then
+  if [ -n "$is_layer" ]; then
     grep -q 'LayerSurface: mapped' "$app_log" && { mapped=1; break; }
   else
     if swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.aquademo"'; then
@@ -183,7 +188,7 @@ for _ in $(seq 1 32); do
   sleep 0.25
 done
 [ "$mapped" = 1 ] || { echo "FAIL: surface never mapped"; cat "$app_log"; exit 1; }
-[ "$scene" = "wallpaper" ] && echo "layer surface mapped: $(grep 'LayerSurface: mapped' "$app_log" | head -1)"
+[ -n "$is_layer" ] && echo "layer surface mapped: $(grep 'LayerSurface: mapped' "$app_log" | head -1)"
 sleep 1  # let a couple of frames paint
 
 if [ "$reload" = "--reload" ]; then
@@ -215,6 +220,7 @@ if [ "$click" = "--click" ]; then
     scroll)  vpw=360; vph=420 ;;
     tabs)    vpw=480; vph=380 ;;
     sheet)   vpw=440; vph=320 ;;
+    menubar) vpw=800; vph=600 ;;
     *)       vpw=440; vph=300 ;;
   esac
   vp_log=$(mktemp)
@@ -242,6 +248,13 @@ if [ "$click" = "--click" ]; then
     # (sway doesn't surface client xdg-popups in get_tree; the screenshot is the
     # evidence — the menu should be open with "Graphite" highlighted. Pressing
     # over an item selects it, sets the value, and dismisses the popup.)
+  elif [ "$menubar" = "--menubar" ]; then
+    # Click the system (drop) menu at the far left of the bar, opening a real
+    # dropdown popup parented to the menu-bar layer surface; hover an item.
+    printf 'm 21 11\np\nr\n' >&3   # open the system menu
+    sleep 0.5
+    printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
+    sleep 0.4
   else
   case "$scene" in
     widgets)
@@ -345,6 +358,13 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
   fi
   sleep 0.5
   exec 4>&-
+fi
+
+if [ "$menubar" = "--menubar" ]; then
+  # The click should have opened a dropdown from the menu-bar layer surface.
+  grep -q 'MenuBar: opened' "$app_log" \
+    || { echo "FAIL: menu bar didn't open a dropdown"; cat "$app_log"; exit 1; }
+  echo "menu bar: $(grep 'MenuBar: opened' "$app_log" | head -1) (popup from a layer surface)"
 fi
 
 if [ "$hidpi" = "--hidpi" ]; then

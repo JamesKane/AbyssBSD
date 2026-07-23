@@ -117,6 +117,13 @@ public enum Theme {
     public static let menuText = Color(hex: 0x1a1a1a)
     public static let menuTextOnHighlight = Color(hex: 0xffffff)
 
+    // Menu bar: a light, faintly glassy strip at the top of the screen with a
+    // 1px darker bottom edge; the open/hovered title takes the menu blue.
+    public static let menuBarTop = Color(hex: 0xfcfcfc)
+    public static let menuBarBottom = Color(hex: 0xebebeb)
+    public static let menuBarBorder = Color(hex: 0xa6a6a6)
+    public static let menuBarText = Color(hex: 0x161616)
+
     public static let bodyText = Color(hex: 0x202020)
     public static let fontFamily = "Lucida Grande"
     public static let fontSize: Double = 13

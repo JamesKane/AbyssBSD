@@ -134,10 +134,21 @@ component can fold config wakeups into its own loop next to the Wayland fd. Same
 and Rust stay config-compatible. 9 unit tests incl. a live watcher wake. P2.2/P2.4
 wire the wallpaper/menu bar to read their `.ini` and hot-reload. See HANDOFF §2.17.
 
-**P2.4 — Menu bar (`reef-panel` top-bar analog, in Aqua dress).**
-layer-shell TOP, exclusive ~22px (Jaguar bar height × scale). Pinstriped bar,
-Apple menu + app menus as **`AquaMenu` popups** (already built), right-aligned
-clock, status items (stubbed on Linux). The Jaguar signature. Reads `panel.ini`.
+**P2.4 — Menu bar (`reef-panel` top-bar analog, in Aqua dress). ✅ done.**
+`MenuBar` — layer-shell TOP, exclusive 22px, anchored top+L+R: a pinstriped Aqua
+bar with an original water-drop system glyph (not Apple's apple), the bold app
+menu, the standard menus (File/Edit/View/Go/Window/Help), and a right-aligned
+clock. The first *interactive* layer surface: clicking a title opens a real
+dropdown — an **`AquaMenu` in a grabbing popup parented to the layer surface**.
+That needed generalising `Popup` (a shared designated init + Window- and
+LayerSurface-parented convenience inits; a layer popup is a parent-less xdg_popup
+then `zwlr_layer_surface_v1.get_popup`). The clock ticks via a `timerfd`
+(`aw_create_interval_timer`) folded into the run loop with `addFileDescriptor`.
+Reads `panel.ini` (`show_clock`, `menubar_height`). Verified live: `live-sway.sh
+--menubar` maps the 800×22 bar and clicks the system title to open a dropdown
+(`docs/screenshots/live-menubar.png`). See HANDOFF §2.19. (Menu-bar *keyboard*
+nav and hardware status items — volume/battery — are future; the latter needs the
+FreeBSD `vents` bridges.)
 
 **P2.5 — foreign-toplevel + Dock.**
 Generate `wlr-foreign-toplevel-management`; a `ForeignToplevels` client tracking

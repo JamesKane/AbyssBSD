@@ -305,6 +305,37 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.19 Menu bar: popups from a layer surface, and a timerfd clock
+(Phase 2.4.) The menu bar (`MenuBar`, layer-shell TOP + exclusive zone) is the
+first interactive layer surface. What was new:
+- **Popups parent differently off a layer surface.** An xdg-toplevel menu uses
+  `xdg_surface.get_popup(parentXdgSurface, positioner)`. A layer-shell menu has
+  no xdg parent: create a *parent-less* xdg_popup
+  (`xdg_surface.get_popup(NULL, positioner)`), then attach it with
+  `zwlr_layer_surface_v1.get_popup(popup)`. `Popup` was refactored to one private
+  designated init (listeners + grab + commit) with two convenience inits (Window
+  vs LayerSurface parent) sharing a `makeSurfaceAndPositioner` helper — the
+  existing window menus kept working unchanged. The grab still uses
+  `display.lastPointerSerial` (set from the click on the bar, which the P2.1
+  input routing delivers to the layer surface).
+- **Reuse `AquaMenu` for the dropdowns** (pass `selected: -1` for no checkmark);
+  it's already a `PopupDelegate` with hover + choose. `LayerSurface.openPopup`
+  mirrors `Window.openPopup`.
+- **A ticking clock via `timerfd`.** `aw_create_interval_timer(ms)` returns a
+  periodic non-blocking timerfd; register it with `Display.addFileDescriptor`
+  (§2.18), read 8 bytes to clear each tick, reformat, and `setNeedsDisplay` only
+  when the string changed. `formatMenuClock` is pure (unit-tested); the live clock
+  reads `localtime_r`.
+- **Layout-is-truth** again: `menuBarLayout` (title/clock rects) is computed each
+  render from shaped text widths and cached; pointer hit-testing uses the cache
+  (handlers have no cairo context — `menuWidth` uses a 1×1 scratch surface to
+  measure popup width). The system glyph is an original water-drop, per the
+  "original glyphs, not Apple artwork" policy (§4).
+- Verified live by `live-sway.sh --menubar`: the 800×22 bar maps (asserted via
+  `LayerSurface: mapped … [abyss.menubar]`), a click on the system title opens a
+  dropdown (asserted via `MenuBar: opened System`), and a pixel check confirms
+  the open title is highlighted blue with a white glyph.
+
 ### 2.18 Config-driven desktop + hot-reload: fold the watch fd into the run loop
 (Phase 2.2.) The wallpaper became the real Desktop: `Wallpaper` reads
 `desktop.ini` (`PoolConfig`) into a `DesktopStyle` (image → gradient → flat →

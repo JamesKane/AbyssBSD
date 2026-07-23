@@ -18,6 +18,7 @@ public enum SceneKind: Sendable {
     case tabs
     case sheet
     case wallpaper   // full-bleed desktop backdrop (a layer-shell client live)
+    case menubar     // the top menu bar (a layer-shell TOP client live)
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
@@ -244,9 +245,16 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
 
     defer { Text.renderScale = 1 }
 
-    // The wallpaper is full-bleed (no grey desktop, no window inset).
-    if kind == .wallpaper {
+    // The wallpaper is full-bleed (no grey desktop, no window inset). The menu
+    // bar preview composites the bar over the wallpaper at the top.
+    if kind == .wallpaper || kind == .menubar {
         paintWallpaper(cr, w: Double(width), h: Double(height))
+        if kind == .menubar {
+            paintMenuBar(cr, w: Double(width), h: MenuBarMetrics.height,
+                         menus: MenuBar.defaultMenus(appName: "Finder"),
+                         clock: formatMenuClock(hour24: 9, minute: 41, wday: 1),
+                         openIndex: nil, showClock: true)
+        }
         cairo_surface_flush(cs)
         let status = cairo_surface_write_to_png(cs, path)
         cairo_destroy(cr)
@@ -282,7 +290,7 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
-    case .wallpaper:
+    case .wallpaper, .menubar:
         break  // handled full-bleed above
     }
     cairo_restore(cr)

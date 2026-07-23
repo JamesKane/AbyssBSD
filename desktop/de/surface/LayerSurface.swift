@@ -279,6 +279,17 @@ public final class LayerSurface {
         delegate?.keyEvent(event)
     }
 
+    /// Open a grabbing popup (a menu) anchored to a rect in this layer surface's
+    /// logical coordinates — the menu bar's / Dock's dropdowns. The caller owns
+    /// the returned Popup; dropping it (or a `popup_done`) tears it down.
+    public func openPopup(anchorX: Int32, anchorY: Int32, anchorW: Int32,
+                          anchorH: Int32, width: Int32, height: Int32,
+                          delegate: PopupDelegate) -> Popup? {
+        Popup(layerParent: self, anchorX: anchorX, anchorY: anchorY,
+              anchorW: anchorW, anchorH: anchorH, width: width, height: height,
+              delegate: delegate)
+    }
+
     /// Logical (surface) size, for the toolkit's layout.
     public var size: (width: Int32, height: Int32) { (logicalW, logicalH) }
 }

@@ -146,6 +146,11 @@ void *aw_xdg_surface_get_popup(void *xdg_surface, void *parent, void *positioner
                                  (struct xdg_positioner *)positioner);
 }
 
+void *aw_xdg_surface_get_popup_no_parent(void *xdg_surface, void *positioner) {
+    return xdg_surface_get_popup((struct xdg_surface *)xdg_surface, NULL,
+                                 (struct xdg_positioner *)positioner);
+}
+
 void aw_xdg_popup_grab(void *popup, void *seat, uint32_t serial) {
     xdg_popup_grab((struct xdg_popup *)popup, (struct wl_seat *)seat, serial);
 }
@@ -195,6 +200,11 @@ void aw_layer_surface_ack_configure(void *ls, uint32_t serial) {
 
 void aw_layer_surface_destroy(void *ls) {
     zwlr_layer_surface_v1_destroy((struct zwlr_layer_surface_v1 *)ls);
+}
+
+void aw_layer_surface_get_popup(void *ls, void *xdg_popup) {
+    zwlr_layer_surface_v1_get_popup((struct zwlr_layer_surface_v1 *)ls,
+                                    (struct xdg_popup *)xdg_popup);
 }
 
 void *aw_seat_get_pointer(void *seat) {
