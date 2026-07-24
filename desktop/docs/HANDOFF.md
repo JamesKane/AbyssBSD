@@ -305,6 +305,45 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.21 The Finder: an app, not a shell surface — and POSIX from Swift
+(Phase 2.6.) The Finder is the first component that is an ordinary xdg-shell
+**application** (it reuses `Window`), so the interesting traps were in the model
+layer, not Wayland:
+
+- **`readdir`'s `d_name` is a C array field.** Reading it needs
+  `withUnsafePointer` + `withMemoryRebound(to: CChar.self, …)`. Compute the
+  capacity **before** the closure: `MemoryLayout.size(ofValue: raw)` *inside*
+  `withUnsafePointer(to: &raw)` is an exclusivity violation ("overlapping
+  accesses to 'raw'") and fails to compile.
+- **Don't trust `d_type`** — it is `DT_UNKNOWN` on some filesystems. `stat` the
+  joined path instead (which also follows symlinks, as the Finder does).
+- **Spell the `stat` mode bits yourself.** `mode_t` is `UInt32` on Linux and
+  `UInt16` on FreeBSD, and the `S_IF*` macros don't reliably surface, so compare
+  `UInt32(st.st_mode) & 0o170000 == 0o040000`. Same discipline as `LOCK_EX` in
+  §2.17.
+- **Scroll-to-reveal must include the view's margin.** The first version scrolled
+  an item just barely into view, which meant the first item could never reach the
+  very top (the grid's 10px pad stayed clipped) and the last item never reached
+  the bottom. `finderScrollToShow` reveals item ± the grid margin. A unit test
+  caught this, not the eye.
+- **Double-click has no protocol support.** `wl_pointer.button` carries no click
+  count, so it's derived: same item + `CLOCK_MONOTONIC` delta ≤ 450 ms. Clear the
+  remembered index after opening, or a third click chains into another open.
+- **A new app needs a new app_id in the live harness.** `live-sway.sh` waits for
+  the surface to map by grepping `get_tree` for `org.abyssbsd.aquademo`; the
+  Finder maps as `org.abyssbsd.finder`, so the expected id is now per-scene.
+  Symptom without it: "FAIL: surface never mapped" while the app's own log shows
+  it working fine.
+- **Order-dependent keyboard tests.** Back re-selects the folder you came out of
+  (the Finder does this), so a test that pressed Down assumed the wrong starting
+  point. Press Home first — assert from a pinned state, not an inherited one.
+
+Fidelity: the 10.2 Finder is a **browser** (toolbar + navigate in place), not a
+spatial file manager, and it is standard Aqua — brushed metal is 10.3, which is
+consistent with the descope in §4. The sibling's `reef-fm` is spatial and sorts
+folders first; the Mac Finder sorts one case-insensitive alphabetical run over
+every kind. Adapt, don't copy.
+
 ### 2.20 The Dock: magnification math + foreign-toplevel + a test-harness quirk
 (Phase 2.5.) The magnifying Dock (`Dock`, layer-shell BOTTOM) is net-new design.
 Key pieces:

@@ -5,7 +5,7 @@ a read of the Rust sibling's shell (`reef`), config (`pool`), and IPC (`current`
 Read [PLAN.md](PLAN.md) for the locked decisions and [STATUS.md](STATUS.md) for the
 Phase-1 baseline this builds on.
 
-Last updated: 2026-07-20.
+Last updated: 2026-07-24.
 
 ---
 
@@ -167,10 +167,31 @@ foreign-toplevel tracker sees it (`Dock: running …`).
 `docs/screenshots/live-dock.png`. See HANDOFF §2.20. (App *launching* from a
 pinned-not-running tile needs exec/xdg-activation — future.)
 
-**P2.6 — Finder (`reef-fm` analog).**
-xdg-shell toplevels (reuse `Window`), `readdir` listing, Aqua icon grid, spatial
-multi-window, keyboard nav + open. Largest pass; can be its own mini-sequence.
-Generate `xdg-activation` here for raise-existing-window.
+**P2.6 — Finder (`reef-fm` analog). ✅ first pass done.**
+The first shell component that is an ordinary **xdg-shell application** (it
+reuses `Window`, not `LayerSurface`). `FinderModel.swift` is the pure half —
+`readDirectory` (POSIX `opendir`/`stat`, dot-files filtered, Finder sort),
+path helpers, `finderLayout` / `finderItemRect` / `finderIndex(atX:y:)` /
+`finderScrollToShow` / `finderMove` — so paint and hit-test share one geometry
+and the whole model unit-tests with no compositor. `Finder.swift` paints it
+(toolbar with Back + an icon/list view switch, white item well, procedural
+folder/document/app/volume icons, Aqua scrollbar, status bar) and wires the live
+window: click to select, double-click to open, Back, wheel/thumb/arrow scrolling,
+and keyboard nav (arrows by row, Home/End, Return, Backspace-up, Page keys, Tab
+to switch view, type-ahead). Config from `finder.ini` (`view`, `show_hidden`);
+starts in `$ABYSS_FINDER_DIR` (else `$HOME`). Verified live against a seeded
+directory: `live-sway.sh --finder [--keys]` browses into a folder, returns via
+Back, switches to list view and repeats it from the keyboard
+(`docs/screenshots/live-finder.png`). See HANDOFF §2.21.
+
+**Fidelity correction (deliberate):** the scope sketch above said "spatial
+multi-window", inherited from `reef-fm`. The **10.2 Finder is a browser** — a
+toolbar window that navigates in place, where hiding the toolbar is what gives
+you a spatial window. So this pass browses in place; the toolbar-hidden spatial
+mode (and with it multi-window routing, which needs `Display` to route input by
+surface rather than to one primary window) is deferred to the Finder's second
+pass, along with `xdg-activation` (raise an existing window), file operations
+(new folder / rename / delete / copy) and launching what you double-click.
 
 **P2.7 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the

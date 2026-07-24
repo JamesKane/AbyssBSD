@@ -7,7 +7,7 @@
 # configure/resize, pointer input, listener/object lifetimes). This script runs
 # AquaDemo against a headless sway and captures the result with grim.
 #
-# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets] [out.png] [--click] [--type] [--keys] [--hidpi] [--wheel] [--repeat]
+# Usage: abyss/tests/live-sway.sh [window|sysprefs|widgets|finder] [out.png] [--click] [--type] [--keys] [--hidpi] [--wheel] [--repeat] [--finder]
 # Needs: sway (>=1.11), grim. With --click/--type also: wayland-scanner +
 # libwayland dev (to build the virtual-input helpers; --type also needs
 # xkbcommon). Uses the headless backend + pixman software renderer, so no
@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -37,7 +37,8 @@ for a in "$@"; do
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     --menubar)                menubar="--menubar"; click="--click" ;;  # menu bar dropdown
     --dock)                   dock_mode="--dock"; click="--click" ;;  # Dock magnify + running
-    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock)  scene="$a" ;;
+    --finder)                 finder="--finder"; click="--click" ;;  # browse a seeded dir
+    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -65,6 +66,8 @@ fi
 [ "$menubar" = "--menubar" ] && scene="menubar"
 # --dock drives the Dock (a layer-shell BOTTOM surface).
 [ "$dock_mode" = "--dock" ] && scene="dock"
+# --finder drives the file browser (an ordinary xdg toplevel).
+[ "$finder" = "--finder" ] && scene="finder"
 # Which scenes are layer-shell surfaces (not xdg toplevels — not in get_tree).
 is_layer=""; case "$scene" in wallpaper|menubar|dock) is_layer=1 ;; esac
 
@@ -108,6 +111,7 @@ case "$scene" in
   scroll)   res="360x420" ;;
   tabs)     res="480x380" ;;
   sheet)    res="440x320" ;;
+  finder)   res="520x400" ;;
   wallpaper|menubar|dock) res="800x600" ;;  # the layer surface stretches to fill it
   *)        res="440x300" ;;
 esac
@@ -137,6 +141,7 @@ cleanup() {
   rm -f "$cfg" "$log" "${app_log:-}" "${fifo:-}" "${vp_log:-}" "${vk_fifo:-}" "${vk_log:-}"
   [ -n "$vp_dir" ] && rm -rf "$vp_dir" || true
   [ -n "${cfgdir:-}" ] && rm -rf "$cfgdir" || true
+  [ -n "${finderdir:-}" ] && rm -rf "$finderdir" || true
 }
 trap cleanup EXIT
 
@@ -168,10 +173,23 @@ if [ "$reload" = "--reload" ]; then
   abyss_cfg="ABYSS_CONFIG_DIR=$cfgdir"
 fi
 
+# --finder: give the Finder a seeded directory to browse, so the listing (and
+# what a click lands on) is identical on every machine. Sorted by the Finder's
+# rule that is: Applications, Documents, Pictures, Read Me.txt.
+finder_env=""
+if [ "$finder" = "--finder" ]; then
+  finderdir=$(mktemp -d)
+  mkdir -p "$finderdir/Applications" "$finderdir/Documents/Letters" "$finderdir/Pictures"
+  printf 'Welcome to AbyssBSD.\n' > "$finderdir/Read Me.txt"
+  printf 'notes\n' > "$finderdir/Documents/notes.txt"
+  printf '.dotfile\n' > "$finderdir/.hidden"   # must NOT be listed
+  finder_env="ABYSS_FINDER_DIR=$finderdir"
+fi
+
 # Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
 # AQUA_SCALE so the window auto-detects scale from wl_output rather than pinning.
 app_log=$(mktemp)
-env -u AQUA_SCALE $abyss_cfg WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
+env -u AQUA_SCALE $abyss_cfg $finder_env WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
     .build/debug/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
@@ -179,12 +197,15 @@ app_pid=$!
 # toplevel and never appears in sway's get_tree, so we assert on the app's own
 # "mapped" log — proof the compositor accepted the layer-shell handshake and
 # sent a configure. A normal window we detect by its app_id in the tree.
+# The Finder is its own application (its own app_id), not the demo shell.
+app_id="org.abyssbsd.aquademo"
+[ "$scene" = "finder" ] && app_id="org.abyssbsd.finder"
 mapped=0
 for _ in $(seq 1 32); do
   if [ -n "$is_layer" ]; then
     grep -q 'LayerSurface: mapped' "$app_log" && { mapped=1; break; }
   else
-    if swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.aquademo"'; then
+    if swaymsg -t get_tree 2>/dev/null | grep -q "\"app_id\": \"$app_id\""; then
       mapped=1; break
     fi
   fi
@@ -194,6 +215,13 @@ done
 [ "$mapped" = 1 ] || { echo "FAIL: surface never mapped"; cat "$app_log"; exit 1; }
 [ -n "$is_layer" ] && echo "layer surface mapped: $(grep 'LayerSurface: mapped' "$app_log" | head -1)"
 sleep 1  # let a couple of frames paint
+
+if [ "$finder" = "--finder" ]; then
+  # readdir + sort + the dot-file filter, against a directory we control.
+  grep -q "Finder: listed $finderdir (4 items)" "$app_log" \
+    || { echo "FAIL: Finder didn't list the seeded directory"; cat "$app_log"; exit 1; }
+  echo "finder: $(grep 'Finder: listed' "$app_log" | head -1)"
+fi
 
 if [ "$reload" = "--reload" ]; then
   # Config-driven: the initial desktop.ini set a gradient.
@@ -225,6 +253,7 @@ if [ "$click" = "--click" ]; then
     tabs)    vpw=480; vph=380 ;;
     sheet)   vpw=440; vph=320 ;;
     menubar|dock) vpw=800; vph=600 ;;
+    finder)  vpw=520; vph=400 ;;
     *)       vpw=440; vph=300 ;;
   esac
   vp_log=$(mktemp)
@@ -266,6 +295,33 @@ if [ "$click" = "--click" ]; then
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
     sleep 0.4
+  elif [ "$finder" = "--finder" ]; then
+    # The icon grid: cell 1 (0-based) is "Documents" — 10px pad + one 88px cell,
+    # under the 22px title bar and the 36px toolbar. Click once to select, again
+    # (inside the double-click window) to browse into it.
+    printf 'm 142 96\np\nr\n' >&3
+    sleep 0.15
+    printf 'p\nr\n' >&3
+    sleep 0.8
+    grep -q 'Finder: selected Documents' "$app_log" \
+      || { echo "FAIL: click didn't select Documents"; cat "$app_log"; exit 1; }
+    grep -q "Finder: opened $finderdir/Documents" "$app_log" \
+      || { echo "FAIL: double-click didn't open Documents"; cat "$app_log"; exit 1; }
+    grep -q "Finder: listed $finderdir/Documents (2 items)" "$app_log" \
+      || { echo "FAIL: Documents listed the wrong contents"; cat "$app_log"; exit 1; }
+    echo "finder: double-click browsed into Documents (2 items)"
+    # Back returns to the parent (the 10.2 Finder browses in place).
+    printf 'm 27 40\np\nr\n' >&3
+    sleep 0.6
+    grep -q "Finder: back to $finderdir" "$app_log" \
+      || { echo "FAIL: Back didn't return to the parent"; cat "$app_log"; exit 1; }
+    echo "finder: Back returned to the parent"
+    # The toolbar's view switch: the right segment is list view.
+    printf 'm 99 40\np\nr\n' >&3
+    sleep 0.6
+    grep -q 'Finder: view -> list' "$app_log" \
+      || { echo "FAIL: the view switch didn't select list view"; cat "$app_log"; exit 1; }
+    echo "finder: switched to list view"
   elif [ "$dock_mode" = "--dock" ]; then
     # Hover over the Dock (near a left-of-centre tile) to trigger magnification,
     # then capture NOW while the pointer is present (magnification is hover-
@@ -371,6 +427,24 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
       sleep 0.3
     else
     case "$scene" in
+      finder)
+        # Keyboard browsing: Home selects the first row, Enter opens it,
+        # Backspace goes back up to the parent. (Back left "Documents"
+        # selected — the Finder highlights the folder you came out of — so
+        # Home, not Down, is what pins the selection to Applications.) Raw
+        # evdev: Home=102 Enter=28 Backspace=14.
+        printf 'k 102\n' >&4
+        sleep 0.3
+        printf 'k 28\n'  >&4
+        sleep 0.6
+        grep -q "Finder: opened $finderdir/Applications" "$app_log" \
+          || { echo "FAIL: Enter didn't open the selected folder"; cat "$app_log"; exit 1; }
+        printf 'k 14\n'  >&4   # Backspace: up to the parent
+        sleep 0.6
+        grep -q "Finder: opened $finderdir\$" "$app_log" \
+          || { echo "FAIL: Backspace didn't go up to the parent"; cat "$app_log"; exit 1; }
+        echo "finder: keyboard opened Applications and went back up"
+        ;;
       sheet)
         # Space opens the sheet from the keyboard; leave it open for the shot.
         printf 'k 57\n' >&4

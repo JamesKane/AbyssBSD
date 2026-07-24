@@ -326,6 +326,11 @@ public final class Window {
               delegate: delegate)
     }
 
+    /// Retitle the toplevel (the Finder does this as it browses).
+    public func setTitle(_ title: String) {
+        title.withCString { aw_xdg_toplevel_set_title(raw(xdgToplevel), $0) }
+    }
+
     /// Logical (surface) size, useful to the toolkit for layout.
     public var size: (width: Int32, height: Int32) { (logicalW, logicalH) }
 }

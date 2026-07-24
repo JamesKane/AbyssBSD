@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-07-20.
+Last updated: 2026-07-24.
 
 ## What this is
 
@@ -32,7 +32,12 @@ File/Edit/View/…, and a live clock — clicking a title opens a real Aqua drop
 (`AQUA_SCENE=dock`): a layer-shell BOTTOM shelf that **magnifies** under the
 pointer, with running-app indicators driven by **`wlr-foreign-toplevel-management`**
 (`Surface.ForeignToplevels`) and the Trash — clicking a running tile activates its
-window (![dock](screenshots/live-dock.png)). See [PHASE2.md](PHASE2.md) for the
+window (![dock](screenshots/live-dock.png)). P2.6 added the **Finder**
+(`AQUA_SCENE=finder`) — the first shell piece that is an ordinary xdg-shell
+*application* rather than a layer surface: real `readdir` listings in an Aqua
+icon grid or list view, browsing in place with a toolbar Back button, a
+scrollbar, and full keyboard navigation
+(![finder](screenshots/live-finder.png)). See [PHASE2.md](PHASE2.md) for the
 ordered scope.
 
 ## Current state — Phase 1 vertical slice works
@@ -45,8 +50,9 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (33 green — Aqua toolkit + desktop
-  config + menu-bar layout + Dock magnification, PoolConfig read/write/watch).
+- Build: `swift build`. Tests: `swift test` (44 green — Aqua toolkit + desktop
+  config + menu-bar layout + Dock magnification + the Finder's listing/geometry
+  model, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -122,6 +128,21 @@ from the title bar (animated), dims and blocks the parent, and dismisses via its
 Cancel/Delete buttons — recording the choice below (`de/aqua/Sheet.swift`):
 ![sheet](screenshots/sheet.png)
 
+The **Finder** (`AQUA_SCENE=finder`) is the first real *application*: a Jaguar
+browser window over the live filesystem — a toolbar with Back and an icon/list
+view switch, a white item well with original procedural folder / document /
+application / volume icons, an Aqua scrollbar, and the "12 items, 39.6 GB
+available" status bar (`de/aqua/Finder.swift` + the pure `FinderModel.swift`):
+![finder](screenshots/finder.png) ![finder list view](screenshots/finder-list.png)
+
+Click selects, double-click browses into a folder *in place* (the 10.2 Finder is
+a browser, not a spatial file manager — and it is standard Aqua, since brushed
+metal is a 10.3 texture), Back returns and re-selects the folder you came out of.
+The keyboard drives it all: arrows (a whole row at a time in icon view), Home /
+End, Return to open, Backspace to go up, Page keys to scroll, Tab to switch view,
+and type-ahead selection. It reads `finder.ini` (`view`, `show_hidden`) and starts
+in `$ABYSS_FINDER_DIR` (else `$HOME`).
+
 The window also **tracks its output's scale** (`wl_output` + `wl_surface`
 enter/leave): drop it on a HiDPI (scale-2) output and it re-cuts its buffers and
 repaints crisp at 2× with no `AQUA_SCALE` — that env var is now just an optional
@@ -187,6 +208,11 @@ abyss/tests/live-sway.sh wallpaper /tmp/wall.png         # a layer-shell BACKGRO
 abyss/tests/live-sway.sh --reload  /tmp/wall.png         # desktop.ini config + hot-reload
 abyss/tests/live-sway.sh --menubar /tmp/mbar.png         # menu bar (TOP) + open a dropdown
 abyss/tests/live-sway.sh --dock    /tmp/dock.png         # Dock (BOTTOM) magnify + foreign-toplevel
+abyss/tests/live-sway.sh --finder  /tmp/finder.png       # browse a seeded dir: open, Back, list view
+abyss/tests/live-sway.sh --finder --keys /tmp/fkeys.png  # ... and drive it from the keyboard
+
+# Finder (an ordinary xdg-shell app) over a real directory:
+ABYSS_FINDER_DIR=~/Documents AQUA_SCENE=finder .build/debug/AquaDemo
 
 # Wallpaper (layer-shell) PNG preview, no compositor:
 AQUA_SCENE=wallpaper AQUA_RENDER_PNG=/tmp/wall.png .build/debug/AquaDemo
@@ -235,7 +261,8 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 - **Phase 2:** scoped in detail in [PHASE2.md](PHASE2.md). The shell as Wayland
   clients against sway (no compositor work — `tide` is reused in Phase 3):
   layer-shell in `Surface`, then Desktop/wallpaper, `PoolConfig`, MenuBar, Dock
-  (new — magnifying), Finder. `CurrentIPC` (binds FreeBSD-only libnv — absent on
+  (new — magnifying), Finder (first pass done: browse/select/open, icon + list
+  views; file *operations* and multi-window are the remaining Finder work). `CurrentIPC` (binds FreeBSD-only libnv — absent on
   this Linux box) is deferred to the phase tail or Phase 3; it carries only the
   control plane, not the visible desktop. Protocol XMLs already vendored in
   `protocols/`.

@@ -438,6 +438,196 @@ final class AquaTests: XCTestCase {
         let h = DockMetrics.surfaceHeight(tileSize: 48)
         XCTAssertGreaterThan(h, 48 * DockMetrics.maxScale)
     }
+
+    // MARK: Finder — listing model
+
+    func testFinderSortIsCaseInsensitiveAndInterleaved() {
+        // The Mac Finder sorts one alphabetical run: folders do NOT float to the
+        // top (that's the GNOME-2 behaviour the Rust sibling had).
+        let sorted = finderSort([
+            FinderEntry(name: "zebra.txt", kind: .document),
+            FinderEntry(name: "Apps", kind: .folder),
+            FinderEntry(name: "banana.txt", kind: .document),
+            FinderEntry(name: "Cats", kind: .folder),
+        ])
+        XCTAssertEqual(sorted.map(\.name), ["Apps", "banana.txt", "Cats", "zebra.txt"])
+    }
+
+    func testFinderKindDetectsAppBundle() {
+        XCTAssertEqual(finderKind(name: "TextEdit.app", isDirectory: true), .application)
+        XCTAssertEqual(finderKind(name: "Documents", isDirectory: true), .folder)
+        XCTAssertEqual(finderKind(name: "notes.txt", isDirectory: false), .document)
+        // A *file* called foo.app is still a document, not a bundle.
+        XCTAssertEqual(finderKind(name: "foo.app", isDirectory: false), .document)
+    }
+
+    func testFinderPathHelpers() {
+        XCTAssertEqual(finderJoin("/home/abyss", "Docs"), "/home/abyss/Docs")
+        XCTAssertEqual(finderJoin("/", "usr"), "/usr")
+        XCTAssertEqual(finderParent("/home/abyss/Docs"), "/home/abyss")
+        XCTAssertEqual(finderParent("/home"), "/")
+        XCTAssertNil(finderParent("/"))
+        XCTAssertEqual(finderDisplayName("/home/abyss/Docs"), "Docs")
+        XCTAssertEqual(finderDisplayName("/home/abyss/"), "abyss")  // trailing slash
+        XCTAssertEqual(finderDisplayName("/"), "Computer")
+    }
+
+    func testFinderFormatBytesAndStatusText() {
+        XCTAssertEqual(finderFormatBytes(0), "0 bytes")
+        XCTAssertEqual(finderFormatBytes(1), "1 byte")
+        XCTAssertEqual(finderFormatBytes(4_812), "4.8 KB")
+        XCTAssertEqual(finderFormatBytes(61_440), "61.4 KB")
+        XCTAssertEqual(finderFormatBytes(39_600_000_000), "39.6 GB")
+        XCTAssertEqual(finderStatusText(count: 1, freeBytes: 0), "1 item")
+        XCTAssertEqual(finderStatusText(count: 12, freeBytes: 39_600_000_000),
+                       "12 items, 39.6 GB available")
+    }
+
+    func testFinderTypeSelectWrapsAndIsCaseInsensitive() {
+        let e = finderSampleEntries()   // Applications … TextEdit.app
+        let first = finderTypeSelect(e, prefix: "m", after: nil)
+        XCTAssertEqual(e[first!].name, "Movies")
+        // The next "m" advances to Music, then wraps back to Movies.
+        let second = finderTypeSelect(e, prefix: "M", after: first)
+        XCTAssertEqual(e[second!].name, "Music")
+        let third = finderTypeSelect(e, prefix: "m", after: second)
+        XCTAssertEqual(e[third!].name, "Movies")
+        XCTAssertNil(finderTypeSelect(e, prefix: "q", after: nil))
+    }
+
+    // MARK: Finder — geometry (the same pure functions paint and hit-test use)
+
+    func testFinderLayoutSplitsTheWindow() {
+        let L = finderLayout(w: 520, h: 400)
+        // Toolbar sits under the title bar; the status bar is the last strip.
+        XCTAssertEqual(L.toolbar.y, Theme.titleBarHeight, accuracy: 0.001)
+        XCTAssertEqual(L.status.y + L.status.h, 400, accuracy: 0.001)
+        // The content well stops short of the scrollbar and never overlaps the
+        // status bar.
+        XCTAssertEqual(L.content.w, 520 - FinderMetrics.scrollbarWidth, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(L.content.y + L.content.h, L.status.y + 0.001)
+        // Both scroll arrows are paired at the bottom (the Jaguar default).
+        XCTAssertGreaterThan(L.upArrow.y, L.track.y + L.track.h - 0.001)
+        XCTAssertEqual(L.downArrow.y, L.upArrow.y + L.upArrow.h, accuracy: 0.001)
+    }
+
+    func testFinderIconGridHitTestRoundTrips() {
+        let L = finderLayout(w: 520, h: 400)
+        let vp = finderItemViewport(L, view: .icon)
+        let count = 12
+        let cols = finderColumns(viewportW: vp.w)
+        XCTAssertGreaterThan(cols, 1)
+        // Every item's own cell centre hit-tests back to that item.
+        for i in 0..<count {
+            let r = finderItemRect(i, view: .icon, viewport: vp, scroll: 0)
+            let hit = finderIndex(atX: r.x + r.w / 2, y: r.y + r.h / 2, count: count,
+                                  view: .icon, viewport: vp, scroll: 0)
+            XCTAssertEqual(hit, i)
+        }
+        // Empty space past the last item hits nothing.
+        let past = finderItemRect(count, view: .icon, viewport: vp, scroll: 0)
+        XCTAssertNil(finderIndex(atX: past.x + 4, y: past.y + 4, count: count,
+                                 view: .icon, viewport: vp, scroll: 0))
+    }
+
+    func testFinderListHitTestFollowsScroll() {
+        let L = finderLayout(w: 520, h: 400)
+        let vp = finderItemViewport(L, view: .list)
+        // The list view's rows start below the column header.
+        XCTAssertEqual(vp.y, L.content.y + finderListHeaderHeight, accuracy: 0.001)
+        let count = 60
+        let scroll = 5 * FinderMetrics.rowHeight
+        // Scrolled by five rows, the top row is item 5.
+        XCTAssertEqual(finderIndex(atX: vp.x + 10, y: vp.y + 1, count: count,
+                                   view: .list, viewport: vp, scroll: scroll), 5)
+    }
+
+    func testFinderScrollToShowRevealsOffscreenItems() {
+        let L = finderLayout(w: 520, h: 400)
+        let vp = finderItemViewport(L, view: .icon)
+        let count = 60
+        let maxS = finderMaxScroll(count: count, view: .icon, viewport: vp)
+        XCTAssertGreaterThan(maxS, 0)
+
+        // Scrolling to the last item pins the bottom and shows it in full.
+        let s = finderScrollToShow(count - 1, scroll: 0, count: count,
+                                   view: .icon, viewport: vp)
+        XCTAssertEqual(s, maxS, accuracy: 0.001)
+        let last = finderItemRect(count - 1, view: .icon, viewport: vp, scroll: s)
+        XCTAssertLessThanOrEqual(last.y + last.h, vp.y + vp.h + 0.001)
+        // Coming back to item 0 scrolls to the top.
+        XCTAssertEqual(finderScrollToShow(0, scroll: s, count: count,
+                                          view: .icon, viewport: vp), 0, accuracy: 0.001)
+        // An already-visible item doesn't move the view.
+        XCTAssertEqual(finderScrollToShow(1, scroll: 0, count: count,
+                                          view: .icon, viewport: vp), 0, accuracy: 0.001)
+    }
+
+    func testFinderArrowMotionStepsRowsAndClamps() {
+        let L = finderLayout(w: 520, h: 400)
+        let vp = finderItemViewport(L, view: .icon)
+        let cols = finderColumns(viewportW: vp.w)
+        let count = 12
+        // No selection yet: any arrow starts at the first item.
+        XCTAssertEqual(finderMove(from: nil, dx: 1, dy: 0, count: count,
+                                  view: .icon, viewport: vp), 0)
+        // Down moves a whole row in icon view, one item in list view.
+        XCTAssertEqual(finderMove(from: 0, dx: 0, dy: 1, count: count,
+                                  view: .icon, viewport: vp), cols)
+        XCTAssertEqual(finderMove(from: 0, dx: 0, dy: 1, count: count,
+                                  view: .list, viewport: vp), 1)
+        // Motion clamps at both ends rather than wrapping.
+        XCTAssertEqual(finderMove(from: 0, dx: -1, dy: 0, count: count,
+                                  view: .icon, viewport: vp), 0)
+        XCTAssertEqual(finderMove(from: count - 1, dx: 0, dy: 1, count: count,
+                                  view: .icon, viewport: vp), count - 1)
+    }
+
+    // MARK: Finder — the real filesystem
+
+    func testReadDirectorySortsAndHidesDotfiles() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/finder.XXXXXX").utf8CString)
+        guard let dir = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer {
+            for n in ["beta.txt", ".hidden", "TextEdit.app", "Alpha"] {
+                let p = finderJoin(dir, n)
+                p.withCString { _ = unlink($0) == 0 || rmdir($0) == 0 }
+            }
+            dir.withCString { _ = rmdir($0) }
+        }
+
+        func write(_ name: String, bytes: Int) {
+            let fd = finderJoin(dir, name).withCString { open($0, O_CREAT | O_WRONLY, 0o644) }
+            XCTAssertGreaterThanOrEqual(fd, 0)
+            let data = [UInt8](repeating: 0x41, count: bytes)
+            _ = data.withUnsafeBytes { Glibc.write(fd, $0.baseAddress, bytes) }
+            close(fd)
+        }
+        func makeDir(_ name: String) {
+            finderJoin(dir, name).withCString { _ = mkdir($0, 0o755) }
+        }
+        write("beta.txt", bytes: 1_500)
+        write(".hidden", bytes: 3)
+        makeDir("Alpha")
+        makeDir("TextEdit.app")
+
+        let entries = readDirectory(dir)
+        // Alphabetical, case-insensitive, folders interleaved; dot-file hidden.
+        XCTAssertEqual(entries.map(\.name), ["Alpha", "beta.txt", "TextEdit.app"])
+        XCTAssertEqual(entries[0].kind, .folder)
+        XCTAssertEqual(entries[1].kind, .document)
+        XCTAssertEqual(entries[1].size, 1_500)
+        XCTAssertEqual(entries[2].kind, .application)
+        // ... and shown when asked for.
+        XCTAssertEqual(readDirectory(dir, showHidden: true).count, 4)
+        // An unreadable path lists as empty rather than failing.
+        XCTAssertTrue(readDirectory(finderJoin(dir, "nope")).isEmpty)
+        // Free space on a real volume is non-zero.
+        XCTAssertGreaterThan(finderFreeSpace(dir), 0)
+    }
 }
 
 // A temp dir without importing Foundation (which the toolkit avoids).

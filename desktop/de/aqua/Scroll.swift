@@ -42,16 +42,24 @@ public func scrollLayout(w: Double, h: Double) -> ScrollLayout {
     return L
 }
 
-/// The thumb rect for `offset`, or nil when the content fits (no thumb).
-public func scrollThumbRect(track: Rect, offset: Double,
-                            viewportH: Double) -> Rect? {
-    let contentH = scrollContentHeight()
-    guard contentH > viewportH else { return nil }
+/// The thumb rect for `offset` over content of height `contentH`, or nil when
+/// the content fits (Aqua hides the thumb then). Shared by every scrolling view
+/// — the scroll scene and the Finder both size their thumb from this.
+public func thumbRect(track: Rect, offset: Double, viewportH: Double,
+                      contentH: Double) -> Rect? {
+    guard contentH > viewportH, track.h > 0 else { return nil }
     let thumbH = max(24, track.h * (viewportH / contentH))
     let maxOff = contentH - viewportH
     let t = maxOff > 0 ? max(0, min(1, offset / maxOff)) : 0
     let y = track.y + t * (track.h - thumbH)
     return Rect(track.x + 2, y, track.w - 4, thumbH)
+}
+
+/// The scroll scene's thumb (its content height is fixed).
+public func scrollThumbRect(track: Rect, offset: Double,
+                            viewportH: Double) -> Rect? {
+    thumbRect(track: track, offset: offset, viewportH: viewportH,
+              contentH: scrollContentHeight())
 }
 
 /// Paint the scroll scene and return its (offset-independent) layout.

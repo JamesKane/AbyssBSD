@@ -10,7 +10,7 @@ import Glibc
 import Darwin
 #endif
 
-public struct Rect {
+public struct Rect: Equatable, Sendable {
     public var x, y, w, h: Double
     public init(_ x: Double, _ y: Double, _ w: Double, _ h: Double) {
         self.x = x; self.y = y; self.w = w; self.h = h

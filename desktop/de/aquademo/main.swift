@@ -47,6 +47,10 @@ case "menubar":
 case "dock":
     // A wlr-layer-shell BOTTOM client (the magnifying Dock).
     scene = .dock; title = "Dock"; width = 800; height = 600
+case "finder":
+    // The file browser — an ordinary xdg-shell toplevel, not a shell surface.
+    // Starts in $ABYSS_FINDER_DIR (else $HOME).
+    scene = .finder; title = "Finder"; width = 520; height = 400
 default:
     scene = .window; title = "AbyssBSD"; width = 440; height = 300
 }
@@ -95,6 +99,14 @@ if scene == .wallpaper {
     }
     print("AquaDemo: Dock (layer-shell BOTTOM) is up.")
     withExtendedLifetime(dock) { display.run() }
+} else if scene == .finder {
+    guard let finder = FinderWindow(display: display, width: width, height: height)
+    else {
+        print("AquaDemo: failed to create the Finder window.")
+        exit(1)
+    }
+    print("AquaDemo: Finder is up (\(FinderWindow.startDirectory())).")
+    withExtendedLifetime(finder) { display.run() }
 } else {
     guard let window = AquaWindow(display: display, title: title, scene: scene,
                                   width: width, height: height) else {

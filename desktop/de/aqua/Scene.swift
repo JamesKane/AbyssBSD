@@ -20,6 +20,7 @@ public enum SceneKind: Sendable {
     case wallpaper   // full-bleed desktop backdrop (a layer-shell client live)
     case menubar     // the top menu bar (a layer-shell TOP client live)
     case dock        // the magnifying Dock (a layer-shell BOTTOM client live)
+    case finder      // the file browser (an ordinary xdg-shell toplevel)
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
@@ -303,6 +304,15 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
+    case .finder:
+        // A fixed synthetic home folder, so the preview is reproducible on any
+        // machine (the live FinderWindow reads the real filesystem).
+        let entries = finderSampleEntries()
+        let listView = getenv("AQUA_FINDER_VIEW").map { String(cString: $0) } == "list"
+        paintFinder(cr, w: cw, h: ch,
+                    state: FinderState(path: "/Users/abyss", entries: entries,
+                                       selection: 2, view: listView ? .list : .icon,
+                                       freeBytes: 39_600_000_000))
     case .wallpaper, .menubar, .dock:
         break  // handled full-bleed above
     }
