@@ -37,8 +37,12 @@ window (![dock](screenshots/live-dock.png)). P2.6 added the **Finder**
 *application* rather than a layer surface: real `readdir` listings in an Aqua
 icon grid or list view, browsing in place with a toolbar Back button, a
 scrollbar, and full keyboard navigation
-(![finder](screenshots/live-finder.png)). See [PHASE2.md](PHASE2.md) for the
-ordered scope.
+(![finder](screenshots/live-finder.png)). Its second pass added **spatial
+mode**: hide the toolbar with the title bar's pill and every folder gets its own
+window, with **xdg-activation** raising one that's already open
+(![spatial finder](screenshots/live-finder-spatial.png)) — which made the client
+runtime multi-window (`Display` routes input **by wl_surface**). See
+[PHASE2.md](PHASE2.md) for the ordered scope.
 
 ## Current state — Phase 1 vertical slice works
 
@@ -50,7 +54,7 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (44 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (45 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
@@ -76,8 +80,12 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     `WindowDelegate`/`LayerSurfaceDelegate`/`PopupDelegate`/`PixelBuffer`. Input
     routes to the window *or* the layer surface (one per process). Also
     `ForeignToplevels` (tracks running apps via
-    `wlr-foreign-toplevel-management`, for the Dock) and an
+    `wlr-foreign-toplevel-management`, for the Dock), **xdg-activation**
+    (`Display.activate(surface:)` — how a client raises its own window), and an
     `addFileDescriptor` hook to fold config-watch / timer fds into the run loop.
+    `Display` holds a weak **window registry** and routes pointer/keyboard by the
+    `wl_surface` the `enter` events name, so one process can run many windows
+    (the spatial Finder).
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text, and the control set: checkbox,
     radio, slider, pop-up button, progress bar, text field, group box,
@@ -136,8 +144,15 @@ available" status bar (`de/aqua/Finder.swift` + the pure `FinderModel.swift`):
 ![finder](screenshots/finder.png) ![finder list view](screenshots/finder-list.png)
 
 Click selects, double-click browses into a folder *in place* (the 10.2 Finder is
-a browser, not a spatial file manager — and it is standard Aqua, since brushed
-metal is a 10.3 texture), Back returns and re-selects the folder you came out of.
+a browser by default — and it is standard Aqua, since brushed metal is a 10.3
+texture), Back returns and re-selects the folder you came out of. Clicking the
+title bar's **pill** hides the toolbar and switches to **spatial mode**, where
+each folder opens in its own window, re-opening an open folder raises it (via
+xdg-activation) instead of duplicating it, and the red light closes one window —
+the app quits with the last. The mode persists to `finder.ini`.
+![spatial finder](screenshots/live-finder-spatial.png)
+(A Wayland client can't position its own windows, so the "remembered position"
+part of spatial Finder waits for `tide` in Phase 3; size/view/mode do persist.)
 The keyboard drives it all: arrows (a whole row at a time in icon view), Home /
 End, Return to open, Backspace to go up, Page keys to scroll, Tab to switch view,
 and type-ahead selection. It reads `finder.ini` (`view`, `show_hidden`) and starts
@@ -210,6 +225,7 @@ abyss/tests/live-sway.sh --menubar /tmp/mbar.png         # menu bar (TOP) + open
 abyss/tests/live-sway.sh --dock    /tmp/dock.png         # Dock (BOTTOM) magnify + foreign-toplevel
 abyss/tests/live-sway.sh --finder  /tmp/finder.png       # browse a seeded dir: open, Back, list view
 abyss/tests/live-sway.sh --finder --keys /tmp/fkeys.png  # ... and drive it from the keyboard
+abyss/tests/live-sway.sh --spatial /tmp/spatial.png      # spatial: 2 windows, raise, close one
 
 # Finder (an ordinary xdg-shell app) over a real directory:
 ABYSS_FINDER_DIR=~/Documents AQUA_SCENE=finder .build/debug/AquaDemo

@@ -17,6 +17,7 @@
 #include "xdg-shell-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
+#include "xdg-activation-v1-client-protocol.h"
 
 /*
  * Create an anonymous, writable shared-memory fd of `size` bytes, suitable for
@@ -115,6 +116,18 @@ void *aw_bind_foreign_toplevel_manager(void *registry, uint32_t name, uint32_t v
 void aw_foreign_toplevel_handle_activate(void *handle, void *seat);
 void aw_foreign_toplevel_handle_close(void *handle);
 void aw_foreign_toplevel_handle_destroy(void *handle);
+
+/* xdg-activation: the client asks the compositor for an activation token (tied
+ * to a real input serial), then activates a surface with it — the sanctioned way
+ * to raise/focus one of your own windows. The Finder uses it in spatial mode to
+ * bring an already-open folder's window forward. */
+void *aw_bind_xdg_activation(void *registry, uint32_t name, uint32_t version);
+void *aw_xdg_activation_get_token(void *activation);
+void aw_xdg_activation_token_set_serial(void *token, uint32_t serial, void *seat);
+void aw_xdg_activation_token_set_surface(void *token, void *surface);
+void aw_xdg_activation_token_commit(void *token);
+void aw_xdg_activation_token_destroy(void *token);
+void aw_xdg_activation_activate(void *activation, const char *token, void *surface);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);

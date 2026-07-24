@@ -23,6 +23,22 @@ public enum SceneKind: Sendable {
     case finder      // the file browser (an ordinary xdg-shell toplevel)
 }
 
+/// The toolbar-toggle pill at the title bar's right. In the Finder this is the
+/// switch between browser mode (toolbar shown) and spatial mode (hidden), so
+/// paint and hit-test both take it from here.
+public func windowPillRect(w: Double) -> Rect {
+    Rect(w - 30, Theme.titleBarHeight / 2 - 6.5, 22, 13)
+}
+
+/// Hit rects for the three traffic lights, in title-bar order.
+public func windowTrafficRects() -> (close: Rect, minimize: Rect, zoom: Rect) {
+    let r = Theme.trafficRadius
+    let cy = Theme.titleBarHeight / 2
+    let x0 = Theme.trafficInset + r
+    func box(_ cx: Double) -> Rect { Rect(cx - r, cy - r, 2 * r, 2 * r) }
+    return (box(x0), box(x0 + Theme.trafficSpacing), box(x0 + 2 * Theme.trafficSpacing))
+}
+
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
 /// traffic lights, centred title, toolbar pill, and border. Returns the body
 /// rect below the title bar.
@@ -65,7 +81,7 @@ public func paintWindowChrome(_ cr: OpaquePointer, w: Double, h: Double,
 
     Draw.text(cr, title, centerX: w / 2, centerY: cy, color: Theme.titleText,
               size: Theme.fontSize)
-    Draw.pill(cr, Rect(w - 30, cy - 6.5, 22, 13))
+    Draw.pill(cr, windowPillRect(w: w))
 
     cairo_restore(cr)
 

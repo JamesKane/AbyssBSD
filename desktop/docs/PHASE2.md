@@ -184,14 +184,34 @@ directory: `live-sway.sh --finder [--keys]` browses into a folder, returns via
 Back, switches to list view and repeats it from the keyboard
 (`docs/screenshots/live-finder.png`). See HANDOFF §2.21.
 
-**Fidelity correction (deliberate):** the scope sketch above said "spatial
-multi-window", inherited from `reef-fm`. The **10.2 Finder is a browser** — a
-toolbar window that navigates in place, where hiding the toolbar is what gives
-you a spatial window. So this pass browses in place; the toolbar-hidden spatial
-mode (and with it multi-window routing, which needs `Display` to route input by
-surface rather than to one primary window) is deferred to the Finder's second
-pass, along with `xdg-activation` (raise an existing window), file operations
-(new folder / rename / delete / copy) and launching what you double-click.
+**Fidelity note:** the scope sketch above said "spatial multi-window", inherited
+from `reef-fm`. The **10.2 Finder is a browser by default** — a toolbar window
+that navigates in place — and hiding the toolbar is what makes it spatial. Both
+modes now exist, switched by the title bar's pill (see the spatial pass below).
+
+**P2.6b — spatial mode + multi-window. ✅ done.**
+Clicking the pill hides the toolbar and switches the Finder to **spatial**: each
+folder opens in its own window (`FinderApp` owns them all), re-opening a folder
+that already has a window **raises** it via **xdg-activation** (protocol
+generated + bound this pass), the red traffic light closes a single window, and
+the process exits with the last one. The mode persists to `finder.ini`
+(`toolbar`). That required the client runtime to go multi-window: `Display` now
+keeps a weak **window registry** and routes pointer/keyboard **by wl_surface**
+(from the `enter` events) instead of to one primary window, and `Window` gained
+`close()` (teardown-guarded), `activate()` and a `windowShouldClose` delegate
+hook so closing one window no longer stops the process. Verified live:
+`live-sway.sh --spatial` hides the toolbar, opens a second real toplevel
+(asserted in sway's tree), re-opens to a raise rather than a duplicate, and
+closes one window with the app still running
+(`docs/screenshots/live-finder-spatial.png`). See HANDOFF §2.22.
+
+**Known limitation (protocol, not laziness):** a Wayland client can't position
+its own windows, so the "remembered window position" half of spatial Finder isn't
+expressible here — sway places them. Size/view/mode we can and do persist;
+position waits for `tide` in Phase 3.
+
+Remaining Finder work: file operations (new folder / rename / delete / copy),
+launching what you double-click, and desktop icons.
 
 **P2.7 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the

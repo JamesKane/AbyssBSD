@@ -227,6 +227,39 @@ void aw_foreign_toplevel_handle_destroy(void *handle) {
         (struct zwlr_foreign_toplevel_handle_v1 *)handle);
 }
 
+void *aw_bind_xdg_activation(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &xdg_activation_v1_interface, version);
+}
+
+void *aw_xdg_activation_get_token(void *activation) {
+    return xdg_activation_v1_get_activation_token(
+        (struct xdg_activation_v1 *)activation);
+}
+
+void aw_xdg_activation_token_set_serial(void *token, uint32_t serial, void *seat) {
+    xdg_activation_token_v1_set_serial((struct xdg_activation_token_v1 *)token,
+                                       serial, (struct wl_seat *)seat);
+}
+
+void aw_xdg_activation_token_set_surface(void *token, void *surface) {
+    xdg_activation_token_v1_set_surface((struct xdg_activation_token_v1 *)token,
+                                        (struct wl_surface *)surface);
+}
+
+void aw_xdg_activation_token_commit(void *token) {
+    xdg_activation_token_v1_commit((struct xdg_activation_token_v1 *)token);
+}
+
+void aw_xdg_activation_token_destroy(void *token) {
+    xdg_activation_token_v1_destroy((struct xdg_activation_token_v1 *)token);
+}
+
+void aw_xdg_activation_activate(void *activation, const char *token, void *surface) {
+    xdg_activation_v1_activate((struct xdg_activation_v1 *)activation, token,
+                               (struct wl_surface *)surface);
+}
+
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }

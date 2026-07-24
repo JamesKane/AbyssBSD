@@ -24,6 +24,7 @@ let package = Package(
             sources: ["xdg-shell-protocol.c",
                       "wlr-layer-shell-unstable-v1-protocol.c",
                       "wlr-foreign-toplevel-management-unstable-v1-protocol.c",
+                      "xdg-activation-v1-protocol.c",
                       "cwayland_shm.c", "cwayland_shim.c"],
             publicHeadersPath: "include",
             linkerSettings: [.linkedLibrary("wayland-client")]

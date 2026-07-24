@@ -48,6 +48,7 @@ public final class Display {
     var seat: OpaquePointer?
     var wmBase: OpaquePointer?
     var layerShell: OpaquePointer?
+    var activation: OpaquePointer?
     var pointer: OpaquePointer?
     var keyboard: OpaquePointer?
 
@@ -63,11 +64,26 @@ public final class Display {
     // xkbcommon translation for keyboard input; created lazily with the seat.
     let keyboardState = KeyboardState()
 
-    // The (single, for now) primary surface that receives input + drives frames.
-    // A process runs either an xdg-shell app (window) or a shell component
-    // (layerSurface) — exactly one is set. Input routes to whichever is present.
+    // Every live Window, so input can be routed to the one the event names.
+    // Held weakly: the caller owns its windows (see HANDOFF §2.7).
+    private final class WeakWindow {
+        weak var window: Window?
+        init(_ w: Window) { window = w }
+    }
+    private var windowRegistry: [WeakWindow] = []
+
+    // The primary window: set to the first one registered, and used as the
+    // fallback target before the first pointer/keyboard `enter` names a surface.
+    // A process runs either xdg-shell windows or a shell component
+    // (layerSurface); input routes to whichever is present.
     public weak var window: Window?
     public weak var layerSurface: LayerSurface?
+
+    // Which window the pointer is over / the keyboard is focused on. Both come
+    // from the `enter` events, which carry the wl_surface — that is what makes a
+    // multi-window app (the spatial Finder) route correctly.
+    private weak var pointerWindow: Window?
+    private weak var keyboardWindow: Window?
 
     // The active grabbing popup (menu), if any. Weak — the caller owns it; we
     // just route input to it and clear on teardown. Set in Popup.init.
@@ -133,6 +149,38 @@ public final class Display {
         wl_display_disconnect(display)
     }
 
+    // MARK: window registry
+
+    /// Called by Window.init. The first window becomes the primary one.
+    func register(window w: Window) {
+        windowRegistry.removeAll { $0.window == nil }
+        windowRegistry.append(WeakWindow(w))
+        if window == nil { window = w }
+    }
+
+    /// Called by Window.close/deinit; promotes another window to primary.
+    func unregister(window w: Window) {
+        windowRegistry.removeAll { $0.window == nil || $0.window === w }
+        if pointerWindow === w { pointerWindow = nil }
+        if keyboardWindow === w { keyboardWindow = nil }
+        if window === w { window = windowRegistry.first?.window }
+    }
+
+    /// The window owning `surface`, if it's one of ours.
+    func window(forSurface surface: OpaquePointer?) -> Window? {
+        guard let surface else { return nil }
+        for box in windowRegistry where box.window?.surface == surface {
+            return box.window
+        }
+        return nil
+    }
+
+    /// The surface an activation request should claim to come from: whatever
+    /// currently holds keyboard focus (else the primary window's).
+    var activationSourceSurface: OpaquePointer? {
+        (keyboardWindow ?? window)?.surface
+    }
+
     // Store a copy of `listener` on the heap and register it on `proxy`.
     func addListener<L>(to proxy: OpaquePointer, listener: L,
                         data: UnsafeMutableRawPointer) {
@@ -178,6 +226,10 @@ public final class Display {
             layerShell = opt(aw_bind_layer_shell(raw(registry), name, min(version, 4)))
         case "zwlr_foreign_toplevel_manager_v1":
             foreignToplevelManager = (name, min(version, 3))
+        case "xdg_activation_v1":
+            // No events on the manager itself, so it binds with no listener;
+            // the per-request token object is the thing that reports back.
+            activation = opt(aw_bind_xdg_activation(raw(registry), name, min(version, 1)))
         case "wl_output":
             // v2 is where the `scale` event lands (and `done` batches props).
             guard let o = opt(aw_bind_output(raw(registry), name, min(version, 2)))
@@ -287,20 +339,21 @@ public final class Display {
     }
 
     // Which surface is the pointer over? A live popup surface wins (it has the
-    // grab); otherwise the window.
+    // grab); otherwise it names one of our windows (or the layer surface).
     private func updatePointerTarget(_ surface: OpaquePointer?) {
         if let surface, let popup = activePopup, surface == popup.surface {
             pointerOnPopup = true
-        } else {
-            pointerOnPopup = false
+            return
         }
+        pointerOnPopup = false
+        if let w = window(forSurface: surface) { pointerWindow = w }
     }
 
     private func routePointerMotion(_ sx: Int32, _ sy: Int32) {
         if pointerOnPopup, let popup = activePopup {
             popup.pointerMoved(fx: sx, fy: sy)
-        } else if let window {
-            window.pointerMoved(fx: sx, fy: sy)
+        } else if let w = pointerWindow ?? window {
+            w.pointerMoved(fx: sx, fy: sy)
         } else {
             layerSurface?.pointerMoved(fx: sx, fy: sy)
         }
@@ -309,8 +362,8 @@ public final class Display {
     private func routePointerButton(_ button: UInt32, pressed: Bool) {
         if pointerOnPopup, let popup = activePopup {
             if button == 0x110 { popup.pointerButton(pressed: pressed) }  // BTN_LEFT
-        } else if let window {
-            window.pointerButton(button, pressed: pressed)
+        } else if let w = pointerWindow ?? window {
+            w.pointerButton(button, pressed: pressed)
         } else {
             layerSurface?.pointerButton(button, pressed: pressed)
         }
@@ -319,16 +372,27 @@ public final class Display {
     private func routePointerAxis(_ axis: UInt32, value: Double) {
         // The primary surface scrolls; an open menu just stays put.
         guard !pointerOnPopup else { return }
-        if let window { window.pointerAxis(axis, value: value) }
+        if let w = pointerWindow ?? window { w.pointerAxis(axis, value: value) }
         else { layerSurface?.pointerAxis(axis, value: value) }
     }
 
-    // Keyboard goes to the primary surface (window or shell layer surface). A
-    // grabbing popup does not steal keyboard from our client (see HANDOFF §2.12),
-    // so the window/layer surface forwards to its open menu itself.
+    // Keyboard goes to the focused window (from wl_keyboard.enter) or the shell
+    // layer surface. A grabbing popup does not steal keyboard from our client
+    // (see HANDOFF §2.12), so the window/layer surface forwards to its open menu.
     private func routeKeyEvent(_ ev: KeyEvent) {
-        if let window { window.keyEvent(ev) }
+        if let w = keyboardWindow ?? window { w.keyEvent(ev) }
         else { layerSurface?.keyEvent(ev) }
+    }
+
+    private func keyboardFocus(_ surface: OpaquePointer?) {
+        if let w = window(forSurface: surface) { keyboardWindow = w }
+    }
+
+    private func keyboardBlur(_ surface: OpaquePointer?) {
+        if let w = window(forSurface: surface), keyboardWindow === w {
+            keyboardWindow = nil
+            repeatKey = nil        // don't keep repeating into an unfocused window
+        }
     }
 
     private func bindKeyboard(_ seat: OpaquePointer) {
@@ -343,8 +407,19 @@ public final class Display {
             let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
             d.keyboardState?.loadKeymap(fd: fd, size: size, format: format)
         }
-        kl.enter = { _, _, _, _, _ in }
-        kl.leave = { _, _, _, _ in }
+        // enter/leave carry the focused surface: in a multi-window app that is
+        // what decides where typing goes. (Imported as OpaquePointer?, like
+        // wl_pointer.enter's surface — see HANDOFF §2.10.)
+        kl.enter = { data, _, _, surface, _ in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            d.keyboardFocus(surface)
+        }
+        kl.leave = { data, _, _, surface in
+            guard let data else { return }
+            let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            d.keyboardBlur(surface)
+        }
         kl.key = { data, _, _, _, key, state in
             guard let data else { return }
             let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()

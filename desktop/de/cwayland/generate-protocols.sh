@@ -22,7 +22,6 @@ gen() {
 gen xdg-shell
 gen wlr-layer-shell-unstable-v1
 gen wlr-foreign-toplevel-management-unstable-v1
-# Phase 2 continued (uncomment + add to Package.swift sources):
-# gen xdg-activation-v1
+gen xdg-activation-v1
 
 echo "done."

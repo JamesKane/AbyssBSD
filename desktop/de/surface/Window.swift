@@ -36,6 +36,10 @@ public protocol WindowDelegate: AnyObject {
     // the conformer — an extension-only method would static-dispatch to the
     // default no-op and the override would never run.
     func windowDidRenderFrame(_ window: Window)
+    // The compositor asked this window to close (xdg_toplevel.close). Same
+    // dispatch caveat: declared in the body so an override actually runs. A
+    // multi-window app closes just this window and quits when the last goes.
+    func windowShouldClose(_ window: Window)
 }
 
 public extension WindowDelegate {
@@ -46,6 +50,8 @@ public extension WindowDelegate {
     // Called after each committed frame is released, so a delegate can drive an
     // animation by advancing state and calling setNeedsDisplay(). Default no-op.
     func windowDidRenderFrame(_ window: Window) {}
+    // Single-window default: closing the window ends the process.
+    func windowShouldClose(_ window: Window) { window.stopDisplay() }
 }
 
 final class ShmBuffer {
@@ -122,6 +128,9 @@ public final class Window {
     private var buffers: [ShmBuffer] = []
     private var needsRedraw = true
     private var framePending = false
+    // One-shot teardown guard: close() runs from the delegate, from deinit, and
+    // (indirectly) from the compositor's close event (see HANDOFF §2.10).
+    private var tornDown = false
 
     public init?(display: Display, title: String, appID: String,
                  width: Int32, height: Int32, scale: Int32 = 1,
@@ -165,7 +174,7 @@ public final class Window {
         tll.close = { data, _ in
             guard let data else { return }
             let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
-            w.display.stop()
+            w.delegate?.windowShouldClose(w)
         }
         display.addListener(to: tl, listener: tll, data: me)
 
@@ -189,9 +198,39 @@ public final class Window {
         appID.withCString { aw_xdg_toplevel_set_app_id(raw(tl), $0) }
 
         aw_surface_commit(raw(surf))  // triggers the initial configure
+        display.register(window: self)
     }
 
+    deinit { close() }
+
+    /// Destroy this window's surfaces and drop it from the display's routing.
+    /// Idempotent — a multi-window app calls it, and so does deinit.
+    public func close() {
+        guard !tornDown else { return }
+        tornDown = true
+        display.unregister(window: self)
+        for b in buffers { b.destroy() }
+        buffers.removeAll()
+        aw_proxy_destroy(raw(xdgToplevel))
+        aw_proxy_destroy(raw(xdgSurface))
+        aw_proxy_destroy(raw(surface))
+        wl_display_flush(display.display)
+    }
+
+    /// Ask the compositor to raise/focus this window (xdg-activation). Returns
+    /// false if the compositor doesn't offer the protocol.
+    @discardableResult
+    public func activate() -> Bool {
+        guard !tornDown else { return false }
+        return display.activate(surface: surface)
+    }
+
+    /// End the run loop (the single-window `windowShouldClose` default; `display`
+    /// is internal, so delegates outside Surface reach it through here).
+    public func stopDisplay() { display.stop() }
+
     public func setNeedsDisplay() {
+        guard !tornDown else { return }
         needsRedraw = true
         if !framePending { renderAndCommit() }
     }
@@ -261,6 +300,7 @@ public final class Window {
     }
 
     private func renderAndCommit() {
+        guard !tornDown else { return }
         guard let buf = freeBuffer() else {
             needsRedraw = true  // both busy; retry on release/frame
             return
@@ -291,6 +331,7 @@ public final class Window {
 
     private func frameDone() {
         framePending = false
+        guard !tornDown else { return }
         // Let the delegate advance any animation (it may call setNeedsDisplay).
         // framePending is false here, so that render runs cleanly — unlike a
         // setNeedsDisplay from inside render(), which would re-enter.

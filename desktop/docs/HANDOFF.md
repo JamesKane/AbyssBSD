@@ -305,6 +305,44 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.22 Many windows in one process: route by surface, and you can't place them
+(Phase 2.6b — the spatial Finder.) Hiding the Finder's toolbar makes it spatial
+(one window per folder), which turned the client runtime multi-window:
+
+- **Input routes by `wl_surface`, not by "the window".** `Display` used to hold a
+  single primary `window`; it now keeps a weak registry, and `wl_pointer.enter` /
+  `wl_keyboard.enter` (both carry the surface) select `pointerWindow` /
+  `keyboardWindow`. The old primary stays as the fallback for events that arrive
+  before the first `enter`. Get the keyboard half wrong and typing goes to the
+  wrong folder — with tiled windows both are visible, so it's obvious on screen.
+- **`wl_keyboard.leave` must stop key repeat.** Otherwise a held key keeps
+  repeating into a window that no longer has focus.
+- **`windowShouldClose` is another §2.11 protocol-body case.** `xdg_toplevel.close`
+  used to call `display.stop()` directly, which kills a multi-window app. It's a
+  delegate call now — and declared in the protocol *body*, not just the
+  extension, or the default (stop the display) would static-dispatch and the
+  app's override would never run.
+- **Window teardown needs the popup discipline (§2.10).** One `tornDown` flag,
+  guarded `setNeedsDisplay`/`renderAndCommit`/`frameDone`, destroy proxies, and
+  unregister from `Display` — a frame callback landing after teardown is
+  otherwise a use-after-free.
+- **xdg-activation is a two-step handshake with a lifetime trap.**
+  `get_activation_token` → `set_serial`/`set_surface`/`commit` → the token
+  object's `done` event carries the string, which you then pass to
+  `activate(token, surface)`. The request therefore outlives the call: pass it as
+  `Unmanaged.passRetained(...)` and `takeRetainedValue()` in `done`. Root the
+  token in a **real input serial** (we stash the last pointer serial) or
+  compositors are entitled to ignore it.
+- **A Wayland client cannot position its own windows.** Real spatial Finder
+  remembers each folder's window position; xdg-shell has no set-position, so
+  placement is the compositor's (sway tiles them). What we can persist is size,
+  view and mode — position waits for `tide` in Phase 3. Not a bug to hunt.
+- **Test coordinates shift when a second window appears.** sway tiles, so opening
+  window 2 halves window 1. The `--spatial` test works because the left tile
+  keeps origin (0,0) and its surface-local coordinates; anything aimed at the
+  right-hand window needs the tile offset added (the close-light click is at
+  260+16).
+
 ### 2.21 The Finder: an app, not a shell surface — and POSIX from Swift
 (Phase 2.6.) The Finder is the first component that is an ordinary xdg-shell
 **application** (it reuses `Window`), so the interesting traps were in the model

@@ -2,11 +2,20 @@
 // bar and Dock (wlr-layer-shell shell components), the Finder is an ordinary
 // xdg-shell application: it reuses Surface.Window and the whole Aqua toolkit.
 //
-// Fidelity note: the 10.2 Finder is a *browser*, not a spatial file manager —
-// a toolbar with Back and a view switch, and folders open in place. (Brushed
-// metal arrived with 10.3; Jaguar's Finder is standard Aqua, which is why this
-// reuses paintWindowChrome.) The Rust sibling's `reef-fm` was spatial and
-// GNOME-2 flavoured, so only its structure carries over, not its behaviour.
+// Fidelity note: the 10.2 Finder is a *browser* by default — a toolbar with
+// Back and a view switch, folders opening in place. Clicking the title bar's
+// pill hides the toolbar, and that is exactly what turns it **spatial**: each
+// folder then gets its own window, and re-opening a folder that already has one
+// raises it (via xdg-activation) instead of making a second. Both modes live
+// here, switched by `toolbarVisible`. (Brushed metal arrived with 10.3; Jaguar's
+// Finder is standard Aqua, which is why this reuses paintWindowChrome.) The Rust
+// sibling's `reef-fm` was spatial-only and GNOME-2 flavoured, so only its
+// structure carries over, not its behaviour.
+//
+// One process owns every window: `FinderApp` holds them and routes
+// open/raise/close, while each `FinderWindow` owns one directory's view. Input
+// reaches the right one because `Display` routes by wl_surface (the pointer and
+// keyboard `enter` events name it).
 //
 // Everything geometric lives in FinderModel.swift as pure functions, so the
 // painter below and the pointer/keyboard handlers hit-test identical rects.
@@ -14,6 +23,7 @@
 // Config (domain `finder`, ~/.config/abyss/finder.ini):
 //   view        = icon | list
 //   show_hidden = true | false
+//   toolbar     = true | false   (false = spatial; remembered across launches)
 // Start directory: $ABYSS_FINDER_DIR, else $HOME, else "/".
 
 import Surface
@@ -40,11 +50,13 @@ public struct FinderState {
     public var canGoBack: Bool
     public var freeBytes: UInt64
     public var backPressed: Bool
+    /// Toolbar shown = browser mode; hidden = spatial (one window per folder).
+    public var toolbarVisible: Bool
 
     public init(path: String, entries: [FinderEntry], selection: Int? = nil,
                 scroll: Double = 0, view: FinderView = .icon,
                 canGoBack: Bool = false, freeBytes: UInt64 = 0,
-                backPressed: Bool = false) {
+                backPressed: Bool = false, toolbarVisible: Bool = true) {
         self.path = path
         self.entries = entries
         self.selection = selection
@@ -53,6 +65,7 @@ public struct FinderState {
         self.canGoBack = canGoBack
         self.freeBytes = freeBytes
         self.backPressed = backPressed
+        self.toolbarVisible = toolbarVisible
     }
 }
 
@@ -75,7 +88,7 @@ public func finderItemViewport(_ L: FinderLayout, view: FinderView) -> Rect {
 public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
                         state: FinderState) -> FinderLayout {
     paintWindowChrome(cr, w: w, h: h, title: finderDisplayName(state.path))
-    let L = finderLayout(w: w, h: h)
+    let L = finderLayout(w: w, h: h, toolbarVisible: state.toolbarVisible)
 
     // A small folder proxy icon to the left of the centred title, as the Finder
     // shows for the folder a window represents.
@@ -486,10 +499,79 @@ public func finderTypeSelect(_ entries: [FinderEntry], prefix: String,
     return nil
 }
 
+// MARK: - The application (one process, many windows)
+
+/// Owns every Finder window and the mode they share. In browser mode there is
+/// normally one window that navigates in place; in spatial mode each folder gets
+/// its own, and asking for a folder that already has one raises it.
+public final class FinderApp {
+    private let display: Display
+    private var windows: [FinderWindow] = []
+    private let width: Int32
+    private let height: Int32
+
+    /// Browser (toolbar shown) vs spatial (hidden). Windows inherit this and a
+    /// toggle in any window updates it — the Finder remembers the mode.
+    public private(set) var toolbarVisible: Bool
+
+    public init?(display: Display, path: String? = nil,
+                 width: Int32 = 520, height: Int32 = 400) {
+        self.display = display
+        self.width = width
+        self.height = height
+        let config = (try? Pool.load("finder")) ?? Config()
+        toolbarVisible = config.bool("finder", "toolbar") ?? true
+        guard let first = FinderWindow(display: display, app: self,
+                                       path: path ?? FinderWindow.startDirectory(),
+                                       toolbarVisible: toolbarVisible,
+                                       width: width, height: height)
+        else { return nil }
+        windows.append(first)
+    }
+
+    /// Open `path` in its own window — or raise the one already showing it.
+    /// Spatial mode's defining behaviour.
+    func open(path: String, from: FinderWindow) {
+        if let existing = windows.first(where: { $0.directory == path }) {
+            FinderWindow.log("raised \(path)")
+            existing.raise()
+            return
+        }
+        guard let w = FinderWindow(display: display, app: self, path: path,
+                                   toolbarVisible: toolbarVisible,
+                                   width: width, height: height) else { return }
+        windows.append(w)
+        FinderWindow.log("new window \(path) (\(windows.count) open)")
+    }
+
+    /// Close one window; the last one out ends the process.
+    func close(_ w: FinderWindow) {
+        windows.removeAll { $0 === w }
+        w.tearDown()
+        FinderWindow.log("closed \(w.directory) (\(windows.count) open)")
+        if windows.isEmpty { display.stop() }
+    }
+
+    /// A window switched mode: apply it everywhere and remember it.
+    func setToolbarVisible(_ visible: Bool) {
+        toolbarVisible = visible
+        for w in windows { w.applyToolbarVisible(visible) }
+        FinderWindow.log(visible ? "toolbar shown (browser mode)"
+                                 : "toolbar hidden (spatial mode)")
+        var config = (try? Pool.load("finder")) ?? Config()
+        _ = config.set("finder", "toolbar", bool: visible)
+        try? config.store("finder")
+    }
+
+    public var windowCount: Int { windows.count }
+}
+
 // MARK: - The live window
 
 public final class FinderWindow: WindowDelegate {
     private var window: Window?
+    private weak var app: FinderApp?
+    private var toolbarVisible: Bool
     private var path: String
     private var entries: [FinderEntry] = []
     private var selection: Int?
@@ -521,23 +603,50 @@ public final class FinderWindow: WindowDelegate {
         return "/"
     }
 
-    public init?(display: Display, path: String? = nil,
-                 width: Int32 = 520, height: Int32 = 400) {
+    init?(display: Display, app: FinderApp, path: String,
+          toolbarVisible: Bool, width: Int32, height: Int32) {
         let config = (try? Pool.load("finder")) ?? Config()
         showHidden = config.bool("finder", "show_hidden") ?? false
         view = config.string("finder", "view") == "list" ? .list : .icon
-        self.path = path ?? FinderWindow.startDirectory()
+        self.app = app
+        self.toolbarVisible = toolbarVisible
+        self.path = path
 
         let (scale, auto) = FinderWindow.scaleConfig()
         guard let win = Window(display: display,
-                               title: finderDisplayName(self.path),
+                               title: finderDisplayName(path),
                                appID: "org.abyssbsd.finder",
                                width: width, height: height,
                                scale: scale, autoScale: auto, delegate: self)
         else { return nil }
         window = win
-        display.window = win
         reload()
+    }
+
+    /// The directory this window shows (FinderApp matches on it to raise).
+    var directory: String { path }
+
+    /// Whether folders open in a new window rather than in place.
+    private var isSpatial: Bool { !toolbarVisible }
+
+    /// Bring this window forward (xdg-activation).
+    func raise() {
+        if window?.activate() != true {
+            FinderWindow.log("raise unavailable (no xdg-activation)")
+        }
+    }
+
+    func applyToolbarVisible(_ visible: Bool) {
+        guard visible != toolbarVisible else { return }
+        toolbarVisible = visible
+        scroll = 0
+        window?.setNeedsDisplay()
+    }
+
+    /// Destroy this window's surface (called by FinderApp).
+    func tearDown() {
+        window?.close()
+        window = nil
     }
 
     private static func scaleConfig() -> (scale: Int32, auto: Bool) {
@@ -586,19 +695,44 @@ public final class FinderWindow: WindowDelegate {
 
     private func goUp() {
         guard let parent = finderParent(path) else { return }
-        navigate(to: parent, selecting: finderDisplayName(path))
+        if isSpatial {
+            app?.open(path: parent, from: self)
+        } else {
+            navigate(to: parent, selecting: finderDisplayName(path))
+        }
     }
 
-    /// Activate an item: containers open in this window, everything else logs
-    /// (launching an app / opening a document needs exec + xdg-activation).
+    /// Activate an item. A folder opens in place (browser mode) or in its own
+    /// window (spatial mode); anything else just logs — launching needs exec.
     private func activate(_ i: Int) {
         guard i >= 0, i < entries.count else { return }
         let entry = entries[i]
         let full = finderJoin(path, entry.name)
-        if entry.isContainer {
-            navigate(to: full)
-        } else {
+        guard entry.isContainer else {
             FinderWindow.log("open item \(full)")
+            return
+        }
+        if isSpatial {
+            app?.open(path: full, from: self)
+        } else {
+            navigate(to: full)
+        }
+    }
+
+    /// The pill in the title bar: show/hide the toolbar, which is what switches
+    /// between browser and spatial behaviour (as in 10.2).
+    private func toggleToolbar() {
+        app?.setToolbarVisible(!toolbarVisible)
+    }
+
+    /// The red traffic light. In spatial mode windows come and go constantly, so
+    /// this closes just this one; the last one out stops the display.
+    private func closeWindow() {
+        if let app {
+            app.close(self)
+        } else {
+            window?.close()
+            window?.stopDisplay()
         }
     }
 
@@ -667,7 +801,8 @@ public final class FinderWindow: WindowDelegate {
         let state = FinderState(path: path, entries: entries, selection: selection,
                                 scroll: scroll, view: view,
                                 canGoBack: !backStack.isEmpty, freeBytes: freeBytes,
-                                backPressed: backPressed)
+                                backPressed: backPressed,
+                                toolbarVisible: toolbarVisible)
         layout = paintFinder(cr, w: w, h: h, state: state)
 
         cairo_surface_flush(cs)
@@ -712,14 +847,22 @@ public final class FinderWindow: WindowDelegate {
             return
         }
 
-        if layout.backButton.contains(pointerX, pointerY) {
-            if !backStack.isEmpty { backPressed = true; window?.setNeedsDisplay() }
-            return
-        }
-        let segs = Draw.segmentRects(layout.viewControl, count: 2)
-        if segs.count == 2 {
-            if segs[0].contains(pointerX, pointerY) { setView(.icon); return }
-            if segs[1].contains(pointerX, pointerY) { setView(.list); return }
+        // Title bar: the pill toggles the toolbar (browser ⇄ spatial), the red
+        // light closes this window.
+        let w = Double(window?.size.width ?? 0)
+        if windowPillRect(w: w).contains(pointerX, pointerY) { toggleToolbar(); return }
+        if windowTrafficRects().close.contains(pointerX, pointerY) { closeWindow(); return }
+
+        if toolbarVisible {
+            if layout.backButton.contains(pointerX, pointerY) {
+                if !backStack.isEmpty { backPressed = true; window?.setNeedsDisplay() }
+                return
+            }
+            let segs = Draw.segmentRects(layout.viewControl, count: 2)
+            if segs.count == 2 {
+                if segs[0].contains(pointerX, pointerY) { setView(.icon); return }
+                if segs[1].contains(pointerX, pointerY) { setView(.list); return }
+            }
         }
 
         // Scrollbar: thumb drag, arrows, page-toward-click.
@@ -762,6 +905,10 @@ public final class FinderWindow: WindowDelegate {
             lastClickIndex = nil
             select(nil)                 // click in empty space deselects
         }
+    }
+
+    public func windowShouldClose(_ window: Window) {
+        closeWindow()
     }
 
     public func keyEvent(_ event: KeyEvent) {

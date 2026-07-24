@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -38,6 +38,7 @@ for a in "$@"; do
     --menubar)                menubar="--menubar"; click="--click" ;;  # menu bar dropdown
     --dock)                   dock_mode="--dock"; click="--click" ;;  # Dock magnify + running
     --finder)                 finder="--finder"; click="--click" ;;  # browse a seeded dir
+    --spatial)                spatial="--spatial"; finder="--finder"; click="--click" ;;
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
@@ -66,7 +67,8 @@ fi
 [ "$menubar" = "--menubar" ] && scene="menubar"
 # --dock drives the Dock (a layer-shell BOTTOM surface).
 [ "$dock_mode" = "--dock" ] && scene="dock"
-# --finder drives the file browser (an ordinary xdg toplevel).
+# --finder drives the file browser (an ordinary xdg toplevel); --spatial also
+# switches it into one-window-per-folder mode.
 [ "$finder" = "--finder" ] && scene="finder"
 # Which scenes are layer-shell surfaces (not xdg toplevels — not in get_tree).
 is_layer=""; case "$scene" in wallpaper|menubar|dock) is_layer=1 ;; esac
@@ -183,7 +185,10 @@ if [ "$finder" = "--finder" ]; then
   printf 'Welcome to AbyssBSD.\n' > "$finderdir/Read Me.txt"
   printf 'notes\n' > "$finderdir/Documents/notes.txt"
   printf '.dotfile\n' > "$finderdir/.hidden"   # must NOT be listed
-  finder_env="ABYSS_FINDER_DIR=$finderdir"
+  # A private config dir: the Finder persists the toolbar (browser/spatial)
+  # state, and a test must never write the developer's real finder.ini.
+  cfgdir=${cfgdir:-$(mktemp -d)}
+  finder_env="ABYSS_FINDER_DIR=$finderdir ABYSS_CONFIG_DIR=$cfgdir"
 fi
 
 # Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
@@ -295,6 +300,52 @@ if [ "$click" = "--click" ]; then
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
     sleep 0.4
+  elif [ "$spatial" = "--spatial" ]; then
+    # Spatial mode: the pill at the title bar's right hides the toolbar, which
+    # is what makes folders open in their own window (as in 10.2).
+    printf 'm 500 11\np\nr\n' >&3
+    sleep 0.6
+    grep -q 'Finder: toolbar hidden (spatial mode)' "$app_log" \
+      || { echo "FAIL: the pill didn't hide the toolbar"; cat "$app_log"; exit 1; }
+    echo "finder: pill hid the toolbar (spatial mode)"
+    # With no toolbar the grid starts right under the title bar, so "Documents"
+    # (cell 1) is at y≈60. Double-click it: a NEW window, not navigation.
+    printf 'm 142 60\np\nr\n' >&3
+    sleep 0.15
+    printf 'p\nr\n' >&3
+    sleep 1.0
+    grep -q "Finder: new window $finderdir/Documents (2 open)" "$app_log" \
+      || { echo "FAIL: spatial open didn't make a second window"; cat "$app_log"; exit 1; }
+    n=$(swaymsg -t get_tree | grep -c '"app_id": "org.abyssbsd.finder"')
+    [ "$n" = 2 ] \
+      || { echo "FAIL: expected 2 Finder toplevels in the tree, got $n"; exit 1; }
+    echo "finder: spatial open made a second real toplevel (tree count=$n)"
+    # Capture here, with both windows up — that is the evidence for spatial mode
+    # (the run closes one below, which would otherwise be all the shot shows).
+    WAYLAND_DISPLAY="$wd" grim "$out"; captured=1
+    echo "finder: captured both spatial windows -> $out"
+    # sway tiles the two side by side, so the first window keeps the left half
+    # and the same surface-local coordinates. Opening Documents again must RAISE
+    # the existing window rather than open a third.
+    printf 'm 142 60\np\nr\n' >&3
+    sleep 0.15
+    printf 'p\nr\n' >&3
+    sleep 0.8
+    grep -q "Finder: raised $finderdir/Documents" "$app_log" \
+      || { echo "FAIL: re-opening an open folder didn't raise its window"; cat "$app_log"; exit 1; }
+    ! grep -q 'Finder: raise unavailable' "$app_log" \
+      || { echo "FAIL: xdg-activation missing — the raise was a no-op"; cat "$app_log"; exit 1; }
+    n=$(swaymsg -t get_tree | grep -c '"app_id": "org.abyssbsd.finder"')
+    [ "$n" = 2 ] || { echo "FAIL: raise opened a duplicate window (count=$n)"; exit 1; }
+    echo "finder: re-open raised the existing window (xdg-activation, still $n)"
+    # The red traffic light closes just that window (the right-hand tile).
+    printf 'm 276 11\np\nr\n' >&3
+    sleep 0.8
+    grep -q "Finder: closed $finderdir/Documents (1 open)" "$app_log" \
+      || { echo "FAIL: the close light didn't close the spatial window"; cat "$app_log"; exit 1; }
+    kill -0 "$app_pid" 2>/dev/null \
+      || { echo "FAIL: closing one window killed the process"; cat "$app_log"; exit 1; }
+    echo "finder: close light closed one window; the app lives on"
   elif [ "$finder" = "--finder" ]; then
     # The icon grid: cell 1 (0-based) is "Documents" — 10px pad + one 88px cell,
     # under the 22px title bar and the 36px toolbar. Click once to select, again

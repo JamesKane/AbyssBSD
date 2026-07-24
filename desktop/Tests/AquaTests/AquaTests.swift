@@ -511,6 +511,21 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(L.downArrow.y, L.upArrow.y + L.upArrow.h, accuracy: 0.001)
     }
 
+    func testFinderLayoutWithoutToolbarIsSpatial() {
+        // Hiding the toolbar (the title bar's pill) is what makes the Finder
+        // spatial in 10.2: the item well then starts right under the title bar,
+        // and its extra height goes to the content.
+        let browser = finderLayout(w: 520, h: 400)
+        let spatial = finderLayout(w: 520, h: 400, toolbarVisible: false)
+        XCTAssertEqual(spatial.toolbar.h, 0, accuracy: 0.001)
+        XCTAssertEqual(spatial.content.y, Theme.titleBarHeight, accuracy: 0.001)
+        XCTAssertEqual(spatial.content.h - browser.content.h,
+                       FinderMetrics.toolbarHeight, accuracy: 0.001)
+        // The status bar and scrollbar are unaffected.
+        XCTAssertEqual(spatial.status, browser.status)
+        XCTAssertEqual(spatial.track.x, browser.track.x, accuracy: 0.001)
+    }
+
     func testFinderIconGridHitTestRoundTrips() {
         let L = finderLayout(w: 520, h: 400)
         let vp = finderItemViewport(L, view: .icon)

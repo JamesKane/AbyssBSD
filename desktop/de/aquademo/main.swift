@@ -100,12 +100,15 @@ if scene == .wallpaper {
     print("AquaDemo: Dock (layer-shell BOTTOM) is up.")
     withExtendedLifetime(dock) { display.run() }
 } else if scene == .finder {
-    guard let finder = FinderWindow(display: display, width: width, height: height)
+    // FinderApp owns the windows (spatial mode opens one per folder); this
+    // strong reference is what keeps them — and their listeners — alive.
+    guard let finder = FinderApp(display: display, width: width, height: height)
     else {
         print("AquaDemo: failed to create the Finder window.")
         exit(1)
     }
-    print("AquaDemo: Finder is up (\(FinderWindow.startDirectory())).")
+    print("AquaDemo: Finder is up (\(FinderWindow.startDirectory()), " +
+          "\(finder.toolbarVisible ? "browser" : "spatial") mode).")
     withExtendedLifetime(finder) { display.run() }
 } else {
     guard let window = AquaWindow(display: display, title: title, scene: scene,
