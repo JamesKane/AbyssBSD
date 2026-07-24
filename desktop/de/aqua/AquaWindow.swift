@@ -129,8 +129,8 @@ public final class AquaWindow: WindowDelegate {
                                          lastAction: sheetAction)
         case .wallpaper:
             paintWallpaper(cr, w: w, h: h)  // not used live (Wallpaper owns it)
-        case .menubar:
-            break  // not used live (MenuBar owns it)
+        case .menubar, .dock:
+            break  // not used live (MenuBar/Dock own them)
         }
     }
 

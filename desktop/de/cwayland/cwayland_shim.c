@@ -207,6 +207,26 @@ void aw_layer_surface_get_popup(void *ls, void *xdg_popup) {
                                     (struct xdg_popup *)xdg_popup);
 }
 
+void *aw_bind_foreign_toplevel_manager(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &zwlr_foreign_toplevel_manager_v1_interface, version);
+}
+
+void aw_foreign_toplevel_handle_activate(void *handle, void *seat) {
+    zwlr_foreign_toplevel_handle_v1_activate(
+        (struct zwlr_foreign_toplevel_handle_v1 *)handle, (struct wl_seat *)seat);
+}
+
+void aw_foreign_toplevel_handle_close(void *handle) {
+    zwlr_foreign_toplevel_handle_v1_close(
+        (struct zwlr_foreign_toplevel_handle_v1 *)handle);
+}
+
+void aw_foreign_toplevel_handle_destroy(void *handle) {
+    zwlr_foreign_toplevel_handle_v1_destroy(
+        (struct zwlr_foreign_toplevel_handle_v1 *)handle);
+}
+
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }

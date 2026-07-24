@@ -150,12 +150,22 @@ Reads `panel.ini` (`show_clock`, `menubar_height`). Verified live: `live-sway.sh
 nav and hardware status items — volume/battery — are future; the latter needs the
 FreeBSD `vents` bridges.)
 
-**P2.5 — foreign-toplevel + Dock.**
-Generate `wlr-foreign-toplevel-management`; a `ForeignToplevels` client tracking
-title/app_id/state. Then the Dock: layer-shell BOTTOM, bottom-center, the
-**magnification** curve (pointer-x → per-tile scale), running-app dots, Trash.
-Clicking a running tile sends foreign-toplevel `activate`. Second Jaguar
-signature; the magnification math is the hard part (pure + unit-testable).
+**P2.5 — foreign-toplevel + Dock. ✅ done.**
+`Surface.ForeignToplevels` binds `wlr-foreign-toplevel-management` (captured by
+Display, bound+listened in one step so no `toplevel` event hits a NULL listener),
+tracking title/app_id/activated per handle and notifying a delegate on `done`.
+The **`Dock`** (layer-shell BOTTOM, full-width, height fits a magnified tile) is
+net-new design: a translucent shelf of procedural app tiles that **magnify** under
+the pointer (`dockMagnify` — a pure, unit-tested curve: base-coordinate distance →
+raised-cosine falloff → re-laid-out at scaled sizes, centred), running-app
+triangles beneath open apps (from `ForeignToplevels`), a hovered-tile tooltip, and
+the Trash behind a separator. Clicking a running tile calls foreign-toplevel
+`activate`. Config from `dock.ini` (`tile_size`, `magnify`). Verified live:
+`live-sway.sh --dock` maps the shelf, hovers to magnify (captured — the pointer is
+held present since magnification is hover-driven), and a second window proves the
+foreign-toplevel tracker sees it (`Dock: running …`).
+`docs/screenshots/live-dock.png`. See HANDOFF §2.20. (App *launching* from a
+pinned-not-running tile needs exec/xdg-activation — future.)
 
 **P2.6 — Finder (`reef-fm` analog).**
 xdg-shell toplevels (reuse `Window`), `readdir` listing, Aqua icon grid, spatial

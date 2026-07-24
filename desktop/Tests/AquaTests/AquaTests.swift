@@ -384,6 +384,60 @@ final class AquaTests: XCTestCase {
                                     clock: "Mon 9:41 AM", showClock: false)
         XCTAssertEqual(noClock.clockRect.w, 0)
     }
+
+    // MARK: Phase 2.5 — Dock magnification
+
+    func testDockMagnifyAtRest() {
+        // No pointer → every tile is base size, evenly spaced, centred.
+        let n = 6, S = 48.0, G = DockMetrics.gap
+        let f = dockMagnify(count: n, baseSize: S, gap: G, centerX: 400,
+                            pointerX: nil, maxScale: DockMetrics.maxScale, range: 118)
+        XCTAssertEqual(f.count, n)
+        for t in f {
+            XCTAssertEqual(t.size, S, accuracy: 0.001)
+            XCTAssertEqual(t.scale, 1, accuracy: 0.001)
+        }
+        // Symmetric about the centre; adjacent gaps equal S+G.
+        XCTAssertEqual((f.first!.centerX + f.last!.centerX) / 2, 400, accuracy: 0.01)
+        XCTAssertEqual(f[1].centerX - f[0].centerX, S + G, accuracy: 0.01)
+    }
+
+    func testDockMagnifyPeaksUnderPointer() {
+        let n = 7, S = 48.0, G = DockMetrics.gap, M = 1.9, R = 118.0
+        let center = 400.0
+        // Base centre of tile 2, to place the pointer exactly on it.
+        let baseW = Double(n) * S + Double(n - 1) * G
+        let baseLeft = center - baseW / 2
+        let target = 2
+        let px = baseLeft + Double(target) * (S + G) + S / 2
+
+        let f = dockMagnify(count: n, baseSize: S, gap: G, centerX: center,
+                            pointerX: px, maxScale: M, range: R)
+        // The pointed-at tile is the largest and near full magnification.
+        let maxIdx = f.indices.max(by: { f[$0].size < f[$1].size })!
+        XCTAssertEqual(maxIdx, target)
+        XCTAssertEqual(f[target].scale, M, accuracy: 0.05)
+        // Every tile is between 1x and Mx, and magnification decreases with
+        // distance from the pointed tile on each side.
+        for t in f {
+            XCTAssertGreaterThanOrEqual(t.scale, 1 - 1e-9)
+            XCTAssertLessThanOrEqual(t.scale, M + 1e-9)
+        }
+        XCTAssertGreaterThan(f[target].size, f[target - 1].size)
+        XCTAssertGreaterThan(f[target].size, f[target + 1].size)
+        XCTAssertGreaterThan(f[target - 1].size, f[0].size)
+        // Tiles never overlap: each centre is past the previous one's right edge.
+        for i in 1..<f.count {
+            XCTAssertGreaterThanOrEqual(f[i].centerX - f[i].size / 2,
+                                        f[i - 1].centerX + f[i - 1].size / 2 - 0.01)
+        }
+    }
+
+    func testDockSurfaceHeightFitsMagnifiedTile() {
+        // The surface must be tall enough for a fully magnified tile.
+        let h = DockMetrics.surfaceHeight(tileSize: 48)
+        XCTAssertGreaterThan(h, 48 * DockMetrics.maxScale)
+    }
 }
 
 // A temp dir without importing Foundation (which the toolkit avoids).

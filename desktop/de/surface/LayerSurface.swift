@@ -50,6 +50,7 @@ public protocol LayerSurfaceDelegate: AnyObject {
     func pointerMoved(x: Double, y: Double)
     func pointerButton(_ button: UInt32, pressed: Bool)
     func pointerAxis(_ axis: UInt32, value: Double)
+    func pointerLeft()
     func keyEvent(_ event: KeyEvent)
     /// Called after each committed frame is released (animation hook). Default no-op.
     func layerSurfaceDidRenderFrame(_ surface: LayerSurface)
@@ -59,6 +60,7 @@ public extension LayerSurfaceDelegate {
     func pointerMoved(x: Double, y: Double) {}
     func pointerButton(_ button: UInt32, pressed: Bool) {}
     func pointerAxis(_ axis: UInt32, value: Double) {}
+    func pointerLeft() {}
     func keyEvent(_ event: KeyEvent) {}
     func layerSurfaceDidRenderFrame(_ surface: LayerSurface) {}
 }
@@ -273,6 +275,10 @@ public final class LayerSurface {
 
     func pointerAxis(_ axis: UInt32, value: Double) {
         delegate?.pointerAxis(axis, value: value)
+    }
+
+    func pointerLeft() {
+        delegate?.pointerLeft()
     }
 
     func keyEvent(_ event: KeyEvent) {

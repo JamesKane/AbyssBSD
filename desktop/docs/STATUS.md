@@ -28,7 +28,11 @@ added the **menu bar** (`AQUA_SCENE=menubar`): a layer-shell TOP strip with an
 exclusive zone, the system menu (an original water-drop glyph), the bold app menu,
 File/Edit/View/…, and a live clock — clicking a title opens a real Aqua dropdown
 (a grabbing popup **parented to the layer surface**), verified live
-(![menu bar](screenshots/live-menubar.png)). See [PHASE2.md](PHASE2.md) for the
+(![menu bar](screenshots/live-menubar.png)). P2.5 added the **Dock**
+(`AQUA_SCENE=dock`): a layer-shell BOTTOM shelf that **magnifies** under the
+pointer, with running-app indicators driven by **`wlr-foreign-toplevel-management`**
+(`Surface.ForeignToplevels`) and the Trash — clicking a running tile activates its
+window (![dock](screenshots/live-dock.png)). See [PHASE2.md](PHASE2.md) for the
 ordered scope.
 
 ## Current state — Phase 1 vertical slice works
@@ -41,8 +45,8 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (30 green — Aqua toolkit + desktop
-  config + menu-bar layout, PoolConfig read/write/watch).
+- Build: `swift build`. Tests: `swift test` (33 green — Aqua toolkit + desktop
+  config + menu-bar layout + Dock magnification, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -64,7 +68,10 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     grabbing xdg-popup child surface for menus) + `Keyboard` (`wl_keyboard` +
     xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
     `WindowDelegate`/`LayerSurfaceDelegate`/`PopupDelegate`/`PixelBuffer`. Input
-    routes to the window *or* the layer surface (one per process).
+    routes to the window *or* the layer surface (one per process). Also
+    `ForeignToplevels` (tracks running apps via
+    `wlr-foreign-toplevel-management`, for the Dock) and an
+    `addFileDescriptor` hook to fold config-watch / timer fds into the run loop.
   - `Aqua` — the toolkit: `Theme` (10.2 tokens), `Draw` (cairo gel buttons,
     traffic lights, gradients, pinstripe, text, and the control set: checkbox,
     radio, slider, pop-up button, progress bar, text field, group box,
@@ -179,6 +186,7 @@ abyss/tests/live-sway.sh window  /tmp/rep.png     --repeat # hold a key → it r
 abyss/tests/live-sway.sh wallpaper /tmp/wall.png         # a layer-shell BACKGROUND wallpaper
 abyss/tests/live-sway.sh --reload  /tmp/wall.png         # desktop.ini config + hot-reload
 abyss/tests/live-sway.sh --menubar /tmp/mbar.png         # menu bar (TOP) + open a dropdown
+abyss/tests/live-sway.sh --dock    /tmp/dock.png         # Dock (BOTTOM) magnify + foreign-toplevel
 
 # Wallpaper (layer-shell) PNG preview, no compositor:
 AQUA_SCENE=wallpaper AQUA_RENDER_PNG=/tmp/wall.png .build/debug/AquaDemo

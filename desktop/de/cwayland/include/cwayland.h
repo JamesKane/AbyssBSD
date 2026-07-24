@@ -16,6 +16,7 @@
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 
 /*
  * Create an anonymous, writable shared-memory fd of `size` bytes, suitable for
@@ -106,6 +107,14 @@ void aw_layer_surface_ack_configure(void *ls, uint32_t serial);
 void aw_layer_surface_destroy(void *ls);
 /* Parent an xdg_popup to a layer surface (its menus/tooltips). */
 void aw_layer_surface_get_popup(void *ls, void *xdg_popup);
+
+/* wlr-foreign-toplevel-management: the compositor advertises a handle per open
+ * toplevel (title/app_id/state); the Dock/menu track running apps and can
+ * activate one. */
+void *aw_bind_foreign_toplevel_manager(void *registry, uint32_t name, uint32_t version);
+void aw_foreign_toplevel_handle_activate(void *handle, void *seat);
+void aw_foreign_toplevel_handle_close(void *handle);
+void aw_foreign_toplevel_handle_destroy(void *handle);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);

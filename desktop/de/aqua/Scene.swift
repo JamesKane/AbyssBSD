@@ -19,6 +19,7 @@ public enum SceneKind: Sendable {
     case sheet
     case wallpaper   // full-bleed desktop backdrop (a layer-shell client live)
     case menubar     // the top menu bar (a layer-shell TOP client live)
+    case dock        // the magnifying Dock (a layer-shell BOTTOM client live)
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),
@@ -246,14 +247,26 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     defer { Text.renderScale = 1 }
 
     // The wallpaper is full-bleed (no grey desktop, no window inset). The menu
-    // bar preview composites the bar over the wallpaper at the top.
-    if kind == .wallpaper || kind == .menubar {
+    // bar / Dock previews composite the shell surfaces over the wallpaper.
+    if kind == .wallpaper || kind == .menubar || kind == .dock {
         paintWallpaper(cr, w: Double(width), h: Double(height))
         if kind == .menubar {
             paintMenuBar(cr, w: Double(width), h: MenuBarMetrics.height,
                          menus: MenuBar.defaultMenus(appName: "Finder"),
                          clock: formatMenuClock(hour24: 9, minute: 41, wday: 1),
                          openIndex: nil, showClock: true)
+        }
+        if kind == .dock {
+            let dockH = DockMetrics.surfaceHeight(tileSize: 48)
+            var items = Dock.defaultPinned()
+            items.append(DockItem(icon: .trash, label: "Trash", appID: nil, isTrash: true))
+            cairo_save(cr)
+            cairo_translate(cr, 0, Double(height) - dockH)
+            // Pointer near a tile to show the magnification curve in the preview.
+            paintDock(cr, w: Double(width), h: dockH, items: items,
+                      running: items.map { _ in false },
+                      pointerX: Double(width) * 0.42, tileSize: 48, magnify: true)
+            cairo_restore(cr)
         }
         cairo_surface_flush(cs)
         let status = cairo_surface_write_to_png(cs, path)
@@ -290,7 +303,7 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
-    case .wallpaper, .menubar:
+    case .wallpaper, .menubar, .dock:
         break  // handled full-bleed above
     }
     cairo_restore(cr)

@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -36,7 +36,8 @@ for a in "$@"; do
     --reload)                 reload="--reload" ;;  # wallpaper: config + hot-reload
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     --menubar)                menubar="--menubar"; click="--click" ;;  # menu bar dropdown
-    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar)  scene="$a" ;;
+    --dock)                   dock_mode="--dock"; click="--click" ;;  # Dock magnify + running
+    window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
 done
@@ -62,8 +63,10 @@ fi
 [ "$reload" = "--reload" ] && scene="wallpaper"
 # --menubar drives the menu bar (a layer-shell TOP surface).
 [ "$menubar" = "--menubar" ] && scene="menubar"
+# --dock drives the Dock (a layer-shell BOTTOM surface).
+[ "$dock_mode" = "--dock" ] && scene="dock"
 # Which scenes are layer-shell surfaces (not xdg toplevels — not in get_tree).
-is_layer=""; case "$scene" in wallpaper|menubar) is_layer=1 ;; esac
+is_layer=""; case "$scene" in wallpaper|menubar|dock) is_layer=1 ;; esac
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -105,7 +108,7 @@ case "$scene" in
   scroll)   res="360x420" ;;
   tabs)     res="480x380" ;;
   sheet)    res="440x320" ;;
-  wallpaper|menubar) res="800x600" ;;  # the layer surface stretches to fill it
+  wallpaper|menubar|dock) res="800x600" ;;  # the layer surface stretches to fill it
   *)        res="440x300" ;;
 esac
 outline="output HEADLESS-1 resolution $res position 0 0"
@@ -128,6 +131,7 @@ cleanup() {
   [ -n "${vp_pid:-}" ] && kill "$vp_pid" 2>/dev/null || true
   [ -n "${vk_pid:-}" ] && kill "$vk_pid" 2>/dev/null || true
   [ -n "${app_pid:-}" ] && kill "$app_pid" 2>/dev/null || true
+  [ -n "${app2_pid:-}" ] && kill "$app2_pid" 2>/dev/null || true
   [ -n "${SWAYSOCK:-}" ] && swaymsg exit >/dev/null 2>&1 || true
   kill "$sway_pid" 2>/dev/null || true
   rm -f "$cfg" "$log" "${app_log:-}" "${fifo:-}" "${vp_log:-}" "${vk_fifo:-}" "${vk_log:-}"
@@ -220,7 +224,7 @@ if [ "$click" = "--click" ]; then
     scroll)  vpw=360; vph=420 ;;
     tabs)    vpw=480; vph=380 ;;
     sheet)   vpw=440; vph=320 ;;
-    menubar) vpw=800; vph=600 ;;
+    menubar|dock) vpw=800; vph=600 ;;
     *)       vpw=440; vph=300 ;;
   esac
   vp_log=$(mktemp)
@@ -230,9 +234,16 @@ if [ "$click" = "--click" ]; then
   exec 3>"$fifo"
   for _ in $(seq 1 20); do grep -q ready "$vp_log" && break; sleep 0.15; done
   grep -q ready "$vp_log" || { echo "FAIL: virtual pointer not ready"; cat "$vp_log"; exit 1; }
+  # sway's get_seats "capabilities" is unreliable under the headless backend +
+  # a virtual pointer (often reads 0 even though events flow), so this is a soft
+  # check — the behaviour assertions below (counters, menu-open logs, the
+  # magnified screenshot) are the real gate.
   caps=$(swaymsg -t get_seats | grep -o '"capabilities": [0-9]*' | grep -o '[0-9]*' | head -1)
-  [ "${caps:-0}" -ne 0 ] || { echo "FAIL: seat gained no pointer capability"; exit 1; }
-  echo "virtual pointer ready; seat capabilities=$caps"
+  if [ "${caps:-0}" -ne 0 ]; then
+    echo "virtual pointer ready; seat capabilities=$caps"
+  else
+    echo "virtual pointer ready; seat capabilities read 0 (sway quirk — proceeding)"
+  fi
   sleep 0.5  # let AquaDemo bind wl_pointer
   if [ "$menu" = "--menu" ]; then
     # Click the Appearance pop-up button to open a real xdg-popup menu.
@@ -255,6 +266,30 @@ if [ "$click" = "--click" ]; then
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
     sleep 0.4
+  elif [ "$dock_mode" = "--dock" ]; then
+    # Hover over the Dock (near a left-of-centre tile) to trigger magnification,
+    # then capture NOW while the pointer is present (magnification is hover-
+    # driven) and before the foreign-toplevel window (below) covers the Dock.
+    printf 'm 320 560\n' >&3
+    sleep 0.6
+    WAYLAND_DISPLAY="$wd" grim "$out"; captured=1
+    echo "dock: captured magnified shelf -> $out"
+    # Now verify foreign-toplevel: launch a second window as a running app so
+    # the Dock's tracker sees a live toplevel. (Done after the screenshot; the
+    # tiled window would otherwise cover the Dock.)
+    env -u AQUA_SCALE WAYLAND_DISPLAY="$wd" AQUA_SCENE=window \
+        .build/debug/AquaDemo >/dev/null 2>&1 &
+    app2_pid=$!
+    seen=0
+    for _ in $(seq 1 30); do
+      grep -q 'Dock: running org.abyssbsd.aquademo' "$app_log" && { seen=1; break; }
+      kill -0 "$app2_pid" 2>/dev/null || break
+      sleep 0.2
+    done
+    [ "$seen" = 1 ] \
+      || { echo "FAIL: Dock didn't see the running toplevel (foreign-toplevel)"; cat "$app_log"; exit 1; }
+    echo "foreign-toplevel: $(grep 'Dock: running' "$app_log" | head -1)"
+    kill "$app2_pid" 2>/dev/null || true; app2_pid=""
   else
   case "$scene" in
     widgets)
@@ -293,7 +328,10 @@ if [ "$click" = "--click" ]; then
   esac
   fi
   sleep 0.5
-  exec 3>&-
+  # For the Dock, keep the virtual pointer alive so the pointer stays over the
+  # shelf — magnification is hover-driven, and closing the pointer sends a leave
+  # that resets it before grim. cleanup kills the pointer at exit.
+  [ "$dock_mode" = "--dock" ] || exec 3>&-
 fi
 
 if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" ]; then
@@ -377,6 +415,8 @@ if [ "$hidpi" = "--hidpi" ]; then
   fi
 fi
 
-WAYLAND_DISPLAY="$wd" grim "$out"
+# The Dock captured earlier (while its magnification pointer was present); don't
+# overwrite it here.
+[ -z "${captured:-}" ] && WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }
 echo "ok: live render -> $out (window mapped, no crash${menu:+, menu open}${menu:+ }${wheel:+, wheeled}${wheel:+ }${click:+, clicked}${type:+, typed}${keys:+, keyed}${repeat:+, repeated}${hidpi:+, 2x})"

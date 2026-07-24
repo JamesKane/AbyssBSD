@@ -51,6 +51,11 @@ public final class Display {
     var pointer: OpaquePointer?
     var keyboard: OpaquePointer?
 
+    // The foreign-toplevel manager global, captured by name/version rather than
+    // bound here — a client that wants it (the Dock) binds and listens in one
+    // step via ForeignToplevels, so no `toplevel` event hits a NULL listener.
+    public internal(set) var foreignToplevelManager: (name: UInt32, version: UInt32)?
+
     // Every wl_output we've bound, with its current scale. The window consults
     // these (via outputScale) for the surfaces it's shown on.
     private var outputs: [OutputInfo] = []
@@ -171,6 +176,8 @@ public final class Display {
             // v4 brings keyboard on_demand + since-4 configure semantics; the
             // menu bar/Dock will want it. It has no events, so no listener.
             layerShell = opt(aw_bind_layer_shell(raw(registry), name, min(version, 4)))
+        case "zwlr_foreign_toplevel_manager_v1":
+            foreignToplevelManager = (name, min(version, 3))
         case "wl_output":
             // v2 is where the `scale` event lands (and `done` batches props).
             guard let o = opt(aw_bind_output(raw(registry), name, min(version, 2)))
@@ -245,6 +252,9 @@ public final class Display {
             pl.leave = { data, _, _, _ in
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+                // If the pointer left the primary layer surface (not into a
+                // popup), let it reset hover state (e.g. Dock magnification).
+                if !d.pointerOnPopup { d.layerSurface?.pointerLeft() }
                 d.pointerOnPopup = false
             }
             pl.motion = { data, _, _, sx, sy in

@@ -305,6 +305,38 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.20 The Dock: magnification math + foreign-toplevel + a test-harness quirk
+(Phase 2.5.) The magnifying Dock (`Dock`, layer-shell BOTTOM) is net-new design.
+Key pieces:
+- **The magnification curve is a pure function** (`dockMagnify`), which is what
+  makes it testable and keeps paint/hit-test in sync. Distances are measured
+  against the *fixed base layout* (stable — not the scaled layout, which would
+  feed back on itself), a raised-cosine `(cos(πt)+1)/2` falloff over a range of a
+  few tiles gives each tile's scale, then tiles are re-laid-out at their scaled
+  sizes and re-centred. Hit-testing uses the drawn frames (layout-is-truth). The
+  surface must be tall enough for a fully magnified tile (icons rise out of the
+  shelf); `DockMetrics.surfaceHeight` sizes it.
+- **foreign-toplevel tracking** (`ForeignToplevels`). The manager global is
+  *captured* by Display (name+version) but *bound* by ForeignToplevels, which
+  attaches the manager listener in the same step — otherwise the `toplevel`
+  events the compositor replays for existing windows hit a NULL listener and
+  abort (§2.3). Bound at v3 → all 8 handle slots need handlers; `done`/`closed`
+  take (data, handle) (2 args) while title/app_id/state/parent take 3 — a
+  mismatch is the "failed to produce diagnostic" compile error. Parse the `state`
+  `wl_array` as uint32s (ACTIVATED == 2). On `closed`, destroy the handle proxy.
+- **Magnification resets on pointer leave**, so `LayerSurfaceDelegate` gained
+  `pointerLeft()`, routed from `wl_pointer.leave` (when not entering a popup).
+  This bit the live test: closing the virtual-pointer fifo destroys the pointer,
+  which sends a leave that resets magnification *before* grim — so `--dock` keeps
+  the pointer alive (skips `exec 3>&-`) and captures while hovering.
+- **sway's `get_seats` "capabilities" is unreliable** under the headless backend
+  + a virtual pointer — it often reads 0 even though pointer events flow (proven:
+  magnification renders, clicks register). It read 1 by luck before; the check is
+  now a soft warning, and the behaviour assertions (counters, menu-open logs, the
+  magnified screenshot) are the real gate. Also: **kill stray sways** — a leftover
+  `sway --unsupported-gpu` from a manual debug run makes the socket auto-detect
+  pick the wrong display and every live test "never maps".
+
 ### 2.19 Menu bar: popups from a layer surface, and a timerfd clock
 (Phase 2.4.) The menu bar (`MenuBar`, layer-shell TOP + exclusive zone) is the
 first interactive layer surface. What was new:
