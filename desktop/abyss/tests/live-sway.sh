@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -39,6 +39,7 @@ for a in "$@"; do
     --dock)                   dock_mode="--dock"; click="--click" ;;  # Dock magnify + running
     --finder)                 finder="--finder"; click="--click" ;;  # browse a seeded dir
     --spatial)                spatial="--spatial"; finder="--finder"; click="--click" ;;
+    --fileops)                fileops="--fileops"; finder="--finder"; click="--click"; keys="--keys" ;;
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
@@ -189,6 +190,9 @@ if [ "$finder" = "--finder" ]; then
   # state, and a test must never write the developer's real finder.ini.
   cfgdir=${cfgdir:-$(mktemp -d)}
   finder_env="ABYSS_FINDER_DIR=$finderdir ABYSS_CONFIG_DIR=$cfgdir"
+  # --fileops moves items to ~/.Trash, so HOME points inside the temp tree —
+  # a test must never drop things in the developer's real Trash.
+  [ "$fileops" = "--fileops" ] && finder_env="$finder_env HOME=$finderdir"
 fi
 
 # Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
@@ -299,6 +303,11 @@ if [ "$click" = "--click" ]; then
     printf 'm 21 11\np\nr\n' >&3   # open the system menu
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
+    sleep 0.4
+  elif [ "$fileops" = "--fileops" ]; then
+    # Just put the pointer in the item well and click empty space, so the window
+    # is focused and nothing is selected; the keyboard block does the work.
+    printf 'm 300 300\np\nr\n' >&3
     sleep 0.4
   elif [ "$spatial" = "--spatial" ]; then
     # Spatial mode: the pill at the title bar's right hides the toolbar, which
@@ -479,14 +488,63 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
     else
     case "$scene" in
       finder)
-        # Keyboard browsing: Home selects the first row, Enter opens it,
-        # Backspace goes back up to the parent. (Back left "Documents"
-        # selected — the Finder highlights the folder you came out of — so
-        # Home, not Down, is what pins the selection to Applications.) Raw
-        # evdev: Home=102 Enter=28 Backspace=14.
+        if [ "$fileops" = "--fileops" ]; then
+          # xkb modifier mask: Command (Mod4/Logo) = 64, +Shift = 65.
+          # ⌘⇧N makes "untitled folder" and drops into an inline rename; type a
+          # name and Return commits it.
+          printf 'c 65 49\n' >&4          # N = evdev 49
+          sleep 0.6
+          grep -q "Finder: new folder $finderdir/untitled folder" "$app_log" \
+            || { echo "FAIL: Cmd-Shift-N made no folder"; cat "$app_log"; exit 1; }
+          printf 't Reports\n' >&4
+          sleep 0.4
+          printf 'k 28\n' >&4             # Return commits the rename
+          sleep 0.6
+          grep -q 'Finder: renamed untitled folder -> untitled folderReports' "$app_log" \
+            && { echo "FAIL: the rename field kept the old name"; cat "$app_log"; exit 1; }
+          [ -d "$finderdir/Reports" ] \
+            || { echo "FAIL: renamed folder missing on disk"; ls -a "$finderdir"; cat "$app_log"; exit 1; }
+          echo "finder: new folder + inline rename -> $finderdir/Reports"
+
+          # Type-select "Read Me.txt", then ⌘C / ⌘V: a copy appears beside it.
+          printf 't r\n' >&4
+          sleep 0.3
+          printf 'c 64 46\n' >&4          # C = evdev 46
+          sleep 0.3
+          printf 'c 64 47\n' >&4          # V = evdev 47
+          sleep 0.8
+          [ -f "$finderdir/Read Me copy.txt" ] \
+            || { echo "FAIL: paste made no copy"; ls "$finderdir"; cat "$app_log"; exit 1; }
+          cmp -s "$finderdir/Read Me.txt" "$finderdir/Read Me copy.txt" \
+            || { echo "FAIL: the copy's contents differ"; exit 1; }
+          echo "finder: copy/paste -> 'Read Me copy.txt' (contents match)"
+
+          # The paste selected the new copy: ⌘Delete moves it to ~/.Trash.
+          printf 'c 64 111\n' >&4         # Delete = evdev 111
+          sleep 0.8
+          [ ! -e "$finderdir/Read Me copy.txt" ] \
+            || { echo "FAIL: Cmd-Delete left the file in place"; cat "$app_log"; exit 1; }
+          [ -f "$finderdir/.Trash/Read Me copy.txt" ] \
+            || { echo "FAIL: the file didn't land in ~/.Trash"; ls -a "$finderdir/.Trash" 2>&1; cat "$app_log"; exit 1; }
+          [ -f "$finderdir/Read Me.txt" ] \
+            || { echo "FAIL: the ORIGINAL was trashed"; exit 1; }
+          echo "finder: Cmd-Delete moved the copy to ~/.Trash (original intact)"
+
+          # Leave an inline rename open for the screenshot.
+          printf 't R\n' >&4
+          sleep 0.3
+          printf 'k 28\n' >&4             # Return starts renaming the selection
+          sleep 0.5
+        else
+        # Keyboard browsing: Home selects the first row, ⌘O opens it, Backspace
+        # goes back up to the parent. (Return *renames* in the Finder, which is
+        # why opening is ⌘O; and Back left "Documents" selected — the Finder
+        # highlights the folder you came out of — so Home, not Down, is what
+        # pins the selection to Applications.) Raw evdev: Home=102 O=24
+        # Backspace=14; xkb modifier mask 64 = Command (Mod4).
         printf 'k 102\n' >&4
         sleep 0.3
-        printf 'k 28\n'  >&4
+        printf 'c 64 24\n' >&4
         sleep 0.6
         grep -q "Finder: opened $finderdir/Applications" "$app_log" \
           || { echo "FAIL: Enter didn't open the selected folder"; cat "$app_log"; exit 1; }
@@ -495,6 +553,7 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
         grep -q "Finder: opened $finderdir\$" "$app_log" \
           || { echo "FAIL: Backspace didn't go up to the parent"; cat "$app_log"; exit 1; }
         echo "finder: keyboard opened Applications and went back up"
+        fi
         ;;
       sheet)
         # Space opens the sheet from the keyboard; leave it open for the shot.

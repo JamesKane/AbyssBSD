@@ -20,6 +20,14 @@
 // Everything geometric lives in FinderModel.swift as pure functions, so the
 // painter below and the pointer/keyboard handlers hit-test identical rects.
 //
+// File operations follow the Mac's verbs, not a PC file manager's: **Return
+// renames** the selection (⌘O or ⌘↓ opens it — double-click still does too),
+// ⌘⇧N makes a new folder and drops straight into renaming it, ⌘D duplicates,
+// ⌘C/⌘X/⌘V copy/cut/paste through a clipboard shared by every window, and ⌘⌫
+// moves to the Trash (~/.Trash — nothing here unlinks what you asked to delete).
+// The naming rules ("untitled folder 2", "Read Me copy.txt") and the syscall
+// layer live in FinderOps.swift.
+//
 // Config (domain `finder`, ~/.config/abyss/finder.ini):
 //   view        = icon | list
 //   show_hidden = true | false
@@ -52,11 +60,14 @@ public struct FinderState {
     public var backPressed: Bool
     /// Toolbar shown = browser mode; hidden = spatial (one window per folder).
     public var toolbarVisible: Bool
+    /// Non-nil while an item's name is being edited in place.
+    public var edit: FinderEdit?
 
     public init(path: String, entries: [FinderEntry], selection: Int? = nil,
                 scroll: Double = 0, view: FinderView = .icon,
                 canGoBack: Bool = false, freeBytes: UInt64 = 0,
-                backPressed: Bool = false, toolbarVisible: Bool = true) {
+                backPressed: Bool = false, toolbarVisible: Bool = true,
+                edit: FinderEdit? = nil) {
         self.path = path
         self.entries = entries
         self.selection = selection
@@ -66,6 +77,48 @@ public struct FinderState {
         self.freeBytes = freeBytes
         self.backPressed = backPressed
         self.toolbarVisible = toolbarVisible
+        self.edit = edit
+    }
+}
+
+/// An in-progress inline rename: which item, the text so far, and how many
+/// leading characters are still *selected*. The Finder opens a rename with the
+/// base name selected (the extension left out of it), so the first thing you
+/// type replaces the name rather than appending to it.
+public struct FinderEdit: Equatable, Sendable {
+    public var index: Int
+    public var text: String
+    public var selectedPrefix: Int
+
+    public init(index: Int, text: String, selectedPrefix: Int = 0) {
+        self.index = index
+        self.text = text
+        self.selectedPrefix = selectedPrefix
+    }
+
+    /// The edit that starts a rename of `name`: base selected, extension kept.
+    public static func renaming(_ index: Int, name: String) -> FinderEdit {
+        FinderEdit(index: index, text: name,
+                   selectedPrefix: finderSplitExtension(name).base.count)
+    }
+
+    /// Replace the selected prefix with `typed` (or append when nothing is
+    /// selected). Returns the edit after the keystroke.
+    public func typing(_ typed: String) -> FinderEdit {
+        guard selectedPrefix > 0 else {
+            return FinderEdit(index: index, text: text + typed, selectedPrefix: 0)
+        }
+        return FinderEdit(index: index, text: typed + String(text.dropFirst(selectedPrefix)),
+                          selectedPrefix: 0)
+    }
+
+    /// Backspace: clears the selection if there is one, else deletes a character.
+    public func deletingBackward() -> FinderEdit {
+        if selectedPrefix > 0 {
+            return FinderEdit(index: index, text: String(text.dropFirst(selectedPrefix)),
+                              selectedPrefix: 0)
+        }
+        return FinderEdit(index: index, text: String(text.dropLast()), selectedPrefix: 0)
     }
 }
 
@@ -118,9 +171,12 @@ public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
         let cell = finderItemRect(i, view: state.view, viewport: viewport, scroll: scroll)
         guard cell.y + cell.h >= viewport.y, cell.y <= viewport.y + viewport.h else { continue }
         let selected = state.selection == i
+        let editing = state.edit?.index == i ? state.edit : nil
         switch state.view {
-        case .icon: paintFinderIconCell(cr, entry, cell, selected: selected)
-        case .list: paintFinderListRow(cr, entry, cell, selected: selected)
+        case .icon:
+            paintFinderIconCell(cr, entry, cell, selected: selected, editing: editing)
+        case .list:
+            paintFinderListRow(cr, entry, cell, selected: selected, editing: editing)
         }
     }
     cairo_restore(cr)
@@ -266,7 +322,8 @@ private func finderListColumns(_ row: Rect) -> [Rect] {
 }
 
 private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
-                                 _ cell: Rect, selected: Bool) {
+                                 _ cell: Rect, selected: Bool,
+                                 editing: FinderEdit? = nil) {
     let size = FinderMetrics.iconSize
     let icon = Rect(cell.x + (cell.w - size) / 2, cell.y + 4, size, size)
     if selected {
@@ -276,6 +333,16 @@ private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
         cairo_fill(cr)
     }
     drawFinderIcon(cr, entry.kind, icon)
+
+    if let edit = editing {
+        // The name is being edited: a white field with the Aqua focus ring, in
+        // place of the label.
+        let tw = Draw.textWidth(cr, edit.text, size: 11)
+        let fw = max(46, min(cell.w + 16, tw + 16))
+        let field = Rect(cell.x + cell.w / 2 - fw / 2, icon.y + size + 2, fw, 16)
+        drawFinderNameField(cr, field, edit: edit, size: 11)
+        return
+    }
 
     let label = finderTruncated(cr, entry.name, maxWidth: cell.w - 8, size: 11)
     let tw = Draw.textWidth(cr, label, size: 11)
@@ -291,7 +358,8 @@ private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
 }
 
 private func paintFinderListRow(_ cr: OpaquePointer, _ entry: FinderEntry,
-                                _ row: Rect, selected: Bool) {
+                                _ row: Rect, selected: Bool,
+                                editing: FinderEdit? = nil) {
     if selected {
         cairo_rectangle(cr, row.x, row.y, row.w, row.h)
         Draw.setColor(cr, Theme.menuHighlight)
@@ -305,14 +373,60 @@ private func paintFinderListRow(_ cr: OpaquePointer, _ entry: FinderEntry,
 
     let baseline = row.y + row.h - 5
     let nameX = icon.x + iconSide + 5
-    let name = finderTruncated(cr, entry.name, maxWidth: cols[0].w - (nameX - cols[0].x) - 6,
-                               size: 11)
-    Draw.textLeft(cr, name, x: nameX, baselineY: baseline, color: fg, size: 11)
+    if let edit = editing {
+        let fw = max(60, min(cols[0].w - (nameX - cols[0].x) - 6,
+                             Draw.textWidth(cr, edit.text, size: 11) + 16))
+        drawFinderNameField(cr, Rect(nameX - 2, row.y + 1, fw, row.h - 2),
+                            edit: edit, size: 11)
+    } else {
+        let name = finderTruncated(cr, entry.name,
+                                   maxWidth: cols[0].w - (nameX - cols[0].x) - 6,
+                                   size: 11)
+        Draw.textLeft(cr, name, x: nameX, baselineY: baseline, color: fg, size: 11)
+    }
     let sizeText = entry.isContainer || entry.kind == .application
         ? "--" : finderFormatBytes(entry.size)
     Draw.textLeft(cr, sizeText, x: cols[1].x + 6, baselineY: baseline, color: fg, size: 11)
     Draw.textLeft(cr, finderKindLabel(entry.kind), x: cols[2].x + 6, baselineY: baseline,
                   color: fg, size: 11)
+}
+
+/// The inline rename field: a white well, the Aqua focus ring, the selected
+/// prefix on a blue highlight, and a caret at the end (editing replaces the
+/// selection, then appends/backspaces — no cursor motion yet).
+private func drawFinderNameField(_ cr: OpaquePointer, _ r: Rect, edit: FinderEdit,
+                                 size: Double) {
+    let text = edit.text
+    Draw.setColor(cr, Theme.fieldBackground)
+    cairo_rectangle(cr, r.x, r.y, r.w, r.h)
+    cairo_fill(cr)
+    Draw.focusRing(cr, r, radius: 2)
+    Draw.setColor(cr, Theme.fieldBorder)
+    cairo_set_line_width(cr, 1)
+    cairo_rectangle(cr, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
+    cairo_stroke(cr)
+
+    let inset = 4.0
+    let shown = finderTruncated(cr, text, maxWidth: r.w - 2 * inset - 2, size: size)
+    if edit.selectedPrefix > 0 {
+        let selected = String(shown.prefix(edit.selectedPrefix))
+        let selW = Draw.textWidth(cr, selected, size: size)
+        Draw.setColor(cr, Theme.menuHighlight)
+        cairo_rectangle(cr, r.x + inset - 1, r.y + 2, selW + 2, r.h - 4)
+        cairo_fill(cr)
+    }
+    Draw.textLeft(cr, shown, x: r.x + inset, baselineY: r.y + r.h - 4,
+                  color: Theme.fieldText, size: size)
+    if edit.selectedPrefix > 0 {
+        // Redraw the selected run in the highlight's text colour.
+        let selected = String(shown.prefix(edit.selectedPrefix))
+        Draw.textLeft(cr, selected, x: r.x + inset, baselineY: r.y + r.h - 4,
+                      color: Theme.menuTextOnHighlight, size: size)
+    }
+    let caretX = min(r.x + r.w - 3, r.x + inset + Draw.textWidth(cr, shown, size: size) + 1)
+    Draw.setColor(cr, Theme.fieldCaret)
+    cairo_rectangle(cr, caretX, r.y + 2, 1, r.h - 4)
+    cairo_fill(cr)
 }
 
 public func finderKindLabel(_ kind: FinderItemKind) -> String {
@@ -514,6 +628,25 @@ public final class FinderApp {
     /// toggle in any window updates it — the Finder remembers the mode.
     public private(set) var toolbarVisible: Bool
 
+    /// The copy/cut clipboard, shared by every window (copy in one, paste in
+    /// another — which is the point of having several open).
+    private(set) var clipboard: (path: String, cut: Bool)?
+
+    func setClipboard(path: String, cut: Bool) {
+        clipboard = (path, cut)
+        FinderWindow.log("\(cut ? "cut" : "copied") \(path)")
+    }
+
+    func clearClipboard() { clipboard = nil }
+
+    /// Re-read every window showing `directory` (a file operation in one window
+    /// must show up in the others looking at the same folder).
+    func refreshWindows(showing directory: String, selecting name: String? = nil) {
+        for w in windows where w.directory == directory {
+            w.refresh(selecting: name)
+        }
+    }
+
     public init?(display: Display, path: String? = nil,
                  width: Int32 = 520, height: Int32 = 400) {
         self.display = display
@@ -589,6 +722,8 @@ public final class FinderWindow: WindowDelegate {
     private var backPressed = false
     private var lastClickIndex: Int?
     private var lastClickMs: Int64 = 0
+    // Non-nil while renaming an item in place.
+    private var edit: FinderEdit?
 
     /// Where a Finder window opens: $ABYSS_FINDER_DIR, else $HOME, else "/".
     public static func startDirectory() -> String {
@@ -640,6 +775,17 @@ public final class FinderWindow: WindowDelegate {
         guard visible != toolbarVisible else { return }
         toolbarVisible = visible
         scroll = 0
+        window?.setNeedsDisplay()
+    }
+
+    /// Re-read this window's directory (after a file operation, possibly one
+    /// made in another window), keeping `name` selected if it's still there.
+    func refresh(selecting name: String? = nil) {
+        let keep = name ?? selection.map { $0 < entries.count ? entries[$0].name : "" }
+        let savedScroll = scroll
+        reload(selecting: keep)
+        scroll = min(savedScroll, maxScroll)
+        revealSelection()
         window?.setNeedsDisplay()
     }
 
@@ -774,6 +920,123 @@ public final class FinderWindow: WindowDelegate {
         window?.setNeedsDisplay()
     }
 
+    // MARK: file operations
+
+    /// Does `name` already exist in this directory?
+    private func exists(_ name: String) -> Bool {
+        finderExists(finderJoin(path, name))
+    }
+
+    private var selectedEntry: FinderEntry? {
+        guard let s = selection, s >= 0, s < entries.count else { return nil }
+        return entries[s]
+    }
+
+    /// ⌘⇧N: make "untitled folder" and go straight into renaming it, as the
+    /// Finder does.
+    private func newFolder() {
+        let name = finderNewFolderName(exists: exists)
+        guard finderCreateDirectory(finderJoin(path, name)) else {
+            FinderWindow.log("could not create \(name) in \(path)")
+            return
+        }
+        FinderWindow.log("new folder \(finderJoin(path, name))")
+        app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+        beginRename()
+    }
+
+    /// Return: edit the selected item's name in place.
+    private func beginRename() {
+        guard let s = selection, let entry = selectedEntry else { return }
+        edit = FinderEdit.renaming(s, name: entry.name)
+        window?.setNeedsDisplay()
+    }
+
+    private func cancelRename() {
+        guard edit != nil else { return }
+        edit = nil
+        window?.setNeedsDisplay()
+    }
+
+    private func commitRename() {
+        guard let e = edit, e.index < entries.count else { return cancelRename() }
+        let old = entries[e.index].name
+        let new = e.text
+        edit = nil
+        guard new != old else { window?.setNeedsDisplay(); return }
+        guard finderIsValidName(new), !exists(new) else {
+            FinderWindow.log("rename refused: '\(new)' is taken or not a valid name")
+            window?.setNeedsDisplay()
+            return
+        }
+        guard finderRenameEntry(from: finderJoin(path, old),
+                               to: finderJoin(path, new)) else {
+            FinderWindow.log("rename failed: \(old) -> \(new)")
+            window?.setNeedsDisplay()
+            return
+        }
+        FinderWindow.log("renamed \(old) -> \(new) in \(path)")
+        app?.refreshWindows(showing: path, selecting: new) ?? refresh(selecting: new)
+    }
+
+    /// ⌘D: copy the selection beside itself ("Read Me copy.txt").
+    private func duplicateSelection() {
+        guard let entry = selectedEntry else { return }
+        let name = finderCopyName(entry.name, exists: exists)
+        guard finderCopyPath(from: finderJoin(path, entry.name),
+                             to: finderJoin(path, name)) else {
+            FinderWindow.log("duplicate failed: \(entry.name)")
+            return
+        }
+        FinderWindow.log("duplicated \(entry.name) -> \(name) in \(path)")
+        app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+    }
+
+    /// ⌘C / ⌘X.
+    private func clipSelection(cut: Bool) {
+        guard let entry = selectedEntry else { return }
+        app?.setClipboard(path: finderJoin(path, entry.name), cut: cut)
+    }
+
+    /// ⌘V: copy (or move, after a cut) the clipboard item into this folder.
+    private func paste() {
+        guard let clip = app?.clipboard else { return }
+        let source = clip.path
+        guard finderExists(source) else {
+            FinderWindow.log("paste failed: \(source) is gone")
+            app?.clearClipboard()
+            return
+        }
+        let sourceDir = finderParent(source) ?? ""
+        let name = finderPasteName(finderDisplayName(source), exists: exists)
+        let dest = finderJoin(path, name)
+        let ok = clip.cut ? finderRenameEntry(from: source, to: dest)
+                          : finderCopyPath(from: source, to: dest)
+        guard ok else {
+            FinderWindow.log("paste failed: \(source) -> \(dest)")
+            return
+        }
+        FinderWindow.log("pasted \(source) -> \(dest)")
+        if clip.cut {
+            app?.clearClipboard()
+            // A move empties the source folder's view too.
+            if sourceDir != path { app?.refreshWindows(showing: sourceDir) }
+        }
+        app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+    }
+
+    /// ⌘⌫: move the selection to ~/.Trash (never an unlink).
+    private func trashSelection() {
+        guard let entry = selectedEntry else { return }
+        let source = finderJoin(path, entry.name)
+        guard let dest = finderMoveToTrash(source) else {
+            FinderWindow.log("could not move \(source) to the Trash")
+            return
+        }
+        FinderWindow.log("trashed \(source) -> \(dest)")
+        app?.refreshWindows(showing: path) ?? refresh()
+    }
+
     private func nowMs() -> Int64 {
         var ts = timespec()
         clock_gettime(CLOCK_MONOTONIC, &ts)
@@ -802,7 +1065,7 @@ public final class FinderWindow: WindowDelegate {
                                 scroll: scroll, view: view,
                                 canGoBack: !backStack.isEmpty, freeBytes: freeBytes,
                                 backPressed: backPressed,
-                                toolbarVisible: toolbarVisible)
+                                toolbarVisible: toolbarVisible, edit: edit)
         layout = paintFinder(cr, w: w, h: h, state: state)
 
         cairo_surface_flush(cs)
@@ -837,6 +1100,7 @@ public final class FinderWindow: WindowDelegate {
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft else { return }
+        if pressed, edit != nil { commitRename() }
         guard pressed else {
             draggingThumb = false
             if backPressed {
@@ -911,12 +1175,63 @@ public final class FinderWindow: WindowDelegate {
         closeWindow()
     }
 
+    /// The ASCII letter a keysym stands for, lowercased (X11 keysyms for ASCII
+    /// *are* the ASCII values), so ⌘N and ⌘⇧N match the same case.
+    private func letter(_ event: KeyEvent) -> Character? {
+        guard event.keysym >= 0x21, event.keysym <= 0x7e,
+              let scalar = UnicodeScalar(event.keysym) else { return nil }
+        return Character(scalar).lowercased().first
+    }
+
+    /// Keys while an inline rename is up: the field owns the keyboard.
+    private func editKey(_ event: KeyEvent, _ e: FinderEdit) {
+        switch event.keysym {
+        case KeySym.enter:
+            commitRename()
+        case KeySym.escape:
+            cancelRename()
+        case KeySym.backspace:
+            guard !e.text.isEmpty else { return }
+            edit = e.deletingBackward()
+            window?.setNeedsDisplay()
+        default:
+            guard !event.text.isEmpty, !event.modifiers.contains(.command) else { return }
+            edit = e.typing(event.text)
+            window?.setNeedsDisplay()
+        }
+    }
+
+    /// The Finder's ⌘-shortcuts. Returns false if this isn't one of them.
+    private func commandKey(_ event: KeyEvent) -> Bool {
+        switch event.keysym {
+        case KeySym.delete, KeySym.backspace: trashSelection(); return true
+        case KeySym.down:  if let s = selection { activate(s) }; return true
+        case KeySym.up:    goUp(); return true
+        default: break
+        }
+        switch letter(event) {
+        case "n" where event.modifiers.contains(.shift): newFolder()
+        case "o": if let s = selection { activate(s) }
+        case "d": duplicateSelection()
+        case "c": clipSelection(cut: false)
+        case "x": clipSelection(cut: true)
+        case "v": paste()
+        default: return false
+        }
+        return true
+    }
+
     public func keyEvent(_ event: KeyEvent) {
         guard event.pressed else { return }
+        // An open rename field takes everything.
+        if let e = edit { editKey(event, e); return }
+        if event.modifiers.contains(.command), commandKey(event) { return }
+
         let vp = viewport
         switch event.keysym {
         case KeySym.enter:
-            if let s = selection { activate(s) }
+            // Mac verbs: Return renames, ⌘O / ⌘↓ (and double-click) open.
+            beginRename()
         case KeySym.backspace:
             goUp()
         case KeySym.escape:
@@ -945,7 +1260,9 @@ public final class FinderWindow: WindowDelegate {
             setView(view == .icon ? .list : .icon)
         default:
             // Type-ahead: a printable character jumps to the next matching name.
-            guard !event.text.isEmpty, event.text != " " else { return }
+            guard !event.text.isEmpty, event.text != " ",
+                  !event.modifiers.contains(.command),
+                  !event.modifiers.contains(.control) else { return }
             if let i = finderTypeSelect(entries, prefix: event.text, after: selection) {
                 select(i)
             }

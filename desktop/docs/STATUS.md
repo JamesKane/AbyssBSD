@@ -54,7 +54,7 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (45 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (51 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
@@ -76,7 +76,8 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     shell components — layer/anchors/exclusive-zone, its own configure/ack,
     reusing the buffer/frame/scale machinery) + `Popup` (a
     grabbing xdg-popup child surface for menus) + `Keyboard` (`wl_keyboard` +
-    xkbcommon keycode→keysym/UTF-8, via the `CXkb` system module) +
+    xkbcommon keycode→keysym/UTF-8 **plus the modifier state**, via the `CXkb`
+    system module) +
     `WindowDelegate`/`LayerSurfaceDelegate`/`PopupDelegate`/`PixelBuffer`. Input
     routes to the window *or* the layer surface (one per process). Also
     `ForeignToplevels` (tracks running apps via
@@ -153,6 +154,17 @@ the app quits with the last. The mode persists to `finder.ini`.
 ![spatial finder](screenshots/live-finder-spatial.png)
 (A Wayland client can't position its own windows, so the "remembered position"
 part of spatial Finder waits for `tide` in Phase 3; size/view/mode do persist.)
+
+It also **operates on files**, with the Mac's verbs rather than a PC file
+manager's: **Return** renames in place (⌘O, ⌘↓ or a double-click open), **⌘⇧N**
+makes a new folder and opens its name for editing with the base pre-selected,
+**⌘D** duplicates, **⌘C/⌘X/⌘V** copy/cut/paste through a clipboard shared across
+windows, and **⌘⌫** moves to `~/.Trash` — nothing here unlinks what you asked to
+delete. Naming follows the Finder ("untitled folder 2", "Read Me copy.txt"), and
+every window showing an affected folder re-reads. Here a new folder has been
+created and renamed to "Reports", and Return has opened a rename on "Read Me.txt"
+with just the base name selected:
+![finder file operations](screenshots/live-finder-fileops.png)
 The keyboard drives it all: arrows (a whole row at a time in icon view), Home /
 End, Return to open, Backspace to go up, Page keys to scroll, Tab to switch view,
 and type-ahead selection. It reads `finder.ini` (`view`, `show_hidden`) and starts
@@ -226,6 +238,7 @@ abyss/tests/live-sway.sh --dock    /tmp/dock.png         # Dock (BOTTOM) magnify
 abyss/tests/live-sway.sh --finder  /tmp/finder.png       # browse a seeded dir: open, Back, list view
 abyss/tests/live-sway.sh --finder --keys /tmp/fkeys.png  # ... and drive it from the keyboard
 abyss/tests/live-sway.sh --spatial /tmp/spatial.png      # spatial: 2 windows, raise, close one
+abyss/tests/live-sway.sh --fileops /tmp/fileops.png      # new folder/rename/copy/trash, checked on disk
 
 # Finder (an ordinary xdg-shell app) over a real directory:
 ABYSS_FINDER_DIR=~/Documents AQUA_SCENE=finder .build/debug/AquaDemo

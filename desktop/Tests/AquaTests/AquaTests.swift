@@ -598,6 +598,136 @@ final class AquaTests: XCTestCase {
                                   view: .icon, viewport: vp), count - 1)
     }
 
+    // MARK: Finder — file-operation naming rules (pure)
+
+    func testFinderSplitExtension() {
+        XCTAssertEqual(finderSplitExtension("Read Me.txt").base, "Read Me")
+        XCTAssertEqual(finderSplitExtension("Read Me.txt").ext, ".txt")
+        XCTAssertEqual(finderSplitExtension("Documents").ext, "")
+        // A leading dot is part of the name, not an extension; so is a trailing one.
+        XCTAssertEqual(finderSplitExtension(".hidden").base, ".hidden")
+        XCTAssertEqual(finderSplitExtension(".hidden").ext, "")
+        XCTAssertEqual(finderSplitExtension("weird.").ext, "")
+        XCTAssertEqual(finderSplitExtension("a.tar.gz").ext, ".gz")
+    }
+
+    func testFinderNewFolderNameSequence() {
+        var taken: Set<String> = []
+        func exists(_ n: String) -> Bool { taken.contains(n) }
+        XCTAssertEqual(finderNewFolderName(exists: exists), "untitled folder")
+        taken.insert("untitled folder")
+        XCTAssertEqual(finderNewFolderName(exists: exists), "untitled folder 2")
+        taken.insert("untitled folder 2")
+        XCTAssertEqual(finderNewFolderName(exists: exists), "untitled folder 3")
+    }
+
+    func testFinderCopyNameKeepsTheExtension() {
+        var taken: Set<String> = ["Read Me.txt", "Documents"]
+        func exists(_ n: String) -> Bool { taken.contains(n) }
+        // " copy" goes before the extension, as on Mac.
+        XCTAssertEqual(finderCopyName("Read Me.txt", exists: exists), "Read Me copy.txt")
+        taken.insert("Read Me copy.txt")
+        XCTAssertEqual(finderCopyName("Read Me.txt", exists: exists), "Read Me copy 2.txt")
+        XCTAssertEqual(finderCopyName("Documents", exists: exists), "Documents copy")
+    }
+
+    func testFinderPasteNameOnlyRenamesOnCollision() {
+        let taken: Set<String> = ["Read Me.txt"]
+        func exists(_ n: String) -> Bool { taken.contains(n) }
+        // Pasting into another folder keeps the name…
+        XCTAssertEqual(finderPasteName("notes.txt", exists: exists), "notes.txt")
+        // …but pasting where it already lives makes a copy.
+        XCTAssertEqual(finderPasteName("Read Me.txt", exists: exists), "Read Me copy.txt")
+    }
+
+    func testFinderNameValidation() {
+        XCTAssertTrue(finderIsValidName("Reports"))
+        XCTAssertTrue(finderIsValidName(".hidden"))
+        XCTAssertFalse(finderIsValidName(""))
+        XCTAssertFalse(finderIsValidName("."))
+        XCTAssertFalse(finderIsValidName(".."))
+        XCTAssertFalse(finderIsValidName("a/b"))       // would escape the folder
+        XCTAssertFalse(finderIsValidName(String(repeating: "x", count: 256)))
+    }
+
+    // MARK: Finder — file operations on a real directory
+
+    func testFinderFileOperations() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/finderops.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+
+        // ~/.Trash must land inside the temp tree, not the real home.
+        let savedHome = getenv("HOME").map { String(cString: $0) }
+        setenv("HOME", root, 1)
+        defer {
+            if let savedHome { setenv("HOME", savedHome, 1) } else { unsetenv("HOME") }
+            removeTree(root)
+        }
+
+        let dir = finderJoin(root, "work")
+        XCTAssertTrue(finderCreateDirectory(dir))
+
+        func write(_ path: String, _ text: String) {
+            let fd = path.withCString { open($0, O_CREAT | O_WRONLY | O_TRUNC, 0o644) }
+            XCTAssertGreaterThanOrEqual(fd, 0)
+            _ = Array(text.utf8).withUnsafeBytes { Glibc.write(fd, $0.baseAddress, $0.count) }
+            close(fd)
+        }
+        func read(_ path: String) -> String {
+            let fd = path.withCString { open($0, O_RDONLY) }
+            guard fd >= 0 else { return "" }
+            defer { close(fd) }
+            var buf = [UInt8](repeating: 0, count: 256)
+            let n = buf.withUnsafeMutableBytes { Glibc.read(fd, $0.baseAddress, $0.count) }
+            return n > 0 ? String(decoding: buf[0..<n], as: UTF8.self) : ""
+        }
+
+        // New folder + rename.
+        let folder = finderJoin(dir, "untitled folder")
+        XCTAssertTrue(finderCreateDirectory(folder))
+        XCTAssertTrue(finderRenameEntry(from: folder, to: finderJoin(dir, "Reports")))
+        XCTAssertFalse(finderExists(folder))
+        XCTAssertTrue(finderIsDirectory(finderJoin(dir, "Reports")))
+
+        // Copy a file (contents and all).
+        write(finderJoin(dir, "Read Me.txt"), "hello abyss")
+        XCTAssertTrue(finderCopyFile(from: finderJoin(dir, "Read Me.txt"),
+                                     to: finderJoin(dir, "Read Me copy.txt")))
+        XCTAssertEqual(read(finderJoin(dir, "Read Me copy.txt")), "hello abyss")
+
+        // Copy a directory tree: the nested file comes along, dot-files included.
+        write(finderJoin(dir, "Reports/q1.txt"), "quarter one")
+        write(finderJoin(dir, "Reports/.notes"), "private")
+        XCTAssertTrue(finderCreateDirectory(finderJoin(dir, "Reports/sub")))
+        write(finderJoin(dir, "Reports/sub/deep.txt"), "deep")
+        XCTAssertTrue(finderCopyPath(from: finderJoin(dir, "Reports"),
+                                     to: finderJoin(dir, "Reports copy")))
+        XCTAssertEqual(read(finderJoin(dir, "Reports copy/q1.txt")), "quarter one")
+        XCTAssertEqual(read(finderJoin(dir, "Reports copy/sub/deep.txt")), "deep")
+        XCTAssertEqual(read(finderJoin(dir, "Reports copy/.notes")), "private")
+        // The original is untouched by the copy.
+        XCTAssertEqual(read(finderJoin(dir, "Reports/q1.txt")), "quarter one")
+
+        // Delete = move to Trash, never an unlink.
+        let victim = finderJoin(dir, "Read Me copy.txt")
+        let trashed = finderMoveToTrash(victim)
+        XCTAssertNotNil(trashed)
+        XCTAssertFalse(finderExists(victim))
+        XCTAssertEqual(read(trashed ?? ""), "hello abyss")
+        XCTAssertTrue((trashed ?? "").hasPrefix(finderJoin(root, ".Trash")))
+
+        // A second item of the same name in the Trash gets uniqued, not clobbered.
+        write(finderJoin(dir, "Read Me copy.txt"), "second one")
+        let trashedAgain = finderMoveToTrash(finderJoin(dir, "Read Me copy.txt"))
+        XCTAssertNotNil(trashedAgain)
+        XCTAssertNotEqual(trashedAgain, trashed)
+        XCTAssertEqual(read(trashed ?? ""), "hello abyss")      // still there
+        XCTAssertEqual(read(trashedAgain ?? ""), "second one")
+    }
+
     // MARK: Finder — the real filesystem
 
     func testReadDirectorySortsAndHidesDotfiles() {
@@ -643,6 +773,19 @@ final class AquaTests: XCTestCase {
         // Free space on a real volume is non-zero.
         XCTAssertGreaterThan(finderFreeSpace(dir), 0)
     }
+}
+
+/// Delete a directory tree — test cleanup only (the Finder itself never unlinks
+/// what a user deletes; it moves to the Trash).
+private func removeTree(_ path: String) {
+    guard finderIsDirectory(path) else {
+        path.withCString { _ = unlink($0) }
+        return
+    }
+    for e in readDirectory(path, showHidden: true) {
+        removeTree(finderJoin(path, e.name))
+    }
+    path.withCString { _ = rmdir($0) }
 }
 
 // A temp dir without importing Foundation (which the toolkit avoids).

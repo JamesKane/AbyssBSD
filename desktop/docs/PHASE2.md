@@ -210,8 +210,25 @@ its own windows, so the "remembered window position" half of spatial Finder isn'
 expressible here — sway places them. Size/view/mode we can and do persist;
 position waits for `tide` in Phase 3.
 
-Remaining Finder work: file operations (new folder / rename / delete / copy),
-launching what you double-click, and desktop icons.
+**P2.6c — file operations. ✅ done.**
+The Finder now changes the filesystem, with the Mac's verbs: **Return renames**
+in place (⌘O / ⌘↓ / double-click open), **⌘⇧N** makes "untitled folder" and drops
+straight into renaming it with the base name pre-selected, **⌘D** duplicates,
+**⌘C/⌘X/⌘V** copy/cut/paste through a clipboard shared by every window, and
+**⌘⌫** moves to `~/.Trash` — nothing unlinks what the user asked to delete. That
+needed `KeyEvent` to carry **modifiers** (xkb; Command = Mod4/Logo) and the
+virtual-keyboard test helper to send the `modifiers` event itself. `FinderOps.swift`
+splits the work: pure naming rules over an `exists` predicate ("untitled folder 2",
+"Read Me copy.txt" — extension-aware) and a thin POSIX layer (mkdir/rename/
+recursive copy/trash). Every window showing an affected folder re-reads, so a
+copy in one spatial window appears in another. Verified live: `live-sway.sh
+--fileops` drives the real shortcuts through the compositor and checks the
+**disk** — the folder is created and renamed, the copy matches byte for byte, and
+⌘⌫ lands the copy in `~/.Trash` with the original intact
+(`docs/screenshots/live-finder-fileops.png`). See HANDOFF §2.23.
+
+Remaining Finder work: launching what you double-click (needs exec), emptying the
+Trash from the Dock, and desktop icons.
 
 **P2.7 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the

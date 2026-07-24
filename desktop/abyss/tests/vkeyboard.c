@@ -25,6 +25,9 @@
 //                   Down=108) — for non-text keys the toolkit reacts to by keysym
 //   d <code>        press (hold down) a raw keycode — for testing key repeat
 //   u <code>        release a raw keycode
+//   c <mask> <code>...  press+release each keycode with the xkb modifier <mask>
+//                   held (Shift=1, Ctrl=4, Alt=8, Logo/Command=64) — how the
+//                   Finder's ⌘-shortcuts are driven
 //   q              quit (also on EOF)
 
 #define _GNU_SOURCE  /* memfd_create */
@@ -41,7 +44,8 @@
 // wl_keyboard.key_state
 #define KEY_RELEASED 0u
 #define KEY_PRESSED  1u
-// Shift as a modifier mask bit (index 0 in a standard xkb keymap).
+// Modifier mask bits of a standard xkb keymap (Shift is index 0, Mod4/Logo — the
+// Mac's Command on PC hardware — is index 6).
 #define MOD_SHIFT 1u
 
 static struct wl_seat *g_seat = NULL;
@@ -148,6 +152,26 @@ int main(void) {
                 zwp_virtual_keyboard_v1_key(vk, t, code, KEY_PRESSED);
                 zwp_virtual_keyboard_v1_key(vk, t + 1, code, KEY_RELEASED);
             }
+            wl_display_flush(dpy);
+            continue;
+        }
+        if (line[0] == 'c' && line[1] == ' ') {
+            // Modifier mask, then keycodes: hold the modifiers, tap each key,
+            // release. The virtual-keyboard protocol makes the client responsible
+            // for the modifiers event — the compositor does not derive it from
+            // the modifier keycodes.
+            char *p = line + 2;
+            uint32_t mask = (uint32_t)strtoul(p, &p, 10);
+            zwp_virtual_keyboard_v1_modifiers(vk, mask, 0, 0, 0);
+            while (*p) {
+                while (*p == ' ' || *p == '\n') p++;
+                if (*p < '0' || *p > '9') break;
+                unsigned code = (unsigned)strtoul(p, &p, 10);
+                t += 10;
+                zwp_virtual_keyboard_v1_key(vk, t, code, KEY_PRESSED);
+                zwp_virtual_keyboard_v1_key(vk, t + 1, code, KEY_RELEASED);
+            }
+            zwp_virtual_keyboard_v1_modifiers(vk, 0, 0, 0, 0);
             wl_display_flush(dpy);
             continue;
         }

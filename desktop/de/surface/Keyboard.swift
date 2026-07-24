@@ -14,6 +14,22 @@ import Glibc
 import Darwin
 #endif
 
+/// The modifiers held when a key event fired. `command` is the Logo/Super key,
+/// which is where the Mac's Command lives on PC hardware — the Finder's
+/// shortcuts (⌘C, ⌘⇧N, ⌘⌫) are spelled with it.
+public struct KeyModifiers: OptionSet, Sendable {
+    public let rawValue: UInt32
+    public init(rawValue: UInt32) { self.rawValue = rawValue }
+
+    public static let shift    = KeyModifiers(rawValue: 1 << 0)
+    public static let control  = KeyModifiers(rawValue: 1 << 1)
+    public static let alt      = KeyModifiers(rawValue: 1 << 2)
+    public static let command  = KeyModifiers(rawValue: 1 << 3)
+    public static let capsLock = KeyModifiers(rawValue: 1 << 4)
+
+    public var isEmpty: Bool { rawValue == 0 }
+}
+
 /// A single key transition, already resolved to a keysym and its text.
 public struct KeyEvent: Sendable {
     /// The XKB/X11 keysym (e.g. `KeySym.backspace`). Layout-resolved.
@@ -23,6 +39,16 @@ public struct KeyEvent: Sendable {
     public let text: String
     /// True on press, false on release.
     public let pressed: Bool
+    /// Modifiers held at the time of the event.
+    public let modifiers: KeyModifiers
+
+    public init(keysym: UInt32, text: String, pressed: Bool,
+                modifiers: KeyModifiers = []) {
+        self.keysym = keysym
+        self.text = text
+        self.pressed = pressed
+        self.modifiers = modifiers
+    }
 }
 
 /// The handful of non-text keysyms the toolkit reacts to. Values are the
@@ -109,6 +135,26 @@ final class KeyboardState {
         xkb_state_update_mask(state, depressed, latched, locked, 0, 0, group)
     }
 
+    /// The modifiers currently held, as xkb sees them. The names are the XKB
+    /// canonical ones ("Shift"/"Control"/"Mod1"/"Mod4"/"Lock") — spelled out
+    /// rather than via the XKB_MOD_NAME_* macros, which are string #defines the
+    /// Swift importer doesn't reliably surface.
+    func currentModifiers() -> KeyModifiers {
+        guard let state else { return [] }
+        func active(_ name: String) -> Bool {
+            name.withCString {
+                xkb_state_mod_name_is_active(state, $0, XKB_STATE_MODS_EFFECTIVE) > 0
+            }
+        }
+        var mods: KeyModifiers = []
+        if active("Shift")   { mods.insert(.shift) }
+        if active("Control") { mods.insert(.control) }
+        if active("Mod1")    { mods.insert(.alt) }
+        if active("Mod4")    { mods.insert(.command) }
+        if active("Lock")    { mods.insert(.capsLock) }
+        return mods
+    }
+
     /// Resolve an evdev keycode from `wl_keyboard.key` into a KeyEvent.
     func event(evdev: UInt32, pressed: Bool) -> KeyEvent? {
         guard let state else { return nil }
@@ -132,6 +178,7 @@ final class KeyboardState {
                 text = s
             }
         }
-        return KeyEvent(keysym: sym, text: text, pressed: pressed)
+        return KeyEvent(keysym: sym, text: text, pressed: pressed,
+                        modifiers: currentModifiers())
     }
 }

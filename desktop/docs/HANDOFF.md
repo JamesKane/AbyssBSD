@@ -305,6 +305,43 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.23 File operations: Mac verbs, xkb modifiers, and a test that owns $HOME
+(Phase 2.6c.) New folder / rename / duplicate / copy / cut / paste / delete, on
+the real filesystem:
+
+- **The toolkit had no modifiers.** `KeyEvent` carried keysym/text/pressed only,
+  which is fine for a text field and useless for ⌘-shortcuts. It now carries
+  `KeyModifiers`, read from xkb with `xkb_state_mod_name_is_active`. Pass the
+  modifier names as **literal strings** ("Shift"/"Control"/"Mod1"/"Mod4"/"Lock")
+  — `XKB_MOD_NAME_*` are string `#define`s the Swift importer doesn't reliably
+  surface. **Command is Mod4** (Logo/Super) on PC hardware.
+- **The virtual keyboard must send `modifiers` itself.** wlroots does *not*
+  derive modifier state from the modifier keycodes a virtual keyboard injects, so
+  pressing evdev 125 does nothing on its own. `vkeyboard.c` gained
+  `c <mask> <code>...` — set the mask, tap the keys, clear the mask — which is
+  how the live test drives ⌘⇧N / ⌘C / ⌘V / ⌘⌫.
+- **Mac verbs, not PC ones.** In the Finder **Return renames** and ⌘O (or ⌘↓, or
+  a double-click) opens. Getting this right meant changing the existing keyboard
+  live test to open with ⌘O — worth it: the alternative is a file manager that
+  looks like Aqua and behaves like Explorer.
+- **A rename opens with the name pre-selected.** The first live run typed
+  "Reports" into a fresh folder and got `untitled folderReports`: the field
+  appended because nothing modelled the selection. `FinderEdit` now carries
+  `selectedPrefix` (the base name, extension excluded, as on Mac), the first
+  keystroke replaces it, and the painter draws it on the blue highlight.
+- **Delete moves to `~/.Trash`; nothing here unlinks.** `rename(2)` can't cross
+  filesystems, and a copy+delete that fails halfway is worse than a refusal — so
+  a cross-device trash attempt reports failure and leaves the file alone. Names
+  colliding in the Trash get the same " copy" uniquing as a paste.
+- **Any test that trashes must own `$HOME`.** Both the unit test (`setenv`,
+  restored in `defer`) and the live test (`HOME=$finderdir`) point it into their
+  temp tree, or the suite quietly fills the developer's real Trash. The unit test
+  also removes its tree afterwards — an earlier version left `/tmp/finderops.*`
+  behind on every run.
+- **Naming rules are pure, over an `exists` predicate.** "untitled folder 2" and
+  "Read Me copy 3.txt" are unit-tested with no filesystem; only the syscall layer
+  touches disk.
+
 ### 2.22 Many windows in one process: route by surface, and you can't place them
 (Phase 2.6b — the spatial Finder.) Hiding the Finder's toolbar makes it spatial
 (one window per folder), which turned the client runtime multi-window:
