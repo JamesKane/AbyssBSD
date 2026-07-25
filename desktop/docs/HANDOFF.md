@@ -1,12 +1,19 @@
 # AbyssBSD (Swift DE) — Handoff & Lessons
 
-What this session built, what we learned doing it, and where the traps are.
-Read [STATUS.md](STATUS.md) for the current build state and [PLAN.md](PLAN.md)
-for the multi-year roadmap; this doc is the *practical knowledge* layer.
+What has been built, what we learned building it, and where the traps are.
+Read [STATUS.md](STATUS.md) for the current build state, [PHASE2.md](PHASE2.md)
+for the shell's ordered passes, and [PLAN.md](PLAN.md) for the multi-year
+roadmap; this doc is the *practical knowledge* layer.
+
+Last updated: 2026-07-25 (end of Phase 2's visible work — P2.1–P2.8 shipped).
+
+**Picking this up cold?** Read §1 (what exists), skim the §2 index for the trap
+nearest what you're about to touch, then §5 (what's next). Then run
+`sh abyss/tests/run.sh` and one live mode (§3) to confirm the box still works.
 
 ---
 
-## 1. What got built (Phase 0–1)
+## 1. What got built (Phase 0–2)
 
 A working Swift 6 desktop foundation that builds and tests clean on Linux and
 renders faithful Jaguar UI:
@@ -32,12 +39,69 @@ renders faithful Jaguar UI:
 - **Infra** — borrowed/adapted FreeBSD VM + test harness under `abyss/`, plus
   the `docs/`.
 
-Two screenshots in `docs/screenshots/` are the evidence: `first-window.png`,
-`system-preferences.png`.
+**Phase 2 — the Aqua shell**, all of it as Wayland clients against stock sway
+(no compositor work; `tide` is reused in Phase 3):
+
+- **`Surface` grew up** — a `wlr-layer-shell` surface *role* beside `Window`
+  (§2.16), **foreign-toplevel** tracking, **xdg-activation**, a **weak window
+  registry with input routed by `wl_surface`** so one process can own many
+  windows *and* a layer surface at once (§2.22, §2.24), `Window.close()`, and an
+  `addFileDescriptor` hook that folds config-watch/timer/IPC fds into the run
+  loop (§2.18).
+- **`PoolConfig`** — the Swift port of the Rust `pool`: mmap read, atomic-rename
+  write, inotify/kqueue directory watch, same `~/.config/abyss/*.ini` files as
+  the sibling, so Swift and Rust components stay config-compatible (§2.17).
+- **The shell components** — the config-driven **Desktop** (with hot-reload and
+  **desktop icons**, §2.24), the **menu bar** with real dropdowns from a layer
+  surface (§2.19), the magnifying **Dock** (§2.20), and the **Finder**: a
+  browser-mode file manager with icon/list views, spatial mode (one window per
+  folder, raise-not-duplicate), Mac-verb file operations onto the real
+  filesystem, and **launching** (§2.21, §2.22, §2.23, §2.25).
+- **Evidence** — every pass has a live-verified screenshot in
+  `docs/screenshots/` (`live-finder*.png`, `live-desktop-icons.png`,
+  `live-dock.png`, `live-menubar.png`, …) produced by `abyss/tests/live-sway.sh`
+  under a headless compositor, not mocked.
+
+Not done in Phase 2, on purpose: `CurrentIPC` (binds FreeBSD-only libnv — see
+PHASE2.md P2.9) and the dev session launcher (P2.10).
+
+The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
+and `system-preferences.png` are the Phase-1 originals.
 
 ---
 
 ## 2. Lessons that cost time (read before you code)
+
+Newest first after §2.15 (so the freshest traps are at the top of the section);
+this index is in numeric order. Each entry is a mistake that actually cost time.
+
+| § | Trap |
+|---|---|
+| 2.1 | libwayland's requests are `static inline` — Swift can't call them; use the `aw_*` shim |
+| 2.2 | Listener structs must outlive the proxy; owner passed via `Unmanaged` |
+| 2.3 | A NULL listener slot **aborts** the client — fill every event of the bound version |
+| 2.4 | Swift 6 rejects `stderr`-style mutable globals; `write(2, …)` instead |
+| 2.5 | cairo's `arc` connects from the current point (`new_sub_path`) |
+| 2.6 | Never mutate an `FT_Face` cairo is rendering from — open two |
+| 2.7 | The window must be owned across the run loop (live-only crash) |
+| 2.8 | xkbcommon owns keycode→text; evdev→xkb is **+8**; feed it every `modifiers` |
+| 2.9 | One pure layout function feeds both paint and hit-test |
+| 2.10 | xdg-popups: grab needs the click's serial; route by surface; teardown order |
+| 2.11 | Protocol-**extension** methods static-dispatch — declare in the body |
+| 2.12 | Shift-Tab is its own keysym; a popup grab still routes keyboard to *you* |
+| 2.13 | Read the proxy from the callback argument, not a capture |
+| 2.14 | Key repeat needs a poll timeout; resolve `prepare_read` or deadlock |
+| 2.15 | The linter lies about C includes |
+| 2.16 | Layer-shell is a second surface *role*, and it isn't in sway's tree |
+| 2.17 | PoolConfig: mmap read / atomic write / watch the **directory** |
+| 2.18 | Fold the watch fd into the run loop — resolve the Wayland read *first* |
+| 2.19 | Popups from a layer surface; a timerfd clock |
+| 2.20 | Dock magnification math + foreign-toplevel + headless-seat quirks |
+| 2.21 | The Finder: POSIX from Swift (`d_name`, `d_type`, `mode_t` widths) |
+| 2.22 | Many windows: route by surface; a client can't place its own windows |
+| 2.23 | File ops: Mac verbs, xkb modifiers, and a test that owns `$HOME` |
+| 2.24 | One process, two surface *kinds* — "is there a window?" is not a routing rule |
+| 2.25 | Launching: resolve before the fork, double-fork so nothing zombies |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -666,8 +730,42 @@ the window auto-scales (§2.13; `docs/screenshots/live-hidpi.png`), `--wheel`
 spins the **scroll wheel** (`vpointer`'s `a` axis command) and `--repeat` holds a
 key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 
+**The live modes today.** `abyss/tests/live-sway.sh [scene] [out.png] [flags]`:
+
+| Flag | What it proves |
+|---|---|
+| `--click` / `--type` / `--keys` | pointer / keyboard / focus-traversal paths |
+| `--wheel` / `--repeat` / `--hidpi` | scroll axis, key repeat, scale-2 auto-scaling |
+| `--menu` / `--menubar` | a grabbing xdg-popup from a window / from a layer surface |
+| `--reload` | `desktop.ini` drives the desktop, and an atomic edit hot-reloads it |
+| `--dock` | Dock magnifies on hover, sees running apps, **launches** from a tile |
+| `--finder` | real `readdir`, double-click into a folder, Back, view switch |
+| `--spatial` | two real toplevels, re-open **raises** (xdg-activation), close one |
+| `--fileops` | ⌘⇧N / rename / ⌘C⌘V / ⌘⌫ — asserted **on disk**, not in the log |
+| `--desktop` | desktop icons: select, open a Finder window, notice a new file |
+| `--launch` | an `.app` bundle really executes; a document reaches `$ABYSS_OPEN` |
+
+**Rules the harness taught us** (each cost a debugging cycle):
+
+- Assert on **side effects** — files on disk, toplevels in `swaymsg -t get_tree`,
+  the app's own fd-2 log lines — not on "it didn't crash".
+- `live-sway.sh` sizes the virtual pointer's coordinate space **per scene**. A
+  scene missing from that list silently gets the default and every injected click
+  lands somewhere else (§2.24). Check `vpw/vph` before suspecting the app.
+- A `grim` capture between two clicks blows the 450 ms double-click window; send
+  a fresh pair instead of appending a click to an earlier selection.
+- After a window that covered a layer surface is destroyed, sway won't hand
+  pointer focus back until the pointer **moves** — jiggle before clicking (§2.25).
+- Tests that write must own their environment: `$HOME` (→ `~/.Trash`),
+  `$ABYSS_CONFIG_DIR` (the Finder persists its mode), `$ABYSS_DESKTOP_DIR`.
+  Otherwise the suite quietly edits the developer's real home.
+- Kill stray `sway --unsupported-gpu` processes if a run reports "never maps" —
+  socket auto-detect will pick the wrong display.
+
 Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
-render). Tests are pure toolkit logic (no compositor).
+render). The 58 unit tests are pure logic — no compositor, no network: toolkit
+geometry, the Finder's listing/naming/scroll model, desktop-icon layout, launcher
+resolution, and PoolConfig's read/write/watch.
 
 ---
 
@@ -681,6 +779,20 @@ no blue pinstripe); **rounded top / square bottom** corners; the toolbar toggle
 **pill** at the title bar's right. The reference is the spec — refine `Theme` and
 `Draw` against it, not from memory.
 
+**Behaviour is part of fidelity, and these are decisions — don't "fix" them:**
+- The 10.2 **Finder is a browser** (toolbar, navigate in place); hiding the
+  toolbar with the title bar's pill is what makes it *spatial*. Both modes exist
+  (§2.22). The sibling's `reef-fm` was spatial-only — a GNOME-2 model.
+- **Brushed metal is 10.3**, not Jaguar: the Finder is standard Aqua here, which
+  is why it reuses `paintWindowChrome`. (A brushed-metal window variant was
+  explicitly descoped for the same reason.)
+- **Mac verbs, not PC ones:** Return *renames*, ⌘O/⌘↓/double-click open, ⌘⌫
+  moves to the Trash. A rename opens with the base name pre-selected (§2.23).
+- The Finder sorts **one case-insensitive alphabetical run** — folders do *not*
+  float to the top (that's the sibling's GNOME-2 behaviour).
+- **Desktop icons fill from the top-right corner downward**, wrapping leftward —
+  the mirror of the Finder's grid, not a reuse of it (§2.24).
+
 Known-not-faithful, on purpose:
 - **Icons are original procedural glyphs**, not Apple artwork (copyright). They
   read correctly but aren't pixel-identical.
@@ -688,57 +800,51 @@ Known-not-faithful, on purpose:
   **Noto Sans**, not Lucida Grande (which ships with no free equivalent) — the
   metrics/letterforms differ. Set `$AQUA_FONT` to a Lucida Grande file for
   pixel-faithful text. cairo toy-text remains only as the no-font fallback.
+- **Window and desktop-icon *positions* aren't remembered**, because a Wayland
+  client cannot place its own surfaces — the compositor does. Size, view and mode
+  do persist. This is a protocol limit, not an omission; `tide` can honour
+  remembered placement in Phase 3 (§2.22).
 
 ---
 
 ## 5. What I'd do next (in order)
 
-1. **Real text** — ✅ done, incl. the refinements (§2.6): FreeType + HarfBuzz
-   shaping painted via cairo-ft (`de/ctext`, `Aqua/Text`), now with bold/italic
-   faces, a shaped-run cache, and device-pixel hinting under HiDPI. Noto Sans
-   stands in for Lucida Grande (`$AQUA_FONT` to override). Only nicety left is
-   rasterised-bitmap caching, and cairo already does that internally.
-2. **Live compositor run + interaction** — ✅ done: `abyss/tests/live-sway.sh
-   [--click]` runs AquaDemo under headless sway + grim, and drives real clicks
-   via a wlr-virtual-pointer helper (`vpointer.c`). Found and fixed two
-   live-only crashes (§2.7 window lifetime, §2.3 NULL `wl_pointer.frame`) and
-   validated xdg-shell configure/resize + shm + frame pacing + the pointer
-   path. **Keyboard input** is now done too (§2.8): `wl_keyboard` + xkbcommon in
-   `Surface`, driven live by `live-sway.sh --type` via a virtual keyboard
-   (`vkeyboard.c`). **Scroll-wheel and key repeat** followed (§2.14) — the input
-   paths are complete; the only optional extra is keyboard focus tracking
-   (enter/leave → caret blink).
-3. **Per-output scale** — ✅ done (§2.13): the window tracks its output's scale
-   via `wl_output` + `wl_surface` enter/leave and re-cuts its buffers to render
-   crisp on HiDPI; `AQUA_SCALE` is now just an optional pin. Verified live by
-   `live-sway.sh --hidpi` (a scale-2 headless output).
-4. **More widgets** — ✅ the core Aqua control set now exists and is interactive
-   (checkbox, radio, slider, pop-up button, progress bar, text field, group box
-   in `Draw`; the **Aqua Controls** scene in `de/aqua/Widgets.swift`, driven live
-   by `live-sway.sh widgets --click`). A **scrollbar** + scrolling list scene
-   followed (`de/aqua/Scroll.swift`, `live-sway.sh scroll --click` drags the
-   thumb; arrow/page/Home/End keys scroll too). **Real pop-up menus** followed:
-   the Appearance pop-up button opens a grabbing xdg-popup child surface
-   (`Surface.Popup` + `AquaMenu`; `live-sway.sh --menu`), choosing an item sets
-   the value and dismisses. A **segmented control + tab view** followed
-   (`de/aqua/Tabs.swift`, `live-sway.sh tabs --click`; Left/Right arrows switch
-   tabs). A **modal sheet** followed (`de/aqua/Sheet.swift`, `live-sway.sh sheet
-   --click`): it slides down from the title bar (animated off the frame tick),
-   dims + blocks the parent, and its buttons dismiss it. **Keyboard
-   focus/traversal** followed (§2.12): a soft `Draw.focusRing`, Tab/Shift-Tab
-   over `WidgetFocus`, Space/arrows/Return/Escape driving the widgets scene, plus
-   arrow-key + Return/Escape nav in the pop-up menu (during its grab) and the
-   sheet — `live-sway.sh widgets --keys` and `--menu --keys`. That completes the
-   Phase-1 control set. (A brushed-metal window variant is deliberately out of
-   scope: it's a Panther/Tiger-era texture, not era-faithful to 10.2 — the
-   pinstriped/white Aqua window is the Jaguar default.)
-5. **Golden-image tests** — snapshot the PNG renders and diff in CI.
-6. **Phase 2** — `CurrentIPC` (bind libnv) + `PoolConfig`, then the shell apps
-   (Dock, MenuBar, Finder). The extra protocol XMLs (layer-shell,
-   foreign-toplevel, xdg-activation) are already vendored in `protocols/`.
-7. **The standing risk** — keep chipping at Swift-on-FreeBSD
-   ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)); nothing ships to the target
-   until it's resolved.
+Phase 0/1 are complete (real text, live input paths, the full control set,
+per-output HiDPI) and Phase 2's *visible* shell is complete (P2.1–P2.8: desktop,
+config, menu bar, Dock, Finder, desktop icons, launching). What's left:
+
+1. **Finish Phase 2's tail** — the two passes deliberately left (PHASE2.md):
+   - **P2.10, dev session launcher** — the highest-value next step. One command
+     that starts (or targets) a compositor and brings up desktop + menu bar +
+     Dock together, so the shell can be seen as a *desktop* rather than as
+     separate scenes. Currently each component is its own `AQUA_SCENE` process.
+   - **P2.9, `CurrentIPC`** — decision point, not a coding task: vendor a
+     portable libnv, hand-roll the nvlist codec, or carry it to Phase 3. It binds
+     FreeBSD-only libnv and carries only the control plane, so nothing visible
+     depends on it.
+2. **Shell polish worth doing** (small, each self-contained):
+   - Empty the Trash from the Dock (the `~/.Trash` half already exists; §2.23).
+   - Dragging desktop icons — blocked on the same thing as spatial window
+     placement: a Wayland client can't position itself, so this needs remembered
+     per-item positions in config (§2.22).
+   - Menu-bar **keyboard** navigation, and its status items (volume/battery need
+     the FreeBSD `vents` bridges — Phase 3).
+   - Reading an `.app` bundle's own icon instead of the procedural "A" tile.
+3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
+   are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
+   exactly this); this is the cheapest guard against silent visual regressions.
+4. **Phase 3 — FreeBSD.** The standing #1 risk is unchanged and gates shipping:
+   the Swift toolchain on FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)).
+   Everything above is deliberately Linux-verifiable so it doesn't block on that.
+   When it lands: reuse Rust `tide` as the compositor, `anchor` as the real
+   session supervisor (replacing §2.25's double-fork stand-in), and the `vents`
+   hardware bridges.
+
+**Portability debts to pay when FreeBSD arrives** (all flagged in code):
+`/proc/self/exe` in `Launcher.selfExecutable` (needs the `KERN_PROC_PATHNAME`
+sysctl; `$ABYSS_APP_BINARY` overrides meanwhile), the inotify half of
+`CPoolWatch`, and `mode_t` width assumptions already handled by spelling the
+`stat` bits out (§2.21).
 
 ---
 
@@ -750,13 +856,36 @@ Known-not-faithful, on purpose:
 - The VM home defaults to `../abyss-swift-vm` (separate from the sibling's
   `../abyss-vm`) so we don't clobber the Rust project's VM. Set
   `ABYSS_VM_HOME=../abyss-vm` to reuse that already-provisioned box.
-- The repo is `git init`'d but **not committed** — no commit was requested.
+- The repo is committed now, one commit per pass, with the pass number in the
+  subject (`P2.8: launching …`) — `git log --oneline` is a readable history of
+  how the shell was built, and each commit's body records what was verified.
 
 ---
 
 ## 7. Pointers
 
+**Where things live** (Swift/C targets under `de/`, mirroring the sibling tree):
+
+| Path | What |
+|---|---|
+| `de/cwayland` | libwayland + generated protocols + the `aw_*` shim (§2.1) |
+| `de/surface` | the client runtime: `Display`, `Window`, `LayerSurface`, `Popup`, `Keyboard`, `ForeignToplevels`, `Activation` |
+| `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
+| `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
+| `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
+| `abyss/tests` | `run.sh` (build+test+smoke), `live-sway.sh`, the virtual input helpers |
+| `protocols/` | vendored protocol XML; regenerate via `de/cwayland/generate-protocols.sh` |
+
+**Adding a Wayland protocol** is mechanical: drop the XML in `protocols/`, add a
+`gen` line to `generate-protocols.sh`, list the generated `.c` in
+`Package.swift`, add one-line `aw_*` wrappers (§2.1), and fill **every** listener
+slot (§2.3). xdg-activation (P2.8) is the most recent worked example.
+
+**External:**
+
 - Architecture canon (Rust sibling): `../AbyssBSD/abyss/docs/{DESKTOP,SEAMS}.md`.
 - Reusable engine to adopt in Phase 3: `../AbyssBSD/abyss/de/{tide,…}`,
-  `../AbyssBSD/abyss/ipc/{current,pool,shmring}`.
-- Agent memory: `abyssbsd-swift-project`, `abyssbsd-swift-status`.
+  `../AbyssBSD/abyss/ipc/{current,pool,shmring}`. Note the sibling's shell
+  targeted **GNOME 2**, not Aqua — adapt its algorithms, don't copy them.
+- Agent memory: `abyssbsd-swift-project`, `abyssbsd-swift-status`,
+  `reef-targeted-gnome2`.

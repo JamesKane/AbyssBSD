@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-07-24.
+Last updated: 2026-07-25.
 
 ## What this is
 
@@ -47,7 +47,7 @@ window, with **xdg-activation** raising one that's already open
 runtime multi-window (`Display` routes input **by wl_surface**). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
-## Current state — Phase 1 vertical slice works
+## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
 
 A Swift 6 package builds on Linux and renders a faithful Jaguar window
 (![first window](screenshots/first-window.png) — glossy traffic lights,
@@ -276,37 +276,23 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-- **Phase 1 polish:** the core control set now exists and is interactive
-  (checkbox, radio, slider, pop-up button, progress bar, text field, group box —
-  `de/aqua/Widgets.swift`) plus a **scrollbar** + scrolling list
-  (`de/aqua/Scroll.swift`) and **real pop-up menus** (a grabbing xdg-popup child
-  surface — `Surface.Popup` + `AquaMenu`) and **segmented control + tab view**
-  (`de/aqua/Tabs.swift`) and a **modal sheet** (slides from the title bar,
-  animated — `de/aqua/Sheet.swift`) and **keyboard focus/traversal** (Tab/Space/
-  arrows + Return/Escape through controls, menus and sheets — `Draw.focusRing` +
-  `WidgetFocus`). The Phase-1 control set is complete, and the window now
-  **auto-scales per output** from `wl_output` (`AQUA_SCALE` is just an optional
-  pin now). (A brushed-metal window variant is deliberately out of scope — it's a
-  Panther/Tiger-era texture, not era-faithful to 10.2.) Real text now shapes via FreeType/HarfBuzz (Noto Sans as the
-  stand-in — drop Lucida Grande in via `$AQUA_FONT` for pixel-faithful text),
-  with **bold/italic faces** (the sheet's question renders bold, as in Aqua), a
-  **shaped-run cache** (static labels aren't re-shaped every frame), and
-  **device-pixel hinting** (text is shaped on the render scale's device grid, so
-  glyph advances line up with the device-rasterised glyphs at HiDPI). The one
-  remaining text nicety is per-glyph caching of rasterised bitmaps (cairo already
-  caches internally, so low priority). Live runs + **pointer and keyboard** interaction work under headless
-  sway (`abyss/tests/live-sway.sh [--click] [--type] [--wheel] [--repeat]`,
-  driving a wlr-virtual-pointer / a zwp-virtual-keyboard), now including
-  **scroll-wheel** (`wl_pointer.axis`) and **key repeat** (a poll-timeout event
-  loop off the compositor's `repeat_info`) — the Phase-1 input paths are complete.
-- **Phase 2:** scoped in detail in [PHASE2.md](PHASE2.md). The shell as Wayland
-  clients against sway (no compositor work — `tide` is reused in Phase 3):
-  layer-shell in `Surface`, then Desktop/wallpaper, `PoolConfig`, MenuBar, Dock
-  (new — magnifying), Finder (first pass done: browse/select/open, icon + list
-  views; file *operations* and multi-window are the remaining Finder work). `CurrentIPC` (binds FreeBSD-only libnv — absent on
-  this Linux box) is deferred to the phase tail or Phase 3; it carries only the
-  control plane, not the visible desktop. Protocol XMLs already vendored in
-  `protocols/`.
-- **Phase 0 tail (the #1 risk):** Swift toolchain on FreeBSD 15 — see
-  [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md). VM/test infra to be borrowed from
-  `../AbyssBSD/abyss/{vm,tests}` and adapted.
+Phase 0/1 are complete, and so is Phase 2's visible shell (P2.1–P2.8: layer-shell
++ Desktop, `PoolConfig`, menu bar, Dock, Finder — browser *and* spatial, with
+file operations — desktop icons, and launching). See
+[HANDOFF.md](HANDOFF.md) §5 for the reasoning; in short:
+
+- **Finish Phase 2's tail:** the **dev session launcher** (P2.10 — one command
+  that brings up desktop + menu bar + Dock together, so it reads as a desktop
+  rather than as separate scenes), and the **`CurrentIPC`** decision (P2.9 — it
+  binds FreeBSD-only libnv; vendor it, hand-roll the codec, or carry to Phase 3).
+- **Shell polish:** empty the Trash from the Dock, menu-bar keyboard navigation,
+  reading an `.app` bundle's own icon. Dragging desktop icons is blocked on the
+  same protocol limit as spatial window placement — a Wayland client can't
+  position itself, so it needs remembered per-item positions in config.
+- **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
+- **Phase 3 — FreeBSD**, gated by the standing #1 risk: the Swift toolchain on
+  FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything so far is
+  deliberately Linux-verifiable so it doesn't block on that. When it lands:
+  Rust `tide` as the compositor, `anchor` as the real session supervisor
+  (replacing the launcher's double-fork stand-in), and the `vents` hardware
+  bridges for the menu bar's status items.

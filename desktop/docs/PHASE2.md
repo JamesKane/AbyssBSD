@@ -5,7 +5,7 @@ a read of the Rust sibling's shell (`reef`), config (`pool`), and IPC (`current`
 Read [PLAN.md](PLAN.md) for the locked decisions and [STATUS.md](STATUS.md) for the
 Phase-1 baseline this builds on.
 
-Last updated: 2026-07-24.
+Last updated: 2026-07-25.
 
 ---
 
@@ -260,15 +260,15 @@ appears. See HANDOFF §2.25.
 
 Remaining shell work: emptying the Trash from the Dock, dragging desktop icons
 to reposition them (needs the per-item positions a spatial desktop remembers),
-and the P2.7 dev session launcher that starts desktop + menu bar + Dock
+and the P2.10 dev session launcher that starts desktop + menu bar + Dock
 together.
 
-**P2.7 (deferred) — `CurrentIPC` + control plane.**
+**P2.9 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the
 nvlist pack/unpack + `SCM_RIGHTS`), then a `reefctl`-equivalent driving menu-bar
 reload/menu and notifications. Otherwise carry to Phase 3.
 
-**P2.8 — Dev session launcher.**
+**P2.10 — Dev session launcher.**
 A shell/Swift script that starts sway (or targets the running one), then the
 wallpaper + menu bar + Dock as clients — the Linux stand-in for `anchor`. Gives us
 a one-command "boot the desktop" for demos and live tests.
