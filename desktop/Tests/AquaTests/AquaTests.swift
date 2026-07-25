@@ -598,6 +598,72 @@ final class AquaTests: XCTestCase {
                                   view: .icon, viewport: vp), count - 1)
     }
 
+    // MARK: Desktop icons
+
+    func testDesktopIconsStackFromTheTopRight() {
+        let bounds = Rect(0, DesktopMetrics.topInset, 800, 600 - DesktopMetrics.topInset)
+        let rows = desktopRows(bounds: bounds)
+        XCTAssertGreaterThan(rows, 1)
+
+        // The first icon hugs the top-right corner (where the Mac puts the disk).
+        let first = desktopIconRect(0, bounds: bounds)
+        XCTAssertEqual(first.x + first.w, bounds.x + bounds.w - DesktopMetrics.margin,
+                       accuracy: 0.001)
+        XCTAssertEqual(first.y, bounds.y + DesktopMetrics.margin, accuracy: 0.001)
+
+        // The second is directly below it — the column fills downward…
+        let second = desktopIconRect(1, bounds: bounds)
+        XCTAssertEqual(second.x, first.x, accuracy: 0.001)
+        XCTAssertEqual(second.y, first.y + DesktopMetrics.cellH, accuracy: 0.001)
+
+        // …and once the column is full, the next one starts to its LEFT.
+        let wrapped = desktopIconRect(rows, bounds: bounds)
+        XCTAssertEqual(wrapped.x, first.x - DesktopMetrics.cellW, accuracy: 0.001)
+        XCTAssertEqual(wrapped.y, first.y, accuracy: 0.001)
+        // Every icon stays inside the desktop.
+        for i in 0..<(rows * 2) {
+            let r = desktopIconRect(i, bounds: bounds)
+            XCTAssertGreaterThanOrEqual(r.x, bounds.x)
+            XCTAssertLessThanOrEqual(r.y + r.h, bounds.y + bounds.h)
+        }
+    }
+
+    func testDesktopIconHitTestRoundTrips() {
+        let bounds = Rect(0, DesktopMetrics.topInset, 800, 600 - DesktopMetrics.topInset)
+        let count = 5
+        for i in 0..<count {
+            let icon = desktopIconBox(desktopIconRect(i, bounds: bounds))
+            let hit = desktopIndex(atX: icon.x + icon.w / 2, y: icon.y + icon.h / 2,
+                                   count: count, bounds: bounds)
+            XCTAssertEqual(hit, i)
+        }
+        // Bare desktop (well left of the icon column) hits nothing.
+        XCTAssertNil(desktopIndex(atX: 100, y: 300, count: count, bounds: bounds))
+        XCTAssertNil(desktopIndex(atX: 400, y: 500, count: count, bounds: bounds))
+    }
+
+    func testDesktopEntriesLeadWithTheVolume() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/desktop.XXXXXX").utf8CString)
+        guard let dir = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer { removeTree(dir) }
+
+        XCTAssertTrue(finderCreateDirectory(finderJoin(dir, "Projects")))
+        let fd = finderJoin(dir, "notes.txt").withCString {
+            open($0, O_CREAT | O_WRONLY, 0o644)
+        }
+        close(fd)
+
+        let entries = desktopEntries(volumeName: "AbyssBSD HD", desktopFolder: dir)
+        XCTAssertEqual(entries.first?.kind, .disk)
+        XCTAssertEqual(entries.map(\.name), ["AbyssBSD HD", "notes.txt", "Projects"])
+        // With no Desktop folder there's still a volume to show.
+        XCTAssertEqual(desktopEntries(volumeName: "AbyssBSD HD",
+                                      desktopFolder: nil).count, 1)
+    }
+
     // MARK: Finder — file-operation naming rules (pure)
 
     func testFinderSplitExtension() {

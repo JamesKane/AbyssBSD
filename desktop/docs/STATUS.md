@@ -37,8 +37,11 @@ window (![dock](screenshots/live-dock.png)). P2.6 added the **Finder**
 *application* rather than a layer surface: real `readdir` listings in an Aqua
 icon grid or list view, browsing in place with a toolbar Back button, a
 scrollbar, and full keyboard navigation
-(![finder](screenshots/live-finder.png)). Its second pass added **spatial
-mode**: hide the toolbar with the title bar's pill and every folder gets its own
+(![finder](screenshots/live-finder.png)). P2.7 gave the desktop its **icons**
+(the boot volume + `~/Desktop`, arranged top-right-down as in Jaguar), where a
+double-click opens a real Finder window
+(![desktop icons](screenshots/live-desktop-icons.png)). The Finder's second pass
+added **spatial mode**: hide the toolbar with the title bar's pill and every folder gets its own
 window, with **xdg-activation** raising one that's already open
 (![spatial finder](screenshots/live-finder-spatial.png)) — which made the client
 runtime multi-window (`Display` routes input **by wl_surface**). See
@@ -54,7 +57,7 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (51 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (54 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
@@ -239,6 +242,7 @@ abyss/tests/live-sway.sh --finder  /tmp/finder.png       # browse a seeded dir: 
 abyss/tests/live-sway.sh --finder --keys /tmp/fkeys.png  # ... and drive it from the keyboard
 abyss/tests/live-sway.sh --spatial /tmp/spatial.png      # spatial: 2 windows, raise, close one
 abyss/tests/live-sway.sh --fileops /tmp/fileops.png      # new folder/rename/copy/trash, checked on disk
+abyss/tests/live-sway.sh --desktop /tmp/desk.png         # desktop icons: select, open a Finder window
 
 # Finder (an ordinary xdg-shell app) over a real directory:
 ABYSS_FINDER_DIR=~/Documents AQUA_SCENE=finder .build/debug/AquaDemo

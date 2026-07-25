@@ -84,6 +84,11 @@ public final class Display {
     // multi-window app (the spatial Finder) route correctly.
     private weak var pointerWindow: Window?
     private weak var keyboardWindow: Window?
+    // …and whether they're on the shell layer surface instead. A process can own
+    // both (the Desktop opens Finder windows), so "is there a window?" is not a
+    // safe proxy for where an event belongs — only the surface is.
+    private var pointerOnLayer = false
+    private var keyboardOnLayer = false
 
     // The active grabbing popup (menu), if any. Weak — the caller owns it; we
     // just route input to it and clear on teardown. Set in Popup.init.
@@ -341,17 +346,24 @@ public final class Display {
     // Which surface is the pointer over? A live popup surface wins (it has the
     // grab); otherwise it names one of our windows (or the layer surface).
     private func updatePointerTarget(_ surface: OpaquePointer?) {
-        if let surface, let popup = activePopup, surface == popup.surface {
-            pointerOnPopup = true
-            return
-        }
         pointerOnPopup = false
-        if let w = window(forSurface: surface) { pointerWindow = w }
+        pointerOnLayer = false
+        guard let surface else { return }
+        if let popup = activePopup, surface == popup.surface {
+            pointerOnPopup = true
+        } else if let w = window(forSurface: surface) {
+            pointerWindow = w
+        } else if let ls = layerSurface, surface == ls.surface {
+            pointerOnLayer = true
+            pointerWindow = nil
+        }
     }
 
     private func routePointerMotion(_ sx: Int32, _ sy: Int32) {
         if pointerOnPopup, let popup = activePopup {
             popup.pointerMoved(fx: sx, fy: sy)
+        } else if pointerOnLayer {
+            layerSurface?.pointerMoved(fx: sx, fy: sy)
         } else if let w = pointerWindow ?? window {
             w.pointerMoved(fx: sx, fy: sy)
         } else {
@@ -362,6 +374,8 @@ public final class Display {
     private func routePointerButton(_ button: UInt32, pressed: Bool) {
         if pointerOnPopup, let popup = activePopup {
             if button == 0x110 { popup.pointerButton(pressed: pressed) }  // BTN_LEFT
+        } else if pointerOnLayer {
+            layerSurface?.pointerButton(button, pressed: pressed)
         } else if let w = pointerWindow ?? window {
             w.pointerButton(button, pressed: pressed)
         } else {
@@ -372,7 +386,8 @@ public final class Display {
     private func routePointerAxis(_ axis: UInt32, value: Double) {
         // The primary surface scrolls; an open menu just stays put.
         guard !pointerOnPopup else { return }
-        if let w = pointerWindow ?? window { w.pointerAxis(axis, value: value) }
+        if pointerOnLayer { layerSurface?.pointerAxis(axis, value: value) }
+        else if let w = pointerWindow ?? window { w.pointerAxis(axis, value: value) }
         else { layerSurface?.pointerAxis(axis, value: value) }
     }
 
@@ -380,18 +395,28 @@ public final class Display {
     // layer surface. A grabbing popup does not steal keyboard from our client
     // (see HANDOFF §2.12), so the window/layer surface forwards to its open menu.
     private func routeKeyEvent(_ ev: KeyEvent) {
-        if let w = keyboardWindow ?? window { w.keyEvent(ev) }
+        if keyboardOnLayer { layerSurface?.keyEvent(ev) }
+        else if let w = keyboardWindow ?? window { w.keyEvent(ev) }
         else { layerSurface?.keyEvent(ev) }
     }
 
     private func keyboardFocus(_ surface: OpaquePointer?) {
-        if let w = window(forSurface: surface) { keyboardWindow = w }
+        if let w = window(forSurface: surface) {
+            keyboardWindow = w
+            keyboardOnLayer = false
+        } else if let ls = layerSurface, surface == ls.surface {
+            keyboardWindow = nil
+            keyboardOnLayer = true
+        }
     }
 
     private func keyboardBlur(_ surface: OpaquePointer?) {
         if let w = window(forSurface: surface), keyboardWindow === w {
             keyboardWindow = nil
             repeatKey = nil        // don't keep repeating into an unfocused window
+        } else if let ls = layerSurface, surface == ls.surface {
+            keyboardOnLayer = false
+            repeatKey = nil
         }
     }
 

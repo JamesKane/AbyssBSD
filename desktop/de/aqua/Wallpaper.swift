@@ -2,11 +2,19 @@
 // client. It reads its look from `desktop.ini` via PoolConfig and hot-reloads
 // when that file changes (the `reef-desktop` analog, in Aqua dress).
 //
+// It also carries the **desktop icons** (DesktopIcons.swift): the boot volume
+// and the contents of ~/Desktop, arranged from the top-right corner down. A
+// double-click opens a Finder window — the Desktop and the Finder are one app on
+// Mac, so this process hosts a `FinderApp` that does *not* own its lifetime (the
+// desktop outlives every window it opens).
+//
 // Config (domain `desktop`), highest precedence first — matching the sibling:
 //   image     = /path/to/wallpaper.png   (PNG; scaled to fill/cover)
 //   grad_top, grad_bot = #aarrggbb        (vertical gradient)
 //   bg        = #aarrggbb                 (flat fill)
 //   (none)    -> the built-in Jaguar "Aqua Blue" gradient
+//   show_icons = true | false             (desktop icons; default true)
+// The Desktop folder is $ABYSS_DESKTOP_DIR, else $HOME/Desktop.
 //
 // The LayerSurface fills the output (BACKGROUND, all edges, exclusive -1). A
 // Pool.Watcher on the config directory is folded into Display's run loop, so a
@@ -129,16 +137,47 @@ private func paintImageCover(_ cr: OpaquePointer, w: Double, h: Double, path: St
     return true
 }
 
+private let kBtnLeft: UInt32 = 0x110
+private let kDoubleClickMs: Int64 = 450
+
 public final class Wallpaper: LayerSurfaceDelegate {
     private var layer: LayerSurface?
     private var style: DesktopStyle
     private var watcher: Pool.Watcher?
+
+    // Desktop icons.
+    private let showIcons: Bool
+    private let desktopFolder: String?
+    private var entries: [FinderEntry] = []
+    private var selection: Int?
+    private var iconWatcher: Pool.Watcher?
+    private var finder: FinderApp?
+    private var pointerX = 0.0
+    private var pointerY = 0.0
+    private var lastClickIndex: Int?
+    private var lastClickMs: Int64 = 0
+
+    /// The folder whose contents appear on the desktop.
+    public static func desktopDirectory() -> String? {
+        if let d = getenv("ABYSS_DESKTOP_DIR") {
+            let s = String(cString: d)
+            if !s.isEmpty { return s }
+        }
+        guard let h = getenv("HOME") else { return nil }
+        let dir = String(cString: h) + "/Desktop"
+        return finderIsDirectory(dir) ? dir : nil
+    }
+
+    /// The name shown under the volume icon (the machine, as on Mac).
+    public static func volumeName() -> String { "AbyssBSD HD" }
 
     /// Create and map the desktop. Returns nil if the compositor lacks
     /// wlr-layer-shell. Reads `desktop.ini` now and watches for changes.
     public init?(display: Display) {
         let config = (try? Pool.load("desktop")) ?? Config()
         style = DesktopStyle.from(config)
+        showIcons = config.bool("desktop", "show_icons") ?? true
+        desktopFolder = Wallpaper.desktopDirectory()
         Wallpaper.log("applied \(style.kind)")
 
         let (scale, auto) = Wallpaper.scaleConfig()
@@ -156,6 +195,100 @@ public final class Wallpaper: LayerSurfaceDelegate {
                 self?.configChanged()
             }
         }
+
+        if showIcons {
+            // The Finder hosted by the desktop: it must NOT quit the process
+            // when its last window closes — the desktop is still there.
+            finder = FinderApp(display: display, quitsWithLastWindow: false)
+            reloadIcons()
+            // Same trick as the config watch, on the Desktop folder: drop a file
+            // in ~/Desktop and it appears, with no polling.
+            if let dir = desktopFolder, let w = try? Pool.Watcher(in: dir) {
+                iconWatcher = w
+                display.addFileDescriptor(w.fileDescriptor) { [weak self] in
+                    self?.desktopFolderChanged()
+                }
+            }
+        }
+    }
+
+    // MARK: desktop icons
+
+    private func reloadIcons() {
+        entries = desktopEntries(volumeName: Wallpaper.volumeName(),
+                                 desktopFolder: desktopFolder)
+        if let s = selection, s >= entries.count { selection = nil }
+        Wallpaper.log("\(entries.count) icons")
+    }
+
+    private func desktopFolderChanged() {
+        _ = iconWatcher?.drain()
+        let before = entries.map(\.name)
+        reloadIcons()
+        guard entries.map(\.name) != before else { return }
+        layer?.setNeedsDisplay()
+    }
+
+    /// The area icons may occupy: the whole output, less the menu bar's strip.
+    private func iconBounds(w: Double, h: Double) -> Rect {
+        Rect(0, DesktopMetrics.topInset, w, h - DesktopMetrics.topInset)
+    }
+
+    private func nowMs() -> Int64 {
+        var ts = timespec()
+        clock_gettime(CLOCK_MONOTONIC, &ts)
+        return Int64(ts.tv_sec) * 1000 + Int64(ts.tv_nsec) / 1_000_000
+    }
+
+    /// Open what was double-clicked: a folder (or the volume) in a Finder
+    /// window; anything else just logs, as launching needs exec.
+    private func activate(_ i: Int) {
+        guard i >= 0, i < entries.count else { return }
+        let entry = entries[i]
+        let path: String
+        if entry.kind == .disk {
+            path = "/"                                   // the boot volume
+        } else if let dir = desktopFolder {
+            path = finderJoin(dir, entry.name)
+        } else {
+            return
+        }
+        guard entry.isContainer else {
+            Wallpaper.log("open item \(path)")
+            return
+        }
+        Wallpaper.log("opened \(path)")
+        finder?.openFolder(path)
+    }
+
+    public func pointerMoved(x: Double, y: Double) {
+        pointerX = x
+        pointerY = y
+    }
+
+    public func pointerButton(_ button: UInt32, pressed: Bool) {
+        guard showIcons, button == kBtnLeft, pressed else { return }
+        let size = layer?.size ?? (width: 0, height: 0)
+        let bounds = iconBounds(w: Double(size.width), h: Double(size.height))
+        let hit = desktopIndex(atX: pointerX, y: pointerY, count: entries.count,
+                               bounds: bounds)
+        let now = nowMs()
+        if let hit {
+            let isDouble = hit == lastClickIndex && now - lastClickMs <= kDoubleClickMs
+            lastClickIndex = hit
+            lastClickMs = now
+            if isDouble {
+                lastClickIndex = nil
+                activate(hit)
+            } else {
+                selection = hit
+                Wallpaper.log("selected \(entries[hit].name)")
+            }
+        } else {
+            lastClickIndex = nil
+            selection = nil          // a click on bare desktop deselects
+        }
+        layer?.setNeedsDisplay()
     }
 
     private func configChanged() {
@@ -193,6 +326,10 @@ public final class Wallpaper: LayerSurfaceDelegate {
         }
         cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
         paintDesktop(cr, w: w, h: h, style: style)
+        if showIcons {
+            paintDesktopIcons(cr, bounds: iconBounds(w: w, h: h), entries: entries,
+                              selection: selection)
+        }
         cairo_surface_flush(cs)
         cairo_destroy(cr)
         cairo_surface_destroy(cs)

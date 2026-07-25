@@ -227,8 +227,24 @@ copy in one spatial window appears in another. Verified live: `live-sway.sh
 ⌘⌫ lands the copy in `~/.Trash` with the original intact
 (`docs/screenshots/live-finder-fileops.png`). See HANDOFF §2.23.
 
+**P2.7 — desktop icons. ✅ done.**
+The Desktop draws the boot volume and the contents of `~/Desktop`
+(`$ABYSS_DESKTOP_DIR` overrides) straight onto the wallpaper's BACKGROUND layer
+surface, arranged the Jaguar way — **top-right corner downward, wrapping into a
+column to the left** (`DesktopIcons.swift`, pure `desktopIconRect` shared by
+paint and hit-test). Labels are white-on-shadow so they read over any wallpaper.
+Click selects, double-click opens a **real Finder window** — the Desktop hosts a
+`FinderApp` that does *not* own the process lifetime — and a `Pool.Watcher` on
+the folder makes a newly-dropped file appear with no polling. Config:
+`desktop.ini`'s `show_icons`. This also forced input routing to become fully
+surface-driven (a process can now own a layer surface *and* toplevels at once —
+see HANDOFF §2.24). Verified live: `live-sway.sh --desktop` selects an icon,
+opens a Finder window from it (asserted in sway's tree), and sees a new file
+land (`docs/screenshots/live-desktop-icons.png`).
+
 Remaining Finder work: launching what you double-click (needs exec), emptying the
-Trash from the Dock, and desktop icons.
+Trash from the Dock, and dragging icons to reposition them (which needs the
+per-item positions a spatial desktop remembers).
 
 **P2.7 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the

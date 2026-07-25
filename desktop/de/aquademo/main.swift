@@ -102,8 +102,8 @@ if scene == .wallpaper {
 } else if scene == .finder {
     // FinderApp owns the windows (spatial mode opens one per folder); this
     // strong reference is what keeps them — and their listeners — alive.
-    guard let finder = FinderApp(display: display, width: width, height: height)
-    else {
+    let finder = FinderApp(display: display, width: width, height: height)
+    guard finder.openInitialWindow() else {
         print("AquaDemo: failed to create the Finder window.")
         exit(1)
     }

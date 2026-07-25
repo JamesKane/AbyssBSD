@@ -305,6 +305,40 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.24 Desktop icons: one process, two surface *kinds* — route by surface
+(Phase 2.7.) The desktop grew icons (the boot volume + ~/Desktop), and
+double-clicking one opens a Finder window — so the wallpaper process now owns a
+layer surface *and* xdg toplevels at the same time. That broke an assumption:
+
+- **"Is there a window?" is not a routing rule.** Pointer/keyboard routing fell
+  back to `pointerWindow ?? window`, so the moment the desktop opened its first
+  Finder window, clicks on the *desktop* went to that window instead. Routing is
+  now fully surface-driven: the `enter` events set `pointerOnLayer` /
+  `keyboardOnLayer` alongside the window refs, and the layer surface is a target
+  in its own right. §2.22 made input multi-*window*; this makes it multi-*kind*.
+- **A hosted app must not own the process lifetime.** `FinderApp` quits the
+  display when its last window closes — correct when the Finder *is* the app,
+  fatal when the Desktop hosts it. Hence `quitsWithLastWindow`, and an init that
+  opens no window (`openInitialWindow()` is now explicit).
+- **Desktop icons are laid out the other way round.** Jaguar fills the *top-right
+  corner downward*, then wraps into a column to the **left** — the mirror of the
+  Finder's left-to-right grid. Same "one pure function" rule (`desktopIconRect`),
+  and the hit-test only covers the icon and its label, not the whole cell.
+- **Labels need their own contrast.** Desktop labels are white with a dark
+  shadow, because they sit on whatever wallpaper the user picked; the Finder's
+  dark-on-white text is unreadable over a photograph.
+- **`Pool.Watcher(in:)` works on any directory.** Pointing one at ~/Desktop gets
+  "a file appeared on the desktop" for free, reusing the run-loop fd hook from
+  §2.18 — no polling, and the live test asserts on it.
+- **Test-harness trap that cost the most time here:** `live-sway.sh` sizes the
+  virtual pointer's coordinate space per scene, and `wallpaper` was missing from
+  that list, so it silently used the 440×300 default and every injected click
+  landed somewhere else. The app was right the whole time; only the harness was
+  wrong. When an injected click "does nothing" on a new scene, check `vpw/vph`
+  before you touch the app. (Related: a `grim` capture between two clicks blows
+  the 450 ms double-click window — send a fresh pair rather than appending one
+  click to an earlier selection.)
+
 ### 2.23 File operations: Mac verbs, xkb modifiers, and a test that owns $HOME
 (Phase 2.6c.) New folder / rename / duplicate / copy / cut / paste / delete, on
 the real filesystem:

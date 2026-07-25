@@ -577,9 +577,9 @@ private func drawAppIcon(_ cr: OpaquePointer, _ r: Rect) {
     cairo_stroke(cr)
 }
 
-/// A volume: a grey drive slab with a lighter top face.
+/// A volume: a grey drive slab with a lighter top face and a status LED.
 private func drawDiskIcon(_ cr: OpaquePointer, _ r: Rect) {
-    let body = Rect(r.x + r.w * 0.08, r.y + r.h * 0.26, r.w * 0.84, r.h * 0.48)
+    let body = Rect(r.x + r.w * 0.06, r.y + r.h * 0.22, r.w * 0.88, r.h * 0.58)
     Draw.roundedRect(cr, body, radius: r.w * 0.08)
     let g = cairo_pattern_create_linear(0, body.y, 0, body.y + body.h)
     cairo_pattern_add_color_stop_rgba(g, 0, 0.90, 0.91, 0.94, 1)
@@ -587,13 +587,26 @@ private func drawDiskIcon(_ cr: OpaquePointer, _ r: Rect) {
     cairo_set_source(cr, g)
     cairo_fill(cr)
     cairo_pattern_destroy(g)
+    // A brighter top face, so the slab reads as a drive rather than a card.
+    Draw.roundedRect(cr, Rect(body.x + r.w * 0.04, body.y + r.h * 0.04,
+                              body.w - r.w * 0.08, body.h * 0.34),
+                     radius: r.w * 0.05)
+    cairo_set_source_rgba(cr, 1, 1, 1, 0.45)
+    cairo_fill(cr)
     Draw.roundedRect(cr, body, radius: r.w * 0.08)
     cairo_set_source_rgba(cr, 0.35, 0.37, 0.42, 0.85)
     cairo_set_line_width(cr, max(0.6, r.w * 0.02))
     cairo_stroke(cr)
+    // Front slot + status LED.
     cairo_new_path(cr)
-    cairo_arc(cr, body.x + body.w * 0.8, body.y + body.h * 0.5, r.w * 0.05, 0, 2 * .pi)
-    cairo_set_source_rgba(cr, 0.35, 0.55, 0.85, 1)
+    cairo_rectangle(cr, body.x + body.w * 0.14, body.y + body.h * 0.70,
+                    body.w * 0.44, max(1, r.h * 0.045))
+    cairo_set_source_rgba(cr, 0.45, 0.47, 0.52, 0.75)
+    cairo_fill(cr)
+    cairo_new_path(cr)
+    cairo_arc(cr, body.x + body.w * 0.80, body.y + body.h * 0.74, max(1, r.w * 0.045),
+              0, 2 * .pi)
+    cairo_set_source_rgba(cr, 0.35, 0.62, 0.92, 1)
     cairo_fill(cr)
 }
 
@@ -647,24 +660,37 @@ public final class FinderApp {
         }
     }
 
-    public init?(display: Display, path: String? = nil,
-                 width: Int32 = 520, height: Int32 = 400) {
+    /// Whether closing the last window ends the process. True when the Finder is
+    /// the app being run; false when something else hosts it (the Desktop opens
+    /// Finder windows but must outlive them).
+    private let quitsWithLastWindow: Bool
+
+    public init(display: Display, width: Int32 = 520, height: Int32 = 400,
+                quitsWithLastWindow: Bool = true) {
         self.display = display
         self.width = width
         self.height = height
+        self.quitsWithLastWindow = quitsWithLastWindow
         let config = (try? Pool.load("finder")) ?? Config()
         toolbarVisible = config.bool("finder", "toolbar") ?? true
+    }
+
+    /// Open the window the app starts with. Returns false if the window can't be
+    /// created (no compositor surface).
+    @discardableResult
+    public func openInitialWindow(path: String? = nil) -> Bool {
         guard let first = FinderWindow(display: display, app: self,
                                        path: path ?? FinderWindow.startDirectory(),
                                        toolbarVisible: toolbarVisible,
                                        width: width, height: height)
-        else { return nil }
+        else { return false }
         windows.append(first)
+        return true
     }
 
-    /// Open `path` in its own window — or raise the one already showing it.
-    /// Spatial mode's defining behaviour.
-    func open(path: String, from: FinderWindow) {
+    /// Open (or raise) a window for `path` — what the Desktop calls when an icon
+    /// is double-clicked.
+    public func openFolder(_ path: String) {
         if let existing = windows.first(where: { $0.directory == path }) {
             FinderWindow.log("raised \(path)")
             existing.raise()
@@ -677,12 +703,16 @@ public final class FinderApp {
         FinderWindow.log("new window \(path) (\(windows.count) open)")
     }
 
+    /// Spatial mode's defining behaviour: a folder opens in its own window, or
+    /// raises the window it already has.
+    func open(path: String, from: FinderWindow) { openFolder(path) }
+
     /// Close one window; the last one out ends the process.
     func close(_ w: FinderWindow) {
         windows.removeAll { $0 === w }
         w.tearDown()
         FinderWindow.log("closed \(w.directory) (\(windows.count) open)")
-        if windows.isEmpty { display.stop() }
+        if windows.isEmpty, quitsWithLastWindow { display.stop() }
     }
 
     /// A window switched mode: apply it everywhere and remember it.

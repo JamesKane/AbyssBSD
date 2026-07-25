@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -40,6 +40,7 @@ for a in "$@"; do
     --finder)                 finder="--finder"; click="--click" ;;  # browse a seeded dir
     --spatial)                spatial="--spatial"; finder="--finder"; click="--click" ;;
     --fileops)                fileops="--fileops"; finder="--finder"; click="--click"; keys="--keys" ;;
+    --desktop)                desktop="--desktop"; click="--click" ;;  # desktop icons
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
@@ -68,6 +69,8 @@ fi
 [ "$menubar" = "--menubar" ] && scene="menubar"
 # --dock drives the Dock (a layer-shell BOTTOM surface).
 [ "$dock_mode" = "--dock" ] && scene="dock"
+# --desktop drives the desktop icons (on the wallpaper's layer surface).
+[ "$desktop" = "--desktop" ] && scene="wallpaper"
 # --finder drives the file browser (an ordinary xdg toplevel); --spatial also
 # switches it into one-window-per-folder mode.
 [ "$finder" = "--finder" ] && scene="finder"
@@ -145,6 +148,7 @@ cleanup() {
   [ -n "$vp_dir" ] && rm -rf "$vp_dir" || true
   [ -n "${cfgdir:-}" ] && rm -rf "$cfgdir" || true
   [ -n "${finderdir:-}" ] && rm -rf "$finderdir" || true
+  [ -n "${deskdir:-}" ] && rm -rf "$deskdir" || true
 }
 trap cleanup EXIT
 
@@ -195,10 +199,27 @@ if [ "$finder" = "--finder" ]; then
   [ "$fileops" = "--fileops" ] && finder_env="$finder_env HOME=$finderdir"
 fi
 
+# --desktop: a seeded ~/Desktop for the wallpaper's icons, and a private config
+# dir (the desktop reads desktop.ini).
+desktop_env=""
+# Any other wallpaper run gets an EMPTY desktop folder, so the backdrop tests
+# (and their screenshots) don't depend on what's in the developer's ~/Desktop.
+if [ "$scene" = "wallpaper" ] && [ "$desktop" != "--desktop" ]; then
+  deskdir=$(mktemp -d)
+  desktop_env="ABYSS_DESKTOP_DIR=$deskdir"
+fi
+if [ "$desktop" = "--desktop" ]; then
+  deskdir=$(mktemp -d)
+  mkdir -p "$deskdir/Documents"
+  printf 'notes\n' > "$deskdir/notes.txt"
+  cfgdir=${cfgdir:-$(mktemp -d)}
+  desktop_env="ABYSS_DESKTOP_DIR=$deskdir ABYSS_CONFIG_DIR=$cfgdir"
+fi
+
 # Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
 # AQUA_SCALE so the window auto-detects scale from wl_output rather than pinning.
 app_log=$(mktemp)
-env -u AQUA_SCALE $abyss_cfg $finder_env WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
+env -u AQUA_SCALE $abyss_cfg $finder_env $desktop_env WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
     .build/debug/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
@@ -224,6 +245,13 @@ done
 [ "$mapped" = 1 ] || { echo "FAIL: surface never mapped"; cat "$app_log"; exit 1; }
 [ -n "$is_layer" ] && echo "layer surface mapped: $(grep 'LayerSurface: mapped' "$app_log" | head -1)"
 sleep 1  # let a couple of frames paint
+
+if [ "$desktop" = "--desktop" ]; then
+  # The boot volume plus the two seeded items.
+  grep -q 'Wallpaper: 3 icons' "$app_log" \
+    || { echo "FAIL: the desktop didn't list its icons"; cat "$app_log"; exit 1; }
+  echo "desktop: $(grep 'Wallpaper: .* icons' "$app_log" | head -1) (volume + 2 items)"
+fi
 
 if [ "$finder" = "--finder" ]; then
   # readdir + sort + the dot-file filter, against a directory we control.
@@ -261,7 +289,7 @@ if [ "$click" = "--click" ]; then
     scroll)  vpw=360; vph=420 ;;
     tabs)    vpw=480; vph=380 ;;
     sheet)   vpw=440; vph=320 ;;
-    menubar|dock) vpw=800; vph=600 ;;
+    wallpaper|menubar|dock) vpw=800; vph=600 ;;
     finder)  vpw=520; vph=400 ;;
     *)       vpw=440; vph=300 ;;
   esac
@@ -304,6 +332,43 @@ if [ "$click" = "--click" ]; then
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
     sleep 0.4
+  elif [ "$desktop" = "--desktop" ]; then
+    # Icons stack from the top-right: index 0 is the volume, index 1 ("Documents")
+    # sits one cell below it — cell x 692..788, icon centred at (740, 150).
+    printf 'm 740 150\n' >&3
+    sleep 0.4
+    printf 'p\nr\n' >&3
+    sleep 0.5
+    grep -q 'Wallpaper: selected Documents' "$app_log" \
+      || { echo "FAIL: clicking a desktop icon didn't select it"; cat "$app_log"; exit 1; }
+    echo "desktop: clicked the second icon -> selected Documents"
+    # Capture with the selection showing, before a Finder window covers the desktop.
+    WAYLAND_DISPLAY="$wd" grim "$out"; captured=1
+    echo "desktop: captured the icons -> $out"
+    # Double-click opens it in a Finder window — the desktop hosts the Finder.
+    # (A fresh pair, not one click appended to the selection above: the capture
+    # in between takes longer than the double-click window.)
+    printf 'p\nr\np\nr\n' >&3
+    sleep 1.2
+    grep -q "Wallpaper: opened $deskdir/Documents" "$app_log" \
+      || { echo "FAIL: double-clicking a desktop folder opened nothing"; cat "$app_log"; exit 1; }
+    for _ in $(seq 1 20); do
+      swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.finder"' && break
+      sleep 0.2
+    done
+    swaymsg -t get_tree | grep -q '"app_id": "org.abyssbsd.finder"' \
+      || { echo "FAIL: no Finder toplevel appeared"; cat "$app_log"; exit 1; }
+    echo "desktop: double-click opened a real Finder window from the desktop"
+    # The desktop watches its folder: a new file shows up with no polling.
+    printf 'hello\n' > "$deskdir/Later.txt"
+    seen=0
+    for _ in $(seq 1 25); do
+      grep -q 'Wallpaper: 4 icons' "$app_log" && { seen=1; break; }
+      sleep 0.2
+    done
+    [ "$seen" = 1 ] \
+      || { echo "FAIL: the desktop didn't notice a new file"; cat "$app_log"; exit 1; }
+    echo "desktop: a new file in the folder appeared on the desktop (watch fd)"
   elif [ "$fileops" = "--fileops" ]; then
     # Just put the pointer in the item well and click empty space, so the window
     # is focused and nothing is selected; the keyboard block does the work.

@@ -267,6 +267,13 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     // bar / Dock previews composite the shell surfaces over the wallpaper.
     if kind == .wallpaper || kind == .menubar || kind == .dock {
         paintWallpaper(cr, w: Double(width), h: Double(height))
+        if kind == .wallpaper {
+            // The desktop's own icons, over a synthetic listing.
+            let bounds = Rect(0, DesktopMetrics.topInset, Double(width),
+                              Double(height) - DesktopMetrics.topInset)
+            paintDesktopIcons(cr, bounds: bounds, entries: desktopSampleEntries(),
+                              selection: 1)
+        }
         if kind == .menubar {
             paintMenuBar(cr, w: Double(width), h: MenuBarMetrics.height,
                          menus: MenuBar.defaultMenus(appName: "Finder"),
