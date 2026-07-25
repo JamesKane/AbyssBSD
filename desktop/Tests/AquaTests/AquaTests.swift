@@ -598,6 +598,95 @@ final class AquaTests: XCTestCase {
                                   view: .icon, viewport: vp), count - 1)
     }
 
+    // MARK: Launching
+
+    func testLauncherResolvesExecutables() {
+        // A bare name is searched along the given PATH…
+        XCTAssertEqual(Launcher.resolveExecutable("sh", path: "/nonexistent:/bin"),
+                       "/bin/sh")
+        XCTAssertNil(Launcher.resolveExecutable("sh", path: "/nonexistent"))
+        // …a path with a slash is used as-is, but only if it's executable.
+        XCTAssertEqual(Launcher.resolveExecutable("/bin/sh"), "/bin/sh")
+        XCTAssertNil(Launcher.resolveExecutable("/etc/hostname"))   // not executable
+        XCTAssertNil(Launcher.resolveExecutable(""))
+    }
+
+    func testLauncherSplitsCommandLines() {
+        XCTAssertEqual(Launcher.splitCommand("xdg-open"), ["xdg-open"])
+        XCTAssertEqual(Launcher.splitCommand("  open   -a  Preview "),
+                       ["open", "-a", "Preview"])
+        XCTAssertEqual(Launcher.splitCommand(""), [])
+    }
+
+    func testLauncherFindsABundleExecutable() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/bundle.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer { removeTree(root) }
+
+        // Foo.app/Contents/MacOS/Foo — the Mac convention.
+        let app = finderJoin(root, "Foo.app")
+        XCTAssertTrue(finderCreateDirectory(app))
+        XCTAssertTrue(finderCreateDirectory(finderJoin(app, "Contents")))
+        XCTAssertTrue(finderCreateDirectory(finderJoin(app, "Contents/MacOS")))
+        let exe = finderJoin(app, "Contents/MacOS/Foo")
+        let fd = exe.withCString { open($0, O_CREAT | O_WRONLY, 0o755) }
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        close(fd)
+
+        XCTAssertEqual(Launcher.bundleExecutable(app), exe)
+        XCTAssertTrue(Launcher.isExecutableFile(exe))
+        // A bundle with nothing runnable in it resolves to nil rather than
+        // launching something arbitrary.
+        let empty = finderJoin(root, "Bare.app")
+        XCTAssertTrue(finderCreateDirectory(empty))
+        XCTAssertNil(Launcher.bundleExecutable(empty))
+    }
+
+    func testLauncherRunsADetachedProcess() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/launch.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer { removeTree(root) }
+
+        // A script that records the environment it was launched with, so we can
+        // prove both the exec and the extra environment took effect.
+        let marker = finderJoin(root, "ran.txt")
+        let script = finderJoin(root, "run.sh")
+        let body = "#!/bin/sh\nprintf '%s' \"$ABYSS_TEST_TAG\" > \(marker)\n"
+        let fd = script.withCString { open($0, O_CREAT | O_WRONLY | O_TRUNC, 0o755) }
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        _ = Array(body.utf8).withUnsafeBytes { Glibc.write(fd, $0.baseAddress, $0.count) }
+        close(fd)
+
+        XCTAssertTrue(Launcher.launchDetached([script],
+                                              extraEnv: ["ABYSS_TEST_TAG": "hello"]))
+        // The child is detached, so poll briefly for its side effect.
+        var contents = ""
+        for _ in 0..<50 {
+            if finderExists(marker) {
+                let f = marker.withCString { open($0, O_RDONLY) }
+                if f >= 0 {
+                    var buf = [UInt8](repeating: 0, count: 64)
+                    let n = buf.withUnsafeMutableBytes { Glibc.read(f, $0.baseAddress, $0.count) }
+                    close(f)
+                    if n > 0 { contents = String(decoding: buf[0..<n], as: UTF8.self) }
+                }
+                if !contents.isEmpty { break }
+            }
+            usleep(20_000)
+        }
+        XCTAssertEqual(contents, "hello", "the detached child ran with our environment")
+        // Nothing to reap: the grandchild belongs to init, so no zombie is left.
+        XCTAssertEqual(waitpid(-1, nil, WNOHANG), -1)
+
+        XCTAssertFalse(Launcher.launchDetached(["definitely-not-a-real-command-xyz"]))
+    }
+
     // MARK: Desktop icons
 
     func testDesktopIconsStackFromTheTopRight() {

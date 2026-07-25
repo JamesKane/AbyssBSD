@@ -885,7 +885,8 @@ public final class FinderWindow: WindowDelegate {
         let entry = entries[i]
         let full = finderJoin(path, entry.name)
         guard entry.isContainer else {
-            FinderWindow.log("open item \(full)")
+            // An app bundle, an executable, or the opener command (Launcher).
+            FinderWindow.log(Launcher.open(full).description + " (\(full))")
             return
         }
         if isSpatial {

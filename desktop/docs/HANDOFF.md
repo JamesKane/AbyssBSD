@@ -305,6 +305,35 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.25 Launching: resolve before the fork, and double-fork so nothing zombies
+(Phase 2.8.) Double-clicking an app bundle, an executable or a document now
+starts a process (`Launcher.swift`):
+
+- **Do every allocation before `fork()`.** After a fork, only async-signal-safe
+  calls are legal in the child — no Swift allocation, no `setenv`, no PATH walk.
+  So argv, envp and the resolved absolute executable path are all built (with
+  `strdup`) *before* forking; the child does `setsid` + `execve` and nothing else.
+- **`execvpe` isn't portable** (GNU-only; FreeBSD lacks it), which is the other
+  reason PATH resolution happens up front: with an absolute path, plain `execve`
+  is enough. `resolveExecutable` is a pure function and unit-tested.
+- **Double-fork instead of a SIGCHLD handler.** fork → fork → `execve`, with the
+  parent reaping the *middle* child immediately; the grandchild reparents to init
+  and can never become a zombie. The run loop must not block in `waitpid`, and
+  installing `SIGCHLD = SIG_IGN` from a library would be a rude global change.
+- **Bundle convention:** `Foo.app/Contents/MacOS/Foo`, falling back to the first
+  executable in that directory. A bundle with nothing runnable resolves to nil
+  rather than launching something arbitrary.
+- **Documents need a configured opener** (`$ABYSS_OPEN`, else `open_command` in
+  `finder.ini`) — there is no LaunchServices. With none set the Finder logs "no
+  handler"; a double-click that silently does nothing is a worse bug report.
+- **The Dock launches by running this same binary** with `AQUA_SCENE` set
+  (`/proc/self/exe`, `$ABYSS_APP_BINARY` to override). Clicking a running tile
+  still activates it; only a non-running one launches.
+- **Live-test timing:** after a window that covered the Dock is killed, sway does
+  not hand pointer focus back to the layer surface until the pointer *moves* —
+  the test jiggles the pointer before clicking the tile. Without it the click
+  vanishes with no log at all, which reads exactly like a broken hit-test.
+
 ### 2.24 Desktop icons: one process, two surface *kinds* — route by surface
 (Phase 2.7.) The desktop grew icons (the boot volume + ~/Desktop), and
 double-clicking one opens a Finder window — so the wallpaper process now owns a

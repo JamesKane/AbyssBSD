@@ -57,7 +57,7 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (54 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (58 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
@@ -158,6 +158,13 @@ the app quits with the last. The mode persists to `finder.ini`.
 (A Wayland client can't position its own windows, so the "remembered position"
 part of spatial Finder waits for `tide` in Phase 3; size/view/mode do persist.)
 
+Double-clicking something that isn't a folder **launches** it: an `.app` bundle
+runs `Contents/MacOS/<name>`, an executable runs directly, and anything else goes
+to the opener command (`$ABYSS_OPEN`, else `open_command` in `finder.ini`) — with
+an honest "no handler" when nothing is set. The desktop icons and the **Dock**
+share that path, so a Dock tile whose app isn't running launches it (another copy
+of this binary in the right scene) instead of just logging.
+
 It also **operates on files**, with the Mac's verbs rather than a PC file
 manager's: **Return** renames in place (⌘O, ⌘↓ or a double-click open), **⌘⇧N**
 makes a new folder and opens its name for editing with the base pre-selected,
@@ -243,6 +250,7 @@ abyss/tests/live-sway.sh --finder --keys /tmp/fkeys.png  # ... and drive it from
 abyss/tests/live-sway.sh --spatial /tmp/spatial.png      # spatial: 2 windows, raise, close one
 abyss/tests/live-sway.sh --fileops /tmp/fileops.png      # new folder/rename/copy/trash, checked on disk
 abyss/tests/live-sway.sh --desktop /tmp/desk.png         # desktop icons: select, open a Finder window
+abyss/tests/live-sway.sh --launch  /tmp/launch.png       # double-click an .app bundle / a document
 
 # Finder (an ordinary xdg-shell app) over a real directory:
 ABYSS_FINDER_DIR=~/Documents AQUA_SCENE=finder .build/debug/AquaDemo

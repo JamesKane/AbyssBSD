@@ -242,9 +242,26 @@ see HANDOFF §2.24). Verified live: `live-sway.sh --desktop` selects an icon,
 opens a Finder window from it (asserted in sway's tree), and sees a new file
 land (`docs/screenshots/live-desktop-icons.png`).
 
-Remaining Finder work: launching what you double-click (needs exec), emptying the
-Trash from the Dock, and dragging icons to reposition them (which needs the
-per-item positions a spatial desktop remembers).
+**P2.8 — launching. ✅ done.**
+Double-clicking something that isn't a folder now starts a process
+(`Launcher.swift`): an `.app` bundle runs `Contents/MacOS/<name>` (the Mac
+convention), a plain executable runs directly, and anything else goes to the
+opener command (`$ABYSS_OPEN`, else `finder.ini`'s `open_command`) — with a
+plain "no handler" when nothing is configured. Spawning is fork → fork →
+`execve` with argv/envp/paths all built *before* the fork, so the child makes
+only async-signal-safe calls and the grandchild reparents to init (no zombies,
+no `waitpid` in the run loop). The Finder, the desktop icons and the **Dock**
+all go through it; a Dock tile that isn't running launches another copy of this
+binary in the right `AQUA_SCENE`. Verified live: `live-sway.sh --launch`
+double-clicks a real (tiny) bundle and checks its executable actually ran, then
+double-clicks a document and checks `$ABYSS_OPEN` received the path; the
+`--dock` run now clicks the Finder tile and asserts a real Finder window
+appears. See HANDOFF §2.25.
+
+Remaining shell work: emptying the Trash from the Dock, dragging desktop icons
+to reposition them (needs the per-item positions a spatial desktop remembers),
+and the P2.7 dev session launcher that starts desktop + menu bar + Dock
+together.
 
 **P2.7 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the

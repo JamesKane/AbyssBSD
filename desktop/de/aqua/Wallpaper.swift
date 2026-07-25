@@ -254,7 +254,7 @@ public final class Wallpaper: LayerSurfaceDelegate {
             return
         }
         guard entry.isContainer else {
-            Wallpaper.log("open item \(path)")
+            Wallpaper.log(Launcher.open(path).description + " (\(path))")
             return
         }
         Wallpaper.log("opened \(path)")

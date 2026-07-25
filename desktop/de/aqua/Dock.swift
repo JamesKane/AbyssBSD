@@ -30,8 +30,15 @@ public struct DockItem: Sendable {
     public let label: String
     public let appID: String?   // matches a running toplevel's app_id; nil for Trash
     public let isTrash: Bool
-    public init(icon: DockIcon, label: String, appID: String?, isTrash: Bool = false) {
+    /// What to run when the tile isn't already running. argv, plus environment
+    /// to add — nil for a tile we can't launch (yet).
+    public let command: [String]?
+    public let environment: [String: String]
+
+    public init(icon: DockIcon, label: String, appID: String?, isTrash: Bool = false,
+                command: [String]? = nil, environment: [String: String] = [:]) {
         self.icon = icon; self.label = label; self.appID = appID; self.isTrash = isTrash
+        self.command = command; self.environment = environment
     }
 }
 
@@ -308,12 +315,20 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var pointerY = 0.0
 
     public static func defaultPinned() -> [DockItem] {
-        [
-            DockItem(icon: .finder,  label: "Finder",  appID: "org.abyssbsd.finder"),
+        // The two tiles that map to something real launch another copy of this
+        // binary in the right scene; the rest are placeholders until there are
+        // apps behind them.
+        let selfExe = Launcher.selfExecutable()
+        return [
+            DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
+                     command: selfExe.map { [$0] },
+                     environment: ["AQUA_SCENE": "finder"]),
             DockItem(icon: .browser, label: "Browser", appID: "org.abyssbsd.browser"),
             DockItem(icon: .mail,    label: "Mail",    appID: "org.abyssbsd.mail"),
             DockItem(icon: .music,   label: "Music",   appID: "org.abyssbsd.music"),
-            DockItem(icon: .prefs,   label: "System Preferences", appID: "org.abyssbsd.prefs"),
+            DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
+                     command: selfExe.map { [$0] },
+                     environment: ["AQUA_SCENE": "sysprefs"]),
         ]
     }
 
@@ -417,10 +432,19 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private func activate(_ item: DockItem) {
         if item.isTrash { Dock.log("clicked Trash"); return }
         guard let appID = item.appID else { return }
+        // Running: raise it. Not running: launch it, if the tile knows how.
         if toplevels?.activate(appID: appID) == true {
             Dock.log("activated \(appID)")
+            return
+        }
+        guard let command = item.command else {
+            Dock.log("no launcher for \(appID)")
+            return
+        }
+        if Launcher.launchDetached(command, extraEnv: item.environment) {
+            Dock.log("launched \(appID)")
         } else {
-            Dock.log("launch \(appID)")   // not running (launch is future)
+            Dock.log("launch failed for \(appID)")
         }
     }
 }

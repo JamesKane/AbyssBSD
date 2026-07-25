@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -41,6 +41,7 @@ for a in "$@"; do
     --spatial)                spatial="--spatial"; finder="--finder"; click="--click" ;;
     --fileops)                fileops="--fileops"; finder="--finder"; click="--click"; keys="--keys" ;;
     --desktop)                desktop="--desktop"; click="--click" ;;  # desktop icons
+    --launch)                 launch="--launch"; finder="--finder"; click="--click" ;;
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
@@ -197,10 +198,35 @@ if [ "$finder" = "--finder" ]; then
   # --fileops moves items to ~/.Trash, so HOME points inside the temp tree —
   # a test must never drop things in the developer's real Trash.
   [ "$fileops" = "--fileops" ] && finder_env="$finder_env HOME=$finderdir"
+  if [ "$launch" = "--launch" ]; then
+    # A real (if tiny) application bundle, laid out the Mac way, plus an opener
+    # command for documents. Both just leave a file behind so the test can prove
+    # the process actually ran.
+    mkdir -p "$finderdir/Marker.app/Contents/MacOS"
+    cat > "$finderdir/Marker.app/Contents/MacOS/Marker" <<APP
+#!/bin/sh
+printf 'app ran\n' > "$finderdir/app-ran.txt"
+APP
+    chmod +x "$finderdir/Marker.app/Contents/MacOS/Marker"
+    cat > "$finderdir/opener.sh" <<OPEN
+#!/bin/sh
+printf '%s' "\$1" > "$finderdir/opened.txt"
+OPEN
+    chmod +x "$finderdir/opener.sh"
+    finder_env="$finder_env ABYSS_OPEN=$finderdir/opener.sh"
+  fi
 fi
 
 # --desktop: a seeded ~/Desktop for the wallpaper's icons, and a private config
 # dir (the desktop reads desktop.ini).
+# What the Dock launches inherits our environment, so point it at a temp dir
+# rather than the developer's home.
+if [ "$scene" = "dock" ]; then
+  finderdir=${finderdir:-$(mktemp -d)}
+  mkdir -p "$finderdir/Documents"
+  finder_env="ABYSS_FINDER_DIR=$finderdir"
+fi
+
 desktop_env=""
 # Any other wallpaper run gets an EMPTY desktop folder, so the backdrop tests
 # (and their screenshots) don't depend on what's in the developer's ~/Desktop.
@@ -255,7 +281,10 @@ fi
 
 if [ "$finder" = "--finder" ]; then
   # readdir + sort + the dot-file filter, against a directory we control.
-  grep -q "Finder: listed $finderdir (4 items)" "$app_log" \
+  # (--launch seeds two extra items: the bundle and the opener script.)
+  expect_items=4
+  [ "$launch" = "--launch" ] && expect_items=6
+  grep -q "Finder: listed $finderdir ($expect_items items)" "$app_log" \
     || { echo "FAIL: Finder didn't list the seeded directory"; cat "$app_log"; exit 1; }
   echo "finder: $(grep 'Finder: listed' "$app_log" | head -1)"
 fi
@@ -332,6 +361,29 @@ if [ "$click" = "--click" ]; then
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
     sleep 0.4
+  elif [ "$launch" = "--launch" ]; then
+    # Sorted: Applications, Documents, Marker.app, opener.sh, Pictures,
+    # Read Me.txt — 5 columns of 88px under the 22px title bar + 36px toolbar.
+    # Cell 2 ("Marker.app") is centred at x=230, y=96.
+    printf 'm 230 96\np\nr\np\nr\n' >&3
+    sleep 1.2
+    grep -q "Finder: launched $finderdir/Marker.app/Contents/MacOS/Marker" "$app_log" \
+      || { echo "FAIL: double-clicking the bundle didn't launch it"; cat "$app_log"; exit 1; }
+    [ -f "$finderdir/app-ran.txt" ] \
+      || { echo "FAIL: the launched app never ran"; cat "$app_log"; exit 1; }
+    echo "finder: double-clicked Marker.app -> its executable really ran"
+    # A document goes to the opener command, which records the path it was given.
+    # "Read Me.txt" is item 5 of 6, and the grid is 5 columns wide, so it wraps
+    # to the start of row 2: cell x 10..98 (centre 54), icon centred at y=172.
+    printf 'm 54 172\np\nr\np\nr\n' >&3
+    sleep 1.2
+    grep -q 'Finder: opened with' "$app_log" \
+      || { echo "FAIL: the document didn't reach the opener"; cat "$app_log"; exit 1; }
+    for _ in $(seq 1 25); do [ -s "$finderdir/opened.txt" ] && break; sleep 0.2; done
+    got=$(cat "$finderdir/opened.txt" 2>/dev/null || true)
+    [ "$got" = "$finderdir/Read Me.txt" ] \
+      || { echo "FAIL: opener got '$got', expected '$finderdir/Read Me.txt'"; cat "$app_log"; exit 1; }
+    echo "finder: double-clicked a document -> \$ABYSS_OPEN ran with its path"
   elif [ "$desktop" = "--desktop" ]; then
     # Icons stack from the top-right: index 0 is the volume, index 1 ("Documents")
     # sits one cell below it — cell x 692..788, icon centred at (740, 150).
@@ -471,6 +523,26 @@ if [ "$click" = "--click" ]; then
       || { echo "FAIL: Dock didn't see the running toplevel (foreign-toplevel)"; cat "$app_log"; exit 1; }
     echo "foreign-toplevel: $(grep 'Dock: running' "$app_log" | head -1)"
     kill "$app2_pid" 2>/dev/null || true; app2_pid=""
+    # Click the Finder tile: it isn't running, so the Dock LAUNCHES it (another
+    # copy of this binary in the finder scene) and a real toplevel appears.
+    # The window above covered the shelf, so give sway a moment to hand pointer
+    # focus back to the layer surface, and move twice so it re-enters.
+    sleep 0.6
+    printf 'm 320 560\n' >&3
+    sleep 0.3
+    printf 'm 265 560\n' >&3
+    sleep 0.4
+    printf 'p\nr\n' >&3
+    sleep 1.2
+    grep -q 'Dock: launched org.abyssbsd.finder' "$app_log" \
+      || { echo "FAIL: the Dock tile didn't launch the Finder"; cat "$app_log"; exit 1; }
+    for _ in $(seq 1 25); do
+      swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.finder"' && break
+      sleep 0.2
+    done
+    swaymsg -t get_tree | grep -q '"app_id": "org.abyssbsd.finder"' \
+      || { echo "FAIL: the launched Finder never mapped a window"; cat "$app_log"; exit 1; }
+    echo "dock: clicking the Finder tile launched a real Finder window"
   else
   case "$scene" in
     widgets)
