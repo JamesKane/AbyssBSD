@@ -258,20 +258,29 @@ double-clicks a document and checks `$ABYSS_OPEN` received the path; the
 `--dock` run now clicks the Finder tile and asserts a real Finder window
 appears. See HANDOFF §2.25.
 
-Remaining shell work: emptying the Trash from the Dock, dragging desktop icons
-to reposition them (needs the per-item positions a spatial desktop remembers),
-and the P2.10 dev session launcher that starts desktop + menu bar + Dock
-together.
+Remaining shell work: emptying the Trash from the Dock, and dragging desktop
+icons to reposition them (needs the per-item positions a spatial desktop
+remembers).
 
 **P2.9 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the
 nvlist pack/unpack + `SCM_RIGHTS`), then a `reefctl`-equivalent driving menu-bar
 reload/menu and notifications. Otherwise carry to Phase 3.
 
-**P2.10 — Dev session launcher.**
-A shell/Swift script that starts sway (or targets the running one), then the
-wallpaper + menu bar + Dock as clients — the Linux stand-in for `anchor`. Gives us
-a one-command "boot the desktop" for demos and live tests.
+**P2.10 — Dev session launcher. ✅ done.**
+`abyss/session.sh` boots the whole shell with one command: it starts a
+compositor (`--nested` inside your session, `--headless` for tests) or targets a
+running one (`--attach`), then runs the desktop, the menu bar and the Dock
+against it and **keeps them alive** — a component that dies is restarted, and
+Ctrl-C (or quitting the compositor) tears the session down together. That
+supervision is why it's the Linux stand-in for `anchor` rather than three
+backgrounded commands; `--screenshot`/`--once` make it usable from CI.
+Verified live by `abyss/tests/live-session.sh`: the three layer surfaces map in
+their own namespaces on one output, the menu bar's exclusive zone really
+reserves space (asserted on sway's *workspace rect*, since a layer surface is
+never in the tree), grim pixel probes prove the stacking order, and killing the
+Dock brings a new one back. See HANDOFF §2.26 and
+![the session](screenshots/live-session.png).
 
 ---
 

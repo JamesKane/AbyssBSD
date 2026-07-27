@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-07-25.
+Last updated: 2026-07-27.
 
 ## What this is
 
@@ -44,7 +44,11 @@ double-click opens a real Finder window
 added **spatial mode**: hide the toolbar with the title bar's pill and every folder gets its own
 window, with **xdg-activation** raising one that's already open
 (![spatial finder](screenshots/live-finder-spatial.png)) — which made the client
-runtime multi-window (`Display` routes input **by wl_surface**). See
+runtime multi-window (`Display` routes input **by wl_surface**). P2.10 tied it
+together: **`abyss/session.sh`** boots the whole shell with one command — a
+nested (or headless, or already-running) compositor plus the desktop, menu bar
+and Dock, supervised and torn down together
+(![the session](screenshots/live-session.png)). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
 ## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
@@ -218,6 +222,10 @@ key and the field fills with repeats — real **key repeat** off the compositor'
 ```sh
 swift build && swift test
 
+# The whole desktop, one command (nested inside your session by default):
+abyss/session.sh                       # --headless / --attach; --without dock; Ctrl-C quits
+abyss/tests/live-session.sh /tmp/session.png   # ... and the live test that asserts it composes
+
 # Headless visual check — renders one frame to PNG, no compositor needed:
 AQUA_RENDER_PNG=/tmp/aqua.png AQUA_SCALE=2 .build/debug/AquaDemo
 AQUA_SCENE=sysprefs AQUA_RENDER_PNG=/tmp/prefs.png AQUA_SCALE=2 .build/debug/AquaDemo
@@ -278,13 +286,12 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 Phase 0/1 are complete, and so is Phase 2's visible shell (P2.1–P2.8: layer-shell
 + Desktop, `PoolConfig`, menu bar, Dock, Finder — browser *and* spatial, with
-file operations — desktop icons, and launching). See
-[HANDOFF.md](HANDOFF.md) §5 for the reasoning; in short:
+file operations — desktop icons, and launching), which now boots as one desktop
+(P2.10). See [HANDOFF.md](HANDOFF.md) §5 for the reasoning; in short:
 
-- **Finish Phase 2's tail:** the **dev session launcher** (P2.10 — one command
-  that brings up desktop + menu bar + Dock together, so it reads as a desktop
-  rather than as separate scenes), and the **`CurrentIPC`** decision (P2.9 — it
-  binds FreeBSD-only libnv; vendor it, hand-roll the codec, or carry to Phase 3).
+- **Finish Phase 2's tail:** the **`CurrentIPC`** decision (P2.9 — it binds
+  FreeBSD-only libnv; vendor it, hand-roll the codec, or carry to Phase 3). It
+  carries only the control plane, so nothing visible is waiting on it.
 - **Shell polish:** empty the Trash from the Dock, menu-bar keyboard navigation,
   reading an `.app` bundle's own icon. Dragging desktop icons is blocked on the
   same protocol limit as spatial window placement — a Wayland client can't

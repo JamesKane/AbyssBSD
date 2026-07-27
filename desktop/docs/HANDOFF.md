@@ -5,7 +5,8 @@ Read [STATUS.md](STATUS.md) for the current build state, [PHASE2.md](PHASE2.md)
 for the shell's ordered passes, and [PLAN.md](PLAN.md) for the multi-year
 roadmap; this doc is the *practical knowledge* layer.
 
-Last updated: 2026-07-25 (end of Phase 2's visible work — P2.1–P2.8 shipped).
+Last updated: 2026-07-27 (P2.1–P2.8 plus the P2.10 session launcher — the shell
+now boots as one desktop).
 
 **Picking this up cold?** Read §1 (what exists), skim the §2 index for the trap
 nearest what you're about to touch, then §5 (what's next). Then run
@@ -57,13 +58,17 @@ renders faithful Jaguar UI:
   browser-mode file manager with icon/list views, spatial mode (one window per
   folder, raise-not-duplicate), Mac-verb file operations onto the real
   filesystem, and **launching** (§2.21, §2.22, §2.23, §2.25).
+- **The session** — `abyss/session.sh` boots all of it with one command: a
+  nested/headless/attached compositor plus the desktop, menu bar and Dock,
+  supervised (a component that dies comes back) and torn down together (§2.26).
+  That is the first time the shell is a *desktop* rather than three scenes.
 - **Evidence** — every pass has a live-verified screenshot in
   `docs/screenshots/` (`live-finder*.png`, `live-desktop-icons.png`,
   `live-dock.png`, `live-menubar.png`, …) produced by `abyss/tests/live-sway.sh`
   under a headless compositor, not mocked.
 
 Not done in Phase 2, on purpose: `CurrentIPC` (binds FreeBSD-only libnv — see
-PHASE2.md P2.9) and the dev session launcher (P2.10).
+PHASE2.md P2.9).
 
 The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
 and `system-preferences.png` are the Phase-1 originals.
@@ -102,6 +107,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.23 | File ops: Mac verbs, xkb modifiers, and a test that owns `$HOME` |
 | 2.24 | One process, two surface *kinds* — "is there a window?" is not a routing rule |
 | 2.25 | Launching: resolve before the fork, double-fork so nothing zombies |
+| 2.26 | The session: kill the supervisor before the child; assert composition on the workspace rect |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -368,6 +374,56 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.26 The session: supervise the components, and prove they *compose*
+(Phase 2.10.) `abyss/session.sh` is the one-command desktop — a compositor plus
+the desktop, menu bar and Dock, kept alive. It is shell, not Swift, deliberately:
+its job is process lifetime (the `anchor` role), and none of it belongs inside a
+Wayland client. What the pass taught:
+
+- **The components need no IPC to compose.** Each connects to the compositor on
+  its own and the *compositor* arranges them: the menu bar's exclusive zone
+  reserves 22px, the desktop asks for `exclusiveZone: -1` so it ignores every
+  reservation and fills the output, the Dock overlaps. Start order doesn't
+  matter, and there is nothing to synchronise — worth knowing before inventing a
+  session protocol for it.
+- **Kill the supervisor *before* the child.** A restart loop plus a teardown that
+  kills children first means the loop dutifully respawns everything you just
+  killed. Teardown drops a `stopping` sentinel file, kills each supervisor, then
+  each recorded child pid. The sentinel is also how the loop tells "the session
+  is ending" from "this component crashed".
+- **Restart, but don't spin.** A component that dies is restarted; one that dies
+  *immediately*, five times running, is a broken build and the supervisor gives
+  up. The counter resets after a run of ≥5s, so a long-lived component that
+  crashes occasionally never exhausts it.
+- **`sway -c <config>` replaces the defaults — including every keybinding.** A
+  nested session with no binding has no way out but killing the launcher, so the
+  generated config binds `Mod4+Shift+Q` to exit.
+- **sway refuses to start on a proprietary-driver box without
+  `--unsupported-gpu`**, even for the *nested* wayland backend and the headless
+  one, which draw nothing on the GPU. The check fires before the backend is
+  chosen. Symptom: "session: sway exited" and an Nvidia rant in the log.
+- **Ask sway which socket it opened; don't scan the runtime dir.** The harness's
+  "first `wayland-N` that isn't the parent's" heuristic (§3's *kill stray sways*
+  rule) picks the wrong compositor the moment two sessions start at once — both
+  chose `wayland-1` and the second one's clients, and its `grim`, all landed on
+  the first's output. Instead match the IPC socket by **our sway's pid**
+  (`sway-ipc.*.$pid.sock`), then `swaymsg exec -- sh -c "env > file"` and read
+  `WAYLAND_DISPLAY` out of it — sway puts it in every child's environment. Two
+  concurrent sessions now get distinct displays. **sway lexes the exec string
+  itself**, so quotes inside it don't reach the shell: dump the whole
+  environment and grep it, rather than trying to `printf "$WAYLAND_DISPLAY"`
+  (that silently writes an empty file, which then falls back to the guess).
+- **Assert composition on the workspace rect.** A layer surface is never in
+  `swaymsg -t get_tree` (§2.16), so "did the menu bar reserve its space?" can't
+  be read off the surface — but `-t get_workspaces` shows the usable area
+  starting at y=22, which is the exclusive zone's *effect*. Side effects again
+  (§3), one level up: the test asserts the components form a desktop, not merely
+  that three processes are running.
+- **A pixel probe needs no image library:** `grim -g "x,y 1x1" -t ppm -` writes
+  an 11-byte header and three bytes, so `tail -c 3 | od -An -tu1` is the pixel.
+  Driving the desktop from a known flat `bg` makes the middle-of-screen probe an
+  exact equality, and top/bottom probes differing from it prove the stacking.
 
 ### 2.25 Launching: resolve before the fork, and double-fork so nothing zombies
 (Phase 2.8.) Double-clicking an app bundle, an executable or a document now
@@ -745,6 +801,14 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 | `--desktop` | desktop icons: select, open a Finder window, notice a new file |
 | `--launch` | an `.app` bundle really executes; a document reaches `$ABYSS_OPEN` |
 
+**The whole desktop at once:** `abyss/tests/live-session.sh [out.png]` runs
+`abyss/session.sh --headless` and asserts the shell *composes* — three layer
+surfaces mapped in their own namespaces on one output, the menu bar's exclusive
+zone reflected in sway's workspace rect, grim pixel probes in the right stacking
+order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
+`docs/screenshots/live-session.png`. To just *look* at it:
+`abyss/session.sh --nested`.
+
 **Rules the harness taught us** (each cost a debugging cycle):
 
 - Assert on **side effects** — files on disk, toplevels in `swaymsg -t get_tree`,
@@ -811,17 +875,14 @@ Known-not-faithful, on purpose:
 
 Phase 0/1 are complete (real text, live input paths, the full control set,
 per-output HiDPI) and Phase 2's *visible* shell is complete (P2.1–P2.8: desktop,
-config, menu bar, Dock, Finder, desktop icons, launching). What's left:
+config, menu bar, Dock, Finder, desktop icons, launching) and now boots as one
+desktop (P2.10). What's left:
 
-1. **Finish Phase 2's tail** — the two passes deliberately left (PHASE2.md):
-   - **P2.10, dev session launcher** — the highest-value next step. One command
-     that starts (or targets) a compositor and brings up desktop + menu bar +
-     Dock together, so the shell can be seen as a *desktop* rather than as
-     separate scenes. Currently each component is its own `AQUA_SCENE` process.
+1. **Finish Phase 2's tail** — the one pass deliberately left (PHASE2.md):
    - **P2.9, `CurrentIPC`** — decision point, not a coding task: vendor a
      portable libnv, hand-roll the nvlist codec, or carry it to Phase 3. It binds
      FreeBSD-only libnv and carries only the control plane, so nothing visible
-     depends on it.
+     depends on it. Nothing else in Phase 2 is blocked on it.
 2. **Shell polish worth doing** (small, each self-contained):
    - Empty the Trash from the Dock (the `~/.Trash` half already exists; §2.23).
    - Dragging desktop icons — blocked on the same thing as spatial window
@@ -873,7 +934,8 @@ sysctl; `$ABYSS_APP_BINARY` overrides meanwhile), the inotify half of
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
-| `abyss/tests` | `run.sh` (build+test+smoke), `live-sway.sh`, the virtual input helpers |
+| `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
+| `abyss/tests` | `run.sh` (build+test+smoke), `live-sway.sh`, `live-session.sh`, the virtual input helpers |
 | `protocols/` | vendored protocol XML; regenerate via `de/cwayland/generate-protocols.sh` |
 
 **Adding a Wayland protocol** is mechanical: drop the XML in `protocols/`, add a

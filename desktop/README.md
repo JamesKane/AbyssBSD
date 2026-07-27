@@ -19,9 +19,14 @@ AQUA_RENDER_PNG=/tmp/aqua.png AQUA_SCALE=2 .build/debug/AquaDemo
 
 # Live, against a running wlroots compositor (install sway/labwc first):
 .build/debug/AquaDemo
+
+# The whole desktop — a nested compositor plus the desktop, menu bar and Dock:
+abyss/session.sh
 ```
 
 Or the whole loop: `sh abyss/tests/run.sh`.
+
+![the Aqua session](docs/screenshots/live-session.png)
 
 ## Layout
 
@@ -32,6 +37,7 @@ Or the whole loop: `sh abyss/tests/run.sh`.
 | `de/surface` | `Surface` — Wayland client runtime |
 | `de/aqua` | `Aqua` — the Jaguar toolkit (theme, drawing, widgets) |
 | `de/aquademo` | the runnable demo |
+| `abyss/session.sh` | the dev session launcher — one command boots the desktop |
 | `abyss/vm`, `abyss/tests` | FreeBSD build/test VM harness (borrowed + adapted) |
 | `docs/` | [PLAN.md](docs/PLAN.md), [STATUS.md](docs/STATUS.md), [SWIFT-ON-FREEBSD.md](docs/SWIFT-ON-FREEBSD.md) |
 
