@@ -332,7 +332,7 @@ private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
         Draw.setColor(cr, Theme.menuHighlight.with(a: 0.22))
         cairo_fill(cr)
     }
-    drawFinderIcon(cr, entry.kind, icon)
+    drawFinderIcon(cr, entry, icon)
 
     if let edit = editing {
         // The name is being edited: a white field with the Aqua focus ring, in
@@ -369,7 +369,7 @@ private func paintFinderListRow(_ cr: OpaquePointer, _ entry: FinderEntry,
     let cols = finderListColumns(row)
     let iconSide = FinderMetrics.listIcon
     let icon = Rect(cols[0].x + 4, row.y + (row.h - iconSide) / 2, iconSide, iconSide)
-    drawFinderIcon(cr, entry.kind, icon)
+    drawFinderIcon(cr, entry, icon)
 
     let baseline = row.y + row.h - 5
     let nameX = icon.x + iconSide + 5
@@ -476,6 +476,14 @@ public func drawFinderIcon(_ cr: OpaquePointer, _ kind: FinderItemKind, _ r: Rec
     case .document:    drawDocumentIcon(cr, r)
     case .disk:        drawDiskIcon(cr, r)
     }
+}
+
+/// An entry's icon: the bundle's own artwork when it has some, else the
+/// procedural glyph for its kind. Everything that draws a listed item goes
+/// through here, so the Finder and the desktop agree.
+public func drawFinderIcon(_ cr: OpaquePointer, _ entry: FinderEntry, _ r: Rect) {
+    if let path = entry.iconPath, AppIcon.draw(cr, path: path, r) { return }
+    drawFinderIcon(cr, entry.kind, r)
 }
 
 /// The Aqua folder: a steel-blue body with a raised tab on the left, a glassy

@@ -10,8 +10,10 @@
 //     reacts the same way: log it and leave the listing alone.
 //
 // Deleting is *move to Trash* (`~/.Trash`), as on Mac — nothing here unlinks a
-// file the user asked to delete, so a mistake is recoverable. Emptying the Trash
-// is the Dock's job, later.
+// file the user asked to delete, so a mistake is recoverable. The single
+// exception is `finderEmptyTrash`, driven from the Dock's Trash menu: that is
+// what emptying the Trash *means*, and it's the only path in the project that
+// really unlinks.
 
 #if canImport(Glibc)
 import Glibc
@@ -143,10 +145,17 @@ public func finderCopyPath(from: String, to: String) -> Bool {
     return ok
 }
 
+/// Where the Trash *would* be (nil when there's no HOME to hang it off). Does
+/// not create it — the Dock asks this every time it repaints, and a shell
+/// component shouldn't conjure directories just by looking.
+public func finderTrashPath() -> String? {
+    guard let home = getenv("HOME") else { return nil }
+    return String(cString: home) + "/.Trash"
+}
+
 /// `~/.Trash`, created on demand (nil when there's no HOME to hang it off).
 public func finderTrashDirectory() -> String? {
-    guard let home = getenv("HOME") else { return nil }
-    let dir = String(cString: home) + "/.Trash"
+    guard let dir = finderTrashPath() else { return nil }
     if !finderExists(dir), !finderCreateDirectory(dir) { return nil }
     return dir
 }
@@ -162,4 +171,41 @@ public func finderMoveToTrash(_ path: String) -> String? {
     let unique = finderPasteName(name) { finderExists(finderJoin(trash, $0)) }
     let dest = finderJoin(trash, unique)
     return finderRenameEntry(from: path, to: dest) ? dest : nil
+}
+
+/// What's in the Trash right now, as full paths — dot-files included, since the
+/// Trash shows (and empties) everything it holds. Empty when there is no Trash
+/// yet, which is the same thing to every caller.
+public func finderTrashContents() -> [String] {
+    guard let trash = finderTrashPath(), finderIsDirectory(trash) else { return [] }
+    return readDirectory(trash, showHidden: true).map { finderJoin(trash, $0.name) }
+}
+
+/// Remove a file, or a directory and everything under it. **This unlinks** —
+/// the one place in the project that does, and only `finderEmptyTrash` calls it.
+/// Depth-first: children before the directory itself, since `rmdir` needs it
+/// empty. A failure anywhere is reported but doesn't stop the rest.
+@discardableResult
+public func finderRemovePath(_ path: String) -> Bool {
+    guard finderIsDirectory(path) else {
+        return path.withCString { unlink($0) == 0 }
+    }
+    var ok = true
+    for entry in readDirectory(path, showHidden: true)
+    where entry.name != "." && entry.name != ".." {
+        if !finderRemovePath(finderJoin(path, entry.name)) { ok = false }
+    }
+    return path.withCString { rmdir($0) == 0 } && ok
+}
+
+/// Empty the Trash: permanently remove everything in it. Returns how many
+/// top-level items went and how many refused, so the caller can say so — the
+/// Dock logs it. Emptying an empty (or absent) Trash is (0, 0), not an error.
+@discardableResult
+public func finderEmptyTrash() -> (removed: Int, failed: Int) {
+    var removed = 0, failed = 0
+    for path in finderTrashContents() {
+        if finderRemovePath(path) { removed += 1 } else { failed += 1 }
+    }
+    return (removed, failed)
 }

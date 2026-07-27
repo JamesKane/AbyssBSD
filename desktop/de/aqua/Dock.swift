@@ -20,9 +20,10 @@ import Darwin
 #endif
 
 private let kBtnLeft: UInt32 = 0x110
+private let kBtnRight: UInt32 = 0x111
 
 public enum DockIcon: Sendable {
-    case finder, browser, mail, music, prefs, genericApp, trash
+    case finder, browser, mail, music, prefs, genericApp, trash, trashFull
 }
 
 public struct DockItem: Sendable {
@@ -176,7 +177,8 @@ private func drawDockLabel(_ cr: OpaquePointer, _ text: String,
 
 private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
     switch kind {
-    case .trash: drawTrash(cr, r); return
+    case .trash:     drawTrash(cr, r, full: false); return
+    case .trashFull: drawTrash(cr, r, full: true); return
     default: break
     }
     // A rounded app tile with a per-app hue, a top sheen, and a white emblem.
@@ -276,10 +278,26 @@ private func emblemWindow(_ cr: OpaquePointer, _ s: Double) {
     cairo_rectangle(cr, x, y, w, s * 0.1); cairo_fill(cr)
 }
 
-private func drawTrash(_ cr: OpaquePointer, _ r: Rect) {
+private func drawTrash(_ cr: OpaquePointer, _ r: Rect, full: Bool) {
     cairo_save(cr)
     cairo_translate(cr, r.x, r.y)
     let s = r.w
+    // A full Trash shows crumpled paper heaped above the rim, drawn *before* the
+    // can so the wire mesh reads over it — the same "you can tell at a glance"
+    // cue as 10.2, in our own glyph vocabulary.
+    if full {
+        cairo_set_source_rgba(cr, 0.94, 0.93, 0.88, 1)
+        for (fx, fy, fr) in [(0.40, 0.30, 0.09), (0.56, 0.28, 0.10), (0.48, 0.22, 0.07)] {
+            cairo_new_sub_path(cr)
+            cairo_arc(cr, s * fx, s * fy, s * fr, 0, 2 * .pi)
+            cairo_fill(cr)
+        }
+        cairo_set_source_rgba(cr, 0.72, 0.71, 0.66, 1)
+        cairo_set_line_width(cr, s * 0.025)
+        cairo_move_to(cr, s * 0.40, s * 0.30); cairo_line_to(cr, s * 0.50, s * 0.26)
+        cairo_move_to(cr, s * 0.52, s * 0.32); cairo_line_to(cr, s * 0.60, s * 0.27)
+        cairo_stroke(cr)
+    }
     cairo_set_source_rgba(cr, 0.78, 0.80, 0.85, 1)
     cairo_set_line_width(cr, s * 0.05)
     // can body (trapezoid)
@@ -303,7 +321,6 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var layer: LayerSurface?
     private var toplevels: ForeignToplevels?
     private let pinned: [DockItem]
-    private let trash: DockItem
     private let tileSize: Double
     private let magnify: Bool
 
@@ -313,6 +330,13 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var frames: [DockTileFrame] = []
     private var pointerX: Double?
     private var pointerY = 0.0
+
+    /// Trash state: whether it holds anything (which tile glyph to draw), the
+    /// watcher that keeps that honest, and the open tile menu.
+    private var trashFull = false
+    private var trashWatcher: Pool.Watcher?
+    private var menu: AquaMenu?
+    private var popup: Popup?
 
     public static func defaultPinned() -> [DockItem] {
         // The two tiles that map to something real launch another copy of this
@@ -337,7 +361,6 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         tileSize = Double(config.uint64("dock", "tile_size") ?? 48)
         magnify = config.bool("dock", "magnify") ?? true
         pinned = Dock.defaultPinned()
-        trash = DockItem(icon: .trash, label: "Trash", appID: nil, isTrash: true)
 
         let height = Int32(DockMetrics.surfaceHeight(tileSize: tileSize))
         guard let ls = LayerSurface(
@@ -346,10 +369,33 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             exclusiveZone: 0, keyboard: .none, delegate: self)
         else { return nil }
         layer = ls
+        trashFull = !finderTrashContents().isEmpty
+        Dock.log("Trash \(trashFull ? "full" : "empty")")
         rebuild()
 
         // Track running apps (optional — the compositor may not offer it).
         toplevels = ForeignToplevels(display: display, delegate: self)
+
+        // Watch ~/.Trash so the tile shows full/empty without polling — the same
+        // run-loop fd hook the desktop uses for ~/Desktop (HANDOFF §2.18). No
+        // Trash yet just means nothing to watch until something is thrown away.
+        if let dir = finderTrashPath(), finderIsDirectory(dir),
+           let w = try? Pool.Watcher(in: dir) {
+            trashWatcher = w
+            display.addFileDescriptor(w.fileDescriptor) { [weak self] in
+                self?.trashChanged()
+            }
+        }
+    }
+
+    private func trashChanged() {
+        _ = trashWatcher?.drain()
+        let full = !finderTrashContents().isEmpty
+        guard full != trashFull else { return }
+        trashFull = full
+        Dock.log("Trash is now \(full ? "full" : "empty")")
+        rebuild()
+        layer?.setNeedsDisplay()
     }
 
     // MARK: ForeignToplevelsDelegate
@@ -375,7 +421,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             items.append(DockItem(icon: .genericApp, label: label, appID: t.appID))
             flags.append(true)
         }
-        items.append(trash)
+        items.append(DockItem(icon: trashFull ? .trashFull : .trash, label: "Trash",
+                              appID: nil, isTrash: true))
         flags.append(false)
         displayItems = items
         running = flags
@@ -416,7 +463,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
-        guard button == kBtnLeft, pressed, let px = pointerX else { return }
+        guard button == kBtnLeft || button == kBtnRight, pressed,
+              let px = pointerX else { return }
         // Hit-test the tile the pointer is over (using the drawn frames).
         let h = Double(layer?.size.height ?? 0)
         let iconBottom = h - DockMetrics.bottomMargin - DockMetrics.panelPadV
@@ -424,13 +472,90 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             let rect = Rect(f.centerX - f.size / 2, iconBottom - f.size, f.size, f.size)
             guard px >= rect.x, px <= rect.x + rect.w,
                   pointerY >= rect.y, pointerY <= rect.y + rect.h else { continue }
-            activate(displayItems[i])
+            if button == kBtnRight {
+                openTileMenu(displayItems[i], frame: f, iconBottom: iconBottom)
+            } else {
+                activate(displayItems[i])
+            }
             return
+        }
+        if button == kBtnRight { closeMenu() }
+    }
+
+    /// A tile's contextual menu. Only the Trash has one so far — "Empty Trash"
+    /// has to live *somewhere*, and on Mac that somewhere is here.
+    private func openTileMenu(_ item: DockItem, frame f: DockTileFrame, iconBottom: Double) {
+        guard item.isTrash else { return }
+        closeMenu()
+        let items = trashFull ? ["Open", "Empty Trash"] : ["Open"]
+        let am = AquaMenu(items: items, selected: -1)
+        am.onChoose = { [weak self] idx in
+            guard let self else { return }
+            if items[idx] == "Empty Trash" { self.emptyTrash() } else { self.openTrash() }
+            self.closeMenu()
+        }
+        am.onDismiss = { [weak self] in self?.menuDismissed() }
+
+        // Anchor to the tile. The positioner's flip-Y constraint puts the menu
+        // *above* the anchor, since the Dock leaves no room below it.
+        let popupW = Int32(max(150, menuWidth(items) + 40))
+        let popupH = Int32(am.preferredHeight.rounded(.up))
+        guard let pop = layer?.openPopup(
+            anchorX: Int32(f.centerX - f.size / 2), anchorY: Int32(iconBottom - f.size),
+            anchorW: Int32(f.size), anchorH: Int32(f.size),
+            width: popupW, height: popupH, delegate: am)
+        else { return }
+        am.popup = pop
+        menu = am
+        popup = pop
+        Dock.log("opened Trash menu")
+    }
+
+    private func closeMenu() {
+        popup?.close()   // programmatic close does not fire onDismiss
+        popup = nil
+        menu = nil
+    }
+
+    private func menuDismissed() {   // outside click (compositor popup_done)
+        popup = nil
+        menu = nil
+    }
+
+    /// Widest item, measured on a scratch surface (pointer handlers have no cr).
+    private func menuWidth(_ items: [String]) -> Double {
+        guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1),
+              let cr = cairo_create(cs) else { return 160 }
+        defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+        return items.map { Draw.textWidth(cr, $0, size: Theme.fontSize) }.max() ?? 120
+    }
+
+    /// Open the Trash in a Finder window — a plain click on the tile, as on Mac.
+    private func openTrash() {
+        guard let dir = finderTrashDirectory(), let exe = Launcher.selfExecutable() else {
+            Dock.log("cannot open the Trash (no HOME?)")
+            return
+        }
+        if Launcher.launchDetached([exe],
+                                   extraEnv: ["AQUA_SCENE": "finder",
+                                              "ABYSS_FINDER_DIR": dir]) {
+            Dock.log("opened the Trash (\(dir))")
+        } else {
+            Dock.log("failed to open the Trash")
         }
     }
 
+    /// Empty the Trash — the only place in the shell that permanently deletes.
+    private func emptyTrash() {
+        let (removed, failed) = finderEmptyTrash()
+        Dock.log("emptied Trash: \(removed) removed, \(failed) failed")
+        trashFull = !finderTrashContents().isEmpty
+        rebuild()
+        layer?.setNeedsDisplay()
+    }
+
     private func activate(_ item: DockItem) {
-        if item.isTrash { Dock.log("clicked Trash"); return }
+        if item.isTrash { openTrash(); return }
         guard let appID = item.appID else { return }
         // Running: raise it. Not running: launch it, if the tile knows how.
         if toplevels?.activate(appID: appID) == true {

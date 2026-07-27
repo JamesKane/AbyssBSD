@@ -17,6 +17,8 @@
 //   m <x> <y>   move the cursor to output pixel (x, y)
 //   p           press   the left button
 //   r           release the left button
+//   P           press   the right button (contextual menus)
+//   R           release the right button
 //   a <value>   vertical scroll by <value> logical px (positive = down)
 //   q           quit (also on EOF)
 
@@ -28,6 +30,7 @@
 #include <string.h>
 
 #define BTN_LEFT 0x110u
+#define BTN_RIGHT 0x111u
 
 static struct zwlr_virtual_pointer_manager_v1 *g_mgr = NULL;
 
@@ -86,6 +89,14 @@ int main(int argc, char **argv) {
             break;
         case 'r':
             zwlr_virtual_pointer_v1_button(vp, t, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+            zwlr_virtual_pointer_v1_frame(vp);
+            break;
+        case 'P':
+            zwlr_virtual_pointer_v1_button(vp, t, BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED);
+            zwlr_virtual_pointer_v1_frame(vp);
+            break;
+        case 'R':
+            zwlr_virtual_pointer_v1_button(vp, t, BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(vp);
             break;
         case 'a': {

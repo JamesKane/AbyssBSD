@@ -5,8 +5,8 @@ Read [STATUS.md](STATUS.md) for the current build state, [PHASE2.md](PHASE2.md)
 for the shell's ordered passes, and [PLAN.md](PLAN.md) for the multi-year
 roadmap; this doc is the *practical knowledge* layer.
 
-Last updated: 2026-07-27 (P2.1–P2.8 plus the P2.10 session launcher — the shell
-now boots as one desktop).
+Last updated: 2026-07-27 (P2.1–P2.8, the P2.10 session launcher, and the P2.11
+polish — the shell boots as one desktop and the loose ends are tied off).
 
 **Picking this up cold?** Read §1 (what exists), skim the §2 index for the trap
 nearest what you're about to touch, then §5 (what's next). Then run
@@ -58,6 +58,9 @@ renders faithful Jaguar UI:
   browser-mode file manager with icon/list views, spatial mode (one window per
   folder, raise-not-duplicate), Mac-verb file operations onto the real
   filesystem, and **launching** (§2.21, §2.22, §2.23, §2.25).
+- **Shell polish (P2.11)** — the Dock's Trash fills and empties for real
+  (right-click → Empty Trash, the one path that unlinks), the menu bar is fully
+  keyboard-drivable, and an `.app` bundle is drawn with its own icon (§2.27).
 - **The session** — `abyss/session.sh` boots all of it with one command: a
   nested/headless/attached compositor plus the desktop, menu bar and Dock,
   supervised (a component that dies comes back) and torn down together (§2.26).
@@ -108,6 +111,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.24 | One process, two surface *kinds* — "is there a window?" is not a routing rule |
 | 2.25 | Launching: resolve before the fork, double-fork so nothing zombies |
 | 2.26 | The session: kill the supervisor before the child; assert composition on the workspace rect |
+| 2.27 | Shell polish: `on_demand` keyboard, a popup `close()` that told nobody, `.icns` is a container |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -374,6 +378,59 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.27 Shell polish: keyboard focus for a bar, a close that told nobody, and
+### what an `.icns` actually is
+(Phase 2.11–2.13 — empty the Trash, menu-bar keyboard navigation, bundle icons.)
+Three small passes, three findings worth keeping:
+
+- **A shell bar wants `on_demand` keyboard interactivity, not `none`.** The menu
+  bar can't drive its menus from the keyboard without focus, and it must not
+  *hold* focus (everything you type would leave the app you're typing into).
+  The layer-shell answer is `keyboard_interactivity = on_demand` (v4): the
+  compositor grants focus when the surface is clicked and takes it back when
+  something else is focused — which is exactly the Mac rule. The obvious
+  alternative, flipping to `exclusive` when a menu opens and back to `none`
+  when it closes, **did not work**: with the interactivity change committed on
+  its own (no new buffer) while the menu's popup grab was active, no
+  `wl_keyboard.enter` ever arrived and not one key reached the client. Set at
+  creation, both `exclusive` and `on_demand` work immediately. Don't spend an
+  afternoon on the dynamic path — declare `on_demand` and be done.
+- **`Popup.close()` deliberately does *not* call `popupDismissed`** (the owner
+  calls it after a choice, and a double notification would re-enter teardown).
+  So Escape-inside-a-menu, which routed to `close()`, tore the popup down and
+  told *nobody*: the menu bar kept `openIndex` set, left the title highlighted,
+  and thought a destroyed menu was still open. Escape is a dismissal, so the
+  menu now fires `onDismiss` itself. Rule: if a path destroys a popup for a
+  *user* reason, it owes the owner a notification; only the owner's own
+  teardown is silent.
+- **`.icns` is a container, not a codec.** Since 10.7 its large variants are
+  whole PNG files, so "read the app's icon" is: walk `{4-byte type, 4-byte
+  big-endian length, payload}` chunks, take the biggest payload starting with
+  the PNG magic, and hand *that* to cairo (via
+  `cairo_image_surface_create_from_png_stream`, whose read callback is a
+  `@convention(c)` function taking a cursor as its context). Genuine 10.2-era
+  RLE variants are *not* decoded — that needs a real ICNS decoder, the same
+  call already made for JPEG wallpapers (§2.18). Every failure falls back to
+  the procedural glyph, so an unreadable icon is never an error.
+- **Resolve an icon once per listing, not once per frame.** `readDirectory`
+  fills `FinderEntry.iconPath` for `.app` bundles; the painter only draws.
+  Decoded surfaces are cached by path (including failures) for the process's
+  life. Probing the filesystem from a paint function would do it every frame,
+  for every visible item.
+- **Trash-tile geometry is magnification-dependent.** A Dock tile's rect comes
+  from the *drawn* frames, which depend on where the pointer was for the last
+  render — so a live test can't aim at the base layout. Compute the fixed point
+  (hover x → that tile's magnified span contains x) rather than guessing:
+  pointer 540 on an 800px output puts the Trash across 501..592. The Trash menu
+  itself needs no special positioning — the positioner's flip-Y constraint
+  (§2.10) puts it above the tile, since the Dock leaves no room below.
+- **Emptying the Trash is the only code in the project that unlinks.**
+  `finderRemovePath` is depth-first (children, then `rmdir`) and lives behind
+  `finderEmptyTrash`; everything else still *moves* to `~/.Trash` (§2.23). No
+  confirmation dialog yet — a layer surface has no window to host a sheet, so
+  the deliberate menu choice is the confirmation. Note it as a known deviation
+  rather than assuming it was forgotten.
 
 ### 2.26 The session: supervise the components, and prove they *compose*
 (Phase 2.10.) `abyss/session.sh` is the one-command desktop — a compositor plus
@@ -799,7 +856,9 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 | `--spatial` | two real toplevels, re-open **raises** (xdg-activation), close one |
 | `--fileops` | ⌘⇧N / rename / ⌘C⌘V / ⌘⌫ — asserted **on disk**, not in the log |
 | `--desktop` | desktop icons: select, open a Finder window, notice a new file |
-| `--launch` | an `.app` bundle really executes; a document reaches `$ABYSS_OPEN` |
+| `--launch` | an `.app` bundle really executes (and is drawn with **its own icon**); a document reaches `$ABYSS_OPEN` |
+| `--trash` | the Dock's Trash: full glyph, right-click menu, **Empty Trash** — checked on disk |
+| `--menubar --keys` | the menu bar driven **only** by the keyboard: Right walks titles, Down/Return chooses, Escape closes |
 
 **The whole desktop at once:** `abyss/tests/live-session.sh [out.png]` runs
 `abyss/session.sh --headless` and asserts the shell *composes* — three layer
@@ -883,14 +942,16 @@ desktop (P2.10). What's left:
      portable libnv, hand-roll the nvlist codec, or carry it to Phase 3. It binds
      FreeBSD-only libnv and carries only the control plane, so nothing visible
      depends on it. Nothing else in Phase 2 is blocked on it.
-2. **Shell polish worth doing** (small, each self-contained):
-   - Empty the Trash from the Dock (the `~/.Trash` half already exists; §2.23).
+2. **Shell polish** — the three self-contained ones are **done** (P2.11, §2.27):
+   emptying the Trash from the Dock, menu-bar keyboard navigation, and reading
+   an `.app` bundle's own icon. What's left of that list:
    - Dragging desktop icons — blocked on the same thing as spatial window
      placement: a Wayland client can't position itself, so this needs remembered
      per-item positions in config (§2.22).
-   - Menu-bar **keyboard** navigation, and its status items (volume/battery need
-     the FreeBSD `vents` bridges — Phase 3).
-   - Reading an `.app` bundle's own icon instead of the procedural "A" tile.
+   - The menu bar's **status items** (volume/battery need the FreeBSD `vents`
+     bridges — Phase 3).
+   - A confirmation sheet for Empty Trash, once something can host a dialog for
+     a layer surface (§2.27).
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.

@@ -120,7 +120,13 @@ public final class AquaMenu: PopupDelegate {
             if hovered >= 0, hovered < items.count { onChoose(hovered) }
             return true
         case KeySym.escape:
-            popup?.close()   // teardown notifies popupDismissed → onDismiss
+            // `close()` is a *programmatic* teardown: it destroys the proxies
+            // and deliberately does NOT call popupDismissed (the owner calls it
+            // itself after a choice). Escape *is* a dismissal, though, so say so
+            // — otherwise the owner keeps thinking the menu is still open, and
+            // the menu bar leaves its title highlighted for a menu that's gone.
+            popup?.close()
+            onDismiss()
             return true
         default:
             return false

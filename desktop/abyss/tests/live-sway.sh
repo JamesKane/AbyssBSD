@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""; trash=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -40,6 +40,7 @@ for a in "$@"; do
     --finder)                 finder="--finder"; click="--click" ;;  # browse a seeded dir
     --spatial)                spatial="--spatial"; finder="--finder"; click="--click" ;;
     --fileops)                fileops="--fileops"; finder="--finder"; click="--click"; keys="--keys" ;;
+    --trash)                  trash="--trash"; click="--click" ;;  # Dock: empty the Trash
     --desktop)                desktop="--desktop"; click="--click" ;;  # desktop icons
     --launch)                 launch="--launch"; finder="--finder"; click="--click" ;;
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
@@ -68,8 +69,10 @@ fi
 [ "$reload" = "--reload" ] && scene="wallpaper"
 # --menubar drives the menu bar (a layer-shell TOP surface).
 [ "$menubar" = "--menubar" ] && scene="menubar"
-# --dock drives the Dock (a layer-shell BOTTOM surface).
+# --dock drives the Dock (a layer-shell BOTTOM surface); --trash drives its
+# Trash tile (right-click menu → Empty Trash), which lives there too.
 [ "$dock_mode" = "--dock" ] && scene="dock"
+[ "$trash" = "--trash" ] && scene="dock"
 # --desktop drives the desktop icons (on the wallpaper's layer surface).
 [ "$desktop" = "--desktop" ] && scene="wallpaper"
 # --finder drives the file browser (an ordinary xdg toplevel); --spatial also
@@ -214,6 +217,13 @@ printf '%s' "\$1" > "$finderdir/opened.txt"
 OPEN
     chmod +x "$finderdir/opener.sh"
     finder_env="$finder_env ABYSS_OPEN=$finderdir/opener.sh"
+    # Give the bundle its OWN icon: a 4x4 solid magenta PNG, written byte for
+    # byte so the harness needs no image tool. Magenta because nothing in the
+    # Aqua palette is anywhere near it — a pixel probe over the icon then proves
+    # the bundle's artwork was used instead of the procedural glyph.
+    mkdir -p "$finderdir/Marker.app/Contents/Resources"
+    printf '\211\120\116\107\015\012\032\012\000\000\000\015\111\110\104\122\000\000\000\004\000\000\000\004\010\002\000\000\000\046\223\011\051\000\000\000\021\111\104\101\124\170\332\143\370\317\360\037\216\030\210\343\000\000\075\041\037\341\245\316\071\374\000\000\000\000\111\105\116\104\256\102\140\202' \
+      > "$finderdir/Marker.app/Contents/Resources/Marker.png"
   fi
 fi
 
@@ -225,6 +235,15 @@ if [ "$scene" = "dock" ]; then
   finderdir=${finderdir:-$(mktemp -d)}
   mkdir -p "$finderdir/Documents"
   finder_env="ABYSS_FINDER_DIR=$finderdir"
+  if [ "$trash" = "--trash" ]; then
+    # A seeded ~/.Trash — one file and one folder, so emptying has to remove a
+    # tree as well as a file. $HOME points inside the temp dir: this test
+    # PERMANENTLY DELETES what it finds in the Trash, so it must own it.
+    mkdir -p "$finderdir/.Trash/Old Reports"
+    printf 'junk\n' > "$finderdir/.Trash/junk.txt"
+    printf 'q1\n'   > "$finderdir/.Trash/Old Reports/q1.txt"
+    finder_env="$finder_env HOME=$finderdir"
+  fi
 fi
 
 desktop_env=""
@@ -365,6 +384,14 @@ if [ "$click" = "--click" ]; then
     # Sorted: Applications, Documents, Marker.app, opener.sh, Pictures,
     # Read Me.txt — 5 columns of 88px under the 22px title bar + 36px toolbar.
     # Cell 2 ("Marker.app") is centred at x=230, y=96.
+    # The bundle ships its own icon (a magenta PNG), so that is what the Finder
+    # must be drawing there — not the procedural application glyph. grim can cut
+    # a 1x1 PPM, whose last three bytes are the pixel.
+    icon_px=$(WAYLAND_DISPLAY="$wd" grim -g "230,96 1x1" -t ppm - | tail -c 3 \
+              | od -An -tu1 | tr -s ' ' | sed 's/^ //;s/ $//')
+    [ "$icon_px" = "255 0 255" ] \
+      || { echo "FAIL: the bundle's own icon wasn't drawn (pixel = $icon_px)"; exit 1; }
+    echo "finder: Marker.app is drawn with its own icon (Contents/Resources)"
     printf 'm 230 96\np\nr\np\nr\n' >&3
     sleep 1.2
     grep -q "Finder: launched $finderdir/Marker.app/Contents/MacOS/Marker" "$app_log" \
@@ -499,6 +526,40 @@ if [ "$click" = "--click" ]; then
     grep -q 'Finder: view -> list' "$app_log" \
       || { echo "FAIL: the view switch didn't select list view"; cat "$app_log"; exit 1; }
     echo "finder: switched to list view"
+  elif [ "$trash" = "--trash" ]; then
+    # The Dock started with a seeded Trash, so the tile shows the full glyph.
+    grep -q 'Dock: Trash full' "$app_log" \
+      || { echo "FAIL: the Dock didn't notice a full Trash"; cat "$app_log"; exit 1; }
+    # Right-click the Trash tile. Its position depends on magnification (tiles
+    # are re-laid-out around the pointer), so hover first and aim at where the
+    # magnified tile then sits: pointer 540 puts the Trash tile across 501..592,
+    # and the shelf's icons run to y=588 on an 800x600 output.
+    printf 'm 540 550\n' >&3
+    sleep 0.5
+    printf 'P\nR\n' >&3
+    sleep 0.8
+    grep -q 'Dock: opened Trash menu' "$app_log" \
+      || { echo "FAIL: right-clicking the Trash opened no menu"; cat "$app_log"; exit 1; }
+    echo "dock: right-click opened the Trash menu"
+    # Capture with the menu open — the evidence shot for this pass.
+    WAYLAND_DISPLAY="$wd" grim "$out"; captured=1
+    # The menu flips *above* the tile (no room below): 48px tall, its rows are
+    # "Open" then "Empty Trash". Click the second row.
+    printf 'm 560 483\n' >&3
+    sleep 0.3
+    printf 'p\nr\n' >&3
+    sleep 1.0
+    grep -q 'Dock: emptied Trash: 2 removed, 0 failed' "$app_log" \
+      || { echo "FAIL: Empty Trash didn't empty it"; cat "$app_log"; exit 1; }
+    # Assert on DISK, not the log: the Trash is empty and still exists, and the
+    # folder that was in it is gone with everything under it.
+    [ -d "$finderdir/.Trash" ] \
+      || { echo "FAIL: emptying removed the Trash folder itself"; exit 1; }
+    [ -z "$(ls -A "$finderdir/.Trash")" ] \
+      || { echo "FAIL: the Trash still holds $(ls -A "$finderdir/.Trash")"; exit 1; }
+    [ ! -e "$finderdir/.Trash/Old Reports/q1.txt" ] \
+      || { echo "FAIL: a nested file survived the empty"; exit 1; }
+    echo "dock: Empty Trash removed both items permanently (checked on disk)"
   elif [ "$dock_mode" = "--dock" ]; then
     # Hover over the Dock (near a left-of-centre tile) to trigger magnification,
     # then capture NOW while the pointer is present (magnification is hover-
@@ -584,7 +645,13 @@ if [ "$click" = "--click" ]; then
   # For the Dock, keep the virtual pointer alive so the pointer stays over the
   # shelf — magnification is hover-driven, and closing the pointer sends a leave
   # that resets it before grim. cleanup kills the pointer at exit.
-  [ "$dock_mode" = "--dock" ] || exec 3>&-
+  # Keep the virtual pointer for the Dock (magnification is hover-driven) and
+  # for the menu bar's keyboard test (which clicks a title again, after the
+  # keyboard block, to check Escape).
+  case "$dock_mode$trash$scene$keys" in
+    *--dock*|*--trash*|menubar--keys) : ;;
+    *) exec 3>&- ;;
+  esac
 fi
 
 if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" ]; then
@@ -624,6 +691,32 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
       sleep 0.3
     else
     case "$scene" in
+      menubar)
+        # The click above opened the System menu. Now drive the bar entirely
+        # from the keyboard: Right walks to the next title (the app menu),
+        # Down highlights its first item and Return chooses it. Raw evdev:
+        # Right=106 Down=108 Enter=28.
+        printf 'k 106\n' >&4
+        sleep 0.5
+        grep -q 'MenuBar: opened Finder' "$app_log" \
+          || { echo "FAIL: Right didn't walk to the next menu"; cat "$app_log"; exit 1; }
+        echo "menu bar: Right walked System -> Finder"
+        printf 'k 108\n' >&4     # Down: highlight "About Finder"
+        sleep 0.3
+        printf 'k 28\n'  >&4     # Return: choose it
+        sleep 0.5
+        grep -q 'MenuBar: chose Finder > About Finder' "$app_log" \
+          || { echo "FAIL: Down+Return didn't choose from the keyboard"; cat "$app_log"; exit 1; }
+        echo "menu bar: Down+Return chose 'About Finder' (no pointer)"
+        # Escape closes the open menu (and hands the keyboard back).
+        printf 'm 21 11\np\nr\n' >&3   # re-open the system menu with the pointer
+        sleep 0.5
+        printf 'k 1\n' >&4             # Escape (evdev 1)
+        sleep 0.6
+        grep -q 'MenuBar: closed' "$app_log" \
+          || { echo "FAIL: Escape didn't close the menu"; cat "$app_log"; exit 1; }
+        echo "menu bar: Escape closed the menu"
+        ;;
       finder)
         if [ "$fileops" = "--fileops" ]; then
           # xkb modifier mask: Command (Mod4/Logo) = 64, +Shift = 65.

@@ -30,11 +30,16 @@ public struct FinderEntry: Sendable, Equatable {
     public let name: String
     public let kind: FinderItemKind
     public let size: UInt64          // bytes; meaningless for folders
+    /// An application bundle's own icon file, when it has one (§AppIcon).
+    /// Resolved once per listing, not per repaint.
+    public let iconPath: String?
 
-    public init(name: String, kind: FinderItemKind, size: UInt64 = 0) {
+    public init(name: String, kind: FinderItemKind, size: UInt64 = 0,
+                iconPath: String? = nil) {
         self.name = name
         self.kind = kind
         self.size = size
+        self.iconPath = iconPath
     }
 
     /// Whether activating this entry navigates into it.
@@ -121,9 +126,11 @@ public func readDirectory(_ path: String, showHidden: Bool = false) -> [FinderEn
         let ok = full.withCString { stat($0, &st) == 0 }
         let isDir = ok && (UInt32(st.st_mode) & kFileTypeMask) == kDirectory
         let size = ok && !isDir ? UInt64(max(0, st.st_size)) : 0
-        out.append(FinderEntry(name: name,
-                               kind: finderKind(name: name, isDirectory: isDir),
-                               size: size))
+        let kind = finderKind(name: name, isDirectory: isDir)
+        // An app bundle may carry its own icon; look once, here, rather than
+        // touching the filesystem from the painter every frame.
+        let iconPath = kind == .application ? AppIcon.iconFile(inBundle: full) : nil
+        out.append(FinderEntry(name: name, kind: kind, size: size, iconPath: iconPath))
     }
     return finderSort(out)
 }

@@ -100,7 +100,7 @@ public func paintDesktopIcons(_ cr: OpaquePointer, bounds: Rect,
             Draw.setColor(cr, Theme.menuHighlight.with(a: 0.35))
             cairo_fill(cr)
         }
-        drawFinderIcon(cr, entry.kind, icon)
+        drawFinderIcon(cr, entry, icon)
 
         let label = desktopTruncated(cr, entry.name, maxWidth: cell.w - 10, size: 11)
         let tw = Draw.textWidth(cr, label, size: 11)

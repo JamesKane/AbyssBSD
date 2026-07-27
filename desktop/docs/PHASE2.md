@@ -258,9 +258,9 @@ double-clicks a document and checks `$ABYSS_OPEN` received the path; the
 `--dock` run now clicks the Finder tile and asserts a real Finder window
 appears. See HANDOFF §2.25.
 
-Remaining shell work: emptying the Trash from the Dock, and dragging desktop
-icons to reposition them (needs the per-item positions a spatial desktop
-remembers).
+Remaining shell work after this pass: dragging desktop icons to reposition them
+(needs the per-item positions a spatial desktop remembers) — see P2.11 for the
+rest, which is done.
 
 **P2.9 (deferred) — `CurrentIPC` + control plane.**
 Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the
@@ -281,6 +281,33 @@ reserves space (asserted on sway's *workspace rect*, since a layer surface is
 never in the tree), grim pixel probes prove the stacking order, and killing the
 Dock brings a new one back. See HANDOFF §2.26 and
 ![the session](screenshots/live-session.png).
+
+**P2.11 — shell polish. ✅ done.**
+The three self-contained loose ends from the P2.8 list, one pass:
+
+- **Empty the Trash from the Dock.** The Trash tile now shows full or empty
+  (watching `~/.Trash` through the run loop, no polling), a plain click opens it
+  in a Finder window, and a **right-click** opens a tile menu whose "Empty
+  Trash" permanently removes everything — `finderEmptyTrash`/`finderRemovePath`,
+  the only code in the project that unlinks. Everything else still *moves* to
+  the Trash. There's no confirmation dialog: a layer surface has nowhere to host
+  a sheet yet, so the deliberate menu choice is the confirmation.
+- **Menu-bar keyboard navigation.** The bar takes `on_demand` keyboard
+  interactivity, so clicking a title hands it focus; Left/Right then walk the
+  titles, Up/Down move the highlight, Return chooses and Escape closes. This
+  turned up a real bug: `Popup.close()` intentionally notifies nobody, so
+  Escape used to destroy the menu while the bar still thought it was open.
+- **An `.app` bundle's own icon.** `AppIcon` reads `Contents/Resources` by
+  convention (`<Name>.png`, `icon.png`, …), including PNG variants embedded in
+  an `.icns` container; `readDirectory` resolves it once per listing and the
+  Finder and desktop draw it in place of the procedural glyph. Old RLE `.icns`
+  variants still need a real decoder, and anything unreadable falls back.
+
+Verified live: `live-sway.sh --trash` (right-click → Empty Trash, asserted **on
+disk**), `--menubar --keys` (the whole bar driven with no pointer), and
+`--launch` (a grim pixel probe over `Marker.app`'s icon proves the bundle's own
+artwork was drawn). 62 unit tests. See HANDOFF §2.27,
+![the Trash menu](screenshots/live-trash.png).
 
 ---
 

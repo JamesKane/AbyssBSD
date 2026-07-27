@@ -202,7 +202,11 @@ public final class MenuBar: LayerSurfaceDelegate {
         guard let ls = LayerSurface(
             display: display, layer: .top, namespace: "abyss.menubar",
             width: 0, height: height, anchor: [.top, .left, .right],
-            exclusiveZone: height, keyboard: .none, delegate: self)
+            // ON_DEMAND, not NONE: the compositor hands the bar keyboard focus
+            // when it's clicked (and takes it back when something else is
+            // focused), which is exactly the Mac rule — click a title, then
+            // drive the menus with the arrow keys. See HANDOFF §2.27.
+            exclusiveZone: height, keyboard: .onDemand, delegate: self)
         else { return nil }
         layer = ls
         clock = MenuBar.currentClock()
@@ -274,6 +278,33 @@ public final class MenuBar: LayerSurfaceDelegate {
         return nil
     }
 
+    // MARK: keyboard
+
+    /// Keys while a dropdown is open. Left/Right walk the *titles* (closing one
+    /// menu and opening its neighbour, as on Mac); everything else belongs to
+    /// the open menu — Up/Down move the highlight, Return chooses, Escape
+    /// closes. With no menu open the bar holds no keyboard focus at all, so
+    /// nothing arrives here.
+    public func keyEvent(_ event: KeyEvent) {
+        guard event.pressed, let open = openIndex else { return }
+        switch event.keysym {
+        case KeySym.left:  openMenu(neighbourTitle(from: open, step: -1))
+        case KeySym.right: openMenu(neighbourTitle(from: open, step: 1))
+        default:           menu?.keyDown(event.keysym)
+        }
+    }
+
+    /// The next title in `step`'s direction that actually has a menu, wrapping.
+    private func neighbourTitle(from i: Int, step: Int) -> Int {
+        let n = menus.count
+        var j = i
+        for _ in 0..<n {
+            j = (j + step + n) % n
+            if !menus[j].items.isEmpty { return j }
+        }
+        return i
+    }
+
     private func openMenu(_ i: Int) {
         closeMenu()
         let m = menus[i]
@@ -306,10 +337,14 @@ public final class MenuBar: LayerSurfaceDelegate {
         if openIndex != nil { openIndex = nil; layer?.setNeedsDisplay() }
     }
 
-    private func menuDismissed() {   // outside click (compositor popup_done)
+    private func menuDismissed() {   // outside click (popup_done), or Escape
         popup = nil
         menu = nil
-        if openIndex != nil { openIndex = nil; layer?.setNeedsDisplay() }
+        if openIndex != nil {
+            openIndex = nil
+            MenuBar.log("closed")
+            layer?.setNeedsDisplay()
+        }
     }
 
     /// Widest item, measured on a scratch surface (pointer handlers have no cr).

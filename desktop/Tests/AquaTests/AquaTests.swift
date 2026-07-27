@@ -883,6 +883,209 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(read(trashedAgain ?? ""), "second one")
     }
 
+    // MARK: Application bundles — an app's own icon
+
+    func testAppBundleIconLookupAndDecode() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/appicon.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer { finderRemovePath(root) }
+
+        let bundle = finderJoin(root, "Marker.app")
+        let resources = finderJoin(bundle, "Contents/Resources")
+        XCTAssertTrue(finderCreateDirectory(bundle))
+        XCTAssertTrue(finderCreateDirectory(finderJoin(bundle, "Contents")))
+        XCTAssertTrue(finderCreateDirectory(resources))
+
+        // A bundle with no artwork has no icon — the procedural glyph stands in.
+        XCTAssertNil(AppIcon.iconFile(inBundle: bundle))
+
+        // Write a real 8x8 red PNG with cairo (no fixture files in the repo).
+        func writePNG(_ path: String, side: Int32, r: Double, g: Double, b: Double) {
+            let s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, side, side)
+            let cr = cairo_create(s)
+            cairo_set_source_rgba(cr, r, g, b, 1)
+            cairo_paint(cr)
+            cairo_destroy(cr)
+            path.withCString { _ = cairo_surface_write_to_png(s, $0) }
+            cairo_surface_destroy(s)
+        }
+        writePNG(finderJoin(resources, "zebra.png"), side: 8, r: 0, g: 0, b: 1)
+        // Any PNG will do when nothing matches the naming convention...
+        XCTAssertEqual(AppIcon.iconFile(inBundle: bundle), finderJoin(resources, "zebra.png"))
+        // ...but a file named after the bundle wins.
+        writePNG(finderJoin(resources, "Marker.png"), side: 16, r: 1, g: 0, b: 0)
+        XCTAssertEqual(AppIcon.iconFile(inBundle: bundle), finderJoin(resources, "Marker.png"))
+
+        // It decodes, and drawing it paints the icon's pixels (red) into a rect.
+        let target = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 32, 32)
+        guard let cr = cairo_create(target) else { return XCTFail("no cairo context") }
+        XCTAssertTrue(AppIcon.draw(cr, path: finderJoin(resources, "Marker.png"),
+                                   Rect(0, 0, 32, 32)))
+        cairo_surface_flush(target)
+        let px = cairo_image_surface_get_data(target)!
+        let stride = Int(cairo_image_surface_get_stride(target))
+        // ARGB32 is premultiplied BGRA in memory on little-endian.
+        let mid = 16 * stride + 16 * 4
+        XCTAssertEqual(px[mid + 2], 255)   // red
+        XCTAssertEqual(px[mid + 1], 0)     // green
+        XCTAssertEqual(px[mid + 0], 0)     // blue
+        cairo_destroy(cr)
+        cairo_surface_destroy(target)
+
+        // A listing marks the bundle with its icon; a plain folder gets none.
+        XCTAssertTrue(finderCreateDirectory(finderJoin(root, "Documents")))
+        let listed = readDirectory(root)
+        let app = listed.first { $0.name == "Marker.app" }
+        XCTAssertEqual(app?.kind, .application)
+        XCTAssertEqual(app?.iconPath, finderJoin(resources, "Marker.png"))
+        XCTAssertNil(listed.first { $0.name == "Documents" }?.iconPath)
+    }
+
+    func testICNSEmbeddedPNGExtraction() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/icns.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer { finderRemovePath(root) }
+
+        // Two PNGs of different sizes, wrapped as .icns variants: the extractor
+        // must pick the biggest one (that's the sharpest icon in the container).
+        func pngBytes(side: Int32) -> [UInt8] {
+            let path = finderJoin(root, "tmp\(side).png")
+            let s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, side, side)
+            let cr = cairo_create(s)
+            cairo_set_source_rgba(cr, 0, 1, 0, 1); cairo_paint(cr)
+            cairo_destroy(cr)
+            path.withCString { _ = cairo_surface_write_to_png(s, $0) }
+            cairo_surface_destroy(s)
+            let fd = path.withCString { open($0, O_RDONLY) }
+            defer { close(fd); path.withCString { _ = unlink($0) } }
+            var out = [UInt8](), buf = [UInt8](repeating: 0, count: 4096)
+            while true {
+                let n = buf.withUnsafeMutableBytes { Glibc.read(fd, $0.baseAddress, $0.count) }
+                if n <= 0 { break }
+                out.append(contentsOf: buf[0..<n])
+            }
+            return out
+        }
+        let small = pngBytes(side: 8), large = pngBytes(side: 64)
+        XCTAssertGreaterThan(large.count, small.count)
+
+        func chunk(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            let len = payload.count + 8
+            return Array(type.utf8) + [UInt8(len >> 24 & 0xff), UInt8(len >> 16 & 0xff),
+                                       UInt8(len >> 8 & 0xff), UInt8(len & 0xff)] + payload
+        }
+        let body = chunk("ic07", small) + chunk("ic09", large)
+        let file = Array("icns".utf8)
+            + [UInt8((body.count + 8) >> 24 & 0xff), UInt8((body.count + 8) >> 16 & 0xff),
+               UInt8((body.count + 8) >> 8 & 0xff), UInt8((body.count + 8) & 0xff)]
+            + body
+        let icns = finderJoin(root, "Marker.icns")
+        let fd = icns.withCString { open($0, O_CREAT | O_WRONLY | O_TRUNC, 0o644) }
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        _ = file.withUnsafeBytes { Glibc.write(fd, $0.baseAddress, $0.count) }
+        close(fd)
+
+        XCTAssertEqual(AppIcon.largestEmbeddedPNG(inICNS: icns), large)
+        // And the whole path decodes: the 64px variant comes back as a surface.
+        let surface = AppIcon.surface(icns)
+        XCTAssertNotNil(surface)
+        XCTAssertEqual(cairo_image_surface_get_width(surface!), 64)
+
+        // A file that isn't an ICNS (or holds no PNG variant) is nil, not a crash.
+        let notICNS = finderJoin(root, "bogus.icns")
+        let fd2 = notICNS.withCString { open($0, O_CREAT | O_WRONLY | O_TRUNC, 0o644) }
+        _ = Array("not an icon at all".utf8).withUnsafeBytes {
+            Glibc.write(fd2, $0.baseAddress, $0.count)
+        }
+        close(fd2)
+        XCTAssertNil(AppIcon.largestEmbeddedPNG(inICNS: notICNS))
+        XCTAssertNil(AppIcon.surface(notICNS))
+    }
+
+    // MARK: The Dock — emptying the Trash (the one path that really unlinks)
+
+    func testEmptyTrashRemovesEverythingPermanently() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/emptytrash.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+
+        // Own $HOME, or this test empties the developer's real Trash.
+        let savedHome = getenv("HOME").map { String(cString: $0) }
+        setenv("HOME", root, 1)
+        defer {
+            if let savedHome { setenv("HOME", savedHome, 1) } else { unsetenv("HOME") }
+            finderRemovePath(root)
+        }
+
+        func write(_ path: String, _ text: String) {
+            let fd = path.withCString { open($0, O_CREAT | O_WRONLY | O_TRUNC, 0o644) }
+            XCTAssertGreaterThanOrEqual(fd, 0)
+            _ = Array(text.utf8).withUnsafeBytes { Glibc.write(fd, $0.baseAddress, $0.count) }
+            close(fd)
+        }
+
+        // Looking at the Trash must not create it, and an absent Trash reads as
+        // empty rather than as an error.
+        XCTAssertEqual(finderTrashPath(), finderJoin(root, ".Trash"))
+        XCTAssertFalse(finderExists(finderJoin(root, ".Trash")))
+        XCTAssertTrue(finderTrashContents().isEmpty)
+        XCTAssertEqual(finderEmptyTrash().removed, 0)
+        XCTAssertFalse(finderExists(finderJoin(root, ".Trash")))
+
+        // Throw away a file and a whole folder (with a dot-file inside, which an
+        // empty must take with it).
+        let work = finderJoin(root, "work")
+        XCTAssertTrue(finderCreateDirectory(work))
+        write(finderJoin(work, "Read Me.txt"), "hello")
+        XCTAssertTrue(finderCreateDirectory(finderJoin(work, "Reports")))
+        write(finderJoin(work, "Reports/q1.txt"), "quarter one")
+        write(finderJoin(work, "Reports/.notes"), "private")
+        XCTAssertNotNil(finderMoveToTrash(finderJoin(work, "Read Me.txt")))
+        XCTAssertNotNil(finderMoveToTrash(finderJoin(work, "Reports")))
+        XCTAssertEqual(finderTrashContents().count, 2)
+
+        // Emptying reports what went, and leaves the Trash itself in place (as
+        // on Mac — the folder stays, its contents don't).
+        let result = finderEmptyTrash()
+        XCTAssertEqual(result.removed, 2)
+        XCTAssertEqual(result.failed, 0)
+        XCTAssertTrue(finderTrashContents().isEmpty)
+        XCTAssertTrue(finderIsDirectory(finderJoin(root, ".Trash")))
+        XCTAssertFalse(finderExists(finderJoin(root, ".Trash/Read Me.txt")))
+        XCTAssertFalse(finderExists(finderJoin(root, ".Trash/Reports/q1.txt")))
+        // Nothing outside the Trash was touched.
+        XCTAssertTrue(finderIsDirectory(work))
+    }
+
+    func testRemovePathDeletesTreesAndReportsFailure() {
+        let base = NSTemporaryDirectoryPath()
+        var template = Array((base + "/removepath.XXXXXX").utf8CString)
+        guard let root = template.withUnsafeMutableBufferPointer({ buf -> String? in
+            mkdtemp(buf.baseAddress!).map { String(cString: $0) }
+        }) else { return XCTFail("mkdtemp failed") }
+        defer { finderRemovePath(root) }
+
+        let tree = finderJoin(root, "a")
+        XCTAssertTrue(finderCreateDirectory(tree))
+        XCTAssertTrue(finderCreateDirectory(finderJoin(tree, "b")))
+        let leaf = finderJoin(tree, "b/c.txt")
+        let fd = leaf.withCString { open($0, O_CREAT | O_WRONLY, 0o644) }
+        XCTAssertGreaterThanOrEqual(fd, 0); close(fd)
+
+        XCTAssertTrue(finderRemovePath(tree))
+        XCTAssertFalse(finderExists(tree))
+        // Removing something that isn't there fails rather than pretending.
+        XCTAssertFalse(finderRemovePath(finderJoin(root, "gone")))
+    }
+
     // MARK: Finder — the real filesystem
 
     func testReadDirectorySortsAndHidesDotfiles() {
@@ -930,17 +1133,11 @@ final class AquaTests: XCTestCase {
     }
 }
 
-/// Delete a directory tree — test cleanup only (the Finder itself never unlinks
-/// what a user deletes; it moves to the Trash).
+/// Delete a directory tree — test cleanup. It's `finderRemovePath` (the Trash's
+/// own eraser); the Finder still never unlinks what a *user* deletes, it moves
+/// it to the Trash.
 private func removeTree(_ path: String) {
-    guard finderIsDirectory(path) else {
-        path.withCString { _ = unlink($0) }
-        return
-    }
-    for e in readDirectory(path, showHidden: true) {
-        removeTree(finderJoin(path, e.name))
-    }
-    path.withCString { _ = rmdir($0) }
+    finderRemovePath(path)
 }
 
 // A temp dir without importing Foundation (which the toolkit avoids).

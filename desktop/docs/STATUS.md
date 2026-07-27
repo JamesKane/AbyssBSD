@@ -48,7 +48,13 @@ runtime multi-window (`Display` routes input **by wl_surface**). P2.10 tied it
 together: **`abyss/session.sh`** boots the whole shell with one command — a
 nested (or headless, or already-running) compositor plus the desktop, menu bar
 and Dock, supervised and torn down together
-(![the session](screenshots/live-session.png)). See
+(![the session](screenshots/live-session.png)). P2.11 tied off the shell's loose
+ends: the Dock's **Trash** fills, opens and **empties** (right-click → Empty
+Trash, the only code here that unlinks —
+![the Trash menu](screenshots/live-trash.png)), the **menu bar is fully
+keyboard-drivable** (click a title, then Left/Right/Up/Down/Return/Escape), and
+an **`.app` bundle is drawn with its own icon** from `Contents/Resources`
+(PNG, including PNGs embedded in an `.icns`). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
 ## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
@@ -61,9 +67,10 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (58 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (62 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
-  model, PoolConfig read/write/watch).
+  model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
+  extraction, PoolConfig read/write/watch).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -259,6 +266,8 @@ abyss/tests/live-sway.sh --spatial /tmp/spatial.png      # spatial: 2 windows, r
 abyss/tests/live-sway.sh --fileops /tmp/fileops.png      # new folder/rename/copy/trash, checked on disk
 abyss/tests/live-sway.sh --desktop /tmp/desk.png         # desktop icons: select, open a Finder window
 abyss/tests/live-sway.sh --launch  /tmp/launch.png       # double-click an .app bundle / a document
+abyss/tests/live-sway.sh --trash   /tmp/trash.png        # Dock Trash: right-click -> Empty Trash
+abyss/tests/live-sway.sh --menubar --keys /tmp/mbk.png   # drive the menu bar from the keyboard alone
 
 # Finder (an ordinary xdg-shell app) over a real directory:
 ABYSS_FINDER_DIR=~/Documents AQUA_SCENE=finder .build/debug/AquaDemo
@@ -292,10 +301,13 @@ file operations — desktop icons, and launching), which now boots as one deskto
 - **Finish Phase 2's tail:** the **`CurrentIPC`** decision (P2.9 — it binds
   FreeBSD-only libnv; vendor it, hand-roll the codec, or carry to Phase 3). It
   carries only the control plane, so nothing visible is waiting on it.
-- **Shell polish:** empty the Trash from the Dock, menu-bar keyboard navigation,
-  reading an `.app` bundle's own icon. Dragging desktop icons is blocked on the
-  same protocol limit as spatial window placement — a Wayland client can't
-  position itself, so it needs remembered per-item positions in config.
+- **Shell polish:** the self-contained ones shipped in P2.11 (empty the Trash,
+  menu-bar keyboard navigation, bundle icons). Left: dragging desktop icons —
+  blocked on the same protocol limit as spatial window placement, since a
+  Wayland client can't position itself, so it needs remembered per-item
+  positions in config — the menu bar's status items (they need the FreeBSD
+  `vents` bridges, Phase 3), and a confirmation sheet for Empty Trash once a
+  layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, gated by the standing #1 risk: the Swift toolchain on
   FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything so far is
