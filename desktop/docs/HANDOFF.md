@@ -41,7 +41,7 @@ renders faithful Jaguar UI:
   the `docs/`.
 
 **Phase 2 — the Aqua shell**, all of it as Wayland clients against stock sway
-(no compositor work; `tide` is reused in Phase 3):
+(no compositor work — a Swift compositor is a later phase; see PLAN.md):
 
 - **`Surface` grew up** — a `wlr-layer-shell` surface *role* beside `Window`
   (§2.16), **foreign-toplevel** tracking, **xdg-activation**, a **weak window
@@ -937,11 +937,15 @@ per-output HiDPI) and Phase 2's *visible* shell is complete (P2.1–P2.8: deskto
 config, menu bar, Dock, Finder, desktop icons, launching) and now boots as one
 desktop (P2.10). What's left:
 
-1. **Finish Phase 2's tail** — the one pass deliberately left (PHASE2.md):
-   - **P2.9, `CurrentIPC`** — decision point, not a coding task: vendor a
-     portable libnv, hand-roll the nvlist codec, or carry it to Phase 3. It binds
-     FreeBSD-only libnv and carries only the control plane, so nothing visible
-     depends on it. Nothing else in Phase 2 is blocked on it.
+1. ~~**Finish Phase 2's tail**~~ — **done. Phase 2 is complete.** Its last open
+   item, **P2.9 `CurrentIPC`**, was a decision rather than a coding task, and it
+   was decided on 2026-07-27: **carried to Phase 3 and written in Swift there**
+   (PHASE2.md P2.9 has the full reasoning and the traps to expect). The short
+   version: every peer it would talk to — session supervisor, compositor,
+   hardware bridges — is itself an unwritten Phase-3 Swift component, its
+   FreeBSD-native encoder isn't on this box, and the Dock already gets running
+   apps from foreign-toplevel. There is nothing here to talk to and nothing to
+   verify against, so building it now would be building against a mirror.
 2. **Shell polish** — the three self-contained ones are **done** (P2.11, §2.27):
    emptying the Trash from the Dock, menu-bar keyboard navigation, and reading
    an `.app` bundle's own icon. What's left of that list:
@@ -958,9 +962,14 @@ desktop (P2.10). What's left:
 4. **Phase 3 — FreeBSD.** The standing #1 risk is unchanged and gates shipping:
    the Swift toolchain on FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)).
    Everything above is deliberately Linux-verifiable so it doesn't block on that.
-   When it lands: reuse Rust `tide` as the compositor, `anchor` as the real
-   session supervisor (replacing §2.25's double-fork stand-in), and the `vents`
-   hardware bridges.
+   When it lands, the work is **Swift rewrites**, not adoptions of the Rust
+   components (PLAN.md, corrected 2026-07-27): a Swift session supervisor to
+   replace `abyss/session.sh` and §2.25's double-fork stand-in, Swift hardware
+   bridges for the menu bar's status items, `CurrentIPC` (PHASE2.md P2.9), and
+   in its own later phase a Swift compositor over a wlroots binding. Until that
+   exists the shell keeps running on stock sway/labwc, which FreeBSD ports too.
+   The sibling's `tide`/`anchor`/`vents` are what you *read* before writing each
+   one.
 
 **Portability debts to pay when FreeBSD arrives** (all flagged in code):
 `/proc/self/exe` in `Launcher.selfExecutable` (needs the `KERN_PROC_PATHNAME`
@@ -1007,8 +1016,10 @@ slot (§2.3). xdg-activation (P2.8) is the most recent worked example.
 **External:**
 
 - Architecture canon (Rust sibling): `../AbyssBSD/abyss/docs/{DESKTOP,SEAMS}.md`.
-- Reusable engine to adopt in Phase 3: `../AbyssBSD/abyss/de/{tide,…}`,
-  `../AbyssBSD/abyss/ipc/{current,pool,shmring}`. Note the sibling's shell
-  targeted **GNOME 2**, not Aqua — adapt its algorithms, don't copy them.
+- Reference implementations to **rewrite from** in Phase 3+ (read, don't link):
+  `../AbyssBSD/abyss/de/{tide,anchor,vents,…}`,
+  `../AbyssBSD/abyss/ipc/{current,pool,shmring}`. `PoolConfig` is how that goes:
+  same on-disk format, all-new Swift. Note the sibling's shell targeted
+  **GNOME 2**, not Aqua — adapt its algorithms, don't copy them.
 - Agent memory: `abyssbsd-swift-project`, `abyssbsd-swift-status`,
   `reef-targeted-gnome2`.

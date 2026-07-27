@@ -9,10 +9,13 @@ Last updated: 2026-07-27.
 
 A FreeBSD fork whose desktop environment is written in **Swift 6**, styled as a
 faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, on **Wayland**. Sibling project
-`../AbyssBSD` (Rust DE) is the design source and supplies the engine we reuse
-(compositor `tide`, IPC `current`, config `pool`, …). See PLAN.md for the
-locked-in decisions (reuse Rust `tide` now / rewrite later; faithful clone;
-Linux-first dev; full phased roadmap).
+`../AbyssBSD` (Rust DE) is the **design source we rewrite from** — its compositor
+(`tide`), IPC (`current`), config (`pool`) and helpers are reference
+implementations to read, not code to link. **The product is Swift**, dropping to
+C only where Swift can't reach (system-library shims like `de/cwayland`).
+`PoolConfig` is the pattern: a Swift rewrite of the Rust `pool` that shares the
+on-disk format and none of the code. See PLAN.md for the locked-in decisions
+(faithful clone; Linux-first dev; full phased roadmap).
 
 **Phase 2 has begun.** P2.1 added the `wlr-layer-shell` surface role to `Surface`
 and a BACKGROUND **wallpaper** (`AQUA_SCENE=wallpaper`) — the shell's foundational
@@ -167,7 +170,7 @@ xdg-activation) instead of duplicating it, and the red light closes one window �
 the app quits with the last. The mode persists to `finder.ini`.
 ![spatial finder](screenshots/live-finder-spatial.png)
 (A Wayland client can't position its own windows, so the "remembered position"
-part of spatial Finder waits for `tide` in Phase 3; size/view/mode do persist.)
+part of spatial Finder waits for a compositor of our own; size/view/mode persist.)
 
 Double-clicking something that isn't a folder **launches** it: an `.app` bundle
 runs `Contents/MacOS/<name>`, an executable runs directly, and anything else goes
@@ -306,12 +309,14 @@ file operations — desktop icons, and launching), which now boots as one deskto
   blocked on the same protocol limit as spatial window placement, since a
   Wayland client can't position itself, so it needs remembered per-item
   positions in config — the menu bar's status items (they need the FreeBSD
-  `vents` bridges, Phase 3), and a confirmation sheet for Empty Trash once a
+  hardware bridges, Phase 3), and a confirmation sheet for Empty Trash once a
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, gated by the standing #1 risk: the Swift toolchain on
   FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything so far is
-  deliberately Linux-verifiable so it doesn't block on that. When it lands:
-  Rust `tide` as the compositor, `anchor` as the real session supervisor
-  (replacing the launcher's double-fork stand-in), and the `vents` hardware
-  bridges for the menu bar's status items.
+  deliberately Linux-verifiable so it doesn't block on that. When it lands the
+  work is **Swift rewrites**, with the sibling's crates read as the spec: a
+  session supervisor (replacing `abyss/session.sh` and the launcher's
+  double-fork stand-in), the hardware bridges behind the menu bar's status
+  items, and `CurrentIPC` (PHASE2.md P2.9). The shell keeps running on stock
+  sway/labwc from ports until a Swift compositor exists (its own later phase).

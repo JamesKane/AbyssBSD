@@ -5,7 +5,12 @@ a read of the Rust sibling's shell (`reef`), config (`pool`), and IPC (`current`
 Read [PLAN.md](PLAN.md) for the locked decisions and [STATUS.md](STATUS.md) for the
 Phase-1 baseline this builds on.
 
-Last updated: 2026-07-25.
+Last updated: 2026-07-27.
+
+**Phase 2 is complete.** P2.1–P2.8 built the visible shell, P2.10 made it boot as
+one desktop, P2.11 tied off the polish, and P2.9 — always a decision rather than
+a coding task — was decided on 2026-07-27: `CurrentIPC` is carried to Phase 3 and
+written in Swift there (§4, P2.9). Next is Phase 3, FreeBSD bring-up.
 
 ---
 
@@ -19,11 +24,12 @@ per commit.
 **Explicitly NOT in Phase 2** (locked in PLAN.md, restated because the sibling
 tempts otherwise):
 
-- **No compositor work.** We reuse Rust `tide` in Phase 3 on FreeBSD. On Linux the
-  shell runs as clients against **sway** (a stock wlroots compositor), which
-  already provides `wlr-layer-shell`, `wlr-foreign-toplevel-management`,
-  `xdg-activation`, and the seat. The sibling's `tide` metronome / triple-buffer /
-  reactor are **not** ported here — that's Phase 6, if ever.
+- **No compositor work in this phase.** The shell runs as clients against
+  **sway** (a stock wlroots compositor), which already provides
+  `wlr-layer-shell`, `wlr-foreign-toplevel-management`, `xdg-activation`, and the
+  seat — on FreeBSD as on Linux. A **Swift** compositor is its own later phase
+  (PLAN.md); the sibling's `tide` metronome / triple-buffer / reactor are the
+  design reference for it, not code to link.
 - **No `anchor` session supervisor (real one).** `anchor` is FreeBSD-native
   (`pdfork(2)` + `kqueue` `EVFILT_PROCDESC`). For Linux dev we use a thin launch
   script; the real supervisor arrives with Phase 3.
@@ -31,18 +37,17 @@ tempts otherwise):
   FreeBSD-only. The menu-bar volume/battery/status items get stubbed or hidden on
   Linux; real bridges land in Phase 3.
 
-**Deferred within Phase 2 (the FreeBSD-coupled tail):**
+**Deferred within Phase 2 (the FreeBSD-coupled tail) — now resolved:**
 
-- **`CurrentIPC` is deferred to the end of the phase, and may slip to Phase 3.**
-  It binds **libnv**, which is a FreeBSD-native library — **not present on this
-  Linux box** (verified: no `pkg-config libnv`, no headers, no libbsd). Standing it
-  up on Linux means vendoring a portable libnv or hand-rolling the nvlist codec
-  first. And it isn't on the critical path: `current` carries only the shell's
-  *control plane* (`reefctl`→panel reload/menu, screenshot, notifications) — none
-  of the visible desktop (wallpaper, menu bar, Dock) needs it. So we build the
-  whole visible shell over Wayland + `PoolConfig` first, and treat `CurrentIPC`
-  as an isolated late pass (or hand it to Phase 3 with the rest of the FreeBSD
-  bringup).
+- **`CurrentIPC` was deferred to the end of the phase, and on 2026-07-27 it was
+  **carried to Phase 3** (full reasoning under P2.9 in §4). It isn't on the
+  critical path: `current` carries only the shell's *control plane* (panel
+  reload/menu, screenshot, notifications) — none of the visible desktop
+  (wallpaper, menu bar, Dock) needs it, and the Dock gets running apps from
+  foreign-toplevel instead. Its FreeBSD-native encoder (**libnv**) isn't on this
+  Linux box (verified: no `pkg-config libnv`, no headers, no libbsd), and every
+  peer it would speak to is itself an unwritten Phase-3 Swift component — so
+  there is nothing here to talk to and nothing to verify against.
 
 ---
 
@@ -60,7 +65,7 @@ by our `Surface` + `Aqua`. What Phase 2 adds:
 | Running-app awareness | — | **foreign-toplevel** client (new) |
 | Launch / raise | — | **xdg-activation** client (new) |
 | Config | — | **`PoolConfig`** (new) |
-| Control-plane IPC | — | **`CurrentIPC`** (deferred) |
+| Control-plane IPC | — | **`CurrentIPC`** (carried to Phase 3 — P2.9) |
 
 The three new protocol XMLs are **already vendored** in `protocols/` and stubbed
 (commented) in `de/cwayland/generate-protocols.sh`. Adding each is the mechanical
@@ -79,8 +84,8 @@ recipe from HANDOFF §2.1: uncomment the `gen` line, list the generated `.c` in
 | **Dock** | *(none — new)* | layer-shell **BOTTOM**, anchored bottom-center | **magnification**, running indicators (foreign-toplevel), Trash. Jaguar-specific, no sibling code |
 | **Finder** | `reef-fm` (1,356 LOC) | **xdg-shell** toplevels (not layer-shell) | real spatial FM: readdir, icon grid, multi-window; largest piece |
 | **Config** | `pool` (431 LOC) | — | mmap read / atomic-rename write / watch |
-| **Control IPC** | `current` (456 LOC) | unix socket + libnv | *deferred* |
-| Session launch | `anchor` (456 LOC) | — | Linux: thin script; real one in Phase 3 |
+| **Control IPC** | `current` (456 LOC) | unix socket + fd passing | *carried to Phase 3 (P2.9)* |
+| Session launch | `anchor` (456 LOC) | — | `abyss/session.sh` (P2.10); a Swift supervisor in Phase 3 |
 
 Note the Dock: the sibling's `reef-panel` is a single *top* bar with an inline
 taskbar — it has **no Dock**. AbyssBSD wants the full Jaguar pairing (top menu bar
@@ -262,10 +267,70 @@ Remaining shell work after this pass: dragging desktop icons to reposition them
 (needs the per-item positions a spatial desktop remembers) — see P2.11 for the
 rest, which is done.
 
-**P2.9 (deferred) — `CurrentIPC` + control plane.**
-Only if we choose to land it on Linux: vendor a portable libnv (or hand-roll the
-nvlist pack/unpack + `SCM_RIGHTS`), then a `reefctl`-equivalent driving menu-bar
-reload/menu and notifications. Otherwise carry to Phase 3.
+**P2.9 — `CurrentIPC` + control plane. ⏭ decided 2026-07-27: carried to Phase 3.**
+
+This was always a decision rather than a coding task, and the decision is to
+**carry it to Phase 3 and write it in Swift there — not to vendor a portable
+libnv now, and not to build it on Linux against nothing.** What settled it:
+
+- **Every consumer is FreeBSD-only, and every consumer is still unwritten.**
+  `current` has exactly two users in the sibling: `anchor` (the session control
+  socket) and `tide` (compositor control, plus a push protocol to the old
+  GNOME-2 panel). We are **rewriting** those in Swift rather than reusing them
+  (PLAN.md, corrected 2026-07-27), so the other end of every conversation this
+  component would hold is itself a Phase-3 deliverable. `vents` (volume/battery,
+  for the menu bar's status items) is FreeBSD hardware by definition.
+- **Nothing visible depends on it.** Our Dock learns about running apps from
+  **`wlr-foreign-toplevel-management`** — a Wayland protocol — not from tide's
+  panel push, so the shell already has what that seam would have carried, from
+  any wlroots compositor.
+- **A Linux build could only talk to itself.** libnv isn't here (confirmed
+  again: no header, no pkg-config, and the `libnv*` libraries on this box are
+  NVIDIA/NVMe). The sibling's own crate only *type-checks* on Linux — its build
+  tree holds `.rmeta` and no linked artifact, exactly what `-lnv` failing looks
+  like. So neither side of a conversation exists here.
+- **Nothing can be verified here anyway.** The first honest test of a control
+  plane is a real client against a real service. Both ends land in Phase 3, so
+  the work should too.
+
+**Swift-native or libnv? Decide it in Phase 3, but the default is Swift.**
+Since the peers are being rewritten in Swift, nvlist's wire format stops being
+a compatibility requirement and becomes just one available encoding. Under the
+"Swift unless Swift can't" rule, the codec is plainly feasible in Swift —
+`PoolConfig` already does mmap/atomic-rename/flock/inotify-kqueue straight from
+Swift with a C shim only for the platform fork, and `sendmsg`/`recvmsg` with
+`SCM_RIGHTS` is the same kind of work. Binding base libnv stays the fallback if
+the format's descriptor handling proves gnarlier than it looks, and remains
+worth it if we ever want to speak to FreeBSD's own nvlist users. What we should
+*not* do is vendor a port of libnv into the tree: that's C we'd own forever, for
+a library that's in base on the target and unnecessary off it.
+
+**What Phase 3 should know when it picks this up** (so the traps are already
+written down):
+
+- **If we do bind libnv, expect the `#define` symbol-prefix trap.** FreeBSD's
+  `<sys/nv.h>` exports its symbols prefixed `FreeBSD_nvlist_*` (to avoid
+  clashing with ZFS's libnvpair) and `#define`s the short names onto them.
+  Swift's C importer does not see `#define`s — the same class of problem as
+  libwayland's static-inline requests (HANDOFF §2.1) and `XKB_MOD_NAME_*`
+  (§2.23). The Rust side had to spell `#[link_name = "FreeBSD_nvlist_create"]`;
+  Swift would get the established fix: a one-line-per-call C shim (`de/cnv`,
+  mirroring `de/cwayland`'s `aw_*`).
+- **Keep the sibling's *shape*** — it's a good design, and reading it is free:
+  a `Msg` of typed fields (str/u64/bool/bytes/**fd**), `runtime_dir()`
+  (`$ABYSS_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/abyss`, else
+  `/var/run/user/<uid>/abyss`, 0700), a service socket at
+  `<runtime_dir>/<service>.sock`, `Server.bind/accept`, `connect`, and a
+  one-shot `call`. Rewrite it in Swift; don't link it.
+- **The run-loop hook already exists.** A `Server`'s listening fd goes straight
+  into `Display.addFileDescriptor` (HANDOFF §2.18) — the same mechanism the
+  config watcher and the menu-bar clock use. No thread, no second loop.
+- **fd passing is the point** (`SCM_RIGHTS`, for handing over shm/dmabuf handles
+  with no pixel copies). Whatever encoding we pick has to carry descriptors, and
+  that — not the field types — is the part to prototype first.
+- Verification is a Swift client against a Swift service, both ours; the
+  sibling's `current-server`/`current-client` are useful as a *reference*
+  behaviour to compare against, not as the counterparty.
 
 **P2.10 — Dev session launcher. ✅ done.**
 `abyss/session.sh` boots the whole shell with one command: it starts a
@@ -327,8 +392,9 @@ artwork was drawn). 62 unit tests. See HANDOFF §2.27,
 
 ## 6. Risks / open decisions
 
-1. **libnv on Linux (the `CurrentIPC` blocker).** Deferred per §1; decision point
-   at P2.7 — vendor portable libnv vs. hand-roll the codec vs. push to Phase 3.
+1. ~~**libnv on Linux (the `CurrentIPC` blocker).**~~ **Closed 2026-07-27:**
+   carried to Phase 3 and bound against FreeBSD's base libnv — neither vendored
+   nor reimplemented. Reasoning and the Phase-3 notes are under P2.9 in §4.
 2. **sway's exclusive-zone / anchor fidelity vs. `tide`.** We develop against
    sway's layer-shell; `tide`'s `arrange()`/`apply_exclusive()` may differ subtly.
    Keep placement logic in pure functions so re-targeting `tide` in Phase 3 is a

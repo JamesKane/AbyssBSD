@@ -3,9 +3,11 @@
 A FreeBSD fork with a desktop environment written in **Swift 6**, styled as a
 faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, running on **Wayland**.
 
-> Sibling project `../AbyssBSD` (a Rust DE) is the design source and supplies the
-> engine components (compositor `tide`, brokerless IPC `current`, config `pool`)
-> that this project reuses while the Aqua shell + toolkit are built in Swift.
+> Sibling project `../AbyssBSD` (a Rust DE) is the **design source we rewrite
+> from**: its compositor (`tide`), brokerless IPC (`current`) and config (`pool`)
+> are reference implementations to read, not components to link. Everything ships
+> in Swift, dropping to C only where Swift can't reach — system libraries and
+> their shims.
 
 ![first window](docs/screenshots/first-window.png)
 

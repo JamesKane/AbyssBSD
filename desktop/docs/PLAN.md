@@ -16,17 +16,30 @@ compositor (`tide`), a shell (`reef`), brokerless IPC (`current`), daemon-free c
 (`anchor`), and an image codec (`abyss-image`). Its architecture is documented in
 `AbyssBSD/abyss/docs/{DESKTOP,SEAMS,STATUS,KERNEL-READINESS}.md`.
 
-**Our job is not to rewrite all of that in Swift.** It is to build the *experienced*
-desktop — the Aqua toolkit, shell, and apps — in Swift 6, reuse the proven Rust engine
-underneath for now, and replace pieces with Swift later where it pays.
+**The product is Swift.** The whole desktop — toolkit, shell, apps, *and* the engine
+underneath — gets written in Swift 6; we drop to C (or C++) only where Swift genuinely
+can't go. The sibling is therefore a **design source and reference implementation to
+rewrite from**, not a runtime dependency to link against: read its algorithms, its
+architecture docs and its protocol maps, then write the Swift. (Corrected 2026-07-27,
+superseding the earlier "reuse the Rust engine for now" framing. `PoolConfig` — a Swift
+rewrite of the Rust `pool`, sharing only the on-disk format — is the pattern.)
+
+"Where Swift can't go" means an established C system library (libwayland, wlroots,
+xkbcommon, cairo, FreeType/HarfBuzz, libnv) or a shim over one, exactly as `de/cwayland`
+and `de/ctext` already do. It does not mean linking Rust crates.
 
 ### Decisions locked in (from planning Q&A)
 
-1. **Compositor: reuse now, rewrite later.** Keep the Rust `tide` compositor (its
-   allocation-free real-time present path and the C1–C5 frame contract are proven and
-   hostile to Swift's ARC). Build the Aqua shell/toolkit/apps in Swift 6 as Wayland
-   *clients*. Revisit a Swift compositor only once the toolkit and Embedded-Swift
-   hot-path patterns are proven (Phase 6).
+1. **Compositor: rewrite in Swift** (corrected 2026-07-27 — this used to read
+   "reuse now, rewrite later"). The Aqua shell/toolkit/apps are built first, as
+   Wayland *clients*, because that's the fastest path to a visible desktop and it
+   works against any wlroots compositor; the compositor itself is then written in
+   Swift over a wlroots C binding (the `wlsys` discipline), with Rust `tide` as the
+   design reference for its `arrange()`/exclusive-zone logic and its C1–C5 frame
+   contract. Until it exists, development runs on **stock sway/labwc** — on FreeBSD
+   as on Linux, both being in ports. The hard part stays hard: the allocation-free
+   real-time present path is where ARC is a genuine risk, and it is the one place
+   we'd reach for Embedded Swift or a C shim (risk 4 below).
 2. **Aqua fidelity: faithful 10.2 clone.** Pinstripes, lickable gel buttons,
    traffic-light controls, the magnifying Dock, Apple menu, pinstriped menu
    bar. The 512pixels Aqua screenshot library is the spec. (Brushed metal is
@@ -35,7 +48,7 @@ underneath for now, and replace pieces with Swift later where it pays.
    pinstriped/white Aqua window.)
 3. **Dev platform: Linux-first, then port.** Swift 6 is first-class on Linux; build the
    toolkit + shell on this workstation against a stock wlroots compositor (sway/labwc)
-   for fast iteration, then bring Swift up on FreeBSD and integrate with `tide`.
+   for fast iteration, then bring Swift up on FreeBSD and run the same way there.
 4. **This document: full phased roadmap.** Phase 0–1 are executable detail; later phases
    are milestone sketches to be expanded when reached.
 
@@ -44,8 +57,10 @@ underneath for now, and replace pieces with Swift later where it pays.
 - **Minimal third-party dependencies.** Capability = **hand FFI to a mature C system
   library** (wayland, xkbcommon, libnv, freetype, harfbuzz, cairo, libpng/jpeg, crypto)
   or vendored C. Avoid SwiftPM registry deps the way the sibling avoids crates.io.
-- **Wrap in phase 1, rewrite in Swift later.** Don't hand-fake a capability a mature C
-  lib provides; wrap it behind a clean Swift interface (the `wlsys`/`sysffi` discipline).
+- **Wrap a C *library*; rewrite a Rust *component*.** Don't hand-fake a capability a
+  mature C lib provides — wrap it behind a clean Swift interface (the `wlsys`/`sysffi`
+  discipline). The sibling's own crates are the opposite case: read them, then write
+  the Swift.
 - **The performance contract is the feature.** Keep `tide`'s C1–C5 benches as a
   CI gate; never let the Swift client layer regress input-to-photon.
 
@@ -58,9 +73,10 @@ underneath for now, and replace pieces with Swift later where it pays.
 | `CWayland` | C-interop target: libwayland-client + scanner-generated protocols | `reef/wl` C glue |
 | `Surface` | Swift Wayland client runtime (registry, surfaces, shm, seat, event loop) | `reef-wl` |
 | `Aqua` | The Aqua toolkit: 2D drawing, text, the 10.2 widget set + theme | `reef-wl::canvas` |
-| `CurrentIPC` | Swift binding to `current` (libnv over unix sockets + SCM_RIGHTS) | `ipc/current` |
+| `CurrentIPC` | Swift control plane: unix sockets, typed messages, fd-passing | `ipc/current` |
 | `PoolConfig` | Swift reimpl of `pool` (mmap read / atomic-rename write / kqueue watch) | `ipc/pool` |
 | `Dock`, `MenuBar`, `Finder`, `Desktop`, `LoginWindow`, `SystemPrefs` | the shell | `reef-*` |
+| *(compositor, session supervisor, hardware bridges)* | Swift rewrites, later phases | `tide`, `anchor`, `vents` |
 | `Installer` | Fedora-style graphical installer (Aqua app) | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
@@ -141,10 +157,12 @@ the 10.2 reference library; confirm crisp rendering at 1x and 2x scale.
 **Goal:** a usable desktop shell (Swift Wayland clients) running against sway.
 
 - **IPC/config in Swift:**
-  - `CurrentIPC` — bind `libnv` and speak the `current` wire protocol (unix sockets,
-    nvlist, fd-passing via `SCM_RIGHTS`) so Swift clients interoperate with the existing
-    Rust services. API shape mirrors `ipc/current/lib.rs` (`Msg.set_*/get_*`, `call`,
-    `Server`).
+  - `CurrentIPC` — the control plane in Swift: unix sockets, typed messages, fd-passing
+    via `SCM_RIGHTS`. API shape mirrors `ipc/current/lib.rs` (`Msg.set_*/get_*`, `call`,
+    `Server`), rewritten rather than bound. **Deferred out of Phase 2 and decided
+    2026-07-27 — see PHASE2.md P2.9:** every peer it would talk to is itself a Phase-3
+    Swift deliverable, so it lands there, with base `libnv` as the fallback encoder if
+    a Swift codec proves impractical.
   - `PoolConfig` — reimplement `pool` in Swift (mmap read, temp-file+fsync+atomic-rename
     write, kqueue/`EVFILT_VNODE` watch). It's ~458 LOC of pure syscalls; reading the same
     `~/.config/abyss/*.ini` files keeps Swift and Rust components config-compatible.
@@ -163,33 +181,41 @@ menus, and Finder; confirm config round-trips through `PoolConfig`.
 
 ---
 
-## Phase 3 — Integrate with `tide` on FreeBSD
+## Phase 3 — FreeBSD bring-up
 
-**Goal:** the Swift Aqua desktop running on its real engine, in the FreeBSD VM.
+**Goal:** the Swift Aqua desktop running on FreeBSD in the VM — on a stock wlroots
+compositor from ports, with its own Swift control plane, session supervisor and
+hardware bridges underneath. (The Swift compositor is Phase 6; nothing here waits
+on it.)
 
 - Bring Swift up on FreeBSD per the Phase 0 spike; get `Surface`/`Aqua` linking against
   FreeBSD libwayland/cairo/freetype/harfbuzz.
-- **Adopt from the sibling, as-is or lightly forked:** `tide` (compositor), `current`,
-  `pool` (Rust side), `shmring`, `vents` (sysctl/OSS/devd bridges), `anchor` (session
-  supervisor). The Swift shell connects to `tide` over Wayland and to services over
-  `current`.
-- **The D-Bus replacement story (goal #3):** `current` *is* the bus (brokerless nvlist
-  IPC). Reuse the sibling's reimagined, compositor-owned portals (`reef-portal`/`open`/
-  `save`/`notify` — file chooser, screenshot/cast, notifications). **Legacy adapter:** a
+- **Rewrite in Swift, reading the sibling as the spec:** `CurrentIPC` (control plane,
+  PHASE2.md P2.9), the session supervisor (`anchor`'s job — `abyss/session.sh` is
+  today's stand-in), the FreeBSD hardware bridges (`vents`: sysctl/OSS/devd, reached
+  from Swift directly as `PoolConfig` reaches syscalls), and `shmring` if the hot path
+  needs it. The compositor is its own later phase; until then the shell runs on stock
+  sway/labwc from ports, exactly as it does on Linux.
+- **The D-Bus replacement story (goal #3):** the control plane *is* the bus (brokerless,
+  no broker process). Take the sibling's compositor-owned portal *design*
+  (`reef-portal`/`open`/`save`/`notify` — file chooser, screenshot/cast, notifications)
+  and write it in Swift. **Legacy adapter:** a
   **jailed D-Bus bridge** + XWayland for GTK/Qt apps, off the critical path, so legacy
   apps that expect a session bus / portals / MPRIS / AT-SPI still work.
-- Run the full `tide` + Swift-shell stack on `tide`'s **headless** backend in the VM and
-  keep the C1–C5 perf benches green as a gate.
+- Run the whole stack headless in the VM (sway's headless backend today, ours later)
+  and keep `tide`'s C1–C5 perf benches as the standing gate the Swift compositor will
+  have to clear.
 
-**Verify:** in the VM, `tide` (headless) + Swift shell come up under `anchor`; the C1–C5
-benches pass; portals hand an fd to a sandboxed Swift app.
+**Verify:** in the VM, the Swift shell comes up under the Swift session supervisor on a
+headless compositor; config round-trips through `PoolConfig`; the control plane hands an
+fd to a sandboxed Swift app.
 
 ---
 
 ## Phase 4 — Mac Pro 2013 (MacPro6,1) hardware bringup
 
-**Goal:** real graphics and real hardware — unblocks `tide`'s GPU present path
-(`DESKTOP.md` phase 2, the sibling's one true blocker).
+**Goal:** real graphics and real hardware — what a GPU present path needs (the
+sibling hit the same wall: `DESKTOP.md` phase 2 was its one true blocker).
 
 - **Boot:** FreeBSD 15 UEFI on Apple EFI (Mac Pro 6,1 quirks); ZFS-on-root.
 - **GPU:** dual **AMD FirePro D300/D500/D700** = GCN 1.0 / Southern Islands → `drm-kmod`
@@ -200,8 +226,9 @@ benches pass; portals hand an fd to a sandboxed Swift app.
 - **Peripherals:** Apple NVMe quirks, Thunderbolt 2, audio; Broadcom Wi-Fi is weak on
   FreeBSD — plan Ethernet/USB-NIC fallback.
 
-**Verify:** `tide` drives a real display at refresh rate on the Mac Pro; flight recorder
-shows zero missed flips under load; the Aqua desktop is interactive on metal.
+**Verify:** the compositor drives a real display at refresh rate on the Mac Pro; the
+flight recorder shows zero missed flips under load; the Aqua desktop is interactive on
+metal.
 
 ---
 
@@ -222,13 +249,14 @@ booting into the Aqua desktop.
 
 ---
 
-## Phase 6 — Swift compositor (the "rewrite later" half of decision #1)
+## Phase 6 — Swift compositor
 
-**Goal:** incrementally replace Rust `tide` with a Swift compositor without regressing
-the contract.
+**Goal:** the compositor in Swift, meeting `tide`'s contract rather than inheriting its
+code. (Sequenced last because the shell is what makes the desktop *visible*, and it
+runs on any wlroots compositor meanwhile — not because the rewrite is optional.)
 
 - Use **Embedded Swift / manual memory management** (no ARC, no allocations) for the
-  present thread; reuse the `wlsys`-equivalent C-shim binding to wlroots.
+  present thread; bind wlroots through a C shim of our own, in the `wlsys` style.
 - Migrate piece by piece (reactor → scene → present), keeping the **headless C1–C5
   benches as the gate** at every step — a regression fails the build, exactly as today.
 
@@ -236,21 +264,30 @@ the contract.
 
 ## Cross-cutting: what we borrow vs. build
 
-- **Borrow (copy/adapt):** VM + test harness (`abyss/vm`, `abyss/tests`), and at the
-  source level `tide`, `current`, `pool`, `shmring`, `vents`, `anchor`, the protocol XML
-  set, the `allow.rtprio` kernel patch, and the SEAMS porting map.
-- **Build new in Swift:** `CWayland`, `Surface`, `Aqua`, `CurrentIPC`, `PoolConfig`, and
-  the entire shell + installer.
-- **Reimplement later in Swift:** the compositor (Phase 6), optionally `pool`/`shmring`
-  (read sides already in Swift).
+- **Borrow as *design*, not as code:** the algorithms and architecture of `tide`,
+  `current`, `pool`, `shmring`, `vents`, `anchor` and `abyss-image` — read them, then
+  write the Swift. What we do copy verbatim is the non-product scaffolding: the VM +
+  test harness (`abyss/vm`, `abyss/tests`), the protocol XML set, the `allow.rtprio`
+  kernel patch, and the SEAMS porting map. Where a *format* must match (the `pool`
+  `.ini` files, a protocol on the wire), match the format — not the implementation.
+- **Build in Swift:** everything else. `CWayland`, `Surface`, `Aqua`, `PoolConfig` and
+  the shell exist; `CurrentIPC`, the compositor, the session supervisor, the FreeBSD
+  hardware bridges, the image codec and the installer are still to come.
+- **Drop to C only where Swift can't reach:** shims over C system libraries (the
+  `aw_*`/`at_*` pattern), and — if measurement demands it — the compositor's
+  real-time present path.
 
 ## Top risks (track explicitly)
 
 1. **Swift on FreeBSD** — unofficial; the whole product hinges on the Phase 0 spike.
 2. **Mac Pro GCN 1.0 GPU** — `amdgpu si_support` maturity for FirePro D-series; dual-GPU.
 3. **Aqua fidelity in software rendering** — gloss/blur/pinstripe at HiDPI via Cairo.
-4. **Swift ARC vs. the latency contract** — kept off the critical path by reusing `tide`;
-   re-enters as a risk only in Phase 6 (mitigated by Embedded Swift).
+4. **Swift ARC vs. the latency contract** — now a *live* risk rather than a deferred
+   one, since the compositor is to be written in Swift rather than inherited from
+   `tide`. It stays off the critical path only while the shell runs as a client on a
+   stock compositor. Mitigations when we get there: Embedded Swift, preallocation, and
+   a C shim for the present path if measurement demands it — with `tide`'s C1–C5
+   benches as the gate that tells us.
 5. **Broadcom Wi-Fi** on FreeBSD — likely wired/USB fallback on the Mac Pro.
 
 ## Overall verification strategy
