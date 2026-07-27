@@ -406,5 +406,3 @@ artwork was drawn). 62 unit tests. See HANDOFF §2.27,
 5. **Standing #1 risk unchanged:** Swift-on-FreeBSD (SWIFT-ON-FREEBSD.md) still
    gates everything shipping to target; Phase 2 stays fully Linux-verifiable so it
    doesn't block on that.
-</content>
-</invoke>

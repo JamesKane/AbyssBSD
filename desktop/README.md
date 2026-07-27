@@ -41,7 +41,7 @@ Or the whole loop: `sh abyss/tests/run.sh`.
 | `de/aquademo` | the runnable demo |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop |
 | `abyss/vm`, `abyss/tests` | FreeBSD build/test VM harness (borrowed + adapted) |
-| `docs/` | [PLAN.md](docs/PLAN.md), [STATUS.md](docs/STATUS.md), [SWIFT-ON-FREEBSD.md](docs/SWIFT-ON-FREEBSD.md) |
+| `docs/` | [PLAN.md](docs/PLAN.md), [STATUS.md](docs/STATUS.md), [PHASE2.md](docs/PHASE2.md), [PHASE3.md](docs/PHASE3.md), [SWIFT-ON-FREEBSD.md](docs/SWIFT-ON-FREEBSD.md) |
 
 See [docs/PLAN.md](docs/PLAN.md) for the full phased roadmap,
 [docs/STATUS.md](docs/STATUS.md) to resume work, and

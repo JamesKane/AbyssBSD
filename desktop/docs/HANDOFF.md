@@ -959,17 +959,23 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD.** The standing #1 risk is unchanged and gates shipping:
-   the Swift toolchain on FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)).
-   Everything above is deliberately Linux-verifiable so it doesn't block on that.
-   When it lands, the work is **Swift rewrites**, not adoptions of the Rust
-   components (PLAN.md, corrected 2026-07-27): a Swift session supervisor to
-   replace `abyss/session.sh` and §2.25's double-fork stand-in, Swift hardware
-   bridges for the menu bar's status items, `CurrentIPC` (PHASE2.md P2.9), and
-   in its own later phase a Swift compositor over a wlroots binding. Until that
-   exists the shell keeps running on stock sway/labwc, which FreeBSD ports too.
-   The sibling's `tide`/`anchor`/`vents` are what you *read* before writing each
-   one.
+4. **Phase 3 — FreeBSD.** Scoped pass-by-pass in **[PHASE3.md](PHASE3.md)**
+   (P3.1–P3.7, written 2026-07-27). The standing #1 risk is unchanged and gates
+   shipping: the Swift toolchain on FreeBSD
+   ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything above is deliberately
+   Linux-verifiable so it doesn't block on that. Bring-up comes first (a fresh
+   `../abyss-swift-vm`, the toolchain spike, the C substrate, and the
+   portability debts listed below), then the native substrate — all **Swift
+   rewrites**, not adoptions of the Rust components (PLAN.md, corrected
+   2026-07-27): `CurrentIPC` (PHASE2.md P2.9), a session supervisor to replace
+   `abyss/session.sh` and §2.25's double-fork stand-in, and hardware bridges for
+   the menu bar's status items. A Swift compositor over a wlroots binding is its
+   own later phase; until it exists the shell keeps running on stock sway/labwc,
+   which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
+   *read* before writing each one. Two things worth knowing before you start:
+   **`CurrentIPC` isn't blocked by the toolchain** (unix sockets + `SCM_RIGHTS`
+   are POSIX, so it builds and tests here today — PHASE3.md §6.3), and the
+   **portals / legacy-D-Bus story is carved out** of the phase (§6.1).
 
 **Portability debts to pay when FreeBSD arrives** (all flagged in code):
 `/proc/self/exe` in `Launcher.selfExecutable` (needs the `KERN_PROC_PATHNAME`

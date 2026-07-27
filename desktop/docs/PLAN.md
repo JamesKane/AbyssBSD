@@ -188,6 +188,13 @@ compositor from ports, with its own Swift control plane, session supervisor and
 hardware bridges underneath. (The Swift compositor is Phase 6; nothing here waits
 on it.)
 
+**Expanded to executable detail in [PHASE3.md](PHASE3.md)** — ordered passes
+P3.1–P3.7, the portability-debt table, and the open decisions. One change of
+scope from the sketch below: the **D-Bus replacement story is carved out to its
+own phase** (PHASE3.md §6.1), since the sibling's portal design is
+compositor-owned and Phase 6 owns the compositor. Nothing in Phase 3 depends on
+it.
+
 - Bring Swift up on FreeBSD per the Phase 0 spike; get `Surface`/`Aqua` linking against
   FreeBSD libwayland/cairo/freetype/harfbuzz.
 - **Rewrite in Swift, reading the sibling as the spec:** `CurrentIPC` (control plane,

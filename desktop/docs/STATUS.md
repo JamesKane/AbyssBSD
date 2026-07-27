@@ -312,11 +312,15 @@ file operations — desktop icons, and launching), which now boots as one deskto
   hardware bridges, Phase 3), and a confirmation sheet for Empty Trash once a
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
-- **Phase 3 — FreeBSD**, gated by the standing #1 risk: the Swift toolchain on
-  FreeBSD ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything so far is
-  deliberately Linux-verifiable so it doesn't block on that. When it lands the
-  work is **Swift rewrites**, with the sibling's crates read as the spec: a
-  session supervisor (replacing `abyss/session.sh` and the launcher's
-  double-fork stand-in), the hardware bridges behind the menu bar's status
-  items, and `CurrentIPC` (PHASE2.md P2.9). The shell keeps running on stock
-  sway/labwc from ports until a Swift compositor exists (its own later phase).
+- **Phase 3 — FreeBSD**, now scoped in **[PHASE3.md](PHASE3.md)** (passes
+  P3.1–P3.7). Gated by the standing #1 risk: the Swift toolchain on FreeBSD
+  ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything so far is deliberately
+  Linux-verifiable so it doesn't block on that. Bring-up first — a fresh
+  `../abyss-swift-vm`, the toolchain spike, the C substrate and the portability
+  debts, ending in the first FreeBSD screenshot — then the native substrate, all
+  **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
+  (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the
+  launcher's double-fork stand-in), and the hardware bridges behind the menu
+  bar's status items. The shell keeps running on stock sway/labwc from ports
+  until a Swift compositor exists (its own later phase); portals and the legacy
+  D-Bus bridge are carved out to a phase of their own.
