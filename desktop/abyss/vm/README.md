@@ -1,25 +1,30 @@
 # AbyssBSD build VM
 
 A scripted, reproducible FreeBSD 15.0-RELEASE VM (qemu + KVM) that acts as the
-build/test host for AbyssBSD. We edit source on the Linux host and build inside
-the guest, because FreeBSD `buildworld`/`buildkernel` and kernel-module loading
-need a real FreeBSD system.
+build/test host for the Swift DE. We edit source on the Linux host and build
+inside the guest, because the target is FreeBSD and only a real FreeBSD system
+can tell us the truth about kqueue, `pdfork`, OSS, devd and the rest.
 
 Everything is driven by plain `sh` scripts + qemu — no vagrant/libvirt. Large VM
-artifacts live in `../../../abyss-vm/` (a sibling of the repo), never in git.
+artifacts live in `../../../abyss-swift-vm/` (a sibling of the repo), never in
+git. That is deliberately *not* the Rust sibling's `../abyss-vm`: the two
+projects keep separate boxes. (They do share port 2222, so only one can run at a
+time.)
 
 ## Quick start
 
 ```sh
 cd abyss/vm
-./fetch-image.sh     # download + verify SHA512 + decompress base qcow2
-./make-seed.sh       # build cloud-init cidata seed (ssh key, user, pkgs)
+./fetch-image.sh          # download + verify SHA512 + decompress base qcow2
+./make-seed.sh            # ssh key (generated if absent) + cloud-init seed
 ABYSS_DAEMON=1 ./run.sh   # boot headless in background
-# wait ~1-2 min for first-boot cloud-init (disk grow + pkg install)
-./ssh.sh 'uname -a'  # log in as the build user
-./sync.sh            # rsync the source tree into the guest
-./ssh.sh 'cd AbyssBSD && uname -a'
+./check.sh                # wait for provisioning, then assert the VM is usable
+./sync.sh                 # rsync the source tree into the guest
+./ssh.sh 'cd AbyssBSD-swiftDE && ls'
 ```
+
+`check.sh` is the one that tells you whether first boot actually worked — see
+below.
 
 ## Files
 
@@ -27,18 +32,31 @@ ABYSS_DAEMON=1 ./run.sh   # boot headless in background
 |-----------------|----------------------------------------------------------------|
 | `config.sh`     | All tunables (paths, ports, CPUs, RAM). Override via env.       |
 | `fetch-image.sh`| Download, checksum, decompress the pristine base image.        |
-| `make-seed.sh`  | Build the NoCloud cloud-init seed (FAT `cidata`, via mtools).  |
+| `make-seed.sh`  | Generate the ssh key if needed; build the NoCloud cloud-init seed (Rock Ridge ISO, via pycdlib). |
 | `run.sh`        | Boot the VM on a COW overlay disk (base image stays pristine). |
+| `check.sh`      | Assert the guest is ready: ssh, cloud-init, packages, pkg-config, harness tools. |
 | `ssh.sh`        | SSH in (passes through args/commands).                          |
-| `sync.sh`       | rsync host source tree → guest `~/AbyssBSD`.                    |
+| `sync.sh`       | rsync host source tree → guest `~/AbyssBSD-swiftDE`.            |
 
 ## Notes
 
 - **COW overlay**: `run.sh` boots a qcow2 overlay backed by the pristine image.
-  To reset to a clean machine: `rm ../../../abyss-vm/abyss-build.qcow2` and re-run.
-- **Login**: user `build`, key-only auth with `abyss-vm/id_abyss`. Passwordless
-  sudo. No passwords anywhere.
-- **Cloud-init done marker**: `~/.cloud-init-done` appears when first-boot
-  provisioning (disk grow + `pkg install git gmake rust`) finishes.
-- **Stop the VM**: `kill $(cat ../../../abyss-vm/qemu.pid)` (daemon mode), or
-  `Ctrl-A X` in the foreground console.
+  To reset to a clean machine: `rm ../../../abyss-swift-vm/abyss-build.qcow2`
+  and re-run.
+- **Login**: user `build`, key-only auth with `abyss-swift-vm/id_abyss`
+  (generated on first `make-seed.sh`). Passwordless sudo. No passwords anywhere.
+- **Why `check.sh` exists**: every `pkg install` in the seed is best-effort
+  (`|| true`) so one missing port can't wedge first boot. The cost is that a
+  silent miss looks exactly like success — `~/.cloud-init-done` appears either
+  way. The seed therefore records anything absent in `~/.pkg-missing`, and
+  `check.sh` asserts on that plus the pkg-config names `Package.swift` uses and
+  the tools `abyss/tests` shells out to. It **reports** Swift's absence without
+  failing: a Swift toolchain on FreeBSD is the P3.2 spike
+  (`docs/SWIFT-ON-FREEBSD.md`), not a precondition for a usable VM.
+- **What's installed**: base tooling, Swift's runtime deps (icu, libxml2, curl,
+  libedit), the C substrate the Swift targets FFI into (wayland, xkbcommon,
+  cairo, freetype2, harfbuzz, png, jpeg-turbo, a font), and wlroots + seatd +
+  **sway** + **grim** so the shell runs and the live tests can capture it. No
+  Rust: the engine is a Swift *rewrite*, not a reuse of the sibling's crates.
+- **Stop the VM**: `kill $(cat ../../../abyss-swift-vm/qemu.pid)` (daemon mode),
+  or `Ctrl-A X` in the foreground console.

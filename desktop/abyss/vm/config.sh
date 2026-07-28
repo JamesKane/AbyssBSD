@@ -40,6 +40,12 @@ ABYSS_REPO="$(cd "$ABYSS_VM_DIR/../.." && pwd)"
 # Source location inside the guest
 : "${ABYSS_GUEST_SRC:=/home/${ABYSS_SSH_USER}/AbyssBSD-swiftDE}"
 
+# Where the FreeBSD swift6 port puts its toolchain. It is deliberately NOT on
+# the default PATH (so lang/swift510 and lang/swift6 can coexist), and a
+# non-interactive `ssh host 'cmd'` reads no profile — so anything scripted must
+# say where Swift lives rather than assume it.
+: "${ABYSS_GUEST_SWIFT_BIN:=/usr/local/swift6/bin}"
+
 abyss_ssh_opts() {
   # Key-only: never fall back to password/keyboard-interactive (no GUI askpass
   # popup, fails fast while the guest is still provisioning).

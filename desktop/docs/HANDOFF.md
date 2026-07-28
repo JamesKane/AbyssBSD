@@ -112,6 +112,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.25 | Launching: resolve before the fork, double-fork so nothing zombies |
 | 2.26 | The session: kill the supervisor before the child; assert composition on the workspace rect |
 | 2.27 | Shell polish: `on_demand` keyboard, a popup `close()` that told nobody, `.icns` is a container |
+| 2.28 | The VM: a package named `swift6`, a toolchain off PATH, and `\|\| true` hiding a miss |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -378,6 +379,35 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.28 The FreeBSD VM: a false negative on the biggest question in the project
+(P3.1 — the build VM and its cloud-init seed.)
+
+- **The Swift package on FreeBSD is `swift6`, not `swift`.** The seed had run
+  `pkg install -y swift || echo "swift pkg unavailable…"` since Phase 0, which
+  reported exactly what we feared about the #1 project risk. It was a **naming
+  miss**: `pkg search -q swift` returns `swift510-5.10.1_2` and **`swift6-6.3.2`**
+  — a *newer* toolchain than the 6.3.1 we develop against on Linux, targeting
+  `x86_64-unknown-freebsd15.0`, with `swift-build`, `swift-test`, Foundation and
+  XCTest. Lesson beyond the typo: when a probe confirms your worst assumption,
+  check the probe. Costly assumptions deserve *more* scepticism, not less.
+- **The toolchain installs off PATH**, at `/usr/local/swift6/bin`, so
+  `lang/swift510` and `lang/swift6` can coexist. A non-interactive
+  `ssh host 'cmd'` reads neither `.profile` nor `/etc/profile`, so *nothing
+  scripted may assume `swift` resolves* — `abyss/vm/config.sh` exports
+  `ABYSS_GUEST_SWIFT_BIN` and the scripts spell it out.
+- **`|| true` on every `pkg install` turns a missing port into a silent
+  success.** It's there so one bad port can't wedge first boot, and
+  `~/.cloud-init-done` appears either way — so provisioning "worked" whatever
+  happened. The seed now writes anything absent to `~/.pkg-missing` and
+  `abyss/vm/check.sh` asserts on it, on the pkg-config names `Package.swift`
+  needs, and on the tools `abyss/tests` shells out to.
+- **First boot takes ~15 minutes and sshd is last.** freebsd-update runs, then
+  ~100 packages install, and only then does sshd start — so an ssh probe fails
+  with `kex_exchange_identification: read: Connection reset by peer` (qemu's
+  hostfwd accepts at the host end; the guest port is closed). That is "still
+  booting", not "broken". `check.sh` waits 20 minutes by default and exits the
+  moment ssh answers.
 
 ### 2.27 Shell polish: keyboard focus for a bar, a close that told nobody, and
 ### what an `.icns` actually is
@@ -959,13 +989,18 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD.** Scoped pass-by-pass in **[PHASE3.md](PHASE3.md)**
-   (P3.1–P3.7, written 2026-07-27). The standing #1 risk is unchanged and gates
-   shipping: the Swift toolchain on FreeBSD
-   ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything above is deliberately
-   Linux-verifiable so it doesn't block on that. Bring-up comes first (a fresh
-   `../abyss-swift-vm`, the toolchain spike, the C substrate, and the
-   portability debts listed below), then the native substrate — all **Swift
+4. **Phase 3 — FreeBSD. In progress: P3.1 is done.** Scoped pass-by-pass in
+   **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27). The build VM
+   provisions and is asserted usable (`abyss/vm/check.sh`), and the standing #1
+   risk is **materially reduced**: FreeBSD ports carries **`swift6-6.3.2`**,
+   newer than our Linux toolchain, with `swift-build`/`swift-test`/XCTest — the
+   old seed's `pkg install -y swift` was a naming false negative (§2.28,
+   [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Not closed: nothing of ours has
+   compiled there yet, and acceptance is `swift build` + `swift test` on this
+   repo (P3.2). Everything above is deliberately Linux-verifiable so it doesn't
+   block on that. Bring-up continues (build the repo in the guest, the C
+   substrate, and the portability debts listed below), then the native
+   substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
    2026-07-27): `CurrentIPC` (PHASE2.md P2.9), a session supervisor to replace
    `abyss/session.sh` and §2.25's double-fork stand-in, and hardware bridges for
@@ -1012,6 +1047,7 @@ sysctl; `$ABYSS_APP_BINARY` overrides meanwhile), the inotify half of
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
 | `abyss/tests` | `run.sh` (build+test+smoke), `live-sway.sh`, `live-session.sh`, the virtual input helpers |
+| `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |
 | `protocols/` | vendored protocol XML; regenerate via `de/cwayland/generate-protocols.sh` |
 
 **Adding a Wayland protocol** is mechanical: drop the XML in `protocols/`, add a

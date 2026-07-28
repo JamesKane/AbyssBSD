@@ -8,10 +8,13 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 has not started.** Phase 2 is complete: the Aqua shell — desktop,
-menu bar, Dock, Finder, icons, launching — runs on Linux against stock sway and
-boots with one command (`abyss/session.sh`). Phase 3 makes it run **on FreeBSD**,
-and gives it the native substrate underneath that Linux has been standing in for.
+**Phase 3 has begun — P3.1 is done.** Phase 2 left the Aqua shell — desktop,
+menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
+and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
+FreeBSD**, and gives it the native substrate underneath that Linux has been
+standing in for. P3.1 built the box it happens in, and turned up the phase's
+best possible news: **ports carries `swift6-6.3.2`**, newer than our Linux
+toolchain (§4, P3.1).
 
 ---
 
@@ -104,29 +107,64 @@ in the commit subject. **P3.2 gates P3.3–P3.4 and P3.6–P3.7** — but note t
 **P3.5 (`CurrentIPC`) does not depend on it** and can be built and tested on
 Linux while the toolchain spike runs (§6.3).
 
-**P3.1 — The build VM + a corrected seed.**
-Provision a fresh `../abyss-swift-vm` per `abyss/vm/config.sh` (the sibling's
-`../abyss-vm` stays untouched — it's the Rust project's box, provisioned from the
-old seed). The seed needs correcting first: `make-seed.sh` still installs **Rust**
-"for the BORROWED engine … we reuse from the sibling in Phase 3", which the
-corrected policy killed — drop it, and drop the comment. Add what we actually
-need: Swift's runtime deps (icu, libxml2, curl), **grim** (the live tests capture
-with it), and keep wayland / wayland-protocols / libxkbcommon / cairo / freetype2
-/ harfbuzz / dejavu / png / jpeg-turbo / wlroots / seatd / sway. The `|| true` on
-every `pkg install` means a silent miss looks like success — the pass should end
-with an explicit "everything expected is installed" check rather than trusting
-`.cloud-init-done`.
-*Verify:* `fetch-image.sh` → `make-seed.sh` → `ABYSS_DAEMON=1 run.sh` → `ssh.sh
-'uname -a'` → `sync.sh` puts the tree in the guest, and a package-presence assert.
+**P3.1 — The build VM + a corrected seed. ✅ done.**
+A fresh `../abyss-swift-vm` (FreeBSD 15.0-RELEASE-p11) now provisions from a
+corrected seed and is asserted usable by a new **`abyss/vm/check.sh`**. The
+sibling's `../abyss-vm` is untouched. What changed:
+
+- **The seed no longer installs Rust.** It was there "for the BORROWED engine …
+  we reuse from the sibling in Phase 3" — dead under the corrected policy. In
+  its place: Swift's own runtime deps (icu, libxml2, curl, libedit) and **grim**,
+  which the live tests capture with.
+- **`make-seed.sh` generates the ssh key** if it's absent instead of failing, so
+  the flow runs from a clean checkout. The sibling's key was made by hand, which
+  is why its absence used to be a hard error.
+- **The `|| true` blind spot is closed.** Every `pkg install` is best-effort so a
+  missing port can't wedge first boot — which meant a silent miss looked exactly
+  like success, `~/.cloud-init-done` appearing either way. The seed now records
+  anything absent in `~/.pkg-missing`, and `check.sh` asserts on that, on the
+  pkg-config names `Package.swift` actually uses, and on the tools
+  `abyss/tests` shells out to (sway, swaymsg, grim, cc).
+- **`sync.sh` excludes `.build/`** (and both VM homes) — it would otherwise push
+  the host's Swift build tree into the guest on every sync.
+
+**The headline: FreeBSD ports has Swift 6, and it's newer than ours.**
+`pkg install -y swift6` lands **`Swift version 6.3.2 (swift-6.3.2-RELEASE)`,
+`Target: x86_64-unknown-freebsd15.0`**, with `swift-build`, `swift-test`,
+Foundation *and* XCTest. The old seed's `pkg install -y swift` was a **false
+negative** — the package is named `swift6`. It installs to
+`/usr/local/swift6/bin`, deliberately off PATH so 5.10 and 6.x coexist, so
+`config.sh` exports **`ABYSS_GUEST_SWIFT_BIN`** rather than assuming `swift`
+resolves (a non-interactive `ssh host 'cmd'` reads no profile). Findings are
+dated in [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md). This does **not** close the
+#1 risk — acceptance is `swift build` *and* `swift test` on this repo, which is
+P3.2 — but option (1) working at all is the best available outcome.
+
+*Verified:* a from-scratch reprovision (overlay disk discarded, seed rebuilt) →
+`check.sh` green: all seeded packages present; wayland-client 1.25.0,
+wayland-scanner, xkbcommon 1.13.2, cairo 1.18.2, freetype2 26.6.20, harfbuzz
+14.2.1, libpng 1.6.58 all resolvable through pkg-config; sway 1.12 / swaymsg /
+grim / cc present; the Swift toolchain reporting 6.3.2. `sync.sh` puts the tree
+at `~/AbyssBSD-swiftDE` in the guest.
+
+*Two notes for later passes:* the guest's **sway is 1.12** against 1.11 on the
+Linux dev box (§6.6's drift, now concrete), and first boot takes **~15 minutes**
+— freebsd-update, then ~100 packages, and sshd only starts after all of it, so
+`check.sh` waits generously by default.
 
 **P3.2 — Swift on FreeBSD (the go/no-go spike).**
-The standing #1 risk, worked in the order SWIFT-ON-FREEBSD.md already fixes:
-(a) `pkg`/ports `lang/swift` if a current 6.x exists, (b) a **Swift SDK
-cross-compile** from this Linux box, (c) build the toolchain from source in the
-guest. Acceptance is unchanged: `swift --version` reports 6.x, a hello-world
-runs, `swift build` succeeds on **this repo**, and `swift test` runs the 62
-tests. Note that `swift test` is a *separate* risk from `swift build` — it needs
-`swift-corelibs-xctest` and Foundation, which lag the compiler.
+The standing #1 risk. **P3.1 already settled which branch we're on:** option (a),
+the ports toolchain — `swift6-6.3.2`, targeting `x86_64-unknown-freebsd15.0`,
+installed in the guest and reporting itself, with `swift-build`, `swift-test`,
+Foundation and XCTest all present. The cross-SDK and build-from-source routes
+stay documented but unneeded unless this one fails to build the repo.
+What's left is the acceptance that actually matters: **`swift build` succeeds on
+this repo, and `swift test` runs the 62 tests.** Expect the first failures to be
+the §2 debt table rather than the compiler, which is why P3.3 exists — the split
+is deliberate: P3.2 answers "does Swift work here", P3.3 answers "does *our
+code* work here". Note `swift test` remains a *separate* risk from `swift build`
+(XCTest and Foundation are a different project from the compiler) — but its
+presence in the package is a good sign, and it downgrades §6.5.
 Append dated findings to SWIFT-ON-FREEBSD.md's "Notes / findings" as you go; that
 file is the deliverable as much as the working toolchain is.
 
@@ -134,7 +172,7 @@ The outcome forks the rest of the phase, so record which branch we're on:
 
 | Outcome | Dev loop | Cost |
 |---|---|---|
-| (a) native toolchain in the guest | unchanged: `sync.sh` then build+test in the guest | none |
+| **(a) native toolchain in the guest — this is the one (P3.1)** | unchanged: `sync.sh` then build+test in the guest, with `$ABYSS_GUEST_SWIFT_BIN` on the front | none |
 | (b) cross-SDK only | build on Linux (`--swift-sdk x86_64-unknown-freebsd`), rsync artifacts, run in the guest | `abyss/tests/run.sh` gains a lane; in-guest `swift test` may not exist |
 | (c) from source | as (a), after a multi-hour build | capture the exact recipe or it isn't reproducible |
 | (d) none of the three | **Phase 3 is blocked** | fall back to the Linux track — golden-image tests, more of the shell — and keep the spike running |
@@ -269,14 +307,15 @@ other than `Glibc`, that's a twenty-file edit — and the right fix is *one* mod
 (`AbyssPlatform`) that re-exports the correct one, not twenty new guards. Settle
 it in the first hour of P3.3.
 
-**6.5 `swift test` may lag `swift build`.** XCTest and Foundation are the
-portable layer that has to build *and pass* on FreeBSD, and they're a different
-project from the compiler. If tests can't run in the guest, the fallback is:
-host-side `swift test` stays the unit gate, and the guest is verified live only —
+**6.5 `swift test` may lag `swift build`.** *Downgraded 2026-07-28:* the
+`swift6` package ships `swift-test` and an `XCTest.swiftmodule` for `freebsd`
+alongside Foundation, so the machinery is at least present. Whether the 62 tests
+*pass* is still P3.2's to find out. If they can't run, the fallback is unchanged:
+host-side `swift test` stays the unit gate and the guest is verified live only —
 weaker, and worth saying out loud in the pass that discovers it.
 
-**6.6 wlroots/sway version drift in ports.** We develop against sway 1.11 here.
-The guest gets whatever `wlroots019`/`sway` ports ship. Layer-shell,
+**6.6 wlroots/sway version drift in ports.** We develop against sway 1.11 here;
+the guest has **sway 1.12 / wlroots019 0.19.3** (measured in P3.1). Layer-shell,
 foreign-toplevel and xdg-activation are all we need, and all are old and stable —
 but a version mismatch shows up as a *missing global*, which our clients should
 report clearly rather than crash on. Check that behaviour early.
@@ -291,6 +330,12 @@ sysctls want permissions the desktop user may not have. `vents` splits reads fro
 "privileged writes" for this reason. Find out in P3.7 what the shell can do as
 the logged-in user, and don't design a status item that needs root.
 
-**6.9 The standing #1 risk is unchanged.** Swift-on-FreeBSD gates everything that
-ships to target. Phases 0–2 were kept fully Linux-verifiable precisely so this
-phase is the *first* thing that can be blocked by it — and §6.3 is the hedge.
+**6.9 The standing #1 risk, materially reduced (2026-07-28).** Swift-on-FreeBSD
+gates everything that ships to target, and P3.1 found the good branch: a current
+6.3.2 toolchain in ports, installed and running in the guest. It is *reduced*,
+not closed — nothing of ours has compiled there yet, and the remaining unknowns
+have moved downstream: does the C substrate link under a `/usr/local` prefix, do
+the never-compiled kqueue and `SHM_ANON` branches work, do the tests pass. Those
+are P3.2/P3.3, and they are ordinary bring-up problems rather than existential
+ones. §6.3 remains the hedge if the repo build turns out worse than the
+toolchain.

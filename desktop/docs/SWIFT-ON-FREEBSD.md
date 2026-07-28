@@ -1,10 +1,26 @@
 # Swift 6 on FreeBSD 15 — the Phase-0 spike
 
-**Status: OPEN — the #1 project risk.** Swift's officially supported platforms
-are macOS, Linux, Windows, and (experimental) Android. **FreeBSD is not an
-official toolchain target.** The whole product depends on closing this. Until
-then, all DE work happens on Linux (Swift 6.3.1 is installed and working here),
-where the Aqua toolkit + shell are built against a stock wlroots compositor.
+**Status: a toolchain exists and installs (2026-07-28). Acceptance not yet met.**
+Swift's officially supported platforms are macOS, Linux, Windows, and
+(experimental) Android — **FreeBSD is not an official swift.org target** — but
+**FreeBSD ports carries one**, and it is current:
+
+```
+$ pkg install -y swift6          # NOT "swift" — that name matches nothing
+$ /usr/local/swift6/bin/swift --version
+Swift version 6.3.2 (swift-6.3.2-RELEASE)
+Target: x86_64-unknown-freebsd15.0
+```
+
+That is **newer than the 6.3.1 we develop against on Linux**, and the package
+ships `swift-build`, `swift-test`, `swiftc`, plus Foundation *and* `XCTest`
+(`/usr/local/swift6/lib/swift/freebsd/XCTest.swiftmodule`) — so the test lane
+looks available too, which was a separate worry (PHASE3.md §6.5).
+
+**This is option (1) below, and it lands the risk far better than expected.**
+It is *not* closed: acceptance is `swift build` **and** `swift test` succeeding
+on **this repo**, and neither has been run yet. That is P3.2. What P3.1
+established is that the toolchain installs and reports itself correctly.
 
 This doc tracks the evaluation. Update it with findings as the spike progresses.
 
@@ -19,12 +35,19 @@ This doc tracks the evaluation. Update it with findings as the spike progresses.
 
 ## Options, in the order to try them
 
-1. **`pkg`/ports `lang/swift`.** Cheapest if a current 6.x exists and works.
-   Check `pkg search swift` in the VM; the cloud-init already attempts
-   `pkg install -y swift` and drops a `~/.swift-todo` marker if it fails.
-   Validate with `swift --version` + a hello-world + `swift test`.
+1. **`pkg`/ports Swift. ✅ this is the one.** `pkg search -q swift` in the guest
+   returns `swift510-5.10.1_2` and **`swift6-6.3.2`** (2026-07-28). The port
+   installs to **`/usr/local/swift6/bin`**, deliberately *off* PATH so 5.10 and
+   6.x can coexist — which is why `abyss/vm/config.sh` exports
+   `ABYSS_GUEST_SWIFT_BIN` rather than assuming `swift` resolves (a
+   non-interactive `ssh host 'cmd'` reads neither `.profile` nor
+   `/etc/profile`). The seed's old `pkg install -y swift` reported a **false
+   negative** for exactly one reason: the package is named `swift6`.
+   Still to validate (P3.2): `swift build` + `swift test` on this repo.
 
-2. **Cross-compile from Linux with a Swift SDK (preferred if #1 is stale).**
+2. **Cross-compile from Linux with a Swift SDK** *(not needed unless #1 fails to
+   build the repo — kept for the record, and still attractive later if in-guest
+   builds prove slow).*
    Swift 6 supports **Swift SDKs** for cross-compilation (the model used by the
    Static Linux SDK). Build/obtain a FreeBSD-amd64 Swift SDK, then from this
    Linux box:
@@ -43,9 +66,23 @@ This doc tracks the evaluation. Update it with findings as the spike progresses.
 - `swift build` + `swift test` succeed on this repo in/for FreeBSD.
 - `Surface`/`Aqua` link against FreeBSD `wayland-client`, `cairo`,
   `freetype2`, `harfbuzz` (the cloud-init installs these).
-- `AquaDemo` runs against `sway` (stock) in the VM, then against the borrowed
-  Rust `tide` compositor (Phase 3).
+- `AquaDemo` runs against stock `sway` in the VM (a Swift compositor of our own
+  is Phase 6 — nothing here waits on it).
 
 ## Notes / findings
 
+- **2026-07-28 (P3.1).** Ports has **`swift6-6.3.2`** — `Swift version 6.3.2
+  (swift-6.3.2-RELEASE)`, `Target: x86_64-unknown-freebsd15.0` — installed and
+  reporting itself in the FreeBSD 15.0-RELEASE-p11 build VM. 600 MiB download,
+  ~3 GiB installed, one extra dependency (`libuuid`). The toolchain includes
+  `swift-build`/`swift-test`/`swiftc`/`lldb`/`clangd`, its own clang 21, and
+  both Foundation and XCTest for `freebsd`. Two facts that cost time and are
+  worth keeping:
+  - the package is **`swift6`**, not `swift` (the old seed line looked like "no
+    Swift on FreeBSD" when it was really "no package by that name"), and
+  - it installs to **`/usr/local/swift6/bin`**, off PATH by design.
+  Guest details for reference: sway **1.12** (Linux dev box has 1.11 — the
+  version-drift risk of PHASE3.md §6.6 is real but small), wlroots019 0.19.3,
+  wayland 1.25.0, xkbcommon 1.13.2, cairo 1.18.2, freetype2 26.6.20, harfbuzz
+  14.2.1, libpng 1.6.58, base clang 19.1.7.
 - _(append dated findings here as the spike runs)_

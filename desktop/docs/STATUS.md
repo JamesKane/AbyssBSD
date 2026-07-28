@@ -296,14 +296,12 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-Phase 0/1 are complete, and so is Phase 2's visible shell (P2.1–P2.8: layer-shell
-+ Desktop, `PoolConfig`, menu bar, Dock, Finder — browser *and* spatial, with
-file operations — desktop icons, and launching), which now boots as one desktop
-(P2.10). See [HANDOFF.md](HANDOFF.md) §5 for the reasoning; in short:
+Phases 0–2 are complete (Phase 2: layer-shell + Desktop, `PoolConfig`, menu bar,
+Dock, Finder — browser *and* spatial, with file operations — desktop icons,
+launching, the one-command session, and the shell polish; P2.9 `CurrentIPC` was
+decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
+§5 for the reasoning; in short:
 
-- **Finish Phase 2's tail:** the **`CurrentIPC`** decision (P2.9 — it binds
-  FreeBSD-only libnv; vendor it, hand-roll the codec, or carry to Phase 3). It
-  carries only the control plane, so nothing visible is waiting on it.
 - **Shell polish:** the self-contained ones shipped in P2.11 (empty the Trash,
   menu-bar keyboard navigation, bundle icons). Left: dragging desktop icons —
   blocked on the same protocol limit as spatial window placement, since a
@@ -312,12 +310,21 @@ file operations — desktop icons, and launching), which now boots as one deskto
   hardware bridges, Phase 3), and a confirmation sheet for Empty Trash once a
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
-- **Phase 3 — FreeBSD**, now scoped in **[PHASE3.md](PHASE3.md)** (passes
-  P3.1–P3.7). Gated by the standing #1 risk: the Swift toolchain on FreeBSD
-  ([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Everything so far is deliberately
-  Linux-verifiable so it doesn't block on that. Bring-up first — a fresh
-  `../abyss-swift-vm`, the toolchain spike, the C substrate and the portability
-  debts, ending in the first FreeBSD screenshot — then the native substrate, all
+- **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
+  and **begun: P3.1 is done.** The build VM (`../abyss-swift-vm`, FreeBSD
+  15.0-RELEASE-p11) provisions from a corrected cloud-init seed and is asserted
+  usable by `abyss/vm/check.sh`. It also settled the standing #1 risk's shape:
+  **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we build with
+  here, targeting `x86_64-unknown-freebsd15.0`, with `swift-build`,
+  `swift-test`, Foundation and XCTest. The old seed's `pkg install -y swift` was
+  a false negative; the package is named `swift6` and lives off PATH at
+  `/usr/local/swift6/bin`. That is **not** the risk closed — acceptance is
+  `swift build` and `swift test` on *this repo*, which is P3.2 — but it is the
+  best of the three routes in [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md).
+  Everything so far is deliberately Linux-verifiable so it doesn't block on
+  that. The rest of the phase: finish bring-up — build the repo in the guest,
+  then the C substrate and the portability debts, ending in the first FreeBSD
+  screenshot — then the native substrate, all
   **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
   (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the
   launcher's double-fork stand-in), and the hardware bridges behind the menu
