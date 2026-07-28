@@ -113,6 +113,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.26 | The session: kill the supervisor before the child; assert composition on the workspace rect |
 | 2.27 | Shell polish: `on_demand` keyboard, a popup `close()` that told nobody, `.icns` is a container |
 | 2.28 | The VM: a package named `swift6`, a toolchain off PATH, and `\|\| true` hiding a miss |
+| 2.29 | FreeBSD build: a C target can't carry `pkgConfig:` — depend on a systemLibrary that does |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -379,6 +380,40 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.29 Building on FreeBSD: `/usr/local`, and where pkg-config flags come from
+(P3.2 — the first build of this repo on FreeBSD. It cost **one Package.swift
+change and no source changes**; all 62 tests passed.)
+
+- **A SwiftPM C target cannot carry `pkgConfig:` — only a `systemLibrary` can.**
+  `CWayland` linked wayland with `linkerSettings: [.linkedLibrary("wayland-client")]`
+  and no include flags at all, which worked purely because Linux keeps the
+  headers in `/usr/include`. FreeBSD puts them under `/usr/local/include`, so
+  the build died on `'wayland-util.h' file not found`. The fix is the pattern
+  already in the tree: a `CWaylandClient` **systemLibrary** with
+  `pkgConfig: "wayland-client"` that `CWayland` **depends on** — dependent
+  targets inherit a systemLibrary's pkg-config cflags/libs, which is how `CText`
+  gets FreeType and HarfBuzz. Prefer that to `unsafeFlags(["-I/usr/local/..."])`:
+  it's portable rather than a FreeBSD special case, and `unsafeFlags` would make
+  the package unusable as a dependency.
+- **`canImport(Glibc)` is TRUE on FreeBSD.** Swift names the platform libc
+  module `Glibc` there. Every `#if canImport(Glibc)` in the tree took the right
+  branch untouched — the feared twenty-file edit cost nothing. Don't "fix" those
+  guards.
+- **FreeBSD 15 has a native `timerfd(2)`**, so `<sys/timerfd.h>` and
+  `timerfd_create` compile as-is — no kqueue `EVFILT_TIMER` fallback needed for
+  the menu-bar clock.
+- **FreeBSD's libwayland is built on an epoll-over-kqueue shim**:
+  `pkg-config --cflags wayland-client` yields
+  `-I/usr/local/include/libepoll-shim`. So `wl_display_get_fd()` returns a shim
+  fd rather than a native one. It compiles and links fine; the place to be
+  careful is §2.14's `prepare_read`/poll-timeout loop, the first time a client
+  actually runs there.
+- **`warning: prohibited flag(s): -D_THREAD_SAFE` on every build is benign.**
+  FreeBSD's `cairo.pc` carries `-D_THREAD_SAFE`; SwiftPM refuses to forward `-D`
+  flags out of pkg-config and drops it. Harmless for our single-threaded
+  painting — `abyss/vm/build.sh` filters the line so it doesn't drown the
+  transcript.
 
 ### 2.28 The FreeBSD VM: a false negative on the biggest question in the project
 (P3.1 — the build VM and its cloud-init seed.)
@@ -989,17 +1024,15 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. In progress: P3.1 is done.** Scoped pass-by-pass in
-   **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27). The build VM
-   provisions and is asserted usable (`abyss/vm/check.sh`), and the standing #1
-   risk is **materially reduced**: FreeBSD ports carries **`swift6-6.3.2`**,
-   newer than our Linux toolchain, with `swift-build`/`swift-test`/XCTest — the
-   old seed's `pkg install -y swift` was a naming false negative (§2.28,
-   [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)). Not closed: nothing of ours has
-   compiled there yet, and acceptance is `swift build` + `swift test` on this
-   repo (P3.2). Everything above is deliberately Linux-verifiable so it doesn't
-   block on that. Bring-up continues (build the repo in the guest, the C
-   substrate, and the portability debts listed below), then the native
+4. **Phase 3 — FreeBSD. In progress: P3.1 and P3.2 are done, and the standing
+   #1 risk is CLOSED.** Scoped pass-by-pass in **[PHASE3.md](PHASE3.md)**
+   (P3.1–P3.7, written 2026-07-27). The build VM provisions and is asserted
+   usable (`abyss/vm/check.sh`), FreeBSD ports carries **`swift6-6.3.2`** —
+   newer than our Linux toolchain — and it **builds this repo and passes all 62
+   tests in the guest**, for one `Package.swift` change and no source changes
+   (§2.28, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
+   `abyss/vm/build.sh` for the guest loop. Bring-up continues with first pixels
+   (the debts below are down to two, both *runtime*), then the native
    substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
    2026-07-27): `CurrentIPC` (PHASE2.md P2.9), a session supervisor to replace
@@ -1012,11 +1045,16 @@ desktop (P2.10). What's left:
    are POSIX, so it builds and tests here today — PHASE3.md §6.3), and the
    **portals / legacy-D-Bus story is carved out** of the phase (§6.1).
 
-**Portability debts to pay when FreeBSD arrives** (all flagged in code):
-`/proc/self/exe` in `Launcher.selfExecutable` (needs the `KERN_PROC_PATHNAME`
-sysctl; `$ABYSS_APP_BINARY` overrides meanwhile), the inotify half of
-`CPoolWatch`, and `mode_t` width assumptions already handled by spelling the
-`stat` bits out (§2.21).
+**Portability debts — mostly paid (P3.2).** The inotify/kqueue fork in
+`CPoolWatch` compiled and passed its test on FreeBSD, `aw_create_shm`'s
+`SHM_ANON` branch built, `timerfd` turned out to be native there, and
+`canImport(Glibc)` is true on FreeBSD so all ~20 guards were already correct.
+Two remain, both *runtime* rather than compile-time: **`/proc/self/exe`** in
+`Launcher.selfExecutable` (needs the `KERN_PROC_PATHNAME` sysctl;
+`$ABYSS_APP_BINARY` overrides meanwhile), and the fact that FreeBSD's libwayland
+runs on an **epoll-over-kqueue shim**, so `wl_display_get_fd()` hands back a shim
+fd and §2.14's poll-timeout loop is worth watching the first time a client runs
+there.
 
 ---
 

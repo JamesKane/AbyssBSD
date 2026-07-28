@@ -8,13 +8,15 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 has begun — P3.1 is done.** Phase 2 left the Aqua shell — desktop,
-menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
-and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
-FreeBSD**, and gives it the native substrate underneath that Linux has been
-standing in for. P3.1 built the box it happens in, and turned up the phase's
-best possible news: **ports carries `swift6-6.3.2`**, newer than our Linux
-toolchain (§4, P3.1).
+**Phase 3 has begun — P3.1 and P3.2 are done, and the project's #1 risk is
+closed.** Phase 2 left the Aqua shell — desktop, menu bar, Dock, Finder, icons,
+launching — running on Linux against stock sway and booting with one command
+(`abyss/session.sh`). Phase 3 makes it run **on FreeBSD**, and gives it the
+native substrate underneath that Linux has been standing in for. P3.1 built the
+box, and found that **ports carries `swift6-6.3.2`** — newer than our Linux
+toolchain. P3.2 then built this repo with it: **62/62 tests pass on FreeBSD**,
+for one `Package.swift` change and no source changes
+([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md) is closed).
 
 ---
 
@@ -24,9 +26,9 @@ toolchain (§4, P3.1).
 wlroots compositor from ports, with its own Swift control plane, session
 supervisor and hardware bridges underneath.** Two halves, in order:
 
-1. **Bring-up** — the VM, the Swift toolchain (the standing #1 risk), the C
-   substrate, and every portability debt Phase 1–2 deliberately deferred. Ends
-   with a screenshot of the Jaguar desktop taken *inside FreeBSD*.
+1. **Bring-up** — the VM, the Swift toolchain (the standing #1 risk, **closed in
+   P3.2**), the C substrate, and every portability debt Phase 1–2 deliberately
+   deferred. Ends with a screenshot of the Jaguar desktop taken *inside FreeBSD*.
 2. **The native substrate** — `CurrentIPC`, a Swift session supervisor
    (`anchor`'s job, replacing `abyss/session.sh`), and the Swift hardware bridges
    (`vents`' job) that finally make the menu bar's volume and battery real.
@@ -65,20 +67,22 @@ against it (PLAN.md, corrected 2026-07-27). `PoolConfig` is the pattern.
 | Control plane | — | **`CurrentIPC`** (carried from P2.9) |
 | Hardware (volume, battery, hotplug) | — (menu bar has no status items) | **sysctl / OSS / devd bridges** |
 | Build + test host | this Linux box | the **FreeBSD VM** + an in-guest test lane |
-| Swift toolchain | 6.3.1 on Linux | **the #1 risk** — see [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md) |
+| Swift toolchain | 6.3.1 on Linux | ✅ ports `swift6-6.3.2` in the guest — was the #1 risk, [closed in P3.2](SWIFT-ON-FREEBSD.md) |
 
 The shell itself is the part that should need the least work — it is deliberately
-POSIX-and-Wayland all the way down. The Linux-isms are few and already known:
+POSIX-and-Wayland all the way down. The Linux-isms were few and already known,
+and **P3.2 settled all but one of them at a cost of one `Package.swift` edit**:
 
-| Debt | Where | Fix |
+| Debt | Where | Outcome |
 |---|---|---|
-| `/proc/self/exe` | `Launcher.selfExecutable` (`de/aqua/Launcher.swift:124`) | `KERN_PROC_PATHNAME` sysctl; `$ABYSS_APP_BINARY` overrides meanwhile |
-| inotify | `de/cpoolwatch/cpoolwatch.c` | kqueue branch is **already written** (`#elif defined(__FreeBSD__)`) — it just has never been compiled |
-| `memfd_create` | `aw_create_shm` | `SHM_ANON` branch already written, likewise never compiled |
-| `timerfd` | `aw_create_interval_timer` (the menu-bar clock) | FreeBSD 13+ has native `timerfd(2)` — *verify*, else a kqueue `EVFILT_TIMER` fd |
-| `#if canImport(Glibc)` | ~20 Swift files | depends on what module Swift exposes on FreeBSD (§6.4) — funnel it through **one** place rather than editing twenty guards |
-| `_GNU_SOURCE` | `de/cwayland/cwayland_shm.c:1` | harmless or dropped; confirm at first compile |
-| `/usr/local` prefix | `Package.swift` — `CWayland` links `wayland-client` with **no** pkgConfig | pkg-config the wayland libs, or carry `-L/usr/local/lib -I/usr/local/include` |
+| `/usr/local` prefix | `Package.swift` — `CWayland` linked `wayland-client` with **no** pkgConfig | ✅ **the only real fix**: a `CWaylandClient` systemLibrary with `pkgConfig: "wayland-client"`, which `CWayland` depends on (P3.2) |
+| `#if canImport(Glibc)` | ~20 Swift files | ✅ free — Swift names the platform libc module **`Glibc`** on FreeBSD too, so every guard was already right |
+| inotify | `de/cpoolwatch/cpoolwatch.c` | ✅ the kqueue branch compiled and **passed its test** — first execution anywhere |
+| `memfd_create` | `aw_create_shm` | ✅ the `SHM_ANON` branch compiled, likewise never built before |
+| `timerfd` | `aw_create_interval_timer` (the menu-bar clock) | ✅ free — FreeBSD 15 has native `timerfd(2)`; no `EVFILT_TIMER` fallback needed |
+| `_GNU_SOURCE` | `de/cwayland/cwayland_shm.c:1` | ✅ harmless — compiles clean |
+| `/proc/self/exe` | `Launcher.selfExecutable` (`de/aqua/Launcher.swift:124`) | ⏳ **still open** — a *runtime* debt a build can't reach. `KERN_PROC_PATHNAME` sysctl; `$ABYSS_APP_BINARY` overrides meanwhile (P3.3) |
+| epoll-over-kqueue | FreeBSD's libwayland (`wayland-client.pc` adds `-I/usr/local/include/libepoll-shim`) | ⏳ **new, found in P3.2** — `wl_display_get_fd()` returns a shim fd, so the poll-timeout run loop (HANDOFF §2.14) is the thing to watch when the client first runs |
 
 ---
 
@@ -103,9 +107,10 @@ port: the value is in the *design* (`anchor`'s descriptor-as-handle discipline,
 ## 4. Ordered passes (recommended)
 
 One build→verify→test→doc→commit pass each, as in Phase 2, with the pass number
-in the commit subject. **P3.2 gates P3.3–P3.4 and P3.6–P3.7** — but note that
-**P3.5 (`CurrentIPC`) does not depend on it** and can be built and tested on
-Linux while the toolchain spike runs (§6.3).
+in the commit subject. P3.2 gated P3.3–P3.4 and P3.6–P3.7 — **that gate is now
+open**: Swift builds and tests this repo on FreeBSD, so every remaining pass is
+verifiable on the target rather than only on Linux. (P3.5 never depended on it;
+§6.3.)
 
 **P3.1 — The build VM + a corrected seed. ✅ done.**
 A fresh `../abyss-swift-vm` (FreeBSD 15.0-RELEASE-p11) now provisions from a
@@ -136,9 +141,10 @@ negative** — the package is named `swift6`. It installs to
 `/usr/local/swift6/bin`, deliberately off PATH so 5.10 and 6.x coexist, so
 `config.sh` exports **`ABYSS_GUEST_SWIFT_BIN`** rather than assuming `swift`
 resolves (a non-interactive `ssh host 'cmd'` reads no profile). Findings are
-dated in [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md). This does **not** close the
-#1 risk — acceptance is `swift build` *and* `swift test` on this repo, which is
-P3.2 — but option (1) working at all is the best available outcome.
+dated in [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md). Finding it did not by
+itself close the #1 risk — acceptance was `swift build` *and* `swift test` on
+this repo — but it put the best of the three routes on the table, and P3.2 then
+met that acceptance in full.
 
 *Verified:* a from-scratch reprovision (overlay disk discarded, seed rebuilt) →
 `check.sh` green: all seeded packages present; wayland-client 1.25.0,
@@ -152,23 +158,53 @@ Linux dev box (§6.6's drift, now concrete), and first boot takes **~15 minutes*
 — freebsd-update, then ~100 packages, and sshd only starts after all of it, so
 `check.sh` waits generously by default.
 
-**P3.2 — Swift on FreeBSD (the go/no-go spike).**
-The standing #1 risk. **P3.1 already settled which branch we're on:** option (a),
-the ports toolchain — `swift6-6.3.2`, targeting `x86_64-unknown-freebsd15.0`,
-installed in the guest and reporting itself, with `swift-build`, `swift-test`,
-Foundation and XCTest all present. The cross-SDK and build-from-source routes
-stay documented but unneeded unless this one fails to build the repo.
-What's left is the acceptance that actually matters: **`swift build` succeeds on
-this repo, and `swift test` runs the 62 tests.** Expect the first failures to be
-the §2 debt table rather than the compiler, which is why P3.3 exists — the split
-is deliberate: P3.2 answers "does Swift work here", P3.3 answers "does *our
-code* work here". Note `swift test` remains a *separate* risk from `swift build`
-(XCTest and Foundation are a different project from the compiler) — but its
-presence in the package is a good sign, and it downgrades §6.5.
+**P3.2 — Swift on FreeBSD. ✅ done — the #1 risk is closed.**
+`swift build` succeeds and **all 62 tests pass** in the guest. The cost was
+**one `Package.swift` change and no source changes at all**:
+
+- **`CWayland` had no include flags.** It was a plain C target carrying
+  `.linkedLibrary("wayland-client")`, which worked only because Linux keeps the
+  headers in `/usr/include`; FreeBSD puts them under `/usr/local/include` and
+  the build died on `'wayland-util.h' file not found`. Fix: a new
+  **`CWaylandClient` systemLibrary** with `pkgConfig: "wayland-client"` that
+  `CWayland` depends on — a C target can't carry a `pkgConfig:` itself but
+  inherits one from a systemLibrary dependency, exactly as `CText` inherits
+  FreeType and HarfBuzz. Portable, not a FreeBSD special case.
+
+Four of the §2 debts turned out to be free, which is why this pass didn't need
+P3.3's help:
+
+- **`canImport(Glibc)` is true on FreeBSD** — Swift names the platform libc
+  module `Glibc` there, so all ~20 guards took the right branch untouched. §6.4
+  cost nothing.
+- **`CPoolWatch`'s kqueue watch compiled and works.** `testWatcherWakesOnStore`
+  passing is that branch's first execution anywhere in the project's life.
+- **`aw_create_shm`'s `SHM_ANON` branch compiled**, likewise never built before.
+- **`timerfd` is real on FreeBSD 15**, so the menu-bar clock needed no fallback.
+
+Left for P3.3, because they are *runtime* debts a build can't reach:
+`Launcher.selfExecutable`'s `/proc/self/exe`, and how the run loop behaves given
+that FreeBSD's libwayland is built on an **epoll-over-kqueue shim**
+(`wayland-client.pc` adds `-I/usr/local/include/libepoll-shim`, so
+`wl_display_get_fd()` returns a shim fd — HANDOFF §2.14's poll-timeout loop is
+the thing to watch).
+
+*Verified:* `abyss/vm/build.sh` — new this pass — syncs and runs
+`swift build` + `swift test` in the guest in one command, since Swift is off
+PATH there and a non-interactive `ssh host 'cmd'` reads no profile. `AquaDemo`
+links with all 48 shared libraries resolving. Findings dated in
+[SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), which is now **closed**.
+
+*Known benign noise:* FreeBSD's `cairo.pc` carries `-D_THREAD_SAFE`, which
+SwiftPM refuses to forward — every build prints
+`warning: prohibited flag(s): -D_THREAD_SAFE`. The flag is dropped, which is
+harmless for our single-threaded painting; `build.sh` filters the line.
 Append dated findings to SWIFT-ON-FREEBSD.md's "Notes / findings" as you go; that
 file is the deliverable as much as the working toolchain is.
 
-The outcome forks the rest of the phase, so record which branch we're on:
+The outcome forked the rest of the phase. **It came out (a)** — recorded here
+because the alternatives shaped the plan and are worth keeping if the ports
+toolchain ever goes stale:
 
 | Outcome | Dev loop | Cost |
 |---|---|---|
@@ -177,14 +213,14 @@ The outcome forks the rest of the phase, so record which branch we're on:
 | (c) from source | as (a), after a multi-hour build | capture the exact recipe or it isn't reproducible |
 | (d) none of the three | **Phase 3 is blocked** | fall back to the Linux track — golden-image tests, more of the shell — and keep the spike running |
 
-**P3.3 — The C substrate + first pixels on FreeBSD.**
-Get `swift build` producing a working `AquaDemo` in the guest and pay every debt
-in §2's table. The two branches that have **never been compiled anywhere**
-(`CPoolWatch`'s kqueue watch and `aw_create_shm`'s `SHM_ANON`) are the ones to
-expect trouble from; the `PoolConfig` watcher test is the kqueue branch's proof
-and it already exists. `wayland-scanner` comes from the `wayland` package and the
-protocol XML is vendored, so `generate-protocols.sh` should need nothing — but
-regenerate in the guest once to prove it.
+**P3.3 — First pixels on FreeBSD.**
+P3.2 took the compile-time half of this pass off the table — everything builds
+and the tests pass — so what's left is **runtime**, which is where the two open
+debts live: `Launcher.selfExecutable`'s `/proc/self/exe` (→ `KERN_PROC_PATHNAME`)
+and how the run loop behaves on libwayland's **epoll-over-kqueue shim**. Also
+regenerate the protocols in the guest once (`wayland-scanner` comes from the
+`wayland` package and the XML is vendored, so it should need nothing) to prove
+that path too.
 *Verify:* first, the headless PNG render (`AQUA_RENDER_PNG=/tmp/aqua.png
 AquaDemo`) in the guest with **no compositor at all** — that isolates cairo /
 FreeType / HarfBuzz / the toolkit from Wayland entirely; diff it against the
@@ -301,18 +337,15 @@ default, P3.5 builds and tests **on Linux today** and merely gains real peers on
 FreeBSD. That makes it the right work to do if P3.2 stalls. It is only blocked if
 we choose libnv, which is itself an argument for the Swift codec.
 
-**6.4 Which C-stdlib module does Swift expose on FreeBSD?** Every one of ~20
-files opens with `#if canImport(Glibc)`. If FreeBSD's Swift presents something
-other than `Glibc`, that's a twenty-file edit — and the right fix is *one* module
-(`AbyssPlatform`) that re-exports the correct one, not twenty new guards. Settle
-it in the first hour of P3.3.
+**6.4 Which C-stdlib module does Swift expose on FreeBSD?** ✅ **Closed
+(P3.2): it's `Glibc`.** Swift names the platform libc module `Glibc` on FreeBSD,
+so `#if canImport(Glibc)` is true there and all ~20 guards took the right branch
+with zero edits. No `AbyssPlatform` module needed.
 
-**6.5 `swift test` may lag `swift build`.** *Downgraded 2026-07-28:* the
-`swift6` package ships `swift-test` and an `XCTest.swiftmodule` for `freebsd`
-alongside Foundation, so the machinery is at least present. Whether the 62 tests
-*pass* is still P3.2's to find out. If they can't run, the fallback is unchanged:
-host-side `swift test` stays the unit gate and the guest is verified live only —
-weaker, and worth saying out loud in the pass that discovers it.
+**6.5 `swift test` may lag `swift build`.** ✅ **Closed (P3.2): 62/62 pass in
+the guest**, XCTest and Foundation included. No fallback needed; the in-guest
+test run is a real gate, which is what makes P3.3–P3.7 verifiable on the target
+rather than only on Linux.
 
 **6.6 wlroots/sway version drift in ports.** We develop against sway 1.11 here;
 the guest has **sway 1.12 / wlroots019 0.19.3** (measured in P3.1). Layer-shell,
@@ -330,12 +363,11 @@ sysctls want permissions the desktop user may not have. `vents` splits reads fro
 "privileged writes" for this reason. Find out in P3.7 what the shell can do as
 the logged-in user, and don't design a status item that needs root.
 
-**6.9 The standing #1 risk, materially reduced (2026-07-28).** Swift-on-FreeBSD
-gates everything that ships to target, and P3.1 found the good branch: a current
-6.3.2 toolchain in ports, installed and running in the guest. It is *reduced*,
-not closed — nothing of ours has compiled there yet, and the remaining unknowns
-have moved downstream: does the C substrate link under a `/usr/local` prefix, do
-the never-compiled kqueue and `SHM_ANON` branches work, do the tests pass. Those
-are P3.2/P3.3, and they are ordinary bring-up problems rather than existential
-ones. §6.3 remains the hedge if the repo build turns out worse than the
-toolchain.
+**6.9 The standing #1 risk: ✅ CLOSED (2026-07-28).** Swift-on-FreeBSD gated
+everything that ships to target, and it is retired: a 6.3.2 toolchain from ports
+(P3.1) builds this repo and passes all 62 tests in the guest (P3.2), at a cost
+of one `Package.swift` change. Every downstream unknown it implied went the same
+way — the C substrate links under the `/usr/local` prefix, the never-compiled
+kqueue and `SHM_ANON` branches work, `Glibc` is the right module name. What
+remains is ordinary bring-up: does the thing *run* (P3.3), and does the harness
+run with it (P3.4). §6.3's hedge is no longer needed, though it stays true.

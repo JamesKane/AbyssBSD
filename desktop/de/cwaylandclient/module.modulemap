@@ -1,0 +1,7 @@
+// pkg-config "wayland-client" supplies the include dir and -lwayland-client.
+// CWayland depends on this target purely to inherit those flags — see shim.h.
+module CWaylandClient [system] {
+    header "shim.h"
+    link "wayland-client"
+    export *
+}

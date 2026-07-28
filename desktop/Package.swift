@@ -3,8 +3,8 @@
 // AbyssBSD — Swift 6 desktop environment (Mac OS X 10.2 "Jaguar" Aqua on Wayland).
 //
 // Layout note: Swift/C targets live under de/ to mirror the sibling AbyssBSD
-// tree. Borrowed Rust engine components (tide, current, pool, …) will be added
-// under de/ as well in Phase 3 and are built outside SwiftPM.
+// tree. The sibling's Rust components are a design source to rewrite from, not
+// dependencies — the engine gets written in Swift here too (docs/PLAN.md).
 import PackageDescription
 
 let package = Package(
@@ -16,9 +16,22 @@ let package = Package(
         .executable(name: "AquaDemo", targets: ["AquaDemo"]),
     ],
     targets: [
-        // C interop: libwayland-client + generated xdg-shell + shm helper.
+        // libwayland-client itself, via pkg-config. CWayland is a plain C
+        // target and so cannot carry a `pkgConfig:` of its own; depending on
+        // this systemLibrary is how it inherits the include dir and the
+        // -lwayland-client flag. Needed on FreeBSD, where the headers are under
+        // /usr/local/include — the previous `.linkedLibrary("wayland-client")`
+        // silently relied on Linux putting them in /usr/include.
+        .systemLibrary(
+            name: "CWaylandClient",
+            path: "de/cwaylandclient",
+            pkgConfig: "wayland-client",
+            providers: [.apt(["libwayland-dev"]), .brew(["wayland"])]
+        ),
+        // C interop: generated protocol clients + the aw_* shim + shm helper.
         .target(
             name: "CWayland",
+            dependencies: ["CWaylandClient"],
             path: "de/cwayland",
             exclude: ["generate-protocols.sh"],
             sources: ["xdg-shell-protocol.c",
@@ -26,8 +39,7 @@ let package = Package(
                       "wlr-foreign-toplevel-management-unstable-v1-protocol.c",
                       "xdg-activation-v1-protocol.c",
                       "cwayland_shm.c", "cwayland_shim.c"],
-            publicHeadersPath: "include",
-            linkerSettings: [.linkedLibrary("wayland-client")]
+            publicHeadersPath: "include"
         ),
         // System cairo (software 2D backend for the Aqua toolkit; cairo-ft
         // bridges the shaped glyphs from CText into cairo_show_glyphs).

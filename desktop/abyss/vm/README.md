@@ -19,9 +19,14 @@ cd abyss/vm
 ./make-seed.sh            # ssh key (generated if absent) + cloud-init seed
 ABYSS_DAEMON=1 ./run.sh   # boot headless in background
 ./check.sh                # wait for provisioning, then assert the VM is usable
-./sync.sh                 # rsync the source tree into the guest
-./ssh.sh 'cd AbyssBSD-swiftDE && ls'
+./build.sh                # sync + swift build + swift test, in the guest
 ```
+
+`build.sh` is the Phase-3 dev loop. It exists because Swift on FreeBSD installs
+**off PATH** (`/usr/local/swift6/bin`, so 5.10 and 6.x can coexist) and a
+non-interactive `ssh host 'cmd'` reads no profile — so nothing scripted may
+assume `swift` resolves. `--no-sync` builds what's already there, `--no-test`
+skips the tests, and `-- <args>` passes through to `swift build`.
 
 `check.sh` is the one that tells you whether first boot actually worked — see
 below.
@@ -35,6 +40,7 @@ below.
 | `make-seed.sh`  | Generate the ssh key if needed; build the NoCloud cloud-init seed (Rock Ridge ISO, via pycdlib). |
 | `run.sh`        | Boot the VM on a COW overlay disk (base image stays pristine). |
 | `check.sh`      | Assert the guest is ready: ssh, cloud-init, packages, pkg-config, harness tools. |
+| `build.sh`      | The dev loop: sync, then `swift build` (+ `swift test`) in the guest. |
 | `ssh.sh`        | SSH in (passes through args/commands).                          |
 | `sync.sh`       | rsync host source tree → guest `~/AbyssBSD-swiftDE`.            |
 

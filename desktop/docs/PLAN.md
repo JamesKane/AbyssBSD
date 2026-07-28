@@ -104,10 +104,11 @@ FreeBSD 15, plus the repo skeleton and borrowed dev infra.
   `sway` (or `labwc`) + `wayland-protocols`, `cairo`, `freetype`, `harfbuzz`,
   `libxkbcommon` as the client-side test substrate.
 - **FreeBSD Swift spike (start now, do not block Phase 1):** evaluate, in order,
-  (a) `pkg`/ports `lang/swift` if a current 6.x exists, (b) **cross-compiling from Linux
+  (a) `pkg`/ports Swift if a current 6.x exists, (b) **cross-compiling from Linux
   using a Swift SDK** built for FreeBSD, (c) building the toolchain from source in the
-  VM. Capture findings in `docs/SWIFT-ON-FREEBSD.md`. **This is the #1 project risk** —
-  surface results early.
+  VM. Capture findings in `docs/SWIFT-ON-FREEBSD.md`. **This was the #1 project
+  risk; it closed on 2026-07-28** as (a) — ports `swift6-6.3.2` builds and tests
+  the repo in the VM. Note the package is `swift6`, not `swift`.
 - **Establish the Swift↔C FFI pattern:** SwiftPM `systemLibrary` targets + module maps
   + a `wayland-scanner` build step, mirroring `reef/wl/build.rs`'s scanner usage.
 
@@ -286,7 +287,12 @@ runs on any wlroots compositor meanwhile — not because the rewrite is optional
 
 ## Top risks (track explicitly)
 
-1. **Swift on FreeBSD** — unofficial; the whole product hinges on the Phase 0 spike.
+1. ~~**Swift on FreeBSD**~~ — **CLOSED 2026-07-28 (P3.2).** FreeBSD is still not
+   an official swift.org target, but ports carries `swift6-6.3.2` (newer than our
+   Linux 6.3.1), and it builds this repo and passes all 62 tests in the VM at a
+   cost of one `Package.swift` change. See docs/SWIFT-ON-FREEBSD.md. The residual
+   risk is ordinary: a ports toolchain can go stale, and the cross-SDK route
+   stays documented as the fallback.
 2. **Mac Pro GCN 1.0 GPU** — `amdgpu si_support` maturity for FirePro D-series; dual-GPU.
 3. **Aqua fidelity in software rendering** — gloss/blur/pinstripe at HiDPI via Cairo.
 4. **Swift ARC vs. the latency contract** — now a *live* risk rather than a deferred

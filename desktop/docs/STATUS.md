@@ -232,6 +232,12 @@ key and the field fills with repeats — real **key repeat** off the compositor'
 ```sh
 swift build && swift test
 
+# The same, on FreeBSD: sync the tree into the build VM and build+test there.
+# (Swift lives off PATH in the guest, so use the script rather than ssh by hand.)
+abyss/vm/check.sh          # is the guest usable? packages, pkg-config, tools
+abyss/vm/build.sh          # sync + swift build + swift test in the VM
+abyss/vm/build.sh --no-test -- -c release
+
 # The whole desktop, one command (nested inside your session by default):
 abyss/session.sh                       # --headless / --attach; --without dock; Ctrl-C quits
 abyss/tests/live-session.sh /tmp/session.png   # ... and the live test that asserts it composes
@@ -311,20 +317,20 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
-  and **begun: P3.1 is done.** The build VM (`../abyss-swift-vm`, FreeBSD
-  15.0-RELEASE-p11) provisions from a corrected cloud-init seed and is asserted
-  usable by `abyss/vm/check.sh`. It also settled the standing #1 risk's shape:
-  **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we build with
-  here, targeting `x86_64-unknown-freebsd15.0`, with `swift-build`,
-  `swift-test`, Foundation and XCTest. The old seed's `pkg install -y swift` was
-  a false negative; the package is named `swift6` and lives off PATH at
-  `/usr/local/swift6/bin`. That is **not** the risk closed — acceptance is
-  `swift build` and `swift test` on *this repo*, which is P3.2 — but it is the
-  best of the three routes in [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md).
-  Everything so far is deliberately Linux-verifiable so it doesn't block on
-  that. The rest of the phase: finish bring-up — build the repo in the guest,
-  then the C substrate and the portability debts, ending in the first FreeBSD
-  screenshot — then the native substrate, all
+  and **begun: P3.1 and P3.2 are done, and the project's #1 risk is closed.**
+  The build VM (`../abyss-swift-vm`, FreeBSD 15.0-RELEASE-p11) provisions from a
+  corrected cloud-init seed and is asserted usable by `abyss/vm/check.sh`
+  (P3.1). **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we
+  build with here — and it **builds this repo and passes all 62 tests in the
+  guest** (P3.2), for one `Package.swift` change and no source changes. The old
+  seed's `pkg install -y swift` was a false negative: the package is named
+  `swift6` and lives off PATH at `/usr/local/swift6/bin`
+  (`ABYSS_GUEST_SWIFT_BIN`). `abyss/vm/build.sh` is the dev loop — sync, build
+  and test in the guest in one command. [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)
+  is now closed. The rest of the phase: first pixels on FreeBSD (the two
+  remaining debts are *runtime* — `/proc/self/exe`, and libwayland there running
+  on an epoll-over-kqueue shim), the harness in the guest, then the native
+  substrate, all
   **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
   (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the
   launcher's double-fork stand-in), and the hardware bridges behind the menu

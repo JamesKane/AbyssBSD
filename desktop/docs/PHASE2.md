@@ -405,4 +405,6 @@ artwork was drawn). 62 unit tests. See HANDOFF §2.27,
    `PoolConfig` forks by OS; keep it behind a single small protocol.
 5. **Standing #1 risk unchanged:** Swift-on-FreeBSD (SWIFT-ON-FREEBSD.md) still
    gates everything shipping to target; Phase 2 stays fully Linux-verifiable so it
-   doesn't block on that.
+   doesn't block on that. *(Written during Phase 2 — that risk **closed** on
+   2026-07-28 in PHASE3.md P3.2: ports `swift6-6.3.2` builds this repo and passes
+   all 62 tests on FreeBSD.)*
