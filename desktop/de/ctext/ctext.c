@@ -116,6 +116,7 @@ int at_font_init(void) {
     }
     static const char *const fallback[] = {
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
+        "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",          /* FreeBSD */
         "/usr/share/fonts/google-noto/NotoSansSymbols-Regular.ttf",
         NULL,
     };
@@ -129,18 +130,21 @@ int at_font_init(void) {
     static const char *const bold[] = {
         "/usr/share/fonts/google-noto/NotoSans-Bold.ttf",
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
+        "/usr/local/share/fonts/dejavu/DejaVuSans-Bold.ttf",       /* FreeBSD */
         "/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf",
         NULL,
     };
     static const char *const italic[] = {
         "/usr/share/fonts/google-noto/NotoSans-Italic.ttf",
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Oblique.ttf",
+        "/usr/local/share/fonts/dejavu/DejaVuSans-Oblique.ttf",     /* FreeBSD */
         "/usr/share/fonts/liberation-sans/LiberationSans-Italic.ttf",
         NULL,
     };
     static const char *const bolditalic[] = {
         "/usr/share/fonts/google-noto/NotoSans-BoldItalic.ttf",
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-BoldOblique.ttf",
+        "/usr/local/share/fonts/dejavu/DejaVuSans-BoldOblique.ttf", /* FreeBSD */
         "/usr/share/fonts/liberation-sans/LiberationSans-BoldItalic.ttf",
         NULL,
     };

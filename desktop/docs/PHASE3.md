@@ -8,15 +8,20 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 has begun — P3.1 and P3.2 are done, and the project's #1 risk is
-closed.** Phase 2 left the Aqua shell — desktop, menu bar, Dock, Finder, icons,
-launching — running on Linux against stock sway and booting with one command
-(`abyss/session.sh`). Phase 3 makes it run **on FreeBSD**, and gives it the
-native substrate underneath that Linux has been standing in for. P3.1 built the
-box, and found that **ports carries `swift6-6.3.2`** — newer than our Linux
-toolchain. P3.2 then built this repo with it: **62/62 tests pass on FreeBSD**,
-for one `Package.swift` change and no source changes
-([SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md) is closed).
+**Phase 3 has begun — P3.1–P3.3 are done. The Jaguar desktop runs on FreeBSD,
+and the project's #1 risk is closed.** Phase 2 left the Aqua shell — desktop,
+menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
+and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
+FreeBSD**, and gives it the native substrate underneath that Linux has been
+standing in for. P3.1 built the box and found that **ports carries
+`swift6-6.3.2`** — newer than our Linux toolchain. P3.2 built this repo with it
+(**62/62 tests**, one `Package.swift` change, no source changes;
+[SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md) is closed). P3.3 ran it:
+
+![the Jaguar desktop on FreeBSD](screenshots/freebsd-desktop.png)
+
+Next is the harness (P3.4), then the native substrate the shell has been faking
+on Linux — the control plane, the session supervisor, the hardware bridges.
 
 ---
 
@@ -81,8 +86,9 @@ and **P3.2 settled all but one of them at a cost of one `Package.swift` edit**:
 | `memfd_create` | `aw_create_shm` | ✅ the `SHM_ANON` branch compiled, likewise never built before |
 | `timerfd` | `aw_create_interval_timer` (the menu-bar clock) | ✅ free — FreeBSD 15 has native `timerfd(2)`; no `EVFILT_TIMER` fallback needed |
 | `_GNU_SOURCE` | `de/cwayland/cwayland_shm.c:1` | ✅ harmless — compiles clean |
-| `/proc/self/exe` | `Launcher.selfExecutable` (`de/aqua/Launcher.swift:124`) | ⏳ **still open** — a *runtime* debt a build can't reach. `KERN_PROC_PATHNAME` sysctl; `$ABYSS_APP_BINARY` overrides meanwhile (P3.3) |
-| epoll-over-kqueue | FreeBSD's libwayland (`wayland-client.pc` adds `-I/usr/local/include/libepoll-shim`) | ⏳ **new, found in P3.2** — `wl_display_get_fd()` returns a shim fd, so the poll-timeout run loop (HANDOFF §2.14) is the thing to watch when the client first runs |
+| `/proc/self/exe` | `Launcher.selfExecutable` | ✅ **paid (P3.3)** — the new `CPlatform` C shim (`ap_self_executable`): `KERN_PROC_PATHNAME` there, `/proc/self/exe` here. Swift can't see `<sys/sysctl.h>` at all |
+| epoll-over-kqueue | FreeBSD's libwayland (`wayland-client.pc` adds `-I/usr/local/include/libepoll-shim`) | ✅ **a non-event (P3.3)** — the client maps, paints and keeps frame callbacks with no run-loop change |
+| bold/italic fonts | `de/ctext/ctext.c` style lists | ✅ **found and fixed in P3.3** — only the *regular* list had a FreeBSD path, so styled runs silently fell back to regular. A bug that could only exist on the target |
 
 ---
 
@@ -213,20 +219,49 @@ toolchain ever goes stale:
 | (c) from source | as (a), after a multi-hour build | capture the exact recipe or it isn't reproducible |
 | (d) none of the three | **Phase 3 is blocked** | fall back to the Linux track — golden-image tests, more of the shell — and keep the spike running |
 
-**P3.3 — First pixels on FreeBSD.**
-P3.2 took the compile-time half of this pass off the table — everything builds
-and the tests pass — so what's left is **runtime**, which is where the two open
-debts live: `Launcher.selfExecutable`'s `/proc/self/exe` (→ `KERN_PROC_PATHNAME`)
-and how the run loop behaves on libwayland's **epoll-over-kqueue shim**. Also
-regenerate the protocols in the guest once (`wayland-scanner` comes from the
-`wayland` package and the XML is vendored, so it should need nothing) to prove
-that path too.
-*Verify:* first, the headless PNG render (`AQUA_RENDER_PNG=/tmp/aqua.png
-AquaDemo`) in the guest with **no compositor at all** — that isolates cairo /
-FreeType / HarfBuzz / the toolkit from Wayland entirely; diff it against the
-Linux render. Then `AquaDemo` under sway's headless backend + grim: **the first
-FreeBSD screenshot**, checked in. That is this pass's milestone and the phase's
-first real one.
+**P3.3 — First pixels on FreeBSD. ✅ done.**
+**The Jaguar desktop runs on FreeBSD.** The window first, headless with no
+compositor at all, then live under sway + grim:
+
+![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
+![the Jaguar desktop on FreeBSD](screenshots/freebsd-desktop.png)
+
+Both remaining debts are paid, and one new bug turned up that only existed here:
+
+- **`/proc/self/exe` → `KERN_PROC_PATHNAME`.** Swift's libc module surfaces no
+  `<sys/sysctl.h>` on FreeBSD — `sysctl` and `sysctlbyname` are simply not in
+  scope — so this became a small C shim, **`CPlatform`** (`de/cplatform`), in
+  the `CPoolWatch` mould: one call, `ap_self_executable`, with the `#ifdef`
+  inside C where it belongs. `Launcher.selfExecutable` now has no Linux-ism in
+  it at all. That shim is also where P3.7's `vents` sysctl bridge will grow.
+- **The epoll-over-kqueue shim is a non-event.** FreeBSD's libwayland is built
+  on libepoll-shim, so `wl_display_get_fd()` returns a shim fd — the client maps,
+  paints, and keeps its frame callbacks with no change to the poll-timeout run
+  loop (HANDOFF §2.14).
+- **Bold text was silently falling back to regular.** `ctext.c`'s *regular* font
+  list had a FreeBSD path but the **bold / italic / bold-italic lists did not**,
+  so every styled run quietly resolved to the regular face. FreeBSD ships DejaVu
+  at `/usr/local/share/fonts/dejavu/`; those paths are now in every list. Visible
+  in the screenshot above as the bold **Finder** app menu — and it would have
+  been invisible on Linux forever.
+
+**Layer-shell works on the guest's newer sway**, which was §6.6's open question:
+the wallpaper maps 800×600 on BACKGROUND, the menu bar 800×22 on TOP, and the
+exclusive zone really reserves space — sway's workspace rect comes back
+`y=22, height=578`, the same assertion `live-session.sh` makes on Linux.
+
+**`wayland-scanner` needs nothing.** Regenerating all four protocols in the
+guest produces **8 files byte-identical** to the committed ones, so the vendored
+XML + generated glue is genuinely portable rather than accidentally Linux-shaped.
+
+*Verified:* `swift build` + **63/63 tests** in the guest (a new test covers
+`selfExecutable` on both platforms), the headless PNG render matching Linux's
+bar the font choice — the guest has DejaVu where Fedora has Noto — and the two
+live captures above.
+
+*Noted for P3.4:* FreeBSD sets no **`XDG_RUNTIME_DIR`** for an ssh session, so
+the harness must provide one rather than assume it; the manual runs here set
+`/tmp/xdg-$(id -u)` at 0700.
 
 **P3.4 — The harness and the session, in the guest.**
 Make the Phase-2 verification machinery run under FreeBSD: `abyss/tests/run.sh`,
@@ -347,8 +382,12 @@ the guest**, XCTest and Foundation included. No fallback needed; the in-guest
 test run is a real gate, which is what makes P3.3–P3.7 verifiable on the target
 rather than only on Linux.
 
-**6.6 wlroots/sway version drift in ports.** We develop against sway 1.11 here;
-the guest has **sway 1.12 / wlroots019 0.19.3** (measured in P3.1). Layer-shell,
+**6.6 wlroots/sway version drift in ports.** ✅ **Answered (P3.3): no drift that
+matters.** We develop against sway 1.11 here; the guest has **sway 1.12 /
+wlroots019 0.19.3**, and layer-shell works there unchanged — BACKGROUND and TOP
+surfaces map, and the exclusive zone reserves space exactly as on Linux
+(workspace rect `y=22`). Foreign-toplevel and xdg-activation are still to be
+exercised live in the guest (P3.4). Original note: Layer-shell,
 foreign-toplevel and xdg-activation are all we need, and all are old and stable —
 but a version mismatch shows up as a *missing global*, which our clients should
 report clearly rather than crash on. Check that behaviour early.

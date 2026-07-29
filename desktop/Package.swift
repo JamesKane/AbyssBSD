@@ -100,6 +100,15 @@ let package = Package(
             sources: ["cpoolwatch.c"],
             publicHeadersPath: "include"
         ),
+        // Platform facts Swift can't reach: Swift's libc module surfaces no
+        // <sys/sysctl.h>, so "what is my own executable?" needs C on FreeBSD
+        // (/proc/self/exe on Linux, KERN_PROC_PATHNAME there).
+        .target(
+            name: "CPlatform",
+            path: "de/cplatform",
+            sources: ["cplatform.c"],
+            publicHeadersPath: "include"
+        ),
         // Config: read/write the same ~/.config/abyss/*.ini files as the Rust
         // `pool` (mmap read, atomic-rename write, directory watch). Pure syscalls;
         // no Wayland, so the shell components and tests use it independently.
@@ -111,7 +120,7 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["Surface", "CCairo", "CText", "PoolConfig"],
+            dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.

@@ -18,6 +18,7 @@
 // `anchor` (pdfork + kqueue) in Phase 3; this is the Linux-dev stand-in.
 
 import PoolConfig
+import CPlatform
 
 #if canImport(Glibc)
 import Glibc
@@ -112,8 +113,10 @@ public enum Launcher {
     }
 
     /// This process's own executable — how the Dock launches another copy of the
-    /// shell. `/proc/self/exe` on Linux; `$ABYSS_APP_BINARY` overrides (and is
-    /// the fallback path on systems without procfs, until Phase 3's `anchor`).
+    /// shell. `$ABYSS_APP_BINARY` overrides; otherwise `CPlatform` answers,
+    /// since the mechanism is per-OS (`/proc/self/exe` on Linux, the
+    /// `KERN_PROC_PATHNAME` sysctl on FreeBSD, which has no procfs mounted by
+    /// default — and Swift's libc module surfaces no `<sys/sysctl.h>`).
     public static func selfExecutable() -> String? {
         if let e = getenv("ABYSS_APP_BINARY") {
             let s = String(cString: e)
@@ -121,10 +124,10 @@ public enum Launcher {
         }
         var buf = [CChar](repeating: 0, count: 4096)
         let n = buf.withUnsafeMutableBufferPointer {
-            readlink("/proc/self/exe", $0.baseAddress!, $0.count - 1)
+            ap_self_executable($0.baseAddress!, $0.count)
         }
         guard n > 0 else { return nil }
-        return String(decoding: buf[0..<n].map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return String(decoding: buf[0..<Int(n)].map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     // MARK: - Opening

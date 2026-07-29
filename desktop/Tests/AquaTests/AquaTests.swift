@@ -611,6 +611,27 @@ final class AquaTests: XCTestCase {
         XCTAssertNil(Launcher.resolveExecutable(""))
     }
 
+    func testLauncherFindsItsOwnExecutable() {
+        // The mechanism is per-OS and lives in CPlatform (/proc/self/exe on
+        // Linux, the KERN_PROC_PATHNAME sysctl on FreeBSD, which mounts no
+        // procfs by default). Whatever the path, it must be absolute and point
+        // at something we could actually exec — that is what the Dock relies on
+        // when it launches another copy of the shell.
+        guard let me = Launcher.selfExecutable() else {
+            return XCTFail("selfExecutable() returned nil")
+        }
+        XCTAssertTrue(me.hasPrefix("/"), "not absolute: \(me)")
+        XCTAssertEqual(access(me, X_OK), 0, "not executable: \(me)")
+
+        // $ABYSS_APP_BINARY overrides — but only when it names something
+        // executable, so a stale value can't break launching.
+        setenv("ABYSS_APP_BINARY", "/bin/sh", 1)
+        XCTAssertEqual(Launcher.selfExecutable(), "/bin/sh")
+        setenv("ABYSS_APP_BINARY", "/nonexistent/binary", 1)
+        XCTAssertEqual(Launcher.selfExecutable(), me)
+        unsetenv("ABYSS_APP_BINARY")
+    }
+
     func testLauncherSplitsCommandLines() {
         XCTAssertEqual(Launcher.splitCommand("xdg-open"), ["xdg-open"])
         XCTAssertEqual(Launcher.splitCommand("  open   -a  Preview "),

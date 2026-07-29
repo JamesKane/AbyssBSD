@@ -114,6 +114,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.27 | Shell polish: `on_demand` keyboard, a popup `close()` that told nobody, `.icns` is a container |
 | 2.28 | The VM: a package named `swift6`, a toolchain off PATH, and `\|\| true` hiding a miss |
 | 2.29 | FreeBSD build: a C target can't carry `pkgConfig:` — depend on a systemLibrary that does |
+| 2.30 | FreeBSD runtime: no `<sys/sysctl.h>` from Swift, font lists that only covered *regular*, no `XDG_RUNTIME_DIR` |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -380,6 +381,35 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.30 Running on FreeBSD: sysctl is invisible, and a bug that could only
+### exist on the target
+(P3.3 — first pixels in the guest, headless and live under sway.)
+
+- **Swift's libc module surfaces no `<sys/sysctl.h>` on FreeBSD.** Both
+  `sysctl` and `sysctlbyname` fail with `cannot find … in scope`, even though
+  `import Glibc` works and the symbols are in libc. Anything needing them takes
+  a C shim — hence **`CPlatform`** (`de/cplatform`), one call
+  (`ap_self_executable`) with the `#ifdef` inside C: `KERN_PROC_PATHNAME` on
+  FreeBSD (there is no procfs mounted by default, so `/proc/curproc/file` is not
+  an option either), `/proc/self/exe` on Linux. P3.7's `vents` sysctl bridge
+  grows in the same place.
+- **A font list that only covers *regular* silently un-bolds the UI.**
+  `ctext.c` had `/usr/local/share/fonts/dejavu/DejaVuSans.ttf` in the regular
+  list, but the bold / italic / bold-italic lists carried only Linux paths — and
+  a style that finds no primary falls back to regular *by design*, so text still
+  renders and nothing errors. Every bold run on FreeBSD was quietly regular.
+  When adding a font path, add it to **all four** lists and the fallback list.
+  This class of bug is invisible on the platform you develop on.
+- **libwayland on an epoll-over-kqueue shim is a non-event.** `wl_display_get_fd()`
+  hands back a libepoll-shim fd; the poll-timeout run loop (§2.14) needed no
+  change — the client maps, paints and keeps its frame callbacks.
+- **FreeBSD sets no `XDG_RUNTIME_DIR`** for an ssh session (no systemd, no
+  pam_xdg). Anything that runs sway or looks for a Wayland socket must provide
+  one — `/tmp/xdg-$(id -u)` at mode 0700 works.
+- **`wayland-scanner` output is identical across platforms.** Regenerating all
+  four protocols in the guest produced 8 files byte-for-byte equal to the
+  committed ones, so the generated glue is genuinely portable.
 
 ### 2.29 Building on FreeBSD: `/usr/local`, and where pkg-config flags come from
 (P3.2 — the first build of this repo on FreeBSD. It cost **one Package.swift
@@ -1024,15 +1054,17 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. In progress: P3.1 and P3.2 are done, and the standing
-   #1 risk is CLOSED.** Scoped pass-by-pass in **[PHASE3.md](PHASE3.md)**
-   (P3.1–P3.7, written 2026-07-27). The build VM provisions and is asserted
-   usable (`abyss/vm/check.sh`), FreeBSD ports carries **`swift6-6.3.2`** —
-   newer than our Linux toolchain — and it **builds this repo and passes all 62
-   tests in the guest**, for one `Package.swift` change and no source changes
-   (§2.28, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
-   `abyss/vm/build.sh` for the guest loop. Bring-up continues with first pixels
-   (the debts below are down to two, both *runtime*), then the native
+4. **Phase 3 — FreeBSD. In progress: P3.1–P3.3 are done, the standing #1 risk
+   is CLOSED, and the Jaguar desktop runs on FreeBSD**
+   (![the desktop on FreeBSD](screenshots/freebsd-desktop.png)). Scoped
+   pass-by-pass in **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27).
+   The build VM provisions and is asserted usable (`abyss/vm/check.sh`), FreeBSD
+   ports carries **`swift6-6.3.2`** — newer than our Linux toolchain — and it
+   **builds this repo and passes all 63 tests in the guest**, for one
+   `Package.swift` change and no source changes (§2.28,
+   [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
+   `abyss/vm/build.sh` for the guest loop. Next is the harness in the guest
+   (P3.4 — note FreeBSD sets no `XDG_RUNTIME_DIR`, §2.30), then the native
    substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
    2026-07-27): `CurrentIPC` (PHASE2.md P2.9), a session supervisor to replace
@@ -1045,16 +1077,16 @@ desktop (P2.10). What's left:
    are POSIX, so it builds and tests here today — PHASE3.md §6.3), and the
    **portals / legacy-D-Bus story is carved out** of the phase (§6.1).
 
-**Portability debts — mostly paid (P3.2).** The inotify/kqueue fork in
+**Portability debts — all paid (P3.2–P3.3).** The inotify/kqueue fork in
 `CPoolWatch` compiled and passed its test on FreeBSD, `aw_create_shm`'s
 `SHM_ANON` branch built, `timerfd` turned out to be native there, and
 `canImport(Glibc)` is true on FreeBSD so all ~20 guards were already correct.
-Two remain, both *runtime* rather than compile-time: **`/proc/self/exe`** in
-`Launcher.selfExecutable` (needs the `KERN_PROC_PATHNAME` sysctl;
-`$ABYSS_APP_BINARY` overrides meanwhile), and the fact that FreeBSD's libwayland
-runs on an **epoll-over-kqueue shim**, so `wl_display_get_fd()` hands back a shim
-fd and §2.14's poll-timeout loop is worth watching the first time a client runs
-there.
+`/proc/self/exe` moved into the new **`CPlatform`** shim (`KERN_PROC_PATHNAME`
+on FreeBSD, since Swift can't see `<sys/sysctl.h>` there at all — §2.30), and
+libwayland's epoll-over-kqueue shim turned out to need no run-loop change. What
+P3.3 *added* to the list was a bug in the other direction: the font style lists
+covered only Linux paths for bold/italic, so styled text silently fell back to
+regular on FreeBSD (§2.30).
 
 ---
 
@@ -1082,6 +1114,7 @@ there.
 | `de/surface` | the client runtime: `Display`, `Window`, `LayerSurface`, `Popup`, `Keyboard`, `ForeignToplevels`, `Activation` |
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
+| `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`), §2.30 |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
 | `abyss/tests` | `run.sh` (build+test+smoke), `live-sway.sh`, `live-session.sh`, the virtual input helpers |

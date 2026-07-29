@@ -60,6 +60,14 @@ an **`.app` bundle is drawn with its own icon** from `Contents/Resources`
 (PNG, including PNGs embedded in an `.icns`). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
+## It runs on FreeBSD (Phase 3, P3.3)
+
+The point of the whole exercise, on the target OS — a Swift 6 desktop under
+stock sway in the FreeBSD 15 build VM, captured with grim:
+![the Jaguar desktop on FreeBSD](screenshots/freebsd-desktop.png)
+And the toolkit alone, headless with no compositor at all:
+![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
+
 ## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
 
 A Swift 6 package builds on Linux and renders a faithful Jaguar window
@@ -70,10 +78,11 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (62 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (63 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
-  extraction, PoolConfig read/write/watch).
+  extraction, self-executable resolution, PoolConfig read/write/watch).
+  **The same 63 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -116,6 +125,9 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     files as the Rust `pool` (mmap read, atomic-rename write, directory watch via
     the `CPoolWatch` inotify/kqueue shim). Pure syscalls, no Wayland — the shell
     components and tests use it independently (`de/poolconfig/`).
+  - `CPlatform` — platform facts Swift can't reach: `ap_self_executable`
+    (`/proc/self/exe` on Linux, the `KERN_PROC_PATHNAME` sysctl on FreeBSD,
+    whose Swift libc module surfaces no `<sys/sysctl.h>`).
   - `AquaDemo` — the runnable demo.
 
 A **System Preferences** demo scene reproduces the Jaguar layout (toolbar with
@@ -317,19 +329,25 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
-  and **begun: P3.1 and P3.2 are done, and the project's #1 risk is closed.**
+  and **begun: P3.1–P3.3 are done. The Jaguar desktop runs on FreeBSD**
+  (![the desktop on FreeBSD](screenshots/freebsd-desktop.png)) **and the
+  project's #1 risk is closed.**
   The build VM (`../abyss-swift-vm`, FreeBSD 15.0-RELEASE-p11) provisions from a
   corrected cloud-init seed and is asserted usable by `abyss/vm/check.sh`
   (P3.1). **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we
-  build with here — and it **builds this repo and passes all 62 tests in the
+  build with here — and it **builds this repo and passes all 63 tests in the
   guest** (P3.2), for one `Package.swift` change and no source changes. The old
   seed's `pkg install -y swift` was a false negative: the package is named
   `swift6` and lives off PATH at `/usr/local/swift6/bin`
   (`ABYSS_GUEST_SWIFT_BIN`). `abyss/vm/build.sh` is the dev loop — sync, build
   and test in the guest in one command. [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md)
-  is now closed. The rest of the phase: first pixels on FreeBSD (the two
-  remaining debts are *runtime* — `/proc/self/exe`, and libwayland there running
-  on an epoll-over-kqueue shim), the harness in the guest, then the native
+  is now closed. P3.3 then ran it: the window headless with no compositor, and
+  the desktop live under sway + grim. Every portability debt is paid — the last,
+  `/proc/self/exe`, became the **`CPlatform`** shim (`KERN_PROC_PATHNAME`;
+  Swift can't see `<sys/sysctl.h>` on FreeBSD at all) — and one bug turned up
+  that only existed there: the font style lists carried Linux paths only, so
+  **bold and italic text silently fell back to regular**. The rest of the phase:
+  the harness in the guest, then the native
   substrate, all
   **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
   (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the
