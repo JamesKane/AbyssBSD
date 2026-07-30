@@ -60,13 +60,18 @@ an **`.app` bundle is drawn with its own icon** from `Contents/Resources`
 (PNG, including PNGs embedded in an `.icns`). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
-## It runs on FreeBSD (Phase 3, P3.3)
+## It runs on FreeBSD (Phase 3, P3.3–P3.4)
 
 The point of the whole exercise, on the target OS — a Swift 6 desktop under
 stock sway in the FreeBSD 15 build VM, captured with grim:
 ![the Jaguar desktop on FreeBSD](screenshots/freebsd-desktop.png)
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
+
+The whole **harness** passes there too — **63 unit tests and all 31 live modes**,
+including pointer/keyboard injection, file operations checked on disk, and
+`abyss/session.sh` supervising the desktop, menu bar and Dock as one session:
+![the session on FreeBSD](screenshots/freebsd-session.png)
 
 ## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
 
@@ -244,10 +249,16 @@ key and the field fills with repeats — real **key repeat** off the compositor'
 ```sh
 swift build && swift test
 
-# The same, on FreeBSD: sync the tree into the build VM and build+test there.
-# (Swift lives off PATH in the guest, so use the script rather than ssh by hand.)
+# Every live mode in one go (pass/fail table; -o DIR keeps the PNGs + logs):
+abyss/tests/run-live.sh
+abyss/tests/run-live.sh -o /tmp/shots dock trash   # ... or just some of them
+
+# The same, on FreeBSD: sync the tree into the build VM and run there.
+# (Swift lives off PATH in the guest, so use the scripts rather than ssh by hand.)
 abyss/vm/check.sh          # is the guest usable? packages, pkg-config, tools
-abyss/vm/build.sh          # sync + swift build + swift test in the VM
+abyss/tests/run.sh --vm    # build + unit tests + smoke render, in the VM
+abyss/tests/run.sh --vm --live   # ... and all 31 live modes there
+abyss/vm/build.sh          # quicker: just sync + swift build + swift test
 abyss/vm/build.sh --no-test -- -c release
 
 # The whole desktop, one command (nested inside your session by default):
@@ -329,9 +340,9 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
-  and **begun: P3.1–P3.3 are done. The Jaguar desktop runs on FreeBSD**
-  (![the desktop on FreeBSD](screenshots/freebsd-desktop.png)) **and the
-  project's #1 risk is closed.**
+  and **begun: P3.1–P3.4 are done. The Jaguar desktop runs on FreeBSD, its whole
+  harness passes there (63 unit tests + 31 live modes), and the project's #1
+  risk is closed.**
   The build VM (`../abyss-swift-vm`, FreeBSD 15.0-RELEASE-p11) provisions from a
   corrected cloud-init seed and is asserted usable by `abyss/vm/check.sh`
   (P3.1). **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we
@@ -346,9 +357,12 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   `/proc/self/exe`, became the **`CPlatform`** shim (`KERN_PROC_PATHNAME`;
   Swift can't see `<sys/sysctl.h>` on FreeBSD at all) — and one bug turned up
   that only existed there: the font style lists carried Linux paths only, so
-  **bold and italic text silently fell back to regular**. The rest of the phase:
-  the harness in the guest, then the native
-  substrate, all
+  **bold and italic text silently fell back to regular**. P3.4 got the harness
+  green in the guest — all 31 live modes and the supervised session — behind two
+  platform fixes (FreeBSD sets no `XDG_RUNTIME_DIR`, and its `od(1)` adds a
+  trailing space that broke the pixel probes), and added
+  `abyss/tests/run-live.sh` plus a `run.sh --vm` lane. The rest of the phase: the
+  native substrate, all
   **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
   (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the
   launcher's double-fork stand-in), and the hardware bridges behind the menu

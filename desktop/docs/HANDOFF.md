@@ -115,6 +115,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.28 | The VM: a package named `swift6`, a toolchain off PATH, and `\|\| true` hiding a miss |
 | 2.29 | FreeBSD build: a C target can't carry `pkgConfig:` — depend on a systemLibrary that does |
 | 2.30 | FreeBSD runtime: no `<sys/sysctl.h>` from Swift, font lists that only covered *regular*, no `XDG_RUNTIME_DIR` |
+| 2.31 | FreeBSD harness: `od(1)` adds a trailing space, and a `for` over a table word-splits multi-word entries |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -381,6 +382,33 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.31 The harness on FreeBSD: two whitespace bugs, one of them mine
+(P3.4 — getting all 31 live modes green in the guest.)
+
+- **FreeBSD's `od(1)` prints a trailing space after the last value; GNU's does
+  not.** The grim pixel probes compare a string, so `"32 64 128 "` vs
+  `"32 64 128"` failed on *identical pixels* — and the failure message read
+  "the desktop didn't paint its configured bg", which is a lie that costs real
+  time. `tr -s ' '` does not help: it squeezes runs, it doesn't trim. Normalise
+  the fields instead: `od -An -tu1 | awk '{ print $1, $2, $3 }'`. `live-sway.sh`
+  had happened to add `s/ $//` and `live-session.sh` had not, which is why
+  exactly one mode failed.
+- **`XDG_RUNTIME_DIR` does not exist on FreeBSD** (no pam_systemd). sway aborts
+  without it and `set -u` trips first, so every live test died before starting.
+  `abyss/common.sh` now provides `abyss_ensure_runtime_dir` (a per-uid 0700 dir
+  under `$TMPDIR`), sourced by `live-sway.sh`, `live-session.sh` and
+  `session.sh` — one copy, because three would drift.
+- **A `for entry in $table` word-splits entries that contain spaces.** My own
+  bug in `run-live.sh`: rows like `widgets-click:widgets --click` became two
+  bogus modes, and the only symptom was an absurd `skipped=39` in a table of 31.
+  Read the table a line at a time instead, from a here-doc on **fd 3** so the
+  inner command keeps its own stdin and the counters stay in the current shell
+  (a pipeline would put them in a subshell and silently report zero).
+- Everything else was already portable: the virtual-input C helpers build with
+  base clang because they take their flags from `pkg-config`, the
+  `sway-ipc.*.$pid.sock` glob and `swaymsg exec`'s env dump (§2.26) work
+  unchanged, and headless sway needs no seatd.
 
 ### 2.30 Running on FreeBSD: sysctl is invisible, and a bug that could only
 ### exist on the target
@@ -1054,17 +1082,17 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. In progress: P3.1–P3.3 are done, the standing #1 risk
-   is CLOSED, and the Jaguar desktop runs on FreeBSD**
-   (![the desktop on FreeBSD](screenshots/freebsd-desktop.png)). Scoped
+4. **Phase 3 — FreeBSD. In progress: P3.1–P3.4 are done, the standing #1 risk
+   is CLOSED, the Jaguar desktop runs on FreeBSD and its whole harness passes
+   there** (![the session on FreeBSD](screenshots/freebsd-session.png)). Scoped
    pass-by-pass in **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27).
    The build VM provisions and is asserted usable (`abyss/vm/check.sh`), FreeBSD
    ports carries **`swift6-6.3.2`** — newer than our Linux toolchain — and it
-   **builds this repo and passes all 63 tests in the guest**, for one
-   `Package.swift` change and no source changes (§2.28,
-   [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
-   `abyss/vm/build.sh` for the guest loop. Next is the harness in the guest
-   (P3.4 — note FreeBSD sets no `XDG_RUNTIME_DIR`, §2.30), then the native
+   **builds this repo and passes all 63 unit tests plus all 31 live modes in the
+   guest**, for one `Package.swift` change and a handful of small platform fixes
+   (§2.28–§2.31, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
+   `abyss/tests/run.sh --vm [--live]` for the guest lane and
+   `abyss/vm/build.sh` for a quick build+test. Next is the native
    substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
    2026-07-27): `CurrentIPC` (PHASE2.md P2.9), a session supervisor to replace
@@ -1117,7 +1145,8 @@ regular on FreeBSD (§2.30).
 | `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`), §2.30 |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
-| `abyss/tests` | `run.sh` (build+test+smoke), `live-sway.sh`, `live-session.sh`, the virtual input helpers |
+| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 31 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, the virtual input helpers |
+| `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |
 | `protocols/` | vendored protocol XML; regenerate via `de/cwayland/generate-protocols.sh` |
 

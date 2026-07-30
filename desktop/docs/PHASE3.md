@@ -8,8 +8,9 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 has begun — P3.1–P3.3 are done. The Jaguar desktop runs on FreeBSD,
-and the project's #1 risk is closed.** Phase 2 left the Aqua shell — desktop,
+**Phase 3 has begun — P3.1–P3.4 are done. The Jaguar desktop runs on FreeBSD,
+its whole test harness passes there (31/31 live modes), and the project's #1
+risk is closed.** Phase 2 left the Aqua shell — desktop,
 menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
 and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
 FreeBSD**, and gives it the native substrate underneath that Linux has been
@@ -20,8 +21,9 @@ standing in for. P3.1 built the box and found that **ports carries
 
 ![the Jaguar desktop on FreeBSD](screenshots/freebsd-desktop.png)
 
-Next is the harness (P3.4), then the native substrate the shell has been faking
-on Linux — the control plane, the session supervisor, the hardware bridges.
+P3.4 then got the harness green there — all 31 live modes and the supervised
+session. Next is the native substrate the shell has been faking on Linux: the
+control plane (P3.5), the session supervisor (P3.6), the hardware bridges (P3.7).
 
 ---
 
@@ -263,16 +265,50 @@ live captures above.
 the harness must provide one rather than assume it; the manual runs here set
 `/tmp/xdg-$(id -u)` at 0700.
 
-**P3.4 — The harness and the session, in the guest.**
-Make the Phase-2 verification machinery run under FreeBSD: `abyss/tests/run.sh`,
-`live-sway.sh` (all ~20 modes), `live-session.sh`, and `abyss/session.sh` itself.
-Known suspects: the virtual-pointer/keyboard C helpers (base clang, should be
-fine), sway's IPC socket naming and the `sway-ipc.*.$pid.sock` glob
-`session.sh` matches on, `swaymsg exec`'s environment dump (HANDOFF §2.26), and
-whether headless sway wants seatd in the guest. Add an in-VM lane to
-`abyss/tests/run.sh` (the sibling's `run-vm.sh`/`run-kyua.sh` are the model).
-*Verify:* the same live tests that pass on Linux pass in the guest, screenshots
-checked in beside their Linux counterparts.
+**P3.4 — The harness and the session, in the guest. ✅ done.**
+**All 31 live modes pass on FreeBSD, and so does the whole session:**
+
+![the session on FreeBSD](screenshots/freebsd-session.png)
+
+That is the entire Phase-2 verification machinery running on the target —
+pointer injection through a `wlr-virtual-pointer`, a `zwp_virtual_keyboard`,
+layer-shell, **foreign-toplevel** and **xdg-activation** (which P3.3 hadn't
+exercised live), file operations checked on disk, launching a real bundle,
+emptying the Trash, and `abyss/session.sh` supervising three components. Two
+platform bugs, both in the harness rather than the product:
+
+- **FreeBSD sets no `XDG_RUNTIME_DIR`.** sway refuses to start without one
+  ("XDG_RUNTIME_DIR is not set in the environment. Aborting."), and `set -u`
+  tripped first, so *every* live test failed in the guest. New
+  **`abyss/common.sh`** holds one shared `abyss_ensure_runtime_dir` — a per-uid
+  0700 dir under `$TMPDIR` — sourced by `live-sway.sh`, `live-session.sh` and
+  `session.sh` rather than pasted into three places.
+- **FreeBSD's `od(1)` prints a trailing space after the last value; GNU's does
+  not.** The pixel probes compared `"32 64 128 "` against `"32 64 128"` and
+  failed on identical pixels — a false negative that looked exactly like the
+  desktop not painting. Both probes now normalise through
+  `awk '{ print $1, $2, $3 }'`. (`live-sway.sh` happened to strip it already,
+  `live-session.sh` didn't, which is why only the session test failed.)
+
+Everything else was already portable: the virtual-input C helpers compile with
+base clang because they take their flags from `pkg-config`, sway's IPC socket
+glob and `swaymsg exec` environment dump work unchanged (HANDOFF §2.26), and
+headless sway needs no seatd.
+
+New this pass, and the reason a 31-mode sweep is now a routine thing to run:
+
+- **`abyss/tests/run-live.sh`** — runs every live mode in order with a per-mode
+  timeout and prints a pass/fail table, keeping the PNGs and logs (`-o DIR`) or
+  a subset (`run-live.sh dock trash`). One `swift build` up front, so a compile
+  error fails once rather than 31 times.
+- **`abyss/tests/run.sh --vm`** — the in-VM lane the plan called for: sync the
+  tree and run *this same script* in the guest, with `$ABYSS_GUEST_SWIFT_BIN` on
+  the front. `--live` adds the live sweep on either side. (`config.sh` now lets
+  a caller outside `abyss/vm/` set `ABYSS_VM_DIR`, since `$0` no longer points
+  there.)
+
+*Verified:* `run-live.sh` **31/31 in the guest** and **31/31 on Linux**, both
+after the fixes; `run.sh --vm` green end to end.
 
 **P3.5 — `CurrentIPC` (the P2.9 carry).**
 The Swift control plane, finally with peers to talk to. Shape from the sibling
@@ -338,9 +374,9 @@ items closes the phase.
 - **Live (guest):** `live-sway.sh` and `live-session.sh` under headless sway +
   grim in the VM, screenshots checked in beside the Linux ones so a regression is
   visible rather than described.
-- **Two-layer harness:** `abyss/tests/run.sh` grows an in-VM lane (host build +
-  test, then sync + in-guest build + test + live), adapting the sibling's
-  `run-vm.sh`/`run-kyua.sh`.
+- **Two-layer harness:** ✅ **built in P3.4.** `abyss/tests/run.sh --vm` syncs
+  and runs the same script in the guest; `--live` adds the live sweep on either
+  side; `abyss/tests/run-live.sh` runs all 31 modes with a pass/fail table.
 - **The perf gate is not yet ours to clear.** `tide`'s C1–C5 benches measure a
   compositor; we don't have one until Phase 6. Phase 3 inherits the *contract*
   (don't regress input-to-photon on the client side), not the benchmark.
@@ -386,8 +422,9 @@ rather than only on Linux.
 matters.** We develop against sway 1.11 here; the guest has **sway 1.12 /
 wlroots019 0.19.3**, and layer-shell works there unchanged — BACKGROUND and TOP
 surfaces map, and the exclusive zone reserves space exactly as on Linux
-(workspace rect `y=22`). Foreign-toplevel and xdg-activation are still to be
-exercised live in the guest (P3.4). Original note: Layer-shell,
+(workspace rect `y=22`). **P3.4 closed the rest**: foreign-toplevel and
+xdg-activation are exercised live there too, with all 31 live modes green.
+Original note: Layer-shell,
 foreign-toplevel and xdg-activation are all we need, and all are old and stable —
 but a version mismatch shows up as a *missing global*, which our clients should
 report clearly rather than crash on. Check that behaviour early.

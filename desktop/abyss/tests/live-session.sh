@@ -14,6 +14,8 @@ set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
+. "$root/abyss/common.sh"
+abyss_ensure_runtime_dir      # FreeBSD sets none; sway refuses without it
 out="${1:-${TMPDIR:-/tmp}/aqua-session-$$.png}"
 
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
@@ -84,7 +86,12 @@ echo "  menu bar reserved its exclusive zone (workspace y=$ws_y)"
 # 3. The pixels stack in the right order. grim can capture a 1x1 region as a
 # binary PPM, whose last three bytes are that pixel — no image library needed.
 pixel() {
-  WAYLAND_DISPLAY="$wd" grim -g "$1,$2 1x1" -t ppm - | tail -c 3 | od -An -tu1 | tr -s ' ' | sed 's/^ //'
+  # awk normalises the field spacing on purpose: FreeBSD's od(1) prints a
+  # TRAILING space after the last value and GNU's does not, so a `tr -s`/`sed`
+  # pipeline compares equal on Linux and unequal on FreeBSD for identical
+  # pixels — which is exactly how this failed in the VM.
+  WAYLAND_DISPLAY="$wd" grim -g "$1,$2 1x1" -t ppm - | tail -c 3 \
+    | od -An -tu1 | awk '{ print $1, $2, $3 }'
 }
 mid=$(pixel $((W / 2)) $((H / 2)))
 top=$(pixel $((W / 2)) 6)

@@ -4,8 +4,10 @@
 # Large VM artifacts (images, disks, seed) live OUTSIDE the git repo so they
 # never bloat history.
 
-# Repo root (this file lives at $REPO/abyss/vm/config.sh)
-ABYSS_VM_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Repo root (this file lives at $REPO/abyss/vm/config.sh). The vm/ scripts get
+# this right from $0; anything else that sources this file (abyss/tests/run.sh
+# --vm) sets ABYSS_VM_DIR first, since $0 would then point somewhere else.
+: "${ABYSS_VM_DIR:=$(cd "$(dirname "$0")" && pwd)}"
 ABYSS_REPO="$(cd "$ABYSS_VM_DIR/../.." && pwd)"
 
 # Where VM artifacts are stored (sibling of the repo by default).

@@ -83,6 +83,8 @@ is_layer=""; case "$scene" in wallpaper|menubar|dock) is_layer=1 ;; esac
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
+. "$root/abyss/common.sh"
+abyss_ensure_runtime_dir      # FreeBSD sets none; sway refuses without it
 
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }
@@ -387,8 +389,10 @@ if [ "$click" = "--click" ]; then
     # The bundle ships its own icon (a magenta PNG), so that is what the Finder
     # must be drawing there — not the procedural application glyph. grim can cut
     # a 1x1 PPM, whose last three bytes are the pixel.
+    # awk normalises the spacing: FreeBSD's od(1) adds a trailing space after
+    # the last value where GNU's does not (see live-session.sh's pixel()).
     icon_px=$(WAYLAND_DISPLAY="$wd" grim -g "230,96 1x1" -t ppm - | tail -c 3 \
-              | od -An -tu1 | tr -s ' ' | sed 's/^ //;s/ $//')
+              | od -An -tu1 | awk '{ print $1, $2, $3 }')
     [ "$icon_px" = "255 0 255" ] \
       || { echo "FAIL: the bundle's own icon wasn't drawn (pixel = $icon_px)"; exit 1; }
     echo "finder: Marker.app is drawn with its own icon (Contents/Resources)"
