@@ -75,6 +75,7 @@ public enum Current {
             close(sock)
             throw CurrentError.system(e, "connect \(path)")
         }
+        _ = ap_socket_nosigpipe(sock)   // belt and braces beside MSG_NOSIGNAL
         return sock
     }
 
@@ -200,9 +201,31 @@ public enum Current {
         }
 
         /// Accept one client. The returned socket is the caller's to close.
+        /// How long to wait for a request on an accepted connection before
+        /// giving up on it. A client that connects and then says nothing must
+        /// not be able to stall a service that is also supervising a session.
+        public var requestTimeout: Double = 2.0
+
         public func accept() throws -> Int32 {
             let c = Glibc.accept(fd, nil, nil)
             guard c >= 0 else { throw CurrentError.system(errno, "accept") }
+            _ = ap_socket_nosigpipe(c)
+
+            // **A connection accepted from a non-blocking listener inherits
+            // O_NONBLOCK on the BSDs, but not on Linux.** Leaving it inherited
+            // means `recvmsg` returns EAGAIN whenever the request hasn't landed
+            // in the microsecond since accept — the service then drops a
+            // perfectly good client, which on FreeBSD failed about half of all
+            // `abyssctl quit` calls (HANDOFF §2.33). Force blocking explicitly.
+            let flags = fcntl(c, F_GETFL, 0)
+            if flags >= 0 { _ = fcntl(c, F_SETFL, flags & ~O_NONBLOCK) }
+
+            // Bound the wait instead of trusting the peer.
+            if requestTimeout > 0 {
+                var tv = timeval(tv_sec: Int(requestTimeout),
+                                 tv_usec: Int((requestTimeout - Double(Int(requestTimeout))) * 1_000_000))
+                _ = setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+            }
             return c
         }
 
@@ -290,18 +313,17 @@ private func beUInt32(_ b: [UInt8]) -> UInt32 {
 }
 
 /// Write every byte, resuming on a short write or EINTR.
+///
+/// Goes through `ap_send_all` rather than `write(2)` so a peer that has hung up
+/// yields EPIPE instead of **SIGPIPE killing the process** — MSG_NOSIGNAL is a
+/// macro Swift cannot see, so it has to happen in C. Losing a peer mid-message
+/// is an ordinary error a caller should report.
 private func writeAll(_ fd: Int32, _ bytes: [UInt8]) throws {
-    var off = 0
-    while off < bytes.count {
-        let n = bytes.withUnsafeBufferPointer {
-            write(fd, $0.baseAddress! + off, bytes.count - off)
-        }
-        if n < 0 {
-            if errno == EINTR { continue }
-            throw CurrentError.system(errno, "write")
-        }
-        if n == 0 { throw CurrentError.closed }
-        off += n
+    let rc = bytes.withUnsafeBufferPointer {
+        ap_send_all(fd, $0.baseAddress, bytes.count)
+    }
+    if rc != 0 {
+        throw errno == EPIPE ? CurrentError.closed : CurrentError.system(errno, "send")
     }
 }
 

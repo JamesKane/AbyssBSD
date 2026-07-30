@@ -60,7 +60,7 @@ an **`.app` bundle is drawn with its own icon** from `Contents/Resources`
 (PNG, including PNGs embedded in an `.icns`). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
-## It runs on FreeBSD (Phase 3, P3.3–P3.4)
+## It runs on FreeBSD (Phase 3, P3.3–P3.6)
 
 The point of the whole exercise, on the target OS — a Swift 6 desktop under
 stock sway in the FreeBSD 15 build VM, captured with grim:
@@ -68,10 +68,11 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **63 unit tests and all 31 live modes**,
-including pointer/keyboard injection, file operations checked on disk, and
-`abyss/session.sh` supervising the desktop, menu bar and Dock as one session:
-![the session on FreeBSD](screenshots/freebsd-session.png)
+The whole **harness** passes there too — **90 unit tests and all 32 live modes**,
+including pointer/keyboard injection, file operations checked on disk, and the
+desktop, menu bar and Dock brought up as one session. That session is now run by
+**`anchor`**, the Swift supervisor, rather than by a shell script:
+![the session under the Swift supervisor on FreeBSD](screenshots/freebsd-anchor.png)
 
 ## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
 
@@ -83,12 +84,12 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (78 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (90 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
-  CurrentIPC codec + descriptor passing).
-  **The same 78 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  CurrentIPC codec + descriptor passing, and the supervisor's restart policy).
+  **The same 90 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -135,6 +136,12 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     (`/proc/self/exe` on Linux, the `KERN_PROC_PATHNAME` sysctl on FreeBSD,
     whose Swift libc module surfaces no `<sys/sysctl.h>`) and **SCM_RIGHTS fd
     passing**, since `cmsg(3)` is entirely macros.
+  - `Anchor` + `anchor` — the session supervisor (`de/anchor`, `de/anchorbin`):
+    starts the compositor and the shell, restarts a component that dies, and
+    tears the session down as a unit. Every child is a **pollable descriptor**
+    (`pdfork` on FreeBSD, `pidfd` on Linux — `de/cproc`), so it is one `poll()`
+    loop carrying children, the control socket and a signal self-pipe. Drive it
+    with **`abyssctl status|quit`**.
   - `CurrentIPC` — the brokerless control plane (`de/currentipc`): a typed `Msg`
     (string / u64 / bool / bytes / **fd**) with its own compact wire format, a
     `Server` on `<runtime_dir>/<service>.sock`, `connect` and one-shot `call`.
@@ -258,9 +265,14 @@ key and the field fills with repeats — real **key repeat** off the compositor'
 ```sh
 swift build && swift test
 
+# The whole desktop under the Swift supervisor (the replacement for session.sh):
+.build/debug/anchor --display "$WAYLAND_DISPLAY"    # or --compositor CMD
+.build/debug/abyssctl status                        # ... and abyssctl quit
+
 # The control plane between two real processes (no compositor needed; also part
 # of run.sh's default lane):
 abyss/tests/live-ipc.sh
+abyss/tests/live-anchor.sh    # supervision: restart a killed component, quit
 
 # Every live mode in one go (pass/fail table; -o DIR keeps the PNGs + logs):
 abyss/tests/run-live.sh
@@ -353,9 +365,10 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
-  and **well along: P3.1–P3.5 are done. The Jaguar desktop runs on FreeBSD, its
-  whole harness passes there (78 unit tests + 31 live modes), the control plane
-  hands descriptors between processes, and the project's #1 risk is closed.**
+  and **nearly done: P3.1–P3.6 are complete. The Jaguar desktop runs on FreeBSD
+  under a Swift session supervisor, its whole harness passes there (90 unit
+  tests + 32 live modes), the control plane hands descriptors between processes,
+  and the project's #1 risk is closed.**
   The build VM (`../abyss-swift-vm`, FreeBSD 15.0-RELEASE-p11) provisions from a
   corrected cloud-init seed and is asserted usable by `abyss/vm/check.sh`
   (P3.1). **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we
@@ -378,7 +391,11 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   (`de/currentipc`): the brokerless control plane — typed messages over unix
   sockets with **`SCM_RIGHTS` descriptor passing**, our own compact codec rather
   than FreeBSD's libnv (P2.9's call, and it means the component has no platform
-  fork at all). The rest of the phase: the session supervisor and the hardware
+  fork at all). P3.6 replaced `abyss/session.sh` with **`anchor`**, the Swift
+  session supervisor: every child is a pollable descriptor (`pdfork` on FreeBSD,
+  `pidfd` on Linux), so supervision is one `poll()` loop that also carries the
+  control socket and a signal self-pipe — with `abyssctl status|quit` driving it.
+  The rest of the phase: the hardware
   bridges, all
   **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
   (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the

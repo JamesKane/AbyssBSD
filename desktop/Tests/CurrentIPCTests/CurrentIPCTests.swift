@@ -180,6 +180,33 @@ final class CurrentIPCTests: XCTestCase {
         XCTAssertEqual(fcntl(received!, F_GETFD), -1)
     }
 
+    /// Writing to a peer that has gone away must be an *error*, never a signal.
+    ///
+    /// Without MSG_NOSIGNAL this raises SIGPIPE and the process dies silently
+    /// with status 141 — which is exactly how `abyssctl quit` failed about one
+    /// run in three on FreeBSD, looking for all the world like a supervisor
+    /// that ignored the request (HANDOFF §2.33). If this test ever hangs or
+    /// crashes the whole suite rather than failing, that protection is gone.
+    func testWritingToAClosedPeerErrorsRatherThanKillingUs() throws {
+        var sv: [Int32] = [-1, -1]
+        XCTAssertEqual(socketpair(AF_UNIX, sockStreamForTests, 0, &sv), 0)
+        defer { close(sv[0]) }
+        close(sv[1])                        // the peer hangs up
+
+        var m = Msg()
+        m.set("method", "into-the-void")
+        // A payload big enough that the write can't just vanish into a buffer.
+        m.set("filler", bytes: [UInt8](repeating: 0x7f, count: 64 * 1024))
+        XCTAssertThrowsError(try Current.send(m, on: sv[0])) { error in
+            switch error {
+            case CurrentError.closed, CurrentError.system:
+                break                       // either is a fine way to say "gone"
+            default:
+                XCTFail("expected a closed/system error, got \(error)")
+            }
+        }
+    }
+
     // MARK: - A real service on a real socket
 
     func testServerAndClientOverARealSocket() throws {
@@ -240,6 +267,33 @@ final class CurrentIPCTests: XCTestCase {
             var r = Msg(); r.set("echo", request.string("method") ?? ""); return r
         })
         XCTAssertEqual(try Current.receive(on: good).string("echo"), "status")
+    }
+
+    /// A connection accepted from a **non-blocking listener** must itself be
+    /// blocking.
+    ///
+    /// The BSDs propagate O_NONBLOCK from the listener to the accepted socket;
+    /// Linux does not. A service that polls its listener (which every service
+    /// hosted inside an event loop does) therefore gets non-blocking
+    /// connections on FreeBSD only — and then `recvmsg` returns EAGAIN whenever
+    /// the request hasn't landed yet, and the service drops a good client. That
+    /// failed roughly half of all `abyssctl quit` calls, and passed every time
+    /// on Linux (HANDOFF §2.33).
+    func testAcceptedConnectionsAreBlockingEvenFromANonBlockingListener() throws {
+        let dir = try scratchRuntimeDir()
+        defer { unsetenv("ABYSS_RUNTIME_DIR"); _ = rmdirTree(dir) }
+
+        let server = try Current.Server(service: "anchor")
+        try server.setNonBlocking(true)
+        let client = try Current.connect("anchor")
+        defer { close(client) }
+
+        let accepted = try server.accept()
+        defer { close(accepted) }
+        let flags = fcntl(accepted, F_GETFL, 0)
+        XCTAssertGreaterThanOrEqual(flags, 0)
+        XCTAssertEqual(flags & O_NONBLOCK, 0,
+                       "an accepted connection must be blocking, whatever the listener is")
     }
 
     func testBindReplacesAStaleSocketAndUnlinksOnClose() throws {

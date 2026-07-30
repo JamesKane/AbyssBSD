@@ -44,10 +44,16 @@ int ap_self_executable(char *buf, size_t len) {
 #error "CPlatform: unsupported platform (need /proc/self/exe or KERN_PROC_PATHNAME)"
 #endif
 
-/* --- SCM_RIGHTS ------------------------------------------------------- */
-/* Portable across Linux and FreeBSD as written: cmsg is POSIX, and the only
- * historical wart (needing MSG_NOSIGNAL vs SO_NOSIGPIPE) is handled by the
- * caller, which ignores SIGPIPE. */
+/* --- sockets ---------------------------------------------------------- */
+/* Portable across Linux and FreeBSD: cmsg is POSIX, and both have MSG_NOSIGNAL
+ * (FreeBSD additionally has SO_NOSIGPIPE, set via ap_socket_nosigpipe). Every
+ * send here passes it, so a peer that has gone away yields EPIPE rather than
+ * killing the process — see ap_send_all's comment for why that matters. */
+#ifdef MSG_NOSIGNAL
+#define AP_NOSIGNAL MSG_NOSIGNAL
+#else
+#define AP_NOSIGNAL 0
+#endif
 
 long ap_sendmsg_fds(int sock, const void *buf, size_t len, const int *fds, int nfds) {
     if (buf == NULL || len == 0 || nfds < 0 || nfds > AP_MAX_FDS) {
@@ -82,9 +88,41 @@ long ap_sendmsg_fds(int sock, const void *buf, size_t len, const int *fds, int n
 
     ssize_t n;
     do {
-        n = sendmsg(sock, &msg, 0);
+        n = sendmsg(sock, &msg, AP_NOSIGNAL);
     } while (n < 0 && errno == EINTR);
     return (long)n;
+}
+
+int ap_send_all(int sock, const void *buf, size_t len) {
+    if (buf == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    const char *p = (const char *)buf;
+    size_t off = 0;
+    while (off < len) {
+        ssize_t n = send(sock, p + off, len - off, AP_NOSIGNAL);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return -1;
+        }
+        if (n == 0) {
+            errno = EPIPE;
+            return -1;
+        }
+        off += (size_t)n;
+    }
+    return 0;
+}
+
+int ap_socket_nosigpipe(int sock) {
+#ifdef SO_NOSIGPIPE
+    int on = 1;
+    return setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+#else
+    (void)sock;
+    return 0;       /* Linux has no SO_NOSIGPIPE; MSG_NOSIGNAL covers it */
+#endif
 }
 
 long ap_recvmsg_fds(int sock, void *buf, size_t len, int *fds, int max_fds, int *nfds_out) {

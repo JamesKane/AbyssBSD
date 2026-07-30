@@ -117,6 +117,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.30 | FreeBSD runtime: no `<sys/sysctl.h>` from Swift, font lists that only covered *regular*, no `XDG_RUNTIME_DIR` |
 | 2.31 | FreeBSD harness: `od(1)` adds a trailing space, and a `for` over a table word-splits multi-word entries |
 | 2.32 | The control plane: cmsg is all macros, fds ride with the *length prefix*, and `sun_path` is 108 bytes |
+| 2.33 | The supervisor: accepted sockets inherit `O_NONBLOCK` on BSD but not Linux; SIGPIPE kills a client silently |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -383,6 +384,34 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.33 The session supervisor: two bugs that only showed up on FreeBSD
+(P3.6 — `anchor`. Both cost real time; both are one-liners once seen.)
+
+- **An accepted connection inherits `O_NONBLOCK` from the listener on the BSDs,
+  and does NOT on Linux.** Any service hosted inside an event loop polls its
+  listener, so its listener is non-blocking — and on FreeBSD every accepted
+  connection then was too. `recvmsg` returned `EAGAIN` whenever the request
+  hadn't arrived in the microsecond since `accept`, the service dropped the
+  client, and the client's next write got EPIPE. It failed **about half** of all
+  `abyssctl quit` calls on FreeBSD and **never once** on Linux. `Server.accept`
+  now clears `O_NONBLOCK` explicitly and sets an `SO_RCVTIMEO`, so a silent
+  client can't stall a supervisor either. If you write a service, do not assume
+  the accepted socket's mode — set it.
+- **SIGPIPE kills a client silently, and it looks like the server ignored you.**
+  `abyssctl quit` died with status 141 and *no output*, which reads exactly like
+  a supervisor that took the request and did nothing. A socket library must not
+  leave this to its callers: `CurrentIPC` now sends through
+  `ap_send_all`/`ap_sendmsg_fds` with **MSG_NOSIGNAL** (a macro Swift can't see,
+  hence C) and sets **SO_NOSIGPIPE** where it exists, so a vanished peer is an
+  `EPIPE` error a caller can report. The supervisor separately ignores SIGPIPE,
+  because a `| head` on its log must not be able to kill the session.
+- **Diagnostic worth reusing:** an empty stderr with a non-zero exit almost
+  always means a signal. `rc=141` is SIGPIPE, `139` SIGSEGV — checking the exit
+  code first turned "quit failed" from a mystery into a one-line fix.
+- **A flake that reproduces 1-in-3 is a bug, not the weather.** It passed
+  standalone and failed inside the full sweep; running it eight times in a row
+  in the guest is what made it findable.
 
 ### 2.32 The control plane: passing a descriptor from Swift
 (P3.5 — `CurrentIPC`, the P2.9 carry.)
@@ -1117,23 +1146,23 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. In progress: P3.1–P3.5 are done, the standing #1 risk
-   is CLOSED, the Jaguar desktop runs on FreeBSD, its whole harness passes there,
-   and the control plane carries descriptors between processes**
+4. **Phase 3 — FreeBSD. In progress: P3.1–P3.6 are done, the standing #1 risk
+   is CLOSED, the Jaguar desktop runs on FreeBSD under a Swift session
+   supervisor, and its whole harness passes there**
    (![the session on FreeBSD](screenshots/freebsd-session.png)). Scoped
    pass-by-pass in **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27).
    The build VM provisions and is asserted usable (`abyss/vm/check.sh`), FreeBSD
    ports carries **`swift6-6.3.2`** — newer than our Linux toolchain — and it
-   **builds this repo and passes all 78 unit tests plus all 31 live modes in the
+   **builds this repo and passes all 90 unit tests plus all 32 live modes in the
    guest**, for one `Package.swift` change and a handful of small platform fixes
-   (§2.28–§2.32, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
+   (§2.28–§2.33, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
    `abyss/tests/run.sh --vm [--live]` for the guest lane and
    `abyss/vm/build.sh` for a quick build+test. What's left of the native
    substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
-   2026-07-27): a session supervisor to replace `abyss/session.sh` and §2.25's
-   double-fork stand-in, and hardware bridges for the menu bar's status items.
-   `CurrentIPC` (PHASE2.md P2.9) is **built** — §2.32. A Swift compositor over a wlroots binding is its
+   2026-07-27): hardware bridges for the menu bar's status items (P3.7).
+   `CurrentIPC` (PHASE2.md P2.9) is **built** (§2.32), and so is the session
+   supervisor — `anchor` (§2.33), which replaces `abyss/session.sh`. A Swift compositor over a wlroots binding is its
    own later phase; until it exists the shell keeps running on stock sway/labwc,
    which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
    *read* before writing each one. Two things worth knowing before you start:
@@ -1180,6 +1209,9 @@ regular on FreeBSD (§2.30).
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
 | `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`, §2.30) and SCM_RIGHTS fd passing (§2.32) |
 | `de/currentipc` | the control plane: `Msg` + wire format, `Current.Server`/`connect`/`call` (§2.32) |
+| `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
+| `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
+| `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |

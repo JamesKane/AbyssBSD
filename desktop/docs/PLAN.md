@@ -76,7 +76,8 @@ and `de/ctext` already do. It does not mean linking Rust crates.
 | `CurrentIPC` | Swift control plane: unix sockets, typed messages, fd-passing | `ipc/current` |
 | `PoolConfig` | Swift reimpl of `pool` (mmap read / atomic-rename write / kqueue watch) | `ipc/pool` |
 | `Dock`, `MenuBar`, `Finder`, `Desktop`, `LoginWindow`, `SystemPrefs` | the shell | `reef-*` |
-| *(compositor, session supervisor, hardware bridges)* | Swift rewrites, later phases | `tide`, `anchor`, `vents` |
+| `Anchor` / `anchor` | session supervisor: pollable child descriptors, control service | `anchor` |
+| *(compositor, hardware bridges)* | Swift rewrites, later phases | `tide`, `vents` |
 | `Installer` | Fedora-style graphical installer (Aqua app) | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
@@ -281,8 +282,8 @@ runs on any wlroots compositor meanwhile — not because the rewrite is optional
   kernel patch, and the SEAMS porting map. Where a *format* must match (the `pool`
   `.ini` files, a protocol on the wire), match the format — not the implementation.
 - **Build in Swift:** everything else. `CWayland`, `Surface`, `Aqua`, `PoolConfig`,
-  `CurrentIPC` and the shell exist; the compositor, the session supervisor, the FreeBSD
-  hardware bridges, the image codec and the installer are still to come.
+  `CurrentIPC`, the session supervisor (`anchor`) and the shell exist; the compositor,
+  the FreeBSD hardware bridges, the image codec and the installer are still to come.
 - **Drop to C only where Swift can't reach:** shims over C system libraries (the
   `aw_*`/`at_*` pattern), and — if measurement demands it — the compositor's
   real-time present path.

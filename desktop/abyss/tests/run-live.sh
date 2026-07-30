@@ -120,21 +120,21 @@ done 3<<EOF
 $modes
 EOF
 
-# The session test is its own script (it drives abyss/session.sh, not AquaDemo).
-if want session; then
-  printf '%-14s ' "session"
-  if timeout "$ABYSS_LIVE_TIMEOUT" sh abyss/tests/live-session.sh \
-       "$outdir/session.png" > "$outdir/session.log" 2>&1; then
+# Two tests drive their own supervisor rather than AquaDemo: the shell session
+# script, and the Swift supervisor that replaces it.
+for extra in session anchor; do
+  if ! want "$extra"; then skipped=$((skipped + 1)); continue; fi
+  printf '%-14s ' "$extra"
+  if timeout "$ABYSS_LIVE_TIMEOUT" sh "abyss/tests/live-$extra.sh" \
+       "$outdir/$extra.png" > "$outdir/$extra.log" 2>&1; then
     printf 'ok\n'; passed=$((passed + 1))
   else
     rc=$?
     printf 'FAIL (rc=%s)\n' "$rc"
-    sed -n '$p' "$outdir/session.log" | sed 's/^/               /'
-    failed=$((failed + 1)); failed_labels="$failed_labels session"
+    sed -n '$p' "$outdir/$extra.log" | sed 's/^/               /'
+    failed=$((failed + 1)); failed_labels="$failed_labels $extra"
   fi
-else
-  skipped=$((skipped + 1))
-fi
+done
 
 echo
 echo "passed=$passed failed=$failed skipped=$skipped"

@@ -40,8 +40,26 @@ int ap_self_executable(char *buf, size_t len);
 
 /* sendmsg(2) `buf` (which must be non-empty — SCM_RIGHTS needs at least one
  * byte of payload to ride with) plus `nfds` descriptors. Returns the number of
- * bytes sent, or -1 with errno set. */
+ * bytes sent, or -1 with errno set (EPIPE if the peer has gone). */
 long ap_sendmsg_fds(int sock, const void *buf, size_t len, const int *fds, int nfds);
+
+/*
+ * Write every byte of `buf` to a connected socket, resuming on a short write.
+ * Returns 0, or -1 with errno set (EPIPE if the peer has gone).
+ *
+ * This exists instead of a plain write(2) loop in Swift so that **writing to a
+ * socket whose peer has closed can never kill the process**: it passes
+ * MSG_NOSIGNAL, which is a macro Swift cannot see. Losing a client mid-message
+ * has to be an error the caller reports, not a silent death — a control plane
+ * where `abyssctl quit` dies from SIGPIPE looks exactly like a supervisor that
+ * ignored the request.
+ */
+int ap_send_all(int sock, const void *buf, size_t len);
+
+/* Ask the kernel never to raise SIGPIPE for this socket (SO_NOSIGPIPE, where it
+ * exists — FreeBSD and Darwin). A no-op returning 0 on platforms without it,
+ * which rely on MSG_NOSIGNAL per-call instead. */
+int ap_socket_nosigpipe(int sock);
 
 /* recvmsg(2) up to `len` bytes into `buf`, collecting any descriptors into
  * `fds` (at most `max_fds`, which must be <= AP_MAX_FDS) and writing how many

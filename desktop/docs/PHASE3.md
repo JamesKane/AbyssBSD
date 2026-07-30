@@ -8,10 +8,10 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 is well along — P3.1–P3.5 are done. The Jaguar desktop runs on
-FreeBSD, its whole test harness passes there (31/31 live modes), the control
-plane carries descriptors between processes, and the project's #1 risk is
-closed.** Phase 2 left the Aqua shell — desktop,
+**Phase 3 is nearly done — P3.1–P3.6 are complete. The Jaguar desktop runs on
+FreeBSD under a **Swift session supervisor**, its whole test harness passes
+there (32/32 live modes, 90 unit tests), the control plane carries descriptors
+between processes, and the project's #1 risk is closed.** Phase 2 left the Aqua shell — desktop,
 menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
 and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
 FreeBSD**, and gives it the native substrate underneath that Linux has been
@@ -25,8 +25,10 @@ standing in for. P3.1 built the box and found that **ports carries
 P3.4 then got the harness green there — all 31 live modes and the supervised
 session — and P3.5 built the **control plane** (`CurrentIPC`): typed messages
 over unix sockets, handing real file descriptors between processes, with our own
-codec rather than libnv. What's left of the native substrate: the session
-supervisor (P3.6) and the hardware bridges (P3.7).
+codec rather than libnv. P3.6 then replaced `abyss/session.sh` with **`anchor`**,
+the Swift supervisor — every child a pollable descriptor, a control service, and
+a session that tears down as a unit. All that's left of the native substrate is
+the hardware bridges (P3.7).
 
 ---
 
@@ -73,7 +75,7 @@ against it (PLAN.md, corrected 2026-07-27). `PoolConfig` is the pattern.
 |---|---|---|
 | Toolkit, shell, client runtime | `Aqua`, `Surface`, the five shell components | — (they *port*, they don't get rewritten) |
 | Config | `PoolConfig` + `CPoolWatch` (kqueue branch **written, never compiled**) | first FreeBSD build + test of the kqueue half |
-| Session launch | `abyss/session.sh` (POSIX sh, supervises + tears down) | **Swift supervisor** (`pdfork` + `EVFILT_PROCDESC`) |
+| Session launch | `abyss/session.sh` (POSIX sh, supervises + tears down) | ✅ **`anchor`**, the Swift supervisor (P3.6) |
 | Control plane | — | ✅ **`CurrentIPC`** (carried from P2.9, built in P3.5) |
 | Hardware (volume, battery, hotplug) | — (menu bar has no status items) | **sysctl / OSS / devd bridges** |
 | Build + test host | this Linux box | the **FreeBSD VM** + an in-guest test lane |
@@ -101,7 +103,7 @@ and **P3.2 settled all but one of them at a cost of one `Package.swift` edit**:
 
 | Job | Sibling analog | Ours | Notes |
 |---|---|---|---|
-| Session supervisor | `anchor` (456 LOC) | **Swift rewrite** (P3.6) | `pdfork(2)` + kqueue `EVFILT_PROCDESC`/`EVFILT_SIGNAL`; hosts a control service |
+| Session supervisor | `anchor` (456 LOC) | `Anchor` + `anchor` — **done** (P3.6) | `pdfork` on FreeBSD / `pidfd` on Linux, both pollable; hosts a control service |
 | Control plane | `current` (551 LOC) | `CurrentIPC` — **done** (P3.5) | unix sockets, typed messages, `SCM_RIGHTS`; our own codec, no libnv |
 | Hardware bridges | `vents` (658 LOC: sysctl 127, oss 86, devd 314) | **Swift rewrite** (P3.7) | `sysctlbyname`, `/dev/mixer` ioctls, the devd socket |
 | Config | `pool` (458 LOC) | `PoolConfig` — **done** (P2.3) | the pattern the rest follow |
@@ -373,24 +375,70 @@ FreeBSD) and `CurrentIPC` refuses to truncate a longer path — silently binding
 it with a long scratch directory, which is why `live-ipc.sh` deliberately puts
 its runtime dir under `/tmp` rather than `$TMPDIR`.
 
-**P3.6 — The session supervisor, in Swift (`anchor`'s job).**
-Launch the compositor, read the `WAYLAND_DISPLAY` it prints, launch the desktop /
-menu bar / Dock against it, supervise them, tear the session down together — no
-systemd, no polling. Native facilities: `pdfork(2)` for children (the descriptor
-*is* the handle — closing it reaps, so no zombies and no `waitpid` races),
-kqueue `EVFILT_PROCDESC` to notice a death, `EVFILT_SIGNAL` for its own
-lifecycle. Points `$ABYSS_RUNTIME_DIR` at the session runtime dir so every
-component's sockets share one namespace, and hosts a `CurrentIPC` control service
-(`status`, `quit`) — which is what makes P3.5 land before it.
-This replaces `abyss/session.sh`, whose restart-counter and teardown-ordering
-behaviour is the spec to match (HANDOFF §2.26). Recommendation (§6.2): write it
-**portable** — a small platform shim (pdfork/kqueue on FreeBSD, pidfd/epoll on
-Linux) like `CPoolWatch` — so it can be developed and tested on this box instead
-of only in the VM.
-*Verify:* `live-session.sh`'s assertions, driven by the Swift supervisor instead
-of the script: three layer surfaces in their namespaces, the exclusive zone
-reserved, killing the Dock brings a new one back, and `quit` over the control
-socket tears the session down cleanly.
+**P3.6 — The session supervisor, in Swift (`anchor`'s job). ✅ done.**
+**The Swift supervisor runs the session** — on FreeBSD as on Linux:
+
+![the session under the Swift supervisor, on FreeBSD](screenshots/freebsd-anchor.png)
+
+`anchor` starts the compositor (or attaches to a running one), brings the
+desktop, menu bar and Dock up against it, restarts a component that dies, hosts
+a control service, and tears the whole session down as a unit. It replaces
+`abyss/session.sh`, whose restart accounting is the spec it matches.
+
+**Portable, per §6.2's recommendation — and the abstraction that makes it work
+is "every child is a pollable descriptor".** That is the sibling's insight, and
+it turns supervision into one `poll()` loop with no SIGCHLD handler and no
+`waitpid` races. `de/cproc` supplies it per platform:
+
+- **FreeBSD: `pdfork(2)`** — the process descriptor *is* the handle. It polls
+  `POLLHUP` on exit and closing it reaps, so there is no zombie and no pid to
+  race against. Exactly what `anchor` does.
+- **Linux: `fork(2)` + `pidfd_open(2)`** — the pidfd polls `POLLIN` on exit;
+  the pid is still needed for `kill`/`waitpid`. Safe against a fast-exiting
+  child because nothing reaps implicitly, so the pid is valid (a zombie at
+  worst) until we ask.
+
+Signals join the same loop through a **self-pipe** whose handler is one
+`write(2)` — async-signal-safe, and portable where `EVFILT_SIGNAL` is not. So
+children, the control socket and SIGTERM/SIGINT are all just readable
+descriptors in one `poll()` set.
+
+The **control service** is `CurrentIPC`'s first real user (P3.5 existing is what
+let this pass land): `status` reports each component as `name=up(restarts)`,
+`quit` tears the session down. `de/abyssctl` is the client — the small tool P3.5
+deferred here for want of a service to control.
+
+*Verified:* **10 new unit tests** (88 total) for the decisions — the flapping
+policy, the healthy-run reset, environment layering, command splitting — plus
+**`abyss/tests/live-anchor.sh`** for the syscalls, green on **both platforms**:
+two supervised children, one killed with `kill -9` and observed to come back
+with the restart counted, `quit` over the control plane leaving **no orphaned
+children and no stale socket**, and then the real thing — `anchor` bringing the
+actual shell up under headless sway with all three components up and the menu
+bar's exclusive zone reserved (workspace `y=22`).
+
+*Four bugs worth recording, two of them only visible on the target* (HANDOFF
+§2.33):
+
+- **An accepted connection inherits `O_NONBLOCK` from the listener on the BSDs
+  and not on Linux.** A service inside an event loop has a non-blocking
+  listener, so on FreeBSD every accepted connection was non-blocking too:
+  `recvmsg` returned `EAGAIN` whenever the request hadn't landed yet and the
+  service dropped a good client. It failed **half** of all `abyssctl quit` calls
+  on FreeBSD and **never once** on Linux — the single strongest argument yet for
+  P3.1–P3.4's insistence on testing in the guest. `Server.accept` now clears the
+  flag and sets a receive timeout.
+- **SIGPIPE killed the client silently** (status 141, no output), which reads
+  exactly like a supervisor that ignored the request. `CurrentIPC` now sends
+  with `MSG_NOSIGNAL`/`SO_NOSIGPIPE`, so a vanished peer is an `EPIPE` error
+  rather than a death; a library owes its callers that.
+- **The supervisor died of SIGPIPE** when a `| head` closed its log pipe. A
+  supervisor that a log reader can kill is not a supervisor; it ignores SIGPIPE.
+- **The live test walked into HANDOFF §2.26's trap**: taking "the first
+  `wayland-N` in the runtime dir" got the *developer's own session*, so the shell
+  mapped onto the real desktop at 3840×2160 while the test asserted against the
+  wrong compositor. It now matches sway's IPC socket by pid, asks sway which
+  display it opened, and fails loudly if that is the parent's.
 
 **P3.7 — Hardware bridges + the menu bar's status items.**
 `vents`' job, in Swift, and the phase's visible payoff. Three bridges, each

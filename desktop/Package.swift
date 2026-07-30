@@ -146,6 +146,33 @@ let package = Package(
             dependencies: ["CurrentIPC"],
             path: "de/ipcprobe"
         ),
+        // Process supervision primitives: every child is a pollable descriptor
+        // (pdfork on FreeBSD, pidfd on Linux) plus a signal self-pipe.
+        .target(
+            name: "CProc",
+            path: "de/cproc",
+            sources: ["cproc.c"],
+            publicHeadersPath: "include"
+        ),
+        // The session supervisor's logic — restart policy, the poll loop, the
+        // control service. A library so it can be tested without a session.
+        .target(
+            name: "Anchor",
+            dependencies: ["CProc", "CurrentIPC"],
+            path: "de/anchor"
+        ),
+        // The supervisor itself: the Swift replacement for abyss/session.sh.
+        .executableTarget(
+            name: "anchor",
+            dependencies: ["Anchor", "CurrentIPC", "CPlatform"],
+            path: "de/anchorbin"
+        ),
+        // Drive a running session over the control plane.
+        .executableTarget(
+            name: "abyssctl",
+            dependencies: ["CurrentIPC"],
+            path: "de/abyssctl"
+        ),
         .testTarget(
             name: "AquaTests",
             dependencies: ["Aqua", "PoolConfig"],
@@ -160,6 +187,11 @@ let package = Package(
             name: "CurrentIPCTests",
             dependencies: ["CurrentIPC"],
             path: "Tests/CurrentIPCTests"
+        ),
+        .testTarget(
+            name: "AnchorTests",
+            dependencies: ["Anchor"],
+            path: "Tests/AnchorTests"
         ),
     ]
 )
