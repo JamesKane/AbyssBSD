@@ -8,9 +8,10 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 has begun — P3.1–P3.4 are done. The Jaguar desktop runs on FreeBSD,
-its whole test harness passes there (31/31 live modes), and the project's #1
-risk is closed.** Phase 2 left the Aqua shell — desktop,
+**Phase 3 is well along — P3.1–P3.5 are done. The Jaguar desktop runs on
+FreeBSD, its whole test harness passes there (31/31 live modes), the control
+plane carries descriptors between processes, and the project's #1 risk is
+closed.** Phase 2 left the Aqua shell — desktop,
 menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
 and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
 FreeBSD**, and gives it the native substrate underneath that Linux has been
@@ -22,8 +23,10 @@ standing in for. P3.1 built the box and found that **ports carries
 ![the Jaguar desktop on FreeBSD](screenshots/freebsd-desktop.png)
 
 P3.4 then got the harness green there — all 31 live modes and the supervised
-session. Next is the native substrate the shell has been faking on Linux: the
-control plane (P3.5), the session supervisor (P3.6), the hardware bridges (P3.7).
+session — and P3.5 built the **control plane** (`CurrentIPC`): typed messages
+over unix sockets, handing real file descriptors between processes, with our own
+codec rather than libnv. What's left of the native substrate: the session
+supervisor (P3.6) and the hardware bridges (P3.7).
 
 ---
 
@@ -71,7 +74,7 @@ against it (PLAN.md, corrected 2026-07-27). `PoolConfig` is the pattern.
 | Toolkit, shell, client runtime | `Aqua`, `Surface`, the five shell components | — (they *port*, they don't get rewritten) |
 | Config | `PoolConfig` + `CPoolWatch` (kqueue branch **written, never compiled**) | first FreeBSD build + test of the kqueue half |
 | Session launch | `abyss/session.sh` (POSIX sh, supervises + tears down) | **Swift supervisor** (`pdfork` + `EVFILT_PROCDESC`) |
-| Control plane | — | **`CurrentIPC`** (carried from P2.9) |
+| Control plane | — | ✅ **`CurrentIPC`** (carried from P2.9, built in P3.5) |
 | Hardware (volume, battery, hotplug) | — (menu bar has no status items) | **sysctl / OSS / devd bridges** |
 | Build + test host | this Linux box | the **FreeBSD VM** + an in-guest test lane |
 | Swift toolchain | 6.3.1 on Linux | ✅ ports `swift6-6.3.2` in the guest — was the #1 risk, [closed in P3.2](SWIFT-ON-FREEBSD.md) |
@@ -99,7 +102,7 @@ and **P3.2 settled all but one of them at a cost of one `Package.swift` edit**:
 | Job | Sibling analog | Ours | Notes |
 |---|---|---|---|
 | Session supervisor | `anchor` (456 LOC) | **Swift rewrite** (P3.6) | `pdfork(2)` + kqueue `EVFILT_PROCDESC`/`EVFILT_SIGNAL`; hosts a control service |
-| Control plane | `current` (551 LOC) | **`CurrentIPC`** (P3.5) | unix sockets, typed messages, `SCM_RIGHTS` |
+| Control plane | `current` (551 LOC) | `CurrentIPC` — **done** (P3.5) | unix sockets, typed messages, `SCM_RIGHTS`; our own codec, no libnv |
 | Hardware bridges | `vents` (658 LOC: sysctl 127, oss 86, devd 314) | **Swift rewrite** (P3.7) | `sysctlbyname`, `/dev/mixer` ioctls, the devd socket |
 | Config | `pool` (458 LOC) | `PoolConfig` — **done** (P2.3) | the pattern the rest follow |
 | Compositor | `tide` (11,573 LOC) | Phase 6 | stock sway/labwc from ports until then |
@@ -310,23 +313,65 @@ New this pass, and the reason a 31-mode sweep is now a routine thing to run:
 *Verified:* `run-live.sh` **31/31 in the guest** and **31/31 on Linux**, both
 after the fixes; `run.sh --vm` green end to end.
 
-**P3.5 — `CurrentIPC` (the P2.9 carry).**
-The Swift control plane, finally with peers to talk to. Shape from the sibling
-(read it, don't link it): a `Msg` of typed fields (str/u64/bool/bytes/**fd**),
+**P3.5 — `CurrentIPC` (the P2.9 carry). ✅ done.**
+The control plane exists, in Swift, and it carries descriptors between real
+processes. `de/currentipc` — no Wayland, no Aqua, so the supervisor and the
+hardware bridges can use it without the shell.
+
+**The codec is ours, as P2.9 decided.** With every peer being a Swift component
+we write, nvlist's wire format stopped being a compatibility requirement, and
+under the "Swift unless Swift can't" rule a format this small is plainly
+feasible: `magic | version | count | (name, kind, payload)*`, big-endian because
+it is a documented format rather than a memory dump. **libnv was not needed and
+is not linked.** Descriptors never appear in the byte stream — they ride in
+SCM_RIGHTS and the field stores their *index* in that array, so several fds in
+one message stay unambiguous.
+
+**Descriptor passing needed C, for the reason everything else has.** The whole
+`cmsg(3)` interface is macros (`CMSG_FIRSTHDR`, `CMSG_DATA`, `CMSG_SPACE`,
+`CMSG_LEN`) and Swift's importer cannot see macros, so `ap_sendmsg_fds` /
+`ap_recvmsg_fds` joined **`CPlatform`** beside `ap_self_executable`. That is the
+third instance of the same wall (HANDOFF §2.1, §2.30) and the shim is 80 lines.
+
+**Framing: the length prefix carries the descriptors.** One `sendmsg` sends a
+4-byte big-endian length with the fds attached, then the body goes out with
+ordinary writes; the receiver's single `recvmsg` on those 4 bytes is what
+collects the ancillary data, because the kernel delivers SCM_RIGHTS with the
+first byte of the transfer it accompanied. Body-first would lose the association
+between a message and its handles.
+
+**Ownership is explicit and documented.** `set(_:fd:)` borrows — keep the fd open
+until `send` returns. A received message owns what arrived: `takeFD` transfers it
+to the caller, `closeFDs` drops the rest. Nothing closes a descriptor behind the
+caller's back, because a control plane that silently invalidates a buffer handle
+is worse than one that leaks. Every failure path in `receive` closes the fds it
+had already collected.
+
+Shape kept from the sibling (read, not linked): `Msg` with typed fields,
 `runtimeDir()` (`$ABYSS_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/abyss`, else
 `/var/run/user/<uid>/abyss`, 0700), a socket per service at
-`<runtime_dir>/<service>.sock`, `Server.bind/accept`, `connect`, and a one-shot
-`call`. The listening fd folds into `Display.addFileDescriptor` — no thread, no
-second loop (HANDOFF §2.18).
-**Prototype fd passing first.** `sendmsg`/`recvmsg` with `SCM_RIGHTS` is the part
-that decides the encoding, not the field types (PHASE2.md P2.9). Default to a
-Swift-native codec; base libnv stays the fallback, and if we bind it, expect the
-`#define` symbol-prefix trap — `<sys/nv.h>` maps the short names onto
-`FreeBSD_nvlist_*` and Swift's importer can't see `#define`s, so it needs a
-`de/cnv` shim in the `aw_*` style. **Never vendor a port of libnv.**
-*Verify:* codec round-trips as unit tests (pure bytes, both platforms); a live
-test where one process hands a real shm fd with known bytes to another and the
-receiver reads them back; and a small `abyssctl` that talks to a running service.
+`<runtime_dir>/<service>.sock`, `Server` (bind/accept/serveOne/serve), `connect`,
+and one-shot `call`. `Server.fd` is public on purpose: it goes straight into
+`Display.addFileDescriptor` (HANDOFF §2.18), so a shell component hosts a service
+with no thread and no second loop.
+
+*Verified:* **15 new unit tests** (78 total) on Linux *and* FreeBSD — codec
+round-trips, deterministic packing, missing/mistyped fields, every truncation of
+a valid frame rejected rather than read off the end, a real descriptor through a
+socketpair proving the receiver reads the *sender's* bytes, two fds keeping their
+fields straight, a real `Server`/`connect`/`call` exchange, a stale socket
+rebound after a simulated crash, and a garbage request costing one connection and
+nothing else. Plus **`abyss/tests/live-ipc.sh`**: two real processes
+(`ipcprobe serve` / `ipcprobe send`), the service reading the client's file
+through a passed descriptor, the reply round-tripping, and the socket unlinked on
+exit. It needs no compositor, so it runs in `run.sh`'s default lane on both
+platforms.
+
+*A guard that earned its keep immediately:* `sun_path` is 108 bytes (104 on
+FreeBSD) and `CurrentIPC` refuses to truncate a longer path — silently binding a
+*different* socket is the classic unix-socket bug. The first manual run tripped
+it with a long scratch directory, which is why `live-ipc.sh` deliberately puts
+its runtime dir under `/tmp` rather than `$TMPDIR`.
 
 **P3.6 — The session supervisor, in Swift (`anchor`'s job).**
 Launch the compositor, read the `WAYLAND_DISPLAY` it prints, launch the desktop /
@@ -402,11 +447,11 @@ platform shim (pdfork+kqueue / pidfd+epoll) buys host-side testing and a single
 implementation. Decide at P3.6; `CPoolWatch` is the precedent that it costs
 about thirty lines of C.
 
-**6.3 `CurrentIPC` can start before the toolchain lands.** Unix sockets and
-`SCM_RIGHTS` are POSIX, and the codec is ours — so if we take the Swift-native
-default, P3.5 builds and tests **on Linux today** and merely gains real peers on
-FreeBSD. That makes it the right work to do if P3.2 stalls. It is only blocked if
-we choose libnv, which is itself an argument for the Swift codec.
+**6.3 `CurrentIPC` can start before the toolchain lands.** ✅ **Borne out
+(P3.5).** Unix sockets and `SCM_RIGHTS` are POSIX and the codec is ours, so the
+whole component — 15 unit tests and a two-process live test — passes identically
+on Linux and FreeBSD, with no platform fork anywhere in it. Choosing libnv would
+have tied it to one OS for no benefit, exactly as the P2.9 record predicted.
 
 **6.4 Which C-stdlib module does Swift expose on FreeBSD?** ✅ **Closed
 (P3.2): it's `Glibc`.** Swift names the platform libc module `Glibc` on FreeBSD,

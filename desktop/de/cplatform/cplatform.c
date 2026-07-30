@@ -1,6 +1,13 @@
-/* See cplatform.h. /proc/self/exe on Linux, KERN_PROC_PATHNAME on FreeBSD. */
+/* See cplatform.h. /proc/self/exe on Linux, KERN_PROC_PATHNAME on FreeBSD,
+ * plus SCM_RIGHTS fd passing (cmsg is all macros, so Swift can't do it). */
 #include <stddef.h>
+#include <string.h>
+#include <errno.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>          /* struct iovec — pulled in by socket.h on Linux,
+                                 not guaranteed elsewhere */
 #include "cplatform.h"
 
 #if defined(__linux__)
@@ -36,3 +43,95 @@ int ap_self_executable(char *buf, size_t len) {
 #else
 #error "CPlatform: unsupported platform (need /proc/self/exe or KERN_PROC_PATHNAME)"
 #endif
+
+/* --- SCM_RIGHTS ------------------------------------------------------- */
+/* Portable across Linux and FreeBSD as written: cmsg is POSIX, and the only
+ * historical wart (needing MSG_NOSIGNAL vs SO_NOSIGPIPE) is handled by the
+ * caller, which ignores SIGPIPE. */
+
+long ap_sendmsg_fds(int sock, const void *buf, size_t len, const int *fds, int nfds) {
+    if (buf == NULL || len == 0 || nfds < 0 || nfds > AP_MAX_FDS) {
+        errno = EINVAL;
+        return -1;
+    }
+    struct iovec iov;
+    iov.iov_base = (void *)buf;
+    iov.iov_len = len;
+
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    /* Sized for the cap, not for nfds, so the buffer is a plain local. */
+    union {
+        struct cmsghdr align;
+        char buf[CMSG_SPACE(sizeof(int) * AP_MAX_FDS)];
+    } control;
+
+    if (nfds > 0) {
+        memset(&control, 0, sizeof(control));
+        msg.msg_control = control.buf;
+        msg.msg_controllen = CMSG_SPACE(sizeof(int) * (size_t)nfds);
+        struct cmsghdr *c = CMSG_FIRSTHDR(&msg);
+        c->cmsg_level = SOL_SOCKET;
+        c->cmsg_type = SCM_RIGHTS;
+        c->cmsg_len = CMSG_LEN(sizeof(int) * (size_t)nfds);
+        memcpy(CMSG_DATA(c), fds, sizeof(int) * (size_t)nfds);
+    }
+
+    ssize_t n;
+    do {
+        n = sendmsg(sock, &msg, 0);
+    } while (n < 0 && errno == EINTR);
+    return (long)n;
+}
+
+long ap_recvmsg_fds(int sock, void *buf, size_t len, int *fds, int max_fds, int *nfds_out) {
+    if (nfds_out != NULL) *nfds_out = 0;
+    if (buf == NULL || len == 0 || fds == NULL || max_fds < 0 || max_fds > AP_MAX_FDS) {
+        errno = EINVAL;
+        return -1;
+    }
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = len;
+
+    union {
+        struct cmsghdr align;
+        char buf[CMSG_SPACE(sizeof(int) * AP_MAX_FDS)];
+    } control;
+    memset(&control, 0, sizeof(control));
+
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control.buf;
+    msg.msg_controllen = sizeof(control.buf);
+
+    ssize_t n;
+    do {
+        n = recvmsg(sock, &msg, 0);
+    } while (n < 0 && errno == EINTR);
+    if (n < 0) return -1;
+
+    int got = 0;
+    for (struct cmsghdr *c = CMSG_FIRSTHDR(&msg); c != NULL; c = CMSG_NXTHDR(&msg, c)) {
+        if (c->cmsg_level != SOL_SOCKET || c->cmsg_type != SCM_RIGHTS) continue;
+        size_t payload = c->cmsg_len - CMSG_LEN(0);
+        int count = (int)(payload / sizeof(int));
+        for (int i = 0; i < count; i++) {
+            int fd;
+            memcpy(&fd, CMSG_DATA(c) + i * sizeof(int), sizeof(int));
+            if (got < max_fds) {
+                fds[got++] = fd;
+            } else {
+                /* Never leak a descriptor we refuse to hand back. */
+                close(fd);
+            }
+        }
+    }
+    if (nfds_out != NULL) *nfds_out = got;
+    return (long)n;
+}

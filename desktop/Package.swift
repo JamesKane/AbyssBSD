@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "Aqua", targets: ["Aqua"]),
         .library(name: "Surface", targets: ["Surface"]),
         .library(name: "PoolConfig", targets: ["PoolConfig"]),
+        .library(name: "CurrentIPC", targets: ["CurrentIPC"]),
         .executable(name: "AquaDemo", targets: ["AquaDemo"]),
     ],
     targets: [
@@ -117,6 +118,15 @@ let package = Package(
             dependencies: ["CPoolWatch"],
             path: "de/poolconfig"
         ),
+        // The control plane: brokerless unix-socket IPC with typed messages and
+        // SCM_RIGHTS fd passing (a Swift rewrite of the sibling's `current`).
+        // No Wayland and no Aqua — the supervisor and the hardware bridges use
+        // it independently of the shell.
+        .target(
+            name: "CurrentIPC",
+            dependencies: ["CPlatform"],
+            path: "de/currentipc"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
@@ -129,6 +139,13 @@ let package = Package(
             dependencies: ["Aqua"],
             path: "de/aquademo"
         ),
+        // Two-process control-plane probe: hands a real descriptor from one
+        // process to another (abyss/tests/live-ipc.sh drives it).
+        .executableTarget(
+            name: "ipcprobe",
+            dependencies: ["CurrentIPC"],
+            path: "de/ipcprobe"
+        ),
         .testTarget(
             name: "AquaTests",
             dependencies: ["Aqua", "PoolConfig"],
@@ -138,6 +155,11 @@ let package = Package(
             name: "PoolConfigTests",
             dependencies: ["PoolConfig"],
             path: "Tests/PoolConfigTests"
+        ),
+        .testTarget(
+            name: "CurrentIPCTests",
+            dependencies: ["CurrentIPC"],
+            path: "Tests/CurrentIPCTests"
         ),
     ]
 )

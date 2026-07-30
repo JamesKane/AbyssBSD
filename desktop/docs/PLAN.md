@@ -163,7 +163,9 @@ the 10.2 reference library; confirm crisp rendering at 1x and 2x scale.
     `Server`), rewritten rather than bound. **Deferred out of Phase 2 and decided
     2026-07-27 — see PHASE2.md P2.9:** every peer it would talk to is itself a Phase-3
     Swift deliverable, so it lands there, with base `libnv` as the fallback encoder if
-    a Swift codec proves impractical.
+    a Swift codec proves impractical. **Built 2026-07-30 (PHASE3.md P3.5):** the Swift
+    codec was straightforward, so libnv is neither linked nor needed, and the component
+    has no platform fork at all — it passes identically on Linux and FreeBSD.
   - `PoolConfig` — reimplement `pool` in Swift (mmap read, temp-file+fsync+atomic-rename
     write, kqueue/`EVFILT_VNODE` watch). It's ~458 LOC of pure syscalls; reading the same
     `~/.config/abyss/*.ini` files keeps Swift and Rust components config-compatible.
@@ -278,8 +280,8 @@ runs on any wlroots compositor meanwhile — not because the rewrite is optional
   test harness (`abyss/vm`, `abyss/tests`), the protocol XML set, the `allow.rtprio`
   kernel patch, and the SEAMS porting map. Where a *format* must match (the `pool`
   `.ini` files, a protocol on the wire), match the format — not the implementation.
-- **Build in Swift:** everything else. `CWayland`, `Surface`, `Aqua`, `PoolConfig` and
-  the shell exist; `CurrentIPC`, the compositor, the session supervisor, the FreeBSD
+- **Build in Swift:** everything else. `CWayland`, `Surface`, `Aqua`, `PoolConfig`,
+  `CurrentIPC` and the shell exist; the compositor, the session supervisor, the FreeBSD
   hardware bridges, the image codec and the installer are still to come.
 - **Drop to C only where Swift can't reach:** shims over C system libraries (the
   `aw_*`/`at_*` pattern), and — if measurement demands it — the compositor's

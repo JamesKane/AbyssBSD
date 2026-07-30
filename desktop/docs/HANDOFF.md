@@ -116,6 +116,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.29 | FreeBSD build: a C target can't carry `pkgConfig:` — depend on a systemLibrary that does |
 | 2.30 | FreeBSD runtime: no `<sys/sysctl.h>` from Swift, font lists that only covered *regular*, no `XDG_RUNTIME_DIR` |
 | 2.31 | FreeBSD harness: `od(1)` adds a trailing space, and a `for` over a table word-splits multi-word entries |
+| 2.32 | The control plane: cmsg is all macros, fds ride with the *length prefix*, and `sun_path` is 108 bytes |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -382,6 +383,40 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.32 The control plane: passing a descriptor from Swift
+(P3.5 — `CurrentIPC`, the P2.9 carry.)
+
+- **`cmsg(3)` is entirely macros, so fd passing needs C.** `CMSG_FIRSTHDR`,
+  `CMSG_DATA`, `CMSG_SPACE`, `CMSG_LEN` are all `#define`s and Swift's importer
+  cannot see macros — the third time this wall has appeared (§2.1's
+  static-inline requests, §2.30's `<sys/sysctl.h>`). `ap_sendmsg_fds` /
+  `ap_recvmsg_fds` live in `CPlatform` for this reason; the C is 80 lines and
+  identical on both platforms.
+- **Send the descriptors with the LENGTH PREFIX, not the body.** The kernel
+  delivers SCM_RIGHTS ancillary data alongside the first byte of the transfer it
+  accompanied, so the receiver's one `recvmsg` must be the read that gets the
+  4-byte length — then the body follows over ordinary reads. Attaching the fds
+  to the body instead means a receiver that reads the length first has already
+  lost them.
+- **A message must never carry an fd in its byte stream.** Descriptors travel
+  out of band, so the wire format stores an *index* into the SCM_RIGHTS array.
+  Without that, two attached fds are indistinguishable on the far side.
+- **Decide who owns a received descriptor, and write it down.** Ours: `set(fd:)`
+  borrows (keep it open until `send` returns); a received `Msg` owns what
+  arrived, and the reader either `takeFD`s it (and must close it) or `closeFDs`.
+  Every error path in `receive` closes the fds it had already collected —
+  otherwise each malformed message a peer sends leaks a descriptor. The C side
+  likewise closes any fd beyond the caller's cap rather than dropping it.
+- **`sun_path` is 108 bytes on Linux, 104 on FreeBSD** — and truncating a path
+  that doesn't fit silently binds a *different* socket. `CurrentIPC` throws
+  instead, which tripped on the first manual run because the scratch directory
+  was 127 characters. Anything that builds a socket path (tests especially)
+  should keep the runtime dir short — `live-ipc.sh` uses `/tmp` rather than
+  `$TMPDIR` on purpose.
+- **`SOCK_STREAM` imports as a different Swift type per platform** —
+  `__socket_type` on Linux (needing `.rawValue`), a plain `Int32` on the BSDs.
+  One private constant behind `#if os(Linux)` keeps the call sites identical.
 
 ### 2.31 The harness on FreeBSD: two whitespace bugs, one of them mine
 (P3.4 — getting all 31 live modes green in the guest.)
@@ -1082,22 +1117,23 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. In progress: P3.1–P3.4 are done, the standing #1 risk
-   is CLOSED, the Jaguar desktop runs on FreeBSD and its whole harness passes
-   there** (![the session on FreeBSD](screenshots/freebsd-session.png)). Scoped
+4. **Phase 3 — FreeBSD. In progress: P3.1–P3.5 are done, the standing #1 risk
+   is CLOSED, the Jaguar desktop runs on FreeBSD, its whole harness passes there,
+   and the control plane carries descriptors between processes**
+   (![the session on FreeBSD](screenshots/freebsd-session.png)). Scoped
    pass-by-pass in **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27).
    The build VM provisions and is asserted usable (`abyss/vm/check.sh`), FreeBSD
    ports carries **`swift6-6.3.2`** — newer than our Linux toolchain — and it
-   **builds this repo and passes all 63 unit tests plus all 31 live modes in the
+   **builds this repo and passes all 78 unit tests plus all 31 live modes in the
    guest**, for one `Package.swift` change and a handful of small platform fixes
-   (§2.28–§2.31, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
+   (§2.28–§2.32, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
    `abyss/tests/run.sh --vm [--live]` for the guest lane and
-   `abyss/vm/build.sh` for a quick build+test. Next is the native
+   `abyss/vm/build.sh` for a quick build+test. What's left of the native
    substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
-   2026-07-27): `CurrentIPC` (PHASE2.md P2.9), a session supervisor to replace
-   `abyss/session.sh` and §2.25's double-fork stand-in, and hardware bridges for
-   the menu bar's status items. A Swift compositor over a wlroots binding is its
+   2026-07-27): a session supervisor to replace `abyss/session.sh` and §2.25's
+   double-fork stand-in, and hardware bridges for the menu bar's status items.
+   `CurrentIPC` (PHASE2.md P2.9) is **built** — §2.32. A Swift compositor over a wlroots binding is its
    own later phase; until it exists the shell keeps running on stock sway/labwc,
    which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
    *read* before writing each one. Two things worth knowing before you start:
@@ -1142,7 +1178,9 @@ regular on FreeBSD (§2.30).
 | `de/surface` | the client runtime: `Display`, `Window`, `LayerSurface`, `Popup`, `Keyboard`, `ForeignToplevels`, `Activation` |
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
-| `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`), §2.30 |
+| `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`, §2.30) and SCM_RIGHTS fd passing (§2.32) |
+| `de/currentipc` | the control plane: `Msg` + wire format, `Current.Server`/`connect`/`call` (§2.32) |
+| `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
 | `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 31 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, the virtual input helpers |

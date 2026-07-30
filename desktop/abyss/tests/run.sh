@@ -57,6 +57,11 @@ AQUA_RENDER_PNG="$out" AQUA_SCALE=2 .build/debug/AquaDemo
 test -s "$out" && echo "ok: $out" || { echo "FAIL: no PNG produced"; exit 1; }
 rm -f "$out"
 
+# Two real processes handing a descriptor over the control plane. In the default
+# lane because it needs no compositor and takes about a second.
+echo "== control plane, two processes =="
+sh "$root/abyss/tests/live-ipc.sh"
+
 if [ "$live" -eq 1 ]; then
   echo "== live modes (headless sway + grim) =="
   sh "$root/abyss/tests/run-live.sh"
