@@ -55,6 +55,26 @@ public enum FinderPicker {
     public static let chosenExitCode: Int32 = 0
     public static let cancelledExitCode: Int32 = 1
 
+    /// In *save* mode the portal passes a suggested filename
+    /// (`$ABYSS_FINDER_SAVE_NAME`). A save dialog has to be able to name a file
+    /// that doesn't exist yet, which picking from a listing cannot express — so
+    /// **⌘S saves into the folder on screen** under that name.
+    ///
+    /// This is a stopgap with a real Aqua save panel (a name field, a New Folder
+    /// button) behind it; it is called out in PHASE7.md rather than left to be
+    /// discovered. Without it `file.save` could only ever overwrite something
+    /// that already existed.
+    public static func saveName() -> String? {
+        guard let v = getenv("ABYSS_FINDER_SAVE_NAME"), v.pointee != 0 else { return nil }
+        let name = String(cString: v)
+        // The portal sanitises this too; a picker that trusts its environment
+        // blindly would still be wrong, and the check is one line.
+        guard !name.isEmpty, !name.contains("/"), name != ".", name != ".." else { return nil }
+        return name
+    }
+
+    public static var isSaving: Bool { isPicking && saveName() != nil }
+
     /// Write the chosen path and exit 0.
     ///
     /// Written with `O_TRUNC` and a trailing newline, then `fsync`ed: the portal

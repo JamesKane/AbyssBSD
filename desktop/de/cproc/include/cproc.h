@@ -54,6 +54,22 @@ int ap_child_signal(const ap_child *c, int sig);
 int ap_child_reap(ap_child *c, int *status);
 
 /*
+ * Run a command to completion and return its **exit status** (as from
+ * WEXITSTATUS), or -1 with errno set. Writes 1 to *signalled when the child
+ * died from a signal instead of exiting, which the caller must be able to tell
+ * apart from an ordinary non-zero exit.
+ *
+ * Deliberately separate from ap_child_spawn's supervision model: that one hands
+ * back a *pollable descriptor* and cannot report an exit status on FreeBSD,
+ * where pdfork's status arrives only through a kqueue NOTE_EXIT that a poll()
+ * loop never collects. A caller that runs one child and waits for the answer —
+ * the portal running a file picker — wants a plain fork/waitpid instead, and
+ * gets the status on both platforms.
+ */
+int ap_run_and_wait(const char *const *argv, const char *const *envp,
+                    int *signalled);
+
+/*
  * A self-pipe carrying signal numbers: installs a handler for each of the
  * `count` signals in `sigs` that writes the signal number as one byte to a
  * pipe, and returns the readable end.

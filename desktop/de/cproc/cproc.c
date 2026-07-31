@@ -127,6 +127,34 @@ int ap_child_reap(ap_child *c, int *status) {
 #endif
 }
 
+int ap_run_and_wait(const char *const *argv, const char *const *envp, int *signalled) {
+    if (signalled != NULL) *signalled = 0;
+    if (argv == NULL || argv[0] == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* Plain fork here, not pdfork: we want waitpid's status, and this child is
+     * awaited immediately rather than supervised. */
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        /* CHILD — async-signal-safe only; argv/envp were built by the caller. */
+        execve(argv[0], (char *const *)argv, (char *const *)envp);
+        _exit(127);
+    }
+    int st = 0;
+    pid_t r;
+    do {
+        r = waitpid(pid, &st, 0);
+    } while (r < 0 && errno == EINTR);
+    if (r < 0) return -1;
+    if (WIFSIGNALED(st)) {
+        if (signalled != NULL) *signalled = 1;
+        return WTERMSIG(st);
+    }
+    return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
 /* The self-pipe. One per process is plenty; a second call replaces it. */
 static int g_sig_pipe[2] = { -1, -1 };
 

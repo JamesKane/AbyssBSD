@@ -1237,6 +1237,16 @@ public final class FinderWindow: WindowDelegate {
         return Character(scalar).lowercased().first
     }
 
+    /// ⌘S in a save picker: choose `<the folder on screen>/<suggested name>`.
+    /// A save dialog must be able to name a file that does not exist yet, which
+    /// picking from a listing cannot express (see FinderPicker.saveName).
+    private func saveHere() {
+        guard let name = FinderPicker.saveName() else { return }
+        let full = finderJoin(path, name)
+        FinderWindow.log("picked \(full)")
+        FinderPicker.chose(full)
+    }
+
     /// Keys while an inline rename is up: the field owns the keyboard.
     private func editKey(_ event: KeyEvent, _ e: FinderEdit) {
         switch event.keysym {
@@ -1270,6 +1280,7 @@ public final class FinderWindow: WindowDelegate {
         case "c": clipSelection(cut: false)
         case "x": clipSelection(cut: true)
         case "v": paste()
+        case "s" where FinderPicker.isSaving: saveHere()
         default: return false
         }
         return true

@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "PoolConfig", targets: ["PoolConfig"]),
         .library(name: "CurrentIPC", targets: ["CurrentIPC"]),
         .library(name: "Vents", targets: ["Vents"]),
+        .library(name: "Portal", targets: ["Portal"]),
         .executable(name: "AquaDemo", targets: ["AquaDemo"]),
     ],
     targets: [
@@ -185,6 +186,18 @@ let package = Package(
             dependencies: ["Anchor", "CurrentIPC", "CPlatform"],
             path: "de/anchorbin"
         ),
+        // The desktop's portal: the picker runs, the portal opens what the user
+        // chose, and the descriptor goes back over SCM_RIGHTS. No D-Bus.
+        .target(
+            name: "Portal",
+            dependencies: ["CurrentIPC", "CProc", "CPlatform"],
+            path: "de/portal"
+        ),
+        .executableTarget(
+            name: "abyss-portal",
+            dependencies: ["Portal", "CurrentIPC"],
+            path: "de/portalbin"
+        ),
         // Read the machine through the FreeBSD-native bridges.
         .executableTarget(
             name: "ventsctl",
@@ -211,6 +224,11 @@ let package = Package(
             name: "CurrentIPCTests",
             dependencies: ["CurrentIPC"],
             path: "Tests/CurrentIPCTests"
+        ),
+        .testTarget(
+            name: "PortalTests",
+            dependencies: ["Portal", "CurrentIPC"],
+            path: "Tests/PortalTests"
         ),
         .testTarget(
             name: "VentsTests",

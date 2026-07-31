@@ -51,7 +51,8 @@ func readAll(_ fd: Int32) -> [UInt8] {
 
 let args = CommandLine.arguments
 guard args.count >= 3 else {
-    die("usage: ipcprobe serve <service> | ipcprobe send <service> <text>")
+    die("usage: ipcprobe serve <service> | send <service> <text>"
+        + " | portal-open <service> [dir]")
 }
 let mode = args[1]
 let service = args[2]
@@ -114,6 +115,28 @@ case "send":
     } catch {
         close(fd)
         die("send failed: \(error)")
+    }
+
+case "portal-open":
+    // The requesting app in the portal story (PHASE7.md P7.2). It sends a
+    // suggested DIRECTORY and no path — then reads the file it is handed
+    // through the returned descriptor.
+    do {
+        var req = Msg()
+        req.set("method", "file.open")
+        if args.count >= 4 { req.set("dir", args[3]) }
+        out("requested: dir=\(args.count >= 4 ? args[3] : "(none)")")
+        var reply = try Current.call(service, req)
+        guard reply.bool("ok") == true else {
+            die("portal refused: \(reply.string("error") ?? "unknown")")
+        }
+        out("path: \(reply.string("path") ?? "?")")
+        guard let fd = reply.takeFD("file") else { die("no descriptor in the reply") }
+        let bytes = readAll(fd)
+        close(fd)
+        out("contents: \(String(decoding: bytes, as: UTF8.self))")
+    } catch {
+        die("portal call failed: \(error)")
     }
 
 default:

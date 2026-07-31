@@ -85,13 +85,13 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (110 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (121 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, and
   the hardware bridges' parsing).
-  **The same 110 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 121 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -385,7 +385,12 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   phase. **P7.1 is done:** `$ABYSS_FINDER_PICK` turns the Finder into the picker
   — choosing writes the path and exits 0, cancelling exits 1 and writes nothing,
   and a file dialog never launches what you click
-  (![the picker](screenshots/finder-picker.png)).
+  (![the picker](screenshots/finder-picker.png)). **P7.2 is done:**
+  `abyss-portal` hosts the service — `file.open` / `file.save` run the picker,
+  open the chosen path **themselves**, and hand back the descriptor. The
+  confused-deputy rule is enforced by the *type*: a request has nowhere to put
+  "the file to open". `abyss/tests/live-portal.sh` proves it with three real
+  processes.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
   and **COMPLETE: P3.1–P3.7 all shipped.** The Jaguar desktop runs on FreeBSD
   under a Swift session supervisor, with a Swift control plane and Swift hardware

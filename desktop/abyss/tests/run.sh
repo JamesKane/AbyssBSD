@@ -62,6 +62,13 @@ rm -f "$out"
 echo "== control plane, two processes =="
 sh "$root/abyss/tests/live-ipc.sh"
 
+# The file-chooser portal, end to end: a client, a picker, and a descriptor for
+# a file the client never named. Needs a compositor, so it sits in --live.
+if [ "$live" -eq 1 ]; then
+  echo "== the portal, end to end =="
+  sh "$root/abyss/tests/live-portal.sh"
+fi
+
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on
 # Linux it asserts the stubs report themselves absent). No compositor needed.
 echo "== hardware bridges =="

@@ -127,20 +127,47 @@ moment a cancelled picker exited 1, before `$?` could be read — the failure
 looked like the test silently stopping. `rc=0; wait ... || rc=$?` is the form
 that works.
 
-**P7.2 — The portal service: `file.open` and `file.save`.**
-`abyss-portal` binds the `portal` service and answers:
-- `file.open {dir?}` → runs the picker, **opens the picked path itself**
-  (`O_RDONLY`), replies `{ok, path}` + fd `file`.
-- `file.save {dir?, name?}` → same, `O_WRONLY|O_CREAT`.
-- Both reply `{ok:false, error:"cancelled"}` when the user declines.
+**P7.2 — The portal service: `file.open` and `file.save`. ✅ done.**
+`abyss-portal` binds the `portal` service and answers `file.open {dir?}` and
+`file.save {dir?, name?}` — running the picker, **opening the chosen path
+itself**, and returning the descriptor as `file`. Declining replies
+`{ok:false, error:"cancelled"}`.
 
-**The confused-deputy rule, written down before the code:** the requesting app
-supplies only a *suggested start directory*. The portal opens **the path the
-user chose in the picker**, never a path the app sent. An app that could name
-the file it wanted would be using the portal as a privileged `open(2)`, which is
-the exact bug portals exist to prevent.
-*Verify:* unit tests for the request/reply shapes; a live test where a client
-gets a readable fd for a file it names nowhere.
+**The confused-deputy rule is enforced by the type, not by a check.**
+`PortalRequest` has *no case and no field* that can carry "the file to open" —
+an app supplies a suggested directory and nothing else. The bug portals exist to
+prevent is made **unrepresentable** rather than guarded against, and the test
+that pins it throws `path` and `file` at a request and asserts only the
+directory survives. The hints are sanitised too: a start directory must be
+absolute (a relative one would resolve against the *portal's* cwd), and a
+suggested name must be a single path component (an app proposing
+`../../.ssh/authorized_keys` is proposing a location, not a name).
+
+**Cancel, crash and choice are read from two signals together** (§6.2): the exit
+status *and* the result file. Exit 0 with nothing written is a broken picker,
+reported as failure — never as a choice, which would have the portal opening
+whatever a stale result file held.
+
+*A gap closed on the way:* `file.save` needs to name a file that doesn't exist
+yet, which picking from a listing cannot express — so in save mode **⌘S saves
+into the folder on screen** under the suggested name. That is a stopgap with a
+real Aqua save panel (name field, New Folder) behind it, and it is called out
+here rather than left to be discovered. Without it `file.save` could only ever
+overwrite something that already existed.
+
+*Also new:* `ap_run_and_wait` in `CProc`, deliberately separate from the
+supervision API — `ap_child_spawn` hands back a *pollable descriptor* and cannot
+report an exit status on FreeBSD, where pdfork's status arrives only through a
+kqueue `NOTE_EXIT` a poll() loop never collects. A caller that runs one child and
+waits for the answer wants plain fork/waitpid, and now has it.
+
+*Verified:* **11 unit tests** (121 total) on both platforms, most of them about
+what the portal *refuses*. Live, **`abyss/tests/live-portal.sh`** runs the whole
+story with three real processes — `abyss-portal`, the Finder as picker driven by
+a virtual pointer under headless sway, and `ipcprobe` as the requesting app — and
+asserts all three halves of the claim: the client read the contents **through the
+descriptor**, it was **the file the user chose**, and the client **only ever sent
+a directory**. Green on Linux and FreeBSD.
 
 **P7.3 — The sandboxed client (the headline).**
 `abyssopen` calls **`cap_enter(2)`** — irreversibly dropping into Capsicum
