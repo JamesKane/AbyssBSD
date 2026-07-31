@@ -21,6 +21,7 @@ public enum SceneKind: Sendable {
     case wallpaper   // full-bleed desktop backdrop (a layer-shell client live)
     case menubar     // the top menu bar (a layer-shell TOP client live)
     case dock        // the magnifying Dock (a layer-shell BOTTOM client live)
+    case notify      // notification toasts (a layer-shell OVERLAY client live)
     case finder      // the file browser (an ordinary xdg-shell toplevel)
 }
 
@@ -343,6 +344,31 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                                        freeBytes: 39_600_000_000))
     case .wallpaper, .menubar, .dock:
         break  // handled full-bleed above
+    case .notify:
+        // A sample stack, so the PNG render shows the toast design without a
+        // live service to post into it.
+        let sample = [
+            Toast(id: 1, summary: "Build finished", body: "all tests green", expiresAt: .infinity),
+            Toast(id: 2, summary: "Disk ejected",
+                  body: "AbyssBSD HD may now be safely removed", expiresAt: .infinity),
+        ]
+        let heights = sample.map { t -> Double in
+            let lines = t.body.map {
+                toastWrap(cr, $0, width: ToastMetrics.width - ToastMetrics.padX * 2 - 20,
+                          size: ToastMetrics.bodySize, maxLines: ToastMetrics.maxBodyLines)
+            } ?? []
+            return toastHeight(bodyLines: lines.count)
+        }
+        let l = toastLayout(heights: heights)
+        for (i, t) in sample.enumerated() {
+            let lines = t.body.map {
+                toastWrap(cr, $0, width: ToastMetrics.width - ToastMetrics.padX * 2 - 20,
+                          size: ToastMetrics.bodySize, maxLines: ToastMetrics.maxBodyLines)
+            } ?? []
+            let r = l.rects[i]
+            paintToast(cr, Rect(cw - ToastMetrics.width - 12, r.y + 8, r.w, r.h),
+                       toast: t, bodyLines: lines)
+        }
     }
     cairo_restore(cr)
 

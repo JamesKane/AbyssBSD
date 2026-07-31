@@ -79,6 +79,29 @@ final class PortalTests: XCTestCase {
         XCTAssertEqual(PortalRequest(Msg()), .unknown(""))
     }
 
+    // MARK: - notify
+
+    func testNotifyNeedsASummary() {
+        var empty = Msg()
+        empty.set("method", "notify")
+        // A blank panel is not a notification; refuse it at the parse.
+        XCTAssertEqual(PortalRequest(empty), .unknown("notify (no summary)"))
+
+        var full = Msg()
+        full.set("method", "notify")
+        full.set("summary", "Build finished")
+        full.set("body", "all tests green")
+        full.set("timeout", UInt64(8))
+        XCTAssertEqual(PortalRequest(full),
+                       .notify(summary: "Build finished", body: "all tests green", timeout: 8))
+
+        var minimal = Msg()
+        minimal.set("method", "notify")
+        minimal.set("summary", "Done")
+        XCTAssertEqual(PortalRequest(minimal),
+                       .notify(summary: "Done", body: nil, timeout: nil))
+    }
+
     // MARK: - Reading the picker's answer
 
     /// Exit status and result file are read *together*, because either alone is

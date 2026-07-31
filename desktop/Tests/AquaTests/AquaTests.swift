@@ -598,6 +598,77 @@ final class AquaTests: XCTestCase {
                                   view: .icon, viewport: vp), count - 1)
     }
 
+    // MARK: Notification toasts (P7.4)
+
+    func testToastsStackDownwardWithoutOverlapping() {
+        let (rects, width, total) = toastLayout(heights: [50, 66, 50])
+        XCTAssertEqual(rects.count, 3)
+        XCTAssertEqual(width, ToastMetrics.width)
+        // Each sits below the previous, separated by exactly one gap.
+        XCTAssertEqual(rects[0].y, 0)
+        XCTAssertEqual(rects[1].y, 50 + ToastMetrics.gap)
+        XCTAssertEqual(rects[2].y, 50 + ToastMetrics.gap + 66 + ToastMetrics.gap)
+        // The surface is exactly as tall as the stack — no trailing gap, since
+        // an OVERLAY surface takes pointer input wherever it extends and must
+        // not cover desktop it isn't drawing on.
+        XCTAssertEqual(total, 50 + ToastMetrics.gap + 66 + ToastMetrics.gap + 50)
+    }
+
+    func testAnEmptyStackNeedsNoSurface() {
+        let (rects, _, total) = toastLayout(heights: [])
+        XCTAssertTrue(rects.isEmpty)
+        XCTAssertEqual(total, 0)
+    }
+
+    func testClicksLandOnTheToastTheyLookLike() {
+        let (rects, _, _) = toastLayout(heights: [50, 50])
+        XCTAssertEqual(toastIndex(at: 0, rects: rects), 0)
+        XCTAssertEqual(toastIndex(at: 49, rects: rects), 0)
+        // The gap between them belongs to neither.
+        XCTAssertNil(toastIndex(at: 50 + ToastMetrics.gap / 2, rects: rects))
+        XCTAssertEqual(toastIndex(at: 50 + ToastMetrics.gap, rects: rects), 1)
+        XCTAssertNil(toastIndex(at: 5000, rects: rects))
+    }
+
+    func testExpiryIsByMonotonicDeadline() {
+        let toasts = [
+            Toast(id: 1, summary: "gone", expiresAt: 100),
+            Toast(id: 2, summary: "staying", expiresAt: 200),
+        ]
+        XCTAssertEqual(liveToasts(toasts, now: 50).count, 2)
+        XCTAssertEqual(liveToasts(toasts, now: 150).map(\.id), [2])
+        XCTAssertTrue(liveToasts(toasts, now: 250).isEmpty)
+        // Exactly at the deadline it is gone, not lingering.
+        XCTAssertEqual(liveToasts(toasts, now: 100).map(\.id), [2])
+    }
+
+    func testABodyWrapsAndIsCappedRatherThanCoveringTheScreen() {
+        let surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 320, 40)
+        defer { cairo_surface_destroy(surface) }
+        guard let cr = cairo_create(surface) else { return XCTFail("no cairo context") }
+        defer { cairo_destroy(cr) }
+
+        let short = toastWrap(cr, "all tests green", width: 250,
+                              size: ToastMetrics.bodySize, maxLines: 4)
+        XCTAssertEqual(short, ["all tests green"])
+
+        // A wall of text from an app must not become a full-screen panel.
+        let wall = String(repeating: "lorem ipsum dolor sit amet ", count: 40)
+        let wrapped = toastWrap(cr, wall, width: 250, size: ToastMetrics.bodySize,
+                                maxLines: ToastMetrics.maxBodyLines)
+        XCTAssertEqual(wrapped.count, ToastMetrics.maxBodyLines)
+        // Truncation is visible rather than silent.
+        XCTAssertTrue(wrapped.last!.hasSuffix("…"), "capped text should be elided")
+
+        XCTAssertEqual(toastWrap(cr, "", width: 250, size: 12, maxLines: 4), [])
+    }
+
+    func testHeightGrowsWithTheBody() {
+        XCTAssertEqual(toastHeight(bodyLines: 0), ToastMetrics.baseHeight)
+        XCTAssertEqual(toastHeight(bodyLines: 2),
+                       ToastMetrics.baseHeight + 2 * ToastMetrics.lineHeight)
+    }
+
     // MARK: The Finder as a portal's picker (P7.1)
 
     /// A private directory for a test that touches the filesystem.

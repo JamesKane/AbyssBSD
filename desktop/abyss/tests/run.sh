@@ -70,6 +70,8 @@ if [ "$live" -eq 1 ]; then
   # And the claim that makes it worth having: a client with no filesystem.
   echo "== the sandboxed client =="
   sh "$root/abyss/tests/live-sandbox.sh"
+  echo "== notifications =="
+  sh "$root/abyss/tests/live-notify.sh" >/dev/null
 fi
 
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on

@@ -30,6 +30,10 @@ import Darwin
 public enum PortalRequest: Equatable, Sendable {
     case openFile(startDir: String?)
     case saveFile(startDir: String?, suggestedName: String?)
+    /// Post a notification. A jailed app reaches the shell's toast **only**
+    /// through here — it never holds the notify service's socket, which is the
+    /// same trust boundary the file chooser draws.
+    case notify(summary: String, body: String?, timeout: UInt64?)
     case unknown(String)
 
     /// Parse a control-plane message. Unknown methods are preserved so the
@@ -41,6 +45,14 @@ public enum PortalRequest: Equatable, Sendable {
         case "file.save":
             self = .saveFile(startDir: PortalRequest.sanitise(msg.string("dir")),
                              suggestedName: PortalRequest.sanitiseName(msg.string("name")))
+        case "notify":
+            let summary = msg.string("summary") ?? ""
+            // An empty summary is not a notification; refuse it here rather
+            // than let an app post a blank panel.
+            self = summary.isEmpty
+                ? .unknown("notify (no summary)")
+                : .notify(summary: summary, body: msg.string("body"),
+                          timeout: msg.uint64("timeout"))
         case let other:
             self = .unknown(other)
         }

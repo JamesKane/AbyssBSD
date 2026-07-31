@@ -119,6 +119,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.32 | The control plane: cmsg is all macros, fds ride with the *length prefix*, and `sun_path` is 108 bytes |
 | 2.33 | The supervisor: accepted sockets inherit `O_NONBLOCK` on BSD but not Linux; SIGPIPE kills a client silently |
 | 2.34 | The bridges: sysctl is untyped (`"FreeBSD\0"` is 8 bytes), and a pixel probe must not depend on the font |
+| 2.35 | A `LayerSurface` with no teardown: replacing one crashed the process — §2.2's trap, eight months later |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -385,6 +386,30 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.35 The trap you documented is still a trap
+(P7.4 — the notification centre, the first thing to *replace* a layer surface.)
+
+- **`LayerSurface` had no `deinit` and no teardown**, and nothing noticed for
+  eight months, because every layer surface the shell had ever made — wallpaper,
+  menu bar, Dock — lived for the whole process. The notification centre creates
+  and destroys one as toasts come and go, and the second toast segfaulted it.
+  The cause is **§2.2 exactly**: libwayland keeps the listener pointer, so
+  releasing the Swift object leaves the compositor delivering events into freed
+  memory. `Window` had had `close()`/`deinit` since P2.6b; `LayerSurface` now
+  has the same, with a `tornDown` guard, and callers close explicitly before
+  dropping the reference.
+- **The lesson isn't "add a deinit".** It is that a documented trap only
+  protects the code paths that existed when it was written. A new *lifetime
+  pattern* — the first component to destroy a surface rather than hold it — is
+  worth re-reading the old traps for.
+- **Assert the teardown, not just the effect.** The first version of the live
+  test checked that a toast appeared and left the expiry loose; it passed while
+  the process was crashing. The assertion that matters is "the surface was
+  released **and the component is still running**".
+- **An OVERLAY surface takes pointer input wherever it extends**, so a
+  notification surface must be sized to its content and destroyed when empty. A
+  full-screen transparent one looks identical and silently eats every click.
 
 ### 2.34 The hardware bridges: an untyped kernel API, and a font-dependent test
 (P3.7 — `vents`: sysctl, OSS, devd.)
@@ -1253,6 +1278,7 @@ regular on FreeBSD (§2.30).
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
 | `de/abyssopen`, `de/ccap` | the sandboxed client and Capsicum's `cap_enter` |
+| `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
 | `de/vents`, `de/cvents` | the hardware bridges: sysctl, OSS volume, battery, devd (§2.34) |
 | `de/ventsctl` | `ventsctl sysctl\|volume\|battery\|devd` — read the machine by hand |
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |

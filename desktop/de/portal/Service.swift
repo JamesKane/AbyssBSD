@@ -54,6 +54,8 @@ public final class PortalService {
             return choose(startDir: dir, name: nil, mode: .read)
         case .saveFile(let dir, let name):
             return choose(startDir: dir, name: name, mode: .write)
+        case .notify(let summary, let body, let timeout):
+            return (relayNotify(summary: summary, body: body, timeout: timeout), nil)
         case .unknown(let method):
             log("unknown method '\(method)'")
             var reply = Msg()
@@ -61,6 +63,33 @@ public final class PortalService {
             reply.set("error", "unknown method")
             return (reply, nil)
         }
+    }
+
+    /// Relay a notification to the shell's notify service.
+    ///
+    /// The portal is the only thing that talks to it, so a sandboxed app can
+    /// post a toast without being able to reach — or impersonate — the shell.
+    private func relayNotify(summary: String, body: String?, timeout: UInt64?) -> Msg {
+        var out = Msg()
+        out.set("method", "notify")
+        out.set("summary", summary)
+        if let b = body { out.set("body", b) }
+        if let t = timeout { out.set("timeout", t) }
+
+        var reply = Msg()
+        do {
+            let service = (getenv("ABYSS_NOTIFY_SERVICE").map { String(cString: $0) }) ?? "notify"
+            let answer = try Current.call(service, out)
+            log("relayed a notification: \(summary)")
+            reply.set("ok", answer.bool("ok") ?? false)
+            if let id = answer.uint64("id") { reply.set("id", id) }
+        } catch {
+            // No notification centre running is a normal state, not a crash.
+            log("no notify service to relay to (\(error))")
+            reply.set("ok", false)
+            reply.set("error", "no notification service")
+        }
+        return reply
     }
 
     private func choose(startDir: String?, name: String?, mode: PortalOpenMode)

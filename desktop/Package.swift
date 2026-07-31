@@ -132,7 +132,8 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform", "Vents"],
+            dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
+                           "Vents", "CurrentIPC"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.
@@ -193,6 +194,12 @@ let package = Package(
             path: "de/ccap",
             sources: ["ccap.c"],
             publicHeadersPath: "include"
+        ),
+        // notify-send, brokerless: through the portal, as a jailed app would.
+        .executableTarget(
+            name: "abyssnotify",
+            dependencies: ["CurrentIPC"],
+            path: "de/abyssnotify"
         ),
         // The point of the portal, demonstrated: no filesystem, yet it reads
         // the file the user picked.

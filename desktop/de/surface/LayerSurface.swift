@@ -86,6 +86,11 @@ public final class LayerSurface {
     private var buffers: [ShmBuffer] = []
     private var needsRedraw = true
     private var framePending = false
+    /// One-shot teardown guard, as Window has. Without a teardown at all, a
+    /// released LayerSurface left libwayland holding listener pointers into
+    /// freed memory (HANDOFF §2.2) — which crashed the notification centre the
+    /// first time a surface was replaced rather than kept forever.
+    private var tornDown = false
     private var didMap = false
     private let namespace: String
 
@@ -94,10 +99,14 @@ public final class LayerSurface {
     /// compositor stretch it (e.g. width 0 + anchor left|right for a full bar).
     /// `exclusiveZone` reserves that many logical px for the surface (a menu bar
     /// passes its height; a wallpaper passes -1 to sit under exclusive zones).
+    /// `margin` insets the surface from the edges it is anchored to
+    /// (top, right, bottom, left) — the notification stack uses it to sit clear
+    /// of the screen corner.
     public init?(display: Display, layer: Layer, namespace: String,
                  width: Int32, height: Int32,
                  anchor: Anchor, exclusiveZone: Int32 = 0,
                  keyboard: KeyboardInteractivity = .none,
+                 margin: (top: Int32, right: Int32, bottom: Int32, left: Int32) = (0, 0, 0, 0),
                  scale: Int32 = 1, autoScale: Bool = true,
                  delegate: LayerSurfaceDelegate) {
         guard let compositor = display.compositor, let shell = display.layerShell,
@@ -122,6 +131,10 @@ public final class LayerSurface {
         aw_layer_surface_set_anchor(raw(ls), anchor.rawValue)
         aw_layer_surface_set_exclusive_zone(raw(ls), exclusiveZone)
         aw_layer_surface_set_keyboard_interactivity(raw(ls), keyboard.rawValue)
+        if margin != (0, 0, 0, 0) {
+            aw_layer_surface_set_margin(raw(ls), margin.top, margin.right,
+                                        margin.bottom, margin.left)
+        }
 
         let me = Unmanaged.passUnretained(self).toOpaque()
 
@@ -158,7 +171,23 @@ public final class LayerSurface {
         wl_display_flush(display.display)
     }
 
+    deinit { close() }
+
+    /// Destroy this surface and drop it from the display's routing. Idempotent,
+    /// and safe to call from a run-loop callback.
+    public func close() {
+        guard !tornDown else { return }
+        tornDown = true
+        if display.layerSurface === self { display.layerSurface = nil }
+        for b in buffers { b.destroy() }
+        buffers.removeAll()
+        aw_proxy_destroy(raw(layerSurface))
+        aw_proxy_destroy(raw(surface))
+        wl_display_flush(display.display)
+    }
+
     public func setNeedsDisplay() {
+        guard !tornDown else { return }
         needsRedraw = true
         if !framePending { renderAndCommit() }
     }

@@ -47,6 +47,10 @@ case "menubar":
 case "dock":
     // A wlr-layer-shell BOTTOM client (the magnifying Dock).
     scene = .dock; title = "Dock"; width = 800; height = 600
+case "notify":
+    // The notification centre: an OVERLAY layer surface that only exists while
+    // there is something to show, plus the `notify` service (PHASE7.md P7.4).
+    scene = .notify; title = "Notifications"; width = 800; height = 600
 case "finder":
     // The file browser — an ordinary xdg-shell toplevel, not a shell surface.
     // Starts in $ABYSS_FINDER_DIR (else $HOME).
@@ -99,6 +103,16 @@ if scene == .wallpaper {
     }
     print("AquaDemo: Dock (layer-shell BOTTOM) is up.")
     withExtendedLifetime(dock) { display.run() }
+} else if scene == .notify {
+    let center = NotifyCenter(display: display)
+    guard center.start() else {
+        print("AquaDemo: failed to bind the notify service.")
+        exit(1)
+    }
+    // No surface until a notification arrives — an empty OVERLAY surface would
+    // swallow clicks meant for the desktop.
+    print("AquaDemo: notification centre is up (waiting for notifications).")
+    withExtendedLifetime(center) { display.run() }
 } else if scene == .finder {
     // FinderApp owns the windows (spatial mode opens one per folder); this
     // strong reference is what keeps them — and their listeners — alive.

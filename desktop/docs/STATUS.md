@@ -85,13 +85,13 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (121 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (128 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, and
   the hardware bridges' parsing).
-  **The same 121 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 128 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so

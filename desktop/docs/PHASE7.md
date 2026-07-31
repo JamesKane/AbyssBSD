@@ -203,15 +203,49 @@ FreeBSD asserts capability mode, the failed `open(2)`, and the contents; Linux
 asserts the honest fallback. `CCapsicum` is its own C target so the Aqua toolkit
 never links sandbox code.
 
-**P7.4 — Notifications: an Aqua toast, and `notify`.**
-A notification window in Jaguar dress on a layer-shell **OVERLAY** surface, with
-`keyboard_interactivity: none` so it never steals focus, stacking for multiple
-notifications, a timeout, and click-to-dismiss. Then the portal's
-`notify {summary, body?, timeout?}` relays to it, and `abyssnotify` is the CLI.
-A jailed app reaches the toast **only** through the portal — it never holds the
-shell's control socket, which is the same trust boundary the file chooser draws.
-*Verify:* pure layout tests (stacking, wrapping, timeout arithmetic); live, a
-toast appears on the desktop and disappears on its own, captured with grim.
+**P7.4 — Notifications: an Aqua toast, and `notify`. ✅ done.**
+`abyssnotify` → the portal → the notification centre → a toast on the desktop:
+
+![a notification toast](screenshots/notification-toast.png)
+
+**The design was a decision, not a copy** (§6.5): Jaguar had no system-wide
+notification style — Growl came later and was third-party — so there is no
+512pixels reference. The panel is built from the era's own vocabulary instead:
+translucent rounded panel in the sheet/palette idiom, pinstriped, bold summary
+over a lighter body, the water-drop system mark, sitting under the menu bar at
+the top right where menu extras live.
+
+**Two properties a toast must have, both invisible in a screenshot and both
+asserted:** it takes **no exclusive zone** (the live test compares the workspace
+geometry before and after — a notification is not a panel), and its surface is
+**destroyed when the last toast expires**. An OVERLAY surface takes pointer input
+wherever it extends, so an empty one left behind would silently swallow every
+click on that corner of the desktop. `NotifyCenter` therefore has no surface at
+all until something arrives. It also takes `keyboard_interactivity: none`, so a
+toast appearing mid-sentence cannot eat your keystrokes.
+
+The trust boundary is the file chooser's: **a jailed app never holds the notify
+service's socket**, only the portal's. `abyssnotify` goes through the portal by
+default for exactly that reason; `--direct` is for the desktop's own components.
+
+*A real bug this pass found — and the reason the expiry assertion exists.*
+Replacing the layer surface segfaulted the notification centre: **`LayerSurface`
+had no `deinit` and no teardown at all**. Releasing the Swift object left
+libwayland holding listener pointers into freed memory (HANDOFF §2.2) — the trap
+the project documented in Phase 1 and then walked into the first time a layer
+surface was ever *replaced* rather than kept for the process's life. `Window` had
+had `close()`/`deinit` since P2.6b; `LayerSurface` now has the same, and
+`NotifyCenter` closes explicitly before dropping the reference. The live test
+asserts the surface is released **and that the component survives releasing it**,
+which is what would have caught this.
+
+*Verified:* 7 new unit tests (128 total) — stacking without overlap, no trailing
+gap in the surface, clicks landing on the toast they look like and nowhere in the
+gaps, monotonic expiry (gone *at* the deadline, not after), and body text that
+wraps, caps at four lines and elides visibly rather than growing without bound.
+Live, `abyss/tests/live-notify.sh` on both platforms: the notification crosses
+the portal, maps a 300×58 OVERLAY surface, is visible as light pixels over the
+blue desktop, reserves no space, then expires and takes its surface with it.
 
 **P7.5 — Screenshot, as a capability.**
 Vendor `wlr-screencopy-unstable-v1`, bind it in `Surface` (the mechanical recipe
