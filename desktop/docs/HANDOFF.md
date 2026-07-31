@@ -1192,8 +1192,13 @@ desktop (P2.10). What's left:
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
    2026-07-27): `CurrentIPC` (§2.32), the session supervisor `anchor` (§2.33,
    replacing `abyss/session.sh`), and the `Vents` hardware bridges (§2.34).
-   **Next is a phase, not a pass** — Phase 4 (Mac Pro hardware), or the carved-out
-   portals/D-Bus phase, or Phase 6's Swift compositor. A Swift compositor over a wlroots binding is its
+   **Next is a phase, not a pass.** Started: **Phase 7 — portals**
+   ([PHASE7.md](PHASE7.md)), the capability desktop — the portal opens the file
+   the *user* picked and hands back the descriptor, with a Capsicum-sandboxed
+   client to prove it. Numbered 7 but built before Phases 4–6, since it depends
+   only on `CurrentIPC`. Note PHASE3.md §6.1's premise was wrong: `reef-portal`
+   is a shell service, not compositor-owned, so this was never blocked on a
+   compositor. A Swift compositor over a wlroots binding is its
    own later phase; until it exists the shell keeps running on stock sway/labwc,
    which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
    *read* before writing each one. Two things worth knowing before you start:

@@ -261,6 +261,25 @@ booting into the Aqua desktop.
 
 ---
 
+## Phase 7 — Portals: the capability desktop
+
+**Goal:** goal #3 made real — the brokerless answer to xdg-desktop-portal. An app
+asks the desktop to pick a file; the portal runs the Finder as the picker, opens the
+chosen file itself, and hands back the **open descriptor** over `SCM_RIGHTS`. The
+descriptor *is* the capability, and the demo client proves it by calling `cap_enter(2)`
+first, so it has no filesystem at all. Plus notifications (an Aqua toast) and a
+screenshot portal over `wlr-screencopy`.
+
+**Numbered 7 but built out of order** — before Phases 4–6, because it depends on
+nothing they provide (only on `CurrentIPC`, delivered in P3.5). Carved out of Phase 3
+on 2026-07-27 and scoped in **[PHASE7.md](PHASE7.md)**.
+
+**Not in it:** the D-Bus bridge and `org.freedesktop.portal.*`, so stock GTK/Qt apps
+are not served yet; XWayland, MPRIS, AT-SPI; jail plumbing. Those remain the legacy
+half of the story (PHASE7.md §1).
+
+---
+
 ## Phase 6 — Swift compositor
 
 **Goal:** the compositor in Swift, meeting `tide`'s contract rather than inheriting its

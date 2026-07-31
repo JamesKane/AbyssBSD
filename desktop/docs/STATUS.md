@@ -373,6 +373,16 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   hardware bridges, Phase 3), and a confirmation sheet for Empty Trash once a
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
+- **Phase 7 — Portals: the capability desktop**, scoped in
+  **[PHASE7.md](PHASE7.md)** and starting now (numbered 7, built out of order —
+  it depends only on `CurrentIPC`, not on Phases 4–6). The brokerless answer to
+  xdg-desktop-portal: an app asks the desktop to pick a file, the portal runs the
+  **Finder** as the picker, opens the chosen file itself, and returns the **open
+  descriptor** over `SCM_RIGHTS` — the demo client calls `cap_enter(2)` first, so
+  it has no filesystem at all. **The descriptor is the capability.** Plus an Aqua
+  toast for notifications and a screenshot portal over `wlr-screencopy`. The
+  D-Bus bridge (and with it stock GTK/Qt app support) is explicitly *not* in this
+  phase.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
   and **COMPLETE: P3.1–P3.7 all shipped.** The Jaguar desktop runs on FreeBSD
   under a Swift session supervisor, with a Swift control plane and Swift hardware

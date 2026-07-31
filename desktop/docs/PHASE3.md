@@ -529,13 +529,18 @@ desktop's icons. Both are shell polish on top of bridges that now exist.
 ## 6. Risks / open decisions
 
 **6.1 Portals + the legacy D-Bus story: carved out (decided 2026-07-27).**
-PLAN.md files it under Phase 3. It moves to its own phase, because the sibling's
-portal design is compositor-owned and Phase 6 owns the compositor, and because
-"GTK/Qt apps work" is a product goal with its own surface area (a jailed session
-bus, XWayland, MPRIS, AT-SPI) rather than a step in bringing Swift up on FreeBSD.
-Nothing in Phase 3 depends on it. When it comes back, note that a useful subset
-*is* reachable from a client on sway: a Finder-backed file chooser over
-`CurrentIPC`, and screenshots via `wlr-screencopy`.
+PLAN.md files it under Phase 3. It moved to its own phase — now
+**[PHASE7.md](PHASE7.md)** — because "GTK/Qt apps work" is a product goal with
+its own surface area (a jailed session bus, XWayland, MPRIS, AT-SPI) rather than
+a step in bringing Swift up on FreeBSD. Nothing in Phase 3 depended on it.
+
+**Correction (2026-07-30):** this entry also claimed the sibling's portal design
+is *compositor-owned*, with `reef-portal` living in `tide`. **It does not** —
+`reef-portal` is a shell service under `de/reef/portal` that launches the file
+manager as the picker, and it needs no compositor. The real dependency was
+`CurrentIPC`, which P3.5 delivered. That mistake made the phase look more
+blocked than it was; the file-chooser portal could have been built the moment
+P3.5 landed.
 
 **6.2 Supervisor: FreeBSD-only or portable?** *Recommendation: portable.*
 `anchor` is unapologetically FreeBSD-native and that's right for it. But a
