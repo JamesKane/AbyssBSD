@@ -1,20 +1,38 @@
 # AbyssBSD (Swift DE) — Handoff & Lessons
 
 What has been built, what we learned building it, and where the traps are.
-Read [STATUS.md](STATUS.md) for the current build state, [PHASE2.md](PHASE2.md)
-for the shell's ordered passes, and [PLAN.md](PLAN.md) for the multi-year
-roadmap; this doc is the *practical knowledge* layer.
+Read [STATUS.md](STATUS.md) for the current build state, the phase docs
+([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE7.md](PHASE7.md)) for
+ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+the *practical knowledge* layer.
 
-Last updated: 2026-07-27 (P2.1–P2.8, the P2.10 session launcher, and the P2.11
-polish — the shell boots as one desktop and the loose ends are tied off).
+Last updated: 2026-07-31. **Phases 0–3 complete** (the desktop runs on FreeBSD
+with a Swift control plane, session supervisor and hardware bridges);
+**Phase 7 (portals) is at P7.4** — the file chooser hands over descriptors, a
+Capsicum-sandboxed client proves the capability claim, and notifications land as
+Aqua toasts. **128 unit tests + 35 live modes, green on Linux and FreeBSD.**
 
-**Picking this up cold?** Read §1 (what exists), skim the §2 index for the trap
-nearest what you're about to touch, then §5 (what's next). Then run
-`sh abyss/tests/run.sh` and one live mode (§3) to confirm the box still works.
+**Picking this up cold?**
+
+1. Read §1 (what exists) and §5 (what's next — the immediate task is **P7.5**,
+   the screenshot portal).
+2. Skim the §2 index for the trap nearest what you're about to touch. §2.28–2.35
+   are the recent ones; **§2.35 is the freshest scar** and its lesson generalises.
+3. Confirm the box still works:
+
+   ```sh
+   sh abyss/tests/run.sh            # build + 128 unit tests + the fast live tests
+   abyss/vm/check.sh                # is the FreeBSD VM up and usable?
+   sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
+   ```
+
+   The VM may not be running after a break — `ABYSS_DAEMON=1 abyss/vm/run.sh`
+   boots it, and first boot after a reset takes ~15 minutes (§2.28). Everything
+   in `abyss/vm/` is idempotent, so re-running is safe.
 
 ---
 
-## 1. What got built (Phase 0–2)
+## 1. What got built (Phases 0–3, and Phase 7 so far)
 
 A working Swift 6 desktop foundation that builds and tests clean on Linux and
 renders faithful Jaguar UI:
@@ -70,11 +88,48 @@ renders faithful Jaguar UI:
   `live-dock.png`, `live-menubar.png`, …) produced by `abyss/tests/live-sway.sh`
   under a headless compositor, not mocked.
 
-Not done in Phase 2, on purpose: `CurrentIPC` (binds FreeBSD-only libnv — see
-PHASE2.md P2.9).
+**Phase 3 — FreeBSD (complete, P3.1–P3.7).** The same desktop, on the target OS,
+with a native substrate underneath it (PHASE3.md):
+
+- **The build VM** (`abyss/vm`, `../abyss-swift-vm`) provisions from a corrected
+  cloud-init seed and is asserted usable by `abyss/vm/check.sh` (§2.28).
+- **Swift on FreeBSD — the standing #1 risk — is CLOSED.** Ports carries
+  `swift6-6.3.2` (newer than our Linux 6.3.1); it builds this repo and passes
+  every test in the guest, for one `Package.swift` change (§2.29,
+  SWIFT-ON-FREEBSD.md). The package is `swift6`, not `swift`, and installs
+  **off PATH** at `/usr/local/swift6/bin`.
+- **It runs there** (§2.30) — `docs/screenshots/freebsd-desktop.png`. Every
+  portability debt is paid; `CPlatform` holds what Swift can't reach.
+- **The whole harness passes there** (§2.31): 35 live modes, not just the build.
+- **`CurrentIPC`** — the brokerless control plane: typed messages over unix
+  sockets with **SCM_RIGHTS fd passing**, our own codec rather than libnv, and
+  therefore no platform fork at all (§2.32).
+- **`anchor`** — the Swift session supervisor that replaces `abyss/session.sh`:
+  every child a pollable descriptor (`pdfork` / `pidfd`), a control service, and
+  `abyssctl status|quit` (§2.33).
+- **`Vents`** — the hardware bridges: sysctl (not sysfs), OSS (not ALSA), devd
+  (not udev), and the menu bar's volume/battery status items (§2.34).
+
+**Phase 7 — portals (P7.1–P7.4 done, P7.5 open).** The brokerless answer to
+xdg-desktop-portal, and the project's most interesting claim (PHASE7.md):
+
+- **The Finder is a picker** (`$ABYSS_FINDER_PICK`): choose → path written,
+  exit 0; cancel → nothing, exit 1. A file dialog never launches what you click.
+- **`abyss-portal`** answers `file.open`/`file.save` by running the picker,
+  **opening the chosen path itself**, and returning the descriptor. The
+  confused-deputy rule is enforced by the *type*: a request has nowhere to put
+  "the file to open".
+- **`abyssopen` proves it**: in **Capsicum capability mode** — no filesystem, no
+  namespace — it reads the chosen file while `open(2)` on that same path fails
+  with *"Not permitted in capability mode"*. **The descriptor is the
+  capability.**
+- **Notifications** — an Aqua **toast** on an OVERLAY surface that reserves no
+  space and takes no focus, reached through the portal by `abyssnotify`
+  (§2.35, `docs/screenshots/notification-toast.png`).
 
 The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
-and `system-preferences.png` are the Phase-1 originals.
+and `system-preferences.png` are the Phase-1 originals, and `freebsd-*.png` are
+the Phase-3 ones.
 
 ---
 
@@ -1100,6 +1155,28 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 | `--launch` | an `.app` bundle really executes (and is drawn with **its own icon**); a document reaches `$ABYSS_OPEN` |
 | `--trash` | the Dock's Trash: full glyph, right-click menu, **Empty Trash** — checked on disk |
 | `--menubar --keys` | the menu bar driven **only** by the keyboard: Right walks titles, Down/Return chooses, Escape closes |
+| `--menubar --status` | the volume/battery **menu extras** are drawn (fed by `Vents`, or the documented test seam) |
+| `--pick` / `--cancel` | the Finder as a **portal picker**: choose → path + exit 0, Escape → exit 1, nothing launched |
+
+**Run them all:** `abyss/tests/run-live.sh` drives every mode in order with a
+per-mode timeout and prints a pass/fail table (`-o DIR` keeps the PNGs and logs,
+or name a subset: `run-live.sh dock trash`). 35 modes today.
+
+**Tests that need no compositor** (all in `run.sh`'s default lane):
+
+| Script | What it proves |
+|---|---|
+| `live-ipc.sh` | two real processes hand a **descriptor** over the control plane |
+| `live-vents.sh` | sysctl agrees with `sysctl(8)`; **real devd events** (it creates and destroys an `md(4)` disk); absent facilities report absent |
+
+**Tests that need a compositor** (in `run.sh --live`):
+
+| Script | What it proves |
+|---|---|
+| `live-anchor.sh` | the **Swift supervisor**: kill a component, it comes back; `abyssctl quit` leaves no orphans |
+| `live-portal.sh` | three processes: a client gets an fd for a file **it never named** |
+| `live-sandbox.sh` | the client is in **capability mode** and `open(2)` fails, yet it reads the file |
+| `live-notify.sh` | a notification crosses the portal, becomes a toast, reserves no space, and its surface is released on expiry |
 
 **The whole desktop at once:** `abyss/tests/live-session.sh [out.png]` runs
 `abyss/session.sh --headless` and asserts the shell *composes* — three layer
@@ -1126,10 +1203,26 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 - Kill stray `sway --unsupported-gpu` processes if a run reports "never maps" —
   socket auto-detect will pick the wrong display.
 
-Full loop: `sh abyss/tests/run.sh` (build + `swift test` + a headless smoke
-render). The 58 unit tests are pure logic — no compositor, no network: toolkit
-geometry, the Finder's listing/naming/scroll model, desktop-icon layout, launcher
-resolution, and PoolConfig's read/write/watch.
+**The full loop.**
+
+```sh
+abyss/tests/run.sh                 # build + 128 unit tests + smoke render + the
+                                   # no-compositor live tests
+abyss/tests/run.sh --live          # ... and all 35 compositor modes
+abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
+abyss/tests/run.sh --vm --live     # the gate before calling a pass done
+```
+
+The 128 unit tests are pure logic — no compositor, no network: toolkit geometry,
+the Finder's listing/naming/scroll model, desktop-icon layout, launcher
+resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
+passing, the supervisor's restart policy, the hardware bridges' parsing, the
+portal's refusals, and toast layout/expiry.
+
+**Both platforms, every time.** Phase 3 earned this rule: two bugs
+(`O_NONBLOCK` inheritance on `accept`, a string sysctl read as an integer) were
+invisible on Linux and failed only on FreeBSD. A pass is not done until
+`run.sh --vm --live` is green.
 
 ---
 
@@ -1173,79 +1266,53 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-Phase 0/1 are complete (real text, live input paths, the full control set,
-per-output HiDPI) and Phase 2's *visible* shell is complete (P2.1–P2.8: desktop,
-config, menu bar, Dock, Finder, desktop icons, launching) and now boots as one
-desktop (P2.10). What's left:
+**Where things stand.** Phases 0–3 are complete: the Jaguar shell is built, it
+runs on FreeBSD under a Swift session supervisor, with a Swift control plane and
+Swift hardware bridges underneath, and the whole harness passes on both
+platforms. Phase 7 (portals) is four passes in. **128 unit tests and 35 live
+modes, green on Linux and FreeBSD.**
 
-1. ~~**Finish Phase 2's tail**~~ — **done. Phase 2 is complete.** Its last open
-   item, **P2.9 `CurrentIPC`**, was a decision rather than a coding task, and it
-   was decided on 2026-07-27: **carried to Phase 3 and written in Swift there**
-   (PHASE2.md P2.9 has the full reasoning and the traps to expect). The short
-   version: every peer it would talk to — session supervisor, compositor,
-   hardware bridges — is itself an unwritten Phase-3 Swift component, its
-   FreeBSD-native encoder isn't on this box, and the Dock already gets running
-   apps from foreign-toplevel. There is nothing here to talk to and nothing to
-   verify against, so building it now would be building against a mirror.
-2. **Shell polish** — the three self-contained ones are **done** (P2.11, §2.27):
-   emptying the Trash from the Dock, menu-bar keyboard navigation, and reading
-   an `.app` bundle's own icon. What's left of that list:
-   - Dragging desktop icons — blocked on the same thing as spatial window
-     placement: a Wayland client can't position itself, so this needs remembered
-     per-item positions in config (§2.22).
-   - The menu bar's **status items** (volume/battery need the FreeBSD `vents`
-     bridges — Phase 3).
-   - A confirmation sheet for Empty Trash, once something can host a dialog for
-     a layer surface (§2.27).
-3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
-   are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
-   exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. COMPLETE: P3.1–P3.7 all shipped.** The standing #1 risk
-   is CLOSED, the Jaguar desktop runs on FreeBSD under a Swift session
-   supervisor with a Swift control plane and Swift hardware bridges underneath,
-   and its whole harness passes there**
-   (![the session on FreeBSD](screenshots/freebsd-session.png)). Scoped
-   pass-by-pass in **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27).
-   The build VM provisions and is asserted usable (`abyss/vm/check.sh`), FreeBSD
-   ports carries **`swift6-6.3.2`** — newer than our Linux toolchain — and it
-   **builds this repo and passes all 105 unit tests plus all 33 live modes in the
-   guest**, for one `Package.swift` change and a handful of small platform fixes
-   (§2.28–§2.34, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
-   `abyss/tests/run.sh --vm [--live]` for the guest lane and
-   `abyss/vm/build.sh` for a quick build+test. What's left of the native
-   substrate — all **Swift
-   rewrites**, not adoptions of the Rust components (PLAN.md, corrected
-   2026-07-27): `CurrentIPC` (§2.32), the session supervisor `anchor` (§2.33,
-   replacing `abyss/session.sh`), and the `Vents` hardware bridges (§2.34).
-   **Next is a phase, not a pass.** Started: **Phase 7 — portals**
-   ([PHASE7.md](PHASE7.md)), the capability desktop — the portal opens the file
-   the *user* picked and hands back the descriptor, with a Capsicum-sandboxed
-   client to prove it. Numbered 7 but built before Phases 4–6, since it depends
-   only on `CurrentIPC`. Note PHASE3.md §6.1's premise was wrong: `reef-portal`
-   is a shell service, not compositor-owned, so this was never blocked on a
-   compositor. **P7.1–P7.3 are done**: the Finder is a picker, `abyss-portal`
-   hands back descriptors, and `abyssopen` proves the point — in Capsicum
-   capability mode it reads a file whose path it cannot `open`. Left: the Aqua
-   toast + `notify` (P7.4) and the screenshot portal (P7.5). A Swift compositor over a wlroots binding is its
-   own later phase; until it exists the shell keeps running on stock sway/labwc,
-   which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
-   *read* before writing each one. Two things worth knowing before you start:
-   **`CurrentIPC` isn't blocked by the toolchain** (unix sockets + `SCM_RIGHTS`
-   are POSIX, so it builds and tests here today — PHASE3.md §6.3), and the
-   **portals / legacy-D-Bus story is carved out** of the phase (§6.1).
+1. **P7.5 — the screenshot portal.** The one pass left in Phase 7, and the
+   smallest of them. Vendor `wlr-screencopy-unstable-v1`, bind it in `Surface`
+   (the recipe is §7 below; `xdg-activation` is the worked example), and add
+   `screenshot {}` → a **descriptor holding the PNG**. Same shape as the file
+   chooser: the app receives a capability, not a path, and never gets to name
+   what it captures. `grim` already uses this protocol under every screenshot in
+   `docs/screenshots/`, so the compositor side is known to work.
+   *Note for later:* a Swift compositor (Phase 6) will have to implement
+   `wlr-screencopy` itself, or the screenshot portal needs a compositor-owned
+   path then (PHASE7.md §6.6).
 
-**Portability debts — all paid (P3.2–P3.3).** The inotify/kqueue fork in
-`CPoolWatch` compiled and passed its test on FreeBSD, `aw_create_shm`'s
-`SHM_ANON` branch built, `timerfd` turned out to be native there, and
-`canImport(Glibc)` is true on FreeBSD so all ~20 guards were already correct.
-`/proc/self/exe` moved into the new **`CPlatform`** shim (`KERN_PROC_PATHNAME`
-on FreeBSD, since Swift can't see `<sys/sysctl.h>` there at all — §2.30), and
-libwayland's epoll-over-kqueue shim turned out to need no run-loop change. What
-P3.3 *added* to the list was a bug in the other direction: the font style lists
-covered only Linux paths for bold/italic, so styled text silently fell back to
-regular on FreeBSD (§2.30).
+2. **Then pick a phase — they are independent.**
+   - **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
+     volume/battery status items finally read a real mixer and battery rather
+     than reporting absent (P3.7). It is also the biggest single risk left:
+     `amdgpu` `si_support` for the FirePro D-series.
+   - **The D-Bus/portal bridge** — the carved-out half of Phase 7 (§6.7): a
+     jailed session bus and `org.freedesktop.portal.*` so stock GTK/Qt apps get
+     a file chooser from us. Until then, "portals: done" means *our* portals for
+     *our* apps. The guest already has `dbus-1.16.2` and `gtk3` to test against.
+   - **Phase 6 — the Swift compositor.** The largest, and the one that unblocks
+     the things a client fundamentally cannot do: remembered window positions
+     for spatial Finder, and dragging desktop icons (§2.22).
 
----
+3. **Standing smaller items**, none blocking:
+   - **Golden-image tests** — snapshot the deterministic PNG scenes and diff in
+     CI (`finderSampleEntries`/`desktopSampleEntries` exist for exactly this).
+     The cheapest guard against silent visual regressions, and the toast and
+     status items just added more surface worth guarding.
+   - **A real Aqua save panel** — `file.save` currently leans on ⌘S saving into
+     the folder on screen, because picking from a listing cannot name a file
+     that doesn't exist yet (PHASE7.md P7.2). A name field and a New Folder
+     button would replace it.
+   - **A confirmation sheet for Empty Trash**, once something can host a dialog
+     for a layer surface (§2.27).
+   - **Dragging desktop icons** — needs remembered per-item positions in config,
+     and is only half-solvable before Phase 6 (§2.22).
+
+**The rule that earned its place:** a pass is not done until
+`abyss/tests/run.sh --vm --live` is green. Two Phase-3 bugs were invisible on
+Linux and failed only on FreeBSD (§2.33, §2.34).
 
 ## 6. Gotchas inherited from the sibling (still true here)
 
@@ -1255,9 +1322,13 @@ regular on FreeBSD (§2.30).
 - The VM home defaults to `../abyss-swift-vm` (separate from the sibling's
   `../abyss-vm`) so we don't clobber the Rust project's VM. Set
   `ABYSS_VM_HOME=../abyss-vm` to reuse that already-provisioned box.
-- The repo is committed now, one commit per pass, with the pass number in the
-  subject (`P2.8: launching …`) — `git log --oneline` is a readable history of
-  how the shell was built, and each commit's body records what was verified.
+- One commit per pass, with the pass number in the subject (`P7.4: notifications
+  …`) — `git log --oneline` is a readable history of how this was built, and each
+  commit body records **what was verified**, not just what changed. Keep that up:
+  several of those bodies are the only record of why a design went the way it did.
+- Swift lives **off PATH** in the guest (`/usr/local/swift6/bin`), and a
+  non-interactive `ssh host 'cmd'` reads no profile — so use `abyss/vm/build.sh`
+  or `abyss/tests/run.sh --vm` rather than ssh'ing `swift` by hand (§2.28).
 
 ---
 
