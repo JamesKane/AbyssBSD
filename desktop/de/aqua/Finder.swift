@@ -62,12 +62,15 @@ public struct FinderState {
     public var toolbarVisible: Bool
     /// Non-nil while an item's name is being edited in place.
     public var edit: FinderEdit?
+    /// Set when this window is a portal's file picker, so the title bar says
+    /// what the window is *for* rather than which folder it happens to show.
+    public var pickerTitle: String?
 
     public init(path: String, entries: [FinderEntry], selection: Int? = nil,
                 scroll: Double = 0, view: FinderView = .icon,
                 canGoBack: Bool = false, freeBytes: UInt64 = 0,
                 backPressed: Bool = false, toolbarVisible: Bool = true,
-                edit: FinderEdit? = nil) {
+                edit: FinderEdit? = nil, pickerTitle: String? = nil) {
         self.path = path
         self.entries = entries
         self.selection = selection
@@ -78,6 +81,7 @@ public struct FinderState {
         self.backPressed = backPressed
         self.toolbarVisible = toolbarVisible
         self.edit = edit
+        self.pickerTitle = pickerTitle
     }
 }
 
@@ -140,7 +144,8 @@ public func finderItemViewport(_ L: FinderLayout, view: FinderView) -> Rect {
 @discardableResult
 public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
                         state: FinderState) -> FinderLayout {
-    paintWindowChrome(cr, w: w, h: h, title: finderDisplayName(state.path))
+    paintWindowChrome(cr, w: w, h: h, title: state.pickerTitle
+                      ?? finderDisplayName(state.path))
     let L = finderLayout(w: w, h: h, toolbarVisible: state.toolbarVisible)
 
     // A small folder proxy icon to the left of the centred title, as the Finder
@@ -887,20 +892,26 @@ public final class FinderWindow: WindowDelegate {
     }
 
     /// Activate an item. A folder opens in place (browser mode) or in its own
-    /// window (spatial mode); anything else just logs — launching needs exec.
+    /// window (spatial mode); a file is launched — or, when this Finder is
+    /// running as a portal's picker, *chosen* (PHASE7.md P7.1). A file dialog
+    /// that launched what you clicked would be both surprising and a way to make
+    /// the picker run things on the requesting app's behalf.
     private func activate(_ i: Int) {
         guard i >= 0, i < entries.count else { return }
-        let entry = entries[i]
-        let full = finderJoin(path, entry.name)
-        guard entry.isContainer else {
+        switch finderActivation(entry: entries[i], in: path,
+                                picking: FinderPicker.isPicking) {
+        case .choose(let full):
+            FinderWindow.log("picked \(full)")
+            FinderPicker.chose(full)
+        case .launch(let full):
             // An app bundle, an executable, or the opener command (Launcher).
             FinderWindow.log(Launcher.open(full).description + " (\(full))")
-            return
-        }
-        if isSpatial {
-            app?.open(path: full, from: self)
-        } else {
-            navigate(to: full)
+        case .navigate(let full):
+            if isSpatial {
+                app?.open(path: full, from: self)
+            } else {
+                navigate(to: full)
+            }
         }
     }
 
@@ -1104,7 +1115,8 @@ public final class FinderWindow: WindowDelegate {
                                 scroll: scroll, view: view,
                                 canGoBack: !backStack.isEmpty, freeBytes: freeBytes,
                                 backPressed: backPressed,
-                                toolbarVisible: toolbarVisible, edit: edit)
+                                toolbarVisible: toolbarVisible, edit: edit,
+                                pickerTitle: FinderPicker.isPicking ? "Choose a File" : nil)
         layout = paintFinder(cr, w: w, h: h, state: state)
 
         cairo_surface_flush(cs)
@@ -1211,6 +1223,9 @@ public final class FinderWindow: WindowDelegate {
     }
 
     public func windowShouldClose(_ window: Window) {
+        // Closing a picker is declining it: exit non-zero so the portal can tell
+        // "the user cancelled" from "the picker chose something".
+        if FinderPicker.isPicking { FinderPicker.cancelled() }
         closeWindow()
     }
 
@@ -1274,6 +1289,10 @@ public final class FinderWindow: WindowDelegate {
         case KeySym.backspace:
             goUp()
         case KeySym.escape:
+            // In a picker, Escape is Cancel — the dialog convention. It still
+            // clears the selection first, so one Escape deselects and a second
+            // declines, which is what a Mac file dialog does.
+            if FinderPicker.isPicking && selection == nil { FinderPicker.cancelled() }
             select(nil)
         case KeySym.left:
             select(finderMove(from: selection, dx: -1, dy: 0, count: entries.count,

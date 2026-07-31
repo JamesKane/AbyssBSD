@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; status=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""; trash=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; status=""; pick=""; cancel=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""; trash=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -44,6 +44,8 @@ for a in "$@"; do
     --trash)                  trash="--trash"; click="--click" ;;  # Dock: empty the Trash
     --desktop)                desktop="--desktop"; click="--click" ;;  # desktop icons
     --launch)                 launch="--launch"; finder="--finder"; click="--click" ;;
+    --pick)                   pick="--pick"; finder="--finder"; click="--click" ;;  # the portal's picker
+    --cancel)                 pick="--pick"; cancel="--cancel"; finder="--finder"; click="--click"; keys="--keys" ;;
     window|sysprefs|widgets|scroll|tabs|sheet|wallpaper|menubar|dock|finder)  scene="$a" ;;
     *)                        out="$a" ;;
   esac
@@ -208,6 +210,11 @@ if [ "$finder" = "--finder" ]; then
   # state, and a test must never write the developer's real finder.ini.
   cfgdir=${cfgdir:-$(mktemp -d)}
   finder_env="ABYSS_FINDER_DIR=$finderdir ABYSS_CONFIG_DIR=$cfgdir"
+  # Picker mode (P7.1): the Finder writes the chosen path here and exits.
+  if [ "$pick" = "--pick" ]; then
+    pick_result="$finderdir/.pick-result"
+    finder_env="$finder_env ABYSS_FINDER_PICK=$pick_result"
+  fi
   # --fileops moves items to ~/.Trash, so HOME points inside the temp tree —
   # a test must never drop things in the developer's real Trash.
   [ "$fileops" = "--fileops" ] && finder_env="$finder_env HOME=$finderdir"
@@ -390,6 +397,30 @@ if [ "$click" = "--click" ]; then
     sleep 0.5
     printf 'm 44 42\n'       >&3   # hover an item in the dropdown (popup surface)
     sleep 0.4
+  elif [ "$pick" = "--pick" ]; then
+    # Picker mode: the seeded dir holds Applications, Documents, Pictures and
+    # "Read Me.txt" — 4 items across a 5-column grid of 88px cells starting at
+    # x=10, icons centred at y=96. "Read Me.txt" is item 4, so cell 4's centre
+    # is 10 + 3*88 + 44 = 318.
+    #
+    # Capture the picker *before* choosing: it exits on the double-click, so a
+    # shot taken afterwards is of an empty output. This is the evidence that the
+    # window says what it is for ("Choose a File") rather than naming a folder.
+    printf 'm 318 96\np\nr\n' >&3      # select, so the shot shows the target
+    sleep 0.6
+    WAYLAND_DISPLAY="$wd" grim "$out"
+    captured=1
+
+    # Double-clicking must CHOOSE it, not launch it. The Finder writes the path
+    # and exits, so this is also the first live check that the picker terminates
+    # rather than lingering.
+    #
+    # --cancel stops here and lets the keyboard block decline instead: choosing
+    # first would exit the picker before Escape could be tested at all.
+    if [ "$cancel" != "--cancel" ]; then
+      printf 'm 318 96\np\nr\np\nr\n' >&3
+      sleep 1.5
+    fi
   elif [ "$launch" = "--launch" ]; then
     # Sorted: Applications, Documents, Marker.app, opener.sh, Pictures,
     # Read Me.txt — 5 columns of 88px under the 22px title bar + 36px toolbar.
@@ -691,8 +722,17 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
     sleep 0.3
   elif [ "$keys" = "--keys" ]; then
     # Drive keyboard focus/traversal. Raw evdev codes: Tab=15 Space=57 Right=106
-    # Enter=28 Down=108.
-    if [ "$menu" = "--menu" ]; then
+    # Enter=28 Down=108, Escape=1.
+    if [ "$cancel" = "--cancel" ]; then
+      # Decline the picker with Escape. The first clears the selection the
+      # pointer block made, the second is Cancel — the Mac file-dialog
+      # convention, and the reason the picker's exit code has to distinguish
+      # "declined" (1) from "chose" (0).
+      printf 'k 1\n' >&4
+      sleep 0.4
+      printf 'k 1\n' >&4
+      sleep 1.0
+    elif [ "$menu" = "--menu" ]; then
       # The pop-up menu is open (from the --click block). Navigate it purely by
       # keyboard: Down highlights the 2nd item, Enter chooses it — which sets the
       # Appearance value to "Graphite" and dismisses the popup. Proves keyboard
@@ -864,6 +904,64 @@ if [ "$hidpi" = "--hidpi" ]; then
     echo "FAIL: window did not auto-scale to 2x on a scale-2 output"
     cat "$app_log"; exit 1
   fi
+fi
+
+if [ "$cancel" = "--cancel" ]; then
+  # Declining must be distinguishable from choosing — on disk AND in the exit
+  # code, because a crashed picker would otherwise read as a cancelled dialog
+  # (PHASE7.md §6.2).
+  i=0
+  while [ $i -lt 40 ]; do
+    kill -0 "$app_pid" 2>/dev/null || break
+    sleep 0.1; i=$((i + 1))
+  done
+  if kill -0 "$app_pid" 2>/dev/null; then
+    echo "FAIL: Escape didn't cancel the picker"; cat "$app_log"; exit 1
+  fi
+  rc=0; wait "$app_pid" 2>/dev/null || rc=$?   # set -e would abort on a non-zero wait
+  app_pid=""
+  [ "$rc" = 1 ] \
+    || { echo "FAIL: a cancelled picker exited $rc, expected 1"; exit 1; }
+  [ -s "$pick_result" ] \
+    && { echo "FAIL: a cancelled picker wrote a result: $(cat "$pick_result")"; exit 1; }
+  echo "picker: Escape declined — exit 1, no result written"
+elif [ "$pick" = "--pick" ]; then
+  # The whole contract of P7.1, checked on disk and in the process table:
+  #  1. the chosen path was written,
+  #  2. the picker EXITED (a portal waits for it),
+  #  3. it exited 0 — "chose", as distinct from 1 for "cancelled",
+  #  4. and it chose rather than launched.
+  picked=""
+  i=0
+  while [ $i -lt 40 ]; do
+    [ -s "$pick_result" ] && { picked=$(cat "$pick_result"); break; }
+    sleep 0.1; i=$((i + 1))
+  done
+  [ -n "$picked" ] \
+    || { echo "FAIL: the picker wrote no result"; cat "$app_log"; exit 1; }
+  [ "$picked" = "$finderdir/Read Me.txt" ] \
+    || { echo "FAIL: picked '$picked', expected '$finderdir/Read Me.txt'"; exit 1; }
+  echo "picker: chose $picked"
+
+  # It must terminate: a picker that lingers would hang the portal.
+  i=0
+  while [ $i -lt 40 ]; do
+    kill -0 "$app_pid" 2>/dev/null || break
+    sleep 0.1; i=$((i + 1))
+  done
+  if kill -0 "$app_pid" 2>/dev/null; then
+    echo "FAIL: the picker is still running after choosing"; exit 1
+  fi
+  rc=0; wait "$app_pid" 2>/dev/null || rc=$?   # set -e would abort on a non-zero wait
+  [ "$rc" = 0 ] \
+    || { echo "FAIL: the picker exited $rc, expected 0 (0=chose, 1=cancelled)"; exit 1; }
+  app_pid=""
+  echo "picker: exited 0 (chose), and did not launch the document"
+  grep -q "picked $finderdir/Read Me.txt" "$app_log" \
+    || { echo "FAIL: no pick logged"; cat "$app_log"; exit 1; }
+  grep -q "Finder: opened with\|Finder: launched" "$app_log" \
+    && { echo "FAIL: the picker LAUNCHED the file instead of choosing it"; exit 1; }
+  echo "picker: nothing was launched (a file dialog must not run what you click)"
 fi
 
 # The Dock captured earlier (while its magnification pointer was present); don't

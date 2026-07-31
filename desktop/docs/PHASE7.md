@@ -86,14 +86,46 @@ IPC) is already built and the picker is a program we already have.
 
 ## 4. Ordered passes
 
-**P7.1 — The Finder as a picker.**
-A `--pick` mode (`$ABYSS_FINDER_PICK=<result-path>`): the window opens as an
-ordinary Finder, choosing a file writes its path to the result file and exits,
-Cancel exits without writing. The sibling used exactly this — a private result
-file — and it keeps the picker a *separate process* with no portal API surface,
-which is what lets it be the app we already have rather than a library.
-*Verify:* a live run picks a seeded file and the result file holds its path;
-cancelling leaves it empty. Unit-test the pure part (result encoding, cancel).
+**P7.1 — The Finder as a picker. ✅ done.**
+`$ABYSS_FINDER_PICK=<result-path>` turns the Finder into a portal's picker:
+
+![the Finder as a file picker](screenshots/finder-picker.png)
+
+The contract is deliberately file-shaped, as the sibling's was — a private
+result file plus an exit code — which keeps the picker a **separate process**
+with no API surface the requesting app can reach. That is what lets the picker
+be the file manager we already have rather than a library the portal links in
+(§6.1).
+
+- **choose** → the path is written to the result file, exit **0**
+- **cancel** (Escape, or closing the window) → nothing written, exit **1**
+- **anything else** → a crash, which the portal can therefore tell apart (§6.2)
+
+**A file dialog must never launch what you click.** `finderActivation` is a pure
+rule shared by every activation path: a folder navigates in both modes, but a
+file *launches* normally and is *chosen* in picker mode. The case most likely to
+go wrong — double-clicking an `.app` bundle in a picker — is a test of its own,
+because a picker that runs the thing you selected would both surprise the user
+and let the requesting app make the picker execute code on its behalf.
+
+`readResult` refuses anything that isn't an **absolute path**: the portal opens
+whatever comes back, so a relative path would resolve against the *portal's*
+working directory instead of the user's choice.
+
+*Verified:* 5 unit tests (110 total) for the activation rule and the result
+contract — including that an empty result file (a picker that died mid-write) is
+not a choice — plus two live modes on both platforms. `live-sway.sh --pick`
+double-clicks a seeded file and asserts on **disk and in the process table**:
+the right path was written, the picker *exited*, it exited **0**, and nothing
+was launched. `--cancel` drives Escape from the keyboard and asserts exit **1**
+with no result written.
+
+*Two bugs in the test itself, both worth the scar tissue:* `--cancel` initially
+reused the choose path's double-click, so it chose the file before the keyboard
+ever got a turn; and `wait "$app_pid"` under `set -e` **aborted the script** the
+moment a cancelled picker exited 1, before `$?` could be read — the failure
+looked like the test silently stopping. `rc=0; wait ... || rc=$?` is the form
+that works.
 
 **P7.2 — The portal service: `file.open` and `file.save`.**
 `abyss-portal` binds the `portal` service and answers:

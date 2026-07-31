@@ -598,6 +598,96 @@ final class AquaTests: XCTestCase {
                                   view: .icon, viewport: vp), count - 1)
     }
 
+    // MARK: The Finder as a portal's picker (P7.1)
+
+    /// A private directory for a test that touches the filesystem.
+    private func makeScratchDir(_ tag: String) -> String {
+        var template = Array((NSTemporaryDirectoryPath() + "/abyss-\(tag).XXXXXX").utf8CString)
+        guard let dir = template.withUnsafeMutableBufferPointer({
+            mkdtemp($0.baseAddress!).map { String(cString: $0) }
+        }) else {
+            XCTFail("mkdtemp failed")
+            return NSTemporaryDirectoryPath()
+        }
+        return dir
+    }
+
+    func testPickerModeChoosesAFileInsteadOfLaunchingIt() {
+        let doc = FinderEntry(name: "Read Me.txt", kind: .document, size: 10)
+        let folder = FinderEntry(name: "Reports", kind: .folder, size: 0)
+        let app = FinderEntry(name: "Marker.app", kind: .application, size: 0)
+
+        // Normally a file is launched...
+        XCTAssertEqual(finderActivation(entry: doc, in: "/home/x", picking: false),
+                       .launch("/home/x/Read Me.txt"))
+        // ...but a file dialog must never run what you click: in picker mode the
+        // same double-click is the *answer*, not an exec.
+        XCTAssertEqual(finderActivation(entry: doc, in: "/home/x", picking: true),
+                       .choose("/home/x/Read Me.txt"))
+        // An app bundle is a file like any other to a picker — choosing it must
+        // not launch it either, which is the case most likely to go wrong.
+        XCTAssertEqual(finderActivation(entry: app, in: "/home/x", picking: true),
+                       .choose("/home/x/Marker.app"))
+        // Folders still navigate in both modes; you have to be able to browse.
+        XCTAssertEqual(finderActivation(entry: folder, in: "/home/x", picking: true),
+                       .navigate("/home/x/Reports"))
+        XCTAssertEqual(finderActivation(entry: folder, in: "/home/x", picking: false),
+                       .navigate("/home/x/Reports"))
+    }
+
+    func testPickerResultRoundTripsThroughTheResultFile() {
+        let dir = makeScratchDir("picker")
+        defer { _ = finderRemovePath(dir) }
+        let result = dir + "/result"
+
+        // What the picker writes, the portal reads back.
+        let fd = open(result, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        let line = Array("/home/x/Read Me.txt\n".utf8)
+        _ = line.withUnsafeBufferPointer { write(fd, $0.baseAddress, line.count) }
+        close(fd)
+        XCTAssertEqual(FinderPicker.readResult(result), "/home/x/Read Me.txt")
+    }
+
+    func testACancelledPickIsNotMistakenForAChoice() {
+        let dir = makeScratchDir("picker-cancel")
+        defer { _ = finderRemovePath(dir) }
+
+        // A cancel leaves no file at all...
+        XCTAssertNil(FinderPicker.readResult(dir + "/never-written"))
+        // ...and an empty file (a picker that died mid-write) is not a path.
+        let empty = dir + "/empty"
+        close(open(empty, O_WRONLY | O_CREAT | O_TRUNC, 0o600))
+        XCTAssertNil(FinderPicker.readResult(empty))
+    }
+
+    func testAResultMustBeAnAbsolutePath() {
+        let dir = makeScratchDir("picker-relative")
+        defer { _ = finderRemovePath(dir) }
+        let result = dir + "/result"
+        // The portal *opens* whatever comes back, so a relative path would
+        // resolve against the portal's working directory rather than the user's
+        // choice — refuse it rather than open the wrong file.
+        let fd = open(result, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        let line = Array("Read Me.txt\n".utf8)
+        _ = line.withUnsafeBufferPointer { write(fd, $0.baseAddress, line.count) }
+        close(fd)
+        XCTAssertNil(FinderPicker.readResult(result))
+    }
+
+    func testPickerModeIsOffUnlessTheEnvironmentSaysOtherwise() {
+        unsetenv("ABYSS_FINDER_PICK")
+        XCTAssertFalse(FinderPicker.isPicking)
+        XCTAssertNil(FinderPicker.resultPath())
+        setenv("ABYSS_FINDER_PICK", "/tmp/abyss-pick-result", 1)
+        defer { unsetenv("ABYSS_FINDER_PICK") }
+        XCTAssertTrue(FinderPicker.isPicking)
+        XCTAssertEqual(FinderPicker.resultPath(), "/tmp/abyss-pick-result")
+        // An empty value means "not picking" rather than "pick into ''".
+        setenv("ABYSS_FINDER_PICK", "", 1)
+        XCTAssertFalse(FinderPicker.isPicking)
+    }
+
     // MARK: Menu-bar status items
 
     func testStatusItemsAreOmittedWhenTheMachineCantFeedThem() {

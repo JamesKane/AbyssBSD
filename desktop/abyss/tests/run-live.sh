@@ -84,6 +84,8 @@ spatial:--spatial
 fileops:--fileops
 desktop:--desktop
 launch:--launch
+pick:--pick
+pick-cancel:--cancel
 '
 
 want() {
