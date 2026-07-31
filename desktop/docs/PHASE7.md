@@ -169,18 +169,39 @@ asserts all three halves of the claim: the client read the contents **through th
 descriptor**, it was **the file the user chose**, and the client **only ever sent
 a directory**. Green on Linux and FreeBSD.
 
-**P7.3 — The sandboxed client (the headline).**
-`abyssopen` calls **`cap_enter(2)`** — irreversibly dropping into Capsicum
-capability mode, with no `open`-by-path and no global namespace — and *then*
-asks the portal for a file. It reads the contents through the returned
-descriptor and writes them to stdout (an already-open fd; a sandboxed process
-cannot create a new one either).
-Capsicum is FreeBSD-only, so this claim is **verifiable only in the VM**; on
-Linux the same binary runs unsandboxed and says so rather than implying a
-sandbox it doesn't have.
-*Verify:* in the guest, `abyssopen` prints a file's contents **after** entering
-capability mode, and a control run proves `open(2)` on the same path fails from
-inside the sandbox — the second half is what makes the first half mean anything.
+**P7.3 — The sandboxed client. ✅ done — and the claim holds.**
+`abyssopen` enters **Capsicum capability mode** and then reads a file it
+demonstrably cannot open. From the guest:
+
+```
+sandbox: capability mode entered — no filesystem, no namespace
+portal: handed us /tmp/abyss-sbxdocs.3QBrRE/Secret.txt
+control: open(2) on that path failed — Not permitted in capability mode
+         — this process cannot reach the file by name
+read 31 bytes through the descriptor the portal handed over
+```
+
+**The control is the point.** "It read the file" proves only that files can be
+read; the assertion that means something is that `open(2)` on *that same path*
+fails from inside the sandbox. The test checks both, and would fail loudly if
+`open` ever succeeded while `cap_getmode` reported capability mode — a sandbox
+that isn't real is worse than none, because it invites the claim.
+
+**§6.4's trap, avoided by construction:** capability mode forbids `socket(2)` and
+`connect(2)` exactly as it forbids `open(2)`, so the portal connection is made
+**before** `cap_enter` and is then the process's only capability besides stdio.
+The ordering is the load-bearing part of the whole demo.
+
+**Capsicum is FreeBSD-only**, so this is verified in the VM. On Linux the same
+binary runs unsandboxed and **says so** — `sandbox: NOT AVAILABLE on this
+platform … the capability claim is only proven on FreeBSD` — and the Linux half
+of the test asserts that it says so, rather than quietly skipping and leaving a
+reader to assume confinement that isn't there.
+
+*Verified:* `abyss/tests/live-sandbox.sh`, in `run.sh --live` on both platforms:
+FreeBSD asserts capability mode, the failed `open(2)`, and the contents; Linux
+asserts the honest fallback. `CCapsicum` is its own C target so the Aqua toolkit
+never links sandbox code.
 
 **P7.4 — Notifications: an Aqua toast, and `notify`.**
 A notification window in Jaguar dress on a layer-shell **OVERLAY** surface, with

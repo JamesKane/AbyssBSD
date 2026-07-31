@@ -67,6 +67,9 @@ sh "$root/abyss/tests/live-ipc.sh"
 if [ "$live" -eq 1 ]; then
   echo "== the portal, end to end =="
   sh "$root/abyss/tests/live-portal.sh"
+  # And the claim that makes it worth having: a client with no filesystem.
+  echo "== the sandboxed client =="
+  sh "$root/abyss/tests/live-sandbox.sh"
 fi
 
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on

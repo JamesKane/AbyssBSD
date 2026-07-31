@@ -1198,7 +1198,10 @@ desktop (P2.10). What's left:
    client to prove it. Numbered 7 but built before Phases 4–6, since it depends
    only on `CurrentIPC`. Note PHASE3.md §6.1's premise was wrong: `reef-portal`
    is a shell service, not compositor-owned, so this was never blocked on a
-   compositor. A Swift compositor over a wlroots binding is its
+   compositor. **P7.1–P7.3 are done**: the Finder is a picker, `abyss-portal`
+   hands back descriptors, and `abyssopen` proves the point — in Capsicum
+   capability mode it reads a file whose path it cannot `open`. Left: the Aqua
+   toast + `notify` (P7.4) and the screenshot portal (P7.5). A Swift compositor over a wlroots binding is its
    own later phase; until it exists the shell keeps running on stock sway/labwc,
    which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
    *read* before writing each one. Two things worth knowing before you start:
@@ -1248,6 +1251,8 @@ regular on FreeBSD (§2.30).
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
+| `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
+| `de/abyssopen`, `de/ccap` | the sandboxed client and Capsicum's `cap_enter` |
 | `de/vents`, `de/cvents` | the hardware bridges: sysctl, OSS volume, battery, devd (§2.34) |
 | `de/ventsctl` | `ventsctl sysctl\|volume\|battery\|devd` — read the machine by hand |
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |

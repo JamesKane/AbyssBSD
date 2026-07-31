@@ -186,6 +186,21 @@ let package = Package(
             dependencies: ["Anchor", "CurrentIPC", "CPlatform"],
             path: "de/anchorbin"
         ),
+        // Capsicum: entering capability mode, so the sandboxed client can prove
+        // it has no filesystem. Its own target so the toolkit never links it.
+        .target(
+            name: "CCapsicum",
+            path: "de/ccap",
+            sources: ["ccap.c"],
+            publicHeadersPath: "include"
+        ),
+        // The point of the portal, demonstrated: no filesystem, yet it reads
+        // the file the user picked.
+        .executableTarget(
+            name: "abyssopen",
+            dependencies: ["CurrentIPC", "CCapsicum"],
+            path: "de/abyssopen"
+        ),
         // The desktop's portal: the picker runs, the portal opens what the user
         // chose, and the descriptor goes back over SCM_RIGHTS. No D-Bus.
         .target(
