@@ -3,6 +3,7 @@
 // (AquaWindow) and the offscreen PNG render used for visual verification.
 
 import CCairo
+import Vents
 
 #if canImport(Glibc)
 import Glibc
@@ -275,10 +276,14 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                               selection: 1)
         }
         if kind == .menubar {
+            // The headless render reads the machine the same way the live bar
+            // does, so a status item that would appear on screen appears here
+            // too (and one the machine can't feed is absent in both).
             paintMenuBar(cr, w: Double(width), h: MenuBarMetrics.height,
                          menus: MenuBar.defaultMenus(appName: "Finder"),
                          clock: formatMenuClock(hour24: 9, minute: 41, wday: 1),
-                         openIndex: nil, showClock: true)
+                         openIndex: nil, showClock: true,
+                         status: MenuBarStatus.read(mixer: Vents.Mixer()))
         }
         if kind == .dock {
             let dockH = DockMetrics.surfaceHeight(tileSize: 48)

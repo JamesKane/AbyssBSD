@@ -118,6 +118,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.31 | FreeBSD harness: `od(1)` adds a trailing space, and a `for` over a table word-splits multi-word entries |
 | 2.32 | The control plane: cmsg is all macros, fds ride with the *length prefix*, and `sun_path` is 108 bytes |
 | 2.33 | The supervisor: accepted sockets inherit `O_NONBLOCK` on BSD but not Linux; SIGPIPE kills a client silently |
+| 2.34 | The bridges: sysctl is untyped (`"FreeBSD\0"` is 8 bytes), and a pixel probe must not depend on the font |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -384,6 +385,34 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.34 The hardware bridges: an untyped kernel API, and a font-dependent test
+(P3.7 — `vents`: sysctl, OSS, devd.)
+
+- **A sysctl has no type, and guessing "integer first" corrupts short strings.**
+  `ventsctl sysctl kern.ostype` printed **19231843050418758** on its first run:
+  `"FreeBSD\0"` is *exactly eight bytes*, so it reads as a perfectly plausible
+  `Int64`. Any display path must test **printability before numeric width**
+  (`Sysctl.display` does). The unit tests could never have caught this — only a
+  real kernel has a `kern.ostype` — which is the argument for live tests in one
+  line.
+- **`<sys/sysctl.h>` is invisible to Swift, so sysctl needs C** exactly as the
+  variadic `ioctl` does (§2.30). PHASE3.md had assumed sysctl was callable
+  straight from Swift; it isn't. devd, by contrast, needed no C at all — it is a
+  unix socket carrying newline-delimited text.
+- **devd values can contain spaces, inside quotes.** A real CAM error looks like
+  `CDB="00 00 00 00 00 00 "`; splitting fields on whitespace loses the field and
+  mangles the rest. Parse quotes.
+- **A pixel probe positioned relative to text is font-dependent.** The
+  status-item check sampled one coordinate left of the clock, which passed on
+  the dev box (Noto) and landed on bare pinstripe in the VM (DejaVu), where the
+  clock is a different width. Scan a *strip* and count dark pixels instead — and
+  pass `od -v`, or od collapses repeated identical lines to `*` and most of the
+  strip silently disappears.
+- **Absence is a first-class reading.** The VM has no mixer and no battery, so
+  every bridge returns nil there and the status items hide. That is the intended
+  behaviour, and the test asserts it: a facility that isn't present must be
+  *reported* absent, never rendered as a confident 0%.
 
 ### 2.33 The session supervisor: two bugs that only showed up on FreeBSD
 (P3.6 — `anchor`. Both cost real time; both are one-liners once seen.)
@@ -1146,23 +1175,25 @@ desktop (P2.10). What's left:
 3. **Golden-image tests** — snapshot the PNG renders and diff in CI. The scenes
    are deterministic (`finderSampleEntries`, `desktopSampleEntries` exist for
    exactly this); this is the cheapest guard against silent visual regressions.
-4. **Phase 3 — FreeBSD. In progress: P3.1–P3.6 are done, the standing #1 risk
+4. **Phase 3 — FreeBSD. COMPLETE: P3.1–P3.7 all shipped.** The standing #1 risk
    is CLOSED, the Jaguar desktop runs on FreeBSD under a Swift session
-   supervisor, and its whole harness passes there**
+   supervisor with a Swift control plane and Swift hardware bridges underneath,
+   and its whole harness passes there**
    (![the session on FreeBSD](screenshots/freebsd-session.png)). Scoped
    pass-by-pass in **[PHASE3.md](PHASE3.md)** (P3.1–P3.7, written 2026-07-27).
    The build VM provisions and is asserted usable (`abyss/vm/check.sh`), FreeBSD
    ports carries **`swift6-6.3.2`** — newer than our Linux toolchain — and it
-   **builds this repo and passes all 90 unit tests plus all 32 live modes in the
+   **builds this repo and passes all 105 unit tests plus all 33 live modes in the
    guest**, for one `Package.swift` change and a handful of small platform fixes
-   (§2.28–§2.33, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
+   (§2.28–§2.34, [SWIFT-ON-FREEBSD.md](SWIFT-ON-FREEBSD.md), now closed). Use
    `abyss/tests/run.sh --vm [--live]` for the guest lane and
    `abyss/vm/build.sh` for a quick build+test. What's left of the native
    substrate — all **Swift
    rewrites**, not adoptions of the Rust components (PLAN.md, corrected
-   2026-07-27): hardware bridges for the menu bar's status items (P3.7).
-   `CurrentIPC` (PHASE2.md P2.9) is **built** (§2.32), and so is the session
-   supervisor — `anchor` (§2.33), which replaces `abyss/session.sh`. A Swift compositor over a wlroots binding is its
+   2026-07-27): `CurrentIPC` (§2.32), the session supervisor `anchor` (§2.33,
+   replacing `abyss/session.sh`), and the `Vents` hardware bridges (§2.34).
+   **Next is a phase, not a pass** — Phase 4 (Mac Pro hardware), or the carved-out
+   portals/D-Bus phase, or Phase 6's Swift compositor. A Swift compositor over a wlroots binding is its
    own later phase; until it exists the shell keeps running on stock sway/labwc,
    which FreeBSD ports too. The sibling's `tide`/`anchor`/`vents` are what you
    *read* before writing each one. Two things worth knowing before you start:
@@ -1212,6 +1243,8 @@ regular on FreeBSD (§2.30).
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
+| `de/vents`, `de/cvents` | the hardware bridges: sysctl, OSS volume, battery, devd (§2.34) |
+| `de/ventsctl` | `ventsctl sysctl\|volume\|battery\|devd` — read the machine by hand |
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |

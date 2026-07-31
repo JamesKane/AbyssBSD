@@ -13,6 +13,7 @@
 
 import Surface
 import PoolConfig
+import Vents
 import CCairo
 import CWayland
 
@@ -37,8 +38,13 @@ public struct MenuBarMenu: Sendable {
 public struct MenuBarLayout {
     public var titleRects: [Rect]      // aligned with the menus array
     public var clockRect: Rect
-    public init(titleRects: [Rect] = [], clockRect: Rect = Rect(0, 0, 0, 0)) {
+    /// The status items ("menu extras"), nil when the machine can't feed them.
+    public var volumeRect: Rect?
+    public var batteryRect: Rect?
+    public init(titleRects: [Rect] = [], clockRect: Rect = Rect(0, 0, 0, 0),
+                volumeRect: Rect? = nil, batteryRect: Rect? = nil) {
         self.titleRects = titleRects; self.clockRect = clockRect
+        self.volumeRect = volumeRect; self.batteryRect = batteryRect
     }
 }
 
@@ -67,7 +73,8 @@ public func formatMenuClock(hour24: Int, minute: Int, wday: Int) -> String {
 /// hit-tests against it (the "layout is truth" discipline).
 public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
                           menus: [MenuBarMenu], clock: String,
-                          showClock: Bool) -> MenuBarLayout {
+                          showClock: Bool,
+                          status: MenuBarStatus = MenuBarStatus()) -> MenuBarLayout {
     var rects: [Rect] = []
     var x = MenuBarMetrics.leftMargin
     for m in menus {
@@ -87,7 +94,12 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
         let cw = Draw.textWidth(cr, clock, size: MenuBarMetrics.fontSize) + 4
         clockRect = Rect(w - cw - MenuBarMetrics.clockMarginRight, 0, cw, h)
     }
-    return MenuBarLayout(titleRects: rects, clockRect: clockRect)
+    // Status items are right-aligned against whatever the clock left free (or
+    // the bar's right margin when there is no clock).
+    let statusRight = clockRect.w > 0 ? clockRect.x : w - MenuBarMetrics.clockMarginRight
+    let items = menuBarStatusLayout(status: status, h: h, rightEdge: statusRight)
+    return MenuBarLayout(titleRects: rects, clockRect: clockRect,
+                         volumeRect: items.volume, batteryRect: items.battery)
 }
 
 /// Paint the menu bar. `openIndex` (if any) is drawn highlighted in menu blue.
@@ -95,7 +107,8 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
 @discardableResult
 public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
                          menus: [MenuBarMenu], clock: String,
-                         openIndex: Int?, showClock: Bool) -> MenuBarLayout {
+                         openIndex: Int?, showClock: Bool,
+                         status: MenuBarStatus = MenuBarStatus()) -> MenuBarLayout {
     cairo_rectangle(cr, 0, 0, w, h)
     Draw.fillVerticalGradient(cr, y: 0, h: h, stops: [
         (0, Theme.menuBarTop), (1, Theme.menuBarBottom),
@@ -106,7 +119,7 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
     cairo_move_to(cr, 0, h - 0.5); cairo_line_to(cr, w, h - 0.5); cairo_stroke(cr)
 
     let layout = menuBarLayout(cr, w: w, h: h, menus: menus, clock: clock,
-                               showClock: showClock)
+                               showClock: showClock, status: status)
     for (i, m) in menus.enumerated() {
         let r = layout.titleRects[i]
         let open = (i == openIndex)
@@ -128,6 +141,12 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
     if showClock && !clock.isEmpty {
         Draw.textLeft(cr, clock, x: layout.clockRect.x + 2, baselineY: h - 6.5,
                       color: Theme.menuBarText, size: MenuBarMetrics.fontSize)
+    }
+    if !status.isEmpty {
+        let statusRight = layout.clockRect.w > 0
+            ? layout.clockRect.x : w - MenuBarMetrics.clockMarginRight
+        paintMenuBarStatus(cr, status: status, h: h, rightEdge: statusRight,
+                           color: Theme.menuBarText)
     }
     return layout
 }
@@ -162,6 +181,10 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var popup: Popup?
     private var pointerX = 0.0
     private var timerFd: Int32 = -1
+    /// The hardware bridges behind the status items. The mixer is opened once —
+    /// nil on a machine with no sound card, which is how the item stays hidden.
+    private var mixer: Vents.Mixer?
+    private var status = MenuBarStatus()
 
     /// The default Jaguar menu set for an app named `appName`.
     public static func defaultMenus(appName: String) -> [MenuBarMenu] {
@@ -210,6 +233,13 @@ public final class MenuBar: LayerSurfaceDelegate {
         else { return nil }
         layer = ls
         clock = MenuBar.currentClock()
+        // The status items read the machine through Vents (sysctl / OSS). Both
+        // are absent on a VM and on Linux, in which case nothing is drawn — see
+        // MenuBarStatus.
+        mixer = Vents.Mixer()
+        status = MenuBarStatus.read(mixer: mixer)
+        MenuBar.log("status \(status.volume.map { "volume \($0)%" } ?? "no mixer"), "
+                    + "\(status.batteryPercent.map { "battery \($0)%" } ?? "no battery")")
 
         // Tick the clock once a second via a timerfd in the run loop.
         let fd = aw_create_interval_timer(1000)
@@ -233,7 +263,14 @@ public final class MenuBar: LayerSurfaceDelegate {
             read(timerFd, $0, MemoryLayout<UInt64>.size)
         }
         let now = MenuBar.currentClock()
-        if now != clock { clock = now; layer?.setNeedsDisplay() }
+        var dirty = false
+        if now != clock { clock = now; dirty = true }
+        // Poll the hardware on the same tick rather than adding a second timer:
+        // volume and charge move on a human timescale, and a second-resolution
+        // status item is what Jaguar had.
+        let fresh = MenuBarStatus.read(mixer: mixer)
+        if fresh != status { status = fresh; dirty = true }
+        if dirty { layer?.setNeedsDisplay() }
     }
 
     private static func log(_ msg: String) {
@@ -253,7 +290,8 @@ public final class MenuBar: LayerSurfaceDelegate {
         guard let cr = cairo_create(cs) else { cairo_surface_destroy(cs); return }
         cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
         layoutCache = paintMenuBar(cr, w: w, h: h, menus: menus, clock: clock,
-                                   openIndex: openIndex, showClock: showClock)
+                                   openIndex: openIndex, showClock: showClock,
+                                   status: status)
         cairo_surface_flush(cs)
         cairo_destroy(cr)
         cairo_surface_destroy(cs)

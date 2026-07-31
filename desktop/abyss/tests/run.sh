@@ -62,6 +62,11 @@ rm -f "$out"
 echo "== control plane, two processes =="
 sh "$root/abyss/tests/live-ipc.sh"
 
+# The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on
+# Linux it asserts the stubs report themselves absent). No compositor needed.
+echo "== hardware bridges =="
+sh "$root/abyss/tests/live-vents.sh"
+
 if [ "$live" -eq 1 ]; then
   echo "== live modes (headless sway + grim) =="
   sh "$root/abyss/tests/run-live.sh"

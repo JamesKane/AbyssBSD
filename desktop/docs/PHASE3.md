@@ -8,10 +8,11 @@ this phase moves onto FreeBSD, and [HANDOFF.md](HANDOFF.md) for the traps.
 
 Last updated: 2026-07-27.
 
-**Phase 3 is nearly done — P3.1–P3.6 are complete. The Jaguar desktop runs on
-FreeBSD under a **Swift session supervisor**, its whole test harness passes
-there (32/32 live modes, 90 unit tests), the control plane carries descriptors
-between processes, and the project's #1 risk is closed.** Phase 2 left the Aqua shell — desktop,
+**Phase 3 is COMPLETE — P3.1–P3.7 all shipped.** The Jaguar desktop runs on
+FreeBSD under a Swift session supervisor, with a Swift control plane and Swift
+hardware bridges underneath it; the whole test harness passes on the target
+(33/33 live modes, 105 unit tests); and the project's standing #1 risk — Swift
+on FreeBSD — is closed. Phase 2 left the Aqua shell — desktop,
 menu bar, Dock, Finder, icons, launching — running on Linux against stock sway
 and booting with one command (`abyss/session.sh`). Phase 3 makes it run **on
 FreeBSD**, and gives it the native substrate underneath that Linux has been
@@ -27,8 +28,15 @@ session — and P3.5 built the **control plane** (`CurrentIPC`): typed messages
 over unix sockets, handing real file descriptors between processes, with our own
 codec rather than libnv. P3.6 then replaced `abyss/session.sh` with **`anchor`**,
 the Swift supervisor — every child a pollable descriptor, a control service, and
-a session that tears down as a unit. All that's left of the native substrate is
-the hardware bridges (P3.7).
+a session that tears down as a unit. P3.7 finished the substrate with the
+**hardware bridges** (`vents`: sysctl, OSS, devd) and the menu bar's status
+items:
+
+![the desktop on FreeBSD with menu extras](screenshots/menubar-status.png)
+
+**What Phase 3 set out to do is done.** What it deliberately did not do is
+unchanged: no compositor (Phase 6), no portals or legacy D-Bus bridge (§6.1,
+carved out), no Mac Pro (Phase 4).
 
 ---
 
@@ -77,7 +85,7 @@ against it (PLAN.md, corrected 2026-07-27). `PoolConfig` is the pattern.
 | Config | `PoolConfig` + `CPoolWatch` (kqueue branch **written, never compiled**) | first FreeBSD build + test of the kqueue half |
 | Session launch | `abyss/session.sh` (POSIX sh, supervises + tears down) | ✅ **`anchor`**, the Swift supervisor (P3.6) |
 | Control plane | — | ✅ **`CurrentIPC`** (carried from P2.9, built in P3.5) |
-| Hardware (volume, battery, hotplug) | — (menu bar has no status items) | **sysctl / OSS / devd bridges** |
+| Hardware (volume, battery, hotplug) | — (menu bar has no status items) | ✅ **`Vents`** — sysctl / OSS / devd, with menu-bar status items (P3.7) |
 | Build + test host | this Linux box | the **FreeBSD VM** + an in-guest test lane |
 | Swift toolchain | 6.3.1 on Linux | ✅ ports `swift6-6.3.2` in the guest — was the #1 risk, [closed in P3.2](SWIFT-ON-FREEBSD.md) |
 
@@ -105,7 +113,7 @@ and **P3.2 settled all but one of them at a cost of one `Package.swift` edit**:
 |---|---|---|---|
 | Session supervisor | `anchor` (456 LOC) | `Anchor` + `anchor` — **done** (P3.6) | `pdfork` on FreeBSD / `pidfd` on Linux, both pollable; hosts a control service |
 | Control plane | `current` (551 LOC) | `CurrentIPC` — **done** (P3.5) | unix sockets, typed messages, `SCM_RIGHTS`; our own codec, no libnv |
-| Hardware bridges | `vents` (658 LOC: sysctl 127, oss 86, devd 314) | **Swift rewrite** (P3.7) | `sysctlbyname`, `/dev/mixer` ioctls, the devd socket |
+| Hardware bridges | `vents` (658 LOC: sysctl 127, oss 86, devd 314) | `Vents` — **done** (P3.7) | `sysctlbyname`, `/dev/mixer` ioctls, the devd socket |
 | Config | `pool` (458 LOC) | `PoolConfig` — **done** (P2.3) | the pattern the rest follow |
 | Compositor | `tide` (11,573 LOC) | Phase 6 | stock sway/labwc from ports until then |
 | Portals | `reef-portal` (in `tide`) | carved out (§6.1) | compositor-owned in the sibling; needs Phase 6 or a client-side subset |
@@ -440,20 +448,62 @@ bar's exclusive zone reserved (workspace `y=22`).
   wrong compositor. It now matches sway's IPC socket by pid, asks sway which
   display it opened, and fails loudly if that is the parent's.
 
-**P3.7 — Hardware bridges + the menu bar's status items.**
-`vents`' job, in Swift, and the phase's visible payoff. Three bridges, each
-small: **sysctl** (`sysctlbyname(3)` — callable straight from Swift, as
-`PoolConfig` calls `mmap`), **OSS** volume (`/dev/mixer` ioctls — `ioctl`'s
-varargs need a one-line C shim, the `CPoolWatch` pattern again), and **devd**
-(read `/var/run/devd.seqpacket.pipe`, fold the fd into the run loop for hotplug
-and power events).
-Then wire them to the UI that has been waiting for them since P2.4: a real
-**volume** menu extra with a slider, a **battery** extra off the `hw.acpi.battery`
-sysctls, and — if devd makes it cheap — a removable volume appearing on the
-desktop when it's plugged in.
-*Verify:* pure parts unit-tested; in the guest, set the mixer underneath and
-watch the extra follow; a screenshot of the FreeBSD menu bar showing real status
-items closes the phase.
+**P3.7 — Hardware bridges + the menu bar's status items. ✅ done.**
+`vents`' job, in Swift: the shell reads the machine through **sysctl** (not
+sysfs), **OSS** (not ALSA) and **devd** (not udev). `de/vents` holds the bridges,
+`de/cvents` the C floor beneath them, and the menu bar finally has the status
+items it has been missing since P2.4:
+
+![the menu bar's status items](screenshots/menubar-status.png)
+
+**The C shim is bigger than the plan expected, for a reason the plan got wrong.**
+It assumed `sysctlbyname(3)` was "callable straight from Swift, as `PoolConfig`
+calls `mmap`" — it is not: Swift's libc module surfaces no `<sys/sysctl.h>` at
+all (HANDOFF §2.30, discovered in P3.3), so sysctl needs C exactly as `ioctl`'s
+varargs do. devd needed no C at all, being a unix socket carrying text.
+
+**The rule the whole feature is built on: an item you can't feed isn't drawn.**
+Every accessor returns nil when the facility is absent, and the menu bar lays out
+only what answered. That is not hypothetical — **the build VM has neither a mixer
+nor a battery** (qemu provides no sound card and no ACPI battery), so on FreeBSD
+today the real reading is "hide both", and `live-vents.sh` asserts exactly that:
+absence must be *reported*, never rendered as a confident 0%.
+
+Because of that, the drawing is exercised through a documented test seam
+(`$ABYSS_FAKE_VOLUME` / `$ABYSS_FAKE_BATTERY`, read only in `MenuBarStatus`,
+never inside `Vents`). **To be clear about what is and isn't proven:** the
+bridges are verified against the real kernel, and the *rendering* is verified
+with injected values. Real volume and battery readings wait for hardware that
+has them — the Mac Pro, in Phase 4.
+
+*Verified:* **15 new unit tests** (105 total) on both platforms — devd parsing
+against **real captured event lines** (including a CAM error whose quoted values
+contain spaces, which a naive whitespace split silently loses), OSS stereo
+packing and clamping, the battery's "don't know" case, and the status-item
+layout (right-to-left, no reserved gap for a hidden item, the clock not moving).
+Live, in the guest, **`live-vents.sh` reads the real kernel**: `kern.ostype` and
+`hw.ncpu` cross-checked against `sysctl(8)`, absent facilities reported absent,
+and **real devd events** — the script creates and destroys a malloc-backed
+`md(4)` disk and asserts the CREATE and DESTROY notifies arrive:
+
+```
+ok: kern.ostype=FreeBSD hw.ncpu=8 (agrees with sysctl(8))
+ok: devd delivered the device's arrival and departure:
+    notify system=DEVFS subsystem=CDEV type=CREATE cdev=md0
+    notify system=GEOM subsystem=DEV type=CREATE cdev=md0
+```
+
+*A bug the live test caught immediately:* `ventsctl sysctl kern.ostype` printed
+**19231843050418758**. A sysctl API is untyped, `"FreeBSD\0"` is *exactly eight
+bytes*, and asking "is this an integer?" before "is this text?" turns every 4- or
+8-character string into a plausible-looking number. `Sysctl.display` now checks
+printability first, with a test pinning it. The unit tests could not have found
+this — only a real kernel has a `kern.ostype`.
+
+*Deferred, and worth saying so:* the volume item **displays** but doesn't yet
+control (a slider menu extra needs a popup from a layer surface, which the menu
+bar can do — it is UI work, not bridge work), and devd hotplug isn't wired to the
+desktop's icons. Both are shell polish on top of bridges that now exist.
 
 ---
 

@@ -75,6 +75,7 @@ wallpaper:wallpaper
 reload:--reload
 menubar:--menubar
 menubar-keys:--menubar --keys
+menubar-status:--menubar --status
 dock:--dock
 trash:--trash
 finder:--finder

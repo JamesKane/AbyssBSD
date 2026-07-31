@@ -60,7 +60,7 @@ an **`.app` bundle is drawn with its own icon** from `Contents/Resources`
 (PNG, including PNGs embedded in an `.icns`). See
 [PHASE2.md](PHASE2.md) for the ordered scope.
 
-## It runs on FreeBSD (Phase 3, P3.3–P3.6)
+## It runs on FreeBSD (Phase 3 — complete)
 
 The point of the whole exercise, on the target OS — a Swift 6 desktop under
 stock sway in the FreeBSD 15 build VM, captured with grim:
@@ -71,8 +71,9 @@ And the toolkit alone, headless with no compositor at all:
 The whole **harness** passes there too — **90 unit tests and all 32 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
-**`anchor`**, the Swift supervisor, rather than by a shell script:
-![the session under the Swift supervisor on FreeBSD](screenshots/freebsd-anchor.png)
+**`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
+bar carries real status items fed by the Swift hardware bridges:
+![the session under the Swift supervisor on FreeBSD](screenshots/menubar-status.png)
 
 ## Current state — the Aqua shell runs (Phase 1 toolkit + Phase 2 shell)
 
@@ -84,12 +85,13 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (90 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (105 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
-  CurrentIPC codec + descriptor passing, and the supervisor's restart policy).
-  **The same 90 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  CurrentIPC codec + descriptor passing, the supervisor's restart policy, and
+  the hardware bridges' parsing).
+  **The same 105 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -136,6 +138,13 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     (`/proc/self/exe` on Linux, the `KERN_PROC_PATHNAME` sysctl on FreeBSD,
     whose Swift libc module surfaces no `<sys/sysctl.h>`) and **SCM_RIGHTS fd
     passing**, since `cmsg(3)` is entirely macros.
+  - `Vents` + `CVents` — the FreeBSD hardware bridges: **sysctl** (Swift's libc
+    module surfaces no `<sys/sysctl.h>`, so it goes through C), the **OSS mixer**
+    (`ioctl` is variadic, likewise C), the **battery** off `hw.acpi.battery.*`,
+    and a **devd** reader whose fd folds into the run loop for hotplug. Every
+    accessor returns nil when the facility is absent, which is what lets the
+    menu bar hide a status item instead of inventing a reading. `ventsctl` reads
+    them by hand.
   - `Anchor` + `anchor` — the session supervisor (`de/anchor`, `de/anchorbin`):
     starts the compositor and the shell, restarts a component that dies, and
     tears the session down as a unit. Every child is a **pollable descriptor**
@@ -365,10 +374,10 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   layer surface has somewhere to host a dialog.
 - **Golden-image tests:** snapshot the deterministic PNG scenes and diff in CI.
 - **Phase 3 — FreeBSD**, scoped in **[PHASE3.md](PHASE3.md)** (passes P3.1–P3.7)
-  and **nearly done: P3.1–P3.6 are complete. The Jaguar desktop runs on FreeBSD
-  under a Swift session supervisor, its whole harness passes there (90 unit
-  tests + 32 live modes), the control plane hands descriptors between processes,
-  and the project's #1 risk is closed.**
+  and **COMPLETE: P3.1–P3.7 all shipped.** The Jaguar desktop runs on FreeBSD
+  under a Swift session supervisor, with a Swift control plane and Swift hardware
+  bridges underneath; the whole harness passes there (105 unit tests + 33 live
+  modes); and the project's #1 risk is closed.
   The build VM (`../abyss-swift-vm`, FreeBSD 15.0-RELEASE-p11) provisions from a
   corrected cloud-init seed and is asserted usable by `abyss/vm/check.sh`
   (P3.1). **FreeBSD ports carries `swift6-6.3.2`** — newer than the 6.3.1 we
@@ -395,8 +404,10 @@ decided rather than built, and carried to Phase 3). See [HANDOFF.md](HANDOFF.md)
   session supervisor: every child is a pollable descriptor (`pdfork` on FreeBSD,
   `pidfd` on Linux), so supervision is one `poll()` loop that also carries the
   control socket and a signal self-pipe — with `abyssctl status|quit` driving it.
-  The rest of the phase: the hardware
-  bridges, all
+  P3.7 finished the substrate with **`Vents`**, the hardware bridges — sysctl
+  (not sysfs), OSS (not ALSA), devd (not udev) — and the menu bar's volume and
+  battery status items. The remaining Phase-3 work was always someone else's
+  phase: all
   **Swift rewrites** with the sibling's crates read as the spec: `CurrentIPC`
   (PHASE2.md P2.9), a session supervisor (replacing `abyss/session.sh` and the
   launcher's double-fork stand-in), and the hardware bridges behind the menu

@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "Surface", targets: ["Surface"]),
         .library(name: "PoolConfig", targets: ["PoolConfig"]),
         .library(name: "CurrentIPC", targets: ["CurrentIPC"]),
+        .library(name: "Vents", targets: ["Vents"]),
         .executable(name: "AquaDemo", targets: ["AquaDemo"]),
     ],
     targets: [
@@ -130,7 +131,7 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform"],
+            dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform", "Vents"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.
@@ -145,6 +146,23 @@ let package = Package(
             name: "ipcprobe",
             dependencies: ["CurrentIPC"],
             path: "de/ipcprobe"
+        ),
+        // The C floor under the FreeBSD hardware bridges: sysctlbyname (Swift's
+        // libc module surfaces no <sys/sysctl.h>) and the OSS mixer ioctls
+        // (ioctl is variadic, which Swift cannot call). Stubs elsewhere.
+        .target(
+            name: "CVents",
+            path: "de/cvents",
+            sources: ["cvents.c"],
+            publicHeadersPath: "include"
+        ),
+        // The hardware bridges themselves: sysctl, volume, battery, devd.
+        // The shell reads the machine through native facilities — sysctl not
+        // sysfs, OSS not ALSA, devd not udev.
+        .target(
+            name: "Vents",
+            dependencies: ["CVents"],
+            path: "de/vents"
         ),
         // Process supervision primitives: every child is a pollable descriptor
         // (pdfork on FreeBSD, pidfd on Linux) plus a signal self-pipe.
@@ -167,6 +185,12 @@ let package = Package(
             dependencies: ["Anchor", "CurrentIPC", "CPlatform"],
             path: "de/anchorbin"
         ),
+        // Read the machine through the FreeBSD-native bridges.
+        .executableTarget(
+            name: "ventsctl",
+            dependencies: ["Vents"],
+            path: "de/ventsctl"
+        ),
         // Drive a running session over the control plane.
         .executableTarget(
             name: "abyssctl",
@@ -187,6 +211,11 @@ let package = Package(
             name: "CurrentIPCTests",
             dependencies: ["CurrentIPC"],
             path: "Tests/CurrentIPCTests"
+        ),
+        .testTarget(
+            name: "VentsTests",
+            dependencies: ["Vents"],
+            path: "Tests/VentsTests"
         ),
         .testTarget(
             name: "AnchorTests",

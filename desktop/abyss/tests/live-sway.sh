@@ -24,7 +24,7 @@
 # read "Abyss"). An interacting run with no explicit scene defaults to .window.
 set -eu
 
-scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""; trash=""
+scene=""; out=""; click=""; type=""; menu=""; keys=""; hidpi=""; wheel=""; repeat=""; reload=""; status=""; menubar=""; dock_mode=""; finder=""; spatial=""; fileops=""; desktop=""; launch=""; trash=""
 for a in "$@"; do
   case "$a" in
     --click)                  click="--click" ;;
@@ -36,6 +36,7 @@ for a in "$@"; do
     --reload)                 reload="--reload" ;;  # wallpaper: config + hot-reload
     --menu)                   menu="--menu"; click="--click" ;;  # opens a real popup
     --menubar)                menubar="--menubar"; click="--click" ;;  # menu bar dropdown
+    --status)                 status="--status"; menubar="--menubar"; click="" ;;  # volume/battery menu extras
     --dock)                   dock_mode="--dock"; click="--click" ;;  # Dock magnify + running
     --finder)                 finder="--finder"; click="--click" ;;  # browse a seeded dir
     --spatial)                spatial="--spatial"; finder="--finder"; click="--click" ;;
@@ -78,6 +79,13 @@ fi
 # --finder drives the file browser (an ordinary xdg toplevel); --spatial also
 # switches it into one-window-per-folder mode.
 [ "$finder" = "--finder" ] && scene="finder"
+# The status items read real hardware (Vents: OSS + ACPI sysctls). Neither the
+# dev box nor the build VM has a mixer or a battery, so --status drives the
+# *drawing* through the documented test seam in MenuBarStatus. The bridges
+# themselves are tested against the real kernel by live-vents.sh.
+status_env=""
+[ "$status" = "--status" ] && status_env="ABYSS_FAKE_VOLUME=66 ABYSS_FAKE_BATTERY=84"
+
 # Which scenes are layer-shell surfaces (not xdg toplevels — not in get_tree).
 is_layer=""; case "$scene" in wallpaper|menubar|dock) is_layer=1 ;; esac
 
@@ -266,7 +274,7 @@ fi
 # Capture AquaDemo's stderr (it logs buffer-scale changes there). Unset
 # AQUA_SCALE so the window auto-detects scale from wl_output rather than pinning.
 app_log=$(mktemp)
-env -u AQUA_SCALE $abyss_cfg $finder_env $desktop_env WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
+env -u AQUA_SCALE $abyss_cfg $finder_env $desktop_env $status_env WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
     .build/debug/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
@@ -816,11 +824,36 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
   exec 4>&-
 fi
 
-if [ "$menubar" = "--menubar" ]; then
+if [ "$menubar" = "--menubar" ] && [ "$status" != "--status" ]; then
   # The click should have opened a dropdown from the menu-bar layer surface.
   grep -q 'MenuBar: opened' "$app_log" \
     || { echo "FAIL: menu bar didn't open a dropdown"; cat "$app_log"; exit 1; }
   echo "menu bar: $(grep 'MenuBar: opened' "$app_log" | head -1) (popup from a layer surface)"
+fi
+
+if [ "$status" = "--status" ]; then
+  # The bar logs what the machine offered at startup, so the "hidden when
+  # absent" path is visible in the log rather than only in the pixels.
+  grep -q 'MenuBar: status' "$app_log" \
+    || { echo "FAIL: the menu bar never reported its status items"; cat "$app_log"; exit 1; }
+  echo "menu bar: $(grep 'MenuBar: status' "$app_log" | head -1)"
+  # Pixel proof that the items were drawn: the status area left of the clock is
+  # not the bare pinstripe. Sample the battery fill, which is solid dark.
+  # Pixel proof, scanned over a *strip* rather than one coordinate: the items sit
+  # to the left of the clock, and the clock's width depends on the font — which
+  # differs between the dev box (Noto) and the VM (DejaVu). A fixed coordinate
+  # passed here and landed on bare pinstripe there.
+  #
+  # -v matters: od collapses repeated identical lines to "*" without it, which
+  # would silently drop most of the strip.
+  w=190
+  vals=$(WAYLAND_DISPLAY="$wd" grim -g "600,11 ${w}x1" -t ppm - | tail -c $((w * 3)) \
+         | od -An -tu1 -v | tr -s ' ' '\n' | grep -v '^$')
+  dark=$(printf '%s\n' "$vals" | awk 'NR%3==1{r=$1} NR%3==2{g=$1}
+        NR%3==0 { if (r < 120 && g < 120 && $1 < 120) n++ } END { print n+0 }')
+  [ "${dark:-0}" -ge 8 ] \
+    || { echo "FAIL: the status items were not drawn ($dark dark pixels in the strip)"; exit 1; }
+  echo "menu bar: the status items are drawn ($dark dark pixels left of the clock)"
 fi
 
 if [ "$hidpi" = "--hidpi" ]; then

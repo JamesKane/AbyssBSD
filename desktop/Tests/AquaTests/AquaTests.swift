@@ -598,6 +598,70 @@ final class AquaTests: XCTestCase {
                                   view: .icon, viewport: vp), count - 1)
     }
 
+    // MARK: Menu-bar status items
+
+    func testStatusItemsAreOmittedWhenTheMachineCantFeedThem() {
+        // The rule the whole feature rests on: no mixer means no speaker, not a
+        // speaker showing 0%. A VM (and the Linux dev box) has neither device.
+        let empty = MenuBarStatus()
+        XCTAssertTrue(empty.isEmpty)
+        let rects = menuBarStatusLayout(status: empty, h: 22, rightEdge: 800)
+        XCTAssertNil(rects.volume)
+        XCTAssertNil(rects.battery)
+    }
+
+    func testStatusItemsLayOutRightToLeftAndDontOverlap() {
+        let both = MenuBarStatus(volume: 60, batteryPercent: 84)
+        let r = menuBarStatusLayout(status: both, h: 22, rightEdge: 800)
+        let volume = try! XCTUnwrap(r.volume)
+        let battery = try! XCTUnwrap(r.battery)
+        // Battery sits nearest the clock, volume to its left — Jaguar's order.
+        XCTAssertLessThan(volume.x, battery.x)
+        XCTAssertLessThanOrEqual(volume.x + volume.w, battery.x)
+        // Everything stays left of the clock's edge.
+        XCTAssertLessThanOrEqual(battery.x + battery.w, 800)
+        XCTAssertEqual(volume.h, 22)
+    }
+
+    func testASingleItemStillHugsTheClock() {
+        // With only one item present the other's slot must not be reserved —
+        // otherwise the bar shows a gap where a hidden item would have been.
+        let onlyVolume = menuBarStatusLayout(status: MenuBarStatus(volume: 30),
+                                             h: 22, rightEdge: 800)
+        let onlyBattery = menuBarStatusLayout(status: MenuBarStatus(batteryPercent: 10),
+                                              h: 22, rightEdge: 800)
+        XCTAssertNil(onlyVolume.battery)
+        XCTAssertNil(onlyBattery.volume)
+        let v = try! XCTUnwrap(onlyVolume.volume)
+        let b = try! XCTUnwrap(onlyBattery.battery)
+        XCTAssertEqual(v.x + v.w, 800 - MenuBarStatusMetrics.clockGap)
+        XCTAssertEqual(b.x + b.w, 800 - MenuBarStatusMetrics.clockGap)
+    }
+
+    func testTheMenuBarLayoutReservesSpaceForStatusItems() {
+        // Paint and hit-test share one layout (§2.9), so the bar's own layout
+        // must carry the item rects rather than computing them separately.
+        let surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 800, 22)
+        defer { cairo_surface_destroy(surface) }
+        guard let cr = cairo_create(surface) else { return XCTFail("no cairo context") }
+        defer { cairo_destroy(cr) }
+        let menus = MenuBar.defaultMenus(appName: "Finder")
+        let withStatus = menuBarLayout(cr, w: 800, h: 22, menus: menus,
+                                       clock: "Mon 9:41 AM", showClock: true,
+                                       status: MenuBarStatus(volume: 60, batteryPercent: 84))
+        XCTAssertNotNil(withStatus.volumeRect)
+        XCTAssertNotNil(withStatus.batteryRect)
+        // They sit left of the clock, never over it.
+        XCTAssertLessThanOrEqual(withStatus.batteryRect!.x + withStatus.batteryRect!.w,
+                                 withStatus.clockRect.x)
+        let without = menuBarLayout(cr, w: 800, h: 22, menus: menus,
+                                    clock: "Mon 9:41 AM", showClock: true)
+        XCTAssertNil(without.volumeRect)
+        XCTAssertNil(without.batteryRect)
+        // The clock doesn't move when items appear: they take space to its left.
+        XCTAssertEqual(withStatus.clockRect.x, without.clockRect.x)
+    }
+
     // MARK: Launching
 
     func testLauncherResolvesExecutables() {
