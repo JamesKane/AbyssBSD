@@ -31,9 +31,17 @@
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
 #include <wlr/render/allocator.h>
+#include <wlr/render/drm_format_set.h>
 #include <wlr/render/pass.h>
 #include <wlr/render/wlr_renderer.h>
+#include <wlr/render/wlr_texture.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_shm.h>
+#include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 

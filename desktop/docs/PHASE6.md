@@ -314,12 +314,68 @@ thread, and one thread dispatching client requests cannot promise that. The
 reactor/present split lands with the clients it exists to isolate us from
 (P6.3/P6.5), where it can actually be tested rather than asserted.
 
-**P6.3 — A scene, and a real client on it.**
-`wlr_compositor` + `xdg_shell`, surfaces landing in the SoA scene with damage
-tracking, composited by pixman. The client is one we already have: **AquaDemo**.
-*Verify:* AquaDemo connects to `undertow`, and `undertow` writes a PNG of its
-own output showing the Aqua window. (It owns the pixels, so this needs no
-screencopy yet.) The first pass where the thing is recognisably a compositor.
+**P6.3 — A scene, and a real client on it. ✅ done.**
+`wl_compositor` + `wl_shm` + `xdg_shell`, a socket, our own SoA scene, and each
+mapped surface textured into the frame by pixman. The client is one we already
+had — **AquaDemo, unmodified**:
+
+![an Aqua window on undertow](screenshots/undertow-first-client.png)
+
+That is a Swift compositor compositing a Swift toolkit's window, with no other
+compositor anywhere: `abyss/tests/live-undertow.sh` is the first test in this
+project that **starts no sway at all**.
+
+**We do not use `wlr_scene`**, and this is the pass where that stops being a
+statement and starts being code. `wlr_scene` is a perfectly good retained scene
+graph, and taking it would hand away precisely the part DESKTOP.md §2 reserves
+to us. `SurfaceScene` is the structure-of-arrays instead: latch the window list,
+cull, and walk it linearly. Its `latchAndComposite` never calls into a client,
+never takes a lock a client holds and never waits — everything it reads was
+already committed, which is C2 by construction.
+
+*Three things that were each a silent hang until found, all worth knowing before
+writing a compositor:*
+
+- **`wlr_compositor_create` does not create `wl_shm`.** Without it no client can
+  attach a buffer — and our own `Display.init` requires compositor + shm +
+  xdg_wm_base, so it refuses the connection outright and the client reports
+  *"cannot connect to a Wayland compositor"*, an error pointing nowhere near the
+  missing global. One line: `wlr_shm_create_with_renderer`.
+- **A client must be answered.** xdg-shell requires the compositor to reply to
+  the first commit with a configure before the client may attach anything, and
+  the client must be released with `wlr_surface_send_frame_done` after each frame
+  or it draws exactly once and waits for ever. Both look like a client that hung
+  while doing nothing wrong.
+- **`wlr_renderer_autocreate` picks the GPU when there is one**, and GPU-backed
+  buffers are not CPU-readable, so the capture is impossible — *on the dev box
+  only*, invisibly diverging from the VM. Phase 6 is software-rendered by scope
+  (§7.1), so the session pins `WLR_RENDERER=pixman` (overridable) and both
+  platforms stay on one path.
+
+*And the capture reads the frame we actually drew.* The first attempt allocated
+its own buffer and re-rendered into it; the renderer refused the pass, because a
+buffer must be in its render-format set and guessing XRGB8888/INVALID is not the
+same as asking. `wlr_output_begin_render_pass` negotiates that already and leaves
+the buffer in `state.buffer` — so the honest capture is the presented frame, not
+a re-render into something we hoped was compatible. It writes a **PPM, not a
+PNG**: the compositor would otherwise link an image encoder to prove it drew
+something, and the harness has probed PPM with `od` since Phase 2 (HANDOFF
+§2.26).
+
+*Verified:* **3 new unit tests** (162 total) on both platforms — the globals and
+socket, an empty scene compositing to nothing, and the capture's exact PPM
+geometry. Live, `abyss/tests/live-undertow.sh` runs `undertow` and `AquaDemo` as
+two real processes and asserts on **pixels**: the desktop is the blue we chose,
+the window's middle is window-light, and just outside its left edge is desktop
+again — that last one is what stops a scene that ignored geometry and painted the
+whole output from passing everything else.
+
+*Two harness bugs found on the way, both of the §2.34 family:* probing the
+window's exact centre hit a control's border (187, not the light content it was
+aiming at), so the test scans a strip and counts; and `od` emits 16 bytes per
+line, so RGB triples do **not** align to its columns — the first count reported
+466 light pixels in a 420-pixel strip, and a count exceeding its own denominator
+is the only reason that was caught.
 
 **P6.4 — Input.**
 libinput through wlroots, `wl_seat`, pointer/keyboard/focus routing, click-to-

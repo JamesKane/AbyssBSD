@@ -4,9 +4,9 @@ The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
 Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
-**Phase 6 — `undertow`, the Swift compositor — is under way at P6.2 of 7**: the
-frame contract gates every build, and it now drives real wlroots frames. 159 unit tests + 35 live
-modes, green on Linux *and* FreeBSD. **Next: P6.3, a scene and a real client on it.**
+**Phase 6 — `undertow`, the Swift compositor — is under way at P6.3 of 7**: it is a
+compositor now — a real client's window, composited by our own scene. 162 unit tests + 35 live
+modes, green on Linux *and* FreeBSD. **Next: P6.4, input.**
 
 ## What this is
 
@@ -72,7 +72,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **159 unit tests and all 35 live modes**,
+The whole **harness** passes there too — **162 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -89,14 +89,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (159 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (162 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
   hardware bridges' parsing, the portal's refusals, and the screencopy pixel
   normalisation).
-  **The same 159 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 162 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -317,6 +317,11 @@ abyss/tests/bench-metronome.sh
 .build/debug/undertow bench-alloc     --frames 5000 --surfaces 512
 .build/debug/undertow headless --hz 60 --frames 120 --width 800 --height 600
 
+# undertow as a real compositor, with a real client on it (starts no sway):
+abyss/tests/live-undertow.sh /tmp/frame.ppm
+.build/debug/undertow run --hz 60 --frames 400 --width 800 --height 600 \
+    --capture /tmp/frame.ppm      # then: WAYLAND_DISPLAY=<printed> AquaDemo
+
 # The portals, end to end (each starts its own headless sway):
 abyss/tests/live-portal.sh          # a client, a picker, a descriptor
 abyss/tests/live-sandbox.sh         # ...with no filesystem at all
@@ -454,7 +459,17 @@ undertow headless — HEADLESS-1 800x600 @ 60Hz, 120 frames, 128 surfaces
   vblank source     nominal grid — this backend reports no hardware clock
 ```
 
-**The immediate task is P6.3: a scene, and a real client on it.**
+**P6.3 is done — it is a compositor.** `wl_compositor` + `wl_shm` + `xdg_shell`,
+a socket, and our own structure-of-arrays scene (not `wlr_scene` — that is the
+part DESKTOP.md reserves to us). AquaDemo connects as an ordinary client and its
+window is textured into our frame:
+
+![an Aqua window on undertow](screenshots/undertow-first-client.png)
+
+`abyss/tests/live-undertow.sh` is the first test in this project that **starts no
+sway at all**.
+
+**The immediate task is P6.4: input.**
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

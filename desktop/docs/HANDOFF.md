@@ -485,6 +485,19 @@ search`, §2.36's Capsicum control, and this.)
   test.** P6.1's synthetic display originally derived each vblank from the
   target the predictor asked for, so the predictor was scored against its own
   guesses and could not fail. Give the model its own independent ground truth.
+- **An error message is a diagnostic, and it can lie too.** P6.3's compositor
+  threw `.noDisplay` — *"could not create a wl_display"* — when what actually
+  failed was `wl_display_add_socket_auto`, three calls later, because the guest
+  has no `XDG_RUNTIME_DIR` (§2.31, reaching `swift test` for the first time now
+  that a unit test binds a socket). The message sent me to look at the
+  compositor when the problem was the environment. **One failure, one case, one
+  sentence naming the actual cause** — `.noSocket` now says which call failed
+  *and* names the variable. Reusable rule: if two different failures can produce
+  the same message, the message is wrong.
+- **Reproduce the platform's condition on the dev box before believing the
+  fix.** `env -u XDG_RUNTIME_DIR swift test` turns a 20-minute VM round trip
+  into a two-second one, and it is what proved the fix rather than the next
+  guest run merely not failing.
 
 ### 2.36 A control that isn't a control: Capsicum permits `socket(2)`
 (P7.5 — the screenshot portal. The bug was in the *proof*, not the code.)
@@ -1346,12 +1359,13 @@ platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
 **Phase 6 — `undertow`, the Swift compositor — is under way**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1 and P6.2 are done**: the metronome and
-its meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
-pixels do"*), and the wlroots bridge under it. The frame contract is a build gate
-in `run.sh`'s default lane (`abyss/tests/bench-metronome.sh`), and `undertow`
-composites real wlroots frames at exact cadence on both platforms. **The
-immediate task is P6.3: a scene, and a real client on it.**
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1–P6.3 are done**: the metronome and its
+meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
+pixels do"*), the wlroots bridge under it, and now a real client on a real scene.
+`undertow` hosts a Wayland socket, and AquaDemo's window is composited by our own
+structure-of-arrays scene (not `wlr_scene`) at exact cadence on both platforms.
+`abyss/tests/live-undertow.sh` is the first test here that **starts no sway**.
+**The immediate task is P6.4: input.**
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
 shim exists only because `wl_signal_add` is a static inline and
@@ -1444,7 +1458,7 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
 | `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
 | `de/abyssgrab` | capture an output to a PNG via `wlr-screencopy`; the portal forks it, so the portal itself is never a Wayland client |
-| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, the synthetic display+scene, and `Backend` (the wlroots bridge) — `undertow` is its own bench harness |
+| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, `Backend` (the wlroots bridge), `Compositor` (globals, socket, windows) and `SurfaceScene` (our SoA scene — deliberately **not** `wlr_scene`) — `undertow` is its own bench harness |
 | `de/cwlroots` | **29 lines of C**, and that is the whole wlroots binding: Swift imports the headers directly, but `wl_signal_add` is a static inline and `wl_container_of` is a macro, so every wlroots event arrives through one trampoline (§2.1 at scale) |
 | `de/cwlrootssys`, `de/cwaylandserver` | pkg-config flag carriers for wlroots-0.19 and libwayland-**server** (§2.29's pattern) |
 | `de/callocprobe` | counts allocations by symbol interposition; the enforcement half of PLAN.md risk 4. **Executable-only, and useless without its positive control** (§2.37) |

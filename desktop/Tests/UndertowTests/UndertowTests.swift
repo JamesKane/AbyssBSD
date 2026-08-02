@@ -11,7 +11,32 @@
 import XCTest
 @testable import Undertow
 
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+/// Make sure there is somewhere to bind a Wayland socket.
+///
+/// **FreeBSD sets no `XDG_RUNTIME_DIR`** — there is no pam_xdg (HANDOFF §2.31) —
+/// so `wl_display_add_socket_auto` has nowhere to put a socket and the
+/// compositor tests fail there while passing on Linux. A unit test should not
+/// depend on ambient environment it can provide for itself, so it provides it.
+private func ensureRuntimeDir() {
+    if let existing = getenv("XDG_RUNTIME_DIR"), existing.pointee != 0 { return }
+    let dir = "/tmp/abyss-test-run-\(getuid())"
+    _ = mkdir(dir, 0o700)
+    setenv("XDG_RUNTIME_DIR", dir, 1)
+}
+
 final class UndertowTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        ensureRuntimeDir()
+    }
+
 
     // MARK: - Time
 
@@ -311,6 +336,71 @@ final class UndertowTests: XCTestCase {
         // Within 5% of 60Hz. Without the grid snap this drifts ~30% low.
         XCTAssertEqual(Double(m.predictor.periodNs), 16_666_666,
                        accuracy: 16_666_666 * 0.05)
+    }
+
+    // MARK: - The compositor (P6.3)
+
+    /// The globals a client needs, and a socket to reach them.
+    ///
+    /// `wl_shm` is the one worth asserting: `wlr_compositor_create` does not
+    /// create it, and without it no client can attach a buffer. Our own
+    /// `Display.init` requires compositor + shm + xdg_wm_base and refuses the
+    /// connection outright, so the symptom is "cannot connect to a Wayland
+    /// compositor" — an error pointing nowhere near the missing global.
+    func testTheCompositorOffersASocketAndTheGlobalsAClientNeeds() throws {
+        let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
+                                         refreshMilliHz: 60_000)
+        let compositor = try Compositor(session: session, outputWidth: 320, outputHeight: 240)
+        XCTAssertFalse(compositor.socketName.isEmpty)
+        XCTAssertTrue(compositor.socketName.hasPrefix("wayland-"))
+        XCTAssertEqual(compositor.toplevels.count, 0)
+        XCTAssertEqual(compositor.mappedToplevels.count, 0)
+    }
+
+    /// An empty scene still composites: background only, nothing painted.
+    func testAnEmptySceneCompositesTheDesktopAndNothingElse() throws {
+        let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
+                                         refreshMilliHz: 60_000)
+        let compositor = try Compositor(session: session, outputWidth: 320, outputHeight: 240)
+        let scene = SurfaceScene(compositor: compositor, outputWidth: 320, outputHeight: 240)
+        defer { scene.release() }
+        let stats = scene.latchAndComposite(now: 0, target: 0)
+        XCTAssertEqual(stats.surfaces, 0)
+        XCTAssertEqual(stats.damageArea, 0)
+        XCTAssertEqual(scene.count, 0)
+    }
+
+    /// The compositor writes out the frame it actually drew.
+    ///
+    /// The capture reads the output's own swapchain buffer. An earlier version
+    /// allocated a buffer and re-rendered into it, and the renderer refused the
+    /// pass — a buffer has to be in the renderer's render-format set, and
+    /// guessing XRGB8888/INVALID is not the same as asking.
+    func testTheCompositorCapturesTheFrameItDrew() throws {
+        let session = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48,
+                                         refreshMilliHz: 60_000)
+        let compositor = try Compositor(session: session, outputWidth: 64, outputHeight: 48)
+        let output = WlrootsOutput(session.outputs[0], session: session)
+        let scene = SurfaceScene(compositor: compositor, outputWidth: 64, outputHeight: 48)
+        defer { scene.release() }
+        output.scene = scene
+
+        let path = "/tmp/undertow-test-\(getpid()).ppm"
+        defer { unlink(path) }
+        XCTAssertTrue(output.capturePPM(path: path), "the capture failed")
+
+        let fd = open(path, O_RDONLY)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        var head = [UInt8](repeating: 0, count: 15)
+        let n = head.withUnsafeMutableBufferPointer { read(fd, $0.baseAddress, 15) }
+        XCTAssertGreaterThan(n, 0)
+        XCTAssertTrue(String(decoding: head, as: UTF8.self).hasPrefix("P6\n64 48\n255\n"),
+                      "not a 64x48 binary PPM")
+        // Header + one RGB triple per pixel, exactly.
+        var st = stat()
+        XCTAssertEqual(stat(path, &st), 0)
+        XCTAssertEqual(Int(st.st_size), 13 + 64 * 48 * 3)
     }
 
     /// The display's vblanks must be its own, not an echo of what the

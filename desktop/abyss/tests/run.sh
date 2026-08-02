@@ -45,6 +45,14 @@ if [ "$vm" -eq 1 ]; then
   exec ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$remote"
 fi
 
+# FreeBSD has no pam_xdg, so nothing sets XDG_RUNTIME_DIR (HANDOFF §2.31) — and
+# from Phase 6 the *unit tests* need one too, because `undertow` binds a Wayland
+# socket and `wl_display_add_socket_auto` has nowhere to put it without one. The
+# live scripts have sourced this helper since Phase 3; it belongs here as well
+# now that `swift test` can care.
+. "$root/abyss/common.sh"
+abyss_ensure_runtime_dir
+
 echo "== swift build =="
 swift build
 
@@ -67,6 +75,12 @@ sh "$root/abyss/tests/live-ipc.sh"
 # which is exactly why the contract is built before the pixels (PHASE6.md P6.1).
 echo "== the frame contract =="
 sh "$root/abyss/tests/bench-metronome.sh"
+
+# A real client on our own compositor. Also in the default lane, and notable for
+# being the first test here that starts no sway at all — undertow IS the
+# compositor (PHASE6.md P6.3).
+echo "== a real client on undertow =="
+sh "$root/abyss/tests/live-undertow.sh"
 
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.

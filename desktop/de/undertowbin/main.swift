@@ -35,6 +35,9 @@ func usage() -> Never {
                                     [--width N] [--height N] [--verbose]
                                     [--assert-missed-permille N]
                                     [--assert-cost-p99-us N]
+           undertow run             [--hz N] [--frames N] [--width N] [--height N]
+                                    [--capture FILE.ppm] [--assert-windows N]
+                                    [--verbose]
     """)
     exit(2)
 }
@@ -52,6 +55,8 @@ var assertCostP99Us: UInt64? = nil
 var width: Int32 = 1920
 var height: Int32 = 1080
 var verbose = false
+var capturePath: String? = nil
+var assertWindows: Int? = nil
 
 var i = 0
 while i < args.count {
@@ -80,6 +85,8 @@ while i < args.count {
         guard let v = Int32(value("--height")) else { die("--height wants a number") }
         height = v
     case "--verbose": verbose = true
+    case "--capture": capturePath = value("--capture")
+    case "--assert-windows": assertWindows = Int(value("--assert-windows"))
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -278,6 +285,58 @@ case "headless":
     }
     if failed { exit(1) }
     out("  verdict           ok")
+
+// ----------------------------------------- the compositor, hosting real clients
+case "run":
+    let session: WlrootsSession
+    let compositor: Compositor
+    do {
+        session = try WlrootsSession(headlessOutputs: 1, width: width, height: height,
+                                     refreshMilliHz: Int32(hz &* 1000), verbose: verbose)
+        compositor = try Compositor(session: session, outputWidth: width,
+                                    outputHeight: height)
+    } catch {
+        die("\(error)")
+    }
+    guard let wlrOutput = session.outputs.first else { die("no output") }
+    let output = WlrootsOutput(wlrOutput, session: session)
+    let scene = SurfaceScene(compositor: compositor, outputWidth: width,
+                             outputHeight: height)
+    defer { scene.release() }
+    output.scene = scene
+
+    // Announce the socket on stdout BEFORE the loop starts, so a harness can
+    // read one line and know where to point a client. Anything else means
+    // racing a sleep against a compositor's startup.
+    out("WAYLAND_DISPLAY=\(compositor.socketName)")
+    emit(2, "undertow: \(output.name) \(output.width)x\(output.height) @ \(hz)Hz"
+         + " on \(compositor.socketName)")
+
+    let recorder = FlightRecorder(capacity: max(frames, 1))
+    var metronome = Metronome<WlrootsOutput, SurfaceScene>(periodHintNs: output.periodHintNs)
+    var o = output
+    var s = scene
+    for _ in 0..<frames {
+        metronome.step(output: &o, sink: &s, recorder: recorder)
+        // Release clients to draw the next frame, and push the events out.
+        // Without this a client renders once and waits for ever.
+        compositor.endFrame()
+    }
+
+    if let path = capturePath {
+        guard output.capturePPM(path: path) else { die("could not write \(path)") }
+        emit(2, "undertow: wrote \(path)")
+    }
+
+    let windows = compositor.mappedToplevels.count
+    out("windows=\(windows)")
+    out("surfaces-composited=\(scene.count)")
+    out("missed=\(recorder.missedCount) of \(recorder.retained)")
+    if let want = assertWindows, windows != want {
+        emit(2, "FAIL: expected \(want) mapped window(s), got \(windows)")
+        exit(1)
+    }
+    out("verdict ok")
 
 default:
     usage()

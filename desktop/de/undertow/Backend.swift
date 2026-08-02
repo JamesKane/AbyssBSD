@@ -32,6 +32,12 @@ public enum BackendError: Error, CustomStringConvertible {
     case noOutput
     case renderInitFailed
     case modeRejected
+    case noGlobals(String)
+    /// Could not bind a Wayland socket. Its own case, with its own message,
+    /// because it was originally folded into `.noDisplay` and reported
+    /// "could not create a wl_display" — which is a lie that sends you to
+    /// look at the compositor when the problem is the environment.
+    case noSocket
 
     public var description: String {
         switch self {
@@ -42,6 +48,10 @@ public enum BackendError: Error, CustomStringConvertible {
         case .noOutput: return "the backend produced no output"
         case .renderInitFailed: return "wlr_output_init_render failed"
         case .modeRejected: return "the output rejected its mode"
+        case .noGlobals(let what): return "could not create the \(what) global"
+        case .noSocket:
+            return "could not bind a Wayland socket — is XDG_RUNTIME_DIR set?"
+                + " (FreeBSD has no pam_xdg, so nothing sets it: HANDOFF §2.31)"
         }
     }
 }
@@ -112,6 +122,17 @@ public final class WlrootsSession {
     public init(headlessOutputs outputCount: Int, width: Int32, height: Int32,
                 refreshMilliHz: Int32, verbose: Bool = false) throws {
         if verbose { tw_log_verbose() } else { tw_log_silence() }
+
+        // Software rendering, unless the caller says otherwise.
+        //
+        // Phase 6 is software-rendered by scope (PHASE6.md §7.1) — the build VM
+        // has no `/dev/dri` and real GPU work is Phase 4 — but on a dev box with
+        // a GPU `wlr_renderer_autocreate` picks GLES2 and allocates GPU-backed
+        // buffers, which are **not CPU-readable**. That makes `capturePPM`
+        // impossible and the difference between the two machines invisible until
+        // it fails. Pinning pixman here keeps both platforms on the same path.
+        // `overwrite: 0` so WLR_RENDERER from the environment still wins.
+        setenv("WLR_RENDERER", "pixman", 0)
 
         guard let d = wl_display_create() else { throw BackendError.noDisplay }
         display = d
@@ -205,6 +226,15 @@ public final class WlrootsOutput: Output {
 
     public let periodHintNs: UInt64
     private var frameColour: Float = 0
+    /// The scene to draw. A concrete type rather than an existential: the
+    /// present path calls this every frame and a witness-table hop plus the ARC
+    /// traffic of a `weak var` is exactly the kind of cost DESKTOP.md §11 bans
+    /// from here. Set once at startup; nil means "draw the test pattern", which
+    /// is what P6.2 had and what the bridge bench still exercises.
+    public var scene: SurfaceScene?
+    /// The desktop behind the windows. Jaguar blue, so a capture is obviously
+    /// ours and an empty output is obviously empty.
+    public var background = wlr_render_color(r: 0.24, g: 0.40, b: 0.63, a: 1.0)
     /// Anchor for the synthetic grid used when the backend has no hardware
     /// clock. Set from the first present event.
     private var gridEpoch: UInt64 = 0
@@ -256,17 +286,21 @@ public final class WlrootsOutput: Output {
         defer { wlr_output_state_finish(&state) }
 
         guard let pass = wlr_output_begin_render_pass(output, &state, nil) else { return }
-        // P6.2 draws a single animated rect: enough to prove buffers are being
-        // allocated, rendered into, committed and presented. Real surfaces
-        // arrive in P6.3 — this is the pipeline under test, not the picture.
-        frameColour += 0.013
-        if frameColour > 1 { frameColour -= 1 }
-        var opts = wlr_render_rect_options()
-        opts.box = wlr_box(x: 0, y: 0, width: Int32(output.pointee.width),
-                           height: Int32(output.pointee.height))
-        opts.color = wlr_render_color(r: frameColour, g: 0.25, b: 1 - frameColour, a: 1)
-        opts.blend_mode = WLR_RENDER_BLEND_MODE_NONE
-        wlr_render_pass_add_rect(pass, &opts)
+        if let scene {
+            scene.render(into: pass, background: background)
+        } else {
+            // No scene: the P6.2 test pattern, an animated rect. Enough to prove
+            // buffers are allocated, rendered into, committed and presented —
+            // which is what the bridge bench still measures.
+            frameColour += 0.013
+            if frameColour > 1 { frameColour -= 1 }
+            var opts = wlr_render_rect_options()
+            opts.box = wlr_box(x: 0, y: 0, width: Int32(output.pointee.width),
+                               height: Int32(output.pointee.height))
+            opts.color = wlr_render_color(r: frameColour, g: 0.25, b: 1 - frameColour, a: 1)
+            opts.blend_mode = WLR_RENDER_BLEND_MODE_NONE
+            wlr_render_pass_add_rect(pass, &opts)
+        }
         _ = wlr_render_pass_submit(pass)
 
         guard wlr_output_commit_state(output, &state) else { return }
@@ -311,6 +345,100 @@ public final class WlrootsOutput: Output {
         guard e.whenNs > gridEpoch else { return gridEpoch }
         let k = (Mono.since(gridEpoch, e.whenNs) &+ periodHintNs / 2) / periodHintNs
         return gridEpoch &+ k &* periodHintNs
+    }
+
+    /// Render one frame and write it out as a binary PPM.
+    ///
+    /// **A PPM, not a PNG**, and deliberately: the compositor would otherwise
+    /// have to link an image encoder to prove it drew something, and the harness
+    /// has probed PPM with `od` since Phase 2 (HANDOFF §2.26 — "a pixel probe
+    /// needs no image library"). The same reasoning that keeps cairo out of
+    /// `abyss-portal` keeps it out of here.
+    ///
+    /// It captures **the output's own swapchain buffer**, the one it is about to
+    /// present. The first attempt allocated a buffer of its own and rendered
+    /// into that — and the renderer refused the pass, because a buffer has to be
+    /// in the renderer's render-format set and guessing XRGB8888/INVALID is not
+    /// the same as asking. `wlr_output_begin_render_pass` already negotiates all
+    /// of that and leaves the chosen buffer in `state.buffer`, so the honest
+    /// capture is the frame we actually drew rather than a re-render into a
+    /// buffer we hoped was compatible.
+    public func capturePPM(path: String) -> Bool {
+        var state = wlr_output_state()
+        wlr_output_state_init(&state)
+        defer { wlr_output_state_finish(&state) }
+
+        guard let pass = wlr_output_begin_render_pass(output, &state, nil) else {
+            fail("the output refused a render pass")
+            return false
+        }
+        if let scene {
+            scene.render(into: pass, background: background)
+        }
+        guard wlr_render_pass_submit(pass) else {
+            fail("the render pass failed")
+            return false
+        }
+        guard let buffer = state.buffer else {
+            fail("the render pass left no buffer to read")
+            return false
+        }
+
+        var data: UnsafeMutableRawPointer?
+        var fmt: UInt32 = 0
+        var stride = 0
+        guard wlr_buffer_begin_data_ptr_access(
+            buffer, UInt32(WLR_BUFFER_DATA_PTR_ACCESS_READ.rawValue),
+            &data, &fmt, &stride), let src = data
+        else {
+            fail("the output's buffer is not CPU-readable (not shm-backed?)")
+            return false
+        }
+        defer { wlr_buffer_end_data_ptr_access(buffer) }
+
+        let w = Int(output.pointee.width), h = Int(output.pointee.height)
+        let ok = WlrootsOutput.writePPM(path: path, pixels: src, width: w, height: h,
+                                        stride: stride)
+        if !ok { fail("could not write \(path)") }
+        return ok
+    }
+
+    /// A capture that fails silently is worse than no capture: the harness gets
+    /// a missing file and no idea which of four steps went wrong.
+    private func fail(_ why: String) {
+        let m = Array("undertow: capture failed — \(why)\n".utf8)
+        _ = m.withUnsafeBufferPointer { write(2, $0.baseAddress, m.count) }
+    }
+
+    /// Binary PPM (P6). Source is XRGB8888 little-endian, i.e. B,G,R,X in
+    /// memory; PPM wants R,G,B.
+    private static func writePPM(path: String, pixels: UnsafeMutableRawPointer,
+                                 width: Int, height: Int, stride: Int) -> Bool {
+        let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        var out = Array("P6\n\(width) \(height)\n255\n".utf8)
+        out.reserveCapacity(out.count + width * height * 3)
+        let base = pixels.assumingMemoryBound(to: UInt8.self)
+        for row in 0..<height {
+            let line = base + row * stride
+            for col in 0..<width {
+                let p = line + col * 4
+                out.append(p[2])   // R
+                out.append(p[1])   // G
+                out.append(p[0])   // B
+            }
+        }
+        var written = 0
+        while written < out.count {
+            let n = out.withUnsafeBufferPointer {
+                write(fd, $0.baseAddress! + written, out.count - written)
+            }
+            if n <= 0 { return false }
+            written += n
+        }
+        return true
     }
 
     /// Wait for the deadline **while servicing wlroots**.
