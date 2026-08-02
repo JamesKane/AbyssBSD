@@ -260,6 +260,31 @@ void aw_xdg_activation_activate(void *activation, const char *token, void *surfa
                                (struct wl_surface *)surface);
 }
 
+void *aw_bind_screencopy_manager(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &zwlr_screencopy_manager_v1_interface, version);
+}
+
+void *aw_screencopy_capture_output(void *manager, int32_t overlay_cursor,
+                                   void *output) {
+    return zwlr_screencopy_manager_v1_capture_output(
+        (struct zwlr_screencopy_manager_v1 *)manager, overlay_cursor,
+        (struct wl_output *)output);
+}
+
+void aw_screencopy_frame_copy(void *frame, void *buffer) {
+    zwlr_screencopy_frame_v1_copy((struct zwlr_screencopy_frame_v1 *)frame,
+                                  (struct wl_buffer *)buffer);
+}
+
+void aw_screencopy_frame_destroy(void *frame) {
+    zwlr_screencopy_frame_v1_destroy((struct zwlr_screencopy_frame_v1 *)frame);
+}
+
+void aw_screencopy_manager_destroy(void *manager) {
+    zwlr_screencopy_manager_v1_destroy((struct zwlr_screencopy_manager_v1 *)manager);
+}
+
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }

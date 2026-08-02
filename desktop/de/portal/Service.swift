@@ -16,15 +16,26 @@ public final class PortalService {
     /// beside this executable, resolved once so the child never searches `$PATH`
     /// after forking.
     public let pickerBinary: String
+    /// The capture helper (`abyssgrab`). A separate process for the same reason
+    /// the picker is: the portal answers `screenshot` without ever becoming a
+    /// Wayland client (PHASE7.md §6.1, P7.5).
+    public let grabberBinary: String
     public private(set) var journal: [String] = []
 
-    public init(pickerBinary: String? = nil) {
+    public init(pickerBinary: String? = nil, grabberBinary: String? = nil) {
         if let p = pickerBinary {
             self.pickerBinary = p
         } else if let env = getenv("ABYSS_PICKER"), env.pointee != 0 {
             self.pickerBinary = String(cString: env)
         } else {
             self.pickerBinary = PortalService.siblingBinary("AquaDemo") ?? "AquaDemo"
+        }
+        if let g = grabberBinary {
+            self.grabberBinary = g
+        } else if let env = getenv("ABYSS_GRABBER"), env.pointee != 0 {
+            self.grabberBinary = String(cString: env)
+        } else {
+            self.grabberBinary = PortalService.siblingBinary("abyssgrab") ?? "abyssgrab"
         }
     }
 
@@ -56,6 +67,8 @@ public final class PortalService {
             return choose(startDir: dir, name: name, mode: .write)
         case .notify(let summary, let body, let timeout):
             return (relayNotify(summary: summary, body: body, timeout: timeout), nil)
+        case .screenshot:
+            return capture()
         case .unknown(let method):
             log("unknown method '\(method)'")
             var reply = Msg()
@@ -111,6 +124,71 @@ public final class PortalService {
         }
         log("handing over \(path) (\(mode == .read ? "read" : "write"))")
         return (portalReply(.chose(path), mode: mode), fd)
+    }
+
+    // MARK: - Screenshot
+
+    /// Capture the screen and hand back the PNG as a descriptor.
+    ///
+    /// **The image is unlinked the moment it is opened**, so the descriptor is
+    /// not merely the app's only *permitted* way to the bytes — after this
+    /// returns it is the only way at all, for anyone. Nothing is left in the
+    /// runtime dir for the next process to find, and there is no path the
+    /// requesting app could have named even if the type had let it.
+    private func capture() -> (reply: Msg, fd: Int32?) {
+        guard let runtime = try? Current.runtimeDir() else {
+            return (portalScreenshotReply(.failed("no runtime directory")), nil)
+        }
+        let path = runtime + "/shot.\(getpid()).png"
+        unlink(path)
+
+        var signalled: Int32 = 0
+        let argv = [grabberBinary, path]
+        // The environment passes through untouched: the helper needs this
+        // session's WAYLAND_DISPLAY, and the portal is the one that has it.
+        let envp = ProcessEnvironment().block()
+        let status = withCStrings(argv) { a in
+            withCStrings(envp) { e in ap_run_and_wait(a, e, &signalled) }
+        }
+        if status < 0 {
+            unlink(path)
+            let why = String(cString: strerror(errno))
+            log("could not run the capture helper: \(why)")
+            return (portalScreenshotReply(.failed("could not run the capture helper (\(why))")),
+                    nil)
+        }
+
+        // Open BEFORE unlinking, and unlink unconditionally — a failed capture
+        // must not leave a half-written image behind either.
+        let fd = open(path, O_RDONLY)
+        unlink(path)
+        let outcome = GrabOutcome.from(status: status, signalled: signalled != 0,
+                                       image: fd >= 0 ? readPNGSize(fd) : nil)
+        guard case .captured(let w, let h) = outcome else {
+            if fd >= 0 { close(fd) }
+            log("screenshot failed: \(outcome)")
+            return (portalScreenshotReply(outcome), nil)
+        }
+        // The client reads from the start; the header probe moved the offset.
+        _ = lseek(fd, 0, SEEK_SET)
+        log("handing over a \(w)x\(h) screenshot — as a descriptor with no name")
+        return (portalScreenshotReply(outcome), fd)
+    }
+
+    /// Read a PNG's dimensions off an open descriptor.
+    private func readPNGSize(_ fd: Int32) -> PNGSize? {
+        let want = 24
+        var head = [UInt8](repeating: 0, count: want)
+        var got = 0
+        while got < want {
+            let n = head.withUnsafeMutableBufferPointer {
+                read(fd, $0.baseAddress! + got, want - got)
+            }
+            if n <= 0 { break }
+            got += n
+        }
+        guard got == want else { return nil }
+        return PNGHeader.size(of: head)
     }
 
     /// Run the picker and wait. Blocking is correct here: a file dialog is

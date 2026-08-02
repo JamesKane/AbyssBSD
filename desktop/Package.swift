@@ -41,6 +41,7 @@ let package = Package(
                       "wlr-layer-shell-unstable-v1-protocol.c",
                       "wlr-foreign-toplevel-management-unstable-v1-protocol.c",
                       "xdg-activation-v1-protocol.c",
+                      "wlr-screencopy-unstable-v1-protocol.c",
                       "cwayland_shm.c", "cwayland_shim.c"],
             publicHeadersPath: "include"
         ),
@@ -194,6 +195,14 @@ let package = Package(
             path: "de/ccap",
             sources: ["ccap.c"],
             publicHeadersPath: "include"
+        ),
+        // Capture an output to a PNG, via wlr-screencopy. The screenshot
+        // portal's capture step as a separate process, so `abyss-portal` stays
+        // a headless service that links neither Wayland nor cairo.
+        .executableTarget(
+            name: "abyssgrab",
+            dependencies: ["Surface", "CCairo"],
+            path: "de/abyssgrab"
         ),
         // notify-send, brokerless: through the portal, as a jailed app would.
         .executableTarget(

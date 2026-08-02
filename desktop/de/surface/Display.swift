@@ -49,6 +49,8 @@ public final class Display {
     var wmBase: OpaquePointer?
     var layerShell: OpaquePointer?
     var activation: OpaquePointer?
+    var screencopy: OpaquePointer?
+    var screencopyVersion: UInt32 = 0
     var pointer: OpaquePointer?
     var keyboard: OpaquePointer?
 
@@ -235,6 +237,14 @@ public final class Display {
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.
             activation = opt(aw_bind_xdg_activation(raw(registry), name, min(version, 1)))
+        case "zwlr_screencopy_manager_v1":
+            // v3 adds buffer_done, which is what says "I've told you every
+            // buffer type I take — now send copy". Below it, the wl_shm buffer
+            // event is guaranteed and stands alone (Screencopy.swift). The
+            // manager has no events, so it binds with no listener.
+            screencopyVersion = min(version, 3)
+            screencopy = opt(aw_bind_screencopy_manager(raw(registry), name,
+                                                        screencopyVersion))
         case "wl_output":
             // v2 is where the `scale` event lands (and `done` batches props).
             guard let o = opt(aw_bind_output(raw(registry), name, min(version, 2)))
@@ -284,6 +294,15 @@ public final class Display {
     func outputScale(_ proxy: OpaquePointer) -> Int32 {
         for o in outputs where o.proxy == proxy { return o.scale }
         return 1
+    }
+
+    /// How many `wl_output` globals we've bound. A screenshot needs to name one.
+    public var outputCount: Int { outputs.count }
+
+    /// A bound output by index, in the order the registry advertised them.
+    func output(at index: Int) -> OpaquePointer? {
+        guard index >= 0, index < outputs.count else { return nil }
+        return outputs[index].proxy
     }
 
     private func seatCapabilities(_ caps: UInt32) {
@@ -474,7 +493,7 @@ public final class Display {
 
     // MARK: Key repeat
 
-    private func nowMs() -> Int64 {
+    func nowMs() -> Int64 {
         var ts = timespec()
         clock_gettime(CLOCK_MONOTONIC, &ts)
         return Int64(ts.tv_sec) * 1000 + Int64(ts.tv_nsec) / 1_000_000

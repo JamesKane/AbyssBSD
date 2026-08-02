@@ -72,6 +72,10 @@ if [ "$live" -eq 1 ]; then
   sh "$root/abyss/tests/live-sandbox.sh"
   echo "== notifications =="
   sh "$root/abyss/tests/live-notify.sh" >/dev/null
+  # The same claim with a sharper control: a client that cannot call socket(2),
+  # and therefore cannot reach the compositor, holding a picture of the screen.
+  echo "== the screenshot portal =="
+  sh "$root/abyss/tests/live-screenshot.sh"
 fi
 
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on

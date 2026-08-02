@@ -61,9 +61,15 @@ final class ShmBuffer {
     let width, height, stride: Int32
     var busy = false
 
-    init?(display: Display, width: Int32, height: Int32) {
+    /// `stride`/`format` default to what a painted surface wants — a tightly
+    /// packed ARGB8888 row, matching CAIRO_FORMAT_ARGB32. Screencopy is the one
+    /// caller that must not choose: the compositor dictates the buffer it will
+    /// copy into (Screencopy.swift), so both are parameters.
+    init?(display: Display, width: Int32, height: Int32,
+          stride explicitStride: Int32? = nil, format: UInt32 = 0) {
         guard let shm = display.shm else { return nil }
-        let stride = width * 4
+        let stride = explicitStride ?? width * 4
+        guard width > 0, height > 0, stride >= width * 4 else { return nil }
         let length = Int(stride) * Int(height)
         let fd = aw_create_shm(length)
         if fd < 0 { return nil }
@@ -73,9 +79,8 @@ final class ShmBuffer {
         guard let pool = opt(aw_shm_create_pool(raw(shm), fd, Int32(length))) else {
             munmap(map, length); close(fd); return nil
         }
-        // format 0 == WL_SHM_FORMAT_ARGB8888, matching CAIRO_FORMAT_ARGB32.
         guard let buf = opt(aw_shm_pool_create_buffer(
-            raw(pool), 0, width, height, stride, 0)) else {
+            raw(pool), 0, width, height, stride, format)) else {
             aw_shm_pool_destroy(raw(pool)); munmap(map, length); close(fd)
             return nil
         }

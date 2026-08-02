@@ -23,5 +23,6 @@ gen xdg-shell
 gen wlr-layer-shell-unstable-v1
 gen wlr-foreign-toplevel-management-unstable-v1
 gen xdg-activation-v1
+gen wlr-screencopy-unstable-v1
 
 echo "done."

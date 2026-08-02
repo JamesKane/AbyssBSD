@@ -18,6 +18,7 @@
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
+#include "wlr-screencopy-unstable-v1-client-protocol.h"
 
 /*
  * Create an anonymous, writable shared-memory fd of `size` bytes, suitable for
@@ -128,6 +129,18 @@ void aw_xdg_activation_token_set_surface(void *token, void *surface);
 void aw_xdg_activation_token_commit(void *token);
 void aw_xdg_activation_token_destroy(void *token);
 void aw_xdg_activation_activate(void *activation, const char *token, void *surface);
+
+/* wlr-screencopy: the compositor copies an output's contents into a buffer the
+ * client supplies. The frame object describes what buffer it wants (format,
+ * size, stride) and reports ready/failed once the copy is done. This is how
+ * grim takes every screenshot in docs/screenshots/, and it is what lets the
+ * screenshot portal be an ordinary client rather than compositor code. */
+void *aw_bind_screencopy_manager(void *registry, uint32_t name, uint32_t version);
+void *aw_screencopy_capture_output(void *manager, int32_t overlay_cursor,
+                                   void *output);
+void aw_screencopy_frame_copy(void *frame, void *buffer);
+void aw_screencopy_frame_destroy(void *frame);
+void aw_screencopy_manager_destroy(void *manager);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);

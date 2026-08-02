@@ -5,7 +5,9 @@ executable detail, grounded in a read of the sibling's `reef-portal`, `reef-open
 and `reef-notify`. Read [PLAN.md](PLAN.md) for the locked decisions and
 [PHASE3.md](PHASE3.md) for the substrate this builds on.
 
-Last updated: 2026-07-30.
+Last updated: 2026-08-02. **All five passes are done.** What is *not* here is
+§6.7's D-Bus bridge, which was carved out on purpose — read "portals: done" as
+"*our* portals, for *our* apps, done".
 
 **Numbered 7, being done out of order.** PLAN.md's phases run 0–6 and this one is
 new; it is being built now, before Phase 4 (Mac Pro) and Phase 6 (the Swift
@@ -247,13 +249,85 @@ Live, `abyss/tests/live-notify.sh` on both platforms: the notification crosses
 the portal, maps a 300×58 OVERLAY surface, is visible as light pixels over the
 blue desktop, reserves no space, then expires and takes its surface with it.
 
-**P7.5 — Screenshot, as a capability.**
-Vendor `wlr-screencopy-unstable-v1`, bind it in `Surface` (the mechanical recipe
-— HANDOFF §7 — `xdg-activation` is the worked example), and add
-`screenshot {}` → a fd holding the PNG. Same shape as the file chooser: the app
-receives **a descriptor, not a path**, and never gets to name what it captures.
-*Verify:* live, a client with no filesystem access receives a screenshot fd whose
-bytes are a valid PNG of the right dimensions.
+**P7.5 — Screenshot, as a capability. ✅ done.**
+`abyssopen --screenshot` → the portal → `abyssgrab` → a descriptor holding a PNG
+of the desktop:
+
+![a screenshot taken through the portal](screenshots/portal-screenshot.png)
+
+`wlr-screencopy-unstable-v1` is vendored and bound in `Surface`
+(`Screencopy.swift`), and `screenshot {}` answers with a fd and a size.
+
+**This request names nothing at all**, which is the file chooser's rule taken one
+step further. `file.open` at least accepts a directory hint, so it has a field to
+sanitise; `PortalRequest.screenshot` has **no associated values**, so there is
+nothing an app can send and nothing to check. The reply is the mirror image:
+`{ok, mode, width, height}` and a descriptor, and **no `path`** — a screenshot
+has no name the app is entitled to.
+
+**The portal unlinks the image the moment it opens it.** So the descriptor is not
+merely the app's only *permitted* route to the bytes; after the reply is sent it
+is the only route that exists, for anyone. Nothing is left in the runtime dir for
+the next process to find.
+
+**The control is sharper than the file chooser's** (§6.4 again, from the other
+side). `abyssopen`'s file mode proves it could not `open(2)` the path. Its
+screenshot mode proves something stronger: capturing a screen means connecting to
+the compositor, and capability mode forbids naming an address. From the guest:
+
+```
+sandbox: capability mode entered — no filesystem, no namespace
+portal: handed us a 520x400 screenshot — and no path for it (path in reply: none)
+control: connect(2) to /tmp/abyss-run-1001/wayland-1 failed
+         — Not permitted in capability mode
+         — this process cannot reach the compositor to capture anything
+verified: a real PNG, 520x400, read through a descriptor for a file with no name
+```
+
+So the client **could not have captured anything by any route**: no compositor to
+ask, and no filesystem to read someone else's capture from. It is holding a
+picture of a screen it cannot reach.
+
+**The first version of that control was wrong, and only FreeBSD could say so**
+(HANDOFF §2.36). It asserted `socket(2)` must fail — but Capsicum restricts
+*global namespaces*, and an unnamed socket is not in one, so `socket(2)` is
+permitted. The guest printed `socket(2) SUCCEEDED inside capability mode` on the
+first run, which is the P7.3 assertion doing exactly the job it was written for:
+a sandbox claim that isn't real fails loudly rather than shipping. The Linux half
+now asserts the same `connect(2)` **succeeds** unsandboxed — otherwise the
+FreeBSD failure is equally consistent with "there was no compositor there", and
+proves nothing.
+
+*Two design decisions worth recording:*
+
+- **The capture is a separate process (`abyssgrab`), not code in the portal** —
+  the same argument as §6.1's picker. `abyss-portal` is a headless service that
+  speaks IPC and syscalls; had it grown a Wayland client it would have gained a
+  dependency on the compositor's lifetime, plus cairo, to answer one method.
+  `abyssgrab /tmp/shot.png` is a usable screenshot tool in its own right, the
+  way `ventsctl` and `abyssctl` are.
+- **The portal reads the PNG header before handing the descriptor over.** A
+  capability is only worth as much as knowing what it is a capability *to*, and
+  "the helper exited 0" is not that. `PNGHeader` is 20 lines and pure; a helper
+  that exits 0 having written nothing readable is a failure with **no descriptor
+  attached**, never a capture.
+
+*Verified:* **11 new unit tests, 139 total**, on both platforms. Six in
+`PortalTests` — the request carrying nothing an app sent, the reply naming no
+path, the two-signal outcome rule, PNG header parsing and its refusals, and both
+broken-helper shapes yielding **no descriptor**. Five in `AquaTests` for the
+pixel normalisation a screencopy client must get right, none of which a
+"did we get a PNG of the right size?" check would catch: the compositor's stride
+is not `width * 4`, the copy may be `y_invert`ed, and the channel order may be
+BGR. Live,
+**`abyss/tests/live-screenshot.sh`** runs it against a headless sway showing a
+real Jaguar desktop — wallpaper, menu bar and Dock — and asserts the bytes are a
+520×400 PNG, that it is **a picture of something** (a blank buffer encodes to a
+few hundred bytes; this is ~100 KB), that no path came back and none was left
+behind, and on FreeBSD that `connect(2)` to the compositor failed inside the
+sandbox — while the Linux half asserts that same call **succeeds** unsandboxed,
+so the negative is evidence of the sandbox and not of a missing socket. Green on
+Linux and FreeBSD.
 
 ---
 
@@ -283,20 +357,31 @@ what the *user* picked — §6.1's confused-deputy rule is the invariant to test
 not just document.
 
 **6.4 Capsicum limits what the demo can do.** After `cap_enter` there is no
-`open`, no `socket`... **including the portal socket itself** — so the client
-must connect *before* entering capability mode and keep the connection as its
-only capability. Getting that order wrong makes the demo fail in a way that
-looks like the portal is broken.
+`open` by path and no `connect`/`bind` to an address — **including the portal
+socket itself** — so the client must connect *before* entering capability mode
+and keep the connection as its only capability. Getting that order wrong makes
+the demo fail in a way that looks like the portal is broken.
+
+*Corrected in P7.5, having been stated wrongly here since this doc was written:*
+**`socket(2)` is permitted in capability mode.** Capsicum restricts access to
+*global namespaces*, and an unnamed socket is not in one. It is the naming —
+`connect(2)` on a path — that is refused, which is why an already-connected
+descriptor keeps working. The distinction is invisible until you write a test
+that asserts the wrong half of it (HANDOFF §2.36).
 
 **6.5 The toast is net-new Aqua UI.** Jaguar's notification style is not in the
 512pixels library the way windows and menus are (Growl-era third-party
 conventions muddy it), so this is a *design* decision as much as an
 implementation one — expect to iterate on it rather than copy a reference.
 
-**6.6 Screenshot on someone else's compositor.** `wlr-screencopy` is a wlroots
-protocol; a Swift compositor (Phase 6) will have to implement it, or the
-screenshot portal will need a compositor-owned path then. Worth knowing now, not
-worth solving now.
+**6.6 Screenshot on someone else's compositor — still open, now inherited by
+Phase 6.** `wlr-screencopy` is a wlroots protocol, and P7.5 leans on it exactly
+as `grim` does. It is also *deprecated upstream* in favour of
+`ext-image-copy-capture-v1`, which the vendored XML says in as many words. So a
+Swift compositor has three options when it arrives — implement `wlr-screencopy`'s
+server half, move both sides to the `ext-` protocol, or give the portal a
+compositor-owned path — and none of them touches the portal's *shape*, because
+`abyssgrab` is a separate process. That was worth the separation on its own.
 
 **6.7 The D-Bus gap is real.** Until the carved-out bridge exists, a stock GTK
 or Qt app gets no file chooser from us. Anyone reading "portals: done" should

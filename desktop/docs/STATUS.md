@@ -3,9 +3,10 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-07-31. **Phases 0–3 are complete** and **Phase 7 (portals) is
-at P7.4** — next is P7.5, the screenshot portal. 128 unit tests + 35 live modes,
-green on Linux *and* FreeBSD.
+Last updated: 2026-08-02. **Phases 0–3 are complete**, and **Phase 7 (portals) is
+complete** — file chooser, sandboxed client, notifications and screenshot, all
+brokerless. 139 unit tests + 35 live modes, green on Linux *and* FreeBSD.
+There is no queued next task; see [What's next](#whats-next) for the choice.
 
 ## What this is
 
@@ -71,7 +72,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **90 unit tests and all 32 live modes**,
+The whole **harness** passes there too — **139 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -88,13 +89,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (128 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (139 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
-  CurrentIPC codec + descriptor passing, the supervisor's restart policy, and
-  the hardware bridges' parsing).
-  **The same 128 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
+  hardware bridges' parsing, the portal's refusals, and the screencopy pixel
+  normalisation).
+  **The same 139 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -120,7 +122,11 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
     routes to the window *or* the layer surface (one per process). Also
     `ForeignToplevels` (tracks running apps via
     `wlr-foreign-toplevel-management`, for the Dock), **xdg-activation**
-    (`Display.activate(surface:)` — how a client raises its own window), and an
+    (`Display.activate(surface:)` — how a client raises its own window),
+    **`Screencopy`** (`wlr-screencopy`: the compositor copies an output into a
+    buffer we supply, normalised to cairo's layout — the compositor dictates
+    stride, format and row order, so all three are handled rather than assumed),
+    and an
     `addFileDescriptor` hook to fold config-watch / timer fds into the run loop.
     `Display` holds a weak **window registry** and routes pointer/keyboard by the
     `wl_surface` the `enter` events name, so one process can run many windows
@@ -272,10 +278,47 @@ key and the field fills with repeats — real **key repeat** off the compositor'
 `repeat_info`, driven by a poll-timeout event loop
 (![key repeat](screenshots/live-repeat.png)).
 
+## Portals — the capability desktop (Phase 7, complete)
+
+The brokerless answer to xdg-desktop-portal. An app asks the desktop for
+something; the desktop does it and hands back **an open descriptor**. No D-Bus,
+no broker, no flatpak — `abyss-portal` is a `CurrentIPC` service, and descriptors
+ride over `SCM_RIGHTS`.
+
+- **`file.open` / `file.save`** run the **Finder as the picker** and the portal
+  opens what the user chose. A request has **no field for the file to open** —
+  the confused-deputy bug is unrepresentable rather than guarded against.
+- **`notify`** relays to the shell's toast, so a jailed app never holds the
+  notification service's socket. ![a toast](screenshots/notification-toast.png)
+- **`screenshot`** captures via `wlr-screencopy` (in a separate `abyssgrab`
+  process, so the portal is never a Wayland client) and returns the PNG as a
+  descriptor. It **names nothing**: no request field, no `path` in the reply, and
+  the image is unlinked the moment it is opened — so after the reply, the
+  descriptor is the only route to those bytes that exists for anyone. Here is one
+  taken through the portal by a client that has no filesystem:
+  ![a screenshot taken through the portal](screenshots/portal-screenshot.png)
+
+**And the claim is checked, not asserted.** `abyssopen` enters Capsicum
+capability mode *before* asking, so it has no filesystem and cannot name any
+address. It then reads a file whose path it demonstrably cannot `open(2)`, and
+holds a picture of a screen it demonstrably cannot `connect(2)` to. Capsicum is
+FreeBSD-only, so on Linux the same binary says plainly that it is **not**
+sandboxed rather than implying a confinement it doesn't have.
+
 ## How to run
 
 ```sh
 swift build && swift test
+
+# The portals, end to end (each starts its own headless sway):
+abyss/tests/live-portal.sh          # a client, a picker, a descriptor
+abyss/tests/live-sandbox.sh         # ...with no filesystem at all
+abyss/tests/live-screenshot.sh /tmp/shot.png    # ...and no way to reach the screen
+abyss/tests/live-notify.sh          # a toast, via the portal
+
+# Screenshots by hand — abyssgrab is a usable tool, like ventsctl/abyssctl:
+.build/debug/abyssgrab /tmp/shot.png            # --output N, --cursor
+.build/debug/abyssopen --screenshot > /tmp/portal-shot.png   # ...through the portal
 
 # The whole desktop under the Swift supervisor (the replacement for session.sh):
 .build/debug/anchor --display "$WAYLAND_DISPLAY"    # or --compositor CMD
@@ -294,7 +337,7 @@ abyss/tests/run-live.sh -o /tmp/shots dock trash   # ... or just some of them
 # (Swift lives off PATH in the guest, so use the scripts rather than ssh by hand.)
 abyss/vm/check.sh          # is the guest usable? packages, pkg-config, tools
 abyss/tests/run.sh --vm    # build + unit tests + smoke render, in the VM
-abyss/tests/run.sh --vm --live   # ... and all 31 live modes there
+abyss/tests/run.sh --vm --live   # ... and all 35 live modes + the portals there
 abyss/vm/build.sh          # quicker: just sync + swift build + swift test
 abyss/vm/build.sh --no-test -- -c release
 
@@ -362,17 +405,14 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 are complete**, and **Phase 7 (portals) is at P7.4 of 5.**
+**Phases 0–3 are complete, and so is Phase 7 (portals) — all five passes.**
+An app asks the desktop for a file, a notification or a screenshot, and gets back
+a **descriptor**: no D-Bus, no broker, no flatpak. The screenshot goes furthest —
+the request names nothing, the reply names nothing, and the image is unlinked the
+moment it is opened, so the descriptor is the only route to it that exists.
 
-**The immediate task: P7.5 — the screenshot portal.** Vendor
-`wlr-screencopy-unstable-v1`, bind it in `Surface` (the mechanical recipe is
-HANDOFF §7; `xdg-activation` is the worked example), and add `screenshot {}` to
-the portal, returning the PNG as a **descriptor** rather than a path — the same
-shape as the file chooser, so an app receives a capability and never names what
-it captures. `grim` already drives this protocol under every screenshot in
-`docs/screenshots/`, so the compositor side is known good.
-
-**After that, three independent directions** (HANDOFF §5 has the detail):
+**There is no queued next task. Three independent directions** (HANDOFF §5 has
+the detail):
 
 - **Phase 4 — Mac Pro bring-up.** Real hardware, and where the volume/battery
   status items finally read a real mixer and battery instead of reporting
@@ -382,7 +422,10 @@ it captures. `grim` already drives this protocol under every screenshot in
   portals for *our* apps.
 - **Phase 6 — the Swift compositor.** Unblocks what a client fundamentally
   cannot do: remembered window positions for spatial Finder, and dragging
-  desktop icons.
+  desktop icons. It also inherits the one Phase-7 debt: `wlr-screencopy` is a
+  wlroots protocol (and deprecated upstream), so a compositor of ours needs a
+  server half, the `ext-image-copy-capture-v1` successor, or a compositor-owned
+  path for screenshots (PHASE7.md §6.6).
 
 **Standing smaller items:** golden-image tests (the deterministic PNG scenes,
 diffed in CI — the cheapest guard against silent visual regressions, and the

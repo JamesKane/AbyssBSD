@@ -214,4 +214,115 @@ final class PortalTests: XCTestCase {
             XCTFail("a picker that writes nothing must not read as a choice")
         }
     }
+
+    // MARK: - Screenshot (P7.5)
+
+    /// `file.open` at least takes a directory hint. A screenshot request takes
+    /// **nothing** — so nothing an app sends alongside it can survive parsing.
+    /// The same unrepresentability argument as the file chooser, one step
+    /// further: there is no field at all, so there is nothing to sanitise.
+    func testAScreenshotRequestCarriesNothingAnAppSent() {
+        var msg = Msg()
+        msg.set("method", "screenshot")
+        // Every plausible way to say "capture *that* instead".
+        msg.set("output", "HEADLESS-2")
+        msg.set("path", "/etc/master.passwd")
+        msg.set("dir", "/home/build")
+        msg.set("window", UInt64(42))
+        XCTAssertEqual(PortalRequest(msg), .screenshot)
+    }
+
+    /// The reply is a capability and nothing else. A `path` here would hand back
+    /// the very name the request was not allowed to contain — and the file it
+    /// came from is unlinked before the descriptor is sent, so any path would be
+    /// a lie as well as a leak.
+    func testTheScreenshotReplyNamesNoPath() {
+        let reply = portalScreenshotReply(.captured(width: 520, height: 400))
+        XCTAssertEqual(reply.bool("ok"), true)
+        XCTAssertEqual(reply.uint64("width"), 520)
+        XCTAssertEqual(reply.uint64("height"), 400)
+        XCTAssertEqual(reply.string("mode"), "r")
+        XCTAssertNil(reply.string("path"))
+    }
+
+    /// Exit status and file state, read together, exactly as the picker's are
+    /// (PHASE7.md §6.2).
+    func testAGrabThatWroteNoImageIsNotACapture() {
+        let png = PNGSize(width: 8, height: 8)
+        XCTAssertEqual(GrabOutcome.from(status: 0, signalled: false, image: png),
+                       .captured(width: 8, height: 8))
+        // Exit 0 with nothing readable is a broken helper, never a capture —
+        // otherwise the portal hands over a descriptor to it knows not what.
+        if case .failed = GrabOutcome.from(status: 0, signalled: false, image: nil) {} else {
+            XCTFail("exit 0 with no PNG must not read as a capture")
+        }
+        // A helper that produced an image but failed is still a failure: the
+        // status is the authority on whether the capture completed.
+        if case .failed = GrabOutcome.from(status: 1, signalled: false, image: png) {} else {
+            XCTFail("a non-zero exit must not read as a capture")
+        }
+        if case .failed = GrabOutcome.from(status: 11, signalled: true, image: png) {} else {
+            XCTFail("a killed helper must not read as a capture")
+        }
+    }
+
+    /// The portal confirms the bytes are an image before handing them over. It
+    /// decodes nothing — but "a capability to what?" has to have an answer.
+    func testPNGHeaderReadsSizeAndRejectsEverythingElse() {
+        var png = PNGHeader.signature
+        png += [0, 0, 0, 13] + Array("IHDR".utf8)
+        png += [0, 0, 0x02, 0x08]           // width  520
+        png += [0, 0, 0x01, 0x90]           // height 400
+        XCTAssertEqual(PNGHeader.size(of: png), PNGSize(width: 520, height: 400))
+
+        // Truncated: a helper killed mid-write leaves exactly this.
+        XCTAssertNil(PNGHeader.size(of: Array(png[0..<20])))
+        // Right length, wrong file — a JPEG, or anything else that isn't ours.
+        var notPNG = [UInt8](repeating: 0xAB, count: 24)
+        notPNG[0] = 0xFF; notPNG[1] = 0xD8
+        XCTAssertNil(PNGHeader.size(of: notPNG))
+        // The signature alone is not enough; the IHDR has to be there too.
+        var noIHDR = png
+        noIHDR[12] = 0x49; noIHDR[13] = 0x45; noIHDR[14] = 0x4E; noIHDR[15] = 0x44
+        XCTAssertNil(PNGHeader.size(of: noIHDR))
+        // A zero dimension is not an image.
+        var zero = png
+        zero[16] = 0; zero[17] = 0; zero[18] = 0; zero[19] = 0
+        XCTAssertNil(PNGHeader.size(of: zero))
+        XCTAssertNil(PNGHeader.size(of: []))
+    }
+
+    /// A capture helper that cannot run is a clean refusal, and — the part worth
+    /// pinning — **no descriptor comes back with it**. A failed capability
+    /// request must hand over nothing at all.
+    func testAGrabberThatCannotRunYieldsNoDescriptor() {
+        let dir = "/tmp/abyss-portal-rt3.\(getpid())"
+        _ = mkdir(dir, 0o700)
+        setenv("ABYSS_RUNTIME_DIR", dir, 1)
+        defer { unsetenv("ABYSS_RUNTIME_DIR"); _ = rmdir(dir) }
+
+        let service = PortalService(pickerBinary: "/nonexistent/picker",
+                                    grabberBinary: "/nonexistent/grabber")
+        let (reply, fd) = service.handle(.screenshot)
+        XCTAssertEqual(reply.bool("ok"), false)
+        XCTAssertNotNil(reply.string("error"))
+        XCTAssertNil(fd, "a failed capture must not hand back a descriptor")
+    }
+
+    /// `/usr/bin/true` exits 0 and writes no image: the "broken helper" shape,
+    /// through the real fork/exec path. It must not become a capability.
+    func testAGrabberThatWritesNoImageYieldsNoDescriptor() {
+        let dir = "/tmp/abyss-portal-rt4.\(getpid())"
+        _ = mkdir(dir, 0o700)
+        setenv("ABYSS_RUNTIME_DIR", dir, 1)
+        defer { unsetenv("ABYSS_RUNTIME_DIR"); _ = rmdir(dir) }
+
+        let truePath = access("/usr/bin/true", X_OK) == 0 ? "/usr/bin/true" : "/bin/true"
+        let service = PortalService(pickerBinary: truePath, grabberBinary: truePath)
+        let (reply, fd) = service.handle(.screenshot)
+        XCTAssertEqual(reply.bool("ok"), false)
+        XCTAssertNil(fd)
+        // And it left nothing behind in the runtime dir for anyone to find.
+        XCTAssertEqual(access(dir + "/shot.\(getpid()).png", F_OK), -1)
+    }
 }

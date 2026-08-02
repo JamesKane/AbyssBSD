@@ -1377,6 +1377,95 @@ final class AquaTests: XCTestCase {
         // Free space on a real volume is non-zero.
         XCTAssertGreaterThan(finderFreeSpace(dir), 0)
     }
+
+    // MARK: - Screencopy pixel normalisation (P7.5)
+    //
+    // The three things a screencopy client gets wrong, all of them invisible in
+    // a "did we get a PNG of the right size?" check: the compositor's stride is
+    // its own business, the copy may be bottom-up, and the channel order may be
+    // BGR. Pure, so they're tested without a compositor.
+
+    /// A padded stride must not shear the image. wlroots is free to hand back a
+    /// row longer than width*4, and reading it as tightly packed slides every
+    /// row a little further left than the last.
+    func testCapturedRowsHonourTheCompositorsStride() {
+        let w = 2, h = 2, stride = 12          // 4 bytes of padding per row
+        var raw = [UInt8](repeating: 0xEE, count: stride * h)
+        // Row 0: two pixels, B,G,R,A each. Row 1: two more.
+        raw[0...7]   = [10, 11, 12, 0, 20, 21, 22, 0][0...7]
+        raw[12...19] = [30, 31, 32, 0, 40, 41, 42, 0][0...7]
+
+        guard let out = ScreenPixels.normalise(raw, format: 1, width: w, height: h,
+                                               stride: stride, yInvert: false)
+        else { return XCTFail("a padded stride should normalise") }
+        XCTAssertEqual(out.count, w * h * 4)
+        XCTAssertEqual(Array(out[0..<3]), [10, 11, 12])
+        XCTAssertEqual(Array(out[4..<7]), [20, 21, 22])
+        XCTAssertEqual(Array(out[8..<11]), [30, 31, 32])   // row 1, not padding
+        XCTAssertEqual(Array(out[12..<15]), [40, 41, 42])
+    }
+
+    /// y_invert means the compositor wrote the bottom row first. Ignoring it
+    /// yields a perfectly valid, perfectly upside-down screenshot.
+    func testYInvertFlipsRowsBackTheRightWayUp() {
+        let w = 1, h = 3, stride = 4
+        let raw: [UInt8] = [1, 1, 1, 0,  2, 2, 2, 0,  3, 3, 3, 0]
+        guard let up = ScreenPixels.normalise(raw, format: 1, width: w, height: h,
+                                              stride: stride, yInvert: false),
+              let flipped = ScreenPixels.normalise(raw, format: 1, width: w, height: h,
+                                                   stride: stride, yInvert: true)
+        else { return XCTFail("both orientations should normalise") }
+        XCTAssertEqual([up[0], up[4], up[8]], [1, 2, 3])
+        XCTAssertEqual([flipped[0], flipped[4], flipped[8]], [3, 2, 1])
+    }
+
+    /// A BGR-ordered format needs red and blue swapped, or the whole desktop
+    /// comes out in the wrong colours — the kind of bug a dimensions check
+    /// sails straight past.
+    func testBGRFormatsSwapRedAndBlue() {
+        let pixel: [UInt8] = [0x10, 0x20, 0x30, 0]     // memory order B,G,R,A
+        // XRGB8888: already cairo's order.
+        guard let same = ScreenPixels.normalise(pixel, format: 1, width: 1, height: 1,
+                                                stride: 4, yInvert: false),
+              // XBGR8888 (fourcc 'XB24'): red and blue the other way round.
+              let swapped = ScreenPixels.normalise(pixel, format: 0x3432_4258,
+                                                   width: 1, height: 1,
+                                                   stride: 4, yInvert: false)
+        else { return XCTFail("both formats should normalise") }
+        XCTAssertEqual(Array(same[0..<3]), [0x10, 0x20, 0x30])
+        XCTAssertEqual(Array(swapped[0..<3]), [0x30, 0x20, 0x10])
+    }
+
+    /// A screenshot is opaque by definition. The X formats carry no alpha byte
+    /// at all and a compositor may leave it as garbage even in the A formats —
+    /// pass it through and the PNG comes out mysteriously see-through.
+    func testCapturedPixelsAreForcedOpaque() {
+        let raw: [UInt8] = [1, 2, 3, 0x00]
+        guard let out = ScreenPixels.normalise(raw, format: 1, width: 1, height: 1,
+                                               stride: 4, yInvert: false)
+        else { return XCTFail("should normalise") }
+        XCTAssertEqual(out[3], 0xFF)
+    }
+
+    /// Refusals: a buffer too small for the geometry, a stride that can't hold a
+    /// row, and a format we don't read. Each would otherwise be a read past the
+    /// end of a shared mapping or a silently wrong image.
+    func testCaptureNormalisationRefusesWhatItCannotRead() {
+        let ok = [UInt8](repeating: 0, count: 16)
+        XCTAssertNotNil(ScreenPixels.normalise(ok, format: 0, width: 2, height: 2,
+                                               stride: 8, yInvert: false))
+        // Short buffer.
+        XCTAssertNil(ScreenPixels.normalise(Array(ok[0..<12]), format: 0, width: 2,
+                                            height: 2, stride: 8, yInvert: false))
+        // A stride that doesn't fit the row.
+        XCTAssertNil(ScreenPixels.normalise(ok, format: 0, width: 4, height: 2,
+                                            stride: 8, yInvert: false))
+        // A format we can't read — better a clean refusal than a garbage image.
+        XCTAssertNil(ScreenPixels.normalise(ok, format: 0x3231_3457, width: 2,
+                                            height: 2, stride: 8, yInvert: false))
+        XCTAssertNil(ScreenPixels.normalise(ok, format: 0, width: 0, height: 2,
+                                            stride: 8, yInvert: false))
+    }
 }
 
 /// Delete a directory tree — test cleanup. It's `finderRemovePath` (the Trash's

@@ -34,6 +34,12 @@ public enum PortalRequest: Equatable, Sendable {
     /// through here — it never holds the notify service's socket, which is the
     /// same trust boundary the file chooser draws.
     case notify(summary: String, body: String?, timeout: UInt64?)
+    /// Capture the screen. **Deliberately carries nothing at all**: not what to
+    /// capture, not where to put it, not what to call it. `file.open` at least
+    /// takes a directory hint; a screenshot request has no hint worth honouring,
+    /// so the case has no associated values and the reply names no path either.
+    /// The app receives one descriptor and no way to ask for a second thing.
+    case screenshot
     case unknown(String)
 
     /// Parse a control-plane message. Unknown methods are preserved so the
@@ -53,6 +59,10 @@ public enum PortalRequest: Equatable, Sendable {
                 ? .unknown("notify (no summary)")
                 : .notify(summary: summary, body: msg.string("body"),
                           timeout: msg.uint64("timeout"))
+        case "screenshot":
+            // Nothing is read out of the message. Anything an app sent along
+            // with the method is, by construction, ignored.
+            self = .screenshot
         case let other:
             self = .unknown(other)
         }
@@ -102,6 +112,83 @@ public enum PickerOutcome: Equatable, Sendable {
             return .failed("the picker exited \(status)")
         }
     }
+}
+
+/// What running the capture helper produced (PHASE7.md P7.5).
+///
+/// Read from the same two signals as the picker's outcome, for the same reason
+/// (§6.2): an exit status alone can't tell "the compositor refused" from "the
+/// helper wrote a truncated file", and a file alone can't tell a fresh capture
+/// from a stale one. A screenshot has no cancel — nobody was asked.
+public enum GrabOutcome: Equatable, Sendable {
+    case captured(width: Int, height: Int)
+    case failed(String)
+
+    public static func from(status: Int32, signalled: Bool,
+                            image: PNGSize?) -> GrabOutcome {
+        if signalled { return .failed("the capture helper was killed by signal \(status)") }
+        guard status == 0 else {
+            return .failed("the capture helper exited \(status)")
+        }
+        // Exit 0 with no readable PNG is a broken helper. The portal must not
+        // hand over a descriptor to something it hasn't confirmed is an image:
+        // a capability is only as good as knowing what it is a capability *to*.
+        guard let image else {
+            return .failed("the capture helper exited 0 but wrote no readable PNG")
+        }
+        return .captured(width: image.width, height: image.height)
+    }
+}
+
+/// A PNG's declared dimensions.
+public struct PNGSize: Equatable, Sendable {
+    public let width: Int
+    public let height: Int
+    public init(width: Int, height: Int) { self.width = width; self.height = height }
+}
+
+/// Just enough PNG to answer "is this a PNG, and how big?".
+///
+/// The portal decodes nothing — it only needs to confirm that the bytes it is
+/// about to hand over as a capability really are the image it commissioned.
+/// Pure, so it is tested without a compositor.
+public enum PNGHeader {
+    public static let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+
+    /// The IHDR sits immediately after the signature: a 4-byte length, "IHDR",
+    /// then width and height as big-endian 32-bit values.
+    public static func size(of bytes: [UInt8]) -> PNGSize? {
+        guard bytes.count >= 24, Array(bytes[0..<8]) == signature,
+              Array(bytes[12..<16]) == Array("IHDR".utf8)
+        else { return nil }
+        func be32(_ at: Int) -> Int {
+            (Int(bytes[at]) << 24) | (Int(bytes[at + 1]) << 16)
+                | (Int(bytes[at + 2]) << 8) | Int(bytes[at + 3])
+        }
+        let w = be32(16), h = be32(20)
+        guard w > 0, h > 0 else { return nil }
+        return PNGSize(width: w, height: h)
+    }
+}
+
+/// Build the reply for a capture. The descriptor is attached by the caller.
+///
+/// **Note what isn't here: a path.** `file.open` returns one because the user
+/// picked it and already knows it; a screenshot has no name the app is entitled
+/// to. The descriptor is the whole of what it gets.
+public func portalScreenshotReply(_ outcome: GrabOutcome) -> Msg {
+    var reply = Msg()
+    switch outcome {
+    case .captured(let w, let h):
+        reply.set("ok", true)
+        reply.set("mode", "r")
+        reply.set("width", UInt64(w))
+        reply.set("height", UInt64(h))
+    case .failed(let why):
+        reply.set("ok", false)
+        reply.set("error", why)
+    }
+    return reply
 }
 
 /// The picker's exit codes, mirrored from `FinderPicker` so this module doesn't

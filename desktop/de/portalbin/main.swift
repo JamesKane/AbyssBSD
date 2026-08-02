@@ -1,14 +1,17 @@
 // abyss-portal — host the desktop's `portal` service for a session.
 //
-//   abyss-portal [--picker PATH] [--once]
+//   abyss-portal [--picker PATH] [--grabber PATH] [--once]
 //
 // Methods (over CurrentIPC, in the session's runtime dir):
 //   file.open {dir?}         → {ok, path, mode:"r"} + fd `file`  (O_RDONLY)
 //   file.save {dir?, name?}  → {ok, path, mode:"w"} + fd `file`  (O_WRONLY|CREAT)
 //   both               → {ok:false, error:"cancelled"} if the user declined.
+//   notify {summary, body?, timeout?}  → relayed to the shell's toast
+//   screenshot {}            → {ok, mode:"r", width, height} + fd `file`
 //
 // The requesting app never names the file that gets opened — see
-// PortalRequest, where that is enforced by the type.
+// PortalRequest, where that is enforced by the type. `screenshot` goes further
+// and names nothing at all: no request field, and no `path` in the reply.
 
 import CurrentIPC
 import Portal
@@ -25,6 +28,7 @@ func emit(_ fd: Int32, _ s: String) {
 }
 
 var picker: String?
+var grabber: String?
 var once = false
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
@@ -34,10 +38,14 @@ while i < args.count {
         i += 1
         guard i < args.count else { emit(2, "abyss-portal: --picker needs a path"); exit(2) }
         picker = args[i]
+    case "--grabber":
+        i += 1
+        guard i < args.count else { emit(2, "abyss-portal: --grabber needs a path"); exit(2) }
+        grabber = args[i]
     case "--once":
         once = true
     case "-h", "--help":
-        emit(1, "usage: abyss-portal [--picker PATH] [--once]")
+        emit(1, "usage: abyss-portal [--picker PATH] [--grabber PATH] [--once]")
         exit(0)
     default:
         emit(2, "abyss-portal: unknown option '\(args[i])'")
@@ -49,7 +57,7 @@ while i < args.count {
 // A client that hangs up mid-reply must not kill the portal (HANDOFF §2.33).
 signal(SIGPIPE, SIG_IGN)
 
-let service = PortalService(pickerBinary: picker)
+let service = PortalService(pickerBinary: picker, grabberBinary: grabber)
 let server: Current.Server
 do {
     server = try Current.Server(service: "portal")
@@ -57,7 +65,8 @@ do {
     emit(2, "abyss-portal: cannot bind the portal service: \(error)")
     exit(1)
 }
-emit(2, "portal: serving \(server.path) (picker: \(service.pickerBinary))")
+emit(2, "portal: serving \(server.path) (picker: \(service.pickerBinary),"
+     + " grabber: \(service.grabberBinary))")
 
 // One request at a time, on purpose: the picker is a modal dialog, and the
 // portal is blocked while the user decides.

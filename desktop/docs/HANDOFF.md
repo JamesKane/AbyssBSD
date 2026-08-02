@@ -6,18 +6,20 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-07-31. **Phases 0–3 complete** (the desktop runs on FreeBSD
+Last updated: 2026-08-02. **Phases 0–3 complete** (the desktop runs on FreeBSD
 with a Swift control plane, session supervisor and hardware bridges);
-**Phase 7 (portals) is at P7.4** — the file chooser hands over descriptors, a
-Capsicum-sandboxed client proves the capability claim, and notifications land as
-Aqua toasts. **128 unit tests + 35 live modes, green on Linux and FreeBSD.**
+**Phase 7 (portals) is COMPLETE** — the file chooser hands over descriptors, a
+Capsicum-sandboxed client proves the capability claim, notifications land as Aqua
+toasts, and a screenshot arrives as a descriptor with no name.
+**139 unit tests + 35 live modes, green on Linux and FreeBSD.**
 
 **Picking this up cold?**
 
-1. Read §1 (what exists) and §5 (what's next — the immediate task is **P7.5**,
-   the screenshot portal).
-2. Skim the §2 index for the trap nearest what you're about to touch. §2.28–2.35
-   are the recent ones; **§2.35 is the freshest scar** and its lesson generalises.
+1. Read §1 (what exists) and §5 (what's next — Phase 7 is done, so the next move
+   is a **choice between phases**, not a queued task).
+2. Skim the §2 index for the trap nearest what you're about to touch. §2.28–2.36
+   are the recent ones; **§2.36 is the freshest scar** and its lesson generalises
+   (a security claim's *proof* deserves as much scepticism as its code).
 3. Confirm the box still works:
 
    ```sh
@@ -110,7 +112,7 @@ with a native substrate underneath it (PHASE3.md):
 - **`Vents`** — the hardware bridges: sysctl (not sysfs), OSS (not ALSA), devd
   (not udev), and the menu bar's volume/battery status items (§2.34).
 
-**Phase 7 — portals (P7.1–P7.4 done, P7.5 open).** The brokerless answer to
+**Phase 7 — portals (P7.1–P7.5, complete).** The brokerless answer to
 xdg-desktop-portal, and the project's most interesting claim (PHASE7.md):
 
 - **The Finder is a picker** (`$ABYSS_FINDER_PICK`): choose → path written,
@@ -126,6 +128,13 @@ xdg-desktop-portal, and the project's most interesting claim (PHASE7.md):
 - **Notifications** — an Aqua **toast** on an OVERLAY surface that reserves no
   space and takes no focus, reached through the portal by `abyssnotify`
   (§2.35, `docs/screenshots/notification-toast.png`).
+- **Screenshot** — `wlr-screencopy` bound in `Surface`, captured by a separate
+  `abyssgrab` helper so the portal never becomes a Wayland client, and returned
+  as **a descriptor with no name at all**: the request type carries nothing, the
+  reply carries no path, and the image is **unlinked the moment it is opened**.
+  The sandboxed client holds a picture of a screen it cannot reach — `connect(2)`
+  to the compositor fails from capability mode (§2.36,
+  `docs/screenshots/portal-screenshot.png`).
 
 The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
 and `system-preferences.png` are the Phase-1 originals, and `freebsd-*.png` are
@@ -175,6 +184,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.33 | The supervisor: accepted sockets inherit `O_NONBLOCK` on BSD but not Linux; SIGPIPE kills a client silently |
 | 2.34 | The bridges: sysctl is untyped (`"FreeBSD\0"` is 8 bytes), and a pixel probe must not depend on the font |
 | 2.35 | A `LayerSurface` with no teardown: replacing one crashed the process — §2.2's trap, eight months later |
+| 2.36 | Capsicum permits `socket(2)`; it forbids *naming an address* — the control was wrong, and only FreeBSD could say so |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -441,6 +451,35 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.36 A control that isn't a control: Capsicum permits `socket(2)`
+(P7.5 — the screenshot portal. The bug was in the *proof*, not the code.)
+
+- **`cap_enter(2)` does not forbid `socket(2)`.** Capability mode restricts
+  access to **global namespaces**, and an unnamed socket is not in one — so
+  creating it is allowed. What it forbids is *naming an address*: `connect(2)`
+  or `bind(2)` on a path. The sandboxed client's screenshot control was written
+  as "socket(2) must fail", which is simply false, and FreeBSD said so on the
+  first guest run — `socket(2) SUCCEEDED inside capability mode`. The right
+  control is `connect(2)` to `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY`: that is the
+  call a client would actually need to capture a screen, and it is the one
+  Capsicum refuses. §2.29's lesson generalises — **check the probe**, and check
+  it hardest when it is the thing the whole demo rests on.
+- **The failure was the test working.** `abyssopen` treats "the control
+  succeeded while `cap_getmode` says we're confined" as fatal, so a sandbox that
+  isn't real cannot pass quietly. That assertion existed because P7.3 argued for
+  it, and it is the only reason a wrong premise cost an hour instead of shipping
+  as a false claim.
+- **A control must fail *because of* the thing under test.** The Linux half now
+  asserts the same `connect(2)` **succeeds** — same call, same compositor, no
+  sandbox. Without that, "connect failed on FreeBSD" is equally consistent with
+  "there was no compositor socket there", and the evidence proves nothing. A
+  negative result needs its positive control on the other platform.
+- **`--vm --live` is where the design assumption died, not the code.** Nothing
+  about this was a portability bug: the Linux run was green and the FreeBSD
+  build was green. What FreeBSD provided was the only kernel that could tell us
+  the security claim was wrong. Third entry in this file (§2.33, §2.34) where
+  the guest caught something no amount of Linux testing could.
 
 ### 2.35 The trap you documented is still a trap
 (P7.4 — the notification centre, the first thing to *replace* a layer surface.)
@@ -1269,21 +1308,13 @@ Known-not-faithful, on purpose:
 **Where things stand.** Phases 0–3 are complete: the Jaguar shell is built, it
 runs on FreeBSD under a Swift session supervisor, with a Swift control plane and
 Swift hardware bridges underneath, and the whole harness passes on both
-platforms. Phase 7 (portals) is four passes in. **128 unit tests and 35 live
+platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-1. **P7.5 — the screenshot portal.** The one pass left in Phase 7, and the
-   smallest of them. Vendor `wlr-screencopy-unstable-v1`, bind it in `Surface`
-   (the recipe is §7 below; `xdg-activation` is the worked example), and add
-   `screenshot {}` → a **descriptor holding the PNG**. Same shape as the file
-   chooser: the app receives a capability, not a path, and never gets to name
-   what it captures. `grim` already uses this protocol under every screenshot in
-   `docs/screenshots/`, so the compositor side is known to work.
-   *Note for later:* a Swift compositor (Phase 6) will have to implement
-   `wlr-screencopy` itself, or the screenshot portal needs a compositor-owned
-   path then (PHASE7.md §6.6).
+**There is no queued next task — the next move is a choice.** All three
+directions below are independent; pick on appetite, not on order.
 
-2. **Then pick a phase — they are independent.**
+1. **Pick a phase.**
    - **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
      volume/battery status items finally read a real mixer and battery rather
      than reporting absent (P3.7). It is also the biggest single risk left:
@@ -1291,12 +1322,16 @@ modes, green on Linux and FreeBSD.**
    - **The D-Bus/portal bridge** — the carved-out half of Phase 7 (§6.7): a
      jailed session bus and `org.freedesktop.portal.*` so stock GTK/Qt apps get
      a file chooser from us. Until then, "portals: done" means *our* portals for
-     *our* apps. The guest already has `dbus-1.16.2` and `gtk3` to test against.
+     *our* apps — which is exactly what it should be read as. The guest already
+     has `dbus-1.16.2` and `gtk3` to test against.
    - **Phase 6 — the Swift compositor.** The largest, and the one that unblocks
      the things a client fundamentally cannot do: remembered window positions
-     for spatial Finder, and dragging desktop icons (§2.22).
+     for spatial Finder, and dragging desktop icons (§2.22). Note it also
+     **inherits a Phase 7 debt**: `wlr-screencopy` is a wlroots protocol, so a
+     compositor of ours has to implement the server half or the screenshot
+     portal needs a compositor-owned path then (PHASE7.md §6.6).
 
-3. **Standing smaller items**, none blocking:
+2. **Standing smaller items**, none blocking:
    - **Golden-image tests** — snapshot the deterministic PNG scenes and diff in
      CI (`finderSampleEntries`/`desktopSampleEntries` exist for exactly this).
      The cheapest guard against silent visual regressions, and the toast and
@@ -1339,7 +1374,7 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | Path | What |
 |---|---|
 | `de/cwayland` | libwayland + generated protocols + the `aw_*` shim (§2.1) |
-| `de/surface` | the client runtime: `Display`, `Window`, `LayerSurface`, `Popup`, `Keyboard`, `ForeignToplevels`, `Activation` |
+| `de/surface` | the client runtime: `Display`, `Window`, `LayerSurface`, `Popup`, `Keyboard`, `ForeignToplevels`, `Activation`, `Screencopy` |
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
 | `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`, §2.30) and SCM_RIGHTS fd passing (§2.32) |
@@ -1348,14 +1383,15 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
-| `de/abyssopen`, `de/ccap` | the sandboxed client and Capsicum's `cap_enter` |
+| `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
 | `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
+| `de/abyssgrab` | capture an output to a PNG via `wlr-screencopy`; the portal forks it, so the portal itself is never a Wayland client |
 | `de/vents`, `de/cvents` | the hardware bridges: sysctl, OSS volume, battery, devd (§2.34) |
 | `de/ventsctl` | `ventsctl sysctl\|volume\|battery\|devd` — read the machine by hand |
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
-| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 31 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, the virtual input helpers |
+| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/**`live-screenshot.sh`** (the portals, driven from `run.sh --live`), the virtual input helpers |
 | `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |
 | `protocols/` | vendored protocol XML; regenerate via `de/cwayland/generate-protocols.sh` |
@@ -1363,7 +1399,12 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 **Adding a Wayland protocol** is mechanical: drop the XML in `protocols/`, add a
 `gen` line to `generate-protocols.sh`, list the generated `.c` in
 `Package.swift`, add one-line `aw_*` wrappers (§2.1), and fill **every** listener
-slot (§2.3). xdg-activation (P2.8) is the most recent worked example.
+slot (§2.3). **`wlr-screencopy` (P7.5) is the most recent worked example**, and
+the most complete one — it binds a manager, creates a per-request object, fills
+all seven of its events, and has a version fallback (`buffer_done` is v3+, so
+below that the `buffer` event stands alone). Regenerating also proved the other
+four protocols come out byte-identical, so the committed glue is safe to
+regenerate at any time.
 
 **External:**
 
