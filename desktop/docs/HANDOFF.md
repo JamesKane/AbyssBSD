@@ -186,6 +186,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.34 | The bridges: sysctl is untyped (`"FreeBSD\0"` is 8 bytes), and a pixel probe must not depend on the font |
 | 2.35 | A `LayerSurface` with no teardown: replacing one crashed the process — §2.2's trap, eight months later |
 | 2.36 | Capsicum permits `socket(2)`; it forbids *naming an address* — the control was wrong, and only FreeBSD could say so |
+| 2.37 | Swift allocates via `posix_memalign`, and interposition dies in a `.xctest` — a probe with no positive control reports a comfortable zero |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -452,6 +453,38 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.37 A probe with no positive control measures nothing
+(P6.1 — the metronome. Third time this file has recorded the same shape, so it
+is now clearly a *class* of mistake rather than three accidents: §2.29's `pkg
+search`, §2.36's Capsicum control, and this.)
+
+- **Swift allocates through `posix_memalign`, not `malloc`.** An interposer that
+  wraps `malloc`/`calloc`/`realloc` — the obvious three — sees almost nothing a
+  Swift program does. It does not error, it does not warn: it reports **zero
+  allocations**, which is indistinguishable from success and is exactly the
+  answer you were hoping for. `libswiftCore`'s dynamic symbol table is the tell
+  (`nm -D | grep -E 'malloc|memalign'`).
+- **Interposition works in an executable, not in a `.xctest` bundle.** A test
+  bundle is a shared object loaded by a runner, so libc wins the symbol lookup
+  and the probe is silently blind. That is *why* the allocation gate is a bench
+  binary driven by a shell script rather than an XCTest case — not a stylistic
+  preference.
+- **The rule: a probe that cannot fail has not been tested.** `bench-alloc`
+  refuses to report anything until `ap_alloc_probe_works()` has allocated
+  deliberately and *seen it*. That control is four lines and it is the only
+  reason the number means anything. The same discipline caught §2.36's bad
+  Capsicum claim and would have caught the original PHASE6 §4.2 spike, which had
+  no control and published a number from a blind probe.
+- **And check the meter against the thing it meters.** The first
+  `clock_nanosleep` spike printed `rc=0` and I recorded "it works" — but rc=0
+  only says the call returned, not that it *slept*. Measuring elapsed time
+  around it is one extra line and is the difference between a check and a
+  ritual.
+- Corollary for benches generally: **a model that agrees with you is not a
+  test.** P6.1's synthetic display originally derived each vblank from the
+  target the predictor asked for, so the predictor was scored against its own
+  guesses and could not fail. Give the model its own independent ground truth.
 
 ### 2.36 A control that isn't a control: Capsicum permits `socket(2)`
 (P7.5 — the screenshot portal. The bug was in the *proof*, not the code.)
@@ -1312,17 +1345,21 @@ Swift hardware bridges underneath, and the whole harness passes on both
 platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-**Phase 6 — `undertow`, the Swift compositor — is scoped and started**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **The immediate task is P6.1: the metronome
-and its meter, before any pixels** — the canon's own order (DESKTOP.md §13:
-*"the contract exists before the pixels do"*). It needs no wlroots and no C, so
-it is `swift test` on both platforms from day one.
+**Phase 6 — `undertow`, the Swift compositor — is under way**
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1 is done: the metronome and its
+meter, before any pixels** — the canon's own order (DESKTOP.md §13: *"the
+contract exists before the pixels do"*). The frame contract is now a build gate
+in `run.sh`'s default lane (`abyss/tests/bench-metronome.sh`), and it needs no
+compositor, no GPU and no display. **The immediate task is P6.2: the wlroots
+bridge and first frames.**
 
 Three risks were spiked on both platforms *before* the plan was written (§4 of
 PHASE6.md), and two of them changed the plan: **Swift imports wlroots directly**
 (no bindgen — the C shim is a ~15-line `wl_container_of` trampoline, §2.1's trap
 at scale), and **Embedded Swift is struck** because plain Swift with
-preallocation measures zero allocations on the loop body.
+preallocation measures zero allocations on the loop body. Read **§2.37 before
+trusting any measurement you take here** — the second of those spikes was
+published from a blind probe and had to be redone.
 
 The other two directions stay open and independent; pick on appetite, not order.
 
@@ -1400,6 +1437,8 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
 | `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
 | `de/abyssgrab` | capture an output to a PNG via `wlr-screencopy`; the portal forks it, so the portal itself is never a Wayland client |
+| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, the synthetic display+scene — and `undertow` is its own bench harness |
+| `de/callocprobe` | counts allocations by symbol interposition; the enforcement half of PLAN.md risk 4. **Executable-only, and useless without its positive control** (§2.37) |
 | `de/vents`, `de/cvents` | the hardware bridges: sysctl, OSS volume, battery, devd (§2.34) |
 | `de/ventsctl` | `ventsctl sysctl\|volume\|battery\|devd` — read the machine by hand |
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |

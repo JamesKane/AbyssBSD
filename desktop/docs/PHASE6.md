@@ -140,16 +140,29 @@ preallocation, and a C shim for the present path if measurement demands it"*.
 Measurement does not demand them.
 
 A structure-of-arrays scene over `UnsafeMutableBufferPointer`, composited by a
-loop body with no `Array`/`String`/class in reach, run 10 000 times over 2048
-surfaces under a `malloc`/`calloc`/`realloc` interposer:
+loop body with no `Array`/`String`/class in reach, run under an allocation
+interposer:
 
 ```
-frames:                       10000, 2048 surfaces each
-allocations in the loop body: 0
-worst frame:                  15.25 us   (the C1 budget is 2000 us p99)
+undertow bench-alloc — 5000 frames, 512 surfaces
+  probe             live (positive control saw its own allocations)
+  allocations       0
+undertow bench-metronome — 240Hz, 600 frames, 512 surfaces
+  composite cost    p50 14.92 us   p99 37.44 us   p99.9 56.57 us
 ```
 
-**Zero allocations, and two orders of magnitude of headroom on the worst frame.**
+**Zero allocations, and roughly fifty times of headroom on p99 against the 2 ms
+C1 budget.**
+
+> **Corrected at P6.1.** The first version of this measurement was taken with a
+> probe that wrapped only `malloc`/`calloc`/`realloc` and **had no positive
+> control**. Swift's runtime allocates through **`posix_memalign`**, so that
+> probe was blind to nearly every allocation a Swift program makes and would
+> have reported a comfortable zero no matter what the loop did. The number above
+> is from the real `bench-alloc`, which refuses to report anything until a
+> deliberate allocation proves the probe can see one. The conclusion did not
+> change; the evidence for it was much weaker than it was stated to be, and
+> stating it that way was the mistake (HANDOFF §2.37).
 So: plain Swift, with the discipline made a *rule* and the flight recorder
 catching violations as latency spikes — which is exactly what DESKTOP.md §11
 prescribes for Rust, and for the same reason ("achievable but not automatic").
@@ -179,17 +192,72 @@ this project does. `abyss/vm/check.sh` now asserts `wayland-server` and
 
 ## 5. Ordered passes
 
-**P6.1 — The metronome and its meter, against nothing at all.**
+**P6.1 — The metronome and its meter, against nothing at all. ✅ done.**
 The contract before the pixels, and before wlroots: pure Swift, no compositor,
-no C. `Metronome` (EWMA vblank prediction, an adaptive latch margin, the §3.1
-late-latch loop), `FlightRecorder` (a lock-free ring: predicted vs actual
-vblank, latch/composite/submit, flip latency, damage area, missed flag), the
-`Output`/`FrameSink` protocols both real and synthetic backends implement, and
-`TripleBuffer` for lock-free snapshot publication.
-*Verify:* unit tests for the predictor's convergence and the margin control
-loop, plus **an allocation-counting test** (§4.2's interposer, in-tree) that
-asserts the loop body allocates zero. Runs in `swift test` on both platforms
-from day one, because it needs nothing but Swift.
+no display. `Metronome` (EWMA vblank prediction, an adaptive latch margin, the
+§3.1 late-latch loop), `FlightRecorder` (a ring of POD records with a release
+publish), the `Output`/`FrameSink` protocols, and a synthetic display and scene
+to drive them. `undertow` is its own bench harness, as `tide` is:
+
+```
+undertow bench-metronome — 240Hz, 600 frames, 512 surfaces (after 75 warmup)
+  wall clock        2499 ms  (nominal 2499 ms)
+  period estimate   4166.66 us  (nominal 4166.66 us, 671 samples)
+  latch margin      949.84 us
+  composite cost    p50 14.11 us   p99 32.98 us   p99.9 55.43 us
+  missed flips      0 of 600  (0 per mille)
+```
+
+**The metronome is generic over its display and scene, never existential.**
+`Metronome<O: Output, S: FrameSink>` keeps the loop body's calls statically
+dispatched and inlinable — DESKTOP.md §11's "hot paths avoid dyn dispatch" in
+the Swift idiom, and the reason the composite is ~15 µs rather than a witness
+table lookup per surface.
+
+*Four bugs the benches caught, none of which a unit test would have:*
+
+- **The margin ran away.** When the adaptive margin grew larger than the time
+  remaining to the next vblank, the deadline landed in the past, so the loop
+  composited immediately for a vblank it could not possibly make, missed, grew
+  the margin further, and degenerated into a spin that never slept — 600 frames
+  in 61 ms instead of 2499. **A metronome must aim at a vblank it can still
+  hit**; skipping to the next one is C4's "fall to the next period", and its
+  absence is not a slow path but a runaway.
+- **The synthetic display echoed the predictor.** It computed each frame's
+  vblank *from the target the compositor asked for*, so the predictor was
+  observing its own guesses and could never learn the true period — a bench that
+  would have passed no matter how wrong the prediction was. The display now
+  keeps its own grid (`epoch + k·period`), independent of anything predicted.
+  **A model that agrees with you is not a test.**
+- **The present loop allocated ~1.05 times per frame**, because
+  `SyntheticOutput` held its in-flight frames in a Swift `Array` and
+  `append`/`removeFirst` allocate. Exactly the "a spike is not the loop" risk
+  §7.2 names, caught the first time the bench ran. It is a fixed inline ring now.
+- **The margin could not explain its own misses.** It measured only composite
+  cost and absorbed OS wake latency and display commit latency into a blind
+  feedback term, so it over-corrected and then decayed straight back into
+  missing. All three terms are measured separately now, which made the margin
+  both smaller and steadier.
+
+*Verified:* **17 unit tests** (156 total) on both platforms — predictor
+convergence on a 59.94 Hz display advertised as 60, a skipped frame not halving
+the period estimate, implausible-sample rejection, targets always in the future
+and on the grid, the margin's grow-fast/decay-slow asymmetry and its floor and
+ceiling, recorder wrap-around and percentiles. **Cadence is deliberately not unit
+tested** — it depends on OS scheduling and would flake in a VM (§6); it is
+`abyss/tests/bench-metronome.sh`, in `run.sh`'s default lane because it needs no
+compositor, no GPU and no display.
+
+*The miss budget is a rate, and it is not zero — on purpose.* C1's
+"zero missed at p99.9" is a claim about a present thread at **real-time
+priority**, and this one is not: `rtprio` needs the `allow.rtprio` jail param,
+which is Phase 4 on metal. Measured over eight runs, 240 Hz × 600 frames gives 0
+misses seven times and 1 once — rare wake-latency outliers. The gate is
+therefore **5 per mille**, an order of magnitude above that noise and an order of
+magnitude below every regression the bench has actually caught (the runaway
+produced ~30 per mille; the blind margin ~25). A gate that flakes one run in
+eight is a gate people learn to ignore. **Zero-at-p99.9 becomes assertable in
+Phase 4**, and the bench says so rather than quietly redefining C1.
 
 **P6.2 — The wlroots bridge, and first frames.**
 `CWlroots` (the §4.1 trampoline plus wrappers for the static-inline/macro

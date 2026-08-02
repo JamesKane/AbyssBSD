@@ -3,10 +3,10 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-02. **Phases 0–3 are complete**, and **Phase 7 (portals) is
-complete** — file chooser, sandboxed client, notifications and screenshot, all
-brokerless. 139 unit tests + 35 live modes, green on Linux *and* FreeBSD.
-There is no queued next task; see [What's next](#whats-next) for the choice.
+Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
+**Phase 6 — `undertow`, the Swift compositor — is under way at P6.1 of 7**: the
+frame contract and its meter now gate every build. 156 unit tests + 35 live
+modes, green on Linux *and* FreeBSD. **Next: P6.2, the wlroots bridge.**
 
 ## What this is
 
@@ -72,7 +72,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **139 unit tests and all 35 live modes**,
+The whole **harness** passes there too — **156 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -89,14 +89,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (139 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (156 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
   hardware bridges' parsing, the portal's refusals, and the screencopy pixel
   normalisation).
-  **The same 139 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 156 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -310,6 +310,11 @@ sandboxed rather than implying a confinement it doesn't have.
 ```sh
 swift build && swift test
 
+# The compositor's frame contract — no compositor, GPU or display needed:
+abyss/tests/bench-metronome.sh
+.build/debug/undertow bench-metronome --hz 240 --frames 600 --surfaces 512
+.build/debug/undertow bench-alloc     --frames 5000 --surfaces 512
+
 # The portals, end to end (each starts its own headless sway):
 abyss/tests/live-portal.sh          # a client, a picker, a descriptor
 abyss/tests/live-sandbox.sh         # ...with no filesystem at all
@@ -411,14 +416,28 @@ a **descriptor**: no D-Bus, no broker, no flatpak. The screenshot goes furthest 
 the request names nothing, the reply names nothing, and the image is unlinked the
 moment it is opened, so the descriptor is the only route to it that exists.
 
-**Phase 6 — `undertow`, the Swift compositor — is now scoped and started**
+**Phase 6 — `undertow`, the Swift compositor — is under way**
 ([PHASE6.md](PHASE6.md), passes P6.1–P6.7). Three risks were spiked on both
 platforms before the plan was written: Swift imports wlroots **directly** (no
-bindgen, unlike the sibling — the C shim is a ~15-line listener trampoline), a
-present-path loop body in plain Swift measures **zero allocations** with a 15 µs
-worst frame against the 2 ms C1 budget (so Embedded Swift is struck), and the
-guest already carries wlroots 0.19.3 — the same version as the dev box.
-**The immediate task is P6.1: the metronome and its meter, before any pixels.**
+bindgen, unlike the sibling — the C shim is a ~15-line listener trampoline),
+plain Swift measures **zero allocations** on the present path (so Embedded Swift
+is struck), and the guest already carries wlroots 0.19.3, the same version as the
+dev box.
+
+**P6.1 is done — the contract before the pixels.** The metronome (EWMA vblank
+prediction, a three-term adaptive latch margin, the late-latch loop) and the
+flight recorder that makes C1–C5 falsifiable, with no wlroots, no GPU and no
+display involved. It is a build gate now, in `run.sh`'s default lane:
+
+```
+undertow bench-metronome — 240Hz, 600 frames, 512 surfaces (after 75 warmup)
+  wall clock        2499 ms  (nominal 2499 ms)
+  period estimate   4166.66 us  (nominal 4166.66 us, 671 samples)
+  composite cost    p50 14.11 us   p99 32.98 us   p99.9 55.43 us
+  missed flips      0 of 600  (0 per mille)
+```
+
+**The immediate task is P6.2: the wlroots bridge and first frames.**
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

@@ -229,6 +229,28 @@ let package = Package(
             dependencies: ["Portal", "CurrentIPC"],
             path: "de/portalbin"
         ),
+        // Count heap allocations on the calling thread, by symbol interposition.
+        // The enforcement half of PLAN.md's risk 4: the present path's
+        // allocation-freedom is a test that runs every build, not a number
+        // somebody once measured. Only works in an executable — see the header.
+        .target(
+            name: "CAllocProbe",
+            path: "de/callocprobe",
+            sources: ["callocprobe.c"],
+            publicHeadersPath: "include"
+        ),
+        // `undertow` — the compositor (PHASE6.md). P6.1 is the frame scheduler
+        // and the flight recorder that makes the C1-C5 contract falsifiable;
+        // no wlroots and no pixels yet, which is the canon's own order.
+        .target(
+            name: "Undertow",
+            path: "de/undertow"
+        ),
+        .executableTarget(
+            name: "undertow",
+            dependencies: ["Undertow", "CAllocProbe"],
+            path: "de/undertowbin"
+        ),
         // Read the machine through the FreeBSD-native bridges.
         .executableTarget(
             name: "ventsctl",
@@ -270,6 +292,11 @@ let package = Package(
             name: "AnchorTests",
             dependencies: ["Anchor"],
             path: "Tests/AnchorTests"
+        ),
+        .testTarget(
+            name: "UndertowTests",
+            dependencies: ["Undertow"],
+            path: "Tests/UndertowTests"
         ),
     ]
 )

@@ -62,6 +62,12 @@ rm -f "$out"
 echo "== control plane, two processes =="
 sh "$root/abyss/tests/live-ipc.sh"
 
+# The compositor's frame contract (C1 + the allocation-free present path). In
+# the default lane on purpose: it needs no compositor, no GPU and no display,
+# which is exactly why the contract is built before the pixels (PHASE6.md P6.1).
+echo "== the frame contract =="
+sh "$root/abyss/tests/bench-metronome.sh"
+
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.
 if [ "$live" -eq 1 ]; then
