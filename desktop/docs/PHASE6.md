@@ -377,12 +377,54 @@ line, so RGB triples do **not** align to its columns — the first count reporte
 466 light pixels in a 420-pixel strip, and a count exceeding its own denominator
 is the only reason that was caught.
 
-**P6.4 — Input.**
-libinput through wlroots, `wl_seat`, pointer/keyboard/focus routing, click-to-
-focus and raise. The client half of all of this is four phases old, which makes
-the assertions easy to write.
-*Verify:* the existing virtual-pointer/virtual-keyboard helpers drive a real
-client through `undertow`; the Finder responds exactly as it does under sway.
+**P6.4 — Input. ✅ done.**
+`wl_seat`, a compositor-drawn cursor, pointer/keyboard routing, click-to-focus
+and raise. A click driven through our own seat, landing on the app:
+
+![a click through undertow](screenshots/undertow-input.png)
+
+That is `Clicks: 1`, the compositor-drawn cursor sitting on the gel button, and
+the counter incremented because a pointer event travelled through `undertow`'s
+seat into AquaDemo.
+
+**The pointer is driven by `abyss/tests/vpointer.c`, completely unmodified.** It
+speaks `wlr-virtual-pointer-unstable-v1`, which is how this harness has driven
+sway since Phase 1 — so implementing that protocol's *server* side means the
+existing tool drives us with no idea it is talking to a different compositor.
+That is the payoff for four phases of client work: the assertions were already
+written, against a compositor that did not exist yet. Real libinput devices
+arrive with real hardware in Phase 4, through the same `new_input` path.
+
+**The cursor is compositor-drawn**, which DESKTOP.md §3/§9 argues on latency
+grounds (the pointer must never round-trip to a client) and which is also the
+only way a headless capture can show where the pointer is. It is a rectangle;
+a cursor theme belongs with the hardware cursor plane in Phase 4.
+
+**Routing is a pure function.** `PointerRouting.hit` takes a point and a list of
+rects and returns the topmost containing one — §2.9's discipline ("one pure
+function feeds both paint and hit-test") a layer down. The rule deciding which
+window owns a click must not need a running desktop to verify, and it now
+doesn't.
+
+*Verified:* **5 new unit tests** (167 total) on both platforms — topmost-wins,
+surface-local coordinates (get this wrong and every control in every window is
+offset by the window's position, which looks like a broken toolkit), half-open
+edge bounds so two adjacent windows never both claim a pixel, cursor clamping,
+and the seat offering the virtual-input globals. Live,
+`abyss/tests/live-undertow-input.sh` proves the thing that matters: **the client
+acted on it.** It captures a frame before any input and one after the click, and
+asserts the "Clicks: N" region *changed* — with a **negative control** that a
+patch of bare desktop did *not*, so the diff is the client responding rather than
+two captures of an animating scene failing to be identical.
+
+*A bug the negative control did not catch, but arithmetic did.* The early capture
+re-armed itself every frame: `settleFrames < 0` meant both "not started" and
+"finished" (I set `-2` for done), so it fired on ~40 consecutive frames and the
+"before" file held the **last** write — taken after the click, and therefore
+byte-identical to the "after" one. The input test failed for a reason that had
+nothing to do with input. A separate boolean fixed it; the lesson is that a
+sentinel value sharing a predicate with its own initial state is not a state
+machine.
 
 **P6.5 — C2: the isolation proof.**
 The headline claim, and the one that justifies the architecture. Adversarial

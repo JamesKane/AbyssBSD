@@ -232,6 +232,10 @@ public final class WlrootsOutput: Output {
     /// from here. Set once at startup; nil means "draw the test pattern", which
     /// is what P6.2 had and what the bridge bench still exercises.
     public var scene: SurfaceScene?
+    /// The seat, for the compositor-drawn cursor. Drawn last, so the pointer is
+    /// over everything — DESKTOP.md §5 makes this a hardware cursor plane on
+    /// real hardware (Phase 4); here it is a rectangle in the same frame.
+    public var seat: Seat?
     /// The desktop behind the windows. Jaguar blue, so a capture is obviously
     /// ours and an empty output is obviously empty.
     public var background = wlr_render_color(r: 0.24, g: 0.40, b: 0.63, a: 1.0)
@@ -288,6 +292,7 @@ public final class WlrootsOutput: Output {
         guard let pass = wlr_output_begin_render_pass(output, &state, nil) else { return }
         if let scene {
             scene.render(into: pass, background: background)
+            seat?.renderCursor(into: pass)
         } else {
             // No scene: the P6.2 test pattern, an animated rect. Enough to prove
             // buffers are allocated, rendered into, committed and presented —
@@ -374,6 +379,7 @@ public final class WlrootsOutput: Output {
         }
         if let scene {
             scene.render(into: pass, background: background)
+            seat?.renderCursor(into: pass)
         }
         guard wlr_render_pass_submit(pass) else {
             fail("the render pass failed")

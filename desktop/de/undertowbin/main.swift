@@ -36,8 +36,8 @@ func usage() -> Never {
                                     [--assert-missed-permille N]
                                     [--assert-cost-p99-us N]
            undertow run             [--hz N] [--frames N] [--width N] [--height N]
-                                    [--capture FILE.ppm] [--assert-windows N]
-                                    [--verbose]
+                                    [--capture FILE.ppm] [--capture-early FILE.ppm]
+                                    [--assert-windows N] [--verbose]
     """)
     exit(2)
 }
@@ -56,6 +56,7 @@ var width: Int32 = 1920
 var height: Int32 = 1080
 var verbose = false
 var capturePath: String? = nil
+var captureEarlyPath: String? = nil
 var assertWindows: Int? = nil
 
 var i = 0
@@ -86,6 +87,7 @@ while i < args.count {
         height = v
     case "--verbose": verbose = true
     case "--capture": capturePath = value("--capture")
+    case "--capture-early": captureEarlyPath = value("--capture-early")
     case "--assert-windows": assertWindows = Int(value("--assert-windows"))
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
@@ -304,6 +306,13 @@ case "run":
                              outputHeight: height)
     defer { scene.release() }
     output.scene = scene
+    let seat: Seat
+    do {
+        seat = try Seat(compositor: compositor, outputWidth: width, outputHeight: height)
+    } catch {
+        die("\(error)")
+    }
+    output.seat = seat
 
     // Announce the socket on stdout BEFORE the loop starts, so a harness can
     // read one line and know where to point a client. Anything else means
@@ -316,11 +325,36 @@ case "run":
     var metronome = Metronome<WlrootsOutput, SurfaceScene>(periodHintNs: output.periodHintNs)
     var o = output
     var s = scene
+    // The early capture fires a few frames after the FIRST window maps, not at
+    // a wall-clock guess. That makes it a synchronisation point the harness can
+    // wait on — "the client has drawn" — instead of a sleep long enough to
+    // usually work (HANDOFF §2.31's lesson about racing startup, one level up).
+    var settleFrames = -1
+    var earlyCaptured = false
     for _ in 0..<frames {
         metronome.step(output: &o, sink: &s, recorder: recorder)
         // Release clients to draw the next frame, and push the events out.
         // Without this a client renders once and waits for ever.
         compositor.endFrame()
+
+        // A separate `earlyCaptured` flag, not a sentinel in `settleFrames`.
+        // The first version used `settleFrames < 0` to mean "not started" and
+        // set it to -2 for "done" — which also satisfies `< 0`, so it re-armed
+        // itself and captured on every subsequent frame. The "before" file then
+        // held the LAST write, taken after the click, so it was identical to
+        // the "after" one and the input test failed for a reason that had
+        // nothing to do with input.
+        if let early = captureEarlyPath, !earlyCaptured {
+            if settleFrames < 0 {
+                if !compositor.mappedToplevels.isEmpty { settleFrames = 20 }
+            } else if settleFrames > 0 {
+                settleFrames -= 1
+            } else {
+                earlyCaptured = true
+                guard output.capturePPM(path: early) else { die("could not write \(early)") }
+                emit(2, "undertow: wrote \(early) (first window has drawn)")
+            }
+        }
     }
 
     if let path = capturePath {
@@ -331,6 +365,8 @@ case "run":
     let windows = compositor.mappedToplevels.count
     out("windows=\(windows)")
     out("surfaces-composited=\(scene.count)")
+    out("cursor=\(Int(seat.cursorX)),\(Int(seat.cursorY))")
+    out("focused=\(seat.focused != nil ? "yes" : "no")")
     out("missed=\(recorder.missedCount) of \(recorder.retained)")
     if let want = assertWindows, windows != want {
         emit(2, "FAIL: expected \(want) mapped window(s), got \(windows)")

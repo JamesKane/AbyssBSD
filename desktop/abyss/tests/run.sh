@@ -82,6 +82,11 @@ sh "$root/abyss/tests/bench-metronome.sh"
 echo "== a real client on undertow =="
 sh "$root/abyss/tests/live-undertow.sh"
 
+# ...and input reaching that client through our own seat, driven by the same
+# unmodified vpointer the harness points at sway (PHASE6.md P6.4).
+echo "== input through undertow =="
+sh "$root/abyss/tests/live-undertow-input.sh"
+
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.
 if [ "$live" -eq 1 ]; then

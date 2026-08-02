@@ -167,6 +167,19 @@ public final class Compositor {
         toplevels.removeAll { $0 === t }
     }
 
+    /// Move a window to the top of the stack.
+    ///
+    /// `toplevels` is in bottom-to-top order and the scene walks it forwards, so
+    /// raising is simply moving to the end — the stacking order and the paint
+    /// order are the same list, which is the cheapest way to keep them from
+    /// disagreeing.
+    public func raise(_ t: Toplevel) {
+        guard let i = toplevels.firstIndex(where: { $0 === t }), i != toplevels.count - 1
+        else { return }
+        toplevels.remove(at: i)
+        toplevels.append(t)
+    }
+
     /// Windows that currently have something to show, bottom to top.
     public var mappedToplevels: [Toplevel] {
         toplevels.filter { $0.mapped && wlr_surface_has_buffer($0.surface) }

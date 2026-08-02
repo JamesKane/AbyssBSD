@@ -4,9 +4,9 @@ The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
 Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
-**Phase 6 — `undertow`, the Swift compositor — is under way at P6.3 of 7**: it is a
-compositor now — a real client's window, composited by our own scene. 162 unit tests + 35 live
-modes, green on Linux *and* FreeBSD. **Next: P6.4, input.**
+**Phase 6 — `undertow`, the Swift compositor — is under way at P6.4 of 7**: a real
+client's window, composited by our own scene, and clicks reaching it. 167 unit tests + 35 live
+modes, green on Linux *and* FreeBSD. **Next: P6.5, the C2 isolation proof.**
 
 ## What this is
 
@@ -72,7 +72,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **162 unit tests and all 35 live modes**,
+The whole **harness** passes there too — **167 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -89,14 +89,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (162 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (167 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
   hardware bridges' parsing, the portal's refusals, and the screencopy pixel
   normalisation).
-  **The same 162 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 167 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -469,7 +469,15 @@ window is textured into our frame:
 `abyss/tests/live-undertow.sh` is the first test in this project that **starts no
 sway at all**.
 
-**The immediate task is P6.4: input.**
+**P6.4 is done — input.** A `wl_seat`, a compositor-drawn cursor, click-to-focus
+and raise. The pointer is driven by the harness's existing `vpointer`,
+**unmodified**: it speaks `wlr-virtual-pointer`, so implementing that protocol's
+server side means the tool that has driven sway since Phase 1 drives us too.
+
+![a click through undertow](screenshots/undertow-input.png)
+
+**The immediate task is P6.5: C2, the isolation proof — adversarial clients, and
+missed flips still zero.**
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

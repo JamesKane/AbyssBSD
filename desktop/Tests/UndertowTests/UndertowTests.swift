@@ -403,6 +403,74 @@ final class UndertowTests: XCTestCase {
         XCTAssertEqual(Int(st.st_size), 13 + 64 * 48 * 3)
     }
 
+    // MARK: - Input routing (P6.4)
+
+    /// The top window wins. This is the whole reason raising a window changes
+    /// what a click hits, and it is one line that would be tedious to prove with
+    /// a running desktop and trivial here.
+    func testTheTopmostWindowUnderThePointerWins() {
+        let rects = [
+            WindowRect(x: 0, y: 0, width: 200, height: 200),      // bottom
+            WindowRect(x: 100, y: 100, width: 200, height: 200),  // top, overlapping
+        ]
+        // In the overlap, the later (higher) window takes it.
+        XCTAssertEqual(PointerRouting.hit(150, 150, rects: rects)?.index, 1)
+        // Outside the overlap, each gets its own.
+        XCTAssertEqual(PointerRouting.hit(50, 50, rects: rects)?.index, 0)
+        XCTAssertEqual(PointerRouting.hit(250, 250, rects: rects)?.index, 1)
+        // Off both: the desktop, and nobody should be told they have the pointer.
+        XCTAssertNil(PointerRouting.hit(400, 400, rects: rects))
+        XCTAssertNil(PointerRouting.hit(150, 150, rects: []))
+    }
+
+    /// A click arrives in the surface's own coordinates, not the output's — get
+    /// this wrong and every control in every window is offset by the window's
+    /// position, which looks like a broken toolkit rather than a broken
+    /// compositor.
+    func testAHitReportsSurfaceLocalCoordinates() {
+        let rects = [WindowRect(x: 170, y: 120, width: 460, height: 360)]
+        guard let h = PointerRouting.hit(540, 415, rects: rects) else {
+            return XCTFail("the point is inside the window")
+        }
+        XCTAssertEqual(h.localX, 370, accuracy: 0.001)
+        XCTAssertEqual(h.localY, 295, accuracy: 0.001)
+    }
+
+    /// Edges: the top-left corner is inside, the bottom-right is not. Half-open
+    /// bounds, so two windows sharing an edge never both claim a pixel.
+    func testHitTestBoundsAreHalfOpen() {
+        let rects = [WindowRect(x: 10, y: 10, width: 100, height: 100)]
+        XCTAssertNotNil(PointerRouting.hit(10, 10, rects: rects))
+        XCTAssertNotNil(PointerRouting.hit(109.9, 109.9, rects: rects))
+        XCTAssertNil(PointerRouting.hit(110, 60, rects: rects))
+        XCTAssertNil(PointerRouting.hit(60, 110, rects: rects))
+        XCTAssertNil(PointerRouting.hit(9.9, 60, rects: rects))
+    }
+
+    /// A cursor that can leave the screen can address a surface nobody can see.
+    func testTheCursorIsClampedToTheOutput() {
+        let (x1, y1) = PointerRouting.clamp(-50, -50, width: 800, height: 600)
+        XCTAssertEqual(x1, 0); XCTAssertEqual(y1, 0)
+        let (x2, y2) = PointerRouting.clamp(9999, 9999, width: 800, height: 600)
+        XCTAssertEqual(x2, 799); XCTAssertEqual(y2, 599)
+        let (x3, y3) = PointerRouting.clamp(400, 300, width: 800, height: 600)
+        XCTAssertEqual(x3, 400); XCTAssertEqual(y3, 300)
+    }
+
+    /// The seat comes up and offers the virtual-input globals — which is what
+    /// lets the harness's existing `vpointer`/`vkeyboard` drive us unmodified.
+    func testTheSeatOffersTheVirtualInputGlobals() throws {
+        let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
+                                         refreshMilliHz: 60_000)
+        let compositor = try Compositor(session: session, outputWidth: 320, outputHeight: 240)
+        let seat = try Seat(compositor: compositor, outputWidth: 320, outputHeight: 240)
+        // The cursor starts centred, so a capture with no input is still sane.
+        XCTAssertEqual(seat.cursorX, 160)
+        XCTAssertEqual(seat.cursorY, 120)
+        XCTAssertNil(seat.focused)
+        XCTAssertNil(seat.toplevel(at: 10, 10), "there are no windows yet")
+    }
+
     /// The display's vblanks must be its own, not an echo of what the
     /// compositor aimed at — a model that agrees with you cannot test a
     /// predictor (PHASE6.md P6.1).
