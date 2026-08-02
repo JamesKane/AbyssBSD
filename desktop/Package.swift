@@ -239,11 +239,40 @@ let package = Package(
             sources: ["callocprobe.c"],
             publicHeadersPath: "include"
         ),
+        // wlroots + libwayland-server, reached the portable way: only a
+        // systemLibrary can carry `pkgConfig:`, and dependents inherit its
+        // cflags/libs (HANDOFF §2.29). wlroots is PINNED to 0.19 — the guest
+        // offers 0.20 as well and a compositor built against different wlroots
+        // per platform is a failure mode we have not had (PHASE6.md §7.3).
+        .systemLibrary(
+            name: "CWlrootsSys",
+            path: "de/cwlrootssys",
+            pkgConfig: "wlroots-0.19",
+            providers: [.apt(["libwlroots-dev"])]
+        ),
+        .systemLibrary(
+            name: "CWaylandServer",
+            path: "de/cwaylandserver",
+            pkgConfig: "wayland-server",
+            providers: [.apt(["libwayland-dev"])]
+        ),
+        // The C floor under the compositor — and it is nearly empty, because
+        // Swift imports wlroots directly. What needs C is libwayland's event
+        // model: `wl_signal_add` is a static inline and `wl_container_of` is a
+        // macro, so every wlroots event arrives through one C trampoline.
+        .target(
+            name: "CWlroots",
+            dependencies: ["CWlrootsSys", "CWaylandServer"],
+            path: "de/cwlroots",
+            sources: ["cwlroots.c"],
+            publicHeadersPath: "include"
+        ),
         // `undertow` — the compositor (PHASE6.md). P6.1 is the frame scheduler
         // and the flight recorder that makes the C1-C5 contract falsifiable;
-        // no wlroots and no pixels yet, which is the canon's own order.
+        // P6.2 puts real wlroots frames under it.
         .target(
             name: "Undertow",
+            dependencies: ["CWlroots"],
             path: "de/undertow"
         ),
         .executableTarget(

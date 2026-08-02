@@ -31,6 +31,10 @@ func usage() -> Never {
                                     [--assert-missed N] [--assert-missed-permille N]
                                     [--assert-cost-p99-us N]
            undertow bench-alloc     [--frames N] [--surfaces N]
+           undertow headless        [--hz N] [--frames N] [--surfaces N]
+                                    [--width N] [--height N] [--verbose]
+                                    [--assert-missed-permille N]
+                                    [--assert-cost-p99-us N]
     """)
     exit(2)
 }
@@ -45,6 +49,9 @@ var surfaces = 512
 var assertMissed: Int? = nil
 var assertMissedPermille: Int? = nil
 var assertCostP99Us: UInt64? = nil
+var width: Int32 = 1920
+var height: Int32 = 1080
+var verbose = false
 
 var i = 0
 while i < args.count {
@@ -66,6 +73,13 @@ while i < args.count {
     case "--assert-missed": assertMissed = Int(value("--assert-missed"))
     case "--assert-missed-permille": assertMissedPermille = Int(value("--assert-missed-permille"))
     case "--assert-cost-p99-us": assertCostP99Us = UInt64(value("--assert-cost-p99-us"))
+    case "--width":
+        guard let v = Int32(value("--width")) else { die("--width wants a number") }
+        width = v
+    case "--height":
+        guard let v = Int32(value("--height")) else { die("--height wants a number") }
+        height = v
+    case "--verbose": verbose = true
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -187,6 +201,83 @@ case "bench-alloc":
         exit(1)
     }
     out("  verdict           ok — the present loop is allocation-free")
+
+// -------------------------------------------- the compositor, on real wlroots
+case "headless":
+    let session: WlrootsSession
+    do {
+        session = try WlrootsSession(headlessOutputs: 1, width: width, height: height,
+                                     refreshMilliHz: Int32(hz &* 1000), verbose: verbose)
+    } catch {
+        die("\(error)")
+    }
+    guard let wlrOutput = session.outputs.first else { die("no output") }
+    let output = WlrootsOutput(wlrOutput, session: session)
+    var scene = SyntheticScene(surfaces: surfaces, viewport: (width, height))
+    defer { scene.release() }
+    let recorder = FlightRecorder(capacity: max(frames, 1))
+    var metronome = Metronome<WlrootsOutput, SyntheticScene>(
+        periodHintNs: output.periodHintNs)
+
+    out("undertow headless — \(output.name) \(output.width)x\(output.height)"
+        + " @ \(hz)Hz, \(frames) frames, \(surfaces) surfaces")
+
+    // Same warmup argument as the synthetic bench: the margin control loop
+    // discovers the backend's real commit latency by missing once or twice.
+    let warmup = min(max(frames / 8, 16), 240)
+    var o = output
+    metronome.run(frames: warmup, output: &o, sink: &scene,
+                  recorder: FlightRecorder(capacity: warmup))
+
+    let began = Mono.now()
+    metronome.run(frames: frames, output: &o, sink: &scene, recorder: recorder)
+    let elapsed = Mono.since(began, Mono.now())
+
+    let missed = recorder.missedCount
+    let p99 = recorder.costPercentileNs(99)
+    let permille = recorder.retained > 0 ? missed * 1000 / recorder.retained : 0
+    let presented = recorder.percentile(50) { $0.actualVblank }
+
+    out("  wall clock        \(elapsed / 1_000_000) ms"
+        + "  (nominal \(UInt64(frames) &* periodNs / 1_000_000) ms)")
+    out("  period estimate   \(us(metronome.predictor.periodNs))"
+        + "  (nominal \(us(periodNs)), \(metronome.predictor.samples) samples)")
+    out("  latch margin      \(us(metronome.margin.marginNs))")
+    out("  composite cost    p50 \(us(recorder.costPercentileNs(50)))   p99 \(us(p99))")
+    out("  missed flips      \(missed) of \(recorder.retained)  (\(permille) per mille)")
+    // The proof that frames really reached the display: wlroots only reports a
+    // present event for a commit it actually presented, so a non-zero vblank
+    // timestamp means the backend turned our buffer into a "flip".
+    out("  presented frames  \(presented > 0 ? "yes" : "NO — no present events arrived")")
+    // Say which kind of clock the cadence above rests on. A headless output
+    // presents on commit and reports no hardware timestamp, so we pace it
+    // against its nominal grid (Backend.snapToGrid) — that is a real limitation
+    // of the backend, not a result, and a bench that hid it would be claiming a
+    // measured vblank it never had.
+    out("  vblank source     "
+        + (o.sawHardwareClock
+           ? "hardware clock (driver-measured timestamps)"
+           : "nominal grid — this backend reports no hardware clock"))
+
+    var failed = false
+    if presented == 0 {
+        emit(2, "FAIL: no present events — the compositor committed frames that never landed")
+        failed = true
+    }
+    if metronome.predictor.samples == 0 {
+        emit(2, "FAIL: the predictor never received a sample — flip feedback is not reaching it")
+        failed = true
+    }
+    if let limit = assertMissedPermille, permille > limit {
+        emit(2, "FAIL C1: \(missed) missed of \(frames) (\(permille) per mille), limit \(limit)")
+        failed = true
+    }
+    if let limit = assertCostP99Us, p99 / 1000 > limit {
+        emit(2, "FAIL C1: composite cost p99 \(us(p99)), limit \(limit).00 us")
+        failed = true
+    }
+    if failed { exit(1) }
+    out("  verdict           ok")
 
 default:
     usage()

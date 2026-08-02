@@ -67,4 +67,18 @@ echo "== C2's precondition: an allocation-free present path =="
   || { echo "FAIL: the present loop allocates"; exit 1; }
 
 echo
+echo "== the wlroots bridge: real frames on a real backend =="
+# P6.2. The synthetic bench above proves the SCHEDULER; this proves the BRIDGE —
+# buffers allocated, render passes submitted, commits landed, and present events
+# coming back to feed the predictor. The two assertions that matter are inside
+# the binary and are not about speed at all: no present events means we
+# committed frames that never landed, and no predictor samples means flip
+# feedback is not reaching the scheduler. Either one is a broken compositor that
+# would otherwise look perfectly healthy.
+"$bin" headless --hz 60 --frames 120 --surfaces 128 --width 800 --height 600 \
+       --assert-missed-permille "$MISS_BUDGET_PERMILLE" \
+       --assert-cost-p99-us "$BUDGET_US" \
+  || { echo "FAIL: the wlroots bridge regressed"; exit 1; }
+
+echo
 echo "all green (the frame contract holds)."

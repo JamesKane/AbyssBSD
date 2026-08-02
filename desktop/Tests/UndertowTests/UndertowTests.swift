@@ -246,6 +246,73 @@ final class UndertowTests: XCTestCase {
         XCTAssertFalse(stats.degraded)
     }
 
+    // MARK: - The wlroots bridge (P6.2)
+
+    /// The FFI works end to end: a real wlroots session comes up, announces the
+    /// outputs we asked for at the size we asked for, and tears down.
+    ///
+    /// Every one of those announcements arrives through the C trampoline
+    /// (`tw_listen` + `wl_container_of`), so this is really a test of the one
+    /// mechanism the whole compositor is built on — PHASE6.md §4.1.
+    func testAWlrootsSessionComesUpAndAnnouncesItsOutputs() throws {
+        let session = try WlrootsSession(headlessOutputs: 2, width: 640, height: 480,
+                                         refreshMilliHz: 60_000)
+        XCTAssertEqual(session.outputs.count, 2,
+                       "the new_output signal did not reach Swift")
+        let out = WlrootsOutput(session.outputs[0], session: session)
+        XCTAssertEqual(out.width, 640)
+        XCTAssertEqual(out.height, 480)
+        XCTAssertTrue(out.name.hasPrefix("HEADLESS"))
+        // The refresh hint should come from the mode we committed, not the 60Hz
+        // fallback — 60_000 mHz is 16.67ms.
+        XCTAssertEqual(out.periodHintNs, 16_666_666, accuracy: 2_000)
+    }
+
+    /// Frames must actually reach the backend, and feedback must come back.
+    /// "It committed" is not the claim — "it presented, and told us when" is.
+    func testFramesReachTheBackendAndFlipFeedbackReturns() throws {
+        let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
+                                         refreshMilliHz: 60_000)
+        var output = WlrootsOutput(session.outputs[0], session: session)
+        var scene = SyntheticScene(surfaces: 8, viewport: (320, 240))
+        defer { scene.release() }
+        let recorder = FlightRecorder(capacity: 64)
+        var m = Metronome<WlrootsOutput, SyntheticScene>(periodHintNs: output.periodHintNs)
+        m.run(frames: 12, output: &output, sink: &scene, recorder: recorder)
+
+        XCTAssertEqual(recorder.count, 12)
+        XCTAssertGreaterThan(m.predictor.samples, 0,
+                             "no flip feedback reached the predictor — the compositor is "
+                             + "committing frames it never learns the fate of")
+        var presented = 0
+        for i in 0..<recorder.retained where recorder.retainedRecord(i).actualVblank > 0 {
+            presented += 1
+        }
+        XCTAssertGreaterThan(presented, 0, "no present event ever arrived")
+    }
+
+    /// The headless backend presents on commit and reports no hardware clock, so
+    /// its raw timestamps are our own commit times. Feeding those back closes a
+    /// loop with no external reference — self-consistent at any period and
+    /// therefore stable at none (measured drifting 16.7ms → 11.9ms). Snapping to
+    /// the nominal grid is what keeps the estimate honest.
+    func testAClocklessBackendStillPacesAtItsNominalRate() throws {
+        let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
+                                         refreshMilliHz: 60_000)
+        var output = WlrootsOutput(session.outputs[0], session: session)
+        var scene = SyntheticScene(surfaces: 4, viewport: (320, 240))
+        defer { scene.release() }
+        let recorder = FlightRecorder(capacity: 128)
+        var m = Metronome<WlrootsOutput, SyntheticScene>(periodHintNs: output.periodHintNs)
+        m.run(frames: 60, output: &output, sink: &scene, recorder: recorder)
+
+        XCTAssertFalse(output.sawHardwareClock,
+                       "the headless backend claimed a hardware clock; this test's premise is stale")
+        // Within 5% of 60Hz. Without the grid snap this drifts ~30% low.
+        XCTAssertEqual(Double(m.predictor.periodNs), 16_666_666,
+                       accuracy: 16_666_666 * 0.05)
+    }
+
     /// The display's vblanks must be its own, not an echo of what the
     /// compositor aimed at — a model that agrees with you cannot test a
     /// predictor (PHASE6.md P6.1).

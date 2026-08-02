@@ -235,10 +235,12 @@ public struct Metronome<O: Output, S: FrameSink> {
         r.predictedVblank = target
         r.marginNs = m
 
-        // 2. Sleep until the deadline. Absolute, so the sleep cannot drift.
+        // 2. Wait until the deadline. Absolute, so the wait cannot drift — and
+        //    through the output, because a real backend has an event loop to
+        //    service while it waits (Backend.swift).
         let deadline = target > m ? target &- m : entry
         if !config.freeRun {
-            Mono.sleep(untilNs: deadline)
+            output.waitUntil(deadlineNs: deadline)
         }
 
         // 3. Drain flip feedback BEFORE latching, so the prediction that

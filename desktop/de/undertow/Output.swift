@@ -53,6 +53,24 @@ public protocol Output {
     /// Drain one completed flip, if any arrived since the last poll. Returns nil
     /// when there is nothing to report — never blocks waiting for one.
     mutating func pollFlip() -> Flip?
+
+    /// Wait until an absolute monotonic deadline.
+    ///
+    /// Defaulted to a plain sleep, and overridden by backends that must service
+    /// something while waiting — the wlroots bridge dispatches its event loop
+    /// here, without which no `present` event could ever arrive and the
+    /// predictor would never receive a sample.
+    ///
+    /// **Declared here in the protocol body on purpose.** A method that exists
+    /// only in a protocol extension is statically dispatched, so an override
+    /// would compile, look right, and never be called — HANDOFF §2.11, which
+    /// cost an afternoon in Phase 1 and would cost more here, because the
+    /// symptom is a compositor that merely appears to hang.
+    mutating func waitUntil(deadlineNs: UInt64)
+}
+
+public extension Output {
+    mutating func waitUntil(deadlineNs: UInt64) { Mono.sleep(untilNs: deadlineNs) }
 }
 
 /// What one frame's composite produced. Recorded, not acted on.

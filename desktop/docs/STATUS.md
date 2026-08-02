@@ -4,9 +4,9 @@ The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
 Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
-**Phase 6 — `undertow`, the Swift compositor — is under way at P6.1 of 7**: the
-frame contract and its meter now gate every build. 156 unit tests + 35 live
-modes, green on Linux *and* FreeBSD. **Next: P6.2, the wlroots bridge.**
+**Phase 6 — `undertow`, the Swift compositor — is under way at P6.2 of 7**: the
+frame contract gates every build, and it now drives real wlroots frames. 159 unit tests + 35 live
+modes, green on Linux *and* FreeBSD. **Next: P6.3, a scene and a real client on it.**
 
 ## What this is
 
@@ -72,7 +72,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **156 unit tests and all 35 live modes**,
+The whole **harness** passes there too — **159 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -89,14 +89,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (156 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (159 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
   hardware bridges' parsing, the portal's refusals, and the screencopy pixel
   normalisation).
-  **The same 156 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 159 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -310,10 +310,12 @@ sandboxed rather than implying a confinement it doesn't have.
 ```sh
 swift build && swift test
 
-# The compositor's frame contract — no compositor, GPU or display needed:
+# The compositor's frame contract. The first two need no compositor, GPU or
+# display at all; the third runs undertow on a real wlroots headless backend.
 abyss/tests/bench-metronome.sh
 .build/debug/undertow bench-metronome --hz 240 --frames 600 --surfaces 512
 .build/debug/undertow bench-alloc     --frames 5000 --surfaces 512
+.build/debug/undertow headless --hz 60 --frames 120 --width 800 --height 600
 
 # The portals, end to end (each starts its own headless sway):
 abyss/tests/live-portal.sh          # a client, a picker, a descriptor
@@ -437,7 +439,22 @@ undertow bench-metronome — 240Hz, 600 frames, 512 surfaces (after 75 warmup)
   missed flips      0 of 600  (0 per mille)
 ```
 
-**The immediate task is P6.2: the wlroots bridge and first frames.**
+**P6.2 is done too — the wlroots bridge.** Swift imports wlroots directly, so
+the entire binding is **29 lines of C**: `wl_signal_add` is a static inline and
+`wl_container_of` is a macro, so every wlroots event arrives through one
+trampoline. The metronome drives the backend rather than rendering from its
+`frame` handler, which is what makes the schedule ours:
+
+```
+undertow headless — HEADLESS-1 800x600 @ 60Hz, 120 frames, 128 surfaces
+  wall clock        2000 ms  (nominal 1999 ms)
+  period estimate   16666.66 us  (nominal 16666.66 us, 135 samples)
+  missed flips      0 of 120  (0 per mille)
+  presented frames  yes
+  vblank source     nominal grid — this backend reports no hardware clock
+```
+
+**The immediate task is P6.3: a scene, and a real client on it.**
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

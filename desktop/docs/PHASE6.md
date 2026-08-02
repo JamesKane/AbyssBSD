@@ -81,7 +81,7 @@ because `CurrentIPC`/`PoolConfig`/`Anchor` already exist.
 | Job | Sibling | Ours |
 |---|---|---|
 | The compositor | `tide` | **`undertow`** (`de/undertow`, `de/undertowbin`) |
-| wlroots binding | `wlsys` (bindgen, 4946 lines) | **`CWlroots`** — a ~150-line C shim; Swift imports the rest (§4.1) |
+| wlroots binding | `wlsys` (bindgen, 4946 lines) | **`CWlroots`** — **29 lines of C**; Swift imports the rest (§4.1) |
 | Frame scheduler | `metronome.rs` (489) | `Metronome.swift` |
 | Flight recorder | `recorder.rs` (227), `hud.rs` (195) | `FlightRecorder.swift` |
 | Scene (SoA) | `scene.rs` (214), `damage.rs` (180) | `Scene.swift`, `Damage.swift` |
@@ -259,14 +259,60 @@ produced ~30 per mille; the blind margin ~25). A gate that flakes one run in
 eight is a gate people learn to ignore. **Zero-at-p99.9 becomes assertable in
 Phase 4**, and the bench says so rather than quietly redefining C1.
 
-**P6.2 — The wlroots bridge, and first frames.**
-`CWlroots` (the §4.1 trampoline plus wrappers for the static-inline/macro
-calls), the server-side protocol generation, and `Backend.swift`: display, event
-loop, headless backend, outputs, renderer + allocator. The reactor thread folds
-wlroots' fd into the `poll` discipline `Display.run()` already uses (§2.14,
-§2.18). The metronome drives real frames onto a real headless output.
-*Verify:* `undertow --headless --frames N` presents N frames with **missed == 0**,
-on both platforms. The flight recorder's numbers become the bench's assertions.
+**P6.2 — The wlroots bridge, and first frames. ✅ done.**
+`CWlroots` (the §4.1 trampoline — and **nothing else**, because Swift imports the
+rest), the server-side protocol generation, and `Backend.swift`: display, event
+loop, headless backend, outputs, renderer + allocator. The metronome drives real
+frames onto a real wlroots output:
+
+```
+undertow headless — HEADLESS-1 800x600 @ 60Hz, 120 frames, 128 surfaces
+  wall clock        2000 ms  (nominal 1999 ms)
+  period estimate   16666.66 us  (nominal 16666.66 us, 135 samples)
+  composite cost    p50 5.37 us   p99 9.67 us
+  missed flips      0 of 120  (0 per mille)
+  presented frames  yes
+  vblank source     nominal grid — this backend reports no hardware clock
+```
+
+**The inversion that makes this ours.** A wlroots compositor is normally written
+to render *when the output asks*, from its `frame` handler. Undertow does not:
+the metronome decides when a frame happens, and the output's job is to execute
+it and report back through `present`. That is what makes the schedule ours
+rather than the backend's — and the reason P6.1 came first.
+
+*The bug worth recording, because it is the same shape as P6.1's and it will
+recur on every backend:* **a headless output presents on commit, so its "vblank"
+timestamps are our own commit times.** Feeding those into the predictor closes a
+loop with no external reference — self-consistent at *any* period and therefore
+stable at none. Measured, it ratcheted from 16.7 ms to 11.9 ms over 120 frames
+while every individual number looked healthy (0 missed, present events arriving).
+wlroots flags this precisely — `WLR_OUTPUT_PRESENT_HW_CLOCK` distinguishes a
+driver-measured timestamp from a bookkeeping one — so the bridge uses it: with
+real hardware the timestamp passes through untouched; without it we snap to the
+output's nominal grid and **say so in the bench output**. A virtual output has no
+vblank to discover, and pretending to measure one is worse than admitting it.
+This is P6.1's "a model that agrees with you is not a test", arriving from the
+other direction: here the *backend* was the agreeable model.
+
+**Two assertions that are not about speed at all**, and are the ones that
+actually catch a broken compositor: *no present events* means we committed frames
+that never landed, and *no predictor samples* means flip feedback is not reaching
+the scheduler. Either is fatal and either would otherwise look perfectly healthy
+in a frame-time histogram.
+
+*Verified:* **3 new unit tests** (159 total) on both platforms — the session
+announcing its outputs through the trampoline, frames reaching the backend with
+feedback returning, and a clockless backend still pacing at its nominal rate
+(which fails by ~30% without the grid snap). Plus `undertow headless` in
+`abyss/tests/bench-metronome.sh`, in `run.sh`'s default lane.
+
+*Known debt, stated rather than discovered later:* **P6.2 is single-threaded.**
+The event loop is serviced from inside the metronome's wait, which is fine while
+there are no clients — but C2 requires that no client can delay the present
+thread, and one thread dispatching client requests cannot promise that. The
+reactor/present split lands with the clients it exists to isolate us from
+(P6.3/P6.5), where it can actually be tested rather than asserted.
 
 **P6.3 — A scene, and a real client on it.**
 `wlr_compositor` + `xdg_shell`, surfaces landing in the SoA scene with damage

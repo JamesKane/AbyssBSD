@@ -1346,12 +1346,19 @@ platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
 **Phase 6 — `undertow`, the Swift compositor — is under way**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1 is done: the metronome and its
-meter, before any pixels** — the canon's own order (DESKTOP.md §13: *"the
-contract exists before the pixels do"*). The frame contract is now a build gate
-in `run.sh`'s default lane (`abyss/tests/bench-metronome.sh`), and it needs no
-compositor, no GPU and no display. **The immediate task is P6.2: the wlroots
-bridge and first frames.**
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1 and P6.2 are done**: the metronome and
+its meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
+pixels do"*), and the wlroots bridge under it. The frame contract is a build gate
+in `run.sh`'s default lane (`abyss/tests/bench-metronome.sh`), and `undertow`
+composites real wlroots frames at exact cadence on both platforms. **The
+immediate task is P6.3: a scene, and a real client on it.**
+
+**The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
+shim exists only because `wl_signal_add` is a static inline and
+`wl_container_of` is a macro (§2.1 at scale). Adding a wlroots event of any kind
+means `tw_listen(&thing.pointee.events.whatever, { ctx, data in … }, ctx)` and
+nothing else — and freeing the listener before the context it points at (§2.2,
+§2.35).
 
 Three risks were spiked on both platforms *before* the plan was written (§4 of
 PHASE6.md), and two of them changed the plan: **Swift imports wlroots directly**
@@ -1437,7 +1444,9 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
 | `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
 | `de/abyssgrab` | capture an output to a PNG via `wlr-screencopy`; the portal forks it, so the portal itself is never a Wayland client |
-| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, the synthetic display+scene — and `undertow` is its own bench harness |
+| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, the synthetic display+scene, and `Backend` (the wlroots bridge) — `undertow` is its own bench harness |
+| `de/cwlroots` | **29 lines of C**, and that is the whole wlroots binding: Swift imports the headers directly, but `wl_signal_add` is a static inline and `wl_container_of` is a macro, so every wlroots event arrives through one trampoline (§2.1 at scale) |
+| `de/cwlrootssys`, `de/cwaylandserver` | pkg-config flag carriers for wlroots-0.19 and libwayland-**server** (§2.29's pattern) |
 | `de/callocprobe` | counts allocations by symbol interposition; the enforcement half of PLAN.md risk 4. **Executable-only, and useless without its positive control** (§2.37) |
 | `de/vents`, `de/cvents` | the hardware bridges: sysctl, OSS volume, battery, devd (§2.34) |
 | `de/ventsctl` | `ventsctl sysctl\|volume\|battery\|devd` — read the machine by hand |
