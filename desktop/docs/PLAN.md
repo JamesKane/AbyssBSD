@@ -78,7 +78,7 @@ and `de/ctext` already do. It does not mean linking Rust crates.
 | `Dock`, `MenuBar`, `Finder`, `Desktop`, `LoginWindow`, `SystemPrefs` | the shell | `reef-*` |
 | `Anchor` / `anchor` | session supervisor: pollable child descriptors, control service | `anchor` |
 | `Vents` | hardware bridges: sysctl, OSS volume, battery, devd | `vents` |
-| *(compositor)* | Swift rewrite, Phase 6 | `tide` |
+| `undertow` | the compositor — Swift rewrite, Phase 6 ([PHASE6.md](PHASE6.md)) | `tide` |
 | `Installer` | Fedora-style graphical installer (Aqua app) | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
@@ -280,16 +280,33 @@ half of the story (PHASE7.md §1).
 
 ---
 
-## Phase 6 — Swift compositor
+## Phase 6 — `undertow`, the Swift compositor
 
 **Goal:** the compositor in Swift, meeting `tide`'s contract rather than inheriting its
 code. (Sequenced last because the shell is what makes the desktop *visible*, and it
 runs on any wlroots compositor meanwhile — not because the rewrite is optional.)
 
-- Use **Embedded Swift / manual memory management** (no ARC, no allocations) for the
-  present thread; bind wlroots through a C shim of our own, in the `wlsys` style.
-- Migrate piece by piece (reactor → scene → present), keeping the **headless C1–C5
-  benches as the gate** at every step — a regression fails the build, exactly as today.
+**Expanded to executable detail in [PHASE6.md](PHASE6.md)** — ordered passes
+P6.1–P6.7, the sibling→ours component map, and three risks spiked on both
+platforms *before* the plan was written. Two corrections to the sketch below
+came out of those spikes:
+
+- **Swift imports wlroots directly** — no bindgen, unlike the sibling's `wlsys`.
+  The C shim shrinks to a ~15-line listener trampoline, because `wl_listener` /
+  `wl_container_of` / `wl_signal_add` are macros and inlines (HANDOFF §2.1's
+  trap at scale). Verified on Linux and FreeBSD.
+- **Embedded Swift is struck** (risk 4 above): plain Swift with preallocation
+  measures zero allocations on the loop body, and Embedded Swift could not have
+  been scoped to one thread anyway.
+
+- Own the **scene, the frame scheduler and the present path**; let wlroots own
+  DRM/KMS, GBM, libinput and the protocol grind (DESKTOP.md §2).
+- Build it in the canon's order — **the contract and its meter before the
+  pixels** — keeping the **headless C1–C5 benches as the gate** at every step; a
+  regression fails the build, exactly as today.
+- **Software-rendered and headless throughout.** Real GPU, hardware cursor,
+  direct scanout, atomic page-flip and `rtprio` are Phase 4, on metal — the
+  build VM has no `/dev/dri`, which is the same wall the sibling is stopped at.
 
 ---
 
@@ -318,12 +335,18 @@ runs on any wlroots compositor meanwhile — not because the rewrite is optional
    stays documented as the fallback.
 2. **Mac Pro GCN 1.0 GPU** — `amdgpu si_support` maturity for FirePro D-series; dual-GPU.
 3. **Aqua fidelity in software rendering** — gloss/blur/pinstripe at HiDPI via Cairo.
-4. **Swift ARC vs. the latency contract** — now a *live* risk rather than a deferred
-   one, since the compositor is to be written in Swift rather than inherited from
-   `tide`. It stays off the critical path only while the shell runs as a client on a
-   stock compositor. Mitigations when we get there: Embedded Swift, preallocation, and
-   a C shim for the present path if measurement demands it — with `tide`'s C1–C5
-   benches as the gate that tells us.
+4. **Swift ARC vs. the latency contract** — **downgraded 2026-08-02 by
+   measurement** (PHASE6.md §4.2), not closed. A structure-of-arrays loop body
+   over `UnsafeMutableBufferPointer`, run 10 000× over 2048 surfaces under a
+   `malloc` interposer, made **zero allocations** with a **15 µs worst frame
+   against the 2 ms C1 budget**. So **preallocation alone suffices**: of the
+   three mitigations named here, only the cheapest is needed. **Embedded Swift
+   is struck** — it is a whole-module (`-wmo`) language *subset* for bare metal
+   and cannot be scoped to one thread of a process that links wlroots, so it was
+   never available for this job. The residual risk is that a spike is not the
+   loop: the real present path also touches wlroots and the triple buffer, and
+   ARC hides in innocuous captures. Hence an in-tree allocation counter that
+   runs as a **test** every build, with `tide`'s C1–C5 benches as the gate.
 5. **Broadcom Wi-Fi** on FreeBSD — likely wired/USB fallback on the Mac Pro.
 
 ## Overall verification strategy

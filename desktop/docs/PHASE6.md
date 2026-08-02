@@ -1,0 +1,304 @@
+# Phase 6 — `undertow`: the compositor, in Swift (scope)
+
+The last of the big rewrites, and the one that unblocks everything a Wayland
+*client* fundamentally cannot do. Read [PLAN.md](PLAN.md) for the locked
+decisions, the sibling's [DESKTOP.md](../../AbyssBSD/abyss/docs/DESKTOP.md) for
+the architecture canon this phase implements, and [HANDOFF.md](HANDOFF.md) for
+the interop traps.
+
+Last updated: 2026-08-02. **Scoped, not started.** Three risks were spiked
+first, on both platforms, before any of it was written down as a plan (§4) —
+because the phase's shape depends on their answers.
+
+---
+
+## 1. What this phase is
+
+**The performance contract, made real in Swift.** DESKTOP.md opens with C1–C5
+and says why:
+
+> Phase 1 is deliberately the performance contract and its meter — because on
+> this project, *that* is the feature.
+
+So the promise is not "we wrote a compositor". It is:
+
+> The screen stays at refresh rate, and **a single misbehaving program cannot
+> make it stutter** — proved by an in-process flight recorder and headless
+> benches that fail the build on a regression.
+
+Everything else in this phase exists to make that true and to measure it.
+
+**We own the scene, the scheduler and the present path. wlroots owns the
+plumbing** — DRM/KMS, GBM, libinput, and the protocol grind (DESKTOP.md §2).
+That division is canon and this phase does not relitigate it: writing a
+compositor from scratch is a multi-year detour that would not improve the parts
+we actually own.
+
+**Explicitly NOT in Phase 6:**
+
+- **No GPU, no DRM/KMS, no real vblank.** The build VM is Bochs std-VGA with no
+  `/dev/dri`, and the sibling is blocked at exactly this line (its STATUS.md §4:
+  *"the one real blocker: GPU"*). Phase 6 is **software rendering (pixman) on
+  wlroots' headless and nested backends**, which is where C1–C3 are provable
+  anyway. Hardware cursor, direct scanout, atomic page-flip, VRR and
+  explicit-sync belong to **Phase 4** (Mac Pro bring-up), on metal.
+- **No real-time priority.** The sibling needed an `allow.rtprio` jail param —
+  a *kernel* divergence — to grant the present thread bounded RT. That is a
+  Phase-4 concern; headless benches measure the loop body's cost, which is what
+  C1 actually constrains.
+- **No jails.** Same reasoning as Phase 7's carve-out: FreeBSD systems work that
+  belongs with the hardware story.
+- **Not the toolkit.** `Aqua` already exists and already renders the desktop.
+  This phase changes *what it runs on*, not what it looks like.
+
+---
+
+## 2. What we already have vs. what's new
+
+More of this is done than the phase's size suggests, because Phases 1–3 built
+the client half and the substrate:
+
+| Need | Have | New in Phase 6 |
+|---|---|---|
+| Wayland protocol glue | `CWayland` + the `aw_*` shim (§2.1), 5 protocols vendored | the **server** half — `wayland-scanner server-header` |
+| C-interop discipline | four phases of it; §2.1–§2.3 are the rules | `CWlroots` — the listener trampoline (§4.1) |
+| A control plane | `CurrentIPC`, SCM_RIGHTS (P3.5) | the compositor hosts a service |
+| A session supervisor | `anchor` (P3.6) | it starts `undertow` instead of sway |
+| Config | `PoolConfig` (P2.3) | output/workspace layout persisted |
+| A shell to run | the whole Aqua desktop (Phase 2) | it runs on **our** compositor |
+| Real clients to test with | `AquaDemo`, the Finder, the Dock… | adversarial clients (C2) |
+| A test harness | `abyss/tests`, 35 live modes | the C1–C5 gating benches |
+| Screenshots | `wlr-screencopy` **client** (P7.5) | the **server** half (PHASE7 §6.6's debt) |
+
+---
+
+## 3. Component map (sibling → ours)
+
+`tide` is ~5.9k lines of Rust (plus ~2k of tests and a 4.9k-line bindgen dump).
+Ours should land smaller, because Swift imports wlroots directly (§4.1) and
+because `CurrentIPC`/`PoolConfig`/`Anchor` already exist.
+
+| Job | Sibling | Ours |
+|---|---|---|
+| The compositor | `tide` | **`undertow`** (`de/undertow`, `de/undertowbin`) |
+| wlroots binding | `wlsys` (bindgen, 4946 lines) | **`CWlroots`** — a ~150-line C shim; Swift imports the rest (§4.1) |
+| Frame scheduler | `metronome.rs` (489) | `Metronome.swift` |
+| Flight recorder | `recorder.rs` (227), `hud.rs` (195) | `FlightRecorder.swift` |
+| Scene (SoA) | `scene.rs` (214), `damage.rs` (180) | `Scene.swift`, `Damage.swift` |
+| Reactor | `reactor.rs` (167), `kq.rs` (214) | `Reactor.swift` — poll/kqueue, the `Display.run()` discipline (§2.14) |
+| wlroots output bridge | `wlout.rs` (2335) | `Backend.swift` |
+| Input | `evdev.rs` (908) | `Seat.swift` — via wlroots' libinput, not raw evdev |
+| Lock-free publish | `triple.rs` (157), `spsc.rs` (123) | `TripleBuffer.swift` |
+
+---
+
+## 4. The spikes — three risks, retired before planning
+
+PLAN.md risk 4 ("Swift ARC vs. the latency contract") was the reason to spike
+before scoping: if the answers had gone the other way, this would be a different
+phase. All three were run **on Linux and in the FreeBSD guest**.
+
+### 4.1 Can Swift bind wlroots at all? — **Yes, and better than the sibling can.**
+
+The sibling needed **bindgen** (`wlsys`, 4946 generated lines, with the standing
+"regenerate in the VM, pull the file back before the next sync" hazard in its
+STATUS.md §2). **Swift's C importer reads wlroots' headers directly** — no
+bindgen, no generated file to keep in sync. `wl_display_create`,
+`wlr_headless_backend_create` and friends are callable, and struct layouts import
+correctly.
+
+Two things do need C, both already familiar:
+
+- **`xdg-shell-protocol.h` must be generated with `wayland-scanner
+  server-header`.** We have only ever generated the *client* header. This is the
+  one-line reason a naïve `import CWlroots` fails, and it costs a `gen_server`
+  line in `generate-protocols.sh`.
+- **wlroots' entire event model is `wl_listener` + `wl_container_of`, and both
+  are macros** — the §2.1 trap at scale. `wl_signal_add` is a `static inline`
+  too. The fix is one C trampoline, and it is the single most important 15 lines
+  of the phase:
+
+```c
+typedef void (*tw_notify_fn)(void *ctx, void *data);
+struct tw_listener { struct wl_listener l; tw_notify_fn fn; void *ctx; };
+
+static void tw_trampoline(struct wl_listener *listener, void *data) {
+    struct tw_listener *tl = wl_container_of(listener, tl, l);
+    tl->fn(tl->ctx, data);          /* -> a Swift @convention(c) function */
+}
+```
+
+Verified end to end on **both platforms**: a headless backend's `new_output`
+signal fires into a Swift closure carrying an `Unmanaged` context, naming
+`HEADLESS-1` and `HEADLESS-2`. That is the mechanism every other wlroots event
+will use, so the phase's core FFI question is answered before it is asked.
+
+### 4.2 Can the present path be allocation-free in plain Swift? — **Yes. Measured.**
+
+PLAN.md risk 4 named three possible mitigations: *"Embedded Swift,
+preallocation, and a C shim for the present path if measurement demands it"*.
+Measurement does not demand them.
+
+A structure-of-arrays scene over `UnsafeMutableBufferPointer`, composited by a
+loop body with no `Array`/`String`/class in reach, run 10 000 times over 2048
+surfaces under a `malloc`/`calloc`/`realloc` interposer:
+
+```
+frames:                       10000, 2048 surfaces each
+allocations in the loop body: 0
+worst frame:                  15.25 us   (the C1 budget is 2000 us p99)
+```
+
+**Zero allocations, and two orders of magnitude of headroom on the worst frame.**
+So: plain Swift, with the discipline made a *rule* and the flight recorder
+catching violations as latency spikes — which is exactly what DESKTOP.md §11
+prescribes for Rust, and for the same reason ("achievable but not automatic").
+
+**Embedded Swift is the wrong tool and would not have worked anyway.** It is a
+whole-module (`-wmo`) language *subset* for bare metal; you cannot scope it to
+one thread of a process that links wlroots and Foundation. Recording that here so
+nobody spends a week rediscovering it — PLAN.md's risk-4 wording invites the
+attempt.
+
+The residual risk is real but ordinary: **a spike is not the loop.** The real
+present path also touches wlroots calls and the triple buffer, and ARC can hide
+in an innocuous-looking capture. Hence P6.1's in-tree allocation counter, which
+runs as a *test*, not as a one-off.
+
+### 4.3 Does the guest have what it needs? — **Yes, already.**
+
+`wlroots019` and `seatd` have been in the VM seed since Phase 3 (they were put
+there so the shell could run as a *client* under sway). The guest carries
+wlroots **0.19 and 0.20**; Fedora ships 0.19 only, so **we pin 0.19** and the
+dev box is the constraint, as usual. Better than that: both platforms are on
+**0.19.3 exactly**, so the substrate matches the way every other dependency in
+this project does. `abyss/vm/check.sh` now asserts `wayland-server` and
+`wlroots-0.19` alongside the rest, so seed drift is caught before a build is.
+
+---
+
+## 5. Ordered passes
+
+**P6.1 — The metronome and its meter, against nothing at all.**
+The contract before the pixels, and before wlroots: pure Swift, no compositor,
+no C. `Metronome` (EWMA vblank prediction, an adaptive latch margin, the §3.1
+late-latch loop), `FlightRecorder` (a lock-free ring: predicted vs actual
+vblank, latch/composite/submit, flip latency, damage area, missed flag), the
+`Output`/`FrameSink` protocols both real and synthetic backends implement, and
+`TripleBuffer` for lock-free snapshot publication.
+*Verify:* unit tests for the predictor's convergence and the margin control
+loop, plus **an allocation-counting test** (§4.2's interposer, in-tree) that
+asserts the loop body allocates zero. Runs in `swift test` on both platforms
+from day one, because it needs nothing but Swift.
+
+**P6.2 — The wlroots bridge, and first frames.**
+`CWlroots` (the §4.1 trampoline plus wrappers for the static-inline/macro
+calls), the server-side protocol generation, and `Backend.swift`: display, event
+loop, headless backend, outputs, renderer + allocator. The reactor thread folds
+wlroots' fd into the `poll` discipline `Display.run()` already uses (§2.14,
+§2.18). The metronome drives real frames onto a real headless output.
+*Verify:* `undertow --headless --frames N` presents N frames with **missed == 0**,
+on both platforms. The flight recorder's numbers become the bench's assertions.
+
+**P6.3 — A scene, and a real client on it.**
+`wlr_compositor` + `xdg_shell`, surfaces landing in the SoA scene with damage
+tracking, composited by pixman. The client is one we already have: **AquaDemo**.
+*Verify:* AquaDemo connects to `undertow`, and `undertow` writes a PNG of its
+own output showing the Aqua window. (It owns the pixels, so this needs no
+screencopy yet.) The first pass where the thing is recognisably a compositor.
+
+**P6.4 — Input.**
+libinput through wlroots, `wl_seat`, pointer/keyboard/focus routing, click-to-
+focus and raise. The client half of all of this is four phases old, which makes
+the assertions easy to write.
+*Verify:* the existing virtual-pointer/virtual-keyboard helpers drive a real
+client through `undertow`; the Finder responds exactly as it does under sway.
+
+**P6.5 — C2: the isolation proof.**
+The headline claim, and the one that justifies the architecture. Adversarial
+clients — a spinner, a socket-flooder, a never-committer — running against the
+compositor while the metronome holds cadence.
+*Verify:* **missed flips == 0** under adversarial load, asserted in CI on both
+platforms. A regression fails the build (C5). This is the pass that makes the
+phase's promise falsifiable, and it is worth reaching early rather than late.
+
+**P6.6 — The shell, on our own compositor.**
+The server halves of what the Aqua shell already speaks as a client:
+`wlr-layer-shell` (anchors, exclusive zones — the `arrange()` logic `tide` is
+the design reference for), `wlr-foreign-toplevel-management`, `xdg-activation`.
+*Verify:* `anchor` boots the desktop on `undertow` instead of sway, and the live
+modes that assert composition (§2.26's workspace-rect check) pass against it.
+The destination: **the Jaguar desktop, on our compositor, on FreeBSD.**
+
+**P6.7 — What only a compositor can do.**
+The debts the client architecture could never pay (§2.22): **remembered window
+positions** for the spatial Finder, and **dragging desktop icons**. Plus the
+server half of `wlr-screencopy`, which PHASE7 §6.6 hands to this phase — or its
+`ext-image-copy-capture-v1` successor, since upstream deprecates the one we
+bound in P7.5.
+*Verify:* a spatial Finder window reopens where it was left; a desktop icon
+stays where it is dragged; `abyss/tests/live-screenshot.sh` passes against
+`undertow` with no change to the portal.
+
+---
+
+## 6. Verification
+
+Unchanged discipline, with one addition. Pure logic in unit tests, the real
+thing live, **everything green on both platforms**, `abyss/tests/run.sh --vm
+--live` as the gate.
+
+The addition is C5: **the perf benches gate the build like a unit test.**
+`undertow` is its own bench harness, as `tide` is — flags for rate, frame count,
+surface count, adversaries — and the harness asserts on the flight recorder's
+output rather than on a wall-clock guess. Two standing cautions from the
+sibling's STATUS.md §2, worth inheriting rather than rediscovering:
+
+- **RT/timing benches flake under host load.** A lone contract failure in a full
+  sweep is usually a stalled vCPU, not a regression; re-run it in isolation
+  before believing it. Budget headroom accordingly — and prefer asserting on
+  *the compositor's own CPU cost* (which is what C1 constrains) over end-to-end
+  wall time (which the hypervisor can perturb).
+- **Assert p99, not max.** One outlier in a VM proves nothing.
+
+---
+
+## 7. Risks / open decisions
+
+**7.1 The GPU wall is real, and it is not ours to climb here.** Everything in
+this phase is software-rendered and headless. That is not a shortcut — C1–C3 are
+*defined* on the compositor's own CPU work and are fully provable this way — but
+"undertow composites the desktop" will mean "in software" until Phase 4 puts it
+on a Mac Pro. Say it that way.
+
+**7.2 A spike is not the loop (§4.2).** Zero allocations in a synthetic loop
+body does not guarantee zero in the real one. The mitigation is that the
+allocation counter is a *test*, run every build, not a one-off measurement — and
+that the flight recorder makes a violation visible as a latency spike.
+
+**7.3 wlroots is a moving substrate.** Today both platforms are on 0.19.3 and
+`check.sh` asserts it, so this is fine *now*. The risk is future drift: the
+guest already offers 0.20, ports will move, and wlroots breaks API between minor
+versions as a matter of policy. This is the first dependency where the dev box
+and the target could diverge — everything else has been the same version on
+both. Treat a wlroots bump as a deliberate pass, not a `pkg upgrade` side
+effect.
+
+**7.4 The reactor/present split is where the design can go wrong quietly.** C2
+holds *by construction* only if the present thread genuinely never touches
+anything a client controls. In Swift the sharp edge is ARC: a stray strong
+reference across the triple buffer turns a lock-free publish into a retain/
+release pair on the present thread. Design the snapshot as a POD struct over
+preallocated storage, and let P6.1's counter enforce it.
+
+**7.5 Deprecated protocol, inherited.** `wlr-screencopy` is deprecated upstream
+in favour of `ext-image-copy-capture-v1`. P6.7 can implement the old server half
+(cheap, matches our client) or move both halves (correct, more work). Deciding
+late is fine; deciding *silently* is not — the portal's client code is P7.5's
+and would have to move with it.
+
+**7.6 This is the largest phase in the project.** Seven passes, and P6.6 is
+itself most of a window manager. The ordering is deliberately front-loaded with
+the parts that are provable in isolation (P6.1 needs nothing; P6.2 needs no
+client; P6.5 is reachable before the shell), so that a stall late in the phase
+still leaves a measured, tested artifact behind rather than a half-compositor.

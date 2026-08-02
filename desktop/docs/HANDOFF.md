@@ -2,7 +2,8 @@
 
 What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
-([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE7.md](PHASE7.md)) for
+([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE6.md](PHASE6.md),
+[PHASE7.md](PHASE7.md)) for
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
@@ -1311,10 +1312,21 @@ Swift hardware bridges underneath, and the whole harness passes on both
 platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-**There is no queued next task — the next move is a choice.** All three
-directions below are independent; pick on appetite, not on order.
+**Phase 6 — `undertow`, the Swift compositor — is scoped and started**
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **The immediate task is P6.1: the metronome
+and its meter, before any pixels** — the canon's own order (DESKTOP.md §13:
+*"the contract exists before the pixels do"*). It needs no wlroots and no C, so
+it is `swift test` on both platforms from day one.
 
-1. **Pick a phase.**
+Three risks were spiked on both platforms *before* the plan was written (§4 of
+PHASE6.md), and two of them changed the plan: **Swift imports wlroots directly**
+(no bindgen — the C shim is a ~15-line `wl_container_of` trampoline, §2.1's trap
+at scale), and **Embedded Swift is struck** because plain Swift with
+preallocation measures zero allocations on the loop body.
+
+The other two directions stay open and independent; pick on appetite, not order.
+
+1. **Or pick a different phase.**
    - **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
      volume/battery status items finally read a real mixer and battery rather
      than reporting absent (P3.7). It is also the biggest single risk left:
@@ -1324,12 +1336,14 @@ directions below are independent; pick on appetite, not on order.
      a file chooser from us. Until then, "portals: done" means *our* portals for
      *our* apps — which is exactly what it should be read as. The guest already
      has `dbus-1.16.2` and `gtk3` to test against.
-   - **Phase 6 — the Swift compositor.** The largest, and the one that unblocks
-     the things a client fundamentally cannot do: remembered window positions
-     for spatial Finder, and dragging desktop icons (§2.22). Note it also
-     **inherits a Phase 7 debt**: `wlr-screencopy` is a wlroots protocol, so a
-     compositor of ours has to implement the server half or the screenshot
-     portal needs a compositor-owned path then (PHASE7.md §6.6).
+   - **Phase 5 — the installer.** Untouched, and the only phase with no
+     dependency on any of the above.
+
+   What Phase 6 finally pays off, for the record: remembered window positions
+   for the spatial Finder and dragging desktop icons — both things a Wayland
+   *client* cannot do (§2.22) — plus the Phase-7 debt, a server half for
+   `wlr-screencopy` or its `ext-image-copy-capture-v1` successor (PHASE7 §6.6).
+   Those are P6.7, deliberately last: the contract comes first.
 
 2. **Standing smaller items**, none blocking:
    - **Golden-image tests** — snapshot the deterministic PNG scenes and diff in

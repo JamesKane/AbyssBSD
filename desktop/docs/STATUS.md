@@ -411,8 +411,16 @@ a **descriptor**: no D-Bus, no broker, no flatpak. The screenshot goes furthest 
 the request names nothing, the reply names nothing, and the image is unlinked the
 moment it is opened, so the descriptor is the only route to it that exists.
 
-**There is no queued next task. Three independent directions** (HANDOFF §5 has
-the detail):
+**Phase 6 — `undertow`, the Swift compositor — is now scoped and started**
+([PHASE6.md](PHASE6.md), passes P6.1–P6.7). Three risks were spiked on both
+platforms before the plan was written: Swift imports wlroots **directly** (no
+bindgen, unlike the sibling — the C shim is a ~15-line listener trampoline), a
+present-path loop body in plain Swift measures **zero allocations** with a 15 µs
+worst frame against the 2 ms C1 budget (so Embedded Swift is struck), and the
+guest already carries wlroots 0.19.3 — the same version as the dev box.
+**The immediate task is P6.1: the metronome and its meter, before any pixels.**
+
+**The other two directions remain open and independent** (HANDOFF §5):
 
 - **Phase 4 — Mac Pro bring-up.** Real hardware, and where the volume/battery
   status items finally read a real mixer and battery instead of reporting
@@ -420,12 +428,10 @@ the detail):
 - **The D-Bus/portal bridge** — the carved-out half of Phase 7, and what stock
   GTK/Qt apps need before "portals" means anything to them. Today it means *our*
   portals for *our* apps.
-- **Phase 6 — the Swift compositor.** Unblocks what a client fundamentally
-  cannot do: remembered window positions for spatial Finder, and dragging
-  desktop icons. It also inherits the one Phase-7 debt: `wlr-screencopy` is a
-  wlroots protocol (and deprecated upstream), so a compositor of ours needs a
-  server half, the `ext-image-copy-capture-v1` successor, or a compositor-owned
-  path for screenshots (PHASE7.md §6.6).
+(What Phase 6 finally unblocks, for the record: remembered window positions for
+the spatial Finder and dragging desktop icons — both things a Wayland *client*
+cannot do (HANDOFF §2.22) — plus the one Phase-7 debt, a server half for
+`wlr-screencopy` or its `ext-image-copy-capture-v1` successor. They are P6.7.)
 
 **Standing smaller items:** golden-image tests (the deterministic PNG scenes,
 diffed in CI — the cheapest guard against silent visual regressions, and the
