@@ -87,6 +87,12 @@ sh "$root/abyss/tests/live-undertow.sh"
 echo "== input through undertow =="
 sh "$root/abyss/tests/live-undertow-input.sh"
 
+# C2 — the claim the architecture exists to make good: eleven hostile processes
+# cannot make the compositor drop a frame, and the healthy client keeps working
+# throughout (PHASE6.md P6.5).
+echo "== C2: no client can make us miss a frame =="
+sh "$root/abyss/tests/live-undertow-c2.sh"
+
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.
 if [ "$live" -eq 1 ]; then

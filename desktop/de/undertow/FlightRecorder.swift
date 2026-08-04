@@ -27,6 +27,11 @@ public struct FrameRecord: Equatable, Sendable {
     /// cost. `cost > margin` is the shape of a frame about to be late.
     public var marginNs: UInt64 = 0
     public var costNs: UInt64 = 0
+    /// How late the OS actually woke us past the deadline. Under adversarial
+    /// load this is where the cost of dispatching a flooder's protocol traffic
+    /// shows up — so it is the number that proves the load was felt, not just
+    /// that the frames were made.
+    public var wakeLateNs: UInt64 = 0
     public var damageArea: Int64 = 0
     public var surfaces: Int32 = 0
     public var missed: Bool = false

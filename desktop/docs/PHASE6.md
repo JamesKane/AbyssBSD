@@ -426,13 +426,77 @@ nothing to do with input. A separate boolean fixed it; the lesson is that a
 sentinel value sharing a predicate with its own initial state is not a state
 machine.
 
-**P6.5 — C2: the isolation proof.**
-The headline claim, and the one that justifies the architecture. Adversarial
-clients — a spinner, a socket-flooder, a never-committer — running against the
-compositor while the metronome holds cadence.
-*Verify:* **missed flips == 0** under adversarial load, asserted in CI on both
-platforms. A regression fails the build (C5). This is the pass that makes the
-phase's promise falsifiable, and it is worth reaching early rather than late.
+**P6.5 — C2: the isolation proof. ✅ done.**
+The headline claim, and the one that justifies the architecture:
+
+> *"No client can cause a missed flip. A program in an infinite loop, flooding
+> its socket, or never drawing again simply shows its last committed frame; the
+> desktop keeps its cadence."*
+
+`abyss/tests/adversary.c` is eleven real hostile processes across four threats —
+socket-flooders, a zombie, a CPU-spinning never-reader, and a connect/disconnect
+churner — running against the compositor while a **healthy client keeps
+drawing**. Under that load: **0 missed of 600 frames**, and the healthy window
+still composited at the end.
+
+**A polite adversary is not an adversary.** The first flooder drained its socket
+with a `wl_display_roundtrip` every 64 commits — and a roundtrip *waits for the
+compositor to answer*, so it throttled itself to exactly the cadence we chose to
+grant it. It could not apply more pressure than we were willing to accept, and
+the bench sailed through at every rate. The `hard` mode never waits for a reply:
+it writes until the kernel refuses, polls for writability, and writes again.
+That is the difference between greedy and hostile, and only the second one
+tests anything.
+
+**The measurement that mattered, and the fix it justified.** With real pressure,
+the single-threaded design from P6.2 broke — and broke where the debt said it
+would:
+
+| | wake-late p99 | missed |
+|---|---|---|
+| 240Hz, 16 hostile | 2100 µs | 0 / 600 |
+| 240Hz, 24 hostile | 3158 µs | 10 / 600 |
+| 240Hz, 32 hostile | 4064 µs | **600 / 600** |
+| 480Hz, 16 hostile | 1823 µs | **900 / 900** |
+
+The pattern is exact: when the time spent dispatching client traffic approaches
+the refresh period, no scheduling can save you. The culprit was **dispatching on
+the critical path** — `pollFlip` pumped the event loop *after* the deadline,
+between waking and compositing, which is the worst possible place to service a
+client. Moving that out, and reserving the last 500 µs before every deadline for
+nothing but sleeping, changed the picture completely:
+
+| | wake-late p99 | missed |
+|---|---|---|
+| 240Hz, 32 hostile | 1246 µs | 0 / 600 |
+| 480Hz, 16 hostile | 94 µs | 1 / 600 |
+| 480Hz, **64** hostile | 72 µs | **0 / 600** |
+
+Note the wake latency *falling* as the rate rises: a shorter period leaves less
+slack to dispatch in, so less gets dispatched — **backpressure working as
+designed**. The cadence is preserved and the clients absorb the degradation,
+which is precisely C2's bargain.
+
+**So the reactor/present thread split is not needed yet, and now we know why
+rather than hoping.** P6.2 recorded the single-threaded design as a debt to be
+settled "with the clients it exists to isolate us from, where it can actually be
+tested rather than asserted". It has now been tested: bounding *where* dispatch
+happens was sufficient, which is DESKTOP.md §4's own prescription ("bounded work
+per wakeup gives backpressure") rather than its threading model. The debt is
+**re-scoped, not silently dropped** — a real GPU present path (Phase 4) puts far
+more work on the present thread, and that is when this measurement should be
+repeated.
+
+*Verified:* `abyss/tests/live-undertow-c2.sh`, in `run.sh`'s default lane on both
+platforms. **No new unit tests, deliberately** — C2 is a claim about what a
+separate process can do to us, and there is nothing an in-process test could
+honestly assert about it. The bench *is* the test, which is what C5 means.
+
+*The positive control caught a false pass twice.* `surfaces-created` counts every
+surface any client ever makes, and the bench refuses to pass without it: an early
+sweep reported a serene `missed=0` under "8 hostile clients" that had in fact
+created **zero** surfaces — they had never connected. A C2 bench whose
+adversaries fail to arrive is a compliment you pay yourself.
 
 **P6.6 — The shell, on our own compositor.**
 The server halves of what the Aqua shell already speaks as a client:

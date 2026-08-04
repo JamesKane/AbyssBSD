@@ -92,6 +92,9 @@ public final class Compositor {
     public let session: WlrootsSession
     private var xdgShell: UnsafeMutablePointer<wlr_xdg_shell>?
     private var newToplevelListener: UnsafeMutablePointer<tw_listener>?
+    private var newSurfaceListener: UnsafeMutablePointer<tw_listener>?
+    /// How many surfaces clients have created since start-up.
+    public private(set) var surfacesCreated = 0
     /// Every live toplevel, in creation order. Small by construction; a desktop
     /// has tens of windows, not thousands.
     public private(set) var toplevels: [Toplevel] = []
@@ -110,9 +113,8 @@ public final class Compositor {
         // wl_compositor at version 6, plus the pieces a real client expects to
         // find. `wlr_compositor_create` with a renderer is what makes wlroots
         // turn client buffers into textures for us on commit.
-        guard wlr_compositor_create(session.display, 6, session.renderer) != nil else {
-            throw BackendError.noGlobals("wl_compositor")
-        }
+        guard let comp = wlr_compositor_create(session.display, 6, session.renderer)
+        else { throw BackendError.noGlobals("wl_compositor") }
         _ = wlr_subcompositor_create(session.display)
         _ = wlr_data_device_manager_create(session.display)
         // **wl_shm, without which no client can attach a buffer.**
@@ -130,6 +132,14 @@ public final class Compositor {
         xdgShell = shell
 
         let me = Unmanaged.passUnretained(self).toOpaque()
+        // Every surface any client ever creates. Not used for rendering — it is
+        // the POSITIVE CONTROL for adversarial load (PHASE6.md P6.5): a C2 bench
+        // that only asserts "no frames were missed" passes just as happily when
+        // the adversaries failed to connect at all.
+        newSurfaceListener = tw_listen(&comp.pointee.events.new_surface, { ctx, _ in
+            guard let ctx else { return }
+            Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue().surfacesCreated += 1
+        }, me)
         newToplevelListener = tw_listen(&shell.pointee.events.new_toplevel, { ctx, data in
             guard let ctx, let data else { return }
             let c = Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue()
@@ -144,6 +154,7 @@ public final class Compositor {
     }
 
     deinit {
+        tw_listener_free(newSurfaceListener)
         tw_listener_free(newToplevelListener)
         for t in toplevels { t.teardown() }
     }

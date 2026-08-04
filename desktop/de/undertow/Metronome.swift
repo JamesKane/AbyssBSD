@@ -268,6 +268,7 @@ public struct Metronome<O: Output, S: FrameSink> {
         r.compositeEnd = compositeEnd
         r.submit = compositeEnd
         r.costNs = Mono.since(latch, compositeEnd)
+        r.wakeLateNs = wakeLate
         r.surfaces = stats.surfaces
         r.damageArea = stats.damageArea
         r.degraded = stats.degraded

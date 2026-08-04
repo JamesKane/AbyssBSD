@@ -4,9 +4,9 @@ The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
 Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
-**Phase 6 — `undertow`, the Swift compositor — is under way at P6.4 of 7**: a real
-client's window, composited by our own scene, and clicks reaching it. 167 unit tests + 35 live
-modes, green on Linux *and* FreeBSD. **Next: P6.5, the C2 isolation proof.**
+**Phase 6 — `undertow`, the Swift compositor — is under way at P6.5 of 7**: **C2 is
+proved** — eleven hostile processes cannot make it drop a frame. 167 unit tests + 35 live
+modes, green on Linux *and* FreeBSD. **Next: P6.6, the Aqua shell on it.**
 
 ## What this is
 
@@ -476,8 +476,21 @@ server side means the tool that has driven sway since Phase 1 drives us too.
 
 ![a click through undertow](screenshots/undertow-input.png)
 
-**The immediate task is P6.5: C2, the isolation proof — adversarial clients, and
-missed flips still zero.**
+**P6.5 is done — C2, the claim the architecture exists to make good.** Eleven
+real hostile processes (socket-flooders that never wait for a reply, a zombie, a
+CPU-spinning never-reader, a connect/disconnect churner) against the compositor
+while a healthy client keeps drawing: **0 missed of 600 frames**, on both
+platforms, with the healthy window still composited at the end.
+
+Getting there needed a real fix, found by measurement: dispatching client traffic
+*after* the deadline collapsed under 32 flooders (600/600 missed). Moving it into
+the pre-deadline slack survives **64** at every rate we target. So the
+reactor/present thread split P6.2 flagged is **not needed yet — and now we know
+why rather than hoping**; the debt is re-scoped to Phase 4, when a GPU present
+path puts far more work on that thread.
+
+**The immediate task is P6.6: the Aqua shell on our own compositor** —
+`wlr-layer-shell`, foreign-toplevel and xdg-activation, server side.
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

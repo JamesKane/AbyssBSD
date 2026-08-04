@@ -37,7 +37,8 @@ func usage() -> Never {
                                     [--assert-cost-p99-us N]
            undertow run             [--hz N] [--frames N] [--width N] [--height N]
                                     [--capture FILE.ppm] [--capture-early FILE.ppm]
-                                    [--assert-windows N] [--verbose]
+                                    [--assert-windows N] [--assert-surfaces N]
+                                    [--assert-missed N] [--verbose]
     """)
     exit(2)
 }
@@ -58,6 +59,7 @@ var verbose = false
 var capturePath: String? = nil
 var captureEarlyPath: String? = nil
 var assertWindows: Int? = nil
+var assertSurfaces: Int? = nil
 
 var i = 0
 while i < args.count {
@@ -89,6 +91,7 @@ while i < args.count {
     case "--capture": capturePath = value("--capture")
     case "--capture-early": captureEarlyPath = value("--capture-early")
     case "--assert-windows": assertWindows = Int(value("--assert-windows"))
+    case "--assert-surfaces": assertSurfaces = Int(value("--assert-surfaces"))
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -325,6 +328,19 @@ case "run":
     var metronome = Metronome<WlrootsOutput, SurfaceScene>(periodHintNs: output.periodHintNs)
     var o = output
     var s = scene
+
+    // Warm up into a throwaway recorder, as bench-metronome does: the margin
+    // control loop discovers the backend's commit latency by missing once or
+    // twice, and counting that convergence as a C2 failure would be measuring
+    // the first frames of the process's life rather than its behaviour under
+    // load. With this, a healthy baseline is exactly zero missed frames, which
+    // is what lets the C2 gate be a flat zero rather than a tolerance.
+    let warmup = min(max(frames / 8, 16), 240)
+    let warmupRecorder = FlightRecorder(capacity: warmup)
+    for _ in 0..<warmup {
+        metronome.step(output: &o, sink: &s, recorder: warmupRecorder)
+        compositor.endFrame()
+    }
     // The early capture fires a few frames after the FIRST window maps, not at
     // a wall-clock guess. That makes it a synchronisation point the harness can
     // wait on — "the client has drawn" — instead of a sleep long enough to
@@ -367,11 +383,31 @@ case "run":
     out("surfaces-composited=\(scene.count)")
     out("cursor=\(Int(seat.cursorX)),\(Int(seat.cursorY))")
     out("focused=\(seat.focused != nil ? "yes" : "no")")
+    // The positive control for adversarial load: every surface any client ever
+    // created. `missed=0` with `surfaces-created=0` means the adversaries never
+    // arrived, which is a passing bench that proves nothing (PHASE6.md P6.5).
+    out("surfaces-created=\(compositor.surfacesCreated)")
+    out("wake-late-p99-us=\(recorder.percentile(99) { $0.wakeLateNs } / 1000)")
+    out("composite-p99-us=\(recorder.costPercentileNs(99) / 1000)")
+    out("margin-us=\(metronome.margin.marginNs / 1000)")
     out("missed=\(recorder.missedCount) of \(recorder.retained)")
+    var runFailed = false
     if let want = assertWindows, windows != want {
         emit(2, "FAIL: expected \(want) mapped window(s), got \(windows)")
-        exit(1)
+        runFailed = true
     }
+    if let want = assertSurfaces, compositor.surfacesCreated < want {
+        emit(2, "FAIL: only \(compositor.surfacesCreated) client surfaces were created,"
+             + " expected at least \(want) — the load never arrived, so a passing"
+             + " frame count would prove nothing")
+        runFailed = true
+    }
+    if let limit = assertMissed, recorder.missedCount > limit {
+        emit(2, "FAIL C2: \(recorder.missedCount) missed flips of \(recorder.retained),"
+             + " limit \(limit) — a client made the compositor drop a frame")
+        runFailed = true
+    }
+    if runFailed { exit(1) }
     out("verdict ok")
 
 default:

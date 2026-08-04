@@ -187,6 +187,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.35 | A `LayerSurface` with no teardown: replacing one crashed the process — §2.2's trap, eight months later |
 | 2.36 | Capsicum permits `socket(2)`; it forbids *naming an address* — the control was wrong, and only FreeBSD could say so |
 | 2.37 | Swift allocates via `posix_memalign`, and interposition dies in a `.xctest` — a probe with no positive control reports a comfortable zero |
+| 2.38 | A flooding client that roundtrips throttles itself; and *where in the frame* you dispatch matters more than which thread does it |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -453,6 +454,35 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.38 A polite adversary is not an adversary
+(P6.5 — the C2 isolation proof. The bench was wrong before the compositor was.)
+
+- **A flooding client that calls `wl_display_roundtrip` throttles itself to
+  your own cadence.** A roundtrip waits for the compositor to *answer*, so the
+  "flood" can never apply more pressure than the compositor chooses to accept.
+  Our first flooder drained every 64 commits that way and the contract bench
+  passed at every rate — proving nothing. The hostile version never waits for a
+  reply: write until the kernel refuses, poll for writability, write again. The
+  distinction between *greedy* and *hostile* is the whole test.
+- **Count the load, not just the outcome.** `surfaces-created` is a positive
+  control on the adversaries themselves, and it caught a serene `missed=0`
+  under "8 hostile clients" that had created **zero** surfaces — they never
+  connected. This is §2.37's rule in a new place: a bench whose load fails to
+  arrive passes beautifully. (It caught the same class of error twice in one
+  afternoon.)
+- **Where in the frame you do the work matters more than which thread does
+  it.** The compositor collapsed under 32 flooders while dispatching client
+  traffic in `pollFlip` — *after* the deadline, between waking and compositing.
+  Moving that into the pre-deadline slack, and reserving the last 500 µs for
+  nothing but sleeping, took it from 600/600 missed to 0/600 at the same load.
+  The threading model was not the lever; the placement was.
+- **Watch for the number that falls when it should rise.** After the fix, wake
+  latency *decreased* as the refresh rate increased — which looks wrong until
+  you see it is backpressure: a shorter period leaves less slack to dispatch in,
+  so less gets dispatched. The cadence is preserved and the clients absorb the
+  degradation. A metric moving the "wrong" way is worth understanding before
+  it is worth celebrating.
 
 ### 2.37 A probe with no positive control measures nothing
 (P6.1 — the metronome. Third time this file has recorded the same shape, so it
@@ -1359,16 +1389,18 @@ platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
 **Phase 6 — `undertow`, the Swift compositor — is under way**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1–P6.4 are done**: the metronome and its
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1–P6.5 are done**: the metronome and its
 meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
 pixels do"*), the wlroots bridge under it, a real client on a real scene, and
-input reaching that client. `undertow` hosts a Wayland socket, AquaDemo's window
-is composited by our own structure-of-arrays scene (not `wlr_scene`) at exact
-cadence, and a click driven by the harness's **unmodified** `vpointer` reaches
-the app — because implementing `wlr-virtual-pointer`'s server side means the tool
-that drives sway drives us. `abyss/tests/live-undertow*.sh` are the first tests
-here that **start no sway**. **The immediate task is P6.5: C2, the isolation
-proof — adversarial clients, missed flips still zero.**
+input reaching that client — and **C2 is proved**: eleven real hostile processes
+cannot make it drop a frame, while a healthy client keeps drawing. `undertow`
+hosts a Wayland socket, AquaDemo's window is composited by our own
+structure-of-arrays scene (not `wlr_scene`) at exact cadence, and a click driven
+by the harness's **unmodified** `vpointer` reaches the app — because implementing
+`wlr-virtual-pointer`'s server side means the tool that drives sway drives us.
+`abyss/tests/live-undertow*.sh` are the first tests here that **start no sway**.
+**The immediate task is P6.6: the Aqua shell on our own compositor** —
+layer-shell, foreign-toplevel and xdg-activation, server side.
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
 shim exists only because `wl_signal_add` is a static inline and
@@ -1471,6 +1503,7 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
 | `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/**`live-screenshot.sh`** (the portals, driven from `run.sh --live`), the virtual input helpers |
+| `abyss/tests/adversary.c` | hostile Wayland clients for C2: `hard` (flood, never waits for a reply), `zombie`, `deaf`, `churn` (§2.38) |
 | `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |
 | `protocols/` | vendored protocol XML; regenerate via `de/cwayland/generate-protocols.sh` |

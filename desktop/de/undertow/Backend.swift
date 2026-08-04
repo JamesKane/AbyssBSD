@@ -12,12 +12,18 @@
 // and to report back through `present`. That is what makes the schedule ours
 // rather than the backend's, and it is the whole reason P6.1 came first.
 //
-// **P6.2 is single-threaded, and that is a stated debt.** The event loop is
-// serviced from inside the metronome's wait (see `waitUntil`), which is fine
-// while there are no clients — but C2 requires that no client can delay the
-// present thread, and a single thread dispatching client requests plainly
-// cannot promise that. The reactor/present split lands with the clients it
-// exists to isolate us from (P6.3/P6.5), where it can actually be tested.
+// **Single-threaded, and P6.5 measured why that is enough.** The event loop is
+// serviced from inside the metronome's wait (see `waitUntil`). P6.2 recorded
+// this as a debt against C2 — one thread dispatching client requests cannot
+// obviously promise that no client delays the present thread — and P6.5 put
+// eleven hostile processes against it to find out. The answer: what mattered
+// was not *which thread* dispatches but **where in the frame** it happens.
+// Dispatching after the deadline (the original `pollFlip`) collapsed under 32
+// flooders; dispatching only in the slack before it, with a reserve, survives
+// 64 at every rate we target. That is DESKTOP.md §4's "bounded work per wakeup
+// gives backpressure" rather than its threading model. The debt is re-scoped,
+// not dropped: a GPU present path (Phase 4) puts far more work on this thread,
+// and the measurement should be repeated then.
 
 import CWlroots
 
@@ -316,9 +322,14 @@ public final class WlrootsOutput: Output {
     }
 
     public func pollFlip() -> Flip? {
-        // Let wlroots deliver whatever is ready, without blocking. A present
-        // event cannot arrive unless the loop is dispatched.
-        session.dispatchPending()
+        // **No dispatch here, deliberately.** This runs AFTER the deadline, in
+        // the critical path between waking and compositing — the single worst
+        // place to service client traffic, because every microsecond spent here
+        // is taken directly from the frame. Present events are collected during
+        // `waitUntil`, which is where the compositor has slack by construction;
+        // this only drains what already arrived. (Measured: moving the dispatch
+        // out of here is what took 240Hz from collapsing at 24 hostile clients
+        // to surviving them — PHASE6.md P6.5.)
         guard let e = events.pop() else { return nil }
         if e.hardwareClock { sawHardwareClock = true }
         var target = e.whenNs
@@ -460,18 +471,29 @@ public final class WlrootsOutput: Output {
     /// **statically dispatched** and this override would silently never be
     /// called (HANDOFF §2.11 — the sheet-animation trap, four phases old).
     public func waitUntil(deadlineNs: UInt64) {
+        // Stop servicing clients this much before the deadline and just sleep.
+        //
+        // A dispatch pass is bounded by what is in the clients' socket buffers,
+        // NOT by the time we have left — so the last pass before a deadline can
+        // overrun it, and that overrun lands on the frame. The reserve means the
+        // last thing we do before compositing is always a plain sleep, so a
+        // pass that runs long eats slack rather than the frame.
+        let reserveNs: UInt64 = 500_000
         while true {
             let now = Mono.now()
             guard now < deadlineNs else { return }
             let remainingNs = deadlineNs &- now
-            // Dispatch in millisecond slices; below a millisecond, spin the
-            // remainder out with a plain sleep so we wake on time rather than
-            // rounding a sub-millisecond wait up to one.
-            if remainingNs < 1_000_000 {
+            if remainingNs <= reserveNs {
                 Mono.sleep(untilNs: deadlineNs)
                 return
             }
-            session.dispatch(timeoutMs: Int32(min(remainingNs / 1_000_000, 1000)))
+            // Bounded, non-blocking passes with a clock check between each, so
+            // a flood cannot hold us inside one long blocking dispatch.
+            session.dispatchPending()
+            if Mono.now() >= deadlineNs &- reserveNs { continue }
+            // Nothing pending: block for the remainder rather than spinning.
+            session.dispatch(timeoutMs: Int32(min((remainingNs &- reserveNs) / 1_000_000 + 1,
+                                                  1000)))
         }
     }
 }
