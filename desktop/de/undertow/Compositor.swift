@@ -93,6 +93,15 @@ public final class Compositor {
     private var xdgShell: UnsafeMutablePointer<wlr_xdg_shell>?
     private var newToplevelListener: UnsafeMutablePointer<tw_listener>?
     private var newSurfaceListener: UnsafeMutablePointer<tw_listener>?
+    private var newLayerListener: UnsafeMutablePointer<tw_listener>?
+    private var activationListener: UnsafeMutablePointer<tw_listener>?
+    private var foreignManager: UnsafeMutablePointer<wlr_foreign_toplevel_manager_v1>?
+    /// Shell surfaces (wallpaper, menu bar, Dock, toasts), in creation order.
+    public private(set) var layers: [LayerSurface] = []
+    /// The area a toplevel may use — the output minus every exclusive zone.
+    /// A layer surface never appears in a window tree, so this rectangle is the
+    /// only observable proof that the menu bar reserved its strip (§2.26).
+    public private(set) var usableArea = Rect(x: 0, y: 0, width: 0, height: 0)
     /// How many surfaces clients have created since start-up.
     public private(set) var surfacesCreated = 0
     /// Every live toplevel, in creation order. Small by construction; a desktop
@@ -109,6 +118,8 @@ public final class Compositor {
         self.session = session
         self.outputWidth = outputWidth
         self.outputHeight = outputHeight
+        // Until a layer surface reserves anything, the whole output is usable.
+        self.usableArea = Rect(x: 0, y: 0, width: outputWidth, height: outputHeight)
 
         // wl_compositor at version 6, plus the pieces a real client expects to
         // find. `wlr_compositor_create` with a renderer is what makes wlroots
@@ -147,6 +158,39 @@ public final class Compositor {
             c.toplevels.append(Toplevel(t, compositor: c))
         }, me)
 
+        // The three protocols the Aqua shell speaks that an ordinary app does
+        // not: layer-shell for the wallpaper/menu bar/Dock/toasts,
+        // foreign-toplevel so the Dock can see running apps, and xdg-activation
+        // so the spatial Finder can raise a window it already has open.
+        guard let layerShell = wlr_layer_shell_v1_create(session.display, 4) else {
+            throw BackendError.noGlobals("zwlr_layer_shell_v1")
+        }
+        newLayerListener = tw_listen(&layerShell.pointee.events.new_surface, { ctx, data in
+            guard let ctx, let data else { return }
+            let c = Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue()
+            let l = data.assumingMemoryBound(to: wlr_layer_surface_v1.self)
+            // A layer surface may name no output; it is ours to choose, and we
+            // have exactly one.
+            if l.pointee.output == nil { l.pointee.output = c.session.outputs.first }
+            c.layers.append(LayerSurface(l, compositor: c))
+        }, me)
+
+        foreignManager = wlr_foreign_toplevel_manager_v1_create(session.display)
+
+        if let activation = wlr_xdg_activation_v1_create(session.display) {
+            activationListener = tw_listen(&activation.pointee.events.request_activate,
+                                           { ctx, data in
+                guard let ctx, let data else { return }
+                let c = Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue()
+                let ev = data.assumingMemoryBound(to: wlr_xdg_activation_v1_request_activate_event.self)
+                // The sanctioned "raise my own window" path — the spatial
+                // Finder uses it so re-opening an open folder brings its window
+                // forward instead of making a second one (HANDOFF §2.22).
+                guard let surface = ev.pointee.surface else { return }
+                for t in c.toplevels where t.surface == surface { c.raise(t) }
+            }, me)
+        }
+
         guard let socket = wl_display_add_socket_auto(session.display) else {
             throw BackendError.noSocket
         }
@@ -156,7 +200,52 @@ public final class Compositor {
     deinit {
         tw_listener_free(newSurfaceListener)
         tw_listener_free(newToplevelListener)
+        tw_listener_free(newLayerListener)
+        tw_listener_free(activationListener)
         for t in toplevels { t.teardown() }
+        for l in layers { l.teardown() }
+    }
+
+    // MARK: - Layer shell
+
+    internal func forgetLayer(_ l: LayerSurface) {
+        l.teardown()
+        layers.removeAll { $0 === l }
+        arrangeLayers()
+    }
+
+    /// Place every layer surface and recompute the usable area.
+    ///
+    /// Order matters and is the protocol's, not ours: surfaces are arranged
+    /// **by layer, bottom to top**, and each exclusive zone shrinks the area for
+    /// everyone arranged after it. That is why the menu bar (TOP, zone 22)
+    /// reserves its strip while the Dock (also TOP, zone 0) simply overlaps —
+    /// and why the desktop (BACKGROUND, zone -1) paints the whole output
+    /// underneath regardless.
+    public func arrangeLayers() {
+        let full = Rect(x: 0, y: 0, width: outputWidth, height: outputHeight)
+        var usable = full
+        for l in layers.sorted(by: { $0.layer < $1.layer }) {
+            let (rect, remaining) = LayerArrange.place(l.request, in: usable, output: full)
+            // **Configure EVERY surface, reserve for MAPPED ones only.**
+            //
+            // An unmapped surface still needs its configure — that is how it
+            // learns the size to draw at, and it cannot map until it has one.
+            // The first version arranged only surfaces that were already mapped
+            // or not yet initialized, which deadlocked precisely in between: a
+            // surface that had been initialized but had not yet mapped was
+            // skipped, never configured, and so could never map. The menu bar
+            // came up and simply never appeared.
+            l.configure(rect)
+            if l.mapped { usable = remaining }
+        }
+        usableArea = usable
+    }
+
+    /// Layer surfaces with something to show, in paint order (bottom to top).
+    public var mappedLayers: [LayerSurface] {
+        layers.filter { $0.mapped && wlr_surface_has_buffer($0.surface) }
+              .sorted { $0.layer < $1.layer }
     }
 
     /// Where a newly mapped window goes.
@@ -169,8 +258,12 @@ public final class Compositor {
         let w = t.width, h = t.height
         let offset = cascade * 24
         cascade = (cascade + 1) % 8
-        t.x = max(0, (outputWidth - w) / 2 + offset)
-        t.y = max(0, (outputHeight - h) / 2 + offset)
+        // Centred in the USABLE area, not the output: a window that opened
+        // under the menu bar would be the visible symptom of an exclusive zone
+        // that was computed but never honoured.
+        let area = usableArea
+        t.x = max(area.x, area.x + (area.width - w) / 2 + offset)
+        t.y = max(area.y, area.y + (area.height - h) / 2 + offset)
     }
 
     fileprivate func forget(_ t: Toplevel) {
@@ -207,6 +300,9 @@ public final class Compositor {
         clock_gettime(CLOCK_MONOTONIC, &now)
         for t in mappedToplevels {
             wlr_surface_send_frame_done(t.surface, &now)
+        }
+        for l in mappedLayers {
+            wlr_surface_send_frame_done(l.surface, &now)
         }
     }
 

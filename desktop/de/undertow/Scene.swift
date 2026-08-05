@@ -68,6 +68,17 @@ public final class SurfaceScene: FrameSink {
     /// hold.
     public func latchAndComposite(now: UInt64, target: UInt64) -> FrameStats {
         count = 0
+        // Paint order, and it is the shell's whole visual grammar:
+        //
+        //   BACKGROUND(0), BOTTOM(1)  — the wallpaper, under everything
+        //   the toplevels             — application windows
+        //   TOP(2), OVERLAY(3)        — the menu bar, the Dock, toasts
+        //
+        // Layer surfaces are NOT sorted in with the windows: a menu bar that a
+        // window could cover is not a menu bar. Splitting the list at BOTTOM/TOP
+        // is what puts the shell above the apps and the wallpaper below them.
+        let layers = compositor.mappedLayers
+        for l in layers where l.layer <= 1 { add(layer: l) }
         for t in compositor.mappedToplevels {
             guard count < capacity else { break }   // bounded, never grows
             guard let tex = wlr_surface_get_texture(t.surface) else { continue }
@@ -76,6 +87,7 @@ public final class SurfaceScene: FrameSink {
             w[count] = t.width; h[count] = t.height
             count += 1
         }
+        for l in layers where l.layer >= 2 { add(layer: l) }
 
         var painted: Int32 = 0
         var area: Int64 = 0
@@ -90,6 +102,16 @@ public final class SurfaceScene: FrameSink {
             }
         }
         return FrameStats(surfaces: painted, damageArea: area, degraded: false)
+    }
+
+    @inline(__always)
+    private func add(layer l: LayerSurface) {
+        guard count < capacity else { return }
+        guard let tex = wlr_surface_get_texture(l.surface) else { return }
+        texture[count] = tex
+        x[count] = l.rect.x; y[count] = l.rect.y
+        w[count] = l.width; h[count] = l.height
+        count += 1
     }
 
     /// Draw the latched scene into a wlroots render pass.

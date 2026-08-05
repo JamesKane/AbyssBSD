@@ -471,6 +471,107 @@ final class UndertowTests: XCTestCase {
         XCTAssertNil(seat.toplevel(at: 10, 10), "there are no windows yet")
     }
 
+    // MARK: - Layer-shell arrangement (P6.6)
+
+    private func fullOutput() -> Rect { Rect(x: 0, y: 0, width: 800, height: 600) }
+
+    /// The menu bar: a top strip that reserves its height. This is the exact
+    /// arrangement `live-session.sh` has asserted against sway since Phase 2 —
+    /// a layer surface never appears in a window tree, so the usable area is the
+    /// only observable proof the reservation happened (HANDOFF §2.26).
+    func testATopStripWithAnExclusiveZoneReservesIt() {
+        var bar = LayerRequest(anchor: [.top, .left, .right], desiredWidth: 0,
+                               desiredHeight: 22)
+        bar.exclusiveZone = 22
+        let (rect, usable) = LayerArrange.place(bar, in: fullOutput(), output: fullOutput())
+        XCTAssertEqual(rect, Rect(x: 0, y: 0, width: 800, height: 22))
+        XCTAssertEqual(usable, Rect(x: 0, y: 22, width: 800, height: 578))
+    }
+
+    /// The Dock: anchored to the bottom, reserving nothing. It overlaps whatever
+    /// is behind it, which is the Mac's behaviour and the reason a maximised
+    /// window is not shortened by the Dock.
+    func testAZeroZoneSurfaceOverlapsAndReservesNothing() {
+        let dock = LayerRequest(anchor: [.bottom], desiredWidth: 320, desiredHeight: 64)
+        let (rect, usable) = LayerArrange.place(dock, in: fullOutput(), output: fullOutput())
+        XCTAssertEqual(rect, Rect(x: 240, y: 536, width: 320, height: 64))
+        XCTAssertEqual(usable, fullOutput(), "a zero zone must reserve nothing")
+    }
+
+    /// The desktop: `exclusiveZone == -1` means "ignore everyone's
+    /// reservations". Without it the wallpaper would start below the menu bar
+    /// instead of painting the whole output underneath it (HANDOFF §2.26).
+    func testAnExclusiveZoneOfMinusOneIgnoresReservations() {
+        var wallpaper = LayerRequest(anchor: [.top, .bottom, .left, .right],
+                                     desiredWidth: 0, desiredHeight: 0)
+        wallpaper.exclusiveZone = -1
+        // Pretend the menu bar has already taken its strip.
+        let afterBar = Rect(x: 0, y: 22, width: 800, height: 578)
+        let (rect, usable) = LayerArrange.place(wallpaper, in: afterBar,
+                                                output: fullOutput())
+        XCTAssertEqual(rect, fullOutput(), "the desktop must cover the whole output")
+        XCTAssertEqual(usable, afterBar, "and must not change anyone else's area")
+    }
+
+    /// Arranged in order, reservations accumulate — which is how a menu bar and
+    /// a Dock that both reserve leave a window the strip between them.
+    func testReservationsAccumulateInOrder() {
+        var bar = LayerRequest(anchor: [.top, .left, .right], desiredWidth: 0,
+                               desiredHeight: 22)
+        bar.exclusiveZone = 22
+        var shelf = LayerRequest(anchor: [.bottom, .left, .right], desiredWidth: 0,
+                                 desiredHeight: 60)
+        shelf.exclusiveZone = 60
+
+        var usable = fullOutput()
+        (_, usable) = LayerArrange.place(bar, in: usable, output: fullOutput())
+        let (shelfRect, finalUsable) = LayerArrange.place(shelf, in: usable,
+                                                          output: fullOutput())
+        // The shelf sits at the bottom of what was left, not of the output.
+        XCTAssertEqual(shelfRect, Rect(x: 0, y: 540, width: 800, height: 60))
+        XCTAssertEqual(finalUsable, Rect(x: 0, y: 22, width: 800, height: 518))
+    }
+
+    /// Anchoring to opposite edges means "span", and reserves nothing — there is
+    /// no unambiguous side to take the reservation from.
+    func testSpanningBothEdgesReservesNothing() {
+        var full = LayerRequest(anchor: [.top, .bottom, .left, .right],
+                                desiredWidth: 0, desiredHeight: 0)
+        full.exclusiveZone = 40
+        let (rect, usable) = LayerArrange.place(full, in: fullOutput(), output: fullOutput())
+        XCTAssertEqual(rect, fullOutput())
+        XCTAssertEqual(usable, fullOutput())
+    }
+
+    /// Margins push a surface off its edge and are counted in the reservation,
+    /// or a surface with a margin overlaps whatever it was meant to sit beside.
+    func testMarginsOffsetTheSurfaceAndCountTowardTheReservation() {
+        var toast = LayerRequest(anchor: [.top, .right], desiredWidth: 300,
+                                 desiredHeight: 58)
+        toast.marginTop = 30
+        toast.marginRight = 12
+        let (rect, usable) = LayerArrange.place(toast, in: fullOutput(), output: fullOutput())
+        XCTAssertEqual(rect, Rect(x: 800 - 300 - 12, y: 30, width: 300, height: 58))
+        XCTAssertEqual(usable, fullOutput(), "a toast reserves nothing (PHASE7 P7.4)")
+
+        var bar = LayerRequest(anchor: [.top, .left, .right], desiredWidth: 0,
+                               desiredHeight: 22)
+        bar.exclusiveZone = 22
+        bar.marginTop = 4
+        let (_, afterBar) = LayerArrange.place(bar, in: fullOutput(), output: fullOutput())
+        XCTAssertEqual(afterBar.y, 26, "the margin is part of the space taken")
+    }
+
+    /// A reservation can never make the usable area negative, however greedy.
+    func testAnOversizedReservationCannotInvertTheUsableArea() {
+        var greedy = LayerRequest(anchor: [.top, .left, .right], desiredWidth: 0,
+                                  desiredHeight: 9999)
+        greedy.exclusiveZone = 9999
+        let (_, usable) = LayerArrange.place(greedy, in: fullOutput(), output: fullOutput())
+        XCTAssertGreaterThanOrEqual(usable.height, 0)
+        XCTAssertGreaterThanOrEqual(usable.width, 0)
+    }
+
     /// The display's vblanks must be its own, not an echo of what the
     /// compositor aimed at — a model that agrees with you cannot test a
     /// predictor (PHASE6.md P6.1).

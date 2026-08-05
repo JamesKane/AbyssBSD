@@ -38,6 +38,7 @@ func usage() -> Never {
            undertow run             [--hz N] [--frames N] [--width N] [--height N]
                                     [--capture FILE.ppm] [--capture-early FILE.ppm]
                                     [--assert-windows N] [--assert-surfaces N]
+                                    [--assert-layers N] [--assert-usable X,Y,WxH]
                                     [--assert-missed N] [--verbose]
     """)
     exit(2)
@@ -60,6 +61,8 @@ var capturePath: String? = nil
 var captureEarlyPath: String? = nil
 var assertWindows: Int? = nil
 var assertSurfaces: Int? = nil
+var assertLayers: Int? = nil
+var assertUsable: String? = nil
 
 var i = 0
 while i < args.count {
@@ -92,6 +95,8 @@ while i < args.count {
     case "--capture-early": captureEarlyPath = value("--capture-early")
     case "--assert-windows": assertWindows = Int(value("--assert-windows"))
     case "--assert-surfaces": assertSurfaces = Int(value("--assert-surfaces"))
+    case "--assert-layers": assertLayers = Int(value("--assert-layers"))
+    case "--assert-usable": assertUsable = value("--assert-usable")
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -387,11 +392,27 @@ case "run":
     // created. `missed=0` with `surfaces-created=0` means the adversaries never
     // arrived, which is a passing bench that proves nothing (PHASE6.md P6.5).
     out("surfaces-created=\(compositor.surfacesCreated)")
+    out("layers=\(compositor.mappedLayers.count) of \(compositor.layers.count)")
+    // The usable area is the ONLY observable proof that an exclusive zone was
+    // honoured — a layer surface never appears in a window tree, so §2.26's
+    // workspace-rect check is the assertion that the shell composed.
+    let u = compositor.usableArea
+    out("usable=\(u.x),\(u.y),\(u.width)x\(u.height)")
     out("wake-late-p99-us=\(recorder.percentile(99) { $0.wakeLateNs } / 1000)")
     out("composite-p99-us=\(recorder.costPercentileNs(99) / 1000)")
     out("margin-us=\(metronome.margin.marginNs / 1000)")
     out("missed=\(recorder.missedCount) of \(recorder.retained)")
     var runFailed = false
+    if let want = assertLayers, compositor.mappedLayers.count != want {
+        emit(2, "FAIL: expected \(want) mapped layer surface(s),"
+             + " got \(compositor.mappedLayers.count)")
+        runFailed = true
+    }
+    if let want = assertUsable, "\(u.x),\(u.y),\(u.width)x\(u.height)" != want {
+        emit(2, "FAIL: usable area is \(u.x),\(u.y),\(u.width)x\(u.height), expected \(want)"
+             + " — an exclusive zone was not honoured")
+        runFailed = true
+    }
     if let want = assertWindows, windows != want {
         emit(2, "FAIL: expected \(want) mapped window(s), got \(windows)")
         runFailed = true

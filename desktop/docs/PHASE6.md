@@ -498,13 +498,54 @@ sweep reported a serene `missed=0` under "8 hostile clients" that had in fact
 created **zero** surfaces — they had never connected. A C2 bench whose
 adversaries fail to arrive is a compliment you pay yourself.
 
-**P6.6 — The shell, on our own compositor.**
-The server halves of what the Aqua shell already speaks as a client:
-`wlr-layer-shell` (anchors, exclusive zones — the `arrange()` logic `tide` is
-the design reference for), `wlr-foreign-toplevel-management`, `xdg-activation`.
-*Verify:* `anchor` boots the desktop on `undertow` instead of sway, and the live
-modes that assert composition (§2.26's workspace-rect check) pass against it.
-The destination: **the Jaguar desktop, on our compositor, on FreeBSD.**
+**P6.6 — The shell, on our own compositor. ✅ done.**
+The server halves of what the Aqua shell has spoken as a *client* since Phase 2:
+`wlr-layer-shell`, `wlr-foreign-toplevel-management` and `xdg-activation`. The
+wallpaper, the menu bar and the Dock — three separate clients, unmodified —
+composing on `undertow` with no other compositor anywhere:
+
+![the Aqua shell on undertow](screenshots/undertow-shell.png)
+
+**`arrange()` is the pass.** A layer surface does not choose where it goes: it
+states anchors, a desired size, margins and an exclusive zone, and the compositor
+decides. `LayerArrange.place` is that arithmetic as a **pure function** — the
+third time this phase has pulled a rule out of the protocol so it can be tested
+without a compositor (after `PointerRouting` and the metronome itself), and the
+reason seven of the arrangement's edge cases are unit tests rather than
+screenshots.
+
+The three behaviours the shell actually depends on, each now pinned:
+
+- the **menu bar** (TOP, zone 22) reserves its strip, so the usable area becomes
+  `0,22,800x578`;
+- the **desktop** (BACKGROUND, zone **−1**) ignores that reservation and paints
+  the whole output underneath — without which the wallpaper would start below
+  the menu bar (HANDOFF §2.26);
+- the **Dock** (TOP, zone 0) overlaps and reserves nothing, which is why a
+  maximised Mac window is not shortened by it.
+
+Windows are then placed in the **usable** area rather than the output, because a
+window opening under the menu bar is the visible symptom of a zone that was
+computed and never honoured.
+
+*The bug, and it was a deadlock rather than a miscalculation.* `arrange()`
+originally skipped surfaces that were neither mapped nor un-initialised — which
+is exactly the state a surface is in *between* its first commit and its map. It
+therefore never received the configure it needs **in order to** map, so it could
+never leave that state. The menu bar started, reported itself up, and simply
+never appeared. The rule is now: **configure every surface, reserve for mapped
+ones only** — an unmapped surface still has to be told what size to draw.
+
+*Verified:* **7 new unit tests** (35 in `UndertowTests`, 174 total) on both
+platforms, covering the reserving strip, the zero zone, the −1 zone, accumulating
+reservations, spanning both edges, margins counting toward a reservation, and a
+greedy zone being unable to invert the usable area. Live,
+`abyss/tests/live-undertow-shell.sh` boots all three shell components on
+`undertow` and asserts on the usable rectangle — **the same §2.26 check
+`live-session.sh` has made against sway since Phase 2, now made against us** —
+plus three pixel probes proving the stack really is a stack: pale chrome at the
+top, the wallpaper (and *not* the compositor's fallback blue) below it, and the
+Dock overlapping near the bottom.
 
 **P6.7 — What only a compositor can do.**
 The debts the client architecture could never pay (§2.22): **remembered window

@@ -1389,7 +1389,7 @@ platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
 **Phase 6 — `undertow`, the Swift compositor — is under way**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1–P6.5 are done**: the metronome and its
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1–P6.6 are done**: the metronome and its
 meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
 pixels do"*), the wlroots bridge under it, a real client on a real scene, and
 input reaching that client — and **C2 is proved**: eleven real hostile processes
@@ -1398,9 +1398,12 @@ hosts a Wayland socket, AquaDemo's window is composited by our own
 structure-of-arrays scene (not `wlr_scene`) at exact cadence, and a click driven
 by the harness's **unmodified** `vpointer` reaches the app — because implementing
 `wlr-virtual-pointer`'s server side means the tool that drives sway drives us.
-`abyss/tests/live-undertow*.sh` are the first tests here that **start no sway**.
-**The immediate task is P6.6: the Aqua shell on our own compositor** —
-layer-shell, foreign-toplevel and xdg-activation, server side.
+**And the Jaguar desktop runs on it** — wallpaper, menu bar and Dock composing,
+with the menu bar's exclusive zone reserving its strip exactly as §2.26 asserts
+against sway. `abyss/tests/live-undertow*.sh` are the first tests here that
+**start no sway**. **The immediate task is P6.7: what only a compositor can do**
+— remembered window positions (§2.22), dragging desktop icons, and a
+`wlr-screencopy` server half for PHASE7 §6.6's debt.
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
 shim exists only because `wl_signal_add` is a static inline and
@@ -1493,7 +1496,7 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
 | `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
 | `de/abyssgrab` | capture an output to a PNG via `wlr-screencopy`; the portal forks it, so the portal itself is never a Wayland client |
-| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, `Backend` (the wlroots bridge), `Compositor` (globals, socket, windows), `SurfaceScene` (our SoA scene — deliberately **not** `wlr_scene`) and `Seat` (input, cursor, focus; `PointerRouting` is the pure hit-test) — `undertow` is its own bench harness |
+| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, `Backend` (the wlroots bridge), `Compositor` (globals, socket, windows), `SurfaceScene` (our SoA scene — deliberately **not** `wlr_scene`), `Seat` (input, cursor, focus; `PointerRouting` is the pure hit-test) and `LayerShell` (the shell's surfaces; `LayerArrange` is the pure placement rule) — `undertow` is its own bench harness |
 | `de/cwlroots` | **29 lines of C**, and that is the whole wlroots binding: Swift imports the headers directly, but `wl_signal_add` is a static inline and `wl_container_of` is a macro, so every wlroots event arrives through one trampoline (§2.1 at scale) |
 | `de/cwlrootssys`, `de/cwaylandserver` | pkg-config flag carriers for wlroots-0.19 and libwayland-**server** (§2.29's pattern) |
 | `de/callocprobe` | counts allocations by symbol interposition; the enforcement half of PLAN.md risk 4. **Executable-only, and useless without its positive control** (§2.37) |

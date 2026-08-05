@@ -93,6 +93,11 @@ sh "$root/abyss/tests/live-undertow-input.sh"
 echo "== C2: no client can make us miss a frame =="
 sh "$root/abyss/tests/live-undertow-c2.sh"
 
+# The destination of Phase 6: the Aqua shell — wallpaper, menu bar and Dock,
+# three layer-shell clients from Phase 2 — composing on undertow (P6.6).
+echo "== the Aqua shell on undertow =="
+sh "$root/abyss/tests/live-undertow-shell.sh"
+
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.
 if [ "$live" -eq 1 ]; then
