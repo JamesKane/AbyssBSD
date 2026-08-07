@@ -80,6 +80,7 @@ and `de/ctext` already do. It does not mean linking Rust crates.
 | `Vents` | hardware bridges: sysctl, OSS volume, battery, devd | `vents` |
 | `undertow` | the compositor — Swift rewrite, Phase 6 ([PHASE6.md](PHASE6.md)) | `tide` |
 | `Installer` | Fedora-style graphical installer (Aqua app) | — (new) |
+| `abyss-dbus` | the D-Bus bridge: `org.freedesktop.portal.*` for legacy apps, Phase 8 ([PHASE8.md](PHASE8.md)) | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
 
@@ -277,6 +278,28 @@ on 2026-07-27 and scoped in **[PHASE7.md](PHASE7.md)**.
 **Not in it:** the D-Bus bridge and `org.freedesktop.portal.*`, so stock GTK/Qt apps
 are not served yet; XWayland, MPRIS, AT-SPI; jail plumbing. Those remain the legacy
 half of the story (PHASE7.md §1).
+
+---
+
+## Phase 8 — the D-Bus bridge: portals for everyone else
+
+**Goal:** delete PHASE7 §6.7's caveat — a stock GTK/Qt app gets the Finder as its
+file chooser and a descriptor as its answer.
+
+**Expanded to executable detail in [PHASE8.md](PHASE8.md)** — passes P8.1–P8.4,
+and two risks spiked on both platforms before the plan was written.
+
+- **We are the portal**, owning `org.freedesktop.portal.Desktop` and translating
+  to the existing `abyss-portal` over `CurrentIPC` (decided 2026-08-07 over
+  backing stock `xdg-desktop-portal`, which would put a broker on the path and
+  leave two portal frontends with different behaviour).
+- **D-Bus is spoken natively from Swift** — no libdbus (discouraged upstream), no
+  GDBus (drags in the GLib/GTK stack this project rejects), no sd-bus (systemd).
+  The spike connects, authenticates and calls `Hello` on both platforms in ~110
+  lines, which is the same answer `CurrentIPC` reached for its own wire format.
+- `dbus-daemon` from ports **is** the session bus. This phase adds a broker, and
+  says so: nothing on the frame path talks to it, and if it dies the desktop does
+  not notice. PLAN.md always called it a legacy adapter.
 
 ---
 

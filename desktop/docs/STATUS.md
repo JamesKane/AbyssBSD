@@ -514,10 +514,23 @@ the desktop's `-1` zone paints underneath it, and the Dock overlaps without
 reserving. That usable rectangle is the same §2.26 check `live-session.sh` has
 made against sway since Phase 2 — now made against us.
 
-**Phase 6 is complete, so the next move is a choice again:** Phase 4 (Mac Pro
-bring-up — real GPU, hardware cursor, `rtprio`, and where the C1 measurements
-should be repeated), or the carved-out D-Bus/portal bridge, or Phase 5 (the
-installer). See [HANDOFF §5](HANDOFF.md).
+**Phase 8 — the D-Bus bridge — is now scoped and started**
+([PHASE8.md](PHASE8.md), passes P8.1–P8.4). It deletes PHASE7 §6.7's caveat: a
+stock GTK/Qt app gets the Finder as its file chooser and a descriptor as its
+answer. **We are the portal** — `abyss-dbus` owns
+`org.freedesktop.portal.Desktop` and translates to the existing `abyss-portal`,
+rather than backing stock `xdg-desktop-portal` (which would put a broker on the
+path and leave two portal frontends with different behaviour).
+
+**D-Bus is spoken natively from Swift**: the spike connects, authenticates
+(SASL EXTERNAL) and calls `Hello` on both platforms in ~110 lines, with no
+libdbus (discouraged upstream), no GDBus (drags in the GLib/GTK stack this
+project rejects) and no sd-bus (systemd). The Linux box does not even have
+`dbus-devel` installed.
+
+**The other directions stay open:** Phase 4 (Mac Pro bring-up — real GPU,
+hardware cursor, `rtprio`, and where Phase 6's C1 measurements should be
+repeated) and Phase 5 (the installer).
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

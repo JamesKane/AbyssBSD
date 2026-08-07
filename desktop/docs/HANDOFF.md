@@ -3,7 +3,7 @@
 What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE6.md](PHASE6.md),
-[PHASE7.md](PHASE7.md)) for
+[PHASE7.md](PHASE7.md), [PHASE8.md](PHASE8.md)) for
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
@@ -1406,8 +1406,13 @@ positions** (a window reopens where it was dragged, persisted through
 `PoolConfig`) and **PHASE7 §6.6's screencopy** (P7.5's `abyssgrab` captures
 `undertow` unmodified).
 
-**There is no queued next task — the next move is a choice**: Phase 4 (Mac Pro),
-the D-Bus/portal bridge, or Phase 5 (the installer).
+**Phase 8 — the D-Bus bridge — is scoped and started** ([PHASE8.md](PHASE8.md),
+P8.1–P8.4): `abyss-dbus` owns `org.freedesktop.portal.Desktop` and translates to
+the existing `abyss-portal`, so a stock GTK app gets the Finder as its file
+chooser. **D-Bus is spoken natively from Swift** — no libdbus, no GDBus, no
+sd-bus; the spike authenticates and calls `Hello` on both platforms in ~110
+lines. **The immediate task is P8.1: the wire protocol as a library.**
+Phase 4 (Mac Pro) and Phase 5 (the installer) stay open.
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
 shim exists only because `wl_signal_add` is a static inline and
