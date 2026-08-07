@@ -194,6 +194,15 @@ public final class WlrootsSession {
             let ok = wlr_output_commit_state(out, &state)
             wlr_output_state_finish(&state)
             guard ok else { throw BackendError.modeRejected }
+
+            // **Advertise the output to clients.** Without this global there is
+            // no `wl_output` on the bus at all: a client asking "what displays
+            // are there?" is told none. It is easy to miss because the things
+            // that break are the things that *ask* — screencopy ("the
+            // compositor advertised no outputs"), and per-output HiDPI scale,
+            // which Phase 1 built and which would silently stay at 1x. Ordinary
+            // windows and layer surfaces never notice.
+            wlr_output_create_global(out, display)
         }
     }
 

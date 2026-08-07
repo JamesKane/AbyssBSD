@@ -572,6 +572,94 @@ final class UndertowTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(usable.width, 0)
     }
 
+    // MARK: - Remembered window positions (P6.7)
+
+    /// `app_id` alone would be wrong: the spatial Finder opens one window per
+    /// folder from one application, and they must not all share a position.
+    func testAWindowKeyDistinguishesWindowsOfTheSameApp() {
+        let a = WindowPlaces.key(appID: "org.abyssbsd.finder", title: "Documents")
+        let b = WindowPlaces.key(appID: "org.abyssbsd.finder", title: "Pictures")
+        XCTAssertNotNil(a)
+        XCTAssertNotEqual(a, b, "two folders of one app must not share a key")
+    }
+
+    /// A window with no title still gets a key, so single-window apps work.
+    /// A window with neither gets none, because there is nothing stable to
+    /// store it under — better no memory than the wrong window's position.
+    func testAWindowKeyNeedsSomethingStable() {
+        XCTAssertEqual(WindowPlaces.key(appID: "org.abyssbsd.demo", title: nil),
+                       "org.abyssbsd.demo")
+        XCTAssertEqual(WindowPlaces.key(appID: "org.abyssbsd.demo", title: "  "),
+                       "org.abyssbsd.demo", "whitespace is not a title")
+        XCTAssertNil(WindowPlaces.key(appID: nil, title: nil))
+        XCTAssertNil(WindowPlaces.key(appID: "", title: ""))
+    }
+
+    /// The separator must not be forgeable, or one window could claim another's
+    /// remembered position by choosing its title carefully.
+    func testAWindowKeyCannotBeForgedThroughTheSeparator() {
+        // Without escaping, both of these would render as "app/a/b" and the two
+        // windows would share one remembered position.
+        let honest = WindowPlaces.key(appID: "app", title: "a/b")
+        let sneaky = WindowPlaces.key(appID: "app/a", title: "b")
+        XCTAssertNotNil(honest)
+        XCTAssertNotNil(sneaky)
+        XCTAssertNotEqual(honest, sneaky,
+                          "a title containing the separator collided with another window's key")
+        // Exactly one separator, between the two halves.
+        XCTAssertEqual(honest!.filter { $0 == "/" }.count, 1)
+        XCTAssertEqual(sneaky!.filter { $0 == "/" }.count, 1)
+        // And `=` cannot break the INI line it is written on.
+        let equals = WindowPlaces.key(appID: "app", title: "a=b")
+        XCTAssertFalse(equals!.contains("="))
+    }
+
+    /// A position survives a round trip through the real on-disk INI — the same
+    /// mmap-read / atomic-rename store every other component uses.
+    func testAPositionRoundTripsThroughTheConfigFile() throws {
+        let dir = "/tmp/abyss-places-test-\(getpid())"
+        _ = mkdir(dir, 0o700)
+        defer {
+            unlink(dir + "/windows.ini")
+            unlink(dir + "/windows.ini.lock")
+            _ = rmdir(dir)
+        }
+
+        let writer = WindowPlaces(configDir: dir)
+        XCTAssertNil(writer.place(forKey: "app/Documents"), "nothing remembered yet")
+        writer.remember(WindowPlace(x: 460, y: 345), forKey: "app/Documents")
+
+        // A DIFFERENT instance, as a second session would be: the point is that
+        // the position outlives the process that recorded it.
+        let reader = WindowPlaces(configDir: dir)
+        XCTAssertEqual(reader.place(forKey: "app/Documents"),
+                       WindowPlace(x: 460, y: 345))
+        XCTAssertNil(reader.place(forKey: "app/Pictures"))
+    }
+
+    /// A malformed entry must read as "not remembered", not as (0,0) — a window
+    /// silently jumping to the top-left corner is worse than one that cascades.
+    func testAMalformedPositionIsNotRemembered() throws {
+        let dir = "/tmp/abyss-places-bad-\(getpid())"
+        _ = mkdir(dir, 0o700)
+        defer {
+            unlink(dir + "/windows.ini")
+            unlink(dir + "/windows.ini.lock")
+            _ = rmdir(dir)
+        }
+        let path = dir + "/windows.ini"
+        let text = "[windows]\napp/Broken = not-a-position\napp/Half = 12\n"
+        let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        let bytes = Array(text.utf8)
+        _ = bytes.withUnsafeBufferPointer { write(fd, $0.baseAddress, bytes.count) }
+        close(fd)
+
+        let places = WindowPlaces(configDir: dir)
+        XCTAssertNil(places.place(forKey: "app/Broken"))
+        XCTAssertNil(places.place(forKey: "app/Half"))
+    }
+
     /// The display's vblanks must be its own, not an echo of what the
     /// compositor aimed at — a model that agrees with you cannot test a
     /// predictor (PHASE6.md P6.1).

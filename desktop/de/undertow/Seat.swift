@@ -96,6 +96,7 @@ public final class Seat {
             throw BackendError.noGlobals("wl_seat")
         }
         seat = s
+        compositor.seat = self
 
         let me = Unmanaged.passUnretained(self).toOpaque()
 
@@ -225,6 +226,14 @@ public final class Seat {
         (cursorX, cursorY) = PointerRouting.clamp(x, y, width: outputWidth,
                                                   height: outputHeight)
 
+        // A drag in progress owns the pointer: the window follows it, and no
+        // client is told about the motion. That is what stops a drag from
+        // "falling through" onto whatever the pointer passes over.
+        if compositor.moving != nil {
+            compositor.updateMove(cursorX: cursorX, cursorY: cursorY)
+            return
+        }
+
         guard let (t, lx, ly) = toplevel(at: cursorX, cursorY) else {
             // Off every window: the pointer belongs to the desktop, and a client
             // that still thought it had the pointer must be told it does not.
@@ -241,6 +250,14 @@ public final class Seat {
 
     private func button(_ button: UInt32, state: wl_pointer_button_state,
                         timeMsec: UInt32) {
+        // Releasing the button ends a drag, and the window's new position is
+        // remembered there.
+        if state == WL_POINTER_BUTTON_STATE_RELEASED, compositor.moving != nil {
+            compositor.endMove()
+            _ = wlr_seat_pointer_notify_button(seat, timeMsec, button, state)
+            wlr_seat_pointer_notify_frame(seat)
+            return
+        }
         // Click to focus and raise, before the click is delivered: the client
         // should receive the press already focused, which is what makes
         // click-through-to-a-control behave the way a Mac user expects.

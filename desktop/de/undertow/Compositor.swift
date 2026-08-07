@@ -34,6 +34,11 @@ public final class Toplevel {
     public var x: Int32 = 0
     public var y: Int32 = 0
     public private(set) var mapped = false
+    /// What the client calls itself, and what it calls this window. Together
+    /// they are the key a remembered position is stored under.
+    public var appID: String? { xdgToplevel.pointee.app_id.map { String(cString: $0) } }
+    public var title: String? { xdgToplevel.pointee.title.map { String(cString: $0) } }
+    public var placeKey: String? { WindowPlaces.key(appID: appID, title: title) }
 
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
@@ -68,8 +73,20 @@ public final class Toplevel {
         listeners.append(tw_listen(&toplevel.pointee.events.destroy, { ctx, _ in
             guard let ctx else { return }
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            // Remember where it was BEFORE letting go of it: after `forget` the
+            // title and app_id are gone and there is no key left to store under.
+            t.compositor.rememberPlace(of: t)
             t.mapped = false
             t.compositor.forget(t)
+        }, me))
+        // Interactive move — the client asks, the compositor does. `xdg_toplevel`
+        // has no set-position for a reason: only the compositor may place a
+        // window, which is why remembering a position had to wait for this phase
+        // (HANDOFF §2.22).
+        listeners.append(tw_listen(&toplevel.pointee.events.request_move, { ctx, _ in
+            guard let ctx else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            t.compositor.beginMove(t)
         }, me))
     }
 
@@ -113,8 +130,19 @@ public final class Compositor {
     private let outputWidth: Int32
     private let outputHeight: Int32
     private var cascade: Int32 = 0
+    /// Remembered window positions, persisted through PoolConfig.
+    public let places: WindowPlaces
+    /// The window being dragged, and the pointer offset within it.
+    public private(set) var moving: Toplevel?
+    private var moveDX: Double = 0
+    private var moveDY: Double = 0
+    /// Set when a window is restored to a remembered position rather than
+    /// cascaded — the observable difference a test can assert on.
+    public private(set) var restoredCount = 0
 
-    public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32) throws {
+    public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32,
+                configDir: String? = nil) throws {
+        self.places = WindowPlaces(configDir: configDir)
         self.session = session
         self.outputWidth = outputWidth
         self.outputHeight = outputHeight
@@ -176,6 +204,14 @@ public final class Compositor {
         }, me)
 
         foreignManager = wlr_foreign_toplevel_manager_v1_create(session.display)
+
+        // wlr-screencopy, server side — PHASE7 §6.6's debt, handed to this phase
+        // when P7.5 bound the *client* half. Our `abyssgrab` and therefore the
+        // whole screenshot portal work against undertow with no change at all.
+        // (Upstream deprecates this protocol in favour of
+        // ext-image-copy-capture-v1; moving both halves together is a later
+        // decision, and the portal never sees either one.)
+        _ = wlr_screencopy_manager_v1_create(session.display)
 
         if let activation = wlr_xdg_activation_v1_create(session.display) {
             activationListener = tw_listen(&activation.pointee.events.request_activate,
@@ -255,6 +291,16 @@ public final class Compositor {
     /// why the spatial Finder's remembered positions have waited for this phase
     /// (HANDOFF §2.22); P6.7 is where that debt is paid.
     fileprivate func place(_ t: Toplevel) {
+        // A remembered position wins. This is the spatial Finder's whole
+        // behaviour — a folder's window reopens where you left it — and it is
+        // the thing HANDOFF §2.22 recorded as waiting for a compositor of our
+        // own, because xdg-shell gives a client no way to ask.
+        if let key = t.placeKey, let remembered = places.place(forKey: key) {
+            t.x = remembered.x
+            t.y = remembered.y
+            restoredCount += 1
+            return
+        }
         let w = t.width, h = t.height
         let offset = cascade * 24
         cascade = (cascade + 1) % 8
@@ -265,6 +311,43 @@ public final class Compositor {
         t.x = max(area.x, area.x + (area.width - w) / 2 + offset)
         t.y = max(area.y, area.y + (area.height - h) / 2 + offset)
     }
+
+    /// Persist a window's position under its key.
+    func rememberPlace(of t: Toplevel) {
+        guard let key = t.placeKey else { return }
+        places.remember(WindowPlace(x: t.x, y: t.y), forKey: key)
+    }
+
+    // MARK: - Interactive move
+
+    fileprivate func beginMove(_ t: Toplevel) {
+        guard let seat else { return }
+        moving = t
+        moveDX = seat.cursorX - Double(t.x)
+        moveDY = seat.cursorY - Double(t.y)
+        raise(t)
+    }
+
+    /// Follow the pointer. Called from the seat on every motion.
+    func updateMove(cursorX: Double, cursorY: Double) {
+        guard let t = moving else { return }
+        // Clamp so a window can never be dragged entirely off the output and
+        // become unreachable — a compositor's job, and one a client could not do
+        // for itself even if it wanted to.
+        let maxX = Double(outputWidth - 1), maxY = Double(outputHeight - 1)
+        t.x = Int32(min(max(cursorX - moveDX, Double(1 - t.width)), maxX))
+        t.y = Int32(min(max(cursorY - moveDY, Double(usableArea.y)), maxY))
+    }
+
+    /// End the drag and remember where it landed.
+    func endMove() {
+        guard let t = moving else { return }
+        moving = nil
+        rememberPlace(of: t)
+    }
+
+    /// The seat, once one exists — set by `Seat.init`.
+    weak var seat: Seat?
 
     fileprivate func forget(_ t: Toplevel) {
         t.teardown()

@@ -4,9 +4,11 @@ The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
 Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
-**Phase 6 — `undertow`, the Swift compositor — is under way at P6.6 of 7**: **the Jaguar
-desktop runs on it** — wallpaper, menu bar and Dock, composing. 174 unit tests + 35 live
-modes, green on Linux *and* FreeBSD. **Next: P6.7, what only a compositor can do.**
+**Phase 6 — `undertow`, the Swift compositor — is COMPLETE** (all seven passes):
+the Jaguar desktop runs on it, it holds its frame contract under eleven hostile
+processes, and it pays both the §2.22 window-position debt and PHASE7 §6.6's
+screencopy debt. **179 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
+There is no queued next task; see [What's next](#whats-next).
 
 ## What this is
 
@@ -72,7 +74,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **174 unit tests and all 35 live modes**,
+The whole **harness** passes there too — **179 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -89,14 +91,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (174 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (179 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
   hardware bridges' parsing, the portal's refusals, and the screencopy pixel
   normalisation).
-  **The same 174 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 179 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -322,6 +324,7 @@ abyss/tests/live-undertow.sh /tmp/frame.ppm          # a real client on it
 abyss/tests/live-undertow-input.sh                   # a click reaching that client
 abyss/tests/live-undertow-c2.sh                      # C2: eleven hostile processes
 abyss/tests/live-undertow-shell.sh /tmp/shell.ppm    # the Aqua shell composing
+abyss/tests/live-undertow-places.sh                  # a window reopens where it was left
 .build/debug/undertow run --hz 60 --frames 400 --width 800 --height 600 \
     --capture /tmp/frame.ppm      # then: WAYLAND_DISPLAY=<printed> AquaDemo
 
@@ -492,7 +495,15 @@ reactor/present thread split P6.2 flagged is **not needed yet — and now we kno
 why rather than hoping**; the debt is re-scoped to Phase 4, when a GPU present
 path puts far more work on that thread.
 
-**P6.6 is done — the Aqua shell composes on `undertow`.** The server halves of
+**P6.7 is done, and with it Phase 6.** `xdg_toplevel.move` is honoured and a
+window's position is remembered in `~/.config/abyss/windows.ini`, so a folder's
+window reopens where it was left — the debt HANDOFF §2.22 recorded in Phase 2,
+when the spatial Finder found that *"a Wayland client cannot position its own
+windows … position waits for Phase 6"*. And `wlr-screencopy`'s server half is in,
+so P7.5's `abyssgrab` captures `undertow` **unmodified** and the screenshot
+portal works against our compositor (PHASE7 §6.6, closed).
+
+**P6.6 — the Aqua shell composes on `undertow`.** The server halves of
 `wlr-layer-shell`, foreign-toplevel and xdg-activation, so the wallpaper, menu
 bar and Dock — three Phase-2 clients, unmodified — come up on our own compositor:
 
@@ -503,9 +514,10 @@ the desktop's `-1` zone paints underneath it, and the Dock overlaps without
 reserving. That usable rectangle is the same §2.26 check `live-session.sh` has
 made against sway since Phase 2 — now made against us.
 
-**The immediate task is P6.7: what only a compositor can do** — remembered window
-positions for the spatial Finder, dragging desktop icons, and a `wlr-screencopy`
-server half (or its `ext-image-copy-capture-v1` successor) for the Phase-7 debt.
+**Phase 6 is complete, so the next move is a choice again:** Phase 4 (Mac Pro
+bring-up — real GPU, hardware cursor, `rtprio`, and where the C1 measurements
+should be repeated), or the carved-out D-Bus/portal bridge, or Phase 5 (the
+installer). See [HANDOFF §5](HANDOFF.md).
 
 **The other two directions remain open and independent** (HANDOFF §5):
 

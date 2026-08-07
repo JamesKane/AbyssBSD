@@ -1389,7 +1389,7 @@ platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
 **Phase 6 — `undertow`, the Swift compositor — is under way**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **P6.1–P6.6 are done**: the metronome and its
+([PHASE6.md](PHASE6.md), P6.1–P6.7). **Phase 6 is COMPLETE (P6.1–P6.7)**: the metronome and its
 meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
 pixels do"*), the wlroots bridge under it, a real client on a real scene, and
 input reaching that client — and **C2 is proved**: eleven real hostile processes
@@ -1401,9 +1401,13 @@ by the harness's **unmodified** `vpointer` reaches the app — because implement
 **And the Jaguar desktop runs on it** — wallpaper, menu bar and Dock composing,
 with the menu bar's exclusive zone reserving its strip exactly as §2.26 asserts
 against sway. `abyss/tests/live-undertow*.sh` are the first tests here that
-**start no sway**. **The immediate task is P6.7: what only a compositor can do**
-— remembered window positions (§2.22), dragging desktop icons, and a
-`wlr-screencopy` server half for PHASE7 §6.6's debt.
+**start no sway**. P6.7 paid the two cross-phase debts: **§2.22's window
+positions** (a window reopens where it was dragged, persisted through
+`PoolConfig`) and **PHASE7 §6.6's screencopy** (P7.5's `abyssgrab` captures
+`undertow` unmodified).
+
+**There is no queued next task — the next move is a choice**: Phase 4 (Mac Pro),
+the D-Bus/portal bridge, or Phase 5 (the installer).
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
 shim exists only because `wl_signal_add` is a static inline and
@@ -1452,8 +1456,12 @@ The other two directions stay open and independent; pick on appetite, not order.
      button would replace it.
    - **A confirmation sheet for Empty Trash**, once something can host a dialog
      for a layer surface (§2.27).
-   - **Dragging desktop icons** — needs remembered per-item positions in config,
-     and is only half-solvable before Phase 6 (§2.22).
+   - **Dragging desktop icons** — needs remembered per-item positions in config.
+     **Re-scoped in P6.7:** this was filed as needing Phase 6, but §2.22 is
+     about *windows*; desktop icons are drawn by the wallpaper **client** into
+     its own layer surface, and dragging them needs only pointer events on that
+     surface plus a position in config — both available since Phase 2. It is
+     shell work, not compositor work.
 
 **The rule that earned its place:** a pass is not done until
 `abyss/tests/run.sh --vm --live` is green. Two Phase-3 bugs were invisible on

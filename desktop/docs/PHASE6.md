@@ -6,9 +6,13 @@ decisions, the sibling's [DESKTOP.md](../../AbyssBSD/abyss/docs/DESKTOP.md) for
 the architecture canon this phase implements, and [HANDOFF.md](HANDOFF.md) for
 the interop traps.
 
-Last updated: 2026-08-02. **Scoped, not started.** Three risks were spiked
-first, on both platforms, before any of it was written down as a plan (§4) —
-because the phase's shape depends on their answers.
+Last updated: 2026-08-07. **COMPLETE — all seven passes.** `undertow` runs the
+Jaguar desktop, holds its frame contract under eleven hostile processes, and pays
+both the §2.22 window-position debt and PHASE7 §6.6's screencopy debt.
+**179 unit tests + 35 live modes, green on Linux and FreeBSD.**
+
+Three risks were spiked first, on both platforms, before any of it was written
+down as a plan (§4) — because the phase's shape depended on their answers.
 
 ---
 
@@ -547,15 +551,63 @@ plus three pixel probes proving the stack really is a stack: pale chrome at the
 top, the wallpaper (and *not* the compositor's fallback blue) below it, and the
 Dock overlapping near the bottom.
 
-**P6.7 — What only a compositor can do.**
-The debts the client architecture could never pay (§2.22): **remembered window
-positions** for the spatial Finder, and **dragging desktop icons**. Plus the
-server half of `wlr-screencopy`, which PHASE7 §6.6 hands to this phase — or its
-`ext-image-copy-capture-v1` successor, since upstream deprecates the one we
-bound in P7.5.
-*Verify:* a spatial Finder window reopens where it was left; a desktop icon
-stays where it is dragged; `abyss/tests/live-screenshot.sh` passes against
-`undertow` with no change to the portal.
+**P6.7 — What only a compositor can do. ✅ done.**
+The debts the client architecture could never pay.
+
+**Remembered window positions**, which HANDOFF §2.22 recorded in Phase 2 with an
+explicit IOU:
+
+> *"A Wayland client cannot position its own windows. Real spatial Finder
+> remembers each folder's window position; xdg-shell has no set-position, so
+> placement is the compositor's. What we can persist is size, view and mode —
+> position waits for Phase 6. Not a bug to hunt."*
+
+It waited; it is paid. `xdg_toplevel.move` is honoured (the client *asks*, the
+compositor drags — there is no other way round), the landing position is written
+to `~/.config/abyss/windows.ini` through the same `PoolConfig` store every other
+component uses, and a window reopens where it was left.
+
+**The key is `app_id` + `title`, not `app_id`.** The spatial Finder opens one
+window per folder from one application; keyed on app alone they would all share a
+position and pile up. Both halves are escaped, so a window cannot claim another's
+place by putting the separator in its title.
+
+**The server half of `wlr-screencopy`**, which PHASE7 §6.6 handed to this phase.
+wlroots provides it, so it is one call — and `abyssgrab`, P7.5's client,
+**unmodified**, now captures `undertow`. The screenshot portal works against our
+compositor with no change to the portal, which was the debt exactly.
+
+*And one thing that had to be advertised before any of it worked:*
+**`wlr_output_create_global`**. Without it there is no `wl_output` on the bus at
+all, so a client asking "what displays are there?" is told none. It is easy to
+miss because the things that break are the things that *ask*: screencopy failed
+with "the compositor advertised no outputs", and per-output HiDPI scale — built
+in Phase 1 — would have silently stayed at 1×. Ordinary windows and layer
+surfaces never notice.
+
+*A scope correction, made honestly rather than quietly dropped.* The pass was
+also scoped to include **dragging desktop icons**, on the grounds that it was
+"only half-solvable before Phase 6 (§2.22)". Reading §2.22 again while doing the
+work: that entry is entirely about *windows*, and desktop icons are drawn by the
+wallpaper **client** into its own layer surface. Dragging them needs pointer
+events on that surface and a per-item position in config — both of which a client
+has had since Phase 2. **It never needed a compositor.** It is real shell work
+that was mis-filed here, and it belongs on the standing-items list rather than in
+this phase.
+
+*Verified:* **5 new unit tests** (179 total) on both platforms — the key
+distinguishing two folders of one app, a title-less window still getting a key, a
+forged separator not colliding, a position round-tripping through the real
+on-disk INI *via a second instance*, and a malformed entry reading as "not
+remembered" rather than as (0,0) (a window silently jumping to the corner is
+worse than one that cascades). Live,
+**`abyss/tests/live-undertow-places.sh`** runs the whole story across **two
+compositor processes**: a window maps and is placed, the client asks to be moved,
+a real virtual pointer drags it, the session ends, and *a new compositor* reopens
+it at the dropped position — with a guard that the drag actually moved it, since
+otherwise "it reopened in the same place" would pass for a window that never
+went anywhere. The screencopy half is asserted in
+`live-undertow-shell.sh`.
 
 ---
 

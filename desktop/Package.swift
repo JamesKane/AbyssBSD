@@ -272,7 +272,7 @@ let package = Package(
         // P6.2 puts real wlroots frames under it.
         .target(
             name: "Undertow",
-            dependencies: ["CWlroots"],
+            dependencies: ["CWlroots", "PoolConfig"],
             path: "de/undertow"
         ),
         .executableTarget(

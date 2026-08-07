@@ -24,7 +24,8 @@ abyss_ensure_runtime_dir
 out=${1:-}
 undertow="$root/.build/debug/undertow"
 demo="$root/.build/debug/AquaDemo"
-[ -x "$undertow" ] && [ -x "$demo" ] || swift build
+grab="$root/.build/debug/abyssgrab"
+[ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$grab" ] || swift build
 
 W=800
 H=600
@@ -65,6 +66,18 @@ for scene in wallpaper menubar dock; do
       AQUA_SCENE="$scene" "$demo" > "$work/$scene.log" 2>&1 &
   shell_pids="$shell_pids $!"
 done
+
+# ------------------------------------------------- the screenshot portal's debt
+# PHASE7 §6.6 handed this phase a debt: `wlr-screencopy` is a wlroots protocol,
+# so a compositor of ours has to implement its server half or the screenshot
+# portal stops working. `abyssgrab` is P7.5's client, UNMODIFIED — if it captures
+# our output, the whole portal does.
+sleep 2
+if env WAYLAND_DISPLAY="$wd" "$grab" "$work/grab.png" >/dev/null 2>&1; then
+  grab_ok=1
+else
+  grab_ok=0
+fi
 
 rc=0; wait "$ut_pid" 2>/dev/null || rc=$?
 ut_pid=""
@@ -118,6 +131,14 @@ dock=$(pixel $((W / 2)) $((H - 40)))
 [ "$dock" != "$desk" ] \
   || { echo "FAIL: nothing is drawn where the Dock should be"; exit 1; }
 echo "ok: the Dock overlaps the wallpaper near the bottom ($dock)"
+
+# 4. And P7.5's screenshot client captured us through wlr-screencopy.
+[ "$grab_ok" = 1 ] \
+  || { echo "FAIL: abyssgrab could not capture our output — the screenshot"
+       echo "      portal is broken against undertow (PHASE7 §6.6)"; exit 1; }
+head -c 8 "$work/grab.png" | od -An -tx1 | tr -d ' \n' | grep -qi '^89504e470d0a1a0a' \
+  || { echo "FAIL: what abyssgrab wrote is not a PNG"; exit 1; }
+echo "ok: P7.5's screenshot client captured us through wlr-screencopy, unmodified"
 
 [ -n "$out" ] && cp "$ppm" "$out" && echo "wrote $out"
 echo "all green (the Aqua shell composes on our own compositor)."

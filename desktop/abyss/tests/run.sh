@@ -98,6 +98,11 @@ sh "$root/abyss/tests/live-undertow-c2.sh"
 echo "== the Aqua shell on undertow =="
 sh "$root/abyss/tests/live-undertow-shell.sh"
 
+# What only a compositor can do: a window remembers where it was dragged to, and
+# reopens there in a NEW session (HANDOFF §2.22's debt, paid in P6.7).
+echo "== remembered window positions =="
+sh "$root/abyss/tests/live-undertow-places.sh"
+
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.
 if [ "$live" -eq 1 ]; then

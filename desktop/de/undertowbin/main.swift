@@ -39,7 +39,7 @@ func usage() -> Never {
                                     [--capture FILE.ppm] [--capture-early FILE.ppm]
                                     [--assert-windows N] [--assert-surfaces N]
                                     [--assert-layers N] [--assert-usable X,Y,WxH]
-                                    [--assert-missed N] [--verbose]
+                                    [--assert-missed N] [--config-dir DIR] [--verbose]
     """)
     exit(2)
 }
@@ -63,6 +63,7 @@ var assertWindows: Int? = nil
 var assertSurfaces: Int? = nil
 var assertLayers: Int? = nil
 var assertUsable: String? = nil
+var configDir: String? = nil
 
 var i = 0
 while i < args.count {
@@ -97,6 +98,7 @@ while i < args.count {
     case "--assert-surfaces": assertSurfaces = Int(value("--assert-surfaces"))
     case "--assert-layers": assertLayers = Int(value("--assert-layers"))
     case "--assert-usable": assertUsable = value("--assert-usable")
+    case "--config-dir": configDir = value("--config-dir")
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -304,7 +306,7 @@ case "run":
         session = try WlrootsSession(headlessOutputs: 1, width: width, height: height,
                                      refreshMilliHz: Int32(hz &* 1000), verbose: verbose)
         compositor = try Compositor(session: session, outputWidth: width,
-                                    outputHeight: height)
+                                    outputHeight: height, configDir: configDir)
     } catch {
         die("\(error)")
     }
@@ -388,6 +390,10 @@ case "run":
     out("surfaces-composited=\(scene.count)")
     out("cursor=\(Int(seat.cursorX)),\(Int(seat.cursorY))")
     out("focused=\(seat.focused != nil ? "yes" : "no")")
+    out("restored=\(compositor.restoredCount)")
+    for t in compositor.mappedToplevels {
+        out("window \(t.placeKey ?? "?") at \(t.x),\(t.y)")
+    }
     // The positive control for adversarial load: every surface any client ever
     // created. `missed=0` with `surfaces-created=0` means the adversaries never
     // arrived, which is a passing bench that proves nothing (PHASE6.md P6.5).

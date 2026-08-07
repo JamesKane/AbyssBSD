@@ -66,8 +66,11 @@ cleanup() {
 trap cleanup EXIT
 
 adv_dir=$(mktemp -d)
-cc "$root/abyss/tests/adversary.c" $(pkg-config --cflags --libs wayland-client) \
-   -o "$adv_dir/adversary" \
+# adversary.c also carries the `move` oracle (P6.7), which speaks xdg-shell —
+# so it needs the generated protocol source, exactly as any xdg client would.
+cc -I "$root/de/cwayland/include" "$root/abyss/tests/adversary.c" \
+   "$root/de/cwayland/xdg-shell-protocol.c" \
+   $(pkg-config --cflags --libs wayland-client) -o "$adv_dir/adversary" \
   || { echo "FAIL: could not build the adversary"; exit 1; }
 
 # ------------------------------------------------------------- the compositor
