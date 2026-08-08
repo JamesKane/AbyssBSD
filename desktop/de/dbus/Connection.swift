@@ -163,6 +163,21 @@ public final class DBusConnection {
         return code
     }
 
+    /// Subscribe to signals matching a rule.
+    ///
+    /// A bus delivers a broadcast signal only to connections that asked for it,
+    /// so **this must happen before the call that provokes the signal**. The
+    /// portal API is built around that ordering: a client derives the Request's
+    /// object path from its own name and its own token precisely so it can match
+    /// on the path first and call second (PHASE8.md §6.1).
+    public func addMatch(_ rule: String) throws {
+        _ = try call(.methodCall(destination: "org.freedesktop.DBus",
+                                 path: "/org/freedesktop/DBus",
+                                 interface: "org.freedesktop.DBus",
+                                 member: "AddMatch",
+                                 body: [.string(rule)]))
+    }
+
     // MARK: - Sending
 
     public func send(_ message: DBusMessage) throws {

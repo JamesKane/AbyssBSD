@@ -330,6 +330,7 @@ abyss/tests/live-undertow-places.sh                  # a window reopens where it
 
 # The portals, end to end (each starts its own headless sway):
 abyss/tests/live-portal.sh          # a client, a picker, a descriptor
+abyss/tests/live-portal-dbus.sh     # ...and the same picker, over the session bus
 abyss/tests/live-sandbox.sh         # ...with no filesystem at all
 abyss/tests/live-screenshot.sh /tmp/shot.png    # ...and no way to reach the screen
 abyss/tests/live-notify.sh          # a toast, via the portal
@@ -514,10 +515,10 @@ the desktop's `-1` zone paints underneath it, and the Dock overlaps without
 reserving. That usable rectangle is the same §2.26 check `live-session.sh` has
 made against sway since Phase 2 — now made against us.
 
-**Phase 8 — the D-Bus bridge — is now scoped and started**
+**Phase 8 — the D-Bus bridge — is now scoped and half built**
 ([PHASE8.md](PHASE8.md), passes P8.1–P8.4). It deletes PHASE7 §6.7's caveat: a
-stock GTK/Qt app gets the Finder as its file chooser and a descriptor as its
-answer. **We are the portal** — `abyss-dbus` owns
+stock GTK/Qt app gets the Finder as its file chooser. **We are the portal** —
+`abyss-dbus` owns
 `org.freedesktop.portal.Desktop` and translates to the existing `abyss-portal`,
 rather than backing stock `xdg-desktop-portal` (which would put a broker on the
 path and leave two portal frontends with different behaviour).
@@ -533,8 +534,43 @@ ends: `dbus-daemon` is the bus, `dbus-send` calls us, and **`gdbus` — GLib's
 D-Bus — round-trips the `a{sv}` options dictionary every portal method takes and
 parses our introspection XML with its own parser** (`abyss/tests/live-dbus.sh`).
 
-**Next: P8.2**, `org.freedesktop.portal.Desktop` on the bus, translating to the
-existing `abyss-portal`.
+**P8.2 is done — `org.freedesktop.portal.Desktop` is ours.** `abyss-dbus`
+answers `FileChooser.OpenFile` and `SaveFile`, runs the `Request`/`Response`
+object lifecycle, and translates to the same `abyss-portal` and the same Finder
+our own apps get. `abyss/tests/live-portal-dbus.sh` runs five real processes —
+`dbus-daemon`, sway, `abyss-portal`, `abyss-dbus`, a caller — and drives a
+D-Bus `OpenFile` through to a file a human picked, with `gdbus` decoding the
+`Response` signal independently of us.
+
+**The portal API has two ways to hang, and each is invisible to the client shape
+that exposes the other.** Both end the same way: waiting for a signal that never
+comes, with no error — P6.3's missing-configure failure shape again.
+
+1. The Request path is `…/request/SENDER/TOKEN`, built from the **caller's**
+   unique name and the caller's own `handle_token`, because a modern client
+   computes it itself and subscribes *before* calling. Derive it any other way
+   and that client listens where nothing is emitted.
+2. An older client has no token: it calls, takes the handle it is given, and
+   subscribes *then*. So the picker must not run inside the method handler —
+   blocking there answers the dialog before the caller knows where to listen.
+
+Both are driven by the live script, and both were **injected once** to prove the
+script can fail (§2.37): running the picker inside the handler left the late
+client waiting its full 90s.
+
+**And one claim in the plan turned out to be wrong, which is worth recording.**
+PHASE8 §1 promised a foreign app "a descriptor as its answer". Reading the
+interface definition off disk rather than from memory
+(`/usr/share/dbus-1/interfaces/org.freedesktop.portal.FileChooser.xml`) shows
+`Response` carries `uris` — strings — and no descriptor in any version. So the
+bridge closes the fd `abyss-portal` opened and forwards the path. **Their answer
+is a name; ours is a capability** — it is why flatpak needs a FUSE daemon to make
+those names mean anything, and why `abyssopen` can read a file from inside
+Capsicum with no filesystem at all. The confused-deputy property still survives
+the hop: a foreign app names a *directory*, never a file (PHASE8 §6.6).
+
+**Next: P8.3** — a real GTK application, which is the pass that actually deletes
+PHASE7 §6.7's caveat, and nothing before it does.
 
 **The other directions stay open:** Phase 4 (Mac Pro bring-up — real GPU,
 hardware cursor, `rtprio`, and where Phase 6's C1 measurements should be
@@ -545,9 +581,9 @@ repeated) and Phase 5 (the installer).
 - **Phase 4 — Mac Pro bring-up.** Real hardware, and where the volume/battery
   status items finally read a real mixer and battery instead of reporting
   absent. Biggest remaining risk: `amdgpu` `si_support` for the FirePro D-series.
-- **The D-Bus/portal bridge** — the carved-out half of Phase 7, and what stock
-  GTK/Qt apps need before "portals" means anything to them. Today it means *our*
-  portals for *our* apps.
+- **The D-Bus/portal bridge** — Phase 8, now at P8.2. A caller on the session bus
+  gets the Finder; what remains is proving it with GTK itself (P8.3) and having
+  `anchor` start the bus alongside the shell (P8.4).
 (What Phase 6 finally unblocks, for the record: remembered window positions for
 the spatial Finder and dragging desktop icons — both things a Wayland *client*
 cannot do (HANDOFF §2.22) — plus the one Phase-7 debt, a server half for

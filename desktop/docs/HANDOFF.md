@@ -188,6 +188,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.36 | Capsicum permits `socket(2)`; it forbids *naming an address* — the control was wrong, and only FreeBSD could say so |
 | 2.37 | Swift allocates via `posix_memalign`, and interposition dies in a `.xctest` — a probe with no positive control reports a comfortable zero |
 | 2.38 | A flooding client that roundtrips throttles itself; and *where in the frame* you dispatch matters more than which thread does it |
+| 2.39 | An async, object-based API has more than one way to hang — and each is invisible to the client that exposes the other |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -454,6 +455,47 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.39 One hang is not the hang
+(P8.2 — `org.freedesktop.portal.FileChooser`. Two bugs, one symptom, and a test
+that only found the first one.)
+
+The portal API is asynchronous and object-based: a method call returns an
+**object path** at once, and the answer arrives later as a `Response` **signal**
+on that path. A bus delivers a broadcast signal only to connections that asked
+for it, so the client has to be subscribed first. There are two ways to break
+that, they produce the **identical symptom** — a client waiting for ever with no
+error, no log line and nothing on the wire — and *each is invisible to the client
+shape that exposes the other*.
+
+- **The path is derived by the client, not chosen by you.** It is
+  `/org/freedesktop/portal/desktop/request/SENDER/TOKEN`, where SENDER is the
+  **caller's** unique name with the leading `:` dropped and every `.` turned into
+  `_`, and TOKEN is the caller's own `handle_token`. A modern client computes
+  that itself and subscribes *before* it calls. Invent a serial, use your own
+  name, forget one substitution — and it is listening to a path you never emit
+  on. Nothing errors: your signal goes out, the bus routes it to nobody.
+- **The reply must be on the wire before the signal is.** An older client sends
+  no token; it calls, takes the handle it is handed, and subscribes *then*. So
+  the slow work — running a modal picker — must **not** happen inside the method
+  handler, because a handler's return value is what gets sent. Block there and
+  you answer the dialog before the caller ever learns where to listen.
+
+The trap for the test, not just the code: the modern client cannot see the second
+bug (it subscribed long before), and the old client cannot see the first (it
+never predicts anything). **A live test with one client shape passes with either
+bug present.** Both are now driven, and both were injected once to check the
+script fails — the emit-before-reply injection left the late client waiting its
+full 90s while the modern one sailed through green.
+
+The general lesson, beyond this API: when a protocol has a *hand-off* — I tell
+you where to listen, then I speak — enumerate the orderings before writing the
+test, not after. And when the same symptom has several causes, one test per cause
+or you have covered one of them and believe you covered all.
+
+Related: §2.37 (a suite that has never failed has not been shown to test
+anything), and P6.3's missing xdg-shell configure — the same silent-hang shape,
+one layer down.
 
 ### 2.38 A polite adversary is not an adversary
 (P6.5 — the C2 isolation proof. The bench was wrong before the compositor was.)
@@ -1291,6 +1333,7 @@ or name a subset: `run-live.sh dock trash`). 35 modes today.
 |---|---|
 | `live-anchor.sh` | the **Swift supervisor**: kill a component, it comes back; `abyssctl quit` leaves no orphans |
 | `live-portal.sh` | three processes: a client gets an fd for a file **it never named** |
+| `live-portal-dbus.sh` | five processes: `dbus-daemon`, sway, `abyss-portal`, `abyss-dbus`, a caller. Both client shapes (§2.39), and **`gdbus` decodes our `Response` signal with GLib's parser** |
 | `live-sandbox.sh` | the client is in **capability mode** and `open(2)` fails, yet it reads the file |
 | `live-notify.sh` | a notification crosses the portal, becomes a toast, reserves no space, and its surface is released on expiry |
 
@@ -1406,13 +1449,18 @@ positions** (a window reopens where it was dragged, persisted through
 `PoolConfig`) and **PHASE7 §6.6's screencopy** (P7.5's `abyssgrab` captures
 `undertow` unmodified).
 
-**Phase 8 — the D-Bus bridge — is scoped and started** ([PHASE8.md](PHASE8.md),
+**Phase 8 — the D-Bus bridge — is scoped and half built** ([PHASE8.md](PHASE8.md),
 P8.1–P8.4): `abyss-dbus` owns `org.freedesktop.portal.Desktop` and translates to
-the existing `abyss-portal`, so a stock GTK app gets the Finder as its file
-chooser. **P8.1 is done: `de/dbus` speaks D-Bus with no
-dependency** — no libdbus, no GDBus, no sd-bus. It is validated against GLib's
-implementation rather than its own parser (`live-dbus.sh`). **The immediate task
-is P8.2: `org.freedesktop.portal.Desktop` on the bus.**
+the existing `abyss-portal`, so a caller on the session bus gets the Finder as
+its file chooser. **P8.1: `de/dbus` speaks D-Bus with no dependency** — no
+libdbus, no GDBus, no sd-bus — validated against GLib's implementation rather
+than its own parser (`live-dbus.sh`). **P8.2: the portal is on the bus** —
+`FileChooser.OpenFile`/`SaveFile` and the `Request`/`Response` lifecycle, with
+`live-portal-dbus.sh` driving five real processes through to a file a human
+picked. Read **§2.39 before writing any of P8.3**: the portal API has two
+distinct ways to hang and each is invisible to the client shape that exposes the
+other. **The immediate task is P8.3: a real GTK application** — the pass that
+actually deletes PHASE7 §6.7's caveat.
 Phase 4 (Mac Pro) and Phase 5 (the installer) stay open.
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
@@ -1520,7 +1568,7 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
-| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/**`live-screenshot.sh`** (the portals, driven from `run.sh --live`), the virtual input helpers |
+| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, the virtual input helpers |
 | `abyss/tests/adversary.c` | hostile Wayland clients for C2: `hard` (flood, never waits for a reply), `zombie`, `deaf`, `churn` (§2.38) |
 | `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |

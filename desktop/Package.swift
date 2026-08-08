@@ -140,6 +140,14 @@ let package = Package(
             dependencies: ["CPlatform"],
             path: "de/dbus"
         ),
+        // The bridge itself: org.freedesktop.portal.FileChooser, translated to
+        // `abyss-portal` over CurrentIPC. A library so the path derivation, the
+        // options parsing and the URI encoding are unit-tested without a bus.
+        .target(
+            name: "DBusPortal",
+            dependencies: ["DBus", "CurrentIPC"],
+            path: "de/dbusportal"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
@@ -297,6 +305,13 @@ let package = Package(
             dependencies: ["DBus"],
             path: "de/dbusprobe"
         ),
+        // `org.freedesktop.portal.Desktop`, hosted by us: the legacy adapter
+        // that gets a stock GTK or Qt app the Finder as its file chooser.
+        .executableTarget(
+            name: "abyss-dbus",
+            dependencies: ["DBusPortal", "CurrentIPC"],
+            path: "de/dbusbin"
+        ),
         // Read the machine through the FreeBSD-native bridges.
         .executableTarget(
             name: "ventsctl",
@@ -343,6 +358,11 @@ let package = Package(
             name: "DBusTests",
             dependencies: ["DBus"],
             path: "Tests/DBusTests"
+        ),
+        .testTarget(
+            name: "DBusPortalTests",
+            dependencies: ["DBusPortal", "DBus", "CurrentIPC"],
+            path: "Tests/DBusPortalTests"
         ),
         .testTarget(
             name: "UndertowTests",

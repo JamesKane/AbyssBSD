@@ -4,9 +4,11 @@ The half carved out of Phase 7, twice deferred and now due. Read
 [PHASE7.md](PHASE7.md) for the portals this extends, [PLAN.md](PLAN.md) for the
 locked decisions, and [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-08. **P8.1 done** — we speak D-Bus, with no library, and
-GLib's own implementation agrees. Two risks were spiked first, on both platforms
-(§4), because the phase's shape depended on the answers.
+Last updated: 2026-08-08. **P8.1 and P8.2 done** — we speak D-Bus with no
+library, we own `org.freedesktop.portal.Desktop`, and a foreign caller gets the
+Finder. Two risks were spiked first, on both platforms (§4), because the phase's
+shape depended on the answers; a third — what the answer actually *is* — was
+found by reading the interface definition in P8.2 and is recorded in §6.6.
 
 **Numbered 8 because it is new.** PLAN.md runs 0–6, Phase 7 was added for
 portals; this is the piece Phase 7 explicitly refused, promoted to a phase of its
@@ -24,15 +26,22 @@ own rather than smuggled into another.
 
 This phase deletes that caveat. A stock GTK or Qt application — one that knows
 nothing about AbyssBSD, was built for GNOME, and asks for a file the only way it
-knows how — gets **the Finder** as its file chooser and **a descriptor** as its
-answer.
+knows how — gets **the Finder** as its file chooser.
 
 The claim in one line:
 
 > An unmodified GTK application calls `org.freedesktop.portal.FileChooser.OpenFile`
-> and receives an **open file descriptor** for a file the user picked in the
-> Finder — the same picker, the same portal, and the same capability our own
-> sandboxed clients already get.
+> and **the Finder opens** — the same picker, the same portal, and the same file
+> the user chose.
+
+**That sentence used to end "and receives an open file descriptor", and it was
+wrong.** P8.2 read the interface definition off disk
+(`/usr/share/dbus-1/interfaces/org.freedesktop.portal.FileChooser.xml`, shipped
+by xdg-desktop-portal) instead of remembering it, and the `Response` signal
+carries `uris` — an array of strings — and nothing else that names the file.
+There is no `h` in it, in any version. The descriptor is not something this
+bridge withholds; it is something *their* protocol has no room for. §6.6 says
+what that costs and why it is worth stating rather than papering over.
 
 **We are the portal.** `abyss-dbus` owns `org.freedesktop.portal.Desktop` on the
 session bus and translates each call into a `CurrentIPC` request to the existing
@@ -72,7 +81,7 @@ alike is worth the extra code.
 | Need | Have | New in Phase 8 |
 |---|---|---|
 | A portal that opens files | `abyss-portal` + the Finder picker (P7.1/P7.2) | nothing — it is reused verbatim |
-| Descriptor passing | `CurrentIPC`, SCM_RIGHTS (P3.5) | fd out over D-Bus' own unix-fd type |
+| Descriptor passing | `CurrentIPC`, SCM_RIGHTS (P3.5) | nothing — `FileChooser` answers with a URI (§6.6) |
 | A socket + codec discipline | `CurrentIPC`'s wire format, `Msg` | the D-Bus wire format |
 | A service host pattern | `Current.Server`, the run-loop hook | a D-Bus connection in the same loop |
 | A supervisor | `anchor` (P3.6) | it starts `dbus-daemon` and `abyss-dbus` |
@@ -116,13 +125,39 @@ that an unknown method gets an **error reply rather than silence**, because a
 caller that receives nothing hangs for its whole timeout with no diagnostic —
 the same failure shape as P6.3's missing xdg-shell configure.
 
-**P8.2 — `abyss-dbus`: the portal on the bus.**
-Own `org.freedesktop.portal.Desktop`, implement `FileChooser.OpenFile` and
-`SaveFile`, and the `Request`/`Response` object lifecycle the portal API is built
-on (a method returns an object path; the answer arrives later as a signal on it).
-Translate to `abyss-portal` over `CurrentIPC`.
-*Verify:* `dbus-send`/`gdbus` drives `OpenFile` end to end, the Finder opens, and
-the reply carries a descriptor.
+**P8.2 — `abyss-dbus`: the portal on the bus. ✅ done.**
+`org.freedesktop.portal.Desktop` is ours: `FileChooser.OpenFile` and `SaveFile`,
+the `Request`/`Response` object lifecycle, `Properties`, `Introspectable`, and a
+translation to `abyss-portal` over `CurrentIPC`. The Finder that opens is the
+same Finder P7.1 built, launched by the same portal, with no second code path.
+
+**The API has two ways to hang and no way to report either**, and the pass is
+arranged around them. Both end with a client waiting for a `Response` signal that
+never comes — the same failure shape as P6.3's missing xdg-shell configure.
+
+1. **The wrong object path.** The handle is
+   `/org/freedesktop/portal/desktop/request/SENDER/TOKEN`, built from the
+   *caller's* unique name (`:1.42` → `1_42`) and the caller's own `handle_token`.
+   A modern client computes it *itself* and subscribes before calling. Derive it
+   any other way — a serial of ours, our own name — and that client is listening
+   to a path nothing is ever emitted on.
+2. **Emitting before the reply is on the wire.** An older client has no token; it
+   calls, takes the handle it is given, and subscribes *then*. So the picker must
+   not run inside the method handler — a handler's return value is what gets
+   sent, so blocking there would answer the dialog before the caller ever learned
+   where to listen. The slow half is queued and drained by the run loop instead.
+
+*Verified:* **14 unit tests** (211 total) and `abyss/tests/live-portal-dbus.sh`,
+which runs five real processes — `dbus-daemon`, sway, `abyss-portal`,
+`abyss-dbus`, a caller — and **both** client shapes. `gdbus` introspects us with
+its own XML parser, reads the `version` property, has a `handle_token` containing
+a `/` refused with `InvalidArgs`, and **decodes the `Response` signal and its
+`uris` independently of our decoder**.
+
+Both hazards were then *injected* to check the test can fail, because a suite
+that has never failed has not been shown to test anything (§2.37): running the
+picker inside the handler left the late client waiting the full 90s, and dropping
+the `.`→`_` substitution failed both the unit test and the live one.
 
 **P8.3 — A real GTK application.**
 `GtkFileChooserNative` on a stock GTK 3 app, running as a client of `undertow`,
@@ -194,17 +229,18 @@ live test drives us with `dbus-send`, `gdbus`, or a real GTK application.
 
 ## 6. Risks / open decisions
 
-**6.1 The portal API is asynchronous and object-based.** A method call returns an
-object path immediately and the *answer* arrives later as a `Response` signal on
-that object, which the client is expected to have subscribed to first. Getting
-the lifecycle wrong (emitting before the client subscribes, or reusing a path)
-produces a client that hangs with no error — the same failure shape as P6.3's
-missing configure. Budget for it.
+**6.1 The portal API is asynchronous and object-based.** *Retired in P8.2, and it
+cost about what was budgeted.* A method call returns an object path immediately
+and the *answer* arrives later as a `Response` signal on that object, which the
+client is expected to have subscribed to first. There turned out to be **two**
+ways to get it wrong, not one, and each is invisible to the client shape that
+exposes the other — see P8.2 above. Both are now driven by the live script, and
+both were injected once to prove the script can fail.
 
-**6.2 A descriptor over D-Bus is a different mechanism.** Our portal hands out
-fds over `SCM_RIGHTS` directly; D-Bus has its own unix-fd type (`h`) with a
-separate fd array and a `UNIX_FDS` header field, and the connection must have
-negotiated fd passing. The fd we send is the same fd — only the envelope changes.
+**6.2 A descriptor over D-Bus is a different mechanism.** *Moot, as it turns
+out.* This anticipated marshalling an `h` into the reply; §6.6 records what P8.2
+found instead — `FileChooser` has no descriptor in its answer at all. The `h`
+support in `de/dbus` is real and tested, but the file chooser does not use it.
 
 **6.3 `dbus-daemon` is a broker, and we are running one.** Worth saying plainly
 rather than pretending otherwise: this phase adds the exact kind of process the
@@ -222,3 +258,26 @@ two before a GTK file dialog is happy.
 We implement what a current GTK asks for and pin the versions we advertise; a
 future GTK may ask for more. This is the standing cost of speaking somebody
 else's protocol, and it is why Phase 7 preferred its own.
+
+**6.6 Their answer is a name; ours is a capability.** Found in P8.2 by reading
+the interface definition rather than remembering it. `FileChooser`'s `Response`
+returns `uris` — strings — so a legacy client is told *where* the file is and
+opens it by name, with whatever authority it already had. Our own portal returns
+an **open descriptor** over `SCM_RIGHTS`, which is why `abyssopen` can read a
+file from inside Capsicum capability mode with no filesystem at all.
+
+The gap is not ours to close. It is why flatpak needs a **FUSE daemon** — the
+Documents portal — to make those names mean anything inside a sandbox: having
+handed out a path, something must then be standing behind it. So `abyss-dbus`
+closes the descriptor `abyss-portal` opened and forwards the path, and the
+capability stops at the bridge. That is the honest boundary of this phase: a
+foreign app gets **our picker and the user's choice**, and the confused-deputy
+property survives (it still cannot name a file). What it does not get is the
+capability, because its own protocol cannot hold one.
+
+**6.7 One dialog at a time.** `abyss-portal` blocks while the picker is up
+(P7.2's documented cost), so `abyss-dbus` does too. A second `OpenFile` arriving
+mid-dialog is answered with its handle immediately and queued. The visible
+consequence: a `Request.Close` sent while a picker is on screen is not *seen*
+until that picker exits — the `Response` is correctly suppressed, but the dialog
+is not torn down. Worth fixing when something needs it; not worth threads now.

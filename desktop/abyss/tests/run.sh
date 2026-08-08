@@ -117,6 +117,11 @@ if [ "$live" -eq 1 ]; then
   # and therefore cannot reach the compositor, holding a picture of the screen.
   echo "== the screenshot portal =="
   sh "$root/abyss/tests/live-screenshot.sh"
+  # The same portal, reached the way the rest of the world reaches one: a
+  # session bus, org.freedesktop.portal.Desktop, and gdbus as an independent
+  # witness that our Response decodes (PHASE8.md P8.2).
+  echo "== the portal on the session bus =="
+  sh "$root/abyss/tests/live-portal-dbus.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never
