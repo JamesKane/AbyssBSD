@@ -7,24 +7,33 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-02. **Phases 0–3 complete** (the desktop runs on FreeBSD
-with a Swift control plane, session supervisor and hardware bridges);
-**Phase 7 (portals) is COMPLETE** — the file chooser hands over descriptors, a
-Capsicum-sandboxed client proves the capability claim, notifications land as Aqua
-toasts, and a screenshot arrives as a descriptor with no name.
-**139 unit tests + 35 live modes, green on Linux and FreeBSD.**
+Last updated: 2026-08-08. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 is
+half built**. The Jaguar shell runs on FreeBSD, on **our own compositor**
+(`undertow`), over a Swift control plane, session supervisor and hardware
+bridges; the portals hand out descriptors; and a caller on a **session bus** now
+gets the Finder as its file chooser.
+**211 unit tests + 35 live modes, green on Linux and FreeBSD.**
 
 **Picking this up cold?**
 
-1. Read §1 (what exists) and §5 (what's next — Phase 7 is done, so the next move
-   is a **choice between phases**, not a queued task).
-2. Skim the §2 index for the trap nearest what you're about to touch. §2.28–2.36
-   are the recent ones; **§2.36 is the freshest scar** and its lesson generalises
-   (a security claim's *proof* deserves as much scepticism as its code).
-3. Confirm the box still works:
+1. **The next task is queued, not a choice: P8.3, a real GTK application**
+   ([PHASE8.md](PHASE8.md) §3). Read §5 for why, and for the three phases that
+   stay open independently of it.
+2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
+   (the compositor) and **Phase 8** (the D-Bus bridge).
+3. Skim the §2 index for the trap nearest what you're about to touch. **The three
+   freshest scars all generalise, and all three are about *testing* rather than
+   code** — which is the pattern worth carrying into the next pass:
+   - **§2.37** — a probe with no positive control measures nothing. A published
+     measurement had to be withdrawn over this one.
+   - **§2.38** — a polite adversary is not an adversary.
+   - **§2.39** — one hang is not *the* hang: an async, object-based API has more
+     than one way to hang, and each is invisible to the client shape that
+     exposes the other. **Read this before P8.3.**
+4. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 128 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 211 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -35,7 +44,7 @@ toasts, and a screenshot arrives as a descriptor with no name.
 
 ---
 
-## 1. What got built (Phases 0–3, and Phase 7 so far)
+## 1. What got built (Phases 0–3, 6, 7, and Phase 8 so far)
 
 A working Swift 6 desktop foundation that builds and tests clean on Linux and
 renders faithful Jaguar UI:
@@ -136,6 +145,57 @@ xdg-desktop-portal, and the project's most interesting claim (PHASE7.md):
   The sandboxed client holds a picture of a screen it cannot reach — `connect(2)`
   to the compositor fails from capability mode (§2.36,
   `docs/screenshots/portal-screenshot.png`).
+
+**Phase 6 — `undertow`, our own compositor (P6.1–P6.7, complete).** Built out of
+order on purpose (PHASE6.md), and in the canon's order — *the contract exists
+before the pixels do*:
+
+- **The frame contract first.** A metronome with EWMA vblank prediction and
+  late-latching, plus the flight recorder that makes DESKTOP.md's C1–C5
+  falsifiable — written and benchmarked before a single pixel was composited.
+  The present path is **allocation-free**, enforced every build by a symbol-
+  interposition probe rather than by a number somebody once measured (§2.37).
+- **wlroots in 29 lines of C.** Swift imports the headers directly; the shim
+  exists only because `wl_signal_add` is a static inline and `wl_container_of` is
+  a macro (§2.1 at scale). The sibling's binding is 4,946 generated lines.
+- **A scene of our own** — structure-of-arrays, deliberately not `wlr_scene` —
+  hosting xdg-shell toplevels and `wlr-layer-shell` with exclusive zones.
+- **C2 is proved**, and it is the claim the architecture exists to make:
+  **eleven real hostile processes** — flooders that never roundtrip, zombies,
+  churners, a deaf client — cannot make the compositor drop a frame, while a
+  healthy client keeps drawing throughout. The fix that mattered was not a
+  thread: it was *where in the frame* the event loop is pumped (§2.38).
+- **The Jaguar desktop composes on it** — wallpaper, menu bar and Dock, with the
+  menu bar's exclusive zone reserving its strip exactly as §2.26 asserts against
+  sway. `abyss/tests/live-undertow*.sh` are the first tests here that **start no
+  sway at all**.
+- **P6.7 paid two cross-phase debts**: §2.22's **remembered window positions** (a
+  window reopens where it was dragged, persisted through `PoolConfig`) and
+  PHASE7 §6.6's **screencopy server half** (P7.5's `abyssgrab` captures
+  `undertow` unmodified — the client half never knew the difference).
+
+**Phase 8 — the D-Bus bridge (P8.1–P8.2 done, P8.3–P8.4 to go).** Portals for
+everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
+
+- **`de/dbus` speaks D-Bus with no dependency at all** — no libdbus (discouraged
+  by its own docs), no GDBus (that means GLib, and through it the GTK stack this
+  project rejects), no sd-bus (systemd). Only `CPlatform`, for the same
+  SCM_RIGHTS helpers `CurrentIPC` has used since P3.5. **The rule the format
+  turns on:** every value aligns to its natural boundary *measured from the start
+  of the message*, not from the buffer being filled.
+- **`abyss-dbus` owns `org.freedesktop.portal.Desktop`** — `FileChooser.OpenFile`
+  and `SaveFile`, the `Request`/`Response` object lifecycle, `Properties` and
+  `Introspectable` — translating to the existing `abyss-portal` and the same
+  Finder our own apps get, with no second code path.
+- **It is never tested against our own encoder.** `dbus-daemon` is the bus,
+  `dbus-send` and `gdbus` are the callers, and **GLib decodes our `Response`
+  signal with its own parser**. See §2.39 for the two silent hangs this API
+  offers, and why one client shape in a test proves half of what you think.
+- **And the plan's headline claim was wrong.** It promised a foreign app "a
+  descriptor as its answer"; the interface definition on disk says `Response`
+  carries `uris` — strings — with no descriptor in any version. **Their answer
+  is a name; ours is a capability** (PHASE8 §6.6). The confused-deputy property
+  still survives the hop: a foreign app names a directory, never a file.
 
 The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
 and `system-preferences.png` are the Phase-1 originals, and `freebsd-*.png` are
@@ -1318,7 +1378,8 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 
 **Run them all:** `abyss/tests/run-live.sh` drives every mode in order with a
 per-mode timeout and prints a pass/fail table (`-o DIR` keeps the PNGs and logs,
-or name a subset: `run-live.sh dock trash`). 35 modes today.
+or name a subset: `run-live.sh dock trash`). 35 modes today. These are the
+*sway-hosted* modes; `undertow`'s own tests are separate scripts, listed below.
 
 **Tests that need no compositor** (all in `run.sh`'s default lane):
 
@@ -1326,6 +1387,13 @@ or name a subset: `run-live.sh dock trash`). 35 modes today.
 |---|---|
 | `live-ipc.sh` | two real processes hand a **descriptor** over the control plane |
 | `live-vents.sh` | sysctl agrees with `sysctl(8)`; **real devd events** (it creates and destroys an `md(4)` disk); absent facilities report absent |
+| `bench-metronome.sh` | the frame contract: C1 cadence, and an **allocation-free** present path enforced by a probe with a positive control (§2.37) |
+| `live-undertow.sh` | a real client on **our own compositor** — no sway anywhere |
+| `live-undertow-input.sh` | input reaching that client through our seat, driven by the **unmodified** `vpointer` that drives sway |
+| `live-undertow-c2.sh` | **C2**: eleven hostile processes cannot make us drop a frame, while a healthy client keeps drawing (§2.38) |
+| `live-undertow-shell.sh` | the Jaguar shell — wallpaper, menu bar, Dock — composing on `undertow` |
+| `live-undertow-places.sh` | a window reopens where it was dragged, in a **new session** (§2.22's debt) |
+| `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |
 
 **Tests that need a compositor** (in `run.sh --live`):
 
@@ -1365,18 +1433,20 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 128 unit tests + smoke render + the
-                                   # no-compositor live tests
+abyss/tests/run.sh                 # build + 211 unit tests + smoke render + the
+                                   # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
 abyss/tests/run.sh --vm --live     # the gate before calling a pass done
 ```
 
-The 128 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 211 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy, the hardware bridges' parsing, the
-portal's refusals, and toast layout/expiry.
+portal's refusals, toast layout/expiry, the compositor's metronome and layer
+arithmetic, the D-Bus wire format's alignment rules, and the portal bridge's
+path derivation and URI escaping.
 
 **Both platforms, every time.** Phase 3 earned this rule: two bugs
 (`O_NONBLOCK` inheritance on `accept`, a string sysctl read as an integer) were
@@ -1425,101 +1495,87 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-**Where things stand.** Phases 0–3 are complete: the Jaguar shell is built, it
-runs on FreeBSD under a Swift session supervisor, with a Swift control plane and
-Swift hardware bridges underneath, and the whole harness passes on both
-platforms. **Phase 7 (portals) is complete too.** **139 unit tests and 35 live
+**Where things stand.** Phases 0–3, 6 and 7 are complete; Phase 8 is half built.
+The Jaguar shell runs on FreeBSD, on our own compositor, over a Swift control
+plane, session supervisor and hardware bridges. **211 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-**Phase 6 — `undertow`, the Swift compositor — is under way**
-([PHASE6.md](PHASE6.md), P6.1–P6.7). **Phase 6 is COMPLETE (P6.1–P6.7)**: the metronome and its
-meter (the canon's order — DESKTOP.md §13, *"the contract exists before the
-pixels do"*), the wlroots bridge under it, a real client on a real scene, and
-input reaching that client — and **C2 is proved**: eleven real hostile processes
-cannot make it drop a frame, while a healthy client keeps drawing. `undertow`
-hosts a Wayland socket, AquaDemo's window is composited by our own
-structure-of-arrays scene (not `wlr_scene`) at exact cadence, and a click driven
-by the harness's **unmodified** `vpointer` reaches the app — because implementing
-`wlr-virtual-pointer`'s server side means the tool that drives sway drives us.
-**And the Jaguar desktop runs on it** — wallpaper, menu bar and Dock composing,
-with the menu bar's exclusive zone reserving its strip exactly as §2.26 asserts
-against sway. `abyss/tests/live-undertow*.sh` are the first tests here that
-**start no sway**. P6.7 paid the two cross-phase debts: **§2.22's window
-positions** (a window reopens where it was dragged, persisted through
-`PoolConfig`) and **PHASE7 §6.6's screencopy** (P7.5's `abyssgrab` captures
-`undertow` unmodified).
+### The queued task: P8.3 — a real GTK application
 
-**Phase 8 — the D-Bus bridge — is scoped and half built** ([PHASE8.md](PHASE8.md),
-P8.1–P8.4): `abyss-dbus` owns `org.freedesktop.portal.Desktop` and translates to
-the existing `abyss-portal`, so a caller on the session bus gets the Finder as
-its file chooser. **P8.1: `de/dbus` speaks D-Bus with no dependency** — no
-libdbus, no GDBus, no sd-bus — validated against GLib's implementation rather
-than its own parser (`live-dbus.sh`). **P8.2: the portal is on the bus** —
-`FileChooser.OpenFile`/`SaveFile` and the `Request`/`Response` lifecycle, with
-`live-portal-dbus.sh` driving five real processes through to a file a human
-picked. Read **§2.39 before writing any of P8.3**: the portal API has two
-distinct ways to hang and each is invisible to the client shape that exposes the
-other. **The immediate task is P8.3: a real GTK application** — the pass that
-actually deletes PHASE7 §6.7's caveat.
-Phase 4 (Mac Pro) and Phase 5 (the installer) stay open.
+This is the only item here that is *next* rather than *available*. Everything
+else is a phase you could pick on appetite.
 
-**The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
-shim exists only because `wl_signal_add` is a static inline and
-`wl_container_of` is a macro (§2.1 at scale). Adding a wlroots event of any kind
-means `tw_listen(&thing.pointee.events.whatever, { ctx, data in … }, ctx)` and
-nothing else — and freeing the listener before the context it points at (§2.2,
-§2.35).
+`GtkFileChooserNative` on a stock GTK 3 app, running as a client of `undertow`,
+picking a file through the Finder. The guest already carries `gtk3`, put there in
+Phase 3 for exactly this. **It is the pass that deletes PHASE7 §6.7's caveat**
+("portals: done" currently means *our* portals for *our* apps) and nothing before
+it does — P8.2 proved the protocol with `gdbus`, which is a D-Bus client, not an
+application.
 
-Three risks were spiked on both platforms *before* the plan was written (§4 of
-PHASE6.md), and two of them changed the plan: **Swift imports wlroots directly**
-(no bindgen — the C shim is a ~15-line `wl_container_of` trampoline, §2.1's trap
-at scale), and **Embedded Swift is struck** because plain Swift with
-preallocation measures zero allocations on the loop body. Read **§2.37 before
-trusting any measurement you take here** — the second of those spikes was
-published from a blind probe and had to be redone.
+Three things to expect, in the order they will bite:
 
-The other two directions stay open and independent; pick on appetite, not order.
+1. **Read §2.39 first.** The API has two silent hangs and each is invisible to
+   the client shape that exposes the other. GTK is the *modern* shape (it sends a
+   `handle_token`), so if something hangs, that is the half to suspect.
+2. **GTK will ask for more than FileChooser** (PHASE8 §6.4). Expect probes at
+   `org.freedesktop.portal.Settings`, `Documents`, or the accessibility bus, and
+   possibly odd behaviour when they are absent. The mitigation was always "find
+   out with a real app rather than guess" — this is that pass. Budget for the
+   interface list growing by one or two.
+3. **GTK opens the URI by name**, because that is all its protocol gives it
+   (§6.6). So the app needs ordinary filesystem access to the file it picked;
+   this is not the sandboxed story, and the test should not pretend otherwise.
 
-1. **Or pick a different phase.**
-   - **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
-     volume/battery status items finally read a real mixer and battery rather
-     than reporting absent (P3.7). It is also the biggest single risk left:
-     `amdgpu` `si_support` for the FirePro D-series.
-   - **The D-Bus/portal bridge** — the carved-out half of Phase 7 (§6.7): a
-     jailed session bus and `org.freedesktop.portal.*` so stock GTK/Qt apps get
-     a file chooser from us. Until then, "portals: done" means *our* portals for
-     *our* apps — which is exactly what it should be read as. The guest already
-     has `dbus-1.16.2` and `gtk3` to test against.
-   - **Phase 5 — the installer.** Untouched, and the only phase with no
-     dependency on any of the above.
+Then **P8.4**: `anchor` starts `dbus-daemon` and `abyss-dbus` alongside the
+shell, with `DBUS_SESSION_BUS_ADDRESS` in the environment of everything it
+launches — one command boots a desktop where a stock GTK app can open a file.
 
-   What Phase 6 finally pays off, for the record: remembered window positions
-   for the spatial Finder and dragging desktop icons — both things a Wayland
-   *client* cannot do (§2.22) — plus the Phase-7 debt, a server half for
-   `wlr-screencopy` or its `ext-image-copy-capture-v1` successor (PHASE7 §6.6).
-   Those are P6.7, deliberately last: the contract comes first.
+### The phases that stay open (pick on appetite, not order)
 
-2. **Standing smaller items**, none blocking:
-   - **Golden-image tests** — snapshot the deterministic PNG scenes and diff in
-     CI (`finderSampleEntries`/`desktopSampleEntries` exist for exactly this).
-     The cheapest guard against silent visual regressions, and the toast and
-     status items just added more surface worth guarding.
-   - **A real Aqua save panel** — `file.save` currently leans on ⌘S saving into
-     the folder on screen, because picking from a listing cannot name a file
-     that doesn't exist yet (PHASE7.md P7.2). A name field and a New Folder
-     button would replace it.
-   - **A confirmation sheet for Empty Trash**, once something can host a dialog
-     for a layer surface (§2.27).
-   - **Dragging desktop icons** — needs remembered per-item positions in config.
-     **Re-scoped in P6.7:** this was filed as needing Phase 6, but §2.22 is
-     about *windows*; desktop icons are drawn by the wallpaper **client** into
-     its own layer surface, and dragging them needs only pointer events on that
-     surface plus a position in config — both available since Phase 2. It is
-     shell work, not compositor work.
+- **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
+  volume/battery status items finally read a real mixer and battery rather than
+  reporting absent (P3.7). It is also the biggest single risk left: `amdgpu`
+  `si_support` for the FirePro D-series. **And it is where Phase 6's C1
+  measurements should be repeated** — every number in PHASE6.md came off a
+  headless backend with a synthetic clock, and a real GPU with `rtprio` is the
+  only place they mean what they claim.
+- **Phase 5 — the installer.** Untouched, and the only phase with no dependency
+  on any of the above.
 
-**The rule that earned its place:** a pass is not done until
-`abyss/tests/run.sh --vm --live` is green. Two Phase-3 bugs were invisible on
-Linux and failed only on FreeBSD (§2.33, §2.34).
+### Standing smaller items, none blocking
+
+- **Golden-image tests** — snapshot the deterministic PNG scenes and diff in CI
+  (`finderSampleEntries`/`desktopSampleEntries` exist for exactly this). The
+  cheapest guard against silent visual regressions, and the surface worth
+  guarding keeps widening.
+- **A real Aqua save panel** — `file.save` currently leans on ⌘S saving into the
+  folder on screen, because picking from a listing cannot name a file that does
+  not exist yet (PHASE7.md P7.2). A name field and a New Folder button would
+  replace it. **P8.2 raised the stakes slightly**: `SaveFile` now reaches this
+  stopgap from the session bus too, carrying a `current_name` a real panel would
+  put in that field.
+- **A confirmation sheet for Empty Trash**, once something can host a dialog for
+  a layer surface (§2.27).
+- **Dragging desktop icons** — needs remembered per-item positions in config.
+  **Re-scoped in P6.7:** this was filed as needing Phase 6, but §2.22 is about
+  *windows*; desktop icons are drawn by the wallpaper **client** into its own
+  layer surface, and dragging them needs only pointer events on that surface plus
+  a position in config — both available since Phase 2. It is shell work, not
+  compositor work.
+- **One dialog at a time** (PHASE8 §6.7) — `abyss-portal` blocks while the picker
+  is up, so `abyss-dbus` does too. A `Request.Close` sent mid-dialog is not seen
+  until the picker exits. Worth fixing when something needs it; not worth threads
+  now.
+
+### Two rules that earned their place
+
+**A pass is not done until `abyss/tests/run.sh --vm --live` is green.** Two
+Phase-3 bugs were invisible on Linux and failed only on FreeBSD (§2.33, §2.34).
+
+**A test that has never failed has not been shown to test anything.** Phase 6 and
+Phase 8 both caught a false pass by deliberately breaking the code and checking
+the suite noticed (§2.37, §2.39). It costs ten minutes and it is the only thing
+standing between "green" and "green for the reason I think".
 
 ## 6. Gotchas inherited from the sibling (still true here)
 
@@ -1550,7 +1606,8 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
 | `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`, §2.30) and SCM_RIGHTS fd passing (§2.32) |
-| `de/dbus`, `de/dbusprobe` | **D-Bus, hand-written**: marshalling, SASL EXTERNAL, framing, dispatch — no libdbus/GDBus/sd-bus (PHASE8 §4.1). `dbusprobe` is driven by `dbus-send`/`gdbus` so the other end is never ours |
+| `de/dbus`, `de/dbusprobe` | **D-Bus, hand-written**: marshalling, SASL EXTERNAL, framing, dispatch — no libdbus/GDBus/sd-bus (PHASE8 §4.1). `dbusprobe` is driven by `dbus-send`/`gdbus` so the other end is never ours; its `portal-open` / `portal-open-late` modes are the **two client shapes** of §2.39 |
+| `de/dbusportal`, `de/dbusbin` | the bridge: `RequestHandle` (the object path a client predicts *for itself*), `ChooserOptions`, `FileURI`, and the service that queues the picker **out of** the method handler — plus `abyss-dbus`, which owns `org.freedesktop.portal.Desktop` |
 | `de/currentipc` | the control plane: `Msg` + wire format, `Current.Server`/`connect`/`call` (§2.32) |
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |

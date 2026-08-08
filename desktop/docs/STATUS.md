@@ -3,12 +3,14 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, and
-**Phase 6 — `undertow`, the Swift compositor — is COMPLETE** (all seven passes):
-the Jaguar desktop runs on it, it holds its frame contract under eleven hostile
-processes, and it pays both the §2.22 window-position debt and PHASE7 §6.6's
-screencopy debt. **197 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
-There is no queued next task; see [What's next](#whats-next).
+Last updated: 2026-08-08. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 —
+the D-Bus bridge — is half built** (P8.1 and P8.2 of four). The Jaguar desktop
+runs on our own compositor, which holds its frame contract under eleven hostile
+processes; the portals hand out descriptors; and a caller on a session bus now
+gets the Finder as its file chooser.
+**211 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
+**The next task is queued: P8.3, a real GTK application** — see
+[What's next](#whats-next).
 
 ## What this is
 
@@ -424,13 +426,26 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 are complete, and so is Phase 7 (portals) — all five passes.**
+**Phases 0–3, 6 and 7 are complete.** Phase 8 is half built, and its remaining
+two passes are the only queued work.
+
+> **Start here: P8.3 — a real GTK application.** `GtkFileChooserNative` on a
+> stock GTK 3 app, running as a client of `undertow`, picking a file through the
+> Finder. The guest already carries `gtk3`. **It is the pass that deletes
+> PHASE7 §6.7's caveat** — P8.2 proved the protocol with `gdbus`, which is a
+> D-Bus client, not an application. Read **HANDOFF §2.39** before writing any of
+> it, and expect GTK to probe interfaces we do not have yet (PHASE8 §6.4).
+> Then **P8.4**: `anchor` starts the bus alongside the shell.
+>
+> The rest of this section is the record of what got built, newest last.
+
+**Phase 7 (portals) — all five passes.**
 An app asks the desktop for a file, a notification or a screenshot, and gets back
 a **descriptor**: no D-Bus, no broker, no flatpak. The screenshot goes furthest —
 the request names nothing, the reply names nothing, and the image is unlinked the
 moment it is opened, so the descriptor is the only route to it that exists.
 
-**Phase 6 — `undertow`, the Swift compositor — is under way**
+**Phase 6 — `undertow`, the Swift compositor — is COMPLETE**
 ([PHASE6.md](PHASE6.md), passes P6.1–P6.7). Three risks were spiked on both
 platforms before the plan was written: Swift imports wlroots **directly** (no
 bindgen, unlike the sibling — the C shim is a ~15-line listener trampoline),

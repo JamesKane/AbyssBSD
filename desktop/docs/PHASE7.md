@@ -5,9 +5,11 @@ executable detail, grounded in a read of the sibling's `reef-portal`, `reef-open
 and `reef-notify`. Read [PLAN.md](PLAN.md) for the locked decisions and
 [PHASE3.md](PHASE3.md) for the substrate this builds on.
 
-Last updated: 2026-08-02. **All five passes are done.** What is *not* here is
+Last updated: 2026-08-08. **All five passes are done.** What is *not* here is
 §6.7's D-Bus bridge, which was carved out on purpose — read "portals: done" as
-"*our* portals, for *our* apps, done".
+"*our* portals, for *our* apps, done". That bridge is now [Phase 8](PHASE8.md)
+and is half built: a caller on the session bus gets the Finder (P8.2), but the
+caveat stands until a real GTK app does (P8.3). See §6.7.
 
 **Numbered 7, being done out of order.** PLAN.md's phases run 0–6 and this one is
 new; it is being built now, before Phase 4 (Mac Pro) and Phase 6 (the Swift
@@ -386,3 +388,16 @@ compositor-owned path — and none of them touches the portal's *shape*, because
 **6.7 The D-Bus gap is real.** Until the carved-out bridge exists, a stock GTK
 or Qt app gets no file chooser from us. Anyone reading "portals: done" should
 read it as "*our* portals, for *our* apps, done".
+
+*Update, 2026-08-08 — half closed.* [PHASE8.md](PHASE8.md) built the bridge:
+`abyss-dbus` owns `org.freedesktop.portal.Desktop`, and a caller on the session
+bus gets the Finder and the file the user picked (P8.2). **The caveat above
+stands until P8.3**, because everything that has driven it so far is a D-Bus
+client — `dbus-send`, `gdbus` — and not an *application*. GTK asking through its
+own toolkit is a different test, and it is the one that retires this paragraph.
+
+One thing P8.2 found that belongs here: **their protocol has no room for a
+descriptor.** `FileChooser`'s `Response` returns `uris`, so a foreign app is
+told where the file is and opens it by name. The capability story in this phase
+is not something the bridge inherits — it is ours, and it stops at the bridge
+(PHASE8 §6.6).
