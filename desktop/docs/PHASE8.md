@@ -4,8 +4,9 @@ The half carved out of Phase 7, twice deferred and now due. Read
 [PHASE7.md](PHASE7.md) for the portals this extends, [PLAN.md](PLAN.md) for the
 locked decisions, and [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-07. **Scoped, not started.** Two risks were spiked first,
-on both platforms (§4), because the phase's shape depended on the answers.
+Last updated: 2026-08-08. **P8.1 done** — we speak D-Bus, with no library, and
+GLib's own implementation agrees. Two risks were spiked first, on both platforms
+(§4), because the phase's shape depended on the answers.
 
 **Numbered 8 because it is new.** PLAN.md runs 0–6, Phase 7 was added for
 portals; this is the piece Phase 7 explicitly refused, promoted to a phase of its
@@ -81,15 +82,39 @@ alike is worth the extra code.
 
 ## 3. Ordered passes
 
-**P8.1 — `de/dbus`: the wire protocol, as a library.**
-Connect to `$DBUS_SESSION_BUS_ADDRESS` (unix path *and* abstract), SASL EXTERNAL
-authentication, the message header, the type system we actually need
-(`s o u b v a{sv} ay h`), serial/reply matching, and method dispatch. No portal
-yet.
-*Verify:* unit tests for marshalling round-trips against known-good byte
-sequences, and a live test that registers a name on a **real `dbus-daemon`** and
-answers an introspection call — `dbus-send` as the client, so the other end is
-not our own code.
+**P8.1 — `de/dbus`: the wire protocol, as a library. ✅ done.**
+Connect (unix path *and* abstract addresses), SASL EXTERNAL with
+`NEGOTIATE_UNIX_FD`, the message header and framing, the type system the portal
+needs, serial/reply matching, and method dispatch. **No dependency at all** —
+`de/dbus` imports only `CPlatform`, for the same `SCM_RIGHTS` helpers
+`CurrentIPC` has used since P3.5.
+
+**The rule the whole format turns on:** a value is aligned to its natural
+boundary **measured from the start of the message**, not from the start of
+whatever buffer it is being written into. A marshaller that trusts `bytes.count`
+produces bytes its own reader accepts and every real bus rejects — so
+`Marshaller` and `Unmarshaller` both carry an explicit `origin`, and a unit test
+pins it by marshalling the same value at two different origins and checking the
+padding differs.
+
+Three more places the format is easy to get quietly wrong, each now a test:
+a **string's** length is a `u32` and excludes its NUL, while a **signature's** is
+a single *byte*; an **array's** declared length counts its content and **not**
+the padding between the length word and the first element (include it and every
+array of 8-aligned things reads four bytes long); and a **descriptor** is
+marshalled as an *index* into an out-of-band array, exactly as `CurrentIPC`
+learned in P3.5 — decoding with the wrong fd count now throws rather than
+handing back somebody else's descriptor.
+
+*Verified:* **18 unit tests** (197 total) for the rules above, plus
+`abyss/tests/live-dbus.sh` — and the point of that test is **the client on the
+other end is never our own code**. `dbus-daemon` is the bus; `dbus-send` calls
+us; and **`gdbus` — GLib's implementation, an entirely independent encoder —
+round-trips the `a{sv}` options dictionary every portal method takes, a nested
+array, and parses our introspection XML with its own parser.** It also asserts
+that an unknown method gets an **error reply rather than silence**, because a
+caller that receives nothing hangs for its whole timeout with no diagnostic —
+the same failure shape as P6.3's missing xdg-shell configure.
 
 **P8.2 — `abyss-dbus`: the portal on the bus.**
 Own `org.freedesktop.portal.Desktop`, implement `FileChooser.OpenFile` and

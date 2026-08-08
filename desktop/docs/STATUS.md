@@ -7,7 +7,7 @@ Last updated: 2026-08-02. **Phases 0–3 and Phase 7 (portals) are complete**, a
 **Phase 6 — `undertow`, the Swift compositor — is COMPLETE** (all seven passes):
 the Jaguar desktop runs on it, it holds its frame contract under eleven hostile
 processes, and it pays both the §2.22 window-position debt and PHASE7 §6.6's
-screencopy debt. **179 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
+screencopy debt. **197 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
 There is no queued next task; see [What's next](#whats-next).
 
 ## What this is
@@ -74,7 +74,7 @@ stock sway in the FreeBSD 15 build VM, captured with grim:
 And the toolkit alone, headless with no compositor at all:
 ![an Aqua window on FreeBSD](screenshots/freebsd-window.png)
 
-The whole **harness** passes there too — **179 unit tests and all 35 live modes**,
+The whole **harness** passes there too — **197 unit tests and all 35 live modes**,
 including pointer/keyboard injection, file operations checked on disk, and the
 desktop, menu bar and Dock brought up as one session. That session is now run by
 **`anchor`**, the Swift supervisor, rather than by a shell script — and the menu
@@ -91,14 +91,14 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.
-- Build: `swift build`. Tests: `swift test` (179 green — Aqua toolkit + desktop
+- Build: `swift build`. Tests: `swift test` (197 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
   extraction, self-executable resolution, PoolConfig read/write/watch, and the
   CurrentIPC codec + descriptor passing, the supervisor's restart policy, the
   hardware bridges' parsing, the portal's refusals, and the screencopy pixel
   normalisation).
-  **The same 179 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
+  **The same 197 pass on FreeBSD** in the build VM (`abyss/vm/build.sh`).
 - The package layout (`Package.swift`, targets under `de/`):
   - `CWayland` — C interop: libwayland-client + generated **xdg-shell** + a
     shm-fd helper + a shim exporting libwayland's static-inline requests so
@@ -522,11 +522,19 @@ answer. **We are the portal** — `abyss-dbus` owns
 rather than backing stock `xdg-desktop-portal` (which would put a broker on the
 path and leave two portal frontends with different behaviour).
 
-**D-Bus is spoken natively from Swift**: the spike connects, authenticates
-(SASL EXTERNAL) and calls `Hello` on both platforms in ~110 lines, with no
-libdbus (discouraged upstream), no GDBus (drags in the GLib/GTK stack this
-project rejects) and no sd-bus (systemd). The Linux box does not even have
-`dbus-devel` installed.
+**P8.1 is done — `de/dbus` speaks D-Bus with no dependency at all** (only
+`CPlatform`, for the `SCM_RIGHTS` helpers `CurrentIPC` already uses). No libdbus
+(discouraged upstream), no GDBus (drags in the GLib/GTK stack this project
+rejects), no sd-bus (systemd) — the Linux box does not even have `dbus-devel`
+installed.
+
+And it is checked against somebody else's implementation, never our own on both
+ends: `dbus-daemon` is the bus, `dbus-send` calls us, and **`gdbus` — GLib's
+D-Bus — round-trips the `a{sv}` options dictionary every portal method takes and
+parses our introspection XML with its own parser** (`abyss/tests/live-dbus.sh`).
+
+**Next: P8.2**, `org.freedesktop.portal.Desktop` on the bus, translating to the
+existing `abyss-portal`.
 
 **The other directions stay open:** Phase 4 (Mac Pro bring-up — real GPU,
 hardware cursor, `rtprio`, and where Phase 6's C1 measurements should be

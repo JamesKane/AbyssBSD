@@ -119,6 +119,11 @@ if [ "$live" -eq 1 ]; then
   sh "$root/abyss/tests/live-screenshot.sh"
 fi
 
+# D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never
+# our own encoder on both ends (PHASE8.md P8.1). Needs no compositor.
+echo "== D-Bus, against a real bus =="
+sh "$root/abyss/tests/live-dbus.sh"
+
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on
 # Linux it asserts the stubs report themselves absent). No compositor needed.
 echo "== hardware bridges =="

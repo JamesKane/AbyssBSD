@@ -130,6 +130,16 @@ let package = Package(
             dependencies: ["CPlatform"],
             path: "de/currentipc"
         ),
+        // D-Bus, spoken natively: the wire format, authentication and dispatch,
+        // with no libdbus (discouraged upstream), no GDBus (that means GLib and
+        // through it the GTK stack this project rejects) and no sd-bus
+        // (systemd). PHASE8.md §4.1. Depends on CPlatform only for the
+        // SCM_RIGHTS helpers CurrentIPC already uses.
+        .target(
+            name: "DBus",
+            dependencies: ["CPlatform"],
+            path: "de/dbus"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
@@ -280,6 +290,13 @@ let package = Package(
             dependencies: ["Undertow", "CAllocProbe"],
             path: "de/undertowbin"
         ),
+        // Drive the DBus library against a real bus — the client on the other
+        // end is dbus-send, not us (PHASE8.md §5).
+        .executableTarget(
+            name: "dbusprobe",
+            dependencies: ["DBus"],
+            path: "de/dbusprobe"
+        ),
         // Read the machine through the FreeBSD-native bridges.
         .executableTarget(
             name: "ventsctl",
@@ -321,6 +338,11 @@ let package = Package(
             name: "AnchorTests",
             dependencies: ["Anchor"],
             path: "Tests/AnchorTests"
+        ),
+        .testTarget(
+            name: "DBusTests",
+            dependencies: ["DBus"],
+            path: "Tests/DBusTests"
         ),
         .testTarget(
             name: "UndertowTests",

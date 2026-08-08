@@ -1409,9 +1409,10 @@ positions** (a window reopens where it was dragged, persisted through
 **Phase 8 — the D-Bus bridge — is scoped and started** ([PHASE8.md](PHASE8.md),
 P8.1–P8.4): `abyss-dbus` owns `org.freedesktop.portal.Desktop` and translates to
 the existing `abyss-portal`, so a stock GTK app gets the Finder as its file
-chooser. **D-Bus is spoken natively from Swift** — no libdbus, no GDBus, no
-sd-bus; the spike authenticates and calls `Hello` on both platforms in ~110
-lines. **The immediate task is P8.1: the wire protocol as a library.**
+chooser. **P8.1 is done: `de/dbus` speaks D-Bus with no
+dependency** — no libdbus, no GDBus, no sd-bus. It is validated against GLib's
+implementation rather than its own parser (`live-dbus.sh`). **The immediate task
+is P8.2: `org.freedesktop.portal.Desktop` on the bus.**
 Phase 4 (Mac Pro) and Phase 5 (the installer) stay open.
 
 **The wlroots binding is 29 lines of C.** Swift imports the headers directly; the
@@ -1501,6 +1502,7 @@ Linux and failed only on FreeBSD (§2.33, §2.34).
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
 | `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`, §2.30) and SCM_RIGHTS fd passing (§2.32) |
+| `de/dbus`, `de/dbusprobe` | **D-Bus, hand-written**: marshalling, SASL EXTERNAL, framing, dispatch — no libdbus/GDBus/sd-bus (PHASE8 §4.1). `dbusprobe` is driven by `dbus-send`/`gdbus` so the other end is never ours |
 | `de/currentipc` | the control plane: `Msg` + wire format, `Current.Server`/`connect`/`call` (§2.32) |
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
