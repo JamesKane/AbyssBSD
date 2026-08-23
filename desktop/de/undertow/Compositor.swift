@@ -148,8 +148,18 @@ public final class Compositor {
     /// client has nothing to assert on. This is that trace.
     public private(set) var everMapped: [String] = []
 
+    /// - Parameter socketName: the `WAYLAND_DISPLAY` to bind, or nil to take the
+    ///   first free `wayland-N`.
+    ///
+    ///   A session that *names* its display can put that name in its children's
+    ///   environment before the compositor exists, which is what lets one
+    ///   command bring up a whole desktop rather than two — the same argument
+    ///   `anchor` makes for naming its own bus socket (PHASE8 P8.4). Asking for
+    ///   a name that is taken is an error rather than a silent fallback to
+    ///   another one: the fallback would hand every component a display nothing
+    ///   is listening on.
     public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32,
-                configDir: String? = nil) throws {
+                configDir: String? = nil, socketName: String? = nil) throws {
         self.places = WindowPlaces(configDir: configDir)
         self.session = session
         self.outputWidth = outputWidth
@@ -235,10 +245,17 @@ public final class Compositor {
             }, me)
         }
 
-        guard let socket = wl_display_add_socket_auto(session.display) else {
-            throw BackendError.noSocket
+        if let wanted = socketName {
+            guard wanted.withCString({ wl_display_add_socket(session.display, $0) }) == 0 else {
+                throw BackendError.socketTaken(wanted)
+            }
+            self.socketName = wanted
+        } else {
+            guard let socket = wl_display_add_socket_auto(session.display) else {
+                throw BackendError.noSocket
+            }
+            self.socketName = String(cString: socket)
         }
-        socketName = String(cString: socket)
     }
 
     deinit {

@@ -60,11 +60,26 @@ public struct ComponentSpec: Equatable, Sendable {
     public let argv: [String]
     /// Environment entries layered over the supervisor's own.
     public let env: [String: String]
+    /// Unix sockets that must **accept a connection** before this component is
+    /// started — its dependencies, stated as the only thing about them that can
+    /// actually be checked.
+    ///
+    /// A session is not a list of processes, it is processes that *compose*
+    /// (HANDOFF §2.26), and the ordering between them is real: the D-Bus bridge
+    /// cannot own a name on a bus that is not listening yet. Sleeping instead
+    /// would be a race with better manners. Waited on at every start, not only
+    /// the first, because a restart has the same dependency the first start had
+    /// — and it is the restart, arriving microseconds after the thing it needs
+    /// died, that a bring-up-only gate would leave to burn its whole failure
+    /// budget in a millisecond.
+    public let requires: [String]
 
-    public init(name: String, argv: [String], env: [String: String] = [:]) {
+    public init(name: String, argv: [String], env: [String: String] = [:],
+                requires: [String] = []) {
         self.name = name
         self.argv = argv
         self.env = env
+        self.requires = requires
     }
 }
 
@@ -99,4 +114,32 @@ public func currentEnvironment() -> [String: String] {
 /// made (HANDOFF §2.25).
 public func splitCommand(_ s: String) -> [String] {
     s.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+}
+
+/// Turn a command into an absolute executable path: used as-is when it contains
+/// a slash, otherwise searched along `path` (defaults to `$PATH`).
+///
+/// Resolving here, in the parent, is the same discipline `Launcher` follows for
+/// the same reason (HANDOFF §2.25): after the fork a child may only make
+/// async-signal-safe calls, and `execvpe` does not exist on FreeBSD. This is a
+/// second copy of that logic on purpose — `Anchor` is a supervisor and must not
+/// drag in the toolkit (and through it cairo, FreeType and HarfBuzz) to find a
+/// binary on `$PATH`.
+public func resolveExecutable(_ command: String, path: String? = nil) -> String? {
+    guard !command.isEmpty else { return nil }
+    func isExecutableFile(_ p: String) -> Bool {
+        var st = stat()
+        guard p.withCString({ stat($0, &st) == 0 }) else { return false }
+        let mode = UInt32(st.st_mode)
+        return (mode & 0o170000) == 0o100000 && (mode & 0o111) != 0
+    }
+    if command.contains("/") {
+        return isExecutableFile(command) ? command : nil
+    }
+    let search = path ?? getenv("PATH").map { String(cString: $0) } ?? "/usr/bin:/bin"
+    for dir in search.split(separator: ":", omittingEmptySubsequences: true) {
+        let candidate = String(dir) + (dir.hasSuffix("/") ? "" : "/") + command
+        if isExecutableFile(candidate) { return candidate }
+    }
+    return nil
 }

@@ -66,6 +66,11 @@ do {
         if let detail = reply.string("detail"), !detail.isEmpty {
             for part in detail.split(separator: ",") { emit(1, "  \(part)") }
         }
+        // The session's own bus, so "which bus is this desktop on" has an answer
+        // that does not involve reading a log or guessing a path.
+        if let bus = reply.string("bus"), !bus.isEmpty {
+            emit(1, "bus: \(bus)")
+        }
     case "quit", "shutdown":
         emit(1, "session: shutting down")
     default:

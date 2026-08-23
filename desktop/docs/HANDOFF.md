@@ -7,19 +7,18 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-23. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 is
-three passes of four**. The Jaguar shell runs on FreeBSD, on **our own
-compositor** (`undertow`), over a Swift control plane, session supervisor and
-hardware bridges; the portals hand out descriptors; and **an unmodified GTK 3
-application, which has never heard of this desktop, opens a file through the
-Finder**.
-**221 unit tests + 35 live modes, green on Linux and FreeBSD.**
+Last updated: 2026-08-23. **Phases 0–3 and 6–8 are complete.** The Jaguar shell
+runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
+plane, session supervisor and hardware bridges; the portals hand out descriptors;
+and **one command boots a desktop where an unmodified GTK 3 application, which
+has never heard of this desktop, opens a file through the Finder**.
+**234 unit tests + 35 live modes, green on Linux and FreeBSD.**
 
 **Picking this up cold?**
 
-1. **The next task is queued, not a choice: P8.4, `anchor` starts the bus**
-   ([PHASE8.md](PHASE8.md) §3). Read §5 for why, and for the three phases that
-   stay open independently of it.
+1. **Nothing is queued — the next move is a choice.** Phase 8 closed with P8.4;
+   the open phases are **4 (Mac Pro bring-up)** and **5 (the installer)**, and
+   §5 lays out both plus the standing smaller items.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
 3. Skim the §2 index for the trap nearest what you're about to touch. **The
@@ -37,10 +36,13 @@ Finder**.
    - **§2.41** — whose lifetime is this listener, exactly? A compositor must
      outlive its input client, and only a test that shuts down in the right
      order will ever say so.
+   - **§2.42** — name your sockets instead of reading back what something else
+     chose, and test readiness by connecting. A discovered address is one that
+     changes under you.
 4. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 221 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 234 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -181,7 +183,7 @@ before the pixels do*:
   PHASE7 §6.6's **screencopy server half** (P7.5's `abyssgrab` captures
   `undertow` unmodified — the client half never knew the difference).
 
-**Phase 8 — the D-Bus bridge (P8.1–P8.3 done, P8.4 to go).** Portals for
+**Phase 8 — the D-Bus bridge (P8.1–P8.4, complete).** Portals for
 everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
 
 - **`de/dbus` speaks D-Bus with no dependency at all** — no libdbus (discouraged
@@ -208,6 +210,13 @@ everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
   own window on our compositor, `GtkFileChooserNative` opens **the Finder**, and
   it is handed a file it never named — it named a directory. That is the claim
   PHASE7 §6.7 could not make, and nothing before this pass could.
+- **And `anchor` boots the whole thing with one command** (P8.4): compositor,
+  bus, portal, bridge, desktop, menu bar, Dock — in that order, with
+  `DBUS_SESSION_BUS_ADDRESS` in every child's environment. The bus is **first**
+  because the shell is what launches applications, and its socket is one **we
+  name** (`$ABYSS_RUNTIME_DIR/bus`) rather than one we read back, so the address
+  outlives a restart of the daemon. Dependencies are declared as sockets and
+  waited on with `connect(2)`, which is the only readiness test that is true.
 - **And the plan's headline claim was wrong.** It promised a foreign app "a
   descriptor as its answer"; the interface definition on disk says `Response`
   carries `uris` — strings — with no descriptor in any version. **Their answer
@@ -268,6 +277,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.39 | An async, object-based API has more than one way to hang — and each is invisible to the client that exposes the other |
 | 2.40 | A signal that answers **one** client must be *addressed* to it — GTK adds no match rule, and `gdbus monitor` can't see an addressed signal either |
 | 2.41 | Input devices belong to clients: free a device's listeners on its `destroy`, or the compositor aborts when the harness lets go of the pointer |
+| 2.42 | Name the socket; don't read the address back. A discovered address changes when the thing that chose it restarts — and readiness is `connect(2)`, never "the file exists" |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -534,6 +544,77 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.42 Name the socket, don't read the address back
+(P8.4 — `anchor` starting a session bus, and a compositor, for the whole
+desktop.)
+
+Every `dbus-daemon` example does this:
+
+```sh
+addr=$(dbus-daemon --session --print-address=1 --fork)   # ask what it chose
+export DBUS_SESSION_BUS_ADDRESS="$addr"
+```
+
+and it is wrong for a supervisor, in a way that only shows up later. **An address
+you discover is an address that changes when the thing that chose it restarts.**
+The moment `dbus-daemon` is a supervised component — one that can die and come
+back — every child already holding `DBUS_SESSION_BUS_ADDRESS` is pointing at a
+socket that no longer exists, and the variable cannot be un-inherited. The bus
+becomes the one component in the session that is *not* restartable, and nothing
+says so.
+
+Inverting it costs one flag and fixes all of it:
+
+```
+--address=unix:path=$ABYSS_RUNTIME_DIR/bus
+```
+
+The address is now knowable **before the daemon exists** (so it can be exported
+before anything is spawned), it is stable across restarts, and it is a property
+of the *session* rather than of a process — which is also why it belongs beside
+`anchor.sock` and `portal.sock` rather than in `/tmp`. `--print-address=1` is
+still passed, but as a *log line* rather than a channel: it answers "which bus is
+this session on" for a human, and a mismatch with what we asked for would be
+visible instead of mysterious.
+
+The same argument applied a second time, to a different socket: `undertow` picked
+its display with `wl_display_add_socket_auto`, so a session had to *start* the
+compositor, *read* the socket it chose, and only then start everything else —
+which is two commands, not one. `undertow --socket NAME` makes the display a
+name the session chooses too. Asking for a taken name is an **error**, not a
+silent fallback to another: a fallback would hand every component a display
+nothing is listening on.
+
+**And the other half: readiness is `connect(2)`.** Having named a socket you must
+still wait for it, and the two obvious ways are both wrong. Waiting for the file
+to appear is a race with a window: `bind(2)` creates it and `listen(2)` is a
+separate call, so a client that arrives in the gap gets `ECONNREFUSED` from a
+dependency a file-watcher already called ready. A `sleep` is the same race with
+better manners (§2.26). Connecting and dropping the connection immediately
+reaches no protocol at all, which is exactly the point — it asks whether
+something is listening, and nothing else.
+
+So a component declares the sockets it cannot start without, and the supervisor
+waits on **every** start rather than only the first. The restart is the case that
+matters: it arrives microseconds after the thing it needs died, and a
+bring-up-only gate would let it burn a whole failure budget in a millisecond and
+take the session down with it.
+
+Two things worth keeping from how this played out:
+
+- **The gate paid for itself before it was tested.** The first run of
+  `live-session-gtk.sh` failed with *"desktop needs /run/user/1000/abyss-p84-…,
+  which never accepted a connection"* — because the test had forgotten to pass
+  `--socket` to the compositor. Without the gate that is three components
+  crash-looping against a display that does not exist, and the message is
+  whatever the toolkit says about a missing socket, five restarts deep.
+- **"Nothing restarted" is the assertion that tells a gate from a race.** Getting
+  the order right on paper satisfies every other check — the supervisor logs
+  "bridge up" the moment it spawns it, gate or no gate — so log order proves
+  nothing. `up(0)` across every component says each one found what it needed
+  *already listening*. Removing the wait produced `up(1)`: a session that works
+  anyway, most of the time, by crashing until it doesn't have to.
 
 ### 2.41 A compositor must outlive its input
 (P8.3 — `undertow` aborting on the way out of a green test.)
@@ -1497,6 +1578,7 @@ or name a subset: `run-live.sh dock trash`). 35 modes today. These are the
 | `live-portal.sh` | three processes: a client gets an fd for a file **it never named** |
 | `live-portal-dbus.sh` | five processes: `dbus-daemon`, sway, `abyss-portal`, `abyss-dbus`, a caller. Both client shapes (§2.39), and **`dbus-monitor` decodes our `Response` signal with libdbus's parser** |
 | `live-gtk.sh` | six processes, and the important one is not ours: a **stock GTK 3 app** on `undertow` gets the Finder from `GtkFileChooserNative` and reads a file it never named. Asserts the `Response` was *addressed* (§2.40) and that the compositor **exited cleanly after its input client left** (§2.41). Skips loudly (exit 77) with no GTK runtime |
+| `live-session-gtk.sh` | the same claim with **one command**: `anchor` brings up compositor, bus, portal, bridge and shell, and a stock GTK app gets its file. Asserts **nothing restarted** — the assertion that tells a dependency gate from a race — that the bridge owns the portal name on the bus anchor exported, and that `quit` leaves no stray `dbus-daemon` |
 | `live-sandbox.sh` | the client is in **capability mode** and `open(2)` fails, yet it reads the file |
 | `live-notify.sh` | a notification crosses the portal, becomes a toast, reserves no space, and its surface is released on expiry |
 
@@ -1528,20 +1610,21 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 221 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 234 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
 abyss/tests/run.sh --vm --live     # the gate before calling a pass done
 ```
 
-The 221 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 234 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
-passing, the supervisor's restart policy, the hardware bridges' parsing, the
-portal's refusals, toast layout/expiry, the compositor's metronome and layer
-arithmetic, the D-Bus wire format's alignment rules, and the portal bridge's
-path derivation, URI escaping and Settings namespace matching.
+passing, the supervisor's restart policy and the shape of the session it starts,
+the hardware bridges' parsing, the portal's refusals, toast layout/expiry, the
+compositor's metronome and layer arithmetic, the D-Bus wire format's alignment
+rules, and the portal bridge's path derivation, URI escaping and Settings
+namespace matching.
 
 **Both platforms, every time.** Phase 3 earned this rule: two bugs
 (`O_NONBLOCK` inheritance on `accept`, a string sysctl read as an integer) were
@@ -1590,38 +1673,18 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-**Where things stand.** Phases 0–3, 6 and 7 are complete; Phase 8 is three
-passes of four. The Jaguar shell runs on FreeBSD, on our own compositor, over a
-Swift control plane, session supervisor and hardware bridges — and an unmodified
-GTK 3 application opens a file through the Finder. **221 unit tests and 35 live
+**Where things stand.** Phases 0–3 and 6–8 are complete. The Jaguar shell runs on
+FreeBSD, on our own compositor, over a Swift control plane, session supervisor
+and hardware bridges — and **one command boots a desktop where an unmodified GTK
+3 application opens a file through the Finder**. **234 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-### The queued task: P8.4 — the session, whole
+### Nothing is queued: the next move is a choice
 
-This is the only item here that is *next* rather than *available*. Everything
-else is a phase you could pick on appetite.
+For the first time since Phase 3 there is no "next pass". Both remaining phases
+are independent of each other and of everything above; pick on appetite.
 
-`anchor` starts `dbus-daemon` and `abyss-dbus` alongside the shell, with
-`DBUS_SESSION_BUS_ADDRESS` in the environment of everything it launches, so that
-**one command** boots a desktop where a stock GTK app can open a file. Today that
-takes `abyss/tests/live-gtk.sh` and six hand-started processes.
-
-Three things to expect:
-
-1. **`live-gtk.sh` is the specification.** Everything it exports before starting
-   a process is something `anchor` has to put in the environment instead —
-   `DBUS_SESSION_BUS_ADDRESS`, `WAYLAND_DISPLAY`, `ABYSS_RUNTIME_DIR`. Read it as
-   a checklist, then delete the parts `anchor` takes over.
-2. **§2.26's rule applies to the bus too.** The supervisor test's real content is
-   that the components *compose*, not that each starts; a bus that comes up after
-   the client that needs it is a race, not a feature.
-3. **Which bus is a policy question, not a mechanism one.** `dbus-daemon` may
-   already be running (a user's login session, a nested test). Decide whether
-   `anchor` adopts an existing `DBUS_SESSION_BUS_ADDRESS` or insists on its own,
-   and say so in the pass — `abyss-dbus` refuses to share the portal name (P8.2),
-   so the failure mode if you get this wrong is a bridge that will not start.
-
-### The phases that stay open (pick on appetite, not order)
+### The two phases that are left
 
 - **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
   volume/battery status items finally read a real mixer and battery rather than
@@ -1701,7 +1764,7 @@ standing between "green" and "green for the reason I think".
 | `de/dbusportal`, `de/dbusbin` | the bridge: `RequestHandle` (the object path a client predicts *for itself*), `ChooserOptions`, `FileURI`, `PortalSettings` (what we tell a foreign toolkit about how the desktop looks), and the service that queues the picker **out of** the method handler and **addresses** its `Response` — plus `abyss-dbus`, which owns `org.freedesktop.portal.Desktop` |
 | `de/currentipc` | the control plane: `Msg` + wire format, `Current.Server`/`connect`/`call` (§2.32) |
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
-| `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
+| `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, the session plan, dependency gating, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh`, and since P8.4 starts the **whole** desktop: compositor, bus, portal, bridge, shell |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
@@ -1716,7 +1779,7 @@ standing between "green" and "green for the reason I think".
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
-| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`**/**`live-gtk.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, `gtkpick.c` (a stock GTK client, `dlopen`ed so nothing here links GTK), the virtual input helpers |
+| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`**/**`live-gtk.sh`**/**`live-session-gtk.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, `gtkpick.c` (a stock GTK client, `dlopen`ed so nothing here links GTK), the virtual input helpers |
 | `abyss/tests/adversary.c` | hostile Wayland clients for C2: `hard` (flood, never waits for a reply), `zombie`, `deaf`, `churn` (§2.38) |
 | `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |

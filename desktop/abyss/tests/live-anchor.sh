@@ -139,13 +139,20 @@ done
   && { echo "FAIL: discovered the parent session's socket ($wd), not the test one"; exit 1; }
 echo "headless sway on $wd"
 
-# The supervisor starts the desktop, the menu bar and the Dock itself.
+# The supervisor starts the whole default session itself — the bus, the portal
+# and the D-Bus bridge as well as the three shell components (P8.4). This test
+# is about the shell half; `live-session-gtk.sh` is where the services are put
+# to work. Waiting on `dock=up` rather than a component count, because the count
+# is a number that changes when the session gains a service and the name is what
+# this test actually means.
 "$anchor" --display "$wd" > "$rundir/session.log" 2>&1 &
 anchor_pid=$!
 
 i=0
-while [ $i -lt 80 ]; do
-  if "$ctl" status 2>/dev/null | grep -q "components: 3"; then break; fi
+while [ $i -lt 120 ]; do
+  "$ctl" status 2>/dev/null | grep -q "dock=up" && break
+  kill -0 "$anchor_pid" 2>/dev/null \
+    || { echo "FAIL: anchor exited during bring-up"; cat "$rundir/session.log"; exit 1; }
   sleep 0.25; i=$((i + 1))
 done
 "$ctl" status > "$rundir/status3" 2>&1 \
@@ -176,6 +183,18 @@ echo "ok: the menu bar reserved its 22px (workspace starts at y=22)"
 WAYLAND_DISPLAY="$wd" grim "$out" 2>/dev/null && echo "captured $out"
 
 "$ctl" quit >/dev/null 2>&1 || true
-sleep 1
+i=0
+while [ $i -lt 60 ]; do kill -0 "$anchor_pid" 2>/dev/null || break; sleep 0.1; i=$((i + 1)); done
+kill -0 "$anchor_pid" 2>/dev/null \
+  && { echo "FAIL: anchor ignored quit"; cat "$rundir/session.log"; exit 1; }
 anchor_pid=""
+
+# The session's own bus goes with it. `dbus-daemon` is the one child that would
+# happily outlive its parent, and a supervisor that leaks one per run is worse
+# than one that starts none — the leak is invisible until something runs out.
+pgrep -f "address=unix:path=$rundir/bus" >/dev/null 2>&1 \
+  && { echo "FAIL: the session's dbus-daemon outlived the session"
+       pgrep -af "address=unix:path=$rundir/bus"; exit 1; }
+echo "ok: quit took the services down with the shell (no stray bus)"
+
 echo "all green (the Swift supervisor runs the session)."

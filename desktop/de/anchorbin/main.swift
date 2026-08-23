@@ -12,12 +12,20 @@
 //     --display NAME       the Wayland socket to point components at
 //                          (default: $WAYLAND_DISPLAY).
 //     --component NAME=CMD supervise CMD as NAME (repeatable). Without any,
-//                          the default shell is desktop + menubar + dock.
+//                          the default session is started (see below).
 //     --without NAME       drop one of the default components (repeatable).
 //     --binary PATH        the shell binary for the default components
 //                          (default: $ABYSS_APP_BINARY, else AquaDemo beside us).
 //     --runtime-dir DIR    where the control socket lives ($ABYSS_RUNTIME_DIR).
+//     --dbus-config PATH   dbus-daemon config for the session bus (default:
+//                          --session, the system's own).
 //     --max-restarts N     consecutive failures tolerated per component (5).
+//
+// The default session is **bus, portal, bridge, desktop, menubar, dock** — see
+// `de/anchor/Session.swift` for the ordering and why it is that one. The point
+// of the first three is that one command boots a desktop where a *foreign* app
+// — a stock GTK program that has never heard of us — can open a file through
+// the Finder (PHASE8.md P8.4).
 //
 // The session is controlled with `abyssctl status|quit`.
 
@@ -55,6 +63,7 @@ var explicitComponents: [(String, String)] = []
 var without: Set<String> = []
 var binary = ProcessInfoEnv("ABYSS_APP_BINARY")
 var runtimeDir = ProcessInfoEnv("ABYSS_RUNTIME_DIR")
+var dbusConfig: String?
 var maxRestarts = 5
 
 func ProcessInfoEnv(_ k: String) -> String? {
@@ -76,6 +85,7 @@ while i < args.count {
     case "--display":     display = next("a socket name")
     case "--binary":      binary = next("a path")
     case "--runtime-dir": runtimeDir = next("a directory")
+    case "--dbus-config": dbusConfig = next("a path")
     case "--max-restarts":
         guard let n = Int(next("a number")), n >= 0 else { fail("--max-restarts wants a number") }
         maxRestarts = n
@@ -91,7 +101,8 @@ while i < args.count {
         let usage = """
         usage: anchor [--compositor CMD] [--display NAME] [--component NAME=CMD]
                       [--without NAME] [--binary PATH] [--runtime-dir DIR]
-                      [--max-restarts N]
+                      [--dbus-config PATH] [--max-restarts N]
+        the default session: bus, portal, bridge, desktop, menubar, dock
         control it with: abyssctl status | abyssctl quit
 
         """
@@ -122,17 +133,52 @@ let shellBinary: String = binary ?? {
 
 var specs: [ComponentSpec] = []
 if explicitComponents.isEmpty {
-    // The default session, in stacking order: the desktop underneath, then the
-    // menu bar, then the Dock — the same three `abyss/session.sh` runs.
-    let scenes = [("desktop", "wallpaper"), ("menubar", "menubar"), ("dock", "dock")]
     guard access(shellBinary, X_OK) == 0 else {
         fail("no shell binary at \(shellBinary) (build it, or pass --binary)")
     }
-    for (name, scene) in scenes where !without.contains(name) {
-        var env = ["AQUA_SCENE": scene, "ABYSS_APP_BINARY": shellBinary]
-        if let d = display { env["WAYLAND_DISPLAY"] = d }
-        specs.append(ComponentSpec(name: name, argv: [shellBinary], env: env))
+    guard let dir = try? Current.runtimeDir() else {
+        fail("no runtime directory — pass --runtime-dir or set ABYSS_RUNTIME_DIR")
     }
+    // Where our own services live: beside this binary, the same rule the shell
+    // binary follows, so a build tree and an installed tree both work with no
+    // configuration.
+    let serviceDir = selfDirectory() ?? "."
+    // `dbus-daemon` is somebody else's program, so it is looked up on $PATH —
+    // and resolved HERE, in the parent, because a forked child may not go
+    // searching (HANDOFF §2.25). A box without one still gets a desktop; it
+    // just gets one with no bus, and `plan.notes` says so out loud.
+    let dbusDaemon = resolveExecutable("dbus-daemon")
+
+    // Where the compositor's socket will be, when that is knowable: a bare
+    // `WAYLAND_DISPLAY` is a name under $XDG_RUNTIME_DIR, and an absolute one is
+    // the path itself. Unknowable (no display, or no runtime dir on a FreeBSD
+    // box where nothing sets one — HANDOFF §2.31) means no gate rather than a
+    // guess.
+    let compositorSocket: String? = display.flatMap { d in
+        if d.hasPrefix("/") { return d }
+        guard let x = ProcessInfoEnv("XDG_RUNTIME_DIR"), !x.isEmpty else { return nil }
+        return x + "/" + d
+    }
+
+    let plan = defaultSession(shellBinary: shellBinary,
+                              serviceDirectory: serviceDir,
+                              dbusDaemon: dbusDaemon,
+                              dbusConfig: dbusConfig,
+                              runtimeDir: dir,
+                              display: display,
+                              compositorSocket: compositorSocket,
+                              without: without)
+    // Exported before anything is spawned, so **every** child inherits it —
+    // including the applications the shell itself launches later, which is the
+    // whole reason the bus comes first (de/anchor/Session.swift).
+    if let addr = plan.busAddress {
+        setenv("DBUS_SESSION_BUS_ADDRESS", addr, 1)
+    }
+    for note in plan.notes {
+        let b = Array("anchor: \(note)\n".utf8)
+        _ = b.withUnsafeBufferPointer { write(2, $0.baseAddress, b.count) }
+    }
+    specs = plan.components
 } else {
     for (name, cmd) in explicitComponents where !without.contains(name) {
         let argv = splitCommand(cmd)

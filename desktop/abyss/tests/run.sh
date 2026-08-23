@@ -127,6 +127,11 @@ if [ "$live" -eq 1 ]; then
   # Skips itself, loudly, on a box with no GTK runtime.
   echo "== a real GTK application =="
   sh "$root/abyss/tests/live-gtk.sh"
+  # ...and the same claim with nobody assembling the session by hand: one
+  # `anchor` command brings up compositor, bus, portal, bridge and shell
+  # (PHASE8.md P8.4). Skips itself, loudly, on a box with no GTK runtime.
+  echo "== one command, a whole desktop =="
+  sh "$root/abyss/tests/live-session-gtk.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

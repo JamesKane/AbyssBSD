@@ -4,11 +4,13 @@ The half carved out of Phase 7, twice deferred and now due. Read
 [PHASE7.md](PHASE7.md) for the portals this extends, [PLAN.md](PLAN.md) for the
 locked decisions, and [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-08. **P8.1 and P8.2 done** — we speak D-Bus with no
-library, we own `org.freedesktop.portal.Desktop`, and a foreign caller gets the
-Finder. Two risks were spiked first, on both platforms (§4), because the phase's
-shape depended on the answers; a third — what the answer actually *is* — was
-found by reading the interface definition in P8.2 and is recorded in §6.6.
+Last updated: 2026-08-23. **Phase 8 is COMPLETE — P8.1–P8.4.** We speak D-Bus
+with no library, we own `org.freedesktop.portal.Desktop`, an unmodified GTK 3
+application gets the Finder as its file chooser, and **one `anchor` command boots
+a desktop where that works**. Two risks were spiked first, on both platforms
+(§4), because the phase's shape depended on the answers; a third — what the
+answer actually *is* — was found by reading the interface definition in P8.2 and
+is recorded in §6.6.
 
 **Numbered 8 because it is new.** PLAN.md runs 0–6, Phase 7 was added for
 portals; this is the piece Phase 7 explicitly refused, promoted to a phase of its
@@ -219,10 +221,79 @@ composited both windows and **exited cleanly after its input client went away**.
 The destination assertion was injected to check it can fail — without it the GTK
 app hangs for ever, which is how the bug was found.
 
-**P8.4 — The session, whole.**
-`anchor` starts `dbus-daemon` and `abyss-dbus` alongside the shell, with
-`DBUS_SESSION_BUS_ADDRESS` in the environment of everything it launches.
-*Verify:* one command boots a desktop where a stock GTK app can open a file.
+**P8.4 — The session, whole. ✅ done.**
+`anchor` starts the whole desktop: **compositor, bus, portal, bridge, desktop,
+menu bar, Dock** — in that order, with `DBUS_SESSION_BUS_ADDRESS` in the
+environment of every one of them. One command, and a stock GTK app can open a
+file through the Finder.
+
+**The bus is first, and that is the pass.** Not "early" — *first*, before the
+shell, because the shell is what **launches applications**: a GTK app
+double-clicked in the Finder inherits its bus from the Dock, which inherited it
+from `anchor`. Start the bus after the shell and every app launched from the
+desktop is on no bus at all, which from the app's side is indistinguishable from
+a desktop with no portal.
+
+**We name the bus; we do not ask what it chose.** Every example reads the address
+back out of `dbus-daemon --print-address`, and that address *changes when the
+daemon restarts* — stranding `DBUS_SESSION_BUS_ADDRESS` in the environment of
+every child that already had it, which is to say the whole session. So the socket
+is pinned into the session's own runtime directory (`$ABYSS_RUNTIME_DIR/bus`,
+beside `anchor.sock` and `portal.sock`) and passed with `--address=`. The address
+is then knowable *before* the daemon exists, survives its restart, and is a
+property of the session rather than of a process. `--print-address=1` still goes
+to the log, so "which bus is this session on" is answerable from the log alone;
+`abyssctl status` answers it too, from the environment a child would actually
+inherit.
+
+**Ordering as a mechanism, not a comment.** A component declares the unix sockets
+it cannot start without, and the supervisor waits — with `connect(2)`, because
+that is the only readiness test that is true. The socket file appearing is not:
+`bind(2)` creates it and `listen(2)` is a separate call, so a client racing into
+that gap gets `ECONNREFUSED` from a dependency a file-watcher would have called
+ready. A `sleep` is the same race with better manners (HANDOFF §2.26). The wait
+happens on **every** start, not just the first: it is precisely the restart —
+arriving microseconds after the thing it needs died — that would otherwise burn a
+component's whole failure budget in a millisecond and take the session down.
+
+The bridge waits for the bus *and* the portal, so "bridge=up" means "a foreign
+app asking for a file will get one" rather than "a process called abyss-dbus
+exists". The shell waits for the compositor, which closed a pre-existing race
+nothing had ever run into because `--compositor` had no test: the three shell
+components used to be spawned the instant the compositor was, and spent their
+restart budget failing to connect to a socket that did not exist yet.
+
+**`undertow --socket NAME`** arrived here, for the same reason the bus address is
+pinned: a session that *names* its display can put that name in its children's
+environment before the compositor exists. Without it "one command" is two — start
+the compositor, read the socket it picked, then start everything else. Asking for
+a name that is taken is an error rather than a silent fallback, because the
+fallback would hand every component a display nothing is listening on.
+
+**A box with no `dbus-daemon` still gets a desktop**, and is **told** it has no
+bus and therefore no file chooser for foreign apps. Our own apps never needed
+one. A silent omission here would be indistinguishable from a working desktop
+until somebody tried to open a file from GIMP.
+
+*Verified:* **13 unit tests** (234 total) over the plan — the start order, that
+the bridge names both dependencies as socket paths, that the bus address is ours
+and inside the session's runtime dir, `--nofork` (a supervisor's child must be
+the process it supervises), that a missing `dbus-daemon` produces a session *and*
+a note, that dropping the bus drops the bridge and says so, and that the shell
+gates on the compositor only when its path is knowable rather than guessing.
+Plus `abyss/tests/live-session-gtk.sh`: one `anchor` command, six components,
+`abyssctl` reporting the bus, **`abyss-dbus` owning the portal name on it** —
+which it could only do by reading the variable anchor exported — a stock GTK app
+getting the Finder and a file it never named, and `abyssctl quit` leaving no
+stray `dbus-daemon` and no orphans.
+
+The assertion that earns its place is **"nothing restarted"**. Getting the order
+right on paper satisfies every other check; `anchor` logs "bridge up" the moment
+it spawns it either way. A restart count of zero across all six says each
+component found what it needed *already listening*. Injected once by deleting the
+wait from `Supervisor.start`, which produced `up(1)` and failed the line — the
+absence of the gate looks, from outside, like a session that works anyway, most
+of the time, by crashing until it doesn't have to.
 
 ---
 
@@ -306,6 +377,12 @@ rather than pretending otherwise: this phase adds the exact kind of process the
 architecture argues against. What keeps it honest is *where* it sits — nothing on
 the frame path talks to it, no native app needs it, and if it dies the desktop
 does not notice. It is a legacy adapter, and PLAN.md always called it one.
+
+*P8.4 kept it in that box on purpose.* `anchor` starts it as an ordinary
+supervised component with an address of our choosing; a machine with no
+`dbus-daemon` still boots a full desktop, and is told what it is missing. The
+broker is a thing the session *carries*, not a thing the session *is* — which is
+the difference between this and the arrangement PLAN.md rejected.
 
 **6.4 GTK will want more than FileChooser.** *Retired in P8.3, and the budget was
 right: the list grew by exactly one.* A real GTK 3 app probes

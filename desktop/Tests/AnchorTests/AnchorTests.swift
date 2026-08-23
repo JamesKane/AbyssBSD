@@ -103,4 +103,171 @@ final class AnchorTests: XCTestCase {
         XCTAssertGreaterThan(b, a)
         XCTAssertLessThan(b - a, 5, "20ms should not read as seconds")
     }
+
+    // MARK: - The default session (P8.4)
+
+    /// Build the session a real `anchor` would, on a machine we are not on.
+    private func plan(dbusDaemon: String? = "/usr/bin/dbus-daemon",
+                      compositorSocket: String? = nil,
+                      without: Set<String> = []) -> SessionPlan {
+        defaultSession(shellBinary: "/opt/abyss/AquaDemo",
+                       serviceDirectory: "/opt/abyss",
+                       dbusDaemon: dbusDaemon,
+                       runtimeDir: "/run/abyss",
+                       display: "abyss-0",
+                       compositorSocket: compositorSocket,
+                       without: without)
+    }
+
+    /// **The bus is first, and the order is the pass.**
+    ///
+    /// Not alphabetical, not "services then apps": the bus has to exist before
+    /// the shell does, because the shell is what launches applications and a GTK
+    /// app double-clicked in the Finder inherits its bus from the Dock. Start it
+    /// afterwards and every app launched from the desktop is on no bus at all.
+    func testTheSessionStartsInTheOrderItsDependenciesRequire() {
+        XCTAssertEqual(plan().components.map(\.name),
+                       ["bus", "portal", "bridge", "desktop", "menubar", "dock"])
+    }
+
+    /// The bridge names both things it cannot work without, as socket paths —
+    /// the only fact about a dependency that can actually be checked.
+    func testTheBridgeWaitsForTheBusAndForThePortal() {
+        let bridge = plan().components.first { $0.name == "bridge" }
+        XCTAssertEqual(bridge?.requires, ["/run/abyss/bus", "/run/abyss/portal.sock"])
+        XCTAssertEqual(bridge?.env["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/run/abyss/bus")
+    }
+
+    /// The address is ours, and it is inside the session's own runtime directory
+    /// beside `anchor.sock` and `portal.sock`.
+    ///
+    /// The alternative — let `dbus-daemon` choose and read what it printed — is
+    /// what every example does, and it gives an address that *changes when the
+    /// daemon restarts*, stranding the variable in every child that already has
+    /// it. Pinning is what makes the bus restartable at all.
+    func testTheSessionNamesItsOwnBusRatherThanAskingWhatItChose() {
+        let p = plan()
+        XCTAssertEqual(p.busAddress, "unix:path=/run/abyss/bus")
+        XCTAssertEqual(p.busAddress, sessionBusAddress(runtimeDir: "/run/abyss"))
+        let bus = p.components.first { $0.name == "bus" }
+        XCTAssertEqual(bus?.argv.first, "/usr/bin/dbus-daemon")
+        XCTAssertTrue(bus?.argv.contains("--address=unix:path=/run/abyss/bus") == true)
+        // A supervisor's child must be the process it supervises: let it
+        // daemonise and the pollable descriptor belongs to a parent that has
+        // already exited, so the session restarts the bus for ever.
+        XCTAssertTrue(bus?.argv.contains("--nofork") == true)
+        XCTAssertTrue(bus?.argv.contains("--session") == true)
+    }
+
+    func testAConfigFileReplacesTheSystemSessionConfig() {
+        let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo",
+                               serviceDirectory: "/opt/abyss",
+                               dbusDaemon: "/usr/bin/dbus-daemon",
+                               dbusConfig: "/tmp/quiet.conf",
+                               runtimeDir: "/run/abyss",
+                               display: nil)
+        let bus = p.components.first { $0.name == "bus" }
+        XCTAssertTrue(bus?.argv.contains("--config-file=/tmp/quiet.conf") == true)
+        XCTAssertFalse(bus?.argv.contains("--session") == true)
+    }
+
+    /// A box with no `dbus-daemon` still gets a desktop — our own apps never
+    /// needed a bus — but it must **say so**. A desktop that quietly has no file
+    /// chooser for foreign apps is the exact failure this phase exists to fix,
+    /// and a silent omission is indistinguishable from a working one until
+    /// somebody tries to open a file from GIMP.
+    func testWithNoDbusDaemonTheSessionStillBootsAndSaysWhatIsMissing() {
+        let p = plan(dbusDaemon: nil)
+        XCTAssertEqual(p.components.map(\.name), ["portal", "desktop", "menubar", "dock"])
+        XCTAssertNil(p.busAddress)
+        XCTAssertEqual(p.notes.count, 1)
+        XCTAssertTrue(p.notes[0].contains("dbus-daemon"), p.notes[0])
+    }
+
+    /// Dropping the bus drops the bridge with it, because a bridge with no bus
+    /// has nothing to own a name on — and that, too, is said out loud rather
+    /// than being a component that silently vanished from the list.
+    func testDroppingTheBusDropsTheBridgeAndExplainsItself() {
+        let p = plan(without: ["bus"])
+        XCTAssertEqual(p.components.map(\.name), ["portal", "desktop", "menubar", "dock"])
+        XCTAssertEqual(p.notes.count, 1)
+        XCTAssertTrue(p.notes[0].contains("bridge"), p.notes[0])
+    }
+
+    /// Dropping the portal leaves the bridge with only the bus to wait for. It
+    /// is still started: a foreign app then gets an error instead of a picker,
+    /// which is a worse desktop but a truthful one.
+    func testDroppingThePortalLeavesTheBridgeWaitingOnlyForTheBus() {
+        let bridge = plan(without: ["portal"]).components.first { $0.name == "bridge" }
+        XCTAssertEqual(bridge?.requires, ["/run/abyss/bus"])
+    }
+
+    /// The shell waits for the compositor instead of racing it.
+    ///
+    /// Without this the three components are spawned the instant the compositor
+    /// is, fail to connect to a socket that does not exist yet, and spend their
+    /// restart budget on it — so a slow compositor start tears the session down
+    /// as if the shell were broken.
+    func testTheShellWaitsForTheCompositorSocketWhenItsPathIsKnown() {
+        let p = plan(compositorSocket: "/run/user/1000/abyss-0")
+        for name in ["desktop", "menubar", "dock"] {
+            XCTAssertEqual(p.components.first { $0.name == name }?.requires,
+                           ["/run/user/1000/abyss-0"], name)
+        }
+        // Services do not wait for it: the portal only needs a display when it
+        // launches the picker, which is minutes later or never.
+        XCTAssertEqual(p.components.first { $0.name == "portal" }?.requires, [])
+        // And with no knowable path there is no gate rather than a guess.
+        XCTAssertEqual(plan().components.first { $0.name == "dock" }?.requires, [])
+    }
+
+    func testEveryComponentIsToldWhereTheSessionLives() {
+        for c in plan(compositorSocket: "/run/user/1000/abyss-0").components {
+            XCTAssertEqual(c.env["ABYSS_RUNTIME_DIR"], "/run/abyss", c.name)
+            XCTAssertEqual(c.env["WAYLAND_DISPLAY"], "abyss-0", c.name)
+        }
+    }
+
+    func testTheShellComponentsCarryTheirScene() {
+        let p = plan()
+        XCTAssertEqual(p.components.first { $0.name == "desktop" }?.env["AQUA_SCENE"], "wallpaper")
+        XCTAssertEqual(p.components.first { $0.name == "menubar" }?.env["AQUA_SCENE"], "menubar")
+        XCTAssertEqual(p.components.first { $0.name == "dock" }?.env["AQUA_SCENE"], "dock")
+        XCTAssertEqual(p.components.first { $0.name == "dock" }?.argv, ["/opt/abyss/AquaDemo"])
+    }
+
+    /// Our own services are found beside the binary rather than on `$PATH`, so a
+    /// build tree and an installed tree both work with no configuration — and
+    /// nobody's stray `abyss-portal` earlier in `$PATH` gets supervised instead.
+    func testOurOwnServicesAreFoundBesideTheBinary() {
+        let p = plan()
+        XCTAssertEqual(p.components.first { $0.name == "portal" }?.argv, ["/opt/abyss/abyss-portal"])
+        XCTAssertEqual(p.components.first { $0.name == "bridge" }?.argv, ["/opt/abyss/abyss-dbus"])
+    }
+
+    // MARK: - Resolving a command
+
+    func testResolveExecutableSearchesThePathAndRefusesWhatIsNotAProgram() {
+        XCTAssertEqual(resolveExecutable("sh", path: "/bin:/usr/bin"), "/bin/sh")
+        XCTAssertEqual(resolveExecutable("/bin/sh"), "/bin/sh")
+        // A directory is executable in the `x` sense and is not a program; a
+        // supervisor that exec'd one would fail after the fork, where the only
+        // thing it can do about it is die.
+        XCTAssertNil(resolveExecutable("/bin"))
+        XCTAssertNil(resolveExecutable("no-such-program-anywhere", path: "/bin:/usr/bin"))
+        XCTAssertNil(resolveExecutable(""))
+    }
+
+    func testTheBusAddressCanBeTurnedBackIntoASocketPath() {
+        XCTAssertEqual(unixSocketPath(ofBusAddress: "unix:path=/run/abyss/bus"), "/run/abyss/bus")
+        // dbus-daemon prints the address with its guid appended; the path stops
+        // at the comma.
+        XCTAssertEqual(unixSocketPath(ofBusAddress: "unix:path=/run/abyss/bus,guid=abc"),
+                       "/run/abyss/bus")
+        // An abstract socket has no filesystem path, and pretending otherwise
+        // would have a caller wait for a file that will never appear.
+        XCTAssertNil(unixSocketPath(ofBusAddress: "unix:abstract=/tmp/dbus-x"))
+        XCTAssertNil(unixSocketPath(ofBusAddress: "tcp:host=localhost,port=1234"))
+    }
 }
+

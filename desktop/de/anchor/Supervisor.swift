@@ -30,6 +30,10 @@ public final class Supervisor {
     }
 
     private let policy: RestartPolicy
+    /// How long a component waits for something it `requires`. Long enough for a
+    /// cold `dbus-daemon` on the FreeBSD guest, short enough that a session that
+    /// is never going to compose says so rather than hanging for ever.
+    private let dependencyTimeout: Double = 10
     private let components: [Running]
     private let compositor: ComponentSpec?
     private var compositorChild = ap_child(fd: -1, pid: -1)
@@ -84,8 +88,61 @@ public final class Supervisor {
     }
 
     private func start(_ r: Running) throws {
+        for socket in r.spec.requires {
+            guard waitForSocket(socket, seconds: dependencyTimeout) else {
+                throw CurrentError.malformed(
+                    "\(r.spec.name) needs \(socket), which never accepted a connection")
+            }
+        }
         r.child = try spawn(r.spec)
         r.startedAt = monotonicSeconds()
+    }
+
+    /// Wait until `path` accepts a connection, or give up.
+    ///
+    /// **Connecting is the readiness test.** The socket file appearing is not:
+    /// `bind(2)` creates it and `listen(2)` is a separate call, so a client that
+    /// raced into that gap gets ECONNREFUSED and a supervisor that watched for
+    /// the file would have declared the dependency met. Nor is a `sleep` — that
+    /// is the same race with better manners, and this project has paid for one
+    /// of those already (HANDOFF §2.26).
+    ///
+    /// The connection is dropped immediately. It reaches no protocol, which is
+    /// the point: this asks whether something is listening, and nothing else.
+    private func waitForSocket(_ path: String, seconds: Double) -> Bool {
+        let deadline = monotonicSeconds() + seconds
+        var announced = false
+        while true {
+            if connectsNow(path) { return true }
+            if monotonicSeconds() >= deadline { return false }
+            if !announced {
+                log("waiting for \(path)")
+                announced = true
+            }
+            usleep(25_000)
+        }
+    }
+
+    private func connectsNow(_ path: String) -> Bool {
+        var addr = sockaddr_un()
+        addr.sun_family = sunFamilyUnix
+        let bytes = Array(path.utf8)
+        // sun_path is 108 bytes and a truncated path connects to the wrong
+        // thing, or to nothing, without saying so (HANDOFF §2.32).
+        let capacity = MemoryLayout.size(ofValue: addr.sun_path)
+        guard bytes.count < capacity else { return false }
+        withUnsafeMutableBytes(of: &addr.sun_path) { raw in
+            for (i, b) in bytes.enumerated() { raw[i] = b }
+        }
+        let fd = socket(AF_UNIX, sockStreamType, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        let ok = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) == 0
+            }
+        }
+        return ok
     }
 
     // MARK: - Running the session
@@ -239,6 +296,14 @@ public final class Supervisor {
                     "\($0.spec.name)=\($0.isUp ? "up" : "down")(\($0.restarts))"
                 }.joined(separator: ",")
                 reply.set("detail", detail)
+                // Read from the environment rather than remembered from the
+                // plan, because the question a caller is really asking is "what
+                // bus will a child of this session see?" — and the environment
+                // is the only thing that answers that. A session started without
+                // a bus of its own truthfully reports the one it inherited.
+                if let bus = getenv("DBUS_SESSION_BUS_ADDRESS"), bus.pointee != 0 {
+                    reply.set("bus", String(cString: bus))
+                }
             case "quit", "shutdown":
                 reply.set("ok", true)
                 stopping = true
@@ -277,6 +342,18 @@ public final class Supervisor {
         log("session down")
     }
 }
+
+// SOCK_STREAM and sun_family arrive with different Swift types per platform —
+// `__socket_type` on Linux, a plain Int32 on the BSDs. `CurrentIPC` normalises
+// the same two constants for the same reason; they are `private` there, and a
+// supervisor importing an IPC module's internals to open one probe socket would
+// be the worse trade.
+#if canImport(Glibc) && os(Linux)
+private let sockStreamType = Int32(SOCK_STREAM.rawValue)
+#else
+private let sockStreamType = Int32(SOCK_STREAM)
+#endif
+private let sunFamilyUnix = sa_family_t(AF_UNIX)
 
 /// Build a NULL-terminated C string array for `execve`, valid for the duration
 /// of `body`.

@@ -284,7 +284,17 @@ half of the story (PHASE7.md §1).
 ## Phase 8 — the D-Bus bridge: portals for everyone else
 
 **Goal:** delete PHASE7 §6.7's caveat — a stock GTK/Qt app gets the Finder as its
-file chooser and a descriptor as its answer.
+file chooser.
+
+**✅ Complete (2026-08-23), P8.1–P8.4.** One `anchor` command boots a desktop
+where an unmodified GTK 3 application opens a file through the Finder.
+
+*"and a descriptor as its answer" was struck from that goal, not achieved.*
+`FileChooser`'s `Response` carries `uris` — strings — with no descriptor in any
+version, so the capability stops at the bridge and a foreign app opens the file
+by name with the authority it already had. Their answer is a name; ours is a
+capability. PHASE8 §6.6 has the full reckoning, and it is why flatpak needs a
+FUSE daemon to make those names mean anything.
 
 **Expanded to executable detail in [PHASE8.md](PHASE8.md)** — passes P8.1–P8.4,
 and two risks spiked on both platforms before the plan was written.

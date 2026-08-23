@@ -40,6 +40,7 @@ func usage() -> Never {
                                     [--assert-windows N] [--assert-surfaces N]
                                     [--assert-layers N] [--assert-usable X,Y,WxH]
                                     [--assert-missed N] [--config-dir DIR] [--verbose]
+                                    [--socket NAME]
     """)
     exit(2)
 }
@@ -64,6 +65,7 @@ var assertSurfaces: Int? = nil
 var assertLayers: Int? = nil
 var assertUsable: String? = nil
 var configDir: String? = nil
+var socketName: String? = nil
 
 var i = 0
 while i < args.count {
@@ -99,6 +101,7 @@ while i < args.count {
     case "--assert-layers": assertLayers = Int(value("--assert-layers"))
     case "--assert-usable": assertUsable = value("--assert-usable")
     case "--config-dir": configDir = value("--config-dir")
+    case "--socket": socketName = value("--socket")
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -306,7 +309,8 @@ case "run":
         session = try WlrootsSession(headlessOutputs: 1, width: width, height: height,
                                      refreshMilliHz: Int32(hz &* 1000), verbose: verbose)
         compositor = try Compositor(session: session, outputWidth: width,
-                                    outputHeight: height, configDir: configDir)
+                                    outputHeight: height, configDir: configDir,
+                                    socketName: socketName)
     } catch {
         die("\(error)")
     }

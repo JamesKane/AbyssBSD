@@ -3,15 +3,14 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-23. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 —
-the D-Bus bridge — is three passes of four** (P8.1–P8.3). The Jaguar desktop
+Last updated: 2026-08-23. **Phases 0–3 and 6–8 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract under eleven hostile
-processes; the portals hand out descriptors; and **an unmodified GTK 3
-application, running as a client of our compositor, opens a file through the
-Finder** — which is the claim the whole phase exists to make.
-**221 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
-**The next task is queued: P8.4, `anchor` starts the bus** — see
-[What's next](#whats-next).
+processes; the portals hand out descriptors; and **one command boots a desktop
+where an unmodified GTK 3 application opens a file through the Finder** — which
+is the claim the D-Bus phase existed to make.
+**234 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
+**Nothing is queued — what is left is Phase 4 (Mac Pro) and Phase 5 (the
+installer)**; see [What's next](#whats-next).
 
 ## What this is
 
@@ -427,16 +426,17 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3, 6 and 7 are complete.** Phase 8 has one pass left, and it is the
-only queued work.
+**Phases 0–3 and 6–8 are complete**, and for the first time since Phase 3 there
+is no queued pass.
 
-> **Start here: P8.4 — the session, whole.** `anchor` starts `dbus-daemon` and
-> `abyss-dbus` alongside the shell, with `DBUS_SESSION_BUS_ADDRESS` in the
-> environment of everything it launches. *Verify:* **one command** boots a
-> desktop where a stock GTK app can open a file — which is `live-gtk.sh`'s
-> scenario with `anchor` doing the wiring instead of a shell script, so that
-> script is the specification for what has to end up in the environment.
-> Read **HANDOFF §2.26** (the supervisor's composition rule) before starting.
+> **The choice: Phase 4 (Mac Pro bring-up) or Phase 5 (the installer).** They are
+> independent of each other and of everything above. Phase 4 is the real hardware
+> story — a real GPU, `rtprio`, the volume and battery status items reading a
+> real mixer instead of reporting absent — and carries the biggest single risk
+> left, `amdgpu` `si_support` for the FirePro D-series. It is also where Phase
+> 6's C1 measurements should be repeated, because every number in PHASE6.md came
+> off a headless backend with a synthetic clock. Phase 5 is untouched and depends
+> on nothing. HANDOFF §5 has both, plus the standing smaller items.
 >
 > The rest of this section is the record of what got built, newest last.
 
@@ -614,7 +614,42 @@ on the seat's lifetime rather than the device's (**HANDOFF §2.41**). Every
 earlier live test killed the compositor before its input client, so the teardown
 path had never run.
 
-**Next: P8.4** — `anchor` starts the bus alongside the shell.
+**P8.4 is done — one command boots the whole desktop, and Phase 8 is complete.**
+`anchor` starts the compositor, the session bus, `abyss-portal`, `abyss-dbus` and
+the three shell components, in that order, with `DBUS_SESSION_BUS_ADDRESS` in
+every child's environment.
+
+**The bus is first, and that is the pass.** Not "early" — first, before the
+shell, because the shell is what *launches applications*: a GTK app
+double-clicked in the Finder inherits its bus from the Dock, which inherited it
+from `anchor`.
+
+**The session names its own bus** (`$ABYSS_RUNTIME_DIR/bus`, beside
+`anchor.sock` and `portal.sock`) rather than reading back whatever
+`dbus-daemon --print-address` chose. A discovered address changes when the daemon
+restarts, stranding the variable in every child that already holds it — so the
+bus would be the one component in the session that could not be restarted, and
+nothing would say so. `undertow --socket NAME` arrived for the same reason: a
+session that names its display can export it before the compositor exists, which
+is the difference between one command and two. **HANDOFF §2.42.**
+
+**Dependencies are sockets, and readiness is `connect(2)`.** A component declares
+what it cannot start without and the supervisor waits — not for the file to
+appear (`bind` creates it, `listen` is a separate call, and a client in that gap
+gets ECONNREFUSED), not for a sleep. The bridge waits for the bus *and* the
+portal, so "bridge=up" means a foreign app asking for a file will get one. The
+shell waits for the compositor, which closed a pre-existing race nothing had run
+into because `--compositor` had never been tested.
+
+A box with no `dbus-daemon` still boots a full desktop and is **told** it has no
+bus and therefore no file chooser for foreign apps — a silent omission there
+would be indistinguishable from a working desktop until somebody tried to open a
+file from GIMP.
+
+`abyss/tests/live-session-gtk.sh` runs the one command and asserts the whole
+chain, including that **nothing restarted** — the one assertion that tells a
+dependency gate from a race, since the supervisor logs "bridge up" the moment it
+spawns it either way.
 
 **The other directions stay open:** Phase 4 (Mac Pro bring-up — real GPU,
 hardware cursor, `rtprio`, and where Phase 6's C1 measurements should be
@@ -625,9 +660,8 @@ repeated) and Phase 5 (the installer).
 - **Phase 4 — Mac Pro bring-up.** Real hardware, and where the volume/battery
   status items finally read a real mixer and battery instead of reporting
   absent. Biggest remaining risk: `amdgpu` `si_support` for the FirePro D-series.
-- **The D-Bus/portal bridge** — Phase 8, now at P8.3. A real GTK application gets
-  the Finder; what remains is having `anchor` start the bus alongside the shell
-  (P8.4), so it takes one command rather than a test script.
+- **The D-Bus/portal bridge** — Phase 8, **complete**. One command boots a
+  desktop where a real GTK application gets the Finder.
 (What Phase 6 finally unblocks, for the record: remembered window positions for
 the spatial Finder and dragging desktop icons — both things a Wayland *client*
 cannot do (HANDOFF §2.22) — plus the one Phase-7 debt, a server half for

@@ -44,6 +44,9 @@ public enum BackendError: Error, CustomStringConvertible {
     /// "could not create a wl_display" — which is a lie that sends you to
     /// look at the compositor when the problem is the environment.
     case noSocket
+    /// A socket name was asked for and is already in use — someone else's
+    /// session, or ours, still holding it.
+    case socketTaken(String)
 
     public var description: String {
         switch self {
@@ -58,6 +61,9 @@ public enum BackendError: Error, CustomStringConvertible {
         case .noSocket:
             return "could not bind a Wayland socket — is XDG_RUNTIME_DIR set?"
                 + " (FreeBSD has no pam_xdg, so nothing sets it: HANDOFF §2.31)"
+        case .socketTaken(let name):
+            return "could not bind the Wayland socket '\(name)' — something is"
+                + " already using it (is a session already running?)"
         }
     }
 }
