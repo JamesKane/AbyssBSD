@@ -361,7 +361,10 @@ let package = Package(
         ),
         .testTarget(
             name: "DBusPortalTests",
-            dependencies: ["DBusPortal", "DBus", "CurrentIPC"],
+            // `Aqua` is here for one assertion: the accent colour the Settings
+            // portal publishes is a literal, and this is what stops it drifting
+            // away from the theme token it was copied from.
+            dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua"],
             path: "Tests/DBusPortalTests"
         ),
         .testTarget(

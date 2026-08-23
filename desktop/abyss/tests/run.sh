@@ -122,6 +122,11 @@ if [ "$live" -eq 1 ]; then
   # witness that our Response decodes (PHASE8.md P8.2).
   echo "== the portal on the session bus =="
   sh "$root/abyss/tests/live-portal-dbus.sh"
+  # And the caller the whole phase is for: a stock GTK 3 application, which has
+  # never heard of us, getting the Finder as its file chooser (PHASE8.md P8.3).
+  # Skips itself, loudly, on a box with no GTK runtime.
+  echo "== a real GTK application =="
+  sh "$root/abyss/tests/live-gtk.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

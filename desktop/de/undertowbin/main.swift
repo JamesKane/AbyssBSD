@@ -394,6 +394,11 @@ case "run":
     for t in compositor.mappedToplevels {
         out("window \(t.placeKey ?? "?") at \(t.x),\(t.y)")
     }
+    // ... and everyone who was ever here, including the clients that have since
+    // quit. `window` is the survivors; `mapped` is the guest list.
+    for key in compositor.everMapped {
+        out("mapped \(key)")
+    }
     // The positive control for adversarial load: every surface any client ever
     // created. `missed=0` with `surfaces-created=0` means the adversaries never
     // arrived, which is a passing bench that proves nothing (PHASE6.md P6.5).

@@ -76,6 +76,9 @@ public struct Marshaller {
         case .int32(let n): uint32(UInt32(bitPattern: n))
         case .uint32(let n): uint32(n)
         case .uint64(let n): uint64(n)
+        // A double is its IEEE 754 bit pattern, byte-ordered like any other
+        // 64-bit value — so it inherits `uint64`'s 8-byte alignment for free.
+        case .double(let d): uint64(d.bitPattern)
         case .string(let s), .objectPath(let s): string(s)
         case .signature(let s): signature(s)
         case .unixFD(let fd):
@@ -206,6 +209,7 @@ public struct Unmarshaller {
         case "i": return .int32(Int32(bitPattern: try uint32()))
         case "u": return .uint32(try uint32())
         case "t": return .uint64(try uint64())
+        case "d": return .double(Double(bitPattern: try uint64()))
         case "s": return .string(try string())
         case "o": return .objectPath(try string())
         case "g": return .signature(try signature())

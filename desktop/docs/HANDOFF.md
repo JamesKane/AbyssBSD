@@ -7,33 +7,40 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-08. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 is
-half built**. The Jaguar shell runs on FreeBSD, on **our own compositor**
-(`undertow`), over a Swift control plane, session supervisor and hardware
-bridges; the portals hand out descriptors; and a caller on a **session bus** now
-gets the Finder as its file chooser.
-**211 unit tests + 35 live modes, green on Linux and FreeBSD.**
+Last updated: 2026-08-23. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 is
+three passes of four**. The Jaguar shell runs on FreeBSD, on **our own
+compositor** (`undertow`), over a Swift control plane, session supervisor and
+hardware bridges; the portals hand out descriptors; and **an unmodified GTK 3
+application, which has never heard of this desktop, opens a file through the
+Finder**.
+**221 unit tests + 35 live modes, green on Linux and FreeBSD.**
 
 **Picking this up cold?**
 
-1. **The next task is queued, not a choice: P8.3, a real GTK application**
+1. **The next task is queued, not a choice: P8.4, `anchor` starts the bus**
    ([PHASE8.md](PHASE8.md) §3). Read §5 for why, and for the three phases that
    stay open independently of it.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
-3. Skim the §2 index for the trap nearest what you're about to touch. **The three
-   freshest scars all generalise, and all three are about *testing* rather than
+3. Skim the §2 index for the trap nearest what you're about to touch. **The
+   freshest scars all generalise, and most are about *testing* rather than
    code** — which is the pattern worth carrying into the next pass:
    - **§2.37** — a probe with no positive control measures nothing. A published
      measurement had to be withdrawn over this one.
    - **§2.38** — a polite adversary is not an adversary.
    - **§2.39** — one hang is not *the* hang: an async, object-based API has more
      than one way to hang, and each is invisible to the client shape that
-     exposes the other. **Read this before P8.3.**
+     exposes the other.
+   - **§2.40** — an answer for one client must be *addressed* to it; and when you
+     change what goes on the wire, ask what your **witness** can still see. Two
+     green tests once covered a message its only real reader could not receive.
+   - **§2.41** — whose lifetime is this listener, exactly? A compositor must
+     outlive its input client, and only a test that shuts down in the right
+     order will ever say so.
 4. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 211 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 221 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -174,7 +181,7 @@ before the pixels do*:
   PHASE7 §6.6's **screencopy server half** (P7.5's `abyssgrab` captures
   `undertow` unmodified — the client half never knew the difference).
 
-**Phase 8 — the D-Bus bridge (P8.1–P8.2 done, P8.3–P8.4 to go).** Portals for
+**Phase 8 — the D-Bus bridge (P8.1–P8.3 done, P8.4 to go).** Portals for
 everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
 
 - **`de/dbus` speaks D-Bus with no dependency at all** — no libdbus (discouraged
@@ -187,10 +194,20 @@ everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
   and `SaveFile`, the `Request`/`Response` object lifecycle, `Properties` and
   `Introspectable` — translating to the existing `abyss-portal` and the same
   Finder our own apps get, with no second code path.
+- **`org.freedesktop.portal.Settings`** is the second interface, and it exists
+  because a real GTK app asked for it before it drew a window (P8.3). Only
+  `org.freedesktop.appearance` is standardised, so it is the only namespace we
+  publish; every other namespace gets a **successful, empty** answer, which is
+  the difference between an app that starts quietly and one that warns each time.
 - **It is never tested against our own encoder.** `dbus-daemon` is the bus,
-  `dbus-send` and `gdbus` are the callers, and **GLib decodes our `Response`
-  signal with its own parser**. See §2.39 for the two silent hangs this API
-  offers, and why one client shape in a test proves half of what you think.
+  `dbus-send`, `gdbus` and **an unmodified GTK 3 application** are the callers,
+  and both GLib and libdbus decode our `Response` with their own parsers. See
+  §2.39 and §2.40 for the *three* silent hangs this API offers, and why one
+  client shape in a test proves a third of what you think.
+- **A GTK application is just another client of `undertow`** (P8.3). It maps its
+  own window on our compositor, `GtkFileChooserNative` opens **the Finder**, and
+  it is handed a file it never named — it named a directory. That is the claim
+  PHASE7 §6.7 could not make, and nothing before this pass could.
 - **And the plan's headline claim was wrong.** It promised a foreign app "a
   descriptor as its answer"; the interface definition on disk says `Response`
   carries `uris` — strings — with no descriptor in any version. **Their answer
@@ -249,6 +266,8 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.37 | Swift allocates via `posix_memalign`, and interposition dies in a `.xctest` — a probe with no positive control reports a comfortable zero |
 | 2.38 | A flooding client that roundtrips throttles itself; and *where in the frame* you dispatch matters more than which thread does it |
 | 2.39 | An async, object-based API has more than one way to hang — and each is invisible to the client that exposes the other |
+| 2.40 | A signal that answers **one** client must be *addressed* to it — GTK adds no match rule, and `gdbus monitor` can't see an addressed signal either |
+| 2.41 | Input devices belong to clients: free a device's listeners on its `destroy`, or the compositor aborts when the harness lets go of the pointer |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -515,6 +534,81 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.41 A compositor must outlive its input
+(P8.3 — `undertow` aborting on the way out of a green test.)
+
+```
+wlr_pointer_finish: Assertion `wl_list_empty(&pointer->events.motion.listener_list)' failed.
+  virtual_pointer_destroy_resource → wl_client_destroy → wl_client_connection_data
+```
+
+`Seat` attached four listeners to every pointer it was handed and freed them in
+its own `deinit` — the seat's lifetime, not the device's. That is fine for a
+device that belongs to the machine. **A virtual pointer belongs to a client**,
+and this project drives every live test through one: when the harness closes the
+fifo and the vpointer exits, wlroots destroys the device, asserts that nothing is
+still listening to it, and takes the compositor down. §2.2's rule about listener
+*lifetime* again, in its third costume (see §2.35) — the question is never "does
+this listener outlive the callback" but "**whose** life is it, exactly".
+
+The fix is per-device: keep each device's listeners in a group keyed by the
+device, subscribe to its `base.events.destroy`, and free the group there.
+wlroots emits that signal with `wl_signal_emit_mutable` precisely so a listener
+may remove itself from inside it.
+
+Why it stayed hidden for a whole phase: every earlier test either killed the
+compositor first or held its input open to the end of the frame budget, so the
+device outlived the session that owned it and the assert never fired.
+`live-gtk.sh` drops the pointer and *then* waits for undertow's summary — which
+is the only reason we saw it at all.
+
+The keyboard had the identical bug, unfound, because nothing had ever
+disconnected one either. Both are now driven and asserted by
+`live-undertow-input.sh`, which connects a virtual keyboard purely in order to
+drop it, closes the pointer's fifo, and requires undertow to **exit 0** —
+injected once each to prove it can fail (`wlr_keyboard_finish` /
+`wlr_pointer_finish` assertion, exit 134).
+
+The harness rule this leaves behind: **a live test should shut its clients down
+and let the compositor finish.** The teardown path is code too, and it is the
+code nobody runs.
+
+### 2.40 An answer for one client must be addressed to that client
+(P8.3 — a stock GTK 3 app hanging on `GtkFileChooserNative`, with a green bus,
+a correct object path, a correct `Response`, and a witness that saw it.)
+
+§2.39 says a bus delivers a broadcast signal only to connections that asked for
+it. True, and incomplete in the way that costs an afternoon: **the real portal
+does not broadcast the `Response` at all.** `xdg-desktop-portal` emits it with
+the caller's unique name in the DESTINATION field, and GTK is built for that —
+`G_DBUS_DEBUG=message` on the client shows *no* `AddMatch` for the request path
+anywhere. It never subscribes. It simply waits to be spoken to.
+
+So a broadcast `Response` is a message that:
+
+- the bus routes to nobody, because nobody holds a match rule for it;
+- reads as perfectly correct in every log we had — the bridge said
+  `Response(0) on /org/…/request/1_8/gtk146620821`, the path was the one GTK
+  predicted, the body decoded;
+- **and was still seen by our own witness**, because `dbusprobe` does subscribe
+  and `gdbus monitor` was eavesdropping. Two green tests over a message the one
+  client that mattered could never receive.
+
+The fix is one header field (`DBusMessage.signal(to:)`), and the diagnosis is
+worth more than the fix: when a client hangs and the wire looks right, dump the
+client's own `AddMatch` traffic before re-reading your encoder. `G_DBUS_DEBUG=message`
+took ten minutes and named the bug outright.
+
+**And the sting in the tail — the witness stops witnessing.** `gdbus monitor`
+watches through match rules, so it sees a broadcast and is *blind to an addressed
+signal*, `--dest` or not (measured: `dbus-send --type=signal --dest=…` reaches
+`dbus-monitor` and never reaches `gdbus monitor`). Fixing the bug would have
+silently gutted the independent-decode assertion in P8.2's live test, which would
+have gone on passing on the strength of a `grep` that could no longer fail. Both
+tests now use `dbus-monitor`, a real bus monitor, and `live-gtk.sh` asserts the
+destination is there — the property, not just the signal. Cousin of §2.37: when
+you change what goes on the wire, ask what your *witness* can still see.
 
 ### 2.39 One hang is not the hang
 (P8.2 — `org.freedesktop.portal.FileChooser`. Two bugs, one symptom, and a test
@@ -1401,7 +1495,8 @@ or name a subset: `run-live.sh dock trash`). 35 modes today. These are the
 |---|---|
 | `live-anchor.sh` | the **Swift supervisor**: kill a component, it comes back; `abyssctl quit` leaves no orphans |
 | `live-portal.sh` | three processes: a client gets an fd for a file **it never named** |
-| `live-portal-dbus.sh` | five processes: `dbus-daemon`, sway, `abyss-portal`, `abyss-dbus`, a caller. Both client shapes (§2.39), and **`gdbus` decodes our `Response` signal with GLib's parser** |
+| `live-portal-dbus.sh` | five processes: `dbus-daemon`, sway, `abyss-portal`, `abyss-dbus`, a caller. Both client shapes (§2.39), and **`dbus-monitor` decodes our `Response` signal with libdbus's parser** |
+| `live-gtk.sh` | six processes, and the important one is not ours: a **stock GTK 3 app** on `undertow` gets the Finder from `GtkFileChooserNative` and reads a file it never named. Asserts the `Response` was *addressed* (§2.40) and that the compositor **exited cleanly after its input client left** (§2.41). Skips loudly (exit 77) with no GTK runtime |
 | `live-sandbox.sh` | the client is in **capability mode** and `open(2)` fails, yet it reads the file |
 | `live-notify.sh` | a notification crosses the portal, becomes a toast, reserves no space, and its surface is released on expiry |
 
@@ -1433,20 +1528,20 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 211 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 221 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
 abyss/tests/run.sh --vm --live     # the gate before calling a pass done
 ```
 
-The 211 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 221 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy, the hardware bridges' parsing, the
 portal's refusals, toast layout/expiry, the compositor's metronome and layer
 arithmetic, the D-Bus wire format's alignment rules, and the portal bridge's
-path derivation and URI escaping.
+path derivation, URI escaping and Settings namespace matching.
 
 **Both platforms, every time.** Phase 3 earned this rule: two bugs
 (`O_NONBLOCK` inheritance on `accept`, a string sysctl read as an integer) were
@@ -1495,40 +1590,36 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-**Where things stand.** Phases 0–3, 6 and 7 are complete; Phase 8 is half built.
-The Jaguar shell runs on FreeBSD, on our own compositor, over a Swift control
-plane, session supervisor and hardware bridges. **211 unit tests and 35 live
+**Where things stand.** Phases 0–3, 6 and 7 are complete; Phase 8 is three
+passes of four. The Jaguar shell runs on FreeBSD, on our own compositor, over a
+Swift control plane, session supervisor and hardware bridges — and an unmodified
+GTK 3 application opens a file through the Finder. **221 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-### The queued task: P8.3 — a real GTK application
+### The queued task: P8.4 — the session, whole
 
 This is the only item here that is *next* rather than *available*. Everything
 else is a phase you could pick on appetite.
 
-`GtkFileChooserNative` on a stock GTK 3 app, running as a client of `undertow`,
-picking a file through the Finder. The guest already carries `gtk3`, put there in
-Phase 3 for exactly this. **It is the pass that deletes PHASE7 §6.7's caveat**
-("portals: done" currently means *our* portals for *our* apps) and nothing before
-it does — P8.2 proved the protocol with `gdbus`, which is a D-Bus client, not an
-application.
+`anchor` starts `dbus-daemon` and `abyss-dbus` alongside the shell, with
+`DBUS_SESSION_BUS_ADDRESS` in the environment of everything it launches, so that
+**one command** boots a desktop where a stock GTK app can open a file. Today that
+takes `abyss/tests/live-gtk.sh` and six hand-started processes.
 
-Three things to expect, in the order they will bite:
+Three things to expect:
 
-1. **Read §2.39 first.** The API has two silent hangs and each is invisible to
-   the client shape that exposes the other. GTK is the *modern* shape (it sends a
-   `handle_token`), so if something hangs, that is the half to suspect.
-2. **GTK will ask for more than FileChooser** (PHASE8 §6.4). Expect probes at
-   `org.freedesktop.portal.Settings`, `Documents`, or the accessibility bus, and
-   possibly odd behaviour when they are absent. The mitigation was always "find
-   out with a real app rather than guess" — this is that pass. Budget for the
-   interface list growing by one or two.
-3. **GTK opens the URI by name**, because that is all its protocol gives it
-   (§6.6). So the app needs ordinary filesystem access to the file it picked;
-   this is not the sandboxed story, and the test should not pretend otherwise.
-
-Then **P8.4**: `anchor` starts `dbus-daemon` and `abyss-dbus` alongside the
-shell, with `DBUS_SESSION_BUS_ADDRESS` in the environment of everything it
-launches — one command boots a desktop where a stock GTK app can open a file.
+1. **`live-gtk.sh` is the specification.** Everything it exports before starting
+   a process is something `anchor` has to put in the environment instead —
+   `DBUS_SESSION_BUS_ADDRESS`, `WAYLAND_DISPLAY`, `ABYSS_RUNTIME_DIR`. Read it as
+   a checklist, then delete the parts `anchor` takes over.
+2. **§2.26's rule applies to the bus too.** The supervisor test's real content is
+   that the components *compose*, not that each starts; a bus that comes up after
+   the client that needs it is a race, not a feature.
+3. **Which bus is a policy question, not a mechanism one.** `dbus-daemon` may
+   already be running (a user's login session, a nested test). Decide whether
+   `anchor` adopts an existing `DBUS_SESSION_BUS_ADDRESS` or insists on its own,
+   and say so in the pass — `abyss-dbus` refuses to share the portal name (P8.2),
+   so the failure mode if you get this wrong is a bridge that will not start.
 
 ### The phases that stay open (pick on appetite, not order)
 
@@ -1607,7 +1698,7 @@ standing between "green" and "green for the reason I think".
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
 | `de/cplatform` | platform facts Swift can't reach — `ap_self_executable` (`KERN_PROC_PATHNAME` / `/proc/self/exe`, §2.30) and SCM_RIGHTS fd passing (§2.32) |
 | `de/dbus`, `de/dbusprobe` | **D-Bus, hand-written**: marshalling, SASL EXTERNAL, framing, dispatch — no libdbus/GDBus/sd-bus (PHASE8 §4.1). `dbusprobe` is driven by `dbus-send`/`gdbus` so the other end is never ours; its `portal-open` / `portal-open-late` modes are the **two client shapes** of §2.39 |
-| `de/dbusportal`, `de/dbusbin` | the bridge: `RequestHandle` (the object path a client predicts *for itself*), `ChooserOptions`, `FileURI`, and the service that queues the picker **out of** the method handler — plus `abyss-dbus`, which owns `org.freedesktop.portal.Desktop` |
+| `de/dbusportal`, `de/dbusbin` | the bridge: `RequestHandle` (the object path a client predicts *for itself*), `ChooserOptions`, `FileURI`, `PortalSettings` (what we tell a foreign toolkit about how the desktop looks), and the service that queues the picker **out of** the method handler and **addresses** its `Response` — plus `abyss-dbus`, which owns `org.freedesktop.portal.Desktop` |
 | `de/currentipc` | the control plane: `Msg` + wire format, `Current.Server`/`connect`/`call` (§2.32) |
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh` |
@@ -1625,7 +1716,7 @@ standing between "green" and "green for the reason I think".
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
-| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, the virtual input helpers |
+| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`**/**`live-gtk.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, `gtkpick.c` (a stock GTK client, `dlopen`ed so nothing here links GTK), the virtual input helpers |
 | `abyss/tests/adversary.c` | hostile Wayland clients for C2: `hard` (flood, never waits for a reply), `zombie`, `deaf`, `churn` (§2.38) |
 | `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |

@@ -87,12 +87,22 @@ public struct DBusMessage: Equatable, Sendable {
         return m
     }
 
+    /// A signal.
+    ///
+    /// `to:` is the difference between a signal every client on the bus may
+    /// receive and one addressed to a single caller. **Pass it whenever the
+    /// signal answers a particular client**, because a broadcast is only
+    /// delivered to clients that added a match rule for it, and a client that
+    /// expects to be addressed adds none — it simply never hears the answer,
+    /// with no error anywhere (HANDOFF §2.40).
     public static func signal(path: String, interface: String, member: String,
+                              to destination: String? = nil,
                               body: [DBusValue] = []) -> DBusMessage {
         var m = DBusMessage(type: .signal)
         m.path = path
         m.interface = interface
         m.member = member
+        m.destination = destination
         m.body = body
         return m
     }

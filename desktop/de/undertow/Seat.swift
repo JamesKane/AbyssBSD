@@ -72,6 +72,15 @@ public final class Seat {
     private let seat: UnsafeMutablePointer<wlr_seat>
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
+    /// Listeners that belong to **one input device**, keyed by that device.
+    ///
+    /// They cannot live as long as the seat does. A virtual pointer is a client
+    /// resource: when that client disconnects, wlroots destroys the device and
+    /// asserts that nothing is still listening to it — so a listener we never
+    /// removed takes the whole compositor down with it, at the moment a test
+    /// harness lets go of its input (HANDOFF §2.41).
+    private var deviceListeners: [UnsafeMutableRawPointer:
+                                    [UnsafeMutablePointer<tw_listener>?]] = [:]
 
     /// Cursor position in output coordinates. Ours, not a client's.
     public private(set) var cursorX: Double = 0
@@ -131,6 +140,18 @@ public final class Seat {
 
     deinit {
         for l in listeners { tw_listener_free(l) }
+        for (_, group) in deviceListeners {
+            for l in group { tw_listener_free(l) }
+        }
+    }
+
+    /// A device has gone: drop everything we had attached to it.
+    ///
+    /// Called from the device's own `destroy` signal, which wlroots emits with
+    /// `wl_signal_emit_mutable` precisely so a listener may remove itself here.
+    private func forget(device: UnsafeMutableRawPointer) {
+        guard let group = deviceListeners.removeValue(forKey: device) else { return }
+        for l in group { tw_listener_free(l) }
     }
 
     // MARK: - Devices
@@ -148,7 +169,12 @@ public final class Seat {
 
     private func attach(pointer: UnsafeMutablePointer<wlr_pointer>) {
         let me = Unmanaged.passUnretained(self).toOpaque()
-        listeners.append(tw_listen(&pointer.pointee.events.motion_absolute, { ctx, data in
+        // Keyed by the `wlr_pointer`, and recovered in the destroy handler with
+        // wlroots' own accessor rather than by assuming `base` is the first
+        // member of the struct.
+        let key = UnsafeMutableRawPointer(pointer)
+        var group: [UnsafeMutablePointer<tw_listener>?] = []
+        group.append(tw_listen(&pointer.pointee.events.motion_absolute, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_motion_absolute_event.self)
@@ -156,21 +182,21 @@ public final class Seat {
             s.moveCursor(to: e.pointee.x * s.outputWidth, e.pointee.y * s.outputHeight,
                          timeMsec: e.pointee.time_msec)
         }, me))
-        listeners.append(tw_listen(&pointer.pointee.events.motion, { ctx, data in
+        group.append(tw_listen(&pointer.pointee.events.motion, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_motion_event.self)
             s.moveCursor(to: s.cursorX + e.pointee.delta_x, s.cursorY + e.pointee.delta_y,
                          timeMsec: e.pointee.time_msec)
         }, me))
-        listeners.append(tw_listen(&pointer.pointee.events.button, { ctx, data in
+        group.append(tw_listen(&pointer.pointee.events.button, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_button_event.self)
             s.button(e.pointee.button, state: e.pointee.state,
                      timeMsec: e.pointee.time_msec)
         }, me))
-        listeners.append(tw_listen(&pointer.pointee.events.axis, { ctx, data in
+        group.append(tw_listen(&pointer.pointee.events.axis, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_axis_event.self)
@@ -180,26 +206,46 @@ public final class Seat {
                                          e.pointee.relative_direction)
             wlr_seat_pointer_notify_frame(s.seat)
         }, me))
+        group.append(tw_listen(&pointer.pointee.base.events.destroy, { ctx, data in
+            guard let ctx, let data else { return }
+            let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let device = data.assumingMemoryBound(to: wlr_input_device.self)
+            guard let p = wlr_pointer_from_input_device(device) else { return }
+            s.forget(device: UnsafeMutableRawPointer(p))
+        }, me))
+        deviceListeners[key] = group
         addCapability(UInt32(WL_SEAT_CAPABILITY_POINTER.rawValue))
     }
 
     private func attach(keyboard: UnsafeMutablePointer<wlr_keyboard>) {
         let me = Unmanaged.passUnretained(self).toOpaque()
-        listeners.append(tw_listen(&keyboard.pointee.events.key, { ctx, data in
+        let key = UnsafeMutableRawPointer(keyboard)
+        var group: [UnsafeMutablePointer<tw_listener>?] = []
+        group.append(tw_listen(&keyboard.pointee.events.key, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_keyboard_key_event.self)
             wlr_seat_keyboard_notify_key(s.seat, e.pointee.time_msec,
                                          e.pointee.keycode, UInt32(e.pointee.state.rawValue))
         }, me))
-        listeners.append(tw_listen(&keyboard.pointee.events.modifiers, { ctx, data in
+        group.append(tw_listen(&keyboard.pointee.events.modifiers, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let kbd = data.assumingMemoryBound(to: wlr_keyboard.self)
             wlr_seat_keyboard_notify_modifiers(s.seat, &kbd.pointee.modifiers)
         }, me))
+        group.append(tw_listen(&keyboard.pointee.base.events.destroy, { ctx, data in
+            guard let ctx, let data else { return }
+            let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let device = data.assumingMemoryBound(to: wlr_input_device.self)
+            guard let k = wlr_keyboard_from_input_device(device) else { return }
+            s.forget(device: UnsafeMutableRawPointer(k))
+        }, me))
+        deviceListeners[key] = group
+
         // The seat carries one active keyboard; its keymap is what clients are
         // told. A virtual keyboard brings its own, from the client's fd.
+        // wlroots drops it from the seat itself when it is destroyed.
         wlr_seat_set_keyboard(seat, keyboard)
         addCapability(UInt32(WL_SEAT_CAPABILITY_KEYBOARD.rawValue))
     }

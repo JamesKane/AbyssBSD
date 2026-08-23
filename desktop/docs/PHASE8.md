@@ -159,12 +159,65 @@ that has never failed has not been shown to test anything (§2.37): running the
 picker inside the handler left the late client waiting the full 90s, and dropping
 the `.`→`_` substitution failed both the unit test and the live one.
 
-**P8.3 — A real GTK application.**
+**P8.3 — A real GTK application. ✅ done.**
 `GtkFileChooserNative` on a stock GTK 3 app, running as a client of `undertow`,
-picking a file through the Finder. The guest already carries `gtk3`.
-*Verify:* the app receives a file it never named, and the picker it saw was ours.
-**This is the pass that deletes PHASE7 §6.7's caveat**, and nothing before it
-does.
+picking a file through the Finder. **PHASE7 §6.7's caveat is deleted**: the
+caller is no longer a D-Bus tool but a program that asks for a file the way every
+GTK program asks for a file, and has never heard of us.
+
+`abyss/tests/gtkpick.c` is that program: `gtk_file_chooser_native_new` +
+`gtk_native_dialog_run`, and everything after that — the portal check, the
+`handle_token`, the object path it subscribes to, the marshalling — is **GTK's
+own code, unmodified**. It `dlopen`s libgtk rather than linking it, so
+`Package.swift` acquires no GTK dependency (DESKTOP.md §1 rejects the stack
+outright, and it would be a poor joke for the test that proves we need none of it
+to be the thing that links it) and one `cc` line builds on both platforms
+against the runtime alone. A box with no GTK **skips loudly**, exit 77, never
+quietly passes.
+
+Two things a real application wanted that no test client had:
+
+1. **`org.freedesktop.portal.Settings`** — §6.4 predicted this and declined to
+   guess; the answer, from a real app, was that it is the *first* call GTK makes,
+   before it draws anything. `ReadAll(["org.gnome.*"])` must **succeed and be
+   empty**: the difference between "no settings" and "no such method" is a
+   `Gdk-WARNING` on every launch. Only `org.freedesktop.appearance` is
+   standardised, so it is the only namespace we publish — `color-scheme` **2,
+   prefer light**, because Aqua has no dark variant and reporting "no preference"
+   gets GTK's default, which on some distributions is dark. And `Read` returns
+   the value inside **two** variants while `ReadOne` returns one: its own XML
+   says the extra layer was unintended and is now what callers parse, so a
+   correct implementation reproduces the mistake. `d` — IEEE 754 doubles —
+   entered `de/dbus` here, for the accent colour's `(ddd)`.
+2. **The `Response` must be *addressed* to the caller**, not broadcast. This is
+   §6.1's hazard with a third face and it cost the pass an afternoon:
+   `xdg-desktop-portal` unicasts the signal, GTK is built for that and adds **no
+   match rule at all**, so a broadcast that looks right in every log reaches
+   nobody. HANDOFF §2.40 has the diagnosis, including the sting — `gdbus monitor`
+   cannot see an addressed signal, so fixing this would have silently gutted
+   P8.2's independent-decode assertion. Both live tests now witness with
+   `dbus-monitor`.
+
+Also fixed here, found by the test rather than by the code: **`undertow` aborted
+when the virtual pointer disconnected**, because `Seat` freed a device's
+listeners on the *seat's* lifetime rather than the *device's* (HANDOFF §2.41).
+The virtual keyboard had the same bug, unfound for the same reason: every earlier
+live test killed the compositor before its input client, so the teardown path had
+never run. `live-undertow-input.sh` now disconnects both devices on purpose and
+requires undertow to exit 0.
+
+*Verified:* **10 unit tests** (221 total) — the Settings matching rules, the
+one-variant/two-variant asymmetry, an unknown key erroring rather than being
+invented, the accent colour pinned against `Theme.menuHighlight` so the two
+cannot drift, doubles as bit patterns, and a signal's DESTINATION on the encoded
+wire — plus `abyss/tests/live-gtk.sh`: six processes, of which the important one
+is not ours. It asserts that GTK mapped a window on `undertow`, that
+`GtkFileChooserNative` opened **the Finder** and not a GTK dialog, that the app
+received and **read** a file it never named (it named a directory), that libdbus
+saw the same `Response` go past **addressed to the app**, and that undertow
+composited both windows and **exited cleanly after its input client went away**.
+The destination assertion was injected to check it can fail — without it the GTK
+app hangs for ever, which is how the bug was found.
 
 **P8.4 — The session, whole.**
 `anchor` starts `dbus-daemon` and `abyss-dbus` alongside the shell, with
@@ -237,6 +290,12 @@ ways to get it wrong, not one, and each is invisible to the client shape that
 exposes the other — see P8.2 above. Both are now driven by the live script, and
 both were injected once to prove the script can fail.
 
+*And a third, found in P8.3 by the first caller that was a real application:* the
+signal must be **addressed to that client**, not broadcast. GTK adds no match
+rule for it — the real portal unicasts, so GTK simply waits to be spoken to.
+Same symptom as the other two, and the same absence of any diagnostic anywhere.
+HANDOFF §2.40.
+
 **6.2 A descriptor over D-Bus is a different mechanism.** *Moot, as it turns
 out.* This anticipated marshalling an `h` into the reply; §6.6 records what P8.2
 found instead — `FileChooser` has no descriptor in its answer at all. The `h`
@@ -248,11 +307,15 @@ architecture argues against. What keeps it honest is *where* it sits — nothing
 the frame path talks to it, no native app needs it, and if it dies the desktop
 does not notice. It is a legacy adapter, and PLAN.md always called it one.
 
-**6.4 GTK will want more than FileChooser.** A real GTK app may probe
-`org.freedesktop.portal.Settings`, `Documents`, or the accessibility bus, and may
-behave oddly when they are absent. The mitigation is to find out with a real app
-in P8.3 rather than guess now — but expect the interface list to grow by one or
-two before a GTK file dialog is happy.
+**6.4 GTK will want more than FileChooser.** *Retired in P8.3, and the budget was
+right: the list grew by exactly one.* A real GTK 3 app probes
+`org.freedesktop.portal.Settings` **first**, before it draws a window, and gets a
+`Gdk-WARNING` on every launch if it is missing. It does **not** need `Documents`
+— that portal exists to make handed-out *names* mean something inside a sandbox,
+which is §6.6's asymmetry, and this app opens its file by name with the authority
+it already had. AT-SPI is asked for and does no harm when absent
+(`GTK_A11Y=none` in the test keeps the log clean). See P8.3 above for what
+`Settings` answers and why.
 
 **6.5 Version drift.** The portal interfaces are versioned and evolve upstream.
 We implement what a current GTK asks for and pin the versions we advertise; a
@@ -281,3 +344,5 @@ mid-dialog is answered with its handle immediately and queued. The visible
 consequence: a `Request.Close` sent while a picker is on screen is not *seen*
 until that picker exits — the `Response` is correctly suppressed, but the dialog
 is not torn down. Worth fixing when something needs it; not worth threads now.
+Still true after P8.3: GTK opens one dialog and waits for it, so nothing in the
+real path has asked for better yet.

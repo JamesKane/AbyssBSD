@@ -22,6 +22,9 @@ public indirect enum DBusValue: Equatable, Sendable {
     case int32(Int32)              // i
     case uint32(UInt32)            // u
     case uint64(UInt64)            // t
+    /// IEEE 754 double. Added in P8.3 for one caller: `org.freedesktop.appearance`
+    /// publishes its accent colour as `(ddd)`, and there is no other way to say it.
+    case double(Double)            // d
     case string(String)            // s
     case objectPath(String)        // o
     case signature(String)         // g
@@ -43,6 +46,7 @@ public indirect enum DBusValue: Equatable, Sendable {
         case .int32: return "i"
         case .uint32: return "u"
         case .uint64: return "t"
+        case .double: return "d"
         case .string: return "s"
         case .objectPath: return "o"
         case .signature: return "g"
@@ -60,7 +64,7 @@ public indirect enum DBusValue: Equatable, Sendable {
         case .byte, .signature, .variant: return 1
         case .uint16: return 2
         case .bool, .int32, .uint32, .string, .objectPath, .unixFD, .array: return 4
-        case .uint64, .structure, .dictEntry: return 8
+        case .uint64, .double, .structure, .dictEntry: return 8
         }
     }
 

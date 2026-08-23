@@ -389,12 +389,14 @@ compositor-owned path — and none of them touches the portal's *shape*, because
 or Qt app gets no file chooser from us. Anyone reading "portals: done" should
 read it as "*our* portals, for *our* apps, done".
 
-*Update, 2026-08-08 — half closed.* [PHASE8.md](PHASE8.md) built the bridge:
-`abyss-dbus` owns `org.freedesktop.portal.Desktop`, and a caller on the session
-bus gets the Finder and the file the user picked (P8.2). **The caveat above
-stands until P8.3**, because everything that has driven it so far is a D-Bus
-client — `dbus-send`, `gdbus` — and not an *application*. GTK asking through its
-own toolkit is a different test, and it is the one that retires this paragraph.
+*Update, 2026-08-23 — **closed**.* [PHASE8.md](PHASE8.md) built the bridge:
+`abyss-dbus` owns `org.freedesktop.portal.Desktop` (P8.2), and in **P8.3** a
+stock GTK 3 application — `gtk_file_chooser_native_new`, `gtk_native_dialog_run`,
+GTK's own code the whole way down — running as a client of `undertow` got the
+Finder and read a file it never named. So "portals: done" now means what it
+says: *our* portals for our apps, and *theirs* for everyone else.
+`abyss/tests/live-gtk.sh` is the proof, and it skips loudly on a box with no GTK
+runtime rather than passing quietly.
 
 One thing P8.2 found that belongs here: **their protocol has no room for a
 descriptor.** `FileChooser`'s `Response` returns `uris`, so a foreign app is

@@ -139,6 +139,14 @@ public final class Compositor {
     /// Set when a window is restored to a remembered position rather than
     /// cascaded — the observable difference a test can assert on.
     public private(set) var restoredCount = 0
+    /// Every window that ever mapped, by place key, in the order they appeared.
+    ///
+    /// `mappedToplevels` is who is on screen *now*, which at the end of a run is
+    /// only whoever outlived the test. A client that opened, did its work and
+    /// quit — the ordinary shape of an application asking for a file — leaves no
+    /// trace in it, so a test asserting that this compositor composited that
+    /// client has nothing to assert on. This is that trace.
+    public private(set) var everMapped: [String] = []
 
     public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32,
                 configDir: String? = nil) throws {
@@ -291,6 +299,7 @@ public final class Compositor {
     /// why the spatial Finder's remembered positions have waited for this phase
     /// (HANDOFF §2.22); P6.7 is where that debt is paid.
     fileprivate func place(_ t: Toplevel) {
+        everMapped.append(t.placeKey ?? "?")
         // A remembered position wins. This is the spatial Finder's whole
         // behaviour — a folder's window reopens where you left it — and it is
         // the thing HANDOFF §2.22 recorded as waiting for a compositor of our

@@ -36,7 +36,9 @@ before="$work/before.ppm"
 after="$work/after.ppm"
 fifo="$work/vp.fifo"
 cleanup() {
-  for p in ${vp_pid:-} ${client_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  for p in ${vk_pid:-} ${vp_pid:-} ${client_pid:-} ${ut_pid:-}; do
+    kill "$p" 2>/dev/null || true
+  done
   rm -rf "$work" "${vp_dir:-}"
 }
 trap cleanup EXIT
@@ -48,6 +50,14 @@ wayland-scanner client-header "$xml" "$vp_dir/vpointer-proto.h"
 wayland-scanner private-code  "$xml" "$vp_dir/vpointer-proto.c"
 cc -I"$vp_dir" "$root/abyss/tests/vpointer.c" "$vp_dir/vpointer-proto.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$vp_dir/vpointer"
+
+# ...and a virtual keyboard, which this test uses for one thing only: to go
+# away again. See "the devices leave" at the bottom.
+kxml="$root/abyss/tests/virtual-keyboard-unstable-v1.xml"
+wayland-scanner client-header "$kxml" "$vp_dir/vkeyboard-proto.h"
+wayland-scanner private-code  "$kxml" "$vp_dir/vkeyboard-proto.c"
+cc -I"$vp_dir" "$root/abyss/tests/vkeyboard.c" "$vp_dir/vkeyboard-proto.c" \
+   $(pkg-config --cflags --libs wayland-client xkbcommon) -o "$vp_dir/vkeyboard"
 
 # ------------------------------------------------------------ the compositor
 env -u WAYLAND_DISPLAY "$undertow" run --hz 60 --frames 900 \
@@ -98,9 +108,40 @@ sleep 0.5                                   # let AquaDemo bind wl_pointer
 printf 'm %s %s\np\nr\n' "$CLICK_X" "$CLICK_Y" >&3
 sleep 1.0
 
+# ------------------------------------------------------------ the devices leave
+# **A compositor must outlive its input** (HANDOFF §2.41). Both virtual devices
+# belong to a *client*: when that client disconnects, wlroots destroys the device
+# and asserts that nothing is still listening to it. `Seat` used to free a
+# device's listeners on its own lifetime rather than the device's, so this — a
+# harness letting go of its input, the most ordinary thing a test does — aborted
+# the compositor. It went unseen for a whole phase because every test until now
+# killed undertow *first*.
+#
+# So: connect a keyboard, drop both devices, and let undertow run out its frames.
+# The `rc` check below is the assertion; injected once by deleting the keyboard's
+# destroy listener, which reproduced `wlr_keyboard_finish: Assertion
+# \`wl_list_empty(&kb->events.key.listener_list)\' failed` and exit 134.
+kfifo="$work/vk.fifo"
+mkfifo "$kfifo"
+env WAYLAND_DISPLAY="$wd" "$vp_dir/vkeyboard" < "$kfifo" > "$work/vk.log" 2>&1 &
+vk_pid=$!
+exec 4>"$kfifo"
+sleep 0.8
+printf 'q\n' >&4; exec 4>&-
+wait "$vk_pid" 2>/dev/null || true
+vk_pid=""
+
+exec 3>&-                                   # and the pointer's client with it
+wait "$vp_pid" 2>/dev/null || true
+vp_pid=""
+echo "ok: both virtual input devices disconnected while the compositor ran on"
+
 rc=0; wait "$ut_pid" 2>/dev/null || rc=$?
 ut_pid=""
-[ "$rc" = 0 ] || { echo "FAIL: undertow exited $rc"; cat "$work/ut.err"; exit 1; }
+[ "$rc" = 0 ] || { echo "FAIL: undertow exited $rc — a compositor must outlive"
+                   echo "      its input clients (HANDOFF §2.41)"
+                   tail -20 "$work/ut.err"; exit 1; }
+echo "ok: undertow finished cleanly after its input went away"
 
 # ------------------------------------------------------------------ the proof
 

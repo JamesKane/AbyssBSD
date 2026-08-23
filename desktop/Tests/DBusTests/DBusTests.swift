@@ -69,6 +69,29 @@ final class DBusTests: XCTestCase {
         XCTAssertEqual(Array(m.bytes[1..<8]), [0, 0, 0, 0, 0, 0, 0], "not zero-padded")
     }
 
+    /// A double is its IEEE 754 bit pattern, little-endian, aligned to 8 — pinned
+    /// as bytes because a round trip through one implementation cannot tell a
+    /// consistent mistake from a correct answer, and because `==` on `Double`
+    /// would call a lost sign bit on zero a match.
+    func testADoubleIsItsBitPatternAndNotATextualApproximation() {
+        var m = Marshaller()
+        m.value(.double(1.0))
+        XCTAssertEqual(m.bytes, [0, 0, 0, 0, 0, 0, 0xf0, 0x3f])
+
+        var neg = Marshaller()
+        neg.value(.double(-0.0))
+        XCTAssertEqual(neg.bytes, [0, 0, 0, 0, 0, 0, 0, 0x80], "the sign bit was dropped")
+        var back = Unmarshaller(neg.bytes)
+        guard case .double(let zero) = try! back.value("d") else { return XCTFail("not a double") }
+        XCTAssertEqual(zero.sign, .minus)
+
+        // Alignment: a `d` after one byte pads to offset 8, exactly like a `t`.
+        var padded = Marshaller()
+        padded.byte(1)
+        padded.value(.double(1.0))
+        XCTAssertEqual(padded.bytes.count, 16)
+    }
+
     /// Little-endian, and a string's length excludes its terminating NUL — both
     /// pinned as bytes rather than by round-tripping, because a round trip
     /// cannot tell a consistent mistake from a correct answer.
@@ -126,6 +149,10 @@ final class DBusTests: XCTestCase {
         roundTrip(.int32(-42))
         roundTrip(.uint32(4_000_000_000))
         roundTrip(.uint64(0xDEADBEEFCAFEBABE))
+        // `d` arrived in P8.3 with `org.freedesktop.appearance`'s accent colour.
+        roundTrip(.double(0))
+        roundTrip(.double(0x3f / 255.0))
+        roundTrip(.double(-1.7976931348623157e308))
         roundTrip(.string("hello"))
         roundTrip(.string(""))
         roundTrip(.string("ünïcödé ✓"))
@@ -195,6 +222,35 @@ final class DBusTests: XCTestCase {
         // And decoding with the WRONG number of fds must fail rather than
         // silently hand back a descriptor that belongs to someone else.
         XCTAssertThrowsError(try DBusMessage.decode(bytes, fds: [77]))
+    }
+
+    /// **A signal that answers one client must be addressed to it.**
+    ///
+    /// This cost P8.3 an afternoon. A broadcast signal — no DESTINATION field —
+    /// is delivered by the bus only to clients that added a match rule for it,
+    /// and GTK's portal client adds *none*: it expects the portal to address the
+    /// `Response` to it, the way `xdg-desktop-portal` does. So a correct-looking
+    /// broadcast reaches `dbus-monitor`, reaches any test client that
+    /// subscribed, and never reaches the one caller it was for — which looks
+    /// exactly like a portal that never answered (HANDOFF §2.40).
+    ///
+    /// Pinned on the encoded header rather than the struct, because the field
+    /// only matters if it is on the wire.
+    func testAnAddressedSignalCarriesADestinationAndABroadcastDoesNot() throws {
+        var addressed = DBusMessage.signal(path: "/x", interface: "i.f", member: "Sig",
+                                           to: ":1.42", body: [.string("for you")])
+        addressed.serial = 3
+        let (bytes, _) = addressed.encode()
+        let back = try DBusMessage.decode(bytes, fds: [])
+        XCTAssertEqual(back.destination, ":1.42")
+        XCTAssertEqual(back.member, "Sig")
+
+        var broadcast = DBusMessage.signal(path: "/x", interface: "i.f", member: "Sig",
+                                           body: [.string("for anyone")])
+        broadcast.serial = 4
+        let (loud, _) = broadcast.encode()
+        XCTAssertNil(try DBusMessage.decode(loud, fds: []).destination,
+                     "a signal with no `to:` must stay a broadcast")
     }
 
     func testFramingReportsHowMuchMoreIsNeeded() {

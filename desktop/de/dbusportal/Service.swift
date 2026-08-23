@@ -42,13 +42,17 @@ public final class DBusPortalService {
     private let conn: DBusConnection
     /// The `CurrentIPC` service to translate to — `abyss-portal`, normally.
     public let portalService: String
-    /// Requests that have been handed out and not yet answered or closed.
-    private var live: Set<String> = []
+    /// Requests that have been handed out and not yet answered or closed,
+    /// **and who each one belongs to** — the `Response` is addressed to that
+    /// caller rather than broadcast (see `respond`).
+    private var live: [String: String] = [:]
     /// Work deferred out of a method handler; see the file comment.
     private var queue: [() -> Void] = []
     public private(set) var journal: [String] = []
     /// Completed chooser interactions, for `--once` and for the tests.
     public private(set) var served = 0
+    /// What we tell a foreign toolkit about how this desktop looks (P8.3).
+    public var settings: PortalSettings = .aqua
 
     public init(connection: DBusConnection, portalService: String? = nil) {
         self.conn = connection
@@ -89,6 +93,15 @@ public final class DBusPortalService {
         }
         conn.handle(requestInterface, "Close") { [weak self] call in
             self?.closeRequest(call)
+        }
+        conn.handle(PortalSettings.interface, "ReadAll") { [weak self] call in
+            self?.settingsReadAll(call)
+        }
+        conn.handle(PortalSettings.interface, "Read") { [weak self] call in
+            self?.settingsRead(call, layers: 2)
+        }
+        conn.handle(PortalSettings.interface, "ReadOne") { [weak self] call in
+            self?.settingsRead(call, layers: 1)
         }
         conn.handle("org.freedesktop.DBus.Properties", "Get") { [weak self] call in
             self?.property(call, all: false)
@@ -149,7 +162,7 @@ public final class DBusPortalService {
         if options.directory {
             // Said plainly instead of opening a file picker and pretending.
             log("\(sender) asked for a directory chooser, which the Finder is not")
-            live.insert(path)
+            live[path] = sender
             queue.append { [weak self] in
                 self?.respond(path, .other, DBusValue.options([]))
             }
@@ -162,7 +175,7 @@ public final class DBusPortalService {
             log("ignored options: \(options.ignored.joined(separator: ", "))")
         }
 
-        live.insert(path)
+        live[path] = sender
         let service = portalService
         queue.append { [weak self] in
             guard let self else { return }
@@ -206,12 +219,12 @@ public final class DBusPortalService {
     /// Emit `Response` — unless the client closed the Request first, in which
     /// case the spec says no signal is emitted at all.
     private func respond(_ path: String, _ code: PortalResponse, _ results: DBusValue) {
-        guard live.remove(path) != nil else {
+        guard let sender = live.removeValue(forKey: path) else {
             log("\(path) was closed before it finished; no Response emitted")
             return
         }
         let signal = DBusMessage.signal(path: path, interface: requestInterface,
-                                        member: "Response",
+                                        member: "Response", to: sender,
                                         body: [.uint32(code.rawValue), results])
         do {
             try conn.send(signal)
@@ -231,37 +244,92 @@ public final class DBusPortalService {
     /// does guarantee is that no `Response` is emitted for a request the client
     /// abandoned — which is the part the spec actually requires.
     private func closeRequest(_ call: DBusMessage) -> DBusMessage? {
-        guard let path = call.path, live.contains(path) else {
+        guard let path = call.path, live[path] != nil else {
             return .error(to: call, name: "org.freedesktop.DBus.Error.UnknownObject",
                           message: "no live request at \(call.path ?? "?")")
         }
-        live.remove(path)
+        live.removeValue(forKey: path)
         log("closed \(path) at the client's request")
         return .methodReturn(to: call)
     }
 
+    // MARK: - Settings
+
+    /// `ReadAll` — the call a GTK application makes on startup, before anything
+    /// else. It must succeed even when we publish nothing the client asked for:
+    /// an empty dictionary means "no such settings here" and the toolkit uses its
+    /// own defaults, while an error means "this desktop is broken" and gets
+    /// logged as a warning on every launch. That distinction is the entire
+    /// difference between a GTK app that works and one that merely runs.
+    private func settingsReadAll(_ call: DBusMessage) -> DBusMessage? {
+        guard call.path == portalObjectPath else {
+            return .error(to: call, name: "org.freedesktop.DBus.Error.UnknownObject",
+                          message: "no Settings at \(call.path ?? "?")")
+        }
+        guard case .array("s", let items)? = call.body.first else {
+            return .error(to: call, name: "org.freedesktop.DBus.Error.InvalidArgs",
+                          message: "expected (as namespaces)")
+        }
+        var patterns: [String] = []
+        for item in items {
+            guard case .string(let s) = item else { continue }
+            patterns.append(s)
+        }
+        return .methodReturn(to: call, body: [settings.readAll(patterns: patterns)])
+    }
+
+    /// `Read` (two variants) and `ReadOne` (one). See `PortalSettings.read`.
+    private func settingsRead(_ call: DBusMessage, layers: Int) -> DBusMessage? {
+        guard call.path == portalObjectPath else {
+            return .error(to: call, name: "org.freedesktop.DBus.Error.UnknownObject",
+                          message: "no Settings at \(call.path ?? "?")")
+        }
+        guard case .string(let namespace)? = call.body.first,
+              case .string(let key)? = call.body.dropFirst().first else {
+            return .error(to: call, name: "org.freedesktop.DBus.Error.InvalidArgs",
+                          message: "expected (s namespace, s key)")
+        }
+        let value = layers == 2
+            ? settings.read(namespace: namespace, key: key)
+            : settings.readOne(namespace: namespace, key: key)
+        guard let value else {
+            // The spec requires an error for an unknown namespace or key, and it
+            // is the right answer: a made-up default is indistinguishable from a
+            // real setting once it reaches the toolkit.
+            return .error(to: call, name: "org.freedesktop.portal.Error.NotFound",
+                          message: "no setting '\(key)' in '\(namespace)'")
+        }
+        return .methodReturn(to: call, body: [value])
+    }
+
     // MARK: - Properties and introspection
+
+    /// The `version` each interface advertises. Both are read by real clients
+    /// before they call anything, and a missing one reads as version 0.
+    private var versions: [String: UInt32] {
+        [fileChooserInterface: fileChooserVersion,
+         PortalSettings.interface: PortalSettings.version]
+    }
 
     private func property(_ call: DBusMessage, all: Bool) -> DBusMessage? {
         guard case .string(let iface)? = call.body.first else {
             return .error(to: call, name: "org.freedesktop.DBus.Error.InvalidArgs",
                           message: "expected an interface name")
         }
-        guard iface == fileChooserInterface else {
+        guard let version = versions[iface] else {
             return all
                 ? .methodReturn(to: call, body: [.options([])])
                 : .error(to: call, name: "org.freedesktop.DBus.Error.UnknownInterface",
                          message: "no properties on \(iface)")
         }
         if all {
-            return .methodReturn(to: call,
-                                 body: [.options([("version", .uint32(fileChooserVersion))])])
+            return .methodReturn(to: call, body: [.options([("version", .uint32(version))])])
         }
         guard case .string(let name)? = call.body.dropFirst().first, name == "version" else {
             return .error(to: call, name: "org.freedesktop.DBus.Error.UnknownProperty",
                           message: "no such property on \(iface)")
         }
-        return .methodReturn(to: call, body: [.variant(.uint32(fileChooserVersion))])
+        return .methodReturn(to: call, body: [.variant(.uint32(version))])
     }
 
     /// Introspection XML. Real clients parse this with a real XML parser, so it
@@ -293,6 +361,21 @@ public final class DBusPortalService {
             <arg type="s" name="title" direction="in"/>\
             <arg type="a{sv}" name="options" direction="in"/>\
             <arg type="o" name="handle" direction="out"/></method>\
+            <property name="version" type="u" access="read"/>\
+            </interface>\
+            <interface name="\(PortalSettings.interface)">\
+            <method name="ReadAll">\
+            <arg type="as" name="namespaces" direction="in"/>\
+            <arg type="a{sa{sv}}" name="value" direction="out"/></method>\
+            <method name="Read">\
+            <annotation name="org.freedesktop.DBus.Deprecated" value="true"/>\
+            <arg type="s" name="namespace" direction="in"/>\
+            <arg type="s" name="key" direction="in"/>\
+            <arg type="v" name="value" direction="out"/></method>\
+            <method name="ReadOne">\
+            <arg type="s" name="namespace" direction="in"/>\
+            <arg type="s" name="key" direction="in"/>\
+            <arg type="v" name="value" direction="out"/></method>\
             <property name="version" type="u" access="read"/>\
             </interface></node>
             """

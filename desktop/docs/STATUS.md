@@ -3,13 +3,14 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-08. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 —
-the D-Bus bridge — is half built** (P8.1 and P8.2 of four). The Jaguar desktop
+Last updated: 2026-08-23. **Phases 0–3, 6 and 7 are complete**, and **Phase 8 —
+the D-Bus bridge — is three passes of four** (P8.1–P8.3). The Jaguar desktop
 runs on our own compositor, which holds its frame contract under eleven hostile
-processes; the portals hand out descriptors; and a caller on a session bus now
-gets the Finder as its file chooser.
-**211 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
-**The next task is queued: P8.3, a real GTK application** — see
+processes; the portals hand out descriptors; and **an unmodified GTK 3
+application, running as a client of our compositor, opens a file through the
+Finder** — which is the claim the whole phase exists to make.
+**221 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
+**The next task is queued: P8.4, `anchor` starts the bus** — see
 [What's next](#whats-next).
 
 ## What this is
@@ -426,16 +427,16 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3, 6 and 7 are complete.** Phase 8 is half built, and its remaining
-two passes are the only queued work.
+**Phases 0–3, 6 and 7 are complete.** Phase 8 has one pass left, and it is the
+only queued work.
 
-> **Start here: P8.3 — a real GTK application.** `GtkFileChooserNative` on a
-> stock GTK 3 app, running as a client of `undertow`, picking a file through the
-> Finder. The guest already carries `gtk3`. **It is the pass that deletes
-> PHASE7 §6.7's caveat** — P8.2 proved the protocol with `gdbus`, which is a
-> D-Bus client, not an application. Read **HANDOFF §2.39** before writing any of
-> it, and expect GTK to probe interfaces we do not have yet (PHASE8 §6.4).
-> Then **P8.4**: `anchor` starts the bus alongside the shell.
+> **Start here: P8.4 — the session, whole.** `anchor` starts `dbus-daemon` and
+> `abyss-dbus` alongside the shell, with `DBUS_SESSION_BUS_ADDRESS` in the
+> environment of everything it launches. *Verify:* **one command** boots a
+> desktop where a stock GTK app can open a file — which is `live-gtk.sh`'s
+> scenario with `anchor` doing the wiring instead of a shell script, so that
+> script is the specification for what has to end up in the environment.
+> Read **HANDOFF §2.26** (the supervisor's composition rule) before starting.
 >
 > The rest of this section is the record of what got built, newest last.
 
@@ -584,8 +585,36 @@ those names mean anything, and why `abyssopen` can read a file from inside
 Capsicum with no filesystem at all. The confused-deputy property still survives
 the hop: a foreign app names a *directory*, never a file (PHASE8 §6.6).
 
-**Next: P8.3** — a real GTK application, which is the pass that actually deletes
-PHASE7 §6.7's caveat, and nothing before it does.
+**P8.3 is done — a real GTK application gets the Finder, and PHASE7 §6.7's
+caveat is deleted.** `abyss/tests/gtkpick.c` is a stock GTK 3 program:
+`gtk_file_chooser_native_new`, `gtk_native_dialog_run`, and nothing else. It
+`dlopen`s libgtk so the repository acquires no GTK build dependency, it runs as
+an ordinary xdg-shell client of `undertow`, and it receives — and reads — a file
+it never named. It named a directory. Six processes in `abyss/tests/live-gtk.sh`,
+and the important one is not ours.
+
+Two things a real application wanted that no test client had.
+**`org.freedesktop.portal.Settings`** is the *first* call GTK makes, before it
+draws anything, and PHASE8 §6.4 predicted exactly that; a namespace we publish
+nothing for must answer **empty rather than erroring**, or every launch carries a
+warning. We publish `org.freedesktop.appearance` only — `color-scheme` **2,
+prefer light**, because Aqua has no dark variant — and we implement both `Read`
+(two layers of variant, a shipped mistake that is now the contract) and `ReadOne`
+(one). And **the `Response` signal must be addressed to the caller, not
+broadcast**: GTK adds no match rule for it at all, so a broadcast that looks
+right in every log reaches nobody. That is a third way this API hangs, on top of
+the two P8.2 found, and **HANDOFF §2.40** has the diagnosis — including that
+`gdbus monitor` cannot see an addressed signal, so the fix would have silently
+gutted P8.2's independent-decode assertion. Both live tests now witness with
+`dbus-monitor`.
+
+The test also found a **compositor** bug nothing else could: `undertow` aborted
+when the virtual pointer disconnected, because `Seat` freed a device's listeners
+on the seat's lifetime rather than the device's (**HANDOFF §2.41**). Every
+earlier live test killed the compositor before its input client, so the teardown
+path had never run.
+
+**Next: P8.4** — `anchor` starts the bus alongside the shell.
 
 **The other directions stay open:** Phase 4 (Mac Pro bring-up — real GPU,
 hardware cursor, `rtprio`, and where Phase 6's C1 measurements should be
@@ -596,9 +625,9 @@ repeated) and Phase 5 (the installer).
 - **Phase 4 — Mac Pro bring-up.** Real hardware, and where the volume/battery
   status items finally read a real mixer and battery instead of reporting
   absent. Biggest remaining risk: `amdgpu` `si_support` for the FirePro D-series.
-- **The D-Bus/portal bridge** — Phase 8, now at P8.2. A caller on the session bus
-  gets the Finder; what remains is proving it with GTK itself (P8.3) and having
-  `anchor` start the bus alongside the shell (P8.4).
+- **The D-Bus/portal bridge** — Phase 8, now at P8.3. A real GTK application gets
+  the Finder; what remains is having `anchor` start the bus alongside the shell
+  (P8.4), so it takes one command rather than a test script.
 (What Phase 6 finally unblocks, for the record: remembered window positions for
 the spatial Finder and dragging desktop icons — both things a Wayland *client*
 cannot do (HANDOFF §2.22) — plus the one Phase-7 debt, a server half for

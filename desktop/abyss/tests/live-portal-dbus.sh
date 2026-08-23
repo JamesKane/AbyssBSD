@@ -33,6 +33,7 @@ bin="$root/.build/debug/AquaDemo"
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v dbus-daemon >/dev/null || { echo "FAIL: dbus-daemon not installed"; exit 1; }
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }
+command -v dbus-monitor >/dev/null || { echo "FAIL: dbus-monitor not installed"; exit 1; }
 
 # Short paths: a unix socket must fit in sun_path (HANDOFF §2.32).
 rundir=$(mktemp -d /tmp/abyss-pdbus.XXXXXX)
@@ -161,10 +162,15 @@ grep -qi 'InvalidArgs' "$rundir/badtoken" \
 echo "ok: a handle_token that would break the object path was refused, with an error"
 
 # ---------------------------------------------------------------- the caller
-# gdbus monitor is our independent witness: it decodes the Response signal with
-# GLib's parser at the same time our probe decodes it with ours.
-
-gdbus monitor --session --dest org.freedesktop.portal.Desktop > "$rundir/monitor" 2>&1 &
+# dbus-monitor is our independent witness: it decodes the Response signal with
+# libdbus's parser at the same time our probe decodes it with ours.
+#
+# **A real monitor, not `gdbus monitor`.** Since P8.3 the Response is addressed
+# to the caller rather than broadcast (HANDOFF §2.40), and an addressed signal
+# is delivered only to its destination and to true bus monitors. `gdbus monitor`
+# watches through match rules and would silently see nothing here — a witness
+# that stops witnessing, which is the shape of a test that quietly passes on.
+dbus-monitor --session > "$rundir/monitor" 2>&1 &
 mon_pid=$!
 sleep 0.5
 
@@ -231,14 +237,15 @@ grep -q "^uri=$want\$" "$rundir/probe.log" \
   || { echo "FAIL: wrong uri (wanted $want)"; cat "$rundir/probe.log"; exit 1; }
 echo "ok: the answer named the file the user chose, escaped ($want)"
 
-# 3. GLib decoded the same signal with its own parser. Without this, every claim
-#    above is our encoder being read back by our decoder.
-grep -q 'org.freedesktop.portal.Request.Response' "$rundir/monitor" \
-  || { echo "FAIL: gdbus never saw our Response signal"; cat "$rundir/monitor"; exit 1; }
-grep -q 'Chosen%20file.txt' "$rundir/monitor" \
-  || { echo "FAIL: gdbus could not decode the uri out of our Response"
+# 3. libdbus decoded the same signal with its own parser. Without this, every
+#    claim above is our encoder being read back by our decoder.
+grep -q 'member=Response' "$rundir/monitor" \
+  || { echo "FAIL: dbus-monitor never saw our Response signal"
        cat "$rundir/monitor"; exit 1; }
-echo "ok: gdbus decoded the Response signal and its uris independently of us"
+grep -q 'Chosen%20file.txt' "$rundir/monitor" \
+  || { echo "FAIL: libdbus could not decode the uri out of our Response"
+       cat "$rundir/monitor"; exit 1; }
+echo "ok: libdbus decoded the Response signal and its uris independently of us"
 
 # 4. The client never named that file — it suggested a directory. The
 #    confused-deputy property survives the extra hop through D-Bus.

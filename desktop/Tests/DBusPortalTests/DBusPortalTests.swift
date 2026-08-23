@@ -11,6 +11,7 @@
 import XCTest
 @testable import DBusPortal
 import CurrentIPC
+import Aqua
 
 final class DBusPortalTests: XCTestCase {
 
@@ -227,5 +228,129 @@ final class DBusPortalTests: XCTestCase {
                        "desktop")
         XCTAssertNil(DBusPortalService.nextComponent(towards: target, from: target))
         XCTAssertNil(DBusPortalService.nextComponent(towards: target, from: "/net"))
+    }
+
+    // MARK: - Settings (P8.3)
+
+    /// The glob rule, copied from the spec rather than guessed: trailing `*`
+    /// only, prefix-matched on the text before it; an empty list or any empty
+    /// string matches everything.
+    ///
+    /// The case worth pinning is the last one. `org.gnome.*` does **not** match
+    /// the bare namespace `org.gnome`, because the `.` is part of the prefix. A
+    /// looser rule would have us answering for namespaces the client never asked
+    /// about, which is the sort of over-helpfulness that only shows up as a
+    /// toolkit applying a setting nobody made.
+    func testNamespaceGlobbingIsTrailingOnly() {
+        XCTAssertTrue(PortalSettings.matches(namespace: "org.gnome.desktop.interface",
+                                             patterns: ["org.gnome.*"]))
+        XCTAssertTrue(PortalSettings.matches(namespace: "org.freedesktop.appearance",
+                                             patterns: ["org.freedesktop.appearance"]))
+        XCTAssertTrue(PortalSettings.matches(namespace: "anything", patterns: []))
+        XCTAssertTrue(PortalSettings.matches(namespace: "anything", patterns: ["a.b", ""]))
+        XCTAssertFalse(PortalSettings.matches(namespace: "org.kde.stuff",
+                                              patterns: ["org.gnome.*"]))
+        XCTAssertFalse(PortalSettings.matches(namespace: "org.gnome",
+                                              patterns: ["org.gnome.*"]))
+    }
+
+    /// `ReadAll` must SUCCEED with an empty dictionary for namespaces we do not
+    /// publish. This is the whole reason the interface exists here: GTK asks for
+    /// `org.gnome.*`, we are not GNOME and have nothing to say, and the
+    /// difference between "no settings" and "no such method" is the difference
+    /// between an app that starts quietly and one that warns on every launch.
+    func testReadAllAnswersEmptyForNamespacesWeDoNotPublish() {
+        let all = PortalSettings.aqua.readAll(patterns: ["org.gnome.*"])
+        XCTAssertEqual(all.signature, "a{sa{sv}}")
+        guard case .array(_, let entries) = all else { return XCTFail("not a dict") }
+        XCTAssertTrue(entries.isEmpty)
+    }
+
+    /// And it must carry the standardised namespace when that is what was asked
+    /// for — including through the glob a real client sends.
+    func testReadAllCarriesTheAppearanceNamespace() {
+        for patterns in [[], [""], ["org.freedesktop.*"], [PortalSettings.appearance]] {
+            let all = PortalSettings.aqua.readAll(patterns: patterns)
+            guard case .array(_, let entries) = all,
+                  case .dictEntry(.string(let ns), let keys)? = entries.first else {
+                return XCTFail("no namespace for \(patterns)")
+            }
+            XCTAssertEqual(ns, PortalSettings.appearance)
+            XCTAssertEqual(keys.signature, "a{sv}")
+        }
+    }
+
+    /// **`Read` returns two layers of variant and `ReadOne` returns one**, and
+    /// that asymmetry is not ours. The interface XML says the single layer was
+    /// intended, the double layer is what shipped, and callers now parse the
+    /// double — so reproducing the mistake is the correct implementation. Get it
+    /// wrong and the client decodes a variant, finds a `u` where it expected
+    /// another variant, and gives up without a diagnostic.
+    func testReadIsDoubleWrappedAndReadOneIsNot() {
+        let one = PortalSettings.aqua.readOne(namespace: PortalSettings.appearance,
+                                              key: "color-scheme")
+        XCTAssertEqual(one, .variant(.uint32(2)))
+
+        let two = PortalSettings.aqua.read(namespace: PortalSettings.appearance,
+                                           key: "color-scheme")
+        XCTAssertEqual(two, .variant(.variant(.uint32(2))))
+    }
+
+    /// An unknown key is an error, not a default. The spec requires it, and a
+    /// made-up value is indistinguishable from a real one by the time it reaches
+    /// a toolkit.
+    func testAnUnknownSettingIsNotInvented() {
+        XCTAssertNil(PortalSettings.aqua.readOne(namespace: PortalSettings.appearance,
+                                                 key: "no-such-key"))
+        XCTAssertNil(PortalSettings.aqua.readOne(namespace: "org.gnome.desktop.interface",
+                                                 key: "font-name"))
+    }
+
+    /// Aqua is a light theme with no dark variant, so "prefer light" (2) is the
+    /// true answer rather than the polite one. Reporting 0 — no preference —
+    /// gets GTK's own default, which on some distributions is dark: a dark GTK
+    /// dialog on a Jaguar desktop.
+    func testTheDesktopReportsThePreferenceItActuallyHas() {
+        XCTAssertEqual(PortalSettings.aqua.value(namespace: PortalSettings.appearance,
+                                                 key: "color-scheme"), .uint32(2))
+    }
+
+    /// The accent colour is `(ddd)` in the sRGB range [0,1] — out-of-range values
+    /// are defined to mean "unset", so a component accidentally left at 0–255
+    /// would silently turn the accent colour off rather than fail loudly.
+    func testTheAccentColourIsThreeDoublesInRange() {
+        guard case .structure(let parts)? =
+                PortalSettings.aqua.value(namespace: PortalSettings.appearance,
+                                          key: "accent-color") else {
+            return XCTFail("no accent colour")
+        }
+        XCTAssertEqual(parts.count, 3)
+        for part in parts {
+            guard case .double(let c) = part else { return XCTFail("not a double") }
+            XCTAssertTrue((0...1).contains(c), "\(c) is outside sRGB [0,1]")
+        }
+    }
+
+    /// …and it is the colour the desktop actually selects things with.
+    ///
+    /// `DBusPortal` deliberately does not import the toolkit — linking cairo,
+    /// FreeType and HarfBuzz into a D-Bus bridge to name one colour would be a
+    /// bad trade — so the accent is three literals in `Settings.swift`. This is
+    /// what stops them drifting: change `Theme.menuHighlight` and the desktop
+    /// would otherwise keep telling foreign apps the old colour, and nothing
+    /// would ever say so.
+    func testAccentColourMatchesTheAquaTheme() {
+        guard case .structure(let parts)? =
+                PortalSettings.aqua.value(namespace: PortalSettings.appearance,
+                                          key: "accent-color") else {
+            return XCTFail("no accent colour")
+        }
+        let want = Theme.menuHighlight
+        let got = parts.compactMap { part -> Double? in
+            guard case .double(let c) = part else { return nil }
+            return c
+        }
+        XCTAssertEqual(got, [want.r, want.g, want.b],
+                       "the Settings accent colour has drifted from Theme.menuHighlight")
     }
 }
