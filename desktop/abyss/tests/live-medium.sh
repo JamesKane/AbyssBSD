@@ -88,6 +88,14 @@ closure=$(sed -n 's/^ *\([0-9]*\) shared objects.*/\1/p' "$work/build")
   || fail "the runtime closure came out at '$closure' objects, which cannot be right"
 echo "ok: $closure shared objects carried, computed from the binaries that need them"
 
+# The graphics stack is packages, not a closure — nothing we link mentions a
+# kernel module, so `ldd` will never find one (PHASE4 P4.3).
+mods=$(sed -n 's/^ *[0-9]* package(s), \([0-9]*\) kernel modules.*/\1/p' "$work/build")
+[ -n "$mods" ] && [ "$mods" -gt 20 ] \
+  || { grep -i warning "$work/build" | sed 's/^/    /'
+       fail "the medium carries $mods kernel modules; it needs the drm stack and SI firmware"; }
+echo "ok: $mods kernel modules carried — the driver and the firmware for it"
+
 # ------------------------------------------------------------------- 2. boot
 echo "== booting it, nested =="
 sudo kldload nmdm 2>/dev/null || true
@@ -114,6 +122,28 @@ grep -q "mapped .*\[abyss.wallpaper\]" "$work/boot.log" \
 grep -q "mapped org.abyssbsd.aquademo" "$work/boot.log" \
   || fail "the installer's window never mapped on the medium"
 echo "ok: the wallpaper and the Aqua installer both composited — from a build tree"
+
+# ---------------------------------------------------- the graphics stack (P4.3)
+#
+# What can be checked here is checked; what cannot is PHASE4 §5's checklist.
+# Nothing in this VM has an AMD GPU, so "does `si_support` bind" is not a
+# question a test can ask — but "does the medium carry the driver, the firmware,
+# and the knob" is, and a medium that reaches the Mac Pro without them wastes a
+# boot cycle that costs a person's afternoon.
+grep -q "amdgpu kernel modesetting enabled" "$work/boot.log" \
+  || fail "the medium did not load amdgpu — it would come up blank on real hardware"
+grep -q "Starting seatd" "$work/boot.log" \
+  || fail "seatd did not start, so an unprivileged session cannot take DRM master"
+echo "ok: amdgpu loaded and seatd is running — on a machine with no GPU at all"
+
+# The backend is chosen from what the machine has, not from what somebody
+# remembered to pass. Here there is no /dev/dri, so it must choose headless —
+# and it must SAY which, because on metal that line is the first thing worth
+# reading.
+grep -q "abyss-session: headless backend" "$work/boot.log" \
+  || { grep -o "abyss-session:.*" "$work/boot.log" | head -1 | sed 's/^/    /'
+       fail "the session did not choose the headless backend on a machine with no display"; }
+echo "ok: it chose the headless backend, and said so"
 
 # And the privileged half is there, and belongs to the unprivileged session:
 # the disk spoke is empty until it answers, and root would be refused (§4.4).
@@ -148,6 +178,20 @@ echo "== what it actually drew =="
 md=$(sudo mdconfig -a -t vnode -f "$img")
 mkdir -p "$work/mnt"
 sudo mount "/dev/${md}p3" "$work/mnt"
+
+# The one knob that decides whether a Mac Pro shows a picture, and the one thing
+# about it a VM can check: that it is written down. Southern Islands is off by
+# default in amdgpu — without this the FirePros are not claimed at all, which
+# looks like a missing driver and is a default (PHASE4 §6.2).
+sudo grep -q 'amdgpu_si_support="1"' "$work/mnt/boot/loader.conf" \
+  || fail "the medium does not ask amdgpu for Southern Islands — the Mac Pro's GPUs"
+sudo test -s "$work/mnt/boot/modules/amdgpu.ko" \
+  || fail "the medium has no amdgpu.ko"
+sudo test -s "$work/mnt/boot/modules/amdgpu_pitcairn_pfp_bin.ko" \
+  || fail "the medium has no Pitcairn firmware — that is the FirePro D300"
+sudo test -s "$work/mnt/usr/local/bin/seatd" || fail "the medium has no seatd"
+echo "ok: amdgpu, Southern Islands firmware, seatd, and si_support asked for"
+
 ppm="$work/frame.ppm"
 sudo cp "$work/mnt/var/log/abyss-live.ppm" "$ppm" 2>/dev/null \
   || fail "the medium captured no frame"

@@ -20,9 +20,8 @@ on every run, nested twice over, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **The next pass is P4.3** — the medium goes metal-ready, so there is
-   something to boot on the Mac Pro. Phase 4 is scoped ([PHASE4.md](PHASE4.md))
-   and P4.1 is in. Phase 8
+1. **The next step is not code — it is booting the stick.** Phase 4 is scoped
+   ([PHASE4.md](PHASE4.md)) and P4.1/P4.3 are in; §5 is the checklist. Phase 8
    closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
    Phase 5, which is **now complete**: an empty disk becomes a machine running
    the Jaguar desktop, on every run of the harness. **Read §2.43–§2.47 first** —
@@ -1992,13 +1991,19 @@ FirePro D-series — though the spike retired the version of it that would have
 ended the phase, since **all five Southern Islands firmware packages are in
 FreeBSD ports** for the 15.0 ABI (PHASE4 §4.2).
 
-**The next pass is P4.3 — the medium goes metal-ready**: `drm-kmod`, the SI
-firmware, a `loader.conf` that asks `amdgpu` for `si_support`, and a live session
-that says `--backend auto`. That is the thing to put on a USB stick, and PHASE4
-§5 is the checklist to work through when it boots. **The DRM path ships written
-and unproven** — the dev box holds DRM master in a Wayland session, so it cannot
-be exercised here, and saying so is better than a spike that proves the easy half
-(§4.3).
+**P4.3 is done: the medium is metal-ready**, carrying the drm stack, all five
+Southern Islands firmware sets and `seatd`, with a `loader.conf` that asks for
+`si_support` — both spellings, because loading the module in the build VM showed
+both registered. The live session picks its backend from whether `/dev/dri`
+exists, so the harness is untouched and a real machine gets asked for a display.
+
+**The next step is a person.** PHASE4 §5 is an ordered bring-up checklist —
+does the stick boot, does it reach multi-user, does `amdgpu` attach, does
+`undertow` find an output, is the installer on the screen, and only then the
+numbers. Each step's failure is a different problem, which is why they are
+ordered. **The DRM path ships written and unproven**: the dev box holds DRM
+master in a Wayland session, so it cannot be exercised here, and saying so is
+better than a spike that proves the easy half (PHASE4 §4.3).
 
 ### Standing smaller items, and one the installer created
 

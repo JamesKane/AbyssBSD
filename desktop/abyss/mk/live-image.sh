@@ -74,6 +74,29 @@ DATA="/usr/local/share/fonts/dejavu
 BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus
           abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl"
 
+# The graphics stack, for a medium that has to come up on a real machine
+# (PHASE4 P4.3). Packages rather than an `ldd` closure, because kernel modules
+# are not linked by anything we build — nothing in `ldd` will ever mention them,
+# and they are the difference between an installer you can see and one you
+# cannot. Precise, not transitive: named packages, and only `/boot/modules` and
+# `/usr/local` out of each.
+#
+#   drm-66-kmod   what `drm-kmod` resolves to on FreeBSD 15. 3.7 MB, six
+#                 modules: amdgpu, radeonkms, i915kms, drm, ttm, dmabuf.
+#   gpu-firmware  Southern Islands, which is what the Mac Pro's FirePros are —
+#                 the D300 is Pitcairn, the D500 and D700 are Tahiti. The other
+#                 three SI chips ride along at ~190 KB each; a medium that
+#                 refuses to start on a slightly different card for want of a
+#                 megabyte is a poor trade.
+#   seatd         37 KB, and the reason the session can take DRM master without
+#                 being root. The desktop runs as an unprivileged user on
+#                 purpose (PHASE5 §4.4); libseat is already in our closure, but
+#                 the daemon it talks to is not.
+GPU_PKGS="drm-66-kmod seatd
+          gpu-firmware-amd-kmod-tahiti gpu-firmware-amd-kmod-pitcairn
+          gpu-firmware-amd-kmod-verde gpu-firmware-amd-kmod-oland
+          gpu-firmware-amd-kmod-hainan"
+
 # The desktop, as a distribution set. Named to match `InstallPlan.desktopSet`,
 # which is what makes rc.conf on the installed machine turn the desktop on.
 DESKTOP_SET="abyss.txz"
@@ -162,6 +185,32 @@ done
 sudo mkdir -p "$de/usr/local/share/X11"
 sudo ln -sf ../xkeyboard-config-2 "$de/usr/local/share/X11/xkb"
 
+echo "== the graphics stack"
+# Fetched into the *desktop* tree, so that what the medium runs and what the
+# installer installs stay the same collection — a machine installed from this
+# medium needs these modules exactly as much as the medium does.
+gpudir="${TMPDIR:-/tmp}/abyss-live-gpu"
+sudo rm -rf "$gpudir"; sudo mkdir -p "$gpudir"
+# shellcheck disable=SC2086
+if sudo pkg fetch -y -d -o "$gpudir" $GPU_PKGS > /dev/null 2>&1; then
+  n=0
+  for pkgfile in $(sudo find "$gpudir" -name '*.pkg'); do
+    # `--exclude '+*'` drops pkg's own metadata (+MANIFEST and friends); what is
+    # left is the payload at absolute paths, which tar re-roots for us.
+    sudo tar -xf "$pkgfile" -C "$de" --exclude '+*' 2>/dev/null && n=$((n + 1))
+  done
+  mods=$(sudo find "$de/boot/modules" -name '*.ko' 2>/dev/null | wc -l | tr -d ' ')
+  echo "   $n package(s), $mods kernel modules, $(sudo du -sh "$de/boot" 2>/dev/null | awk '{print $1}')"
+  [ "$mods" -gt 4 ] || die "the graphics packages produced only $mods modules"
+else
+  # A medium with no GPU stack still installs and still runs headless — it just
+  # cannot be *seen* on real hardware. Loud, because that is the whole point of
+  # this pass and a silent omission would look like a driver problem later.
+  echo "   WARNING: could not fetch $GPU_PKGS — this medium has no graphics"
+  echo "            stack and will come up blank on real hardware."
+fi
+sudo rm -rf "$gpudir"
+
 echo "== the desktop"
 for b in $BINARIES; do
   sudo install -m 755 "$builddir/$b" "$de/usr/local/bin/$b"
@@ -183,9 +232,27 @@ mode="${ABYSS_SESSION_MODE:-desktop}"
 frames="${ABYSS_SESSION_FRAMES:-0}"
 limit=""
 [ "$frames" = 0 ] || limit="--frames $frames"
+
+# **Use the display if there is one.**
+#
+# `--backend auto` is right on a machine with a GPU and wrong everywhere else:
+# in the build VM there is no `/dev/dri` at all, and asking for it there would
+# take the harness's 39 live modes down with it. So the session looks. This is
+# the one place in the tree that decides between the two, and it decides by
+# what the machine has rather than by what somebody remembered to pass.
+#
+# The pixman pin that makes `--capture` work applies to headless only, so on a
+# real display the capture is expected to fail — which is why the frame is a
+# diagnostic and never an assertion on metal.
+backend=headless
+for card in /dev/dri/card*; do
+  [ -e "$card" ] && backend=auto && break
+done
+echo "abyss-session: $backend backend ($(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo 'no /dev/dri'))"
+
 exec /usr/local/bin/anchor \
   --mode "$mode" \
-  --compositor "/usr/local/bin/undertow run --hz 60 $limit \
+  --compositor "/usr/local/bin/undertow run --hz 60 $limit --backend $backend \
                 --width ${ABYSS_WIDTH:-1024} --height ${ABYSS_HEIGHT:-768} \
                 --socket $sock ${ABYSS_CAPTURE:+--capture $ABYSS_CAPTURE}" \
   --display "$sock"
@@ -256,6 +323,14 @@ abyss_live_enable="YES"
 # Saying so explicitly is what stops rc warning about an unset variable on every
 # boot, which is noise in the one log this machine uses to report on itself.
 abyss_desktop_enable="NO"
+
+# **The GPU driver, and the thing that lets an unprivileged session use it.**
+# `kld_list` rather than loader.conf, which is what FreeBSD's own drm-kmod
+# instructions say: the module wants a running system, not a loader. On a
+# machine with no AMD card this loads and attaches nothing — measured in the
+# build VM, which has no GPU at all — so it is safe to ask for unconditionally.
+kld_list="amdgpu"
+seatd_enable="YES"
 RC
 
 sudo sh -c "cat > $stage/boot/loader.conf" <<'LOADER'
@@ -267,6 +342,20 @@ console="comconsole,vidconsole"
 # The same reason the installer writes it (HANDOFF §2.43): GEOM's disk-ident
 # class can consume the disk and leave no /dev/ufs or /dev/gpt provider at all.
 kern.geom.label.disk_ident.enable="0"
+
+# **Southern Islands is off by default in amdgpu, and the Mac Pro is Southern
+# Islands.** Without this the FirePros are simply not claimed and the machine
+# comes up with no display — which looks like a missing driver and is a default.
+# `amdgpu` prints the fix itself ("Use radeon.si_support=0 amdgpu.si_support=1
+# to override") in Linux's names; FreeBSD's linuxkpi registers BOTH of the
+# spellings below, which was measured by loading the module and reading
+# `sysctl -aN`, not guessed from the message.
+compat.linuxkpi.amdgpu_si_support="1"
+hw.amdgpu.si_support="1"
+# ...and radeonkms must not claim them first. It is not in `kld_list`, so this
+# is belt to that brace.
+compat.linuxkpi.radeon_si_support="0"
+hw.radeon.si_support="0"
 LOADER
 
 # **The root is mounted read-write, and that is a v1 choice with a cost.** A
@@ -410,6 +499,12 @@ PW
 sudo sh -c "cat >> $stage/etc/group" <<'GRP'
 abyss:*:1001:
 GRP
+# seatd's socket is group `video`, which is how an unprivileged session is
+# allowed to ask for DRM master. Without this the session runs, finds a card it
+# may not open, and falls back to no display at all.
+sudo sed -i '' 's|^video:\*:44:.*|video:*:44:abyss|' "$stage/etc/group" 2>/dev/null || true
+grep -q '^video:' "$stage/etc/group" 2>/dev/null \
+  || sudo sh -c "echo 'video:*:44:abyss' >> $stage/etc/group"
 sudo mkdir -p "$stage/home/abyss"
 # So that someone logging in at the live console can just run
 # `abyss-installctl` — the installer service belongs to this user's session and

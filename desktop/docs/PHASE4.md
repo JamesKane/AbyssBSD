@@ -5,9 +5,9 @@ in this loop. Read [PLAN.md](PLAN.md) for the locked decisions, [PHASE6.md](PHAS
 for the frame contract this has to meet on metal, and [PHASE5.md](PHASE5.md) for
 the installer that is how anything gets onto that machine at all.
 
-Last updated: 2026-08-24. **Scoped, and P4.1 is done.** Three risks were spiked
-first — two retired, one *deliberately left open* because only the hardware can
-close it (§4).
+Last updated: 2026-08-24. **Scoped; P4.1 and P4.3 are done — there is a stick to
+boot.** Three risks were spiked first: two retired, one *deliberately left open*
+because only the hardware can close it (§4).
 
 ---
 
@@ -82,12 +82,39 @@ acceleration. Nested gives most of that for free — the events come from the
 host's actual mouse and keyboard — which is why nested is worth having even
 though it can never answer C1.
 
-**P4.3 — the medium goes metal-ready.** The image `abyss/mk/live-image.sh` builds
-runs `undertow` headless and would come up on a Mac Pro with nothing on the
-screen. It needs: `drm-kmod` and the Southern Islands firmware (§4.2), a
-`loader.conf` that asks `amdgpu` for `si_support`, `seatd` or the equivalent so
-the session can take DRM master, and a live session that says `--backend auto`.
-This is the pass that produces the thing to put on a stick.
+**P4.3 — the medium goes metal-ready. ✅ done.** The image now carries **45
+kernel modules** — `drm-66-kmod`'s six (amdgpu, radeonkms, i915kms, drm, ttm,
+dmabuf) and 39 Southern Islands firmware blobs — plus `seatd`, for 4.7 MB of
+packages.
+
+**Packages, not an `ldd` closure**, and the distinction is the point: nothing we
+build links a kernel module, so `ldd` will never mention one. P5.3's lesson was
+"a package manager's closure is not your program's closure"; the converse is
+that some things are *only* obtainable as packages, and the answer is to name
+them precisely and take `/boot/modules` and `/usr/local` out of each rather than
+resolving a dependency graph.
+
+**The `si_support` knob was measured, not guessed.** `amdgpu` prints the fix in
+Linux's spelling — *"Use radeon.si_support=0 amdgpu.si_support=1 to override"* —
+and FreeBSD's linuxkpi mangles module parameters into a sysctl namespace. Rather
+than reason about which, the module was loaded in the build VM (which has no AMD
+GPU at all) and `sysctl -aN` read back: **both** `hw.amdgpu.si_support` and
+`compat.linuxkpi.amdgpu_si_support` are registered. `loader.conf` sets both, and
+turns the `radeon` side off. That load also established something the medium
+depends on: **amdgpu loads harmlessly on a machine it cannot drive**, so
+`kld_list="amdgpu"` is safe to ask for unconditionally.
+
+**The backend is chosen from what the machine has.** One rule, in the live
+session: if `/dev/dri/card*` exists, `--backend auto`; otherwise headless. The
+build VM has no `/dev/dri`, so the harness's 39 live modes are untouched — and
+on a Mac Pro the same medium asks for the display. It says which it chose, which
+on metal is the first line worth reading.
+
+*What a VM can check, it checks:* the medium carries `amdgpu.ko`, carries the
+Pitcairn firmware (the D300), carries `seatd`, asks for `si_support`, loads the
+driver at boot, starts `seatd`, and picks headless where there is no display.
+*What it cannot:* whether `si_support` binds a real FirePro. That is §5, step 3,
+and it is the question this whole pass exists to let somebody ask.
 
 **P4.4 — first light.** Boot the stick on the Mac Pro and work the checklist in
 §5. The interesting failures are all early: Apple's EFI is particular about what

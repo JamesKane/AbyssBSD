@@ -13,8 +13,9 @@ is the claim the D-Bus phase existed to make.
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
 on every run of the harness, nested twice over, with no hardware and no human.
-**Phase 4 (Mac Pro) is the only phase left, and is now scoped and started**
-([PHASE4.md](PHASE4.md), P4.1 done); see [What's next](#whats-next).
+**Phase 4 (Mac Pro) is the only phase left; it is scoped, and P4.1 and P4.3 are
+done — there is an image to write to a stick and boot**
+([PHASE4.md](PHASE4.md)); see [What's next](#whats-next).
 
 ## What this is
 
@@ -434,12 +435,17 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **Phase 4 is scoped, and P4.1 is done** ([PHASE4.md](PHASE4.md)): `undertow`
-> now chooses its backend — DRM on metal, nested inside another compositor,
-> headless by default. **The next pass is P4.3, the metal-ready medium**: the
-> route onto that machine is the Phase 5 installer, so the medium needs
-> `drm-kmod`, the Southern Islands firmware and a session that is not headless.
-> PHASE4 §5 is the checklist to work through when the stick boots.
+> **Phase 4 is scoped; P4.1 and P4.3 are done — there is a stick to boot**
+> ([PHASE4.md](PHASE4.md)). `undertow` chooses its backend, and the medium now
+> carries **45 kernel modules** (the drm stack and Southern Islands firmware),
+> `seatd`, and a `loader.conf` that asks `amdgpu` for `si_support`. The live
+> session picks its backend from what the machine has — `/dev/dri` present means
+> a display, absent means headless — so the harness is untouched and a Mac Pro
+> gets asked for a screen.
+>
+> **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
+> each step's failure is a different problem. Write the image to a stick and work
+> down it.
 >
 > **The DRM path ships written and unproven** — this dev box holds DRM master in
 > a Wayland session, so it cannot be exercised here. Nested *can* be, and was:
@@ -559,6 +565,20 @@ binary. The disk spoke shows **every** disk with the reason beside the ones it
 will not use (a picker that silently omits your disk is one you argue with), and
 the confirmation names the disk in the sentence with the destructive verb on the
 button.
+
+**P4.3 is done — the medium is metal-ready.** It carries the `drm-66-kmod` stack
+and all five Southern Islands firmware sets (the Mac Pro's D300 is Pitcairn, the
+D500/D700 Tahiti), plus `seatd` so an unprivileged session can take DRM master —
+4.7 MB of packages, named precisely rather than resolved as a closure, because
+**nothing we build links a kernel module and `ldd` will never mention one**.
+
+The `si_support` knob was *measured*: `amdgpu` prints the fix in Linux's spelling
+and FreeBSD mangles module parameters into a sysctl namespace, so the module was
+loaded in the build VM and `sysctl -aN` read back — **both**
+`hw.amdgpu.si_support` and `compat.linuxkpi.amdgpu_si_support` exist, and
+`loader.conf` sets both. That load also established that amdgpu attaches nothing
+and harms nothing on a machine with no AMD GPU, which is why `kld_list="amdgpu"`
+is safe to ask for unconditionally.
 
 **Phase 4 is scoped and P4.1 is in — `undertow` meets a real display.** Running
 it on a non-headless backend for the first time produced two findings that shape
