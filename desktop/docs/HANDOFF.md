@@ -12,18 +12,20 @@ runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
 plane, session supervisor and hardware bridges; the portals hand out descriptors;
 and **one command boots a desktop where an unmodified GTK 3 application, which
 has never heard of this desktop, opens a file through the Finder**.
-**261 unit tests + 35 live modes, green on Linux and FreeBSD.**
+**287 unit tests + 36 live modes, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is scoped and started** ([PHASE5.md](PHASE5.md)), its
-four risks retired on the target and **P5.1 done**: a plan we wrote installs a
-FreeBSD that boots, and the harness can prove it booted with no hardware and no
-human.
+four risks retired on the target and **P5.1–P5.2 done**: a program we wrote
+installs a FreeBSD that boots, and the harness proves it booted on every run,
+with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **The next pass is P5.2** — `abyss-install`, the executor. Phase 8
+1. **The next pass is P5.3** — the live medium. Phase 8
    closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
-   Phase 5, and P5.1 is in. §5 has what P5.2 proves, and the standing smaller
-   items. **Read §2.43 before writing P5.2** — it is that pass's whole argument. **Phase 4 (Mac Pro bring-up) is still open and still
+   Phase 5, and **P5.1 and P5.2 are in — the installer installs, and what it
+   installs boots**. §5 has what P5.3 is, and the standing smaller items.
+   **Read §2.43 and §2.44 first**; between them they are why this phase is
+   verified the way it is. **Phase 4 (Mac Pro bring-up) is still open and still
    independent** — and now owns the metal half of Phase 5's verify.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
@@ -42,6 +44,9 @@ human.
    - **§2.41** — whose lifetime is this listener, exactly? A compositor must
      outlive its input client, and only a test that shuts down in the right
      order will ever say so.
+   - **§2.44** — an install that reports success is not an install that
+     worked. Every step said ok, the log said ok, and the machine booted to the
+     loader prompt. Where the output is a *thing*, assert on the thing.
    - **§2.43** — a list of commands is not verified until something runs it. A
      plan with 28 tests and a golden render was wrong in four ways, each of
      which shipped a broken machine; all four were found by executing it.
@@ -288,6 +293,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.41 | Input devices belong to clients: free a device's listeners on its `destroy`, or the compositor aborts when the harness lets go of the pointer |
 | 2.42 | Name the socket; don't read the address back. A discovered address changes when the thing that chose it restarts — and readiness is `connect(2)`, never "the file exists" |
 | 2.43 | A list of commands is not verified until something runs it — a plan with 28 tests and a golden render was wrong four ways |
+| 2.44 | An install that reports success is not one that worked — assert on `login:`; and `geom disk list` cannot see `md(4)` |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -554,6 +560,41 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.44 An install that reports success is not an install that worked
+(P5.2 — `abyss-install`, and the live test that boots what it installed.)
+
+§2.43's lesson, one level up. The step list is now run by a real program that
+reports each step over the control plane, and the first fault injected into it
+was the `zpool set bootfs=` step replaced by `true`. Every step succeeded. The
+service logged **"install: 39 steps, ok"**. The client printed **"installed."**
+And the machine booted to the loader's `OK` prompt, because nothing had told it
+what to boot.
+
+Only `grep -q "login:"` knew. Not the exit status, not the pool importing, not
+the absence of any error anywhere — a machine we partitioned, from a kernel we
+extracted, reaching multi-user. Where a program's output is a *thing* rather than
+a value, the test has to assert on the thing.
+
+Three more, from the same pass:
+
+- **`geom disk list` does not show `md(4)` devices**, and neither does
+  `sysctl kern.disks`. P5.1 installed onto a file-backed md and it worked
+  perfectly — but the installer's own machine probe cannot see such a disk, so
+  the live test could not use one. The fix is a **real** scratch disk on the
+  build VM, not a probe taught about memory disks: a test that needs the product
+  to grow a code path is a test of something the product does not do.
+- **"May command it" and "can reach it" are different questions.** The peer
+  check (§4.4 / `getpeereid` / `SO_PEERCRED`) answers the first and does nothing
+  about the second: a root-owned 0600 socket is one the caller cannot open at
+  all. `abyss-install` therefore hands its socket to the one uid it was started
+  for *and* asks the kernel who called. Neither alone is enough — permissions
+  are defeated by anything running as root, and a peer check grants nobody
+  access.
+- **A force-unwrap in an XCTest kills the process**, so one broken thing hides
+  every test after it. Two injected faults reported the wrong test's name until
+  the `!`s became `XCTUnwrap`. A suite that dies on the first failure tells you
+  less than one that fails.
 
 ### 2.43 A list of commands is not verified until something runs it
 (P5.1 — the install as a value, and the first pass whose output is a *plan*
@@ -1749,12 +1790,18 @@ mounted disk, the running root, or something that is not a whole disk. Pure, in
 run on Linux, where not one of those commands exists. **§2.43 is what running it
 found**, and it is the pass's real lesson.
 
-**P5.2 is next**, and it is where the phase's claim comes true: `abyss-install`
-runs the step list as root, checks its peer (`getpeereid` / `SO_PEERCRED` —
-PHASE5 §4.4), and `abyss/tests/live-install.sh` installs onto a file-backed disk
-in the VM and **boots the result under nested bhyve**. The definition of "it
-worked" is `login:`; everything before that line is a diagnostic. P5.1 already
-proved the harness can do this by hand — the pass is to make it a test.
+**P5.2 is done too**, and with it the phase's claim: `abyss-install` runs the
+step list as root, hands its socket to one uid and asks the kernel who called
+(PHASE5 §4.4), and `abyss/tests/live-install.sh` installs onto the build VM's
+scratch disk and **boots the result under nested bhyve**. The definition of "it
+worked" is `login:` — see §2.44 for what that caught on its first injection.
+
+**P5.3 is next: the live medium.** `abyss/mk/live-image.sh` — extract the sets
+into a staging root, add the DE and the Swift runtime it needs (144 MB, PHASE5
+§6.3), configure a session that autologs in and runs one application, then
+`makefs` + `mkimg`. §4.3 already proved the medium boots; the pass is to put our
+desktop on it. Remember `chflags -R noschg` before rebuilding a staging root, or
+the script works once.
 
 ### The other phase that is left
 
@@ -1838,6 +1885,7 @@ standing between "green" and "green for the reason I think".
 | `de/cproc` | process supervision: every child a pollable fd (`pdfork`/`pidfd`) + a signal self-pipe (§2.33) |
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, the session plan, dependency gating, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh`, and since P8.4 starts the **whole** desktop: compositor, bus, portal, bridge, shell |
 | `de/install` | the installer's thinking half: `InstallPlan` and `DiskInventory` (the machine as an *argument*), the refusals, and the step list a plan compiles to — no dependency at all, so every test runs on Linux where `gpart` does not exist |
+| `de/installrun`, `de/installbin`, `de/installctl` | the doing half: the step runner, the machine probe (`geom disk list` / `mount -p` / `glabel` / `zpool`, parsed pure and tested against captured output), the peer check, the wire codec — plus `abyss-install` (root) and `abyss-installctl` (the caller) |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |

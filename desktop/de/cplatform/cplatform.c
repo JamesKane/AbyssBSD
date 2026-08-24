@@ -1,5 +1,10 @@
 /* See cplatform.h. /proc/self/exe on Linux, KERN_PROC_PATHNAME on FreeBSD,
  * plus SCM_RIGHTS fd passing (cmsg is all macros, so Swift can't do it). */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+/* struct ucred (SO_PEERCRED) is behind _GNU_SOURCE, and this has to come before
+ * any header is included or the declaration is simply absent. */
+#define _GNU_SOURCE
+#endif
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
@@ -173,3 +178,30 @@ long ap_recvmsg_fds(int sock, void *buf, size_t len, int *fds, int max_fds, int 
     if (nfds_out != NULL) *nfds_out = got;
     return (long)n;
 }
+
+/* --------------------------------------------------------------- peer uid */
+
+#if defined(__linux__)
+
+#include <sys/socket.h>
+
+int ap_peer_uid(int sock, unsigned int *uid) {
+    struct ucred cred;
+    socklen_t len = sizeof cred;
+    if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0) return -1;
+    if (len != sizeof cred) { errno = EINVAL; return -1; }
+    if (uid != NULL) *uid = (unsigned int)cred.uid;
+    return 0;
+}
+
+#else   /* FreeBSD, Darwin, and the other BSDs */
+
+int ap_peer_uid(int sock, unsigned int *uid) {
+    uid_t u;
+    gid_t g;
+    if (getpeereid(sock, &u, &g) != 0) return -1;
+    if (uid != NULL) *uid = (unsigned int)u;
+    return 0;
+}
+
+#endif

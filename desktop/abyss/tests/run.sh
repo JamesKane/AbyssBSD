@@ -132,6 +132,14 @@ if [ "$live" -eq 1 ]; then
   # (PHASE8.md P8.4). Skips itself, loudly, on a box with no GTK runtime.
   echo "== one command, a whole desktop =="
   sh "$root/abyss/tests/live-session-gtk.sh"
+
+  # And the pass where an operating system gets onto a disk: a root
+  # `abyss-install` commanded by an unprivileged caller, installing onto a
+  # scratch disk, and the result BOOTED under nested bhyve (PHASE5.md P5.2).
+  # On Linux it is a positive control — the probe must refuse and say why — and
+  # on FreeBSD it skips loudly without the dist sets or bhyve's UEFI firmware.
+  echo "== the installer, and what it installed =="
+  sh "$root/abyss/tests/live-install.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

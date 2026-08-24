@@ -208,6 +208,29 @@ let package = Package(
             name: "Install",
             path: "de/install"
         ),
+        // The installer's doing half: running a step list, looking at the
+        // machine, and the service `abyss-install` hosts. Separate from
+        // `Install` so that target keeps the property that earns it its tests —
+        // it imports nothing, so every refusal runs on Linux.
+        .target(
+            name: "InstallRun",
+            dependencies: ["Install", "CurrentIPC", "CPlatform"],
+            path: "de/installrun"
+        ),
+        // The privileged half: runs as root, commanded by an unprivileged GUI,
+        // and the only program here whose job is to destroy data.
+        .executableTarget(
+            name: "abyss-install",
+            dependencies: ["Install", "InstallRun", "CurrentIPC"],
+            path: "de/installbin"
+        ),
+        // ...and a caller for it, because an installer that only a graphical
+        // program can drive cannot be debugged on a machine with no graphics.
+        .executableTarget(
+            name: "abyss-installctl",
+            dependencies: ["Install", "InstallRun", "CurrentIPC"],
+            path: "de/installctl"
+        ),
         // The supervisor itself: the Swift replacement for abyss/session.sh.
         .executableTarget(
             name: "anchor",
@@ -366,6 +389,11 @@ let package = Package(
             name: "InstallTests",
             dependencies: ["Install"],
             path: "Tests/InstallTests"
+        ),
+        .testTarget(
+            name: "InstallRunTests",
+            dependencies: ["InstallRun", "Install", "CurrentIPC"],
+            path: "Tests/InstallRunTests"
         ),
         .testTarget(
             name: "DBusTests",

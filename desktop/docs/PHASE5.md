@@ -4,7 +4,7 @@ The last phase that depends on nothing. Read [PLAN.md](PLAN.md) for the locked
 decisions, [PHASE8.md](PHASE8.md) for the session this installs, and
 [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-24. **P5.1 is done; P5.2 is next.** Four risks were spiked first,
+Last updated: 2026-08-24. **P5.1 and P5.2 are done; P5.3 is next.** Four risks were spiked first,
 on the target (§4), because the phase's shape depended on the answers — and two
 of them were the phase's whole feasibility question. The passes below are written
 knowing that a program we wrote can install a bootable FreeBSD, and that the
@@ -155,16 +155,57 @@ None of those is a mistake a reviewer would have caught reading the list, and
 every one of them ships a broken machine. **That is the argument for P5.2's live
 test in one paragraph**: this list is not verified until something boots.
 
-**P5.2 — `abyss-install`: the executor, and the pass where the claim comes true.**
+**P5.2 — `abyss-install`: the executor, and the pass where the claim comes true. ✅ done.**
 Runs a step list as root and streams progress back over `CurrentIPC`. Checks its
 peer. Tears down idempotently — export the pool, unmount the ESP, detach the md —
 so a failed install leaves nothing mounted and the next attempt is not a
 different problem.
 
-*Verify:* **`abyss/tests/live-install.sh` — install onto a file-backed disk in
-the build VM, then boot the result under nested bhyve and wait for `login:`.**
-That is the whole phase's claim, made by the harness, on every run, with no GUI
-in it yet. Everything after this pass is the face on the front.
+*Verify:* **`abyss/tests/live-install.sh` — install onto a scratch disk in the
+build VM, then boot the result under nested bhyve and wait for `login:`.** That
+is the whole phase's claim, made by the harness, on every run, with no GUI in it
+yet. Everything after this pass is the face on the front.
+
+**✅ done.** 25 more unit tests (287 total) and a live test that installs a real
+system and boots it. Six things are worth recording.
+
+**The scratch disk is a real disk, and had to be.** P5.1 installed onto a
+file-backed `md(4)` device, which works — but **`geom disk list` does not show
+`md` devices**, and neither does `sysctl kern.disks`, so the installer's own
+machine probe cannot see the disk P5.1 installed onto. Teaching the product
+about memory disks to satisfy a test would be testing a code path the product
+does not have, so the build VM gets a **12 GB virtio scratch disk** instead
+(`abyss/vm/run.sh`). The test then picks its target by the product's own
+signals — not the root disk, nothing mounted from it, big enough to be a target
+— and stops unless that is exactly one disk.
+
+**"Allowed to command it" had to be made to mean "able to reach it".** §4.4
+found that a root-owned 0600 socket is unreachable by the GUI that must command
+it; the peer check answers a different question and does not fix that. So
+`abyss-install --uid N` **hands the socket to that uid** and *then* asks the
+kernel who called. The two are not redundant: permissions alone are defeated by
+anything running as root, and a peer check alone grants nobody access.
+
+**The definition of "it worked" earned its keep on the first injection.** With
+the `bootfs` step replaced by `true`, every step reported success — the install
+said *"39 steps, ok"* — and the loader dropped to its `OK` prompt. Nothing but
+the boot check knew. That is P5.1's §2.43 lesson arriving one level up: **an
+install that reports success is not an install that worked.**
+
+**The disk you booted from is refused twice.** Deleting the running-root refusal
+did not make the machine installable — "something is mounted from it at /,
+/boot/efi, /home, …" still stopped it, and the live test failed because it was
+refused for the *wrong reason*. Two independent signals, and the test knows
+which one it is asking about.
+
+**`check` and `install` are asked about the same plan**, and the test asserts
+they compile to the same number of steps. Otherwise "check said yes" is a promise
+about a plan nobody is going to run.
+
+*One test-quality finding worth carrying:* an injected fault reported the wrong
+test, because a force-unwrap in an XCTest **kills the process** and hides every
+test after it. `XCTUnwrap` fails the one test and lets the rest speak. A suite
+that dies on the first failure tells you less than one that fails.
 
 **P5.3 — the live medium.**
 `abyss/mk/live-image.sh`: extract the sets into a staging root, add the DE and

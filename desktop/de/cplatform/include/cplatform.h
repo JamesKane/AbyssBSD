@@ -68,4 +68,23 @@ int ap_socket_nosigpipe(int sock);
  * leaked. */
 long ap_recvmsg_fds(int sock, void *buf, size_t len, int *fds, int max_fds, int *nfds_out);
 
+/*
+ * Who is on the other end of this connected unix socket?
+ *
+ * The installer is the reason this exists: `abyss-install` runs as root and is
+ * commanded by an unprivileged GUI, so "may this caller command me" cannot be
+ * answered by the socket's permissions. CurrentIPC creates its runtime
+ * directory 0700 and its sockets 0600 — the right default for a desktop, and
+ * exactly wrong here, because a root-owned 0600 socket is one the GUI cannot
+ * open at all. Loosening the mode until it works hands the installer to every
+ * process on the machine; asking the kernel does not.
+ *
+ * In C because it is two different calls: FreeBSD has getpeereid(3) and no
+ * SO_PEERCRED; glibc has SO_PEERCRED (behind _GNU_SOURCE, with a struct ucred)
+ * and no getpeereid. Same shape as the cmsg macros above.
+ *
+ * Writes the peer's effective uid to *uid. Returns 0, or -1 with errno set.
+ */
+int ap_peer_uid(int sock, unsigned int *uid);
+
 #endif /* ABYSS_CPLATFORM_H */

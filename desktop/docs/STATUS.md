@@ -8,12 +8,13 @@ runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**261 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
-**Phase 5 — the installer — is scoped and started** ([PHASE5.md](PHASE5.md),
-passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1 is
-done**: `de/install` is the install as a value, and the list it compiles has been
-run against a real disk and booted. **P5.2 is next**; see
-[What's next](#whats-next).
+**287 unit tests + 36 live modes, green on Linux *and* FreeBSD.**
+**Phase 5 — the installer — is scoped and half built** ([PHASE5.md](PHASE5.md),
+passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1 and
+P5.2 are done: the installer installs, and the harness boots what it installed**
+— an unprivileged caller commands a root `abyss-install` over CurrentIPC, a real
+disk is partitioned and populated, and nested bhyve reaches `login:`. **P5.3 is
+next**; see [What's next](#whats-next).
 
 ## What this is
 
@@ -433,11 +434,11 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **The next pass is P5.2 — `abyss-install`, the executor**, and the pass where
-> the phase's claim comes true: it runs P5.1's step list as root, checks its
-> peer, and `abyss/tests/live-install.sh` installs onto a file-backed disk in the
-> VM and boots the result under nested bhyve. The definition of "it worked" is
-> `login:`.
+> **The next pass is P5.3 — the live medium.** `abyss/mk/live-image.sh`:
+> extract the sets into a staging root, add the DE and the Swift runtime it
+> needs, configure a session that autologs in and runs one application, then
+> `makefs` + `mkimg`. PHASE5 §4.3 already proved a medium built this way boots;
+> the pass is to put our desktop on it.
 >
 > **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
@@ -491,6 +492,26 @@ mounted, and a machine that came up with no swap because GEOM's disk-ident class
 had shadowed the very GPT labels the plan wrote into `fstab`. Each is now a test,
 and the lesson is [HANDOFF §2.43](HANDOFF.md): **a list of commands is not
 verified until something runs it.**
+
+**P5.2 is done — the installer installs, and what it installed boots.**
+`abyss-install` runs a step list as root and streams progress over `CurrentIPC`;
+`abyss-installctl` drives it as an ordinary unprivileged process. That split is
+the phase's central decision, and `abyss/tests/live-install.sh` now exercises all
+of it on every run: the machine probe finds the disks and knows which holds the
+running root, **the disk we booted from is refused live**, a real scratch disk is
+partitioned and populated, and **nested bhyve boots the result to `login:`** with
+the hostname from the plan and swap on.
+
+Three findings worth carrying. **`geom disk list` cannot see `md(4)` devices**,
+so the disk P5.1 installed onto is invisible to the installer's own probe — the
+build VM gets a real 12 GB scratch disk rather than the product growing a code
+path to suit a test. **"May command it" and "can reach it" are different
+questions**: `abyss-install` hands its socket to one uid *and* asks the kernel
+who called, because permissions alone are defeated by root and a peer check alone
+grants nobody access. And [HANDOFF §2.44](HANDOFF.md), from the first injected
+fault: with `bootfs` never set, every step succeeded, the log said *"39 steps,
+ok"*, the client said *"installed."* — and the machine booted to the loader
+prompt. **An install that reports success is not an install that worked.**
 
 **Phase 7 (portals) — all five passes.**
 An app asks the desktop for a file, a notification or a screenshot, and gets back

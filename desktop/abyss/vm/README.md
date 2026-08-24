@@ -38,7 +38,7 @@ below.
 | `config.sh`     | All tunables (paths, ports, CPUs, RAM). Override via env.       |
 | `fetch-image.sh`| Download, checksum, decompress the pristine base image.        |
 | `make-seed.sh`  | Generate the ssh key if needed; build the NoCloud cloud-init seed (Rock Ridge ISO, via pycdlib). |
-| `run.sh`        | Boot the VM on a COW overlay disk (base image stays pristine). |
+| `run.sh`        | Boot the VM on a COW overlay disk (base image stays pristine), plus a 12G **scratch disk** the installer tests are allowed to destroy. |
 | `check.sh`      | Assert the guest is ready: ssh, cloud-init, packages, pkg-config, harness tools. |
 | `build.sh`      | The dev loop: sync, then `swift build` (+ `swift test`) in the guest. |
 | `ssh.sh`        | SSH in (passes through args/commands).                          |
@@ -66,3 +66,16 @@ below.
   Rust: the engine is a Swift *rewrite*, not a reuse of the sibling's crates.
 - **Stop the VM**: `kill $(cat ../../../abyss-swift-vm/qemu.pid)` (daemon mode),
   or `Ctrl-A X` in the foreground console.
+
+## The scratch disk (Phase 5)
+
+`run.sh` attaches a third virtio disk, `$ABYSS_SCRATCH`
+(`../abyss-swift-vm/abyss-scratch.qcow2`, 12G, created on demand). It shows up in
+the guest as `vtbd2`, and `abyss/tests/live-install.sh` installs onto it — which
+means **that disk is wiped on every live run**, deliberately.
+
+It is a *real* virtio disk rather than a file-backed `md(4)` device because
+`geom disk list` does not show md devices (nor does `sysctl kern.disks`), so the
+installer's own machine probe cannot see one. A test that needed the product to
+grow a code path for memory disks would be testing something the product does
+not do. Delete the file to reclaim the space; `run.sh` makes another.

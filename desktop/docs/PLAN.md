@@ -253,7 +253,8 @@ boots our medium, someone clicks through an Aqua installer, and it reboots into 
 Jaguar desktop.
 
 **Expanded to executable detail in [PHASE5.md](PHASE5.md)** — passes P5.1–P5.5, and
-four risks spiked on the target before the plan was written. **P5.1 is done.** Two corrections to the
+four risks spiked on the target before the plan was written. **P5.1 and P5.2 are
+done — the installer installs, and the harness boots what it installed.** Two corrections to the
 sketch below came out of those spikes:
 
 - **We do not drive `bsdinstall`** (corrected 2026-08-24 — this used to read "the GUI

@@ -28,6 +28,14 @@ ABYSS_REPO="$(cd "$ABYSS_VM_DIR/../.." && pwd)"
 : "${ABYSS_DISK:=$ABYSS_VM_HOME/abyss-build.qcow2}"           # working overlay disk
 : "${ABYSS_DISK_SIZE:=80G}"
 : "${ABYSS_SEED:=$ABYSS_VM_HOME/seed.iso}"                    # cloud-init cidata (Rock Ridge ISO)
+# A scratch disk for Phase 5: something the installer can be pointed at and
+# destroy. It is a real virtio disk on purpose — `geom disk list` does not show
+# md(4) devices, so an install onto a memory disk is one the installer's own
+# machine probe cannot see, and a test that worked around that would be testing
+# a code path the product does not have. Small, sparse, and recreated whenever
+# it is missing.
+: "${ABYSS_SCRATCH:=$ABYSS_VM_HOME/abyss-scratch.qcow2}"
+: "${ABYSS_SCRATCH_SIZE:=12G}"
 
 # SSH
 : "${ABYSS_SSH_KEY:=$ABYSS_VM_HOME/id_abyss}"
