@@ -12,20 +12,21 @@ runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
 plane, session supervisor and hardware bridges; the portals hand out descriptors;
 and **one command boots a desktop where an unmodified GTK 3 application, which
 has never heard of this desktop, opens a file through the Finder**.
-**287 unit tests + 36 live modes, green on Linux and FreeBSD.**
+**287 unit tests + 37 live modes, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is scoped and started** ([PHASE5.md](PHASE5.md)), its
-four risks retired on the target and **P5.1–P5.2 done**: a program we wrote
-installs a FreeBSD that boots, and the harness proves it booted on every run,
-with no hardware and no human.
+four risks retired on the target and **P5.1–P5.3 done**: a program we wrote
+installs a FreeBSD that boots, an image we assembled boots into the Jaguar
+desktop, and the harness proves both on every run, with no hardware and no
+human.
 
 **Picking this up cold?**
 
-1. **The next pass is P5.3** — the live medium. Phase 8
+1. **The next pass is P5.4** — the `Installer` Aqua app. Phase 8
    closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
-   Phase 5, and **P5.1 and P5.2 are in — the installer installs, and what it
-   installs boots**. §5 has what P5.3 is, and the standing smaller items.
-   **Read §2.43 and §2.44 first**; between them they are why this phase is
-   verified the way it is. **Phase 4 (Mac Pro bring-up) is still open and still
+   Phase 5, and **P5.1–P5.3 are in — the installer installs, what it installs
+   boots, and the medium it arrives on runs the desktop**. §5 has what P5.4 is,
+   and the standing smaller items. **Read §2.43, §2.44 and §2.45 first**;
+   between them they are why this phase is verified the way it is. **Phase 4 (Mac Pro bring-up) is still open and still
    independent** — and now owns the metal half of Phase 5's verify.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
@@ -44,6 +45,9 @@ with no hardware and no human.
    - **§2.41** — whose lifetime is this listener, exactly? A compositor must
      outlive its input client, and only a test that shuts down in the right
      order will ever say so.
+   - **§2.45** — a package manager's closure is not your program's closure
+     (5.66 GB vs 327 MB); and a silent graceful fallback is invisible to every
+     test downstream unless something announces it.
    - **§2.44** — an install that reports success is not an install that
      worked. Every step said ok, the log said ok, and the machine booted to the
      loader prompt. Where the output is a *thing*, assert on the thing.
@@ -294,6 +298,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.42 | Name the socket; don't read the address back. A discovered address changes when the thing that chose it restarts — and readiness is `connect(2)`, never "the file exists" |
 | 2.43 | A list of commands is not verified until something runs it — a plan with 28 tests and a golden render was wrong four ways |
 | 2.44 | An install that reports success is not one that worked — assert on `login:`; and `geom disk list` cannot see `md(4)` |
+| 2.45 | A package manager's closure is not your program's closure — `ldd`, not `pkg`; and announce a graceful fallback or no test can see it |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -560,6 +565,45 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.45 A package manager's closure is not your program's closure
+(P5.3 — the live medium, and what belongs on it.)
+
+The obvious way to put a desktop on an image is to install the packages it was
+built against. Asking `pkg -r $stage install wlroots019 cairo harfbuzz dejavu …`
+produced a **5.66 GB** staging root in 224 seconds — wlroots pulls Xwayland, mesa
+pulls LLVM, something pulls avahi — and left **409 binaries** in
+`/usr/local/bin`, `2to3` among them, on a medium whose job is to partition a
+disk.
+
+`ldd` over the twelve binaries we ship answers the same question exactly: **67
+shared objects, 17 MB**, transitively closed. It cannot drift from the product,
+because it *is* the product. Result: **327 MB, built in 15 seconds.**
+
+A package manager resolves *what a build needs*, which is the right question for
+a general-purpose system and the wrong one for an appliance image. The cost of
+the other answer is real and has to be stated: no package database on the medium,
+so nothing on it can install anything. Say that out loud rather than discovering
+it.
+
+Three more from the same pass:
+
+- **Carry only what is not already there.** `ldd` also names `/lib/libc.so.7`;
+  copying that makes the medium a mixture of the builder and the distribution
+  sets. base.txz marks those files `schg`, so the attempt fails loudly — which
+  is how it was found rather than shipped. Only `/usr/local` crosses over.
+- **`-static-stdlib` is the wrong trade at this count.** Measured on the
+  smallest binary in the tree: **296 KB dynamic → 9.1 MB static**. Twelve
+  binaries of that is worse than one shared 80 MB copy of the Swift runtime,
+  itself a fraction of the 2.70 GiB swift6 package.
+- **A silent fallback defeats a pixel test.** A medium built with no fonts at
+  all passed every assertion — three layers composited, the chrome in the right
+  places — because `Aqua.Text` falls back to toy text without saying so. Right
+  for a missing italic; wrong for a machine that has lost every glyph. The menu
+  bar had 25 dark pixels with fonts and 15 without: far too close to assert on.
+  The fix was not a cleverer probe but a **report**: the desktop now says what
+  its text stack got. Where a component degrades gracefully, something has to
+  announce the degradation, or no test downstream can see it.
 
 ### 2.44 An install that reports success is not an install that worked
 (P5.2 — `abyss-install`, and the live test that boots what it installed.)
@@ -1796,12 +1840,21 @@ step list as root, hands its socket to one uid and asks the kernel who called
 scratch disk and **boots the result under nested bhyve**. The definition of "it
 worked" is `login:` — see §2.44 for what that caught on its first injection.
 
-**P5.3 is next: the live medium.** `abyss/mk/live-image.sh` — extract the sets
-into a staging root, add the DE and the Swift runtime it needs (144 MB, PHASE5
-§6.3), configure a session that autologs in and runs one application, then
-`makefs` + `mkimg`. §4.3 already proved the medium boots; the pass is to put our
-desktop on it. Remember `chflags -R noschg` before rebuilding a staging root, or
-the script works once.
+**P5.3 is done too: the medium runs the desktop.** `abyss/mk/live-image.sh`
+builds a 327 MB image in 15 seconds and `live-medium.sh` boots it nested and
+checks the frame it drew, pixel by pixel. The lesson is §2.45 — a package
+manager's closure is not your program's closure — and the assertion that had to
+be *invented* is worth reading before P5.4: a medium with no fonts at all passed
+every check until the desktop was made to announce what its text stack got.
+
+**P5.4 is next: the `Installer` Aqua application.** The hub-and-spoke — a summary
+page whose spokes (keyboard, disk, timezone, network, account) are entered and
+returned from in any order, with Install inert until every required one is
+complete. It talks to `abyss-install` over `CurrentIPC`, which already answers
+`disks`, `check` and `install`, so the app builds a plan and shows progress and
+touches nothing itself. Two things waiting for it: the destructive confirmation
+(PHASE5 §6.4 — the sheet that names the disk in the sentence), and the keyboard
+layouts the medium carries but nothing has yet exercised.
 
 ### The other phase that is left
 
@@ -1886,6 +1939,7 @@ standing between "green" and "green for the reason I think".
 | `de/anchor`, `de/anchorbin` | `Anchor` (restart policy, the session plan, dependency gating, poll loop, control service) and the `anchor` binary — replaces `abyss/session.sh`, and since P8.4 starts the **whole** desktop: compositor, bus, portal, bridge, shell |
 | `de/install` | the installer's thinking half: `InstallPlan` and `DiskInventory` (the machine as an *argument*), the refusals, and the step list a plan compiles to — no dependency at all, so every test runs on Linux where `gpart` does not exist |
 | `de/installrun`, `de/installbin`, `de/installctl` | the doing half: the step runner, the machine probe (`geom disk list` / `mount -p` / `glabel` / `zpool`, parsed pure and tested against captured output), the peer check, the wire codec — plus `abyss-install` (root) and `abyss-installctl` (the caller) |
+| `abyss/mk/live-image.sh` | the live medium: base + kernel from the distribution sets, the runtime closure computed with `ldd` (not `pkg` — §2.45), the desktop, and a session started by rc; assembled with `makefs` + `mkimg` |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |

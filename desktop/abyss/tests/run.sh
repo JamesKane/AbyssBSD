@@ -140,6 +140,13 @@ if [ "$live" -eq 1 ]; then
   # on FreeBSD it skips loudly without the dist sets or bhyve's UEFI firmware.
   echo "== the installer, and what it installed =="
   sh "$root/abyss/tests/live-install.sh"
+
+  # ...and the medium it all arrives on: an image assembled from distribution
+  # sets with base tools only, booted nested, running our compositor with the
+  # wallpaper, menu bar and Dock composited on it — checked pixel by pixel
+  # (PHASE5.md P5.3). On Linux, a positive control: the builder must refuse.
+  echo "== the live medium =="
+  sh "$root/abyss/tests/live-medium.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

@@ -8,13 +8,12 @@ runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**287 unit tests + 36 live modes, green on Linux *and* FreeBSD.**
-**Phase 5 — the installer — is scoped and half built** ([PHASE5.md](PHASE5.md),
-passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1 and
-P5.2 are done: the installer installs, and the harness boots what it installed**
-— an unprivileged caller commands a root `abyss-install` over CurrentIPC, a real
-disk is partitioned and populated, and nested bhyve reaches `login:`. **P5.3 is
-next**; see [What's next](#whats-next).
+**287 unit tests + 37 live modes, green on Linux *and* FreeBSD.**
+**Phase 5 — the installer — is scoped and mostly built** ([PHASE5.md](PHASE5.md),
+passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1–P5.3
+are done: the installer installs, the harness boots what it installed, and the
+medium it arrives on comes up running the Jaguar desktop.** **P5.4 — the Aqua
+installer app — is next**; see [What's next](#whats-next).
 
 ## What this is
 
@@ -434,11 +433,12 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **The next pass is P5.3 — the live medium.** `abyss/mk/live-image.sh`:
-> extract the sets into a staging root, add the DE and the Swift runtime it
-> needs, configure a session that autologs in and runs one application, then
-> `makefs` + `mkimg`. PHASE5 §4.3 already proved a medium built this way boots;
-> the pass is to put our desktop on it.
+> **The next pass is P5.4 — the `Installer` Aqua application.** The hub-and-spoke
+> flow that is Anaconda's idea rather than `bsdinstall`'s fixed march: a summary
+> page whose spokes are entered and returned from in any order, with Install
+> inert until every required one is complete. `abyss-install` already answers
+> `disks`, `check` and `install` over CurrentIPC, so the app builds a plan and
+> shows progress and touches nothing itself.
 >
 > **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
@@ -512,6 +512,32 @@ grants nobody access. And [HANDOFF §2.44](HANDOFF.md), from the first injected
 fault: with `bootfs` never set, every step succeeded, the log said *"39 steps,
 ok"*, the client said *"installed."* — and the machine booted to the loader
 prompt. **An install that reports success is not an install that worked.**
+
+**P5.3 is done — the medium boots into the desktop.**
+`abyss/mk/live-image.sh` assembles a **327 MB** image in **15 seconds** out of the
+same distribution sets the installer extracts, with base tools only — no `make
+release`, no source tree, no world build. `abyss/tests/live-medium.sh` boots it
+under nested bhyve and checks what it drew:
+
+![the desktop, from our own medium](screenshots/live-medium.png)
+
+**The package manager was the wrong tool by a factor of seventeen.** Installing
+the packages the desktop was built against produced a **5.66 GB** staging root
+with **409 binaries** in `/usr/local/bin` — Xwayland, LLVM, avahi, `2to3` — on a
+medium whose job is to partition a disk. `ldd` over the twelve binaries we ship
+answers exactly: **67 shared objects, 17 MB**, and it cannot drift from the
+product because it *is* the product ([HANDOFF §2.45](HANDOFF.md)). PHASE5 §6.3's
+open question is closed by the same measurement: the swift6 package is 2.70 GiB,
+the runtime we load is 80 MB, and `-static-stdlib` took the smallest binary in
+the tree from 296 KB to 9.1 MB.
+
+**And one assertion had to be invented.** A medium built with *no fonts at all*
+passed every check — three layers composited, chrome in the right places —
+because `Aqua.Text` falls back to toy text silently, and 25 dark pixels in the
+menu bar versus 15 is far too close to assert on. The fix was not a cleverer
+pixel probe: the desktop now **announces** what its text stack got. Where a
+component degrades gracefully, something has to say so, or no test downstream can
+see it.
 
 **Phase 7 (portals) — all five passes.**
 An app asks the desktop for a file, a notification or a screenshot, and gets back

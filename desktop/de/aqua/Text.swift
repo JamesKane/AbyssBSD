@@ -12,9 +12,39 @@
 import CCairo
 import CText
 
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
 public enum Text {
     /// Whether a real font is loaded. When false, `Draw` falls back to toy text.
     public static let available: Bool = at_font_init() != 0
+
+    /// Say, once, what the text stack got — and say it whether or not it worked.
+    ///
+    /// The fallback to toy text is deliberate and silent, which is right for a
+    /// desktop that is merely missing a face and wrong for one that has no fonts
+    /// at all: the whole shell is text, and a machine that lost all of it still
+    /// draws chrome, still composites three layers, and still looks correct to
+    /// anything examining pixels. A live medium built without its fonts passed
+    /// every assertion in `abyss/tests/live-medium.sh` until this line existed
+    /// (PHASE5 P5.3). Absence has to be *reported*, not merely survived.
+    public static func announce() {
+        let line: String
+        if available {
+            var styles: [String] = []
+            if styleAvailable(.bold) { styles.append("bold") }
+            if styleAvailable(.italic) { styles.append("italic") }
+            if styleAvailable(.boldItalic) { styles.append("bold-italic") }
+            line = "Text: \(at_font_face_count()) face(s)"
+                + (styles.isEmpty ? "" : " (\(styles.joined(separator: ", ")))") + "\n"
+        } else {
+            line = "Text: NO FONTS — falling back to toy text; install DejaVu\n"
+        }
+        line.withCString { _ = write(2, $0, strlen($0)) }
+    }
 
     /// A weight/slant. Maps to the AT_* face groups in the CText shim; a style
     /// with no dedicated face falls back to `.regular` (text still renders).

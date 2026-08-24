@@ -20,6 +20,11 @@ func envString(_ name: String) -> String? {
     getenv(name).map { String(cString: $0) }
 }
 
+// Before anything draws: say what the text stack got. On a development box this
+// is one dull line; on a live medium it is the difference between "the desktop
+// came up" and "the desktop came up and you can read it" (PHASE5 P5.3).
+Aqua.Text.announce()
+
 let sceneName = envString("AQUA_SCENE")
 let scene: SceneKind
 let title: String

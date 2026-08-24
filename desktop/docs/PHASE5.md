@@ -4,7 +4,7 @@ The last phase that depends on nothing. Read [PLAN.md](PLAN.md) for the locked
 decisions, [PHASE8.md](PHASE8.md) for the session this installs, and
 [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-24. **P5.1 and P5.2 are done; P5.3 is next.** Four risks were spiked first,
+Last updated: 2026-08-24. **P5.1–P5.3 are done; P5.4 is next.** Four risks were spiked first,
 on the target (§4), because the phase's shape depended on the answers — and two
 of them were the phase's whole feasibility question. The passes below are written
 knowing that a program we wrote can install a bootable FreeBSD, and that the
@@ -207,14 +207,68 @@ test, because a force-unwrap in an XCTest **kills the process** and hides every
 test after it. `XCTUnwrap` fails the one test and lets the rest speak. A suite
 that dies on the first failure tells you less than one that fails.
 
-**P5.3 — the live medium.**
+**P5.3 — the live medium. ✅ done.**
 `abyss/mk/live-image.sh`: extract the sets into a staging root, add the DE and
 the Swift runtime it needs, configure a session that autologs in and runs one
 application, then `makefs` + `mkimg`. No `make release`, no source tree, no world
 build (§4.3).
 
-*Verify:* boot the medium (nested), and screenshot the Aqua installer on its
-first screen using our own screencopy — the same `abyssgrab` path P7.5 built.
+*Verify:* boot the medium (nested) and check that our desktop came up on it —
+pixel by pixel, on the frame the medium itself captured.
+
+*(The scope as first written said "screenshot the Aqua installer on its first
+screen". That was an ordering mistake in this plan: the installer is P5.4, so
+there is nothing of it to photograph yet. What P5.3 can prove — and does — is
+that **the medium runs our desktop**.)*
+
+**✅ done.** `abyss/mk/live-image.sh` builds a **327 MB** image in **15 seconds**,
+and `abyss/tests/live-medium.sh` boots it nested and checks what it drew.
+
+![the desktop, from our own medium](screenshots/live-medium.png)
+
+**The package manager was the wrong tool, by a factor of seventeen.** The obvious
+build asks `pkg -r $stage install wlroots019 cairo harfbuzz dejavu …` and it
+produced a **5.66 GB** staging root in 224 seconds: wlroots pulls Xwayland, mesa
+pulls LLVM, something pulls avahi, and `/usr/local/bin` ends up with **409
+binaries** including `2to3` — on a medium whose job is to partition a disk.
+
+`ldd` over the twelve binaries we ship answers the question exactly: **67 shared
+objects, 17 MB**, transitively closed, and it cannot drift from the product
+because it *is* the product. The stated cost: **the medium has no package
+database**, so nothing on it can `pkg install` anything. For a live installer
+that is fine; it runs one desktop and writes one disk.
+
+**§6.3 is answered by measurement.** The swift6 package is 2.70 GiB of toolchain;
+the FreeBSD runtime directory is 144 MB; the libraries our binaries actually load
+are **80 MB**. And `-static-stdlib`, the alternative that section named, took the
+*smallest* binary in the tree from **296 KB to 9.1 MB** — call it +8.8 MB each,
+which across twelve binaries is worse than one shared copy. So: carry the
+closure.
+
+**Base libraries come from the sets, not from the builder.** `ldd` also names
+`/lib/libc.so.7`, and copying that would make the medium a mixture of two
+systems. It fails loudly — base.txz marks those `schg` — which is how it was
+found rather than shipped.
+
+**And the assertion that had to be invented.** A medium built with **no fonts at
+all** passed every check: three layers composited, menu bar pale at the top,
+wallpaper underneath, Dock over it. `Aqua.Text` falls back to toy text *silently*
+— right for a missing italic, wrong for a machine that has lost every glyph — and
+the pixels cannot tell them apart (25 dark pixels in the menu bar versus 15;
+measured, and far too close to assert on). The fix is not a cleverer probe: the
+desktop now **says** what its text stack got, and the medium reports it. Absence
+has to be reported, not merely survived.
+
+*Known gap, stated rather than papered over:* removing the keyboard layouts also
+leaves this test green, because a headless session with no input device never
+compiles a keymap. They are carried because the installer is typed into, and
+**P5.4 is the pass that will exercise them**.
+
+*One v1 choice with a cost:* the medium's root is mounted **read-write**. A real
+USB stick wants read-only plus tmpfs, because a stick can be pulled out
+mid-write. This is a disk image in a VM, and read-write is also what makes the
+captured frame available afterwards — but it is the thing to fix before anyone
+puts this on a stick.
 
 *One trap the spike walked into, free of charge:* an extracted base system
 carries `schg` on a good deal of `/var` and `/usr/bin`, so a staging root cannot
@@ -394,11 +448,18 @@ network to install is an installer that does not work on a Mac Pro 6,1 out of th
 box. So the medium carries what it installs, and any fetching is an optional
 extra after the machine is up.
 
-**6.3 The Swift runtime has to ride along.** `/usr/local/swift6/lib/swift/freebsd`
-is **144 MB**, and every binary in this tree links it. So the medium carries it,
-or we build with `-static-stdlib` and carry a copy in each of eight binaries.
-Neither is obviously right and the answer is a measurement, taken in P5.3. It is
-also the first time this project has had to care what its runtime *weighs*.
+**6.3 The Swift runtime has to ride along.** *Closed in P5.3, by measurement.*
+Three numbers settled it: the `swift6` package is **2.70 GiB** of toolchain, the
+FreeBSD runtime directory is **144 MB**, and the libraries our binaries actually
+load are **80 MB**. The alternative this section named — `-static-stdlib` — took
+the *smallest* binary in the tree from **296 KB to 9.1 MB**, so twelve of them
+would carry more duplicated runtime than one shared copy costs.
+
+So the medium carries the closure `ldd` reports, and the same reasoning threw out
+the package manager entirely (§2.45 in HANDOFF): **67 shared objects, 17 MB**, of
+which the Swift part is the bulk. This was indeed the first time the project had
+to care what its runtime weighs, and the answer was to stop asking what it *has*
+and start asking what it *loads*.
 
 **6.4 The destructive confirmation is a design problem, not a dialog.** Every
 installer gets this wrong in the same way: a warning nobody reads, then a
@@ -412,11 +473,19 @@ close to expected now. It is deliberately out of the pass list: it adds a
 passphrase prompt at boot, which is a piece of pre-desktop UI this project does
 not have. Worth doing; worth doing after a machine installs at all.
 
-**6.6 The nested-boot check will be slow, and slow tests get skipped.** A FreeBSD
-boot to multi-user is tens of seconds even nested. If `live-install.sh` makes
-`--vm --live` unpleasant to run, it will stop being run — which is the failure
-mode that matters, not the minutes. If it is too slow it belongs behind its own
-flag, said out loud in `run.sh`, rather than quietly dropped.
+**6.6 The nested-boot check will be slow, and slow tests get skipped.**
+*Measured after P5.3, and still inside the budget.* `run.sh --vm --live` takes
+**9m03s**, of which the two new tests are roughly four minutes: `live-install.sh`
+extracts a whole base system and boots it (~3 min), `live-medium.sh` builds an
+image and boots that (~50 s, of which the build is 15). It was about five minutes
+before this phase.
+
+That is tolerable and it is worth watching. The failure mode that matters is not
+the minutes but the habit: a gate people stop running is a gate. If it grows
+much past this, the boot checks belong behind their own flag — said out loud in
+`run.sh`, never quietly dropped. Both already skip loudly without the
+distribution sets or bhyve's UEFI firmware, which keeps a fresh machine fast and
+honest rather than fast and silent.
 
 **6.7 There is no rollback.** `abyss-install` can tear down its own mess (export,
 unmount, detach), but once `gpart` has written a new GPT over somebody's disk,
