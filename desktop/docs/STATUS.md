@@ -8,11 +8,11 @@ runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**234 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
-**Phase 5 — the installer — is now scoped** ([PHASE5.md](PHASE5.md), passes
-P5.1–P5.5), with its four risks spiked on the target first: a program we wrote
-installs a FreeBSD that boots, and the harness can prove it booted without a
-human, a disk or a second machine. **P5.1 is the next pass**; see
+**261 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
+**Phase 5 — the installer — is scoped and started** ([PHASE5.md](PHASE5.md),
+passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1 is
+done**: `de/install` is the install as a value, and the list it compiles has been
+run against a real disk and booted. **P5.2 is next**; see
 [What's next](#whats-next).
 
 ## What this is
@@ -433,11 +433,11 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **The next pass is P5.1 — `de/install`, the install as a value.** An
-> `InstallPlan` that compiles to a step list of exact `gpart`/`zpool`/`tar`
-> invocations, plus the safety predicate that refuses a mounted disk or the one
-> you booted from. Pure, so all of it is unit-testable on Linux where none of
-> those commands exist — `SessionPlan`'s pattern from P8.4.
+> **The next pass is P5.2 — `abyss-install`, the executor**, and the pass where
+> the phase's claim comes true: it runs P5.1's step list as root, checks its
+> peer, and `abyss/tests/live-install.sh` installs onto a file-backed disk in the
+> VM and boots the result under nested bhyve. The definition of "it worked" is
+> `login:`.
 >
 > **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
@@ -475,6 +475,22 @@ The shape that falls out: **the GUI does not touch the disk.** An unprivileged
 `Installer` sends a plan to a root `abyss-install` and gets progress back —
 `abyss-portal`'s shape — which is what lets the dangerous half be tested with no
 GUI in it, and the GUI half be developed on Linux.
+
+**P5.1 is done — `de/install`, the install as a value.** An `InstallPlan`
+compiles to a step list (the exact `gpart`/`newfs_msdos`/`zpool`/`zfs`/`tar`
+invocations) and a `DiskInventory` makes the machine an argument, so all **28
+tests run on Linux**, where not one of those commands exists — including every
+refusal: the disk you booted from, a disk with something mounted, a partition
+mistaken for a disk, a pool name ZFS itself would reject *after* `gpart` has
+already rewritten the disk.
+
+Then the list was **run**, and booted. That found four defects no unit test would
+have — a pool cache that is never written, `zfs mount -a` sweeping the whole
+machine, `zfs create` mounting into the live filesystem before the root is
+mounted, and a machine that came up with no swap because GEOM's disk-ident class
+had shadowed the very GPT labels the plan wrote into `fstab`. Each is now a test,
+and the lesson is [HANDOFF §2.43](HANDOFF.md): **a list of commands is not
+verified until something runs it.**
 
 **Phase 7 (portals) — all five passes.**
 An app asks the desktop for a file, a notification or a screenshot, and gets back

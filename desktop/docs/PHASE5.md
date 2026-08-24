@@ -4,7 +4,7 @@ The last phase that depends on nothing. Read [PLAN.md](PLAN.md) for the locked
 decisions, [PHASE8.md](PHASE8.md) for the session this installs, and
 [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-24. **Scoped, not started.** Four risks were spiked first,
+Last updated: 2026-08-24. **P5.1 is done; P5.2 is next.** Four risks were spiked first,
 on the target (§4), because the phase's shape depended on the answers — and two
 of them were the phase's whole feasibility question. The passes below are written
 knowing that a program we wrote can install a bootable FreeBSD, and that the
@@ -97,7 +97,7 @@ was started for.
 
 ## 3. Ordered passes
 
-**P5.1 — `de/install`: the install as a value.**
+**P5.1 — `de/install`: the install as a value. ✅ done.**
 `InstallPlan` — disk, scheme, pool name, dataset layout, swap size, which sets to
 extract, hostname, users, timezone, keymap — and the **step list** it compiles
 to: the exact `gpart`, `newfs_msdos`, `zpool`, `zfs` and `tar` invocations, in
@@ -120,6 +120,40 @@ data.
 
 *Verify:* unit tests on both platforms, including the refusals; and a golden
 step list, so a change to what we run at somebody's disk shows up as a diff.
+
+**✅ done.** 28 unit tests (261 total), all of them passing on Linux, where none
+of the commands in the list exists. Four faults were injected to prove the suite
+can fail — the running-root refusal deleted, `canmount=noauto` dropped, the
+password hash moved into argv, the GPT label prefix removed — and each was caught
+by the named test that claims it.
+
+**And then the list was run.** The golden output was mechanically turned into a
+shell script and executed against a 12 GB file-backed disk in the build VM, and
+the result booted under nested bhyve. That found **four defects that no unit test
+would have**, each now a test of its own:
+
+1. `zpool create -o cachefile=X` sets the property and **does not write X**. The
+   copy into `/boot/zfs` failed with ENOENT against a pool whose `cachefile` was
+   set correctly. Ask for the write explicitly.
+2. `zfs mount -a` and `zfs umount -a` act on **every pool on the machine**,
+   including the running installer's own root. The first run said so out loud:
+   *"cannot unmount '/var/log': pool or dataset is busy"*, about the live system.
+3. **`zfs create` mounts what it creates.** Creating `pool/home` before
+   `pool/ROOT/default` is mounted puts it at `/mnt/home` on the *live*
+   filesystem, which the root mount then hides — an install that completes,
+   extracts, and yields a machine whose `/home` is empty. The boot environment
+   is now created and mounted before any other dataset exists.
+4. The machine **booted without swap.** `fstab` named `/dev/gpt/<pool>swap` and
+   there was no `/dev/gpt` at all: GEOM's disk-ident class had consumed the disk,
+   so the GPT sat under `diskid/DISK-BHYVE-…` and no label provider was created.
+   `gpart show -l` still listed the labels, which is what makes it convincing to
+   look at and wrong. Measured both ways — with
+   `kern.geom.label.disk_ident.enable="0"` in `loader.conf`, `/dev/gpt` appears
+   and `swapinfo` shows the partition; without it, neither.
+
+None of those is a mistake a reviewer would have caught reading the list, and
+every one of them ships a broken machine. **That is the argument for P5.2's live
+test in one paragraph**: this list is not verified until something boots.
 
 **P5.2 — `abyss-install`: the executor, and the pass where the claim comes true.**
 Runs a step list as root and streams progress back over `CurrentIPC`. Checks its

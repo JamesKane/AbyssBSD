@@ -253,7 +253,7 @@ boots our medium, someone clicks through an Aqua installer, and it reboots into 
 Jaguar desktop.
 
 **Expanded to executable detail in [PHASE5.md](PHASE5.md)** — passes P5.1–P5.5, and
-four risks spiked on the target before the plan was written. Two corrections to the
+four risks spiked on the target before the plan was written. **P5.1 is done.** Two corrections to the
 sketch below came out of those spikes:
 
 - **We do not drive `bsdinstall`** (corrected 2026-08-24 — this used to read "the GUI
@@ -374,8 +374,10 @@ came out of those spikes:
   kernel patch, and the SEAMS porting map. Where a *format* must match (the `pool`
   `.ini` files, a protocol on the wire), match the format — not the implementation.
 - **Build in Swift:** everything else. `CWayland`, `Surface`, `Aqua`, `PoolConfig`,
-  `CurrentIPC`, the session supervisor (`anchor`), the `Vents` hardware bridges and the
-  shell exist; the compositor, the image codec and the installer are still to come.
+  `CurrentIPC`, the session supervisor (`anchor`), the compositor (`undertow`), the
+  D-Bus bridge and the `Vents` hardware bridges exist, and the installer's thinking
+  half (`Install`) with them; the image codec and the rest of the installer are still
+  to come.
 - **Drop to C only where Swift can't reach:** shims over C system libraries (the
   `aw_*`/`at_*` pattern), and — if measurement demands it — the compositor's
   real-time present path.

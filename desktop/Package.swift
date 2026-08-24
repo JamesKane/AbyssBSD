@@ -200,6 +200,14 @@ let package = Package(
             dependencies: ["CProc", "CurrentIPC"],
             path: "de/anchor"
         ),
+        // The installer's thinking half (Phase 5): what an install IS, as a
+        // value — the plan, the machine it would run on, the refusals, and the
+        // step list it compiles to. Depends on nothing, deliberately: it must be
+        // testable on Linux, where not one of the commands it names exists.
+        .target(
+            name: "Install",
+            path: "de/install"
+        ),
         // The supervisor itself: the Swift replacement for abyss/session.sh.
         .executableTarget(
             name: "anchor",
@@ -353,6 +361,11 @@ let package = Package(
             name: "AnchorTests",
             dependencies: ["Anchor"],
             path: "Tests/AnchorTests"
+        ),
+        .testTarget(
+            name: "InstallTests",
+            dependencies: ["Install"],
+            path: "Tests/InstallTests"
         ),
         .testTarget(
             name: "DBusTests",
