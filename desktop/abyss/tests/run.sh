@@ -154,6 +154,12 @@ if [ "$live" -eq 1 ]; then
   # spoke and asserts the hub stays disarmed — a positive control, not a skip.
   echo "== the Aqua installer =="
   sh "$root/abyss/tests/live-installer.sh"
+
+  # And the whole thing, end to end: an empty disk, our medium, an install from
+  # it, and a reboot into the Jaguar desktop (PHASE5.md P5.5). Nested twice
+  # over, with nobody watching. On Linux, a positive control.
+  echo "== empty disk to Jaguar desktop =="
+  sh "$root/abyss/tests/live-desktop.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

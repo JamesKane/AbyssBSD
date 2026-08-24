@@ -362,6 +362,37 @@ final class InstallTests: XCTestCase {
                       "fstab names a GPT label that may not exist on the installed machine")
     }
 
+    func testAPlainFreeBSDInstallDoesNotStartADesktopItDoesNotHave() {
+        // The rule is derived from the sets, not assumed: install base and
+        // kernel and you get base and kernel, with nothing in rc.conf about a
+        // desktop that is not there.
+        let plain = goodPlan()
+        XCTAssertFalse(plain.installsDesktop)
+        XCTAssertFalse(rcConf(plain).contains("abyss_desktop"))
+    }
+
+    func testInstallingTheDesktopSetStartsTheDesktopForTheAccountCreated() {
+        var p = InstallPlan(disk: "ada0",
+                            sets: ["base.txz", "kernel.txz", InstallPlan.desktopSet],
+                            accounts: [Account(name: "guest", passwordHash: "$6$g"),
+                                       Account(name: "jkane", passwordHash: "$6$j",
+                                               groups: ["wheel"])])
+        XCTAssertTrue(p.installsDesktop)
+        let rc = rcConf(p)
+        XCTAssertTrue(rc.contains("abyss_desktop_enable=\"YES\""), rc)
+        // The administrator, not merely the first account: an installed desktop
+        // belongs to whoever the machine was installed for.
+        XCTAssertTrue(rc.contains("abyss_desktop_user=\"jkane\""), rc)
+
+        // With nobody at all it still starts, and simply says nothing about who
+        // — rather than naming an account that does not exist.
+        p = InstallPlan(disk: "ada0",
+                        sets: ["base.txz", InstallPlan.desktopSet],
+                        rootPasswordHash: "$6$r")
+        XCTAssertTrue(rcConf(p).contains("abyss_desktop_enable"))
+        XCTAssertFalse(rcConf(p).contains("abyss_desktop_user"))
+    }
+
     func testTheFilesWeWriteSayWhereTheRootIs() {
         let p = goodPlan(pool: "tank")
         XCTAssertTrue(loaderConf(p).contains("vfs.root.mountfrom=\"zfs:tank/ROOT/default\""))

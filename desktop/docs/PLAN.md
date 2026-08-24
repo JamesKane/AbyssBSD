@@ -252,11 +252,17 @@ metal.
 boots our medium, someone clicks through an Aqua installer, and it reboots into the
 Jaguar desktop.
 
+**✅ Complete (2026-08-24), P5.1–P5.5.** The whole arc runs in the harness, nested
+twice over: an empty disk, our medium, the Aqua installer on it, an install, and a
+reboot into the Jaguar desktop as the account that was created. *The clicking is
+proven separately* — `live-installer.sh` drives the real app with a real pointer
+and keyboard against the real service; the end-to-end run installs from the
+medium's console, because driving a GUI inside the nested machine would mean
+putting the harness's input tools into the product image. **Input from real
+hardware is untested, and belongs to Phase 4.**
+
 **Expanded to executable detail in [PHASE5.md](PHASE5.md)** — passes P5.1–P5.5, and
-four risks spiked on the target before the plan was written. **P5.1–P5.4 are done
-— the installer installs, the harness boots what it installed, the live medium
-comes up running the Jaguar desktop, and the Aqua installer on it builds the plan
-you click.** Two corrections to the
+four risks spiked on the target before the plan was written. Two corrections to the
 sketch below came out of those spikes:
 
 - **We do not drive `bsdinstall`** (corrected 2026-08-24 — this used to read "the GUI
@@ -282,8 +288,9 @@ sketch below came out of those spikes:
 
 **Verify:** clean install onto the VM end-to-end from the live image, booting into the
 Aqua desktop — proven by the harness, with **nested bhyve** booting what was installed
-and waiting for `login:`. **The Mac Pro half of this belongs to Phase 4**, since
-installing onto that machine first requires it to boot FreeBSD with a working GPU.
+and waiting for the wallpaper, menu bar and Dock. **The Mac Pro half of this belongs
+to Phase 4**, since installing onto that machine first requires it to boot FreeBSD
+with a working GPU.
 
 ---
 
@@ -378,9 +385,8 @@ came out of those spikes:
   `.ini` files, a protocol on the wire), match the format — not the implementation.
 - **Build in Swift:** everything else. `CWayland`, `Surface`, `Aqua`, `PoolConfig`,
   `CurrentIPC`, the session supervisor (`anchor`), the compositor (`undertow`), the
-  D-Bus bridge and the `Vents` hardware bridges exist, and the installer's thinking
-  half (`Install`) with them; the image codec and the rest of the installer are still
-  to come.
+  D-Bus bridge, the `Vents` hardware bridges and the installer all exist. The image
+  codec is the last thing on this list still to come.
 - **Drop to C only where Swift can't reach:** shims over C system libraries (the
   `aw_*`/`at_*` pattern), and — if measurement demands it — the compositor's
   real-time present path.

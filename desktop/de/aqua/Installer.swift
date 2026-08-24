@@ -197,7 +197,7 @@ public struct InstallerModel: Sendable {
 
     /// Why this disk cannot be chosen, or empty if it can.
     public func objection(to d: Disk) -> String {
-        let trial = plan(disk: d.name, passwordHash: "$6$x")
+        let trial = plan(disk: d.name, passwordHash: "$6$x")   // same sets as the real one
         let problems = Install.problems(trial, on: inventory)
         // Only the ones that are about *this disk*; a missing account is not
         // the disk's fault and belongs on its own spoke.
@@ -221,8 +221,16 @@ public struct InstallerModel: Sendable {
     /// can build the same plan without linking crypt(3). The plaintext password
     /// lives in this struct and **never** reaches an `InstallPlan`, which is a
     /// value that gets logged and rendered into a golden test.
+    /// What the Aqua installer installs: FreeBSD **and this desktop**.
+    ///
+    /// `InstallPlan`'s own default is base and kernel, which is right for a
+    /// module that knows nothing about media. This is the installer, and the
+    /// thing it exists to install is the thing it is running on.
+    public static let sets = ["base.txz", "kernel.txz", InstallPlan.desktopSet]
+
     public func plan(disk overrideDisk: String? = nil,
                      passwordHash: String,
+                     sets: [String] = InstallerModel.sets,
                      distDirectory: String = "/usr/freebsd-dist") -> InstallPlan {
         var accounts: [Account] = []
         if !accountName.isEmpty {
@@ -233,6 +241,7 @@ public struct InstallerModel: Sendable {
                                     shell: "/bin/sh"))
         }
         return InstallPlan(disk: overrideDisk ?? disk,
+                           sets: sets,
                            distDirectory: distDirectory,
                            hostname: hostname,
                            timezone: timezone,

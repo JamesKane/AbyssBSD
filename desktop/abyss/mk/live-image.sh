@@ -12,6 +12,7 @@
 #
 #   usage: abyss/mk/live-image.sh [--out PATH] [--dist DIR] [--stage DIR]
 #                                 [--build-dir DIR] [--size N] [--keep]
+#                                 [--stay] [--frames N]
 #
 # FreeBSD only, and it says so: `makefs`, `mkimg` and the runtime closure have no analogue
 # on the dev box, and an image built anywhere else would be a different image.
@@ -25,6 +26,16 @@ stage="${TMPDIR:-/tmp}/abyss-live-stage"
 builddir="$root/.build/debug"
 size=3g
 keep=0
+# Whether the medium stays up after its session ends. Off by default so a test
+# can wait for the machine to power itself off; on for a person at the console,
+# or for a test that means to drive one.
+stay=0
+frames=1800
+# Shell tracing in the live session, baked in at build time — because on a
+# headless medium the console is the only instrument there is, and a session
+# that goes quiet tells you nothing about where. `ABYSS_LIVE_TRACE=1` when
+# building turns it on (HANDOFF §2.47 is what it found).
+trace=${ABYSS_LIVE_TRACE:-}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -34,6 +45,8 @@ while [ $# -gt 0 ]; do
     --build-dir) builddir=$2; shift 2 ;;
     --size)      size=$2; shift 2 ;;
     --keep)      keep=1; shift ;;
+    --stay)      stay=1; shift ;;
+    --frames)    frames=$2; shift 2 ;;
     -h|--help)   sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "usage: live-image.sh [--out PATH] [--dist DIR] [--size N] [--keep]" >&2; exit 2 ;;
   esac
@@ -60,6 +73,13 @@ DATA="/usr/local/share/fonts/dejavu
 # `.build/debug`, because that directory is full of SwiftPM's own intermediates.
 BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus
           abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl"
+
+# The desktop, as a distribution set. Named to match `InstallPlan.desktopSet`,
+# which is what makes rc.conf on the installed machine turn the desktop on.
+DESKTOP_SET="abyss.txz"
+work_sets="${TMPDIR:-/tmp}/abyss-live-sets"
+
+sudo rm -rf "$work_sets"; sudo mkdir -p "$work_sets"
 
 echo "== staging root: $stage"
 # `chflags` first, always. An extracted base system carries schg on a good deal
@@ -99,6 +119,17 @@ echo "== the runtime closure"
 # loudly, which is how this was found. (Our binaries are compiled against the
 # builder's 15.0-RELEASE-p11 and run against the sets' 15.0-RELEASE; ABI is
 # stable within a major release, which is the whole point of the guarantee.)
+# **The desktop is collected once, into a tree of its own**, and then used
+# twice: it is copied into the medium so the medium can run it, and it is
+# tarred into `abyss.txz` so the installer can install it. What the medium
+# carries and what it installs are therefore the same collection, not two that
+# have to be kept in step — the same argument as building the medium out of the
+# distribution sets in the first place.
+de="${TMPDIR:-/tmp}/abyss-live-de"
+sudo chflags -R noschg "$de" 2>/dev/null || true
+sudo rm -rf "$de"
+sudo mkdir -p "$de/usr/local/bin" "$de/usr/local/libexec" "$de/etc/rc.d"
+
 libs=""
 for b in $BINARIES; do
   [ -x "$builddir/$b" ] || die "no $b in $builddir — run swift build first"
@@ -108,8 +139,8 @@ done
 libs=$(echo "$libs" | sort -u | grep .)
 [ -n "$libs" ] || die "ldd found nothing — is $builddir a FreeBSD build?"
 for lib in $libs; do
-  sudo mkdir -p "$stage$(dirname "$lib")"
-  sudo cp -p "$lib" "$stage$lib"
+  sudo mkdir -p "$de$(dirname "$lib")"
+  sudo cp -p "$lib" "$de$lib"
 done
 # shellcheck disable=SC2086
 echo "   $(echo "$libs" | wc -l | tr -d ' ') shared objects, $(du -ch $libs | tail -1 | awk '{print $1}')"
@@ -117,8 +148,8 @@ echo "   $(echo "$libs" | wc -l | tr -d ' ') shared objects, $(du -ch $libs | ta
 echo "== runtime data"
 for d in $DATA; do
   [ -d "$d" ] || die "$d is missing on this machine, so the medium would have no $(basename "$d")"
-  sudo mkdir -p "$stage$(dirname "$d")"
-  sudo cp -R "$d" "$stage$(dirname "$d")/"
+  sudo mkdir -p "$de$(dirname "$d")"
+  sudo cp -R "$d" "$de$(dirname "$d")/"
 done
 # libxkbcommon looks in /usr/local/share/X11/xkb, which on FreeBSD is a symlink
 # into the versioned xkeyboard-config directory. Copying the target without the
@@ -128,15 +159,87 @@ done
 # leaves `live-medium.sh` green, because a headless session with no input device
 # never compiles a keymap — so nothing here proves they are needed. They are:
 # the installer (P5.4) is typed into. Said out loud so the green is not misread.
-sudo mkdir -p "$stage/usr/local/share/X11"
-sudo ln -sf ../xkeyboard-config-2 "$stage/usr/local/share/X11/xkb"
+sudo mkdir -p "$de/usr/local/share/X11"
+sudo ln -sf ../xkeyboard-config-2 "$de/usr/local/share/X11/xkb"
 
 echo "== the desktop"
-sudo mkdir -p "$stage/usr/local/bin"
 for b in $BINARIES; do
-  sudo install -m 755 "$builddir/$b" "$stage/usr/local/bin/$b"
+  sudo install -m 755 "$builddir/$b" "$de/usr/local/bin/$b"
 done
 echo "   $(echo $BINARIES | wc -w | tr -d ' ') binaries in /usr/local/bin"
+
+# How an installed machine starts the desktop. Ships inside the set, so a system
+# that extracted `abyss.txz` has it — and `rc.conf` turns it on only when that
+# set was installed (de/install/Steps.swift).
+sudo sh -c "cat > $de/usr/local/libexec/abyss-session" <<'SESSION'
+#!/bin/sh
+# One `anchor` command brings up the whole desktop (P8.4).
+set -u
+export ABYSS_RUNTIME_DIR="${ABYSS_RUNTIME_DIR:-/var/run/abyss}"
+export XDG_RUNTIME_DIR="$ABYSS_RUNTIME_DIR"
+mkdir -p "$ABYSS_RUNTIME_DIR" && chmod 700 "$ABYSS_RUNTIME_DIR"
+sock="${ABYSS_WAYLAND_SOCKET:-abyss-0}"
+mode="${ABYSS_SESSION_MODE:-desktop}"
+frames="${ABYSS_SESSION_FRAMES:-0}"
+limit=""
+[ "$frames" = 0 ] || limit="--frames $frames"
+exec /usr/local/bin/anchor \
+  --mode "$mode" \
+  --compositor "/usr/local/bin/undertow run --hz 60 $limit \
+                --width ${ABYSS_WIDTH:-1024} --height ${ABYSS_HEIGHT:-768} \
+                --socket $sock ${ABYSS_CAPTURE:+--capture $ABYSS_CAPTURE}" \
+  --display "$sock"
+SESSION
+sudo chmod 755 "$de/usr/local/libexec/abyss-session"
+
+sudo sh -c "cat > $de/etc/rc.d/abyss_desktop" <<'RCD'
+#!/bin/sh
+# PROVIDE: abyss_desktop
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+. /etc/rc.subr
+name="abyss_desktop"
+rcvar="abyss_desktop_enable"
+start_cmd="abyss_desktop_start"
+stop_cmd=":"
+: ${abyss_desktop_user:=""}
+abyss_desktop_start()
+{
+	echo "abyss: starting the desktop${abyss_desktop_user:+ for $abyss_desktop_user}"
+	if [ -n "$abyss_desktop_user" ]; then
+		# The desktop belongs to whoever this machine was installed for. It
+		# runs as them, not as root — the one privileged thing a desktop ever
+		# needs is the installer, and this machine is already installed.
+		#
+		# **rc makes the runtime directory, because the session cannot.**
+		# /var/run belongs to root, so an unprivileged session's own `mkdir`
+		# fails and `anchor` exits with "no runtime directory" — which reads as
+		# a supervisor bug and is a permissions one. The live medium got this
+		# right because root set the directory up first; the installed system
+		# did not, so it showed up only on the far side of an install.
+		rundir="/var/run/abyss-$abyss_desktop_user"
+		mkdir -p "$rundir"
+		chown "$abyss_desktop_user" "$rundir"
+		chmod 700 "$rundir"
+		su -m "$abyss_desktop_user" -c \
+			"ABYSS_RUNTIME_DIR=$rundir \
+			 /usr/local/libexec/abyss-session" 2>&1 | sed 's/^/abyss| /'
+	else
+		/usr/local/libexec/abyss-session 2>&1 | sed 's/^/abyss| /'
+	fi
+	echo "abyss: the desktop exited $?"
+}
+load_rc_config $name
+run_rc_command "$1"
+RCD
+sudo chmod 755 "$de/etc/rc.d/abyss_desktop"
+
+echo "== abyss.txz — the desktop, as a distribution set"
+sudo tar -cJf "$work_sets/$DESKTOP_SET" -C "$de" .
+echo "   $(sudo ls -l "$work_sets/$DESKTOP_SET" | awk '{print $5}') bytes"
+
+# ...and the same tree into the medium, so the medium runs what it installs.
+sudo tar -cf - -C "$de" . | sudo tar -xpf - -C "$stage"
 
 echo "== configuring the live system"
 sudo sh -c "cat > $stage/etc/rc.conf" <<'RC'
@@ -144,10 +247,15 @@ sudo sh -c "cat > $stage/etc/rc.conf" <<'RC'
 hostname="abyss-live"
 ifconfig_DEFAULT="DHCP"
 sendmail_enable="NONE"
-# The desktop, started by rc rather than by a login: our compositor is headless
+# The installer, started by rc rather than by a login: our compositor is headless
 # (Phase 6 — real KMS is Phase 4), so there is no tty to log in on and nothing
 # for a getty to hand over to.
 abyss_live_enable="YES"
+# The medium carries /etc/rc.d/abyss_desktop, because it carries the desktop set
+# it installs — but the medium runs the INSTALLER session, not the desktop one.
+# Saying so explicitly is what stops rc warning about an unset variable on every
+# boot, which is noise in the one log this machine uses to report on itself.
+abyss_desktop_enable="NO"
 RC
 
 sudo sh -c "cat > $stage/boot/loader.conf" <<'LOADER'
@@ -192,50 +300,139 @@ RCD
 sudo chmod 755 "$stage/etc/rc.d/abyss_live"
 
 sudo mkdir -p "$stage/usr/local/libexec"
-sudo sh -c "cat > $stage/usr/local/libexec/abyss-live-session" <<'SESSION'
+# Two values are decided when the image is built and have nowhere to live at boot
+# time on a medium with no configuration of its own — so they are written into
+# the script, by the one heredoc here that interpolates.
+sudo sh -c "cat > $stage/usr/local/libexec/abyss-live-session" <<EOF
 #!/bin/sh
-# The live session: one `anchor` command brings up the whole desktop (P8.4),
-# here on a machine that has never built any of it.
+stay=$stay
+frames=$frames
+ABYSS_LIVE_TRACE=$trace
+EOF
+sudo sh -c "cat >> $stage/usr/local/libexec/abyss-live-session" <<'SESSION'
+# The live session: the installer, on the real desktop.
+#
+# Two halves, and the split is the whole architecture (PHASE5 §1):
+#
+#   abyss-install   as ROOT, because partitioning a disk needs root
+#   the session     as an UNPRIVILEGED user, because a GUI does not
+#
+# The medium could have run everything as root — it is a live image and nobody
+# would notice. Not doing so is what makes the peer check load-bearing here
+# rather than ornamental: the installer hands its socket to exactly one uid and
+# then asks the kernel who called.
+#
+# It runs in the FOREGROUND of rc, which means the console does not come up until
+# the session ends. That is deliberate, and the alternative was tried: a
+# backgrounded session goes **silent** the moment `getty` starts, because getty
+# calls `revoke(2)` on the console and that invalidates every descriptor any
+# other process is holding to it. The session printed exactly one line and then
+# nothing, which looks like a crash and is a redirection. Built with `--stay`
+# the machine waits at a console afterwards, which is when a person — or a test
+# — can use it.
 #
 # Everything it says goes to the console on purpose. This is the only report a
-# live medium can make about itself, and a medium that comes up silently and
+# headless live system can make about itself, and one that comes up silently and
 # wrongly is indistinguishable from one that works.
 set -u
-export ABYSS_RUNTIME_DIR=/var/run/abyss
-export XDG_RUNTIME_DIR=/var/run/abyss
-export HOME=/root
-mkdir -p "$ABYSS_RUNTIME_DIR" && chmod 700 "$ABYSS_RUNTIME_DIR"
+user=abyss
+rundir="/var/run/abyss-$user"
+mkdir -p "$rundir" && chown "$user" "$rundir" && chmod 700 "$rundir"
 
-sock=abyss-live-0
-# `.ppm`, because that is what `undertow --capture` writes — P6, not PNG. The
-# frame is left on the medium's own filesystem, which is the whole reason the
-# root is mounted read-write: it is the only evidence a headless live system can
-# leave behind.
-shot=/var/log/abyss-live.ppm
-frames="${ABYSS_LIVE_FRAMES:-180}"
+run() {
+  # **Write to /dev/console, not to whatever stdout rc happened to have.** This
+  # runs in the background so the console comes up while the desktop does; once
+  # rc finishes, getty takes that terminal and everything this process says
+  # afterwards is lost. The first version printed exactly one line and then went
+  # silent, which looked like a crash and was a redirection.
+  [ -z "${ABYSS_LIVE_TRACE:-}" ] || set -x
+  echo "abyss-live: $(cat /etc/abyss-live)"
 
-echo "abyss-live: $(cat /etc/abyss-live)"
-/usr/local/bin/anchor \
-  --compositor "/usr/local/bin/undertow run --hz 60 --frames $frames \
-                --width 1024 --height 768 --socket $sock \
-                --capture $shot --assert-layers 3" \
-  --display "$sock" > /var/log/abyss-live.log 2>&1
-rc=$?
+  # The privileged half first: the disk spoke is empty until it answers.
+  # Straight to the console, not into a file read at the end: a service that
+  # fails to start is the thing you most need to see, and the end may never
+  # come. (It didn't: the first run of this said only "THE INSTALLER SERVICE
+  # NEVER STARTED", with the reason sitting in a log nobody had reached yet.)
+  env ABYSS_RUNTIME_DIR="$rundir" /usr/local/bin/abyss-install \
+      --uid "$(id -u "$user")" 2>&1 | sed 's/^/install| /' &
+  i=0
+  while [ ! -S "$rundir/install.sock" ] && [ $i -lt 100 ]; do i=$((i+1)); sleep 0.1; done
+  [ -S "$rundir/install.sock" ] \
+    && echo "abyss-live: the installer service is up, for uid $(id -u "$user")" \
+    || echo "abyss-live: THE INSTALLER SERVICE NEVER STARTED"
 
-echo "abyss-live: session exited $rc"
-sed 's/^/abyss-live| /' /var/log/abyss-live.log
-if [ -s "$shot" ]; then
-  echo "abyss-live: captured $(stat -f %z "$shot") bytes of desktop to $shot"
-else
-  echo "abyss-live: NO FRAME CAPTURED"
-fi
-# Leave the machine off rather than sitting at a login prompt: the medium's job
-# in a test is to come up, say what happened, and stop, so the harness never has
-# to guess whether it is finished or merely slow.
-[ -n "${ABYSS_LIVE_STAY:-}" ] || (sleep 2; /sbin/shutdown -p now) &
-echo "abyss-live: done"
+  # `$rundir` is expanded here, by root, before su — the session's own shell has
+  # no reason to know where root decided to put it.
+  su -m "$user" -c "ABYSS_RUNTIME_DIR=$rundir \
+                    ABYSS_SESSION_MODE=installer \
+                    ABYSS_SESSION_FRAMES=$frames \
+                    ABYSS_CAPTURE=$rundir/frame.ppm \
+                    ABYSS_WAYLAND_SOCKET=abyss-live-0 \
+                    /usr/local/libexec/abyss-session" > /var/log/abyss-live.log 2>&1
+  rc=$?
+
+  echo "abyss-live: session exited $rc"
+  sed 's/^/abyss-live| /' /var/log/abyss-live.log
+  # The session runs as an unprivileged user and cannot write to /var/log —
+  # which is the right answer to "why did the capture fail", and cost a boot to
+  # find. It writes into its own runtime directory; root moves it here.
+  shot=/var/log/abyss-live.ppm
+  [ -s "$rundir/frame.ppm" ] && cp "$rundir/frame.ppm" "$shot"
+  if [ -s "$shot" ]; then
+    echo "abyss-live: captured $(stat -f %z "$shot") bytes of desktop to $shot"
+  else
+    echo "abyss-live: NO FRAME CAPTURED"
+  fi
+  echo "abyss-live: done"
+  # Leave the machine off rather than sitting at a login prompt: the medium's
+  # job in a test is to come up, say what happened, and stop, so the harness
+  # never has to guess whether it is finished or merely slow. Built with
+  # `--stay` it stays, for a person at the console or a test driving one.
+  [ "$stay" = 1 ] || (sleep 2; /sbin/shutdown -p now) &
+}
+
+run
 SESSION
 sudo chmod 755 "$stage/usr/local/libexec/abyss-live-session"
+
+# The user the session runs as. No password: this is a live medium, the console
+# is the machine, and an account that cannot be logged into cannot start a
+# session either.
+# Root with no password, as FreeBSD's own installation media have: the console
+# IS the machine on a live medium, and one you cannot log into is one you can
+# neither rescue nor drive. Nothing that gets *installed* inherits this — the
+# installed system's accounts come from the plan (`rootPasswordHash` is `*`).
+sudo sed -i '' 's|^root:[^:]*:|root::|' "$stage/etc/master.passwd"
+
+sudo sh -c "cat >> $stage/etc/master.passwd" <<'PW'
+abyss::1001:1001::0:0:AbyssBSD live:/home/abyss:/bin/sh
+PW
+sudo sh -c "cat >> $stage/etc/group" <<'GRP'
+abyss:*:1001:
+GRP
+sudo mkdir -p "$stage/home/abyss"
+# So that someone logging in at the live console can just run
+# `abyss-installctl` — the installer service belongs to this user's session and
+# lives in that session's runtime directory, and nothing else would find it.
+sudo sh -c "cat > $stage/home/abyss/.profile" <<'PROF'
+ABYSS_RUNTIME_DIR=/var/run/abyss-abyss
+export ABYSS_RUNTIME_DIR
+PATH=$PATH:/usr/local/bin
+export PATH
+PROF
+sudo chown -R 1001:1001 "$stage/home/abyss"
+sudo pwd_mkdb -p -d "$stage/etc" "$stage/etc/master.passwd"
+
+echo "== the distribution sets the medium installs"
+# **A live installer with nothing to install is a demonstration.** The medium
+# carries the same base.txz and kernel.txz it was built from, plus the desktop
+# set built above — so the machine it installs is the machine it is.
+sudo mkdir -p "$stage/usr/freebsd-dist"
+for set in base.txz kernel.txz; do
+  sudo cp -p "$dist/$set" "$stage/usr/freebsd-dist/$set"
+done
+sudo cp -p "$work_sets/$DESKTOP_SET" "$stage/usr/freebsd-dist/$DESKTOP_SET"
+sudo ls -1 "$stage/usr/freebsd-dist" | sed 's/^/   /'
 
 # A marker, so "it booted" can never be satisfied by some other FreeBSD.
 sudo sh -c "echo 'AbyssBSD live medium, built by abyss/mk/live-image.sh' > $stage/etc/abyss-live"

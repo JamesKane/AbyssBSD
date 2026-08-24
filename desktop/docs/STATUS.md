@@ -3,18 +3,17 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-24. **Phases 0–3 and 6–8 are complete.** The Jaguar desktop
+Last updated: 2026-08-24. **Phases 0–3 and 5–8 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**307 unit tests + 38 live modes, green on Linux *and* FreeBSD.**
-**Phase 5 — the installer — is scoped and nearly built** ([PHASE5.md](PHASE5.md),
-passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1–P5.4
-are done: the installer installs, the harness boots what it installed, the medium
-it arrives on comes up running the Jaguar desktop, and an Aqua installer on that
-desktop builds the plan you click.** **P5.5 — install, reboot, desktop — is the
-last one**; see [What's next](#whats-next).
+**315 unit tests + 39 live modes, green on Linux *and* FreeBSD.**
+**Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5):
+**a machine with an empty disk boots our medium, the Aqua installer comes up on
+it, and it reboots into the Jaguar desktop as the account that was created** —
+on every run of the harness, nested twice over, with no hardware and no human.
+**Phase 4 (Mac Pro) is the only phase left**; see [What's next](#whats-next).
 
 ## What this is
 
@@ -434,13 +433,13 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **The next pass is P5.5 — install, reboot, desktop**, and it is the last one in
-> the phase. Everything it needs exists: the medium carries the installer and the
-> service, the service installs and the harness can boot what it installed, and
-> the GUI produces a plan the service accepts. What is left is joining them — the
-> live session on the medium should start the *installer* rather than the
-> desktop, and the test should drive it through to a reboot into the installed
-> system.
+> **Phase 4 — Mac Pro bring-up — is the only phase left**, and three separate
+> threads now point at it: PLAN.md's own verify for Phase 5 wants a clean install
+> onto that machine; **input from real hardware is untested** (every click and
+> keystroke in this tree comes from `wlr-virtual-pointer`, and `undertow` has
+> only a headless backend); and Phase 6's C1 numbers came off a synthetic clock
+> and should be repeated on a real GPU with `rtprio`. Its own risk is the biggest
+> left: `amdgpu` `si_support` for the FirePro D-series.
 >
 > **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
@@ -556,6 +555,34 @@ binary. The disk spoke shows **every** disk with the reason beside the ones it
 will not use (a picker that silently omits your disk is one you argue with), and
 the confirmation names the disk in the sentence with the destructive verb on the
 button.
+
+**P5.5 is done, and with it Phase 5 — an empty disk becomes a desktop.**
+`abyss/tests/live-desktop.sh` runs the whole arc nested twice over: a blank 12 GB
+disk, our medium coming up on the **Aqua installer** (not the desktop — that is
+what a medium is for), an install driven from the medium's own console, and a
+reboot into the Jaguar desktop with the wallpaper, menu bar and Dock, as the
+account the installer created.
+
+The medium carries what it installs: the desktop is collected once and used
+twice — copied in so the medium can run it, and tarred into `abyss.txz` so the
+installer can install it — alongside the `base.txz` and `kernel.txz` it was built
+from. And the installed machine starts what was installed by a rule derived
+rather than assumed: `rc.conf` enables the desktop exactly when that set was
+among the sets extracted.
+
+**§4.4 stopped being ornamental.** The medium runs `abyss-install` as root and
+the session as an unprivileged user, because a live image that ran everything as
+root would work and prove nothing. Driving the install from the console as
+*root* is refused — you log in as the session user, which is the design working.
+
+Three bugs, each visible only on the far side of something
+([HANDOFF §2.47](HANDOFF.md)): an unprivileged session cannot write its captured
+frame to `/var/log`; a **backgrounded** session goes silent the instant `getty`
+calls `revoke(2)` on the console, which looks exactly like a crash and took three
+boots and a shell trace to find; and the *installed* machine could not start its
+desktop at all, because `/var/run` belongs to root and the session's own `mkdir`
+failed — the medium had got that right by accident, and only an install revealed
+it.
 
 **What the live test found that twenty green model tests had not**
 ([HANDOFF §2.46](HANDOFF.md)): pressing Choose on a disk that cannot be used

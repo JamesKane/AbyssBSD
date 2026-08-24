@@ -80,6 +80,16 @@ public struct InstallPlan: Equatable, Sendable {
         self.accounts = accounts
     }
 
+    /// The distribution set that carries the Aqua desktop.
+    ///
+    /// Built by `abyss/mk/live-image.sh` out of the very files the medium runs,
+    /// so what the medium carries and what the installer installs are the same
+    /// collection rather than two that have to be kept in step.
+    public static let desktopSet = "abyss.txz"
+
+    /// Whether this install puts the desktop on the machine.
+    public var installsDesktop: Bool { sets.contains(InstallPlan.desktopSet) }
+
     /// The GPT label prefix. Labels have to be unique **on the machine doing the
     /// install**, not just on the target — the installer is running from a
     /// medium that has partitions of its own, and `/dev/gpt/swap` colliding with

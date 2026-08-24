@@ -6,7 +6,12 @@
 #
 #     A machine that has never built any of this, booted from an image we
 #     assembled out of distribution sets, comes up running our compositor with
-#     the wallpaper, menu bar and Dock composited on it.
+#     the Aqua installer composited on it.
+#
+# (P5.3 asserted the *desktop* here — wallpaper, menu bar and Dock. P5.5 changed
+# what the medium runs, which is the point of a medium: a live installer that
+# boots to a Dock is a live installer nobody asked for. The desktop is still
+# what gets INSTALLED, and `live-desktop.sh` checks that on the far side.)
 #
 # Three steps, each proving something the one before cannot:
 #
@@ -15,10 +20,9 @@
 #   2. BOOT   — nested bhyve, and the medium reports on itself over the console,
 #               which is the only channel a headless live system has.
 #   3. LOOK   — the medium's root is mounted afterwards and the frame it captured
-#               is probed, PIXEL BY PIXEL. "Three surfaces mapped" is a claim
-#               about bookkeeping; a pale menu bar at the top and something other
-#               than the compositor's fallback blue underneath it is a claim
-#               about the picture.
+#               is probed, PIXEL BY PIXEL. "Two surfaces mapped" is a claim about
+#               bookkeeping; a pale panel in the middle of the screen with the
+#               wallpaper behind it is a claim about the picture.
 #
 # On Linux this is a positive control, like `live-install.sh`: the builder must
 # refuse and say why. `makefs`, `mkimg` and the whole arrangement are FreeBSD.
@@ -102,15 +106,22 @@ grep -q "abyss-live: session exited 0" "$work/boot.log" \
        fail "the desktop did not come up on the medium"; }
 echo "ok: it is our medium, and the session came up on it"
 
-# The three shell clients, each a separate layer-shell surface. `undertow` was
-# given --assert-layers 3 as well, so the session's exit status already covers
-# this — but a test that only checks an exit code cannot say WHICH one is
-# missing when it goes wrong.
-for surface in abyss.wallpaper abyss.menubar abyss.dock; do
-  grep -q "mapped .*\[$surface\]" "$work/boot.log" \
-    || fail "$surface never mapped on the medium"
-done
-echo "ok: wallpaper, menu bar and Dock all composited — from a read-only build tree"
+# The wallpaper is a layer surface; the installer is an ordinary window. Both
+# have to be there — a backdrop with no installer is a very expensive desktop
+# picture, and an installer with no backdrop means the wallpaper client died.
+grep -q "mapped .*\[abyss.wallpaper\]" "$work/boot.log" \
+  || fail "the wallpaper never mapped on the medium"
+grep -q "mapped org.abyssbsd.aquademo" "$work/boot.log" \
+  || fail "the installer's window never mapped on the medium"
+echo "ok: the wallpaper and the Aqua installer both composited — from a build tree"
+
+# And the privileged half is there, and belongs to the unprivileged session:
+# the disk spoke is empty until it answers, and root would be refused (§4.4).
+grep -q "the installer service is up, for uid" "$work/boot.log" \
+  || fail "the medium has no installer service, so its disk spoke is empty"
+grep -q "AquaDemo: installer is up" "$work/boot.log" \
+  || fail "the installer never reported what the machine has"
+echo "ok: $(sed -n 's/.*\(AquaDemo: installer is up.*\)/\1/p' "$work/boot.log" | head -1)"
 
 # **The medium has its fonts.** This assertion exists because its absence was
 # found the hard way: a medium built with no fonts at all passed every other
@@ -156,18 +167,21 @@ pixel() {
 }
 lightness() { echo "$1" | awk '{print int(($1 + $2 + $3) / 3)}'; }
 
-bar=$(pixel $((W / 2)) 8)
-[ "$(lightness "$bar")" -gt 150 ] \
-  || fail "no menu bar at the top of the medium's frame (pixel $bar)"
-echo "ok: the menu bar is painted at the top ($bar)"
+# The middle of the screen is the installer's panel: pale Aqua chrome, and
+# emphatically not undertow's fallback blue, which is what an output with
+# nothing composited on it looks like.
+panel=$(pixel $((W / 2)) $((H / 2)))
+[ "$panel" != "61 102 161" ] \
+  || fail "the middle of the frame is bare output — nothing was drawn on it"
+[ "$(lightness "$panel")" -gt 150 ] \
+  || fail "the installer's panel is not in the middle of the frame ($panel)"
+echo "ok: the installer's panel is drawn in the middle ($panel)"
 
-desk=$(pixel 60 300)
+# ...and the wallpaper is behind it, in the corner the window does not cover.
+desk=$(pixel 60 60)
 [ "$desk" != "61 102 161" ] \
   || fail "the desktop is undertow's fallback blue — the wallpaper never composited"
-echo "ok: the wallpaper is under it, not the compositor's fallback ($desk)"
-
-dock=$(pixel $((W / 2)) $((H - 40)))
-[ "$dock" != "$desk" ] || fail "nothing is drawn where the Dock should be"
-echo "ok: the Dock overlaps the wallpaper near the bottom ($dock)"
+[ "$desk" != "$panel" ] || fail "the backdrop and the panel are the same colour"
+echo "ok: the wallpaper is behind it, not the compositor's fallback ($desk)"
 
 echo "all green (a machine booted from our medium ran our desktop, and drew it)."

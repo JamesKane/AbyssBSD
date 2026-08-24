@@ -28,6 +28,22 @@ import Glibc
 import Darwin
 #endif
 
+/// What kind of session this is.
+///
+/// The live medium runs the same compositor, the same toolkit and the same
+/// supervisor as the installed desktop — it just runs *one application* instead
+/// of a shell. Making that a mode rather than a separate program is what keeps
+/// the medium honest: if `anchor` can boot the installer, then the installer is
+/// running on the real desktop, not on a special one built to demonstrate it.
+public enum SessionMode: String, Sendable, Equatable {
+    /// Wallpaper, menu bar, Dock — the desktop.
+    case desktop
+    /// Wallpaper and the installer, and nothing else. No Dock (there is nothing
+    /// to launch), no menu bar (there is nothing to quit to), and no bus — a
+    /// machine being installed has no foreign apps to serve.
+    case installer
+}
+
 /// The session as a plan: what to run, in what order, and what to export first.
 public struct SessionPlan: Equatable, Sendable {
     /// Everything to supervise, already ordered.
@@ -103,6 +119,7 @@ public func defaultSession(shellBinary: String,
                            runtimeDir: String,
                            display: String?,
                            compositorSocket: String? = nil,
+                           mode: SessionMode = .desktop,
                            without: Set<String> = []) -> SessionPlan {
     var components: [ComponentSpec] = []
     var notes: [String] = []
@@ -177,9 +194,13 @@ public func defaultSession(shellBinary: String,
 
     // ---------------------------------------------------------------- shell
     // In stacking order: the desktop underneath, then the menu bar, then the
-    // Dock — the same three `abyss/session.sh` ran.
-    for (name, scene) in [("desktop", "wallpaper"), ("menubar", "menubar"), ("dock", "dock")]
-    where !without.contains(name) {
+    // Dock — the same three `abyss/session.sh` ran. In installer mode, the
+    // wallpaper and the installer instead: a backdrop and the one thing this
+    // machine is for.
+    let scenes: [(String, String)] = mode == .installer
+        ? [("desktop", "wallpaper"), ("installer", "installer")]
+        : [("desktop", "wallpaper"), ("menubar", "menubar"), ("dock", "dock")]
+    for (name, scene) in scenes where !without.contains(name) {
         var env = shared
         env["AQUA_SCENE"] = scene
         env["ABYSS_APP_BINARY"] = shellBinary

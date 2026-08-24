@@ -1,14 +1,17 @@
-# Phase 5 — the installer: a machine with an empty disk (scope)
+# Phase 5 — the installer: a machine with an empty disk
 
 The last phase that depends on nothing. Read [PLAN.md](PLAN.md) for the locked
 decisions, [PHASE8.md](PHASE8.md) for the session this installs, and
 [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-24. **P5.1–P5.4 are done; P5.5 is next.** Four risks were spiked first,
-on the target (§4), because the phase's shape depended on the answers — and two
-of them were the phase's whole feasibility question. The passes below are written
-knowing that a program we wrote can install a bootable FreeBSD, and that the
-harness can prove it booted without a human, a disk or a second machine.
+Last updated: 2026-08-24. **Phase 5 is COMPLETE — P5.1–P5.5.** A machine with an
+empty disk boots our medium, the Aqua installer comes up on it, and the machine
+reboots into the Jaguar desktop as the account that was created — proven on every
+run of the harness, nested twice over, with no hardware and no human.
+
+Four risks were spiked on the target before the plan was written (§4), because
+the phase's shape depended on the answers, and two of them were its whole
+feasibility question.
 
 ---
 
@@ -68,7 +71,9 @@ was started for.
 - **No metal.** PLAN.md's verify says "onto the Mac Pro (and the VM)". The VM
   half is this phase; **the Mac Pro half is Phase 4's**, because installing onto
   that machine first requires that machine to boot FreeBSD with a working GPU.
-  Saying so now is cheaper than discovering it in P5.5.
+  Saying so now is cheaper than discovering it in P5.5. *(It held: everything
+  below was verified nested, and the one thing genuinely untested at the end of
+  the phase is input from real hardware.)*
 - **No dual-boot, no preserving an existing layout.** v1 takes a whole disk and
   writes a GPT over it. "Install alongside" is a partition-shrinking problem and
   a separate piece of work.
@@ -346,12 +351,75 @@ sockets can shut somebody else's connection.
 none reaches an `InstallPlan` — a value that is logged, rendered into a golden
 test and passed between processes.
 
-**P5.5 — install, reboot, desktop.**
+**P5.5 — install, reboot, desktop. ✅ done.**
 The end-to-end: boot the medium, click through, install, reboot, and land in the
 Jaguar desktop with the account that was created in the account spoke.
 
-*Verify:* one script, nested, no human — and a screenshot of the desktop taken on
-the installed machine, which is the only evidence that means anything.
+*Verify:* one script, nested, no human — the installed machine's own boot log is
+the evidence, because a desktop that starts on a machine we installed is a claim
+about that machine and not about a picture.
+
+**✅ done, and with it Phase 5.** `abyss/tests/live-desktop.sh` runs the whole
+arc nested twice over:
+
+```
+ok: a blank 12G disk, with no partition table at all
+ok: the medium came up running the Aqua installer, and it sees 2 disks
+ok: an unprivileged session is commanding a root installer (PHASE5 §4.4)
+ok: its window composited on the medium's own compositor
+ok: logged in at the medium's console; the blank disk is there
+ok: installed onto vtbd1 from the medium, desktop and all
+ok: it boots, as jaguar
+ok: and it started the desktop for the account the installer created
+ok: wallpaper, menu bar and Dock — the Jaguar desktop, on a machine we installed
+ok: with swap, and nothing in the log about what is missing
+```
+
+**The medium runs the installer, not the desktop** — which is what a medium is
+for, and it is the same `anchor` in a different mode (`--mode installer`:
+wallpaper and the installer, no Dock because there is nothing to launch, no menu
+bar because there is nothing to quit to). If `anchor` can boot the installer,
+the installer is running on the real desktop rather than on a special one built
+to demonstrate it.
+
+**The medium carries what it installs.** The desktop is collected once and used
+twice: copied into the medium so the medium can run it, and tarred into
+`abyss.txz` so the installer can install it. The medium also carries `base.txz`
+and `kernel.txz` — a live installer with nothing to install is a demonstration.
+
+**And the installed machine starts what was installed**, by a rule derived
+rather than assumed: `rc.conf` enables the desktop exactly when the set that
+contains it was among the sets extracted, and names the administrator account
+the plan created. Install a plain FreeBSD and you get a plain FreeBSD.
+
+**§4.4 stopped being ornamental.** The medium runs `abyss-install` as **root**
+and the session as an **unprivileged user**, because a live image that ran
+everything as root would work and would prove nothing. Driving the install from
+the medium's console as `root` is *refused* — the service was started for uid
+1001 and hands its socket to exactly that uid. You log in as the session user,
+which is the design working rather than an inconvenience.
+
+*Three bugs, and each was only visible on the far side of something:*
+
+- The session could not write its captured frame to `/var/log`, because it is
+  not root. It reads as a compositor bug and is a permissions one.
+- A **backgrounded** session goes silent the instant `getty` starts, because
+  getty calls `revoke(2)` on the console and that invalidates every descriptor
+  anyone else holds to it. One line, then nothing — three times, before the
+  trace found it (HANDOFF §2.47). The session runs in rc's foreground now.
+- The *installed* machine could not start its desktop at all: `/var/run` belongs
+  to root, so the unprivileged session's own `mkdir` failed and `anchor` exited
+  with "no runtime directory". The live medium got this right because root set
+  the directory up first; only an install revealed that the installed system
+  did not.
+
+**What this does NOT prove, said plainly.** Nobody clicks the installer here —
+the install is driven from the medium's console with `abyss-installctl`, the same
+protocol the GUI speaks carrying the same plan it builds. Driving a GUI inside
+the nested machine would mean putting the harness's input tools into the product
+image. The clicking is proven by `live-installer.sh` on the same binary, the same
+compositor and the same service; what is genuinely untested is **input from real
+hardware**, which is Phase 4.
 
 ---
 
@@ -542,6 +610,14 @@ much past this, the boot checks belong behind their own flag — said out loud i
 `run.sh`, never quietly dropped. Both already skip loudly without the
 distribution sets or bhyve's UEFI firmware, which keeps a fresh machine fast and
 honest rather than fast and silent.
+
+**6.8 There is no login window.** *Referenced by P5.5's `rcConf`.* The installed
+machine starts the desktop from `rc` as the account the installer created,
+because that is who the machine was installed for. That is right for a machine
+with one user and wrong for a machine with two, and it is the reason
+`abyss_desktop_user` exists as a single name rather than a login prompt.
+PLAN.md's Phase 2 sketch listed `LoginWindow`; it was never built, and this is
+the first thing that actually wants it.
 
 **6.7 There is no rollback.** `abyss-install` can tear down its own mess (export,
 unmount, detach), but once `gpart` has written a new GPT over somebody's disk,

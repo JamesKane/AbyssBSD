@@ -7,27 +7,26 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-24. **Phases 0–3 and 6–8 are complete.** The Jaguar shell
+Last updated: 2026-08-24. **Phases 0–3 and 5–8 are complete.** The Jaguar shell
 runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
 plane, session supervisor and hardware bridges; the portals hand out descriptors;
 and **one command boots a desktop where an unmodified GTK 3 application, which
 has never heard of this desktop, opens a file through the Finder**.
-**307 unit tests + 38 live modes, green on Linux and FreeBSD.**
-**Phase 5 — the installer — is scoped and started** ([PHASE5.md](PHASE5.md)), its
-four risks retired on the target and **P5.1–P5.4 done**: a program we wrote
-installs a FreeBSD that boots, an image we assembled boots into the Jaguar
-desktop, an Aqua installer runs on it, and the harness proves all of it on every
-run, with no hardware and no human.
+**315 unit tests + 39 live modes, green on Linux and FreeBSD.**
+**Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
+machine with an empty disk boots our medium, the Aqua installer comes up on it,
+and it reboots into the Jaguar desktop as the account that was created — proven
+on every run, nested twice over, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **The next pass is P5.5** — install, reboot, desktop. Phase 8
+1. **Nothing is queued.** Phase 5 is complete, and Phase 4 (Mac Pro) is the
+   only one left — §5 says why three separate threads now point at it. Phase 8
    closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
-   Phase 5, and **P5.1–P5.4 are in — the installer installs, what it installs
-   boots, the medium it arrives on runs the desktop, and the Aqua installer on
-   it builds the plan you click**. §5 has what P5.5 is, and the standing smaller
-   items. **Read §2.43–§2.46 first**; between them they are why this phase is
-   verified the way it is. **Phase 4 (Mac Pro bring-up) is still open and still
+   Phase 5, which is **now complete**: an empty disk becomes a machine running
+   the Jaguar desktop, on every run of the harness. **Read §2.43–§2.47 first** —
+   between them they are why this phase is verified the way it is, and four of
+   the five were found by running something rather than reading it. **Phase 4 (Mac Pro bring-up) is still open and still
    independent** — and now owns the metal half of Phase 5's verify.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
@@ -46,6 +45,9 @@ run, with no hardware and no human.
    - **§2.41** — whose lifetime is this listener, exactly? A compositor must
      outlive its input client, and only a test that shuts down in the right
      order will ever say so.
+   - **§2.47** — `getty` revokes the console, so a backgrounded service's
+     output dies the moment a login prompt appears. Silent, and it looks
+     exactly like a crash.
    - **§2.46** — a GUI cannot be trusted to be right about itself: twenty
      green model tests missed a screen that looked like it worked. And never
      put coordinates in a test that clicks — make the app publish them.
@@ -304,6 +306,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.44 | An install that reports success is not one that worked — assert on `login:`; and `geom disk list` cannot see `md(4)` |
 | 2.45 | A package manager's closure is not your program's closure — `ldd`, not `pkg`; and announce a graceful fallback or no test can see it |
 | 2.46 | A GUI cannot be trusted to be right about itself — click it live, and let it publish its own geometry; `print` is buffered and invisible |
+| 2.47 | `getty` calls `revoke(2)` on the console — every other process's descriptor to it dies, silently |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -570,6 +573,40 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.47 getty revokes the console, and your background service goes mute
+(P5.5 — the live medium running the installer, and installing from its own
+console.)
+
+The live session was backgrounded so that rc would finish and the console come
+up while the desktop ran. It printed **exactly one line** and then went silent —
+no error, no exit, no core. It looked like a crash three separate times.
+
+It is a redirection. `getty` calls **`revoke(2)`** on the terminal it is about to
+offer a login on, and `revoke` invalidates *every* descriptor any other process
+holds to that device. A background process that inherited the console from rc —
+or that opened `/dev/console` itself, which was the second thing tried — has its
+writes fail from the instant the login prompt appears. Reopening per write would
+work and is ridiculous.
+
+The fix was to stop wanting the thing: the session runs in **rc's foreground**,
+and the console arrives when it ends. A medium built `--stay` then waits there,
+which is when a person — or a test — can use it. The trace that found this is
+worth keeping (`ABYSS_LIVE_TRACE=1` puts `set -x` in the live session), because
+on a headless medium the console is the only instrument there is.
+
+Two more from the same pass:
+
+- **An unprivileged session cannot write to `/var/log`.** The compositor's frame
+  capture failed with a message naming a path, which reads as a compositor bug
+  and is a permissions one — the session runs as the live user *on purpose*
+  (§4.4 is only load-bearing if the GUI is not root). It writes into its own
+  runtime directory and root moves the result somewhere findable.
+- **The peer check will refuse you, and that is it working.** Driving the install
+  from the medium's console as `root` fails: the service was started for uid
+  1001 and hands its socket to exactly that uid. Log in as the session user
+  instead. The medium's `.profile` points `abyss-installctl` at the session's
+  runtime directory, because nothing else would find it.
 
 ### 2.46 A GUI cannot be trusted to be right about itself
 (P5.4 — the Aqua installer, and the live test that clicks it.)
@@ -1895,21 +1932,34 @@ manager's closure is not your program's closure — and the assertion that had t
 be *invented* is worth reading before P5.4: a medium with no fonts at all passed
 every check until the desktop was made to announce what its text stack got.
 
-**P5.4 is done: the Aqua installer.** The hub-and-spoke, driven live by a real
-pointer and a real keyboard against the real `abyss-install` in dry-run. It links
-`InstallWire` and not `InstallRun`, so the GUI does not carry the code that forks
-`gpart`. §2.46 is what building it taught — read it before P5.5.
+**P5.5 is done, and with it Phase 5.** `abyss/tests/live-desktop.sh` runs the
+whole arc nested twice over: a blank disk, our medium coming up on the Aqua
+installer, an install driven from the medium's own console, and a reboot into the
+Jaguar desktop as the account that was created. §2.47 is what it cost.
 
-**P5.5 is next, and it is the last one: install, reboot, desktop.** Boot the
-medium, click through, install, reboot, and land in the Jaguar desktop as the
-account the account spoke created. Everything it needs exists: the medium
-carries the installer and the service (P5.3), the service installs and the
-harness can boot what it installed (P5.2), and the GUI produces a plan
-`abyss-install` accepts (P5.4). What is left is joining them: the live session on
-the medium should start the **installer** rather than the desktop, and the test
-should drive it through to a reboot into the installed system. Note that the
-installer's own progress path — the socket folded into the run loop — has been
-built but never yet watched an install run to completion.
+### Nothing is queued: what is left is Phase 4
+
+**Phase 4 — Mac Pro bring-up — is the only phase left**, and three separate
+things now point at it:
+
+- **PLAN.md's own verify for Phase 5** says "onto the Mac Pro (and the VM)". The
+  VM half is done; the metal half needs that machine to boot FreeBSD with a
+  working GPU.
+- **Input from real hardware is untested.** Every click and keystroke in this
+  tree comes from `wlr-virtual-pointer` and `virtual-keyboard`. `undertow` has
+  only a headless backend; there is no KMS, no libinput device, no real seat.
+- **Phase 6's C1 numbers came off a synthetic clock.** They should be repeated
+  on a real GPU with `rtprio`, which is the only place they mean what they claim.
+
+Its own risk is unchanged and is the biggest left: `amdgpu` `si_support` for the
+FirePro D-series.
+
+### Standing smaller items, and one the installer created
+
+- **There is no login window** (PHASE5 §6.8). The installed machine starts the
+  desktop from `rc` as the account the installer created — right for a machine
+  with one user, wrong for a machine with two. PLAN.md's Phase 2 sketch listed
+  `LoginWindow`; this is the first thing that actually wants it.
 
 ### The other phase that is left
 

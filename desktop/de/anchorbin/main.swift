@@ -60,6 +60,7 @@ func selfDirectory() -> String? {
 var compositorCmd: String?
 var display = ProcessInfoEnv("WAYLAND_DISPLAY")
 var explicitComponents: [(String, String)] = []
+var mode: SessionMode = .desktop
 var without: Set<String> = []
 var binary = ProcessInfoEnv("ABYSS_APP_BINARY")
 var runtimeDir = ProcessInfoEnv("ABYSS_RUNTIME_DIR")
@@ -89,6 +90,12 @@ while i < args.count {
     case "--max-restarts":
         guard let n = Int(next("a number")), n >= 0 else { fail("--max-restarts wants a number") }
         maxRestarts = n
+    case "--mode":
+        let m = next("desktop or installer")
+        guard let parsed = SessionMode(rawValue: m) else {
+            fail("--mode is desktop or installer, not '\(m)'")
+        }
+        mode = parsed
     case "--without":     without.insert(next("a component name"))
     case "--component":
         let spec = next("NAME=COMMAND")
@@ -167,6 +174,7 @@ if explicitComponents.isEmpty {
                               runtimeDir: dir,
                               display: display,
                               compositorSocket: compositorSocket,
+                              mode: mode,
                               without: without)
     // Exported before anything is spawned, so **every** child inherits it —
     // including the applications the shell itself launches later, which is the

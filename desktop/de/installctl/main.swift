@@ -32,6 +32,7 @@ func usage() -> Never {
       --disk NAME          the whole disk to take (required for check/install)
       --pool NAME          pool name (default abyss)
       --dist DIR           where the distribution sets are
+      --sets a.txz,b.txz   which sets to extract (default base,kernel)
       --hostname NAME
       --timezone ZONE      e.g. America/Chicago
       --swap MiB           0 for none
@@ -49,6 +50,7 @@ args.removeFirst()
 
 var disk = "", pool = "abyss", dist = "", host = "abyss", tz = "", rootHash = ""
 var swapMiB: UInt64?
+var sets: [String] = []
 var users: [Account] = []
 var serviceName = "install"
 var assumeYes = false
@@ -60,7 +62,8 @@ var i = 0
 while i < args.count {
     let flag = args[i]
     let needsValue = ["--disk", "--pool", "--dist", "--hostname", "--timezone",
-                      "--swap", "--root-hash", "--service", "--user"].contains(flag)
+                      "--swap", "--root-hash", "--service", "--user",
+                      "--sets"].contains(flag)
     var value = ""
     if needsValue {
         i += 1
@@ -77,6 +80,7 @@ while i < args.count {
     case "--timezone": tz = value
     case "--swap": swapMiB = UInt64(value) ?? 0
     case "--root-hash": rootHash = value
+    case "--sets": sets = value.split(separator: ",").map(String.init)
     case "--service": serviceName = value
     case "--yes": assumeYes = true
     case "--user":
@@ -98,6 +102,7 @@ while i < args.count {
 let defaults = InstallPlan(disk: "")
 var plan = InstallPlan(disk: disk, poolName: pool,
                        swapBytes: swapMiB.map { $0 * 1024 * 1024 } ?? defaults.swapBytes,
+                       sets: sets.isEmpty ? defaults.sets : sets,
                        distDirectory: dist.isEmpty ? defaults.distDirectory : dist,
                        hostname: host, timezone: tz,
                        rootPasswordHash: rootHash.isEmpty ? "*" : rootHash,

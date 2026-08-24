@@ -289,6 +289,19 @@ public func rcConf(_ plan: InstallPlan) -> String {
     out += "hostname=\"\(plan.hostname)\"\n"
     out += "ifconfig_DEFAULT=\"DHCP\"\n"
     if !plan.keymap.isEmpty { out += "keymap=\"\(plan.keymap)\"\n" }
+    // **A machine that installed the desktop should start it.** The rule is
+    // derived rather than assumed: the desktop is enabled exactly when the set
+    // that contains it is one of the sets being extracted, so a plan that
+    // installs a plain FreeBSD produces a plain FreeBSD. And it names the
+    // account to run as, because an installed desktop belongs to whoever this
+    // machine was installed for — there is no login window yet (PHASE5 §6.8).
+    if plan.installsDesktop {
+        out += "abyss_desktop_enable=\"YES\"\n"
+        if let owner = plan.accounts.first(where: { $0.isAdministrator })
+                    ?? plan.accounts.first {
+            out += "abyss_desktop_user=\"\(owner.name)\"\n"
+        }
+    }
     return out
 }
 

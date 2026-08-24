@@ -109,6 +109,7 @@ final class AnchorTests: XCTestCase {
     /// Build the session a real `anchor` would, on a machine we are not on.
     private func plan(dbusDaemon: String? = "/usr/bin/dbus-daemon",
                       compositorSocket: String? = nil,
+                      mode: SessionMode = .desktop,
                       without: Set<String> = []) -> SessionPlan {
         defaultSession(shellBinary: "/opt/abyss/AquaDemo",
                        serviceDirectory: "/opt/abyss",
@@ -116,7 +117,48 @@ final class AnchorTests: XCTestCase {
                        runtimeDir: "/run/abyss",
                        display: "abyss-0",
                        compositorSocket: compositorSocket,
+                       mode: mode,
                        without: without)
+    }
+
+    // MARK: - The live medium's session (PHASE5 P5.5)
+
+    func testAnInstallerSessionRunsTheInstallerAndNotAShell() {
+        // The medium runs the same compositor, toolkit and supervisor as the
+        // installed desktop — one application instead of a shell. If `anchor`
+        // can boot the installer, the installer is running on the real desktop
+        // rather than on a special one built to demonstrate it.
+        let p = plan(mode: .installer)
+        let names = p.components.map(\.name)
+        XCTAssertEqual(names.filter { $0 == "desktop" || $0 == "installer" },
+                       ["desktop", "installer"])
+        XCTAssertFalse(names.contains("dock"), "nothing to launch on an installer medium")
+        XCTAssertFalse(names.contains("menubar"), "nothing to quit to on an installer medium")
+    }
+
+    func testTheInstallerComponentAsksForTheInstallerScene() {
+        let p = plan(mode: .installer)
+        let installer = p.components.first { $0.name == "installer" }
+        XCTAssertEqual(installer?.env["AQUA_SCENE"], "installer")
+        // ...and it is the same binary the desktop runs, not a second one.
+        XCTAssertEqual(installer?.argv, ["/opt/abyss/AquaDemo"])
+    }
+
+    func testAnInstallerSessionStillWaitsForTheCompositor() {
+        // The dependency gate is not a desktop nicety: an installer spawned
+        // before there is a display spends its restart budget and the medium
+        // boots to nothing.
+        let p = plan(compositorSocket: "/run/abyss/wayland-1", mode: .installer)
+        for c in p.components where c.name == "installer" || c.name == "desktop" {
+            XCTAssertEqual(c.requires, ["/run/abyss/wayland-1"], c.name)
+        }
+    }
+
+    func testTheDesktopSessionIsUnchangedByTheNewMode() {
+        // The default is still what it was: a regression here is a desktop that
+        // boots without its Dock.
+        let names = plan().components.map(\.name)
+        XCTAssertEqual(names.suffix(3), ["desktop", "menubar", "dock"])
     }
 
     /// **The bus is first, and the order is the pass.**

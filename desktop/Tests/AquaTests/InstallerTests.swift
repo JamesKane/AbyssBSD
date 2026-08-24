@@ -241,6 +241,7 @@ final class InstallerTests: XCTestCase {
         let built = m.plan(passwordHash: "$6$fake", distDirectory: "/usr/freebsd-dist")
         let expected = InstallPlan(
             disk: "ada2",
+            sets: ["base.txz", "kernel.txz", "abyss.txz"],
             distDirectory: "/usr/freebsd-dist",
             hostname: "jaguar",
             timezone: "America/Chicago",
@@ -250,6 +251,30 @@ final class InstallerTests: XCTestCase {
                                passwordHash: "$6$fake",
                                groups: ["wheel", "operator"], shell: "/bin/sh")])
         XCTAssertEqual(built, expected)
+    }
+
+    func testTheAquaInstallerInstallsThisDesktop() {
+        // The thing it exists to install is the thing it is running on. A plan
+        // from this GUI that installed a plain FreeBSD would boot to a shell,
+        // and the person who clicked "Install" would be entitled to be cross.
+        let p = ready().plan(passwordHash: "$6$fake")
+        XCTAssertTrue(p.installsDesktop, "the Aqua installer did not install the desktop")
+        XCTAssertEqual(p.sets.first, "base.txz", "base still has to be first")
+        // And the installed machine therefore starts it, for the account made.
+        XCTAssertTrue(rcConf(p).contains("abyss_desktop_enable"))
+        XCTAssertTrue(rcConf(p).contains("abyss_desktop_user=\"jkane\""))
+    }
+
+    func testTheTrialPlanBehindAnObjectionMatchesTheRealOne() {
+        // `objection(to:)` compiles a trial plan to ask whether a disk may be
+        // used. If that trial differed from the plan actually installed — a
+        // different set list, say — a disk could be offered and then refused.
+        var m = ready()
+        m.disk = ""
+        let d = m.inventory.disk(named: "ada2")!
+        XCTAssertEqual(m.objection(to: d), "")
+        m.disk = "ada2"
+        XCTAssertEqual(problems(m.plan(passwordHash: "$6$x"), on: m.inventory), [])
     }
 
     func testThePlanTheGuiBuildsIsOneTheInstallerWillAccept() {
