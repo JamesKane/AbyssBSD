@@ -563,9 +563,24 @@ public final class Display {
                 wl_display_cancel_read(display)  // timeout or interrupt
             }
             if pr > 0 {
-                for (i, e) in extraFds.enumerated()
-                where (pfds[i + 1].revents & Int16(POLLIN)) != 0 {
-                    e.handler()
+                // `extraFds` is a value, so this iterates a snapshot and a
+                // handler may safely unregister things — but a handler that has
+                // just been removed must not still run: it would read a
+                // descriptor it already closed, and close it a second time. In
+                // a process that opens sockets, a double close can shut
+                // somebody else's connection that inherited the number.
+                let snapshot = extraFds
+                for (i, e) in snapshot.enumerated() {
+                    let revents = pfds[i + 1].revents
+                    guard revents != 0 else { continue }
+                    guard extraFds.contains(where: { $0.fd == e.fd }) else { continue }
+                    if (revents & Int16(POLLNVAL)) != 0 {
+                        // A closed descriptor left in the set would make poll()
+                        // return immediately, for ever. Drop it rather than spin.
+                        removeFileDescriptor(e.fd)
+                        continue
+                    }
+                    if (revents & Int16(POLLIN | POLLHUP)) != 0 { e.handler() }
                 }
             }
             fireDueRepeats()
@@ -576,6 +591,13 @@ public final class Display {
     /// it becomes readable. For config-watch (PoolConfig), IPC sockets, timers.
     public func addFileDescriptor(_ fd: Int32, onReadable: @escaping () -> Void) {
         extraFds.append((fd, onReadable))
+    }
+
+    /// Stop polling an fd. The caller still owns it and must close it — and
+    /// should unregister *before* closing, so no handler can run against a
+    /// descriptor that is already gone.
+    public func removeFileDescriptor(_ fd: Int32) {
+        extraFds.removeAll { $0.fd == fd }
     }
 
     public func stop() { running = false }

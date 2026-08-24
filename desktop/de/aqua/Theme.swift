@@ -125,6 +125,17 @@ public enum Theme {
     public static let menuBarText = Color(hex: 0x161616)
 
     public static let bodyText = Color(hex: 0x202020)
+    public static let secondaryText = Color(hex: 0x6b6b6b)
+
+    // MARK: Attention
+    //
+    // Added for the installer's hub (PHASE5 P5.4), where "this row still needs
+    // you" has to read differently from "this row is fine" at a glance, without
+    // making the whole screen shout. Jaguar's own alert accents are this warm
+    // red on a barely-tinted panel.
+    public static let attentionText = Color(hex: 0x9a3b2e)
+    public static let attentionBackground = Color(hex: 0xfdf4f1)
+    public static let rowBackground = Color(hex: 0xfbfbfb)
     public static let fontFamily = "Lucida Grande"
     public static let fontSize: Double = 13
 }

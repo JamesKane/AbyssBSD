@@ -12,21 +12,22 @@ runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
 plane, session supervisor and hardware bridges; the portals hand out descriptors;
 and **one command boots a desktop where an unmodified GTK 3 application, which
 has never heard of this desktop, opens a file through the Finder**.
-**287 unit tests + 37 live modes, green on Linux and FreeBSD.**
+**307 unit tests + 38 live modes, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is scoped and started** ([PHASE5.md](PHASE5.md)), its
-four risks retired on the target and **P5.1–P5.3 done**: a program we wrote
+four risks retired on the target and **P5.1–P5.4 done**: a program we wrote
 installs a FreeBSD that boots, an image we assembled boots into the Jaguar
-desktop, and the harness proves both on every run, with no hardware and no
-human.
+desktop, an Aqua installer runs on it, and the harness proves all of it on every
+run, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **The next pass is P5.4** — the `Installer` Aqua app. Phase 8
+1. **The next pass is P5.5** — install, reboot, desktop. Phase 8
    closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
-   Phase 5, and **P5.1–P5.3 are in — the installer installs, what it installs
-   boots, and the medium it arrives on runs the desktop**. §5 has what P5.4 is,
-   and the standing smaller items. **Read §2.43, §2.44 and §2.45 first**;
-   between them they are why this phase is verified the way it is. **Phase 4 (Mac Pro bring-up) is still open and still
+   Phase 5, and **P5.1–P5.4 are in — the installer installs, what it installs
+   boots, the medium it arrives on runs the desktop, and the Aqua installer on
+   it builds the plan you click**. §5 has what P5.5 is, and the standing smaller
+   items. **Read §2.43–§2.46 first**; between them they are why this phase is
+   verified the way it is. **Phase 4 (Mac Pro bring-up) is still open and still
    independent** — and now owns the metal half of Phase 5's verify.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
@@ -45,6 +46,9 @@ human.
    - **§2.41** — whose lifetime is this listener, exactly? A compositor must
      outlive its input client, and only a test that shuts down in the right
      order will ever say so.
+   - **§2.46** — a GUI cannot be trusted to be right about itself: twenty
+     green model tests missed a screen that looked like it worked. And never
+     put coordinates in a test that clicks — make the app publish them.
    - **§2.45** — a package manager's closure is not your program's closure
      (5.66 GB vs 327 MB); and a silent graceful fallback is invisible to every
      test downstream unless something announces it.
@@ -299,6 +303,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.43 | A list of commands is not verified until something runs it — a plan with 28 tests and a golden render was wrong four ways |
 | 2.44 | An install that reports success is not one that worked — assert on `login:`; and `geom disk list` cannot see `md(4)` |
 | 2.45 | A package manager's closure is not your program's closure — `ldd`, not `pkg`; and announce a graceful fallback or no test can see it |
+| 2.46 | A GUI cannot be trusted to be right about itself — click it live, and let it publish its own geometry; `print` is buffered and invisible |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -565,6 +570,49 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.46 A GUI cannot be trusted to be right about itself
+(P5.4 — the Aqua installer, and the live test that clicks it.)
+
+Three findings, and the first is the general one.
+
+**The model's tests all passed, and the app was still wrong.** Pressing Choose on
+a disk that cannot be used returned you to the hub with nothing chosen — which
+looks exactly like success. Twenty unit tests over the model had nothing to say,
+because each of them called `chooseSelection()` and then asked what the model
+held; none of them asked *where the user now was*. The live test found it in the
+crudest possible way: the list it was about to click had disappeared. A choice
+that does not take must not leave the screen that explains why.
+
+**Do not put coordinates in a test that clicks things.** They are a copy of a
+screenshot from the day it was written, and they rot silently — the clicks still
+land, just not on anything. `ABYSS_INSTALLER_DUMP` makes the app publish the
+centre of every rect it drew *and its own surface size*, and the test clicks
+those. Injecting the classic failure — the painter no longer updating the layout
+the hit-tester reads, so what is drawn and what is clickable drift apart — is
+then caught at once. It is also a bug no unit test can see, because in a unit
+test there is only one copy of the layout.
+
+**`print` is invisible to whatever is watching your log.** Swift buffers stdout
+when it is not a terminal, so the installer's startup line never reached the
+file the live test was polling — the app was up and drawing, and the test timed
+out waiting to be told. Everything the harness waits on goes out through
+`write(2, …)`, which the tree already does for the reason in §2.4.
+
+Two smaller things worth keeping:
+
+- **Unregister a descriptor before closing it, and make the loop enforce it.**
+  `Display` had no `removeFileDescriptor`, so an install's progress socket could
+  not leave the poll set — and a closed fd left in it returns `POLLNVAL`
+  immediately, for ever. The dispatch also now skips a handler that was
+  unregistered earlier in the same pass: it would otherwise read a descriptor it
+  already closed and close it twice, which in a process full of sockets can shut
+  somebody else's connection that inherited the number.
+- **Link the protocol, not the executor.** `Wire` became its own target so the
+  GUI can speak to `abyss-install` without linking the code that forks `gpart`.
+  "The GUI does not touch the disk" is worth making true of the *binary*, not
+  just of the design — there is then no path from a click to a partition table,
+  because the instructions are not in that process.
 
 ### 2.45 A package manager's closure is not your program's closure
 (P5.3 — the live medium, and what belongs on it.)
@@ -1847,14 +1895,21 @@ manager's closure is not your program's closure — and the assertion that had t
 be *invented* is worth reading before P5.4: a medium with no fonts at all passed
 every check until the desktop was made to announce what its text stack got.
 
-**P5.4 is next: the `Installer` Aqua application.** The hub-and-spoke — a summary
-page whose spokes (keyboard, disk, timezone, network, account) are entered and
-returned from in any order, with Install inert until every required one is
-complete. It talks to `abyss-install` over `CurrentIPC`, which already answers
-`disks`, `check` and `install`, so the app builds a plan and shows progress and
-touches nothing itself. Two things waiting for it: the destructive confirmation
-(PHASE5 §6.4 — the sheet that names the disk in the sentence), and the keyboard
-layouts the medium carries but nothing has yet exercised.
+**P5.4 is done: the Aqua installer.** The hub-and-spoke, driven live by a real
+pointer and a real keyboard against the real `abyss-install` in dry-run. It links
+`InstallWire` and not `InstallRun`, so the GUI does not carry the code that forks
+`gpart`. §2.46 is what building it taught — read it before P5.5.
+
+**P5.5 is next, and it is the last one: install, reboot, desktop.** Boot the
+medium, click through, install, reboot, and land in the Jaguar desktop as the
+account the account spoke created. Everything it needs exists: the medium
+carries the installer and the service (P5.3), the service installs and the
+harness can boot what it installed (P5.2), and the GUI produces a plan
+`abyss-install` accepts (P5.4). What is left is joining them: the live session on
+the medium should start the **installer** rather than the desktop, and the test
+should drive it through to a reboot into the installed system. Note that the
+installer's own progress path — the socket folded into the run loop — has been
+built but never yet watched an install run to completion.
 
 ### The other phase that is left
 
@@ -1940,6 +1995,7 @@ standing between "green" and "green for the reason I think".
 | `de/install` | the installer's thinking half: `InstallPlan` and `DiskInventory` (the machine as an *argument*), the refusals, and the step list a plan compiles to — no dependency at all, so every test runs on Linux where `gpart` does not exist |
 | `de/installrun`, `de/installbin`, `de/installctl` | the doing half: the step runner, the machine probe (`geom disk list` / `mount -p` / `glabel` / `zpool`, parsed pure and tested against captured output), the peer check, the wire codec — plus `abyss-install` (root) and `abyss-installctl` (the caller) |
 | `abyss/mk/live-image.sh` | the live medium: base + kernel from the distribution sets, the runtime closure computed with `ldd` (not `pkg` — §2.45), the desktop, and a session started by rc; assembled with `makefs` + `mkimg` |
+| `de/installwire` | the install protocol on the control plane — its own target so the **GUI links the protocol and not the executor** (§2.46) |
 | `de/abyssctl` | `abyssctl status\|quit` — drive a running session over the control plane |
 | `de/portal`, `de/portalbin` | the file-chooser portal: `PortalRequest` (the confused-deputy rule, enforced by the type), the service, `abyss-portal` |
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |

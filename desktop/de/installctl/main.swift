@@ -4,15 +4,16 @@
 //   abyss-installctl check   --disk NAME [plan options]
 //   abyss-installctl install --disk NAME [plan options]
 //
-// The GUI (P5.4) will speak this protocol directly; this exists because the
-// harness needs a caller, and because an installer whose privileged half can
+// It links `InstallWire` and **not** `InstallRun`: a client speaks the protocol,
+// it does not carry the code that forks `gpart`. The GUI (P5.4) is built the
+// same way. This exists because the harness needs a caller, and because an installer whose privileged half can
 // only be driven by a graphical program is one you cannot debug on a machine
 // that has no graphics — which, for an installer, is every machine it has not
 // finished installing yet.
 
 import CurrentIPC
 import Install
-import InstallRun
+import InstallWire
 
 #if canImport(Glibc)
 import Glibc

@@ -16,6 +16,12 @@ import Glibc
 import Darwin
 #endif
 
+/// Unbuffered, so a log-watching test sees it when it happens.
+func installerSay(_ s: String) {
+    let line = s + "\n"
+    line.withCString { _ = write(2, $0, strlen($0)) }
+}
+
 func envString(_ name: String) -> String? {
     getenv(name).map { String(cString: $0) }
 }
@@ -56,6 +62,11 @@ case "notify":
     // The notification centre: an OVERLAY layer surface that only exists while
     // there is something to show, plus the `notify` service (PHASE7.md P7.4).
     scene = .notify; title = "Notifications"; width = 800; height = 600
+case "installer":
+    // The guided installer (PHASE5 P5.4). Wide enough for a disk row to say
+    // what a disk is, and tall enough that the hub does not scroll — a summary
+    // you have to scroll is not a summary.
+    scene = .installer; title = "Install AbyssBSD"; width = 620; height = 460
 case "finder":
     // The file browser — an ordinary xdg-shell toplevel, not a shell surface.
     // Starts in $ABYSS_FINDER_DIR (else $HOME).
@@ -129,6 +140,64 @@ if scene == .wallpaper {
     print("AquaDemo: Finder is up (\(FinderWindow.startDirectory()), " +
           "\(finder.toolbarVisible ? "browser" : "spatial") mode).")
     withExtendedLifetime(finder) { display.run() }
+} else if scene == .installer {
+    guard let window = AquaWindow(display: display, title: title, scene: scene,
+                                  width: width, height: height) else {
+        print("AquaDemo: failed to create the installer window.")
+        exit(1)
+    }
+
+    // Ask the machine what it has, once, before the first frame. If the service
+    // is not there the hub says so on the disk spoke, verbatim — an installer
+    // that shows an empty list when it could not even look is one that gets
+    // blamed for the wrong thing.
+    let (inventory, why) = InstallerClient.disks()
+    window.installer.inventory = inventory
+    window.installer.inventoryError = why
+    // `write(2, …)` rather than `print`: stdout is buffered when it is not a
+    // terminal, so a `print` here is invisible to anything waiting on the log —
+    // which is exactly what a live test does. The Installer's own lines already
+    // go out this way (Swift 6 rejects the `stderr` global, HANDOFF §2.4).
+    installerSay("AquaDemo: installer is up — \(inventory.disks.count) disk(s)"
+                 + (why.isEmpty ? "" : ", and: \(why)"))
+
+    window.onQuit = { exit(0) }
+    window.onInstall = { plan in
+        // **Nothing here partitions anything.** The plan goes to
+        // `abyss-install`, and the socket it answers on is folded into the run
+        // loop — the same trick the config watcher and the menu-bar clock use
+        // (HANDOFF §2.18), so the progress screen keeps painting while the
+        // install runs instead of freezing on the first step.
+        guard let sock = InstallerClient.begin(plan) else {
+            window.installer.page = .done(ok: false,
+                error: "The installer service is not running on this machine")
+            return
+        }
+        installerSay("AquaDemo: install started on \(plan.disk)")
+        display.addFileDescriptor(sock) {
+            guard let event = InstallerClient.next(on: sock) else {
+                // Unregister before closing, never after: a handler that runs
+                // against a closed descriptor reads nothing and closes it
+                // twice.
+                display.removeFileDescriptor(sock)
+                close(sock)
+                return
+            }
+            switch event {
+            case .starting(let i, let total, let what, _):
+                window.installer.stepIndex = i + 1
+                window.installer.stepTotal = total
+                window.installer.stepWhat = what
+            case .ok, .failed:
+                break
+            case .finished(let ok, let error):
+                window.installer.page = .done(ok: ok, error: error)
+                installerSay("AquaDemo: install \(ok ? "finished" : "failed: \(error)")")
+            }
+            window.refresh()
+        }
+    }
+    withExtendedLifetime(window) { display.run() }
 } else {
     guard let window = AquaWindow(display: display, title: title, scene: scene,
                                   width: width, height: height) else {

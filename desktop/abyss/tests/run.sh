@@ -147,6 +147,13 @@ if [ "$live" -eq 1 ]; then
   # (PHASE5.md P5.3). On Linux, a positive control: the builder must refuse.
   echo "== the live medium =="
   sh "$root/abyss/tests/live-medium.sh"
+
+  # And the face on the front of it: the Aqua installer, driven by a real
+  # pointer and a real keyboard on our own compositor, against the real
+  # `abyss-install` in dry-run (PHASE5.md P5.4). On Linux it drives the account
+  # spoke and asserts the hub stays disarmed — a positive control, not a skip.
+  echo "== the Aqua installer =="
+  sh "$root/abyss/tests/live-installer.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

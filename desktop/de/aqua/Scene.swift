@@ -23,6 +23,7 @@ public enum SceneKind: Sendable {
     case dock        // the magnifying Dock (a layer-shell BOTTOM client live)
     case notify      // notification toasts (a layer-shell OVERLAY client live)
     case finder      // the file browser (an ordinary xdg-shell toplevel)
+    case installer   // the guided installer (PHASE5 P5.4)
 }
 
 /// The toolbar-toggle pill at the title bar's right. In the Finder this is the
@@ -342,6 +343,27 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                     state: FinderState(path: "/Users/abyss", entries: entries,
                                        selection: 2, view: listView ? .list : .icon,
                                        freeBytes: 39_600_000_000))
+    case .installer:
+        // A fixed synthetic machine, so the preview is the same on any box —
+        // the live installer asks `abyss-install` what disks are really there.
+        // `AQUA_INSTALLER_PAGE` picks which screen, the way AQUA_FINDER_VIEW
+        // picks the Finder's, so every one of them can be looked at.
+        var m = installerSampleModel()
+        switch getenv("AQUA_INSTALLER_PAGE").map({ String(cString: $0) }) {
+        case "empty":    m = InstallerModel(inventory: m.inventory)
+        case "disk":     m.enter(.disk)
+        case "account":  m.enter(.account)
+        case "keyboard": m.enter(.keyboard)
+        case "confirm":  m.page = .confirm
+        case "installing":
+            m.page = .installing; m.stepIndex = 24; m.stepTotal = 39
+            m.stepWhat = "extract base.txz"
+        case "done":     m.page = .done(ok: true, error: "")
+        default: break
+        }
+        paintInstaller(cr, w: cw, h: ch, model: m,
+                       focus: getenv("AQUA_INSTALLER_PAGE").map({ String(cString: $0) })
+                                == "account" ? .password : nil)
     case .wallpaper, .menubar, .dock:
         break  // handled full-bleed above
     case .notify:

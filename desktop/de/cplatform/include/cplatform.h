@@ -87,4 +87,20 @@ long ap_recvmsg_fds(int sock, void *buf, size_t len, int *fds, int max_fds, int 
  */
 int ap_peer_uid(int sock, unsigned int *uid);
 
+/*
+ * Hash a password the way the installed system will check it.
+ *
+ * The installer's plan carries a *hash*, never a plaintext password — it is a
+ * value that gets logged, rendered into a golden test and passed between
+ * processes (see de/install/Plan.swift). Somewhere between the text field and
+ * the plan, therefore, something has to call crypt(3), and it happens in the
+ * unprivileged GUI so that no plaintext ever crosses the control plane.
+ *
+ * SHA-512 ($6$), with a random salt from arc4random_buf. In C because crypt(3)
+ * needs -lcrypt on both platforms and the salt wants a byte buffer.
+ *
+ * Writes a NUL-terminated hash into `out`. Returns 0, or -1 on failure.
+ */
+int ap_crypt_sha512(const char *password, char *out, size_t len);
+
 #endif /* ABYSS_CPLATFORM_H */

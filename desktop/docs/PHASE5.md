@@ -4,7 +4,7 @@ The last phase that depends on nothing. Read [PLAN.md](PLAN.md) for the locked
 decisions, [PHASE8.md](PHASE8.md) for the session this installs, and
 [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-24. **P5.1–P5.3 are done; P5.4 is next.** Four risks were spiked first,
+Last updated: 2026-08-24. **P5.1–P5.4 are done; P5.5 is next.** Four risks were spiked first,
 on the target (§4), because the phase's shape depended on the answers — and two
 of them were the phase's whole feasibility question. The passes below are written
 knowing that a program we wrote can install a bootable FreeBSD, and that the
@@ -276,7 +276,7 @@ be `rm -rf`'d — `rm` reports "Directory not empty" and tells you nothing about
 why. A rebuild script that does not `chflags -R noschg` first will fail on its
 *second* run, which is the run nobody tests.
 
-**P5.4 — `Installer`: the Aqua application.**
+**P5.4 — `Installer`: the Aqua application. ✅ done.**
 The hub-and-spoke, which is the part that is Anaconda's idea rather than
 `bsdinstall`'s: a summary page whose spokes — keyboard, disk, timezone, network,
 account — are entered and returned from in any order, with the Install button
@@ -289,6 +289,62 @@ each disk today, and the destructive confirmation names the disk in the sentence
 
 *Verify:* live, on `undertow`, driven by the harness's pointer and keyboard; the
 plan the GUI produces is compared against the plan a unit test builds by hand.
+
+**✅ done.** 20 unit tests over the model (307 total) and
+`abyss/tests/live-installer.sh`, which drives the real app with a real pointer
+and a real keyboard against the real `abyss-install` in `--dry-run`.
+
+![the installer, on our own compositor](screenshots/installer.png)
+
+**The GUI links the protocol and not the executor.** `Wire` moved into its own
+target, `InstallWire`, so `Aqua` can ask for disks, check a plan and watch an
+install without linking `InstallRun` — the code that forks `gpart`. That makes
+"the GUI does not touch the disk" (§1) a fact about the binary rather than an
+intention in a comment: there is no path from a click in that process to a
+partition table, because the instructions are not in it.
+
+**One predicate, over the same statuses the user can see.** `canInstall` is
+`outstanding.isEmpty`, and `outstanding` is the required spokes that are not
+complete. The button is drawn spent *and* does nothing — both, because a control
+that looks dead and still fires is worse than one that never looked dead. Every
+spoke says something even when unanswered ("Choose a disk to install onto", "No
+account will be created"): a hub whose incomplete rows are blank tells you there
+is a problem without telling you what.
+
+**Required is what cannot be guessed.** A disk and someone to log in as; not the
+keyboard and not the time zone, which have defaults that are answers ("US
+(default)", "UTC (default)") rather than omissions.
+
+**The disk spoke shows every disk, including the ones it will not use, with the
+reason beside each.** A picker that silently omits your disk is one you argue
+with. And the objections shown are only the ones about *that disk* — a missing
+account is not the disk's fault, and without that filter every row grows a
+complaint about a password.
+
+**What the live test found that no unit test had.** Pressing Choose on a disk
+that cannot be used returned you to the hub with nothing chosen — which looks
+exactly like success. The test noticed because the disk list it was about to
+click had vanished. A choice that does not take now does not leave the spoke,
+where the reason is written next to the row.
+
+**Clicks come from the app's own layout.** `ABYSS_INSTALLER_DUMP` makes the
+installer publish the centre of every rect it drew, including its own surface
+size, and the test clicks those. A test with coordinates in it is a test of a
+screenshot from the day it was written. Injecting the classic failure — the
+paint no longer updating the layout the hit-tester reads — is caught
+immediately, and that is a bug no unit test can see.
+
+*Also:* `Display` gained `removeFileDescriptor`, because an install's progress
+socket has to leave the poll set when it closes; a closed descriptor left in it
+makes `poll` return `POLLNVAL` immediately, for ever. The dispatch now also
+skips a handler unregistered earlier in the same pass — otherwise it reads a
+descriptor it already closed, and closes it twice, which in a process full of
+sockets can shut somebody else's connection.
+
+*And the password:* `crypt(3)` is called in the **unprivileged** half
+(`ap_crypt_sha512`, `-lcrypt`), so no plaintext crosses the control plane and
+none reaches an `InstallPlan` — a value that is logged, rendered into a golden
+test and passed between processes.
 
 **P5.5 — install, reboot, desktop.**
 The end-to-end: boot the medium, click through, install, reboot, and land in the

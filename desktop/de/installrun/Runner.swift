@@ -11,23 +11,13 @@
 // allowed to.
 
 import Install
+import InstallWire
 
 #if canImport(Glibc)
 import Glibc
 #elseif canImport(Darwin)
 import Darwin
 #endif
-
-/// What the runner tells whoever is watching.
-public enum RunEvent: Sendable, Equatable {
-    /// About to do this. `destructive` is true from the first step that changes
-    /// the disk — a caller that wants to confirm has until this event.
-    case starting(index: Int, total: Int, what: String, destructive: Bool)
-    case ok(index: Int)
-    /// A step failed. `ignored` when the plan allowed it to.
-    case failed(index: Int, what: String, why: String, ignored: Bool)
-    case finished(ok: Bool, error: String)
-}
 
 /// The result of running one command.
 struct CommandResult {

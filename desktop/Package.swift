@@ -111,7 +111,10 @@ let package = Package(
             name: "CPlatform",
             path: "de/cplatform",
             sources: ["cplatform.c"],
-            publicHeadersPath: "include"
+            publicHeadersPath: "include",
+            // crypt(3) needs -lcrypt on both platforms — the installer hashes a
+            // password in the GUI so no plaintext crosses the control plane.
+            linkerSettings: [.linkedLibrary("crypt")]
         ),
         // Config: read/write the same ~/.config/abyss/*.ini files as the Rust
         // `pool` (mmap read, atomic-rename write, directory watch). Pure syscalls;
@@ -152,7 +155,12 @@ let package = Package(
         .target(
             name: "Aqua",
             dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
-                           "Vents", "CurrentIPC"],
+                           "Vents", "CurrentIPC",
+                           // The installer's model builds an InstallPlan and
+                           // asks the same refusals P5.1 wrote whether a disk
+                           // may be chosen. `Install` depends on nothing, so
+                           // this costs the toolkit no new libraries.
+                           "Install", "InstallWire"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.
@@ -212,23 +220,30 @@ let package = Package(
         // machine, and the service `abyss-install` hosts. Separate from
         // `Install` so that target keeps the property that earns it its tests —
         // it imports nothing, so every refusal runs on Linux.
+        // The install protocol on the control plane. Its own target so the GUI
+        // can speak it without linking the half that forks `gpart`.
+        .target(
+            name: "InstallWire",
+            dependencies: ["Install", "CurrentIPC"],
+            path: "de/installwire"
+        ),
         .target(
             name: "InstallRun",
-            dependencies: ["Install", "CurrentIPC", "CPlatform"],
+            dependencies: ["Install", "InstallWire", "CurrentIPC", "CPlatform"],
             path: "de/installrun"
         ),
         // The privileged half: runs as root, commanded by an unprivileged GUI,
         // and the only program here whose job is to destroy data.
         .executableTarget(
             name: "abyss-install",
-            dependencies: ["Install", "InstallRun", "CurrentIPC"],
+            dependencies: ["Install", "InstallRun", "InstallWire", "CurrentIPC"],
             path: "de/installbin"
         ),
         // ...and a caller for it, because an installer that only a graphical
         // program can drive cannot be debugged on a machine with no graphics.
         .executableTarget(
             name: "abyss-installctl",
-            dependencies: ["Install", "InstallRun", "CurrentIPC"],
+            dependencies: ["Install", "InstallWire", "CurrentIPC"],
             path: "de/installctl"
         ),
         // The supervisor itself: the Swift replacement for abyss/session.sh.
@@ -392,7 +407,7 @@ let package = Package(
         ),
         .testTarget(
             name: "InstallRunTests",
-            dependencies: ["InstallRun", "Install", "CurrentIPC"],
+            dependencies: ["InstallRun", "InstallWire", "Install", "CurrentIPC"],
             path: "Tests/InstallRunTests"
         ),
         .testTarget(

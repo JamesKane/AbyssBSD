@@ -15,6 +15,7 @@ import XCTest
 import CurrentIPC
 @testable import Install
 @testable import InstallRun
+@testable import InstallWire
 
 #if canImport(Glibc)
 import Glibc

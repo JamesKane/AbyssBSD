@@ -8,12 +8,13 @@ runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**287 unit tests + 37 live modes, green on Linux *and* FreeBSD.**
-**Phase 5 — the installer — is scoped and mostly built** ([PHASE5.md](PHASE5.md),
-passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1–P5.3
-are done: the installer installs, the harness boots what it installed, and the
-medium it arrives on comes up running the Jaguar desktop.** **P5.4 — the Aqua
-installer app — is next**; see [What's next](#whats-next).
+**307 unit tests + 38 live modes, green on Linux *and* FreeBSD.**
+**Phase 5 — the installer — is scoped and nearly built** ([PHASE5.md](PHASE5.md),
+passes P5.1–P5.5). Its four risks were spiked on the target first, and **P5.1–P5.4
+are done: the installer installs, the harness boots what it installed, the medium
+it arrives on comes up running the Jaguar desktop, and an Aqua installer on that
+desktop builds the plan you click.** **P5.5 — install, reboot, desktop — is the
+last one**; see [What's next](#whats-next).
 
 ## What this is
 
@@ -433,12 +434,13 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **The next pass is P5.4 — the `Installer` Aqua application.** The hub-and-spoke
-> flow that is Anaconda's idea rather than `bsdinstall`'s fixed march: a summary
-> page whose spokes are entered and returned from in any order, with Install
-> inert until every required one is complete. `abyss-install` already answers
-> `disks`, `check` and `install` over CurrentIPC, so the app builds a plan and
-> shows progress and touches nothing itself.
+> **The next pass is P5.5 — install, reboot, desktop**, and it is the last one in
+> the phase. Everything it needs exists: the medium carries the installer and the
+> service, the service installs and the harness can boot what it installed, and
+> the GUI produces a plan the service accepts. What is left is joining them — the
+> live session on the medium should start the *installer* rather than the
+> desktop, and the test should drive it through to a reboot into the installed
+> system.
 >
 > **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
@@ -538,6 +540,29 @@ menu bar versus 15 is far too close to assert on. The fix was not a cleverer
 pixel probe: the desktop now **announces** what its text stack got. Where a
 component degrades gracefully, something has to say so, or no test downstream can
 see it.
+
+**P5.4 is done — the Aqua installer.** Anaconda's shape rather than
+`bsdinstall`'s fixed march: a hub whose spokes are entered and returned from in
+any order, each with its own one-line status, and an Install button that is inert
+until the required ones are answered. Driven live by a real pointer and a real
+keyboard, on `undertow`, against the real `abyss-install` in dry-run:
+
+![the installer, on our own compositor](screenshots/installer.png)
+
+**The GUI links the protocol, not the executor.** `Wire` moved to its own target
+so `Aqua` can ask for disks and watch an install without linking the code that
+forks `gpart` — which makes "the GUI does not touch the disk" a fact about the
+binary. The disk spoke shows **every** disk with the reason beside the ones it
+will not use (a picker that silently omits your disk is one you argue with), and
+the confirmation names the disk in the sentence with the destructive verb on the
+button.
+
+**What the live test found that twenty green model tests had not**
+([HANDOFF §2.46](HANDOFF.md)): pressing Choose on a disk that cannot be used
+returned you to the hub with nothing chosen — which looks exactly like success.
+Every unit test asked what the model *held* and none asked where the user now
+*was*. Also from that pass: never put coordinates in a test that clicks things —
+the app publishes the centre of every rect it drew, and the test clicks those.
 
 **Phase 7 (portals) — all five passes.**
 An app asks the desktop for a file, a notification or a screenshot, and gets back

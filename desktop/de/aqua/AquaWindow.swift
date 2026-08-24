@@ -4,6 +4,7 @@
 
 import Surface
 import CCairo
+import Install
 
 #if canImport(Glibc)
 import Glibc
@@ -46,6 +47,25 @@ public final class AquaWindow: WindowDelegate {
     // Tabs-scene state.
     private var tabs = TabsState()
     private var tabsLayoutCache = TabsLayout()
+
+    // Installer-scene state (PHASE5 P5.4). The model is public so the app can
+    // seed it from `abyss-install` before the first frame, and so a live test
+    // can read back what the clicks and keystrokes actually produced.
+    public var installer = InstallerModel()
+    public private(set) var installerLayoutCache = InstallerLayout()
+    public var accountFocus: AccountField? = nil
+    private var installerPressed = false
+    private var installerLastDumped: InstallerPage? = nil
+    private let installerDumpLayout = getenv("ABYSS_INSTALLER_DUMP") != nil
+    /// Where an install's progress arrives, once one has been started.
+    public private(set) var installerSocket: Int32 = -1
+    /// Redraw, for a caller driving the model from outside (install progress).
+    public func refresh() { window?.setNeedsDisplay() }
+
+    /// Called when the user commits, so the app can start the install and fold
+    /// the socket into its run loop. The window itself never installs anything.
+    public var onInstall: ((InstallPlan) -> Void)?
+    public var onQuit: (() -> Void)?
 
     // Sheet-scene state (progress 0…1 drives the slide animation).
     private var sheetVisible = false
@@ -129,6 +149,17 @@ public final class AquaWindow: WindowDelegate {
                                          lastAction: sheetAction)
         case .wallpaper:
             paintWallpaper(cr, w: w, h: h)  // not used live (Wallpaper owns it)
+        case .installer:
+            installerLayoutCache = paintInstaller(cr, w: w, h: h, model: installer,
+                                                  focus: accountFocus,
+                                                  pressed: installerPressed)
+            // Publish the geometry whenever the page changes, so a test clicks
+            // what was actually drawn instead of coordinates copied into a
+            // shell script that will be wrong the first time this layout moves.
+            if installerDumpLayout && installerLastDumped != installer.page {
+                installerLastDumped = installer.page
+                dumpInstallerLayout(w: w, h: h)
+            }
         case .menubar, .dock, .finder, .notify:
             break  // not used live (MenuBar/Dock/FinderWindow own them)
         }
@@ -182,6 +213,7 @@ public final class AquaWindow: WindowDelegate {
         case .scroll:  scrollPointerButton(pressed: pressed)
         case .tabs:    tabsPointerButton(pressed: pressed)
         case .sheet:   sheetPointerButton(pressed: pressed)
+        case .installer: installerPointerButton(pressed: pressed)
         default:       windowPointerButton(pressed: pressed)
         }
     }
@@ -471,6 +503,7 @@ public final class AquaWindow: WindowDelegate {
         case .scroll:  if event.pressed { scrollKey(event.keysym) }; return
         case .tabs:    if event.pressed { tabsKey(event.keysym) }; return
         case .sheet:   if event.pressed { sheetKey(event.keysym) }; return
+        case .installer: installerKey(event); return
         default: break
         }
         guard event.pressed else { return }  // act on press; release is a no-op
@@ -488,4 +521,231 @@ public final class AquaWindow: WindowDelegate {
         }
         window?.setNeedsDisplay()
     }
+}
+
+// MARK: - Installer-scene input (PHASE5 P5.4)
+//
+// Every rect comes from `installerLayoutCache`, which is what `paintInstaller`
+// returned on the last frame — so what is clickable is exactly what was drawn.
+
+extension AquaWindow {
+
+    /// Print every rect on the current page, so a test can click by name.
+    fileprivate func dumpInstallerLayout(w: Double, h: Double) {
+        let l = installerLayoutCache
+        // The surface size goes first: a caller clicking these has to know
+        // where the window is on the output, and the window is the only thing
+        // that knows how big it is.
+        var parts = ["size=\(Int(w))x\(Int(h))", "primary=\(rectText(l.primary))"]
+        if l.secondary.w > 0 { parts.append("secondary=\(rectText(l.secondary))") }
+        for (i, r) in l.spokeRows.enumerated() { parts.append("spoke\(i)=\(rectText(r))") }
+        for (i, r) in l.listRows.enumerated() { parts.append("row\(i)=\(rectText(r))") }
+        for (i, r) in l.fields.enumerated() { parts.append("field\(i)=\(rectText(r))") }
+        if l.adminCheck.w > 0 { parts.append("admin=\(rectText(l.adminCheck))") }
+        installerLog("layout " + parts.joined(separator: " "))
+    }
+
+    fileprivate func rectText(_ r: Rect) -> String {
+        // The centre, which is what a test wants to click.
+        "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))"
+    }
+
+    /// Say what just happened, on stderr.
+    ///
+    /// An installer is driven by clicks, and a click leaves no trace — so the
+    /// only way for anything (a test, or somebody reading a log after a failed
+    /// install) to know what was chosen is for the app to say. Cheap, and the
+    /// difference between "the window was on screen" and "the window did what
+    /// it was clicked to do".
+    fileprivate func installerLog(_ msg: String) {
+        let line = "Installer: \(msg)\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
+    }
+
+    /// Build the plan the hub describes, hashing the password on the way out.
+    public func installerPlan() -> InstallPlan {
+        installer.plan(passwordHash: InstallerClient.hash(installer.accountPassword),
+                       distDirectory: installerDistDirectory())
+    }
+
+    fileprivate func installerPointerButton(pressed: Bool) {
+        let l = installerLayoutCache
+        if !pressed {
+            installerPressed = false
+            window?.setNeedsDisplay()
+            return
+        }
+        installerPressed = l.primary.contains(pointerX, pointerY)
+
+        switch installer.page {
+        case .hub:
+            for (i, r) in l.spokeRows.enumerated() where r.contains(pointerX, pointerY) {
+                installer.enter(Spoke.allCases[i])
+                installerLog("entered \(Spoke.allCases[i].title)")
+                window?.setNeedsDisplay()
+                return
+            }
+            if l.primary.contains(pointerX, pointerY) {
+                // The button is drawn spent when the hub is incomplete, and it
+                // does nothing when pressed. Both, not either: a control that
+                // looks dead and still fires is worse than one that does not
+                // look dead at all.
+                if installer.canInstall {
+                    installer.page = .confirm
+                    installerLog("confirming: erase \(installer.disk)")
+                } else {
+                    installerLog("install is not armed: \(installer.readiness)")
+                }
+            } else if l.secondary.contains(pointerX, pointerY) {
+                onQuit?()
+            }
+
+        case .spoke(let spoke):
+            for (i, r) in l.listRows.enumerated() where r.contains(pointerX, pointerY) {
+                installer.selection = i
+                window?.setNeedsDisplay()
+                return
+            }
+            if spoke == .account {
+                for (i, r) in l.fields.enumerated() where r.contains(pointerX, pointerY) {
+                    accountFocus = AccountField.allCases[i]
+                    window?.setNeedsDisplay()
+                    return
+                }
+                if l.adminCheck.contains(pointerX, pointerY) {
+                    installer.accountIsAdministrator.toggle()
+                }
+            }
+            if l.primary.contains(pointerX, pointerY) {
+                if spoke == .account {
+                    installer.back()
+                    installerLog("account is \(installer.accountName.isEmpty ? "(none)" : installer.accountName)"
+                                 + (installer.passwordProblem.isEmpty ? "" : " — \(installer.passwordProblem)"))
+                } else {
+                    let took = installer.chooseSelection()
+                    switch spoke {
+                    case .disk:
+                        took ? installerLog("disk is \(installer.disk)")
+                             : installerLog("refused that disk: "
+                                 + installer.objection(to: installer.installableDisks[installer.selection]))
+                    case .keyboard: installerLog("keyboard is \(installer.keymap)")
+                    case .timezone: installerLog("time zone is \(installer.timezone)")
+                    case .account: break
+                    }
+                }
+                installerLog(installer.canInstall ? "ready to install" : "not ready")
+                accountFocus = nil
+            } else if l.secondary.contains(pointerX, pointerY) {
+                installer.back()
+                accountFocus = nil
+            }
+
+        case .confirm:
+            if l.primary.contains(pointerX, pointerY) {
+                installer.page = .installing
+                onInstall?(installerPlan())
+            } else if l.secondary.contains(pointerX, pointerY) {
+                installer.page = .hub
+            }
+
+        case .installing:
+            break                       // nothing to click; it is happening
+
+        case .done:
+            if l.primary.contains(pointerX, pointerY) { onQuit?() }
+        }
+        window?.setNeedsDisplay()
+    }
+
+    fileprivate func installerKey(_ event: KeyEvent) {
+        guard event.pressed else { return }
+        defer { window?.setNeedsDisplay() }
+
+        // Typing into the account fields comes first: a text field has to
+        // swallow the keys a list would otherwise use.
+        if case .spoke(.account) = installer.page, let field = accountFocus {
+            switch event.keysym {
+            case KeySym.backspace:
+                switch field {
+                case .fullName: if !installer.accountFullName.isEmpty { installer.accountFullName.removeLast() }
+                case .name:     if !installer.accountName.isEmpty { installer.accountName.removeLast() }
+                case .password: if !installer.accountPassword.isEmpty { installer.accountPassword.removeLast() }
+                case .confirm:  if !installer.accountConfirm.isEmpty { installer.accountConfirm.removeLast() }
+                }
+                return
+            case KeySym.tab:
+                let all = AccountField.allCases
+                let i = all.firstIndex(of: field) ?? 0
+                accountFocus = all[(i + 1) % all.count]
+                return
+            case KeySym.enter:
+                accountFocus = nil
+                installer.back()
+                return
+            case KeySym.escape:
+                accountFocus = nil
+                return
+            default:
+                if !event.text.isEmpty {
+                    switch field {
+                    case .fullName: installer.accountFullName += event.text
+                    case .name:     installer.accountName += event.text
+                    case .password: installer.accountPassword += event.text
+                    case .confirm:  installer.accountConfirm += event.text
+                    }
+                    return
+                }
+            }
+        }
+
+        switch event.keysym {
+        case KeySym.down:
+            if installer.spokeRowCount > 0 {
+                installer.selection = min(installer.selection + 1, installer.spokeRowCount - 1)
+            }
+        case KeySym.up:
+            installer.selection = max(installer.selection - 1, 0)
+        case KeySym.enter:
+            switch installer.page {
+            case .hub:
+                if installer.canInstall { installer.page = .confirm }
+            case .spoke(let s):
+                if s == .account { installer.back() } else { installer.chooseSelection() }
+            case .confirm:
+                installer.page = .installing
+                onInstall?(installerPlan())
+            case .installing: break
+            case .done: onQuit?()
+            }
+        case KeySym.escape:
+            switch installer.page {
+            case .spoke: installer.back()
+            case .confirm: installer.page = .hub
+            default: break
+            }
+        default:
+            break
+        }
+    }
+}
+
+func installerDistDirectory() -> String {
+    getenv("ABYSS_DIST_DIR").map { String(cString: $0) } ?? "/usr/freebsd-dist"
+}
+
+/// A fixed machine for the PNG preview, so the shot is the same on any box.
+public func installerSampleModel() -> InstallerModel {
+    var m = InstallerModel(inventory: DiskInventory(disks: [
+        Disk(name: "ada0", bytes: 500 << 30, description: "APPLE SSD SM0512F",
+             mountedAt: ["/"], holdsRunningRoot: true),
+        Disk(name: "ada1", bytes: 256 << 30, description: "Crucial CT256MX100"),
+        Disk(name: "da0", bytes: 2 << 30, description: "SanDisk Cruzer"),
+    ], importedPools: ["zroot"]))
+    m.disk = "ada1"
+    m.timezone = "America/Chicago"
+    m.accountName = "jkane"
+    m.accountFullName = "J Kane"
+    m.accountPassword = "secret"
+    m.accountConfirm = "secret"
+    return m
 }

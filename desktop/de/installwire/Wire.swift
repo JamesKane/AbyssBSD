@@ -5,6 +5,13 @@
 // that P5.1 keeps the property that earns it its tests — `de/install` imports
 // nothing at all, and every one of its refusals runs on a machine with no disks.
 //
+// **And it is its own target so that the GUI can link the protocol without
+// linking the executor.** The Aqua installer (P5.4) needs to ask for disks,
+// check a plan and watch an install; it must not link `InstallRun`, which is
+// the code that forks `gpart`. Keeping the wire format separate is what makes
+// "the GUI does not touch the disk" (PHASE5 §1) true of the binary and not just
+// of the design.
+//
 // `Msg` has scalars and no arrays, so lists are indexed field names
 // (`disk.0.name`). Verbose on the wire and trivial to read in a log, which for a
 // control plane whose messages describe rewriting somebody's disk is the right
@@ -12,6 +19,21 @@
 
 import CurrentIPC
 import Install
+
+/// What an install reports as it happens.
+///
+/// Lives beside the wire format rather than with the runner, because it is the
+/// vocabulary **both ends** share: the executor emits these and the GUI decodes
+/// them, and the GUI must not link the executor to do so.
+public enum RunEvent: Sendable, Equatable {
+    /// About to do this. `destructive` is true from the first step that changes
+    /// the disk — a caller that wants to confirm has until this event.
+    case starting(index: Int, total: Int, what: String, destructive: Bool)
+    case ok(index: Int)
+    /// A step failed. `ignored` when the plan allowed it to.
+    case failed(index: Int, what: String, why: String, ignored: Bool)
+    case finished(ok: Bool, error: String)
+}
 
 public enum Wire {
 

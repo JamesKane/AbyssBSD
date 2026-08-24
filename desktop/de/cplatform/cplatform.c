@@ -205,3 +205,32 @@ int ap_peer_uid(int sock, unsigned int *uid) {
 }
 
 #endif
+
+/* ------------------------------------------------------------- passwords */
+
+#include <stdlib.h>
+#ifdef __linux__
+#include <crypt.h>
+#endif
+
+int ap_crypt_sha512(const char *password, char *out, size_t len) {
+    static const char alphabet[] =
+        "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    unsigned char raw[16];
+    char salt[3 + 16 + 1];
+
+    if (password == NULL || out == NULL || len == 0) return -1;
+    arc4random_buf(raw, sizeof raw);
+    salt[0] = '$'; salt[1] = '6'; salt[2] = '$';
+    for (size_t i = 0; i < sizeof raw; i++) {
+        salt[3 + i] = alphabet[raw[i] % (sizeof alphabet - 1)];
+    }
+    salt[3 + sizeof raw] = '\0';
+
+    char *hash = crypt(password, salt);
+    if (hash == NULL) return -1;
+    size_t n = strlen(hash);
+    if (n + 1 > len) return -1;
+    memcpy(out, hash, n + 1);
+    return 0;
+}

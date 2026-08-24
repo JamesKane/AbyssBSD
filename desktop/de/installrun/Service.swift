@@ -18,6 +18,7 @@
 
 import CurrentIPC
 import Install
+import InstallWire
 
 #if canImport(Glibc)
 import Glibc
