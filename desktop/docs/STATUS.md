@@ -3,14 +3,17 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-23. **Phases 0–3 and 6–8 are complete.** The Jaguar desktop
+Last updated: 2026-08-24. **Phases 0–3 and 6–8 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
 **234 unit tests + 35 live modes, green on Linux *and* FreeBSD.**
-**Nothing is queued — what is left is Phase 4 (Mac Pro) and Phase 5 (the
-installer)**; see [What's next](#whats-next).
+**Phase 5 — the installer — is now scoped** ([PHASE5.md](PHASE5.md), passes
+P5.1–P5.5), with its four risks spiked on the target first: a program we wrote
+installs a FreeBSD that boots, and the harness can prove it booted without a
+human, a disk or a second machine. **P5.1 is the next pass**; see
+[What's next](#whats-next).
 
 ## What this is
 
@@ -426,19 +429,52 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 6–8 are complete**, and for the first time since Phase 3 there
-is no queued pass.
+**Phases 0–3 and 6–8 are complete.** The choice recorded here on 2026-08-23 —
+Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
+([PHASE5.md](PHASE5.md)).
 
-> **The choice: Phase 4 (Mac Pro bring-up) or Phase 5 (the installer).** They are
-> independent of each other and of everything above. Phase 4 is the real hardware
-> story — a real GPU, `rtprio`, the volume and battery status items reading a
-> real mixer instead of reporting absent — and carries the biggest single risk
-> left, `amdgpu` `si_support` for the FirePro D-series. It is also where Phase
-> 6's C1 measurements should be repeated, because every number in PHASE6.md came
-> off a headless backend with a synthetic clock. Phase 5 is untouched and depends
-> on nothing. HANDOFF §5 has both, plus the standing smaller items.
+> **The next pass is P5.1 — `de/install`, the install as a value.** An
+> `InstallPlan` that compiles to a step list of exact `gpart`/`zpool`/`tar`
+> invocations, plus the safety predicate that refuses a mounted disk or the one
+> you booted from. Pure, so all of it is unit-testable on Linux where none of
+> those commands exist — `SessionPlan`'s pattern from P8.4.
+>
+> **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
+> real hardware story — a real GPU, `rtprio`, the volume and battery status items
+> reading a real mixer instead of reporting absent — and carries the biggest
+> single risk left, `amdgpu` `si_support` for the FirePro D-series. It is also
+> where Phase 6's C1 measurements should be repeated, because every number in
+> PHASE6.md came off a headless backend with a synthetic clock. **It owns the
+> metal half of Phase 5's verify**, too: installing onto that machine first
+> requires that machine to boot. HANDOFF §5 has both, plus the standing smaller
+> items.
 >
 > The rest of this section is the record of what got built, newest last.
+
+**Phase 5 — the installer — is scoped** ([PHASE5.md](PHASE5.md), passes
+P5.1–P5.5). Four risks were spiked on the target before the plan was written, and
+two of them were the phase's whole feasibility question:
+
+- **We do not drive `bsdinstall`.** Its components are shell scripts wrapped
+  around `bsddialog`, and driving a dialog from a GUI is a worse job than doing
+  the install. The spike wrote the GPT, the ESP, the pool and the extraction
+  directly — `gpart`, `newfs_msdos`, `zpool`, `tar`, all in base — onto a
+  **6 GB file-backed `md(4)` disk**, and the result boots to `login:`.
+- **The harness can prove it booted.** The build VM sees `SVM`, `vmm.ko` loads
+  inside it, and `bhyve` is in base — so `run.sh --vm --live` installs a system
+  and **boots what it installed**, nested, with no hardware and no human.
+- **A live medium needs no `make release`.** `makefs` + `mkimg` over the same
+  dist sets the installer extracts produced a 1.1 GB image that boots. One
+  artifact, two uses.
+- **An unprivileged GUI cannot format a disk**, and `CurrentIPC`'s 0700/0600
+  defaults mean it cannot even reach a root service. The answer is not a wider
+  mode: `abyss-install` asks the kernel who is calling (`getpeereid` on FreeBSD,
+  `SO_PEERCRED` on Linux — a real fork, glibc has no `getpeereid`).
+
+The shape that falls out: **the GUI does not touch the disk.** An unprivileged
+`Installer` sends a plan to a root `abyss-install` and gets progress back —
+`abyss-portal`'s shape — which is what lets the dangerous half be tested with no
+GUI in it, and the GUI half be developed on Linux.
 
 **Phase 7 (portals) — all five passes.**
 An app asks the desktop for a file, a notification or a screenshot, and gets back

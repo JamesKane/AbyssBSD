@@ -2,23 +2,28 @@
 
 What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
-([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE6.md](PHASE6.md),
-[PHASE7.md](PHASE7.md), [PHASE8.md](PHASE8.md)) for
+([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE5.md](PHASE5.md),
+[PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md), [PHASE8.md](PHASE8.md)) for
 ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-23. **Phases 0–3 and 6–8 are complete.** The Jaguar shell
+Last updated: 2026-08-24. **Phases 0–3 and 6–8 are complete.** The Jaguar shell
 runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
 plane, session supervisor and hardware bridges; the portals hand out descriptors;
 and **one command boots a desktop where an unmodified GTK 3 application, which
 has never heard of this desktop, opens a file through the Finder**.
 **234 unit tests + 35 live modes, green on Linux and FreeBSD.**
+**Phase 5 — the installer — is scoped** ([PHASE5.md](PHASE5.md)), its four risks
+retired on the target: a program we wrote installs a FreeBSD that boots, and the
+harness can prove it booted with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **Nothing is queued — the next move is a choice.** Phase 8 closed with P8.4;
-   the open phases are **4 (Mac Pro bring-up)** and **5 (the installer)**, and
-   §5 lays out both plus the standing smaller items.
+1. **The next pass is P5.1** — `de/install`, the install as a value. Phase 8
+   closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
+   Phase 5, which is now scoped. §5 has what P5.1 is, what P5.2 proves, and the
+   standing smaller items. **Phase 4 (Mac Pro bring-up) is still open and still
+   independent** — and now owns the metal half of Phase 5's verify.
 2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
    (the compositor) and **Phase 8** (the D-Bus bridge).
 3. Skim the §2 index for the trap nearest what you're about to touch. **The
@@ -1679,12 +1684,27 @@ and hardware bridges — and **one command boots a desktop where an unmodified G
 3 application opens a file through the Finder**. **234 unit tests and 35 live
 modes, green on Linux and FreeBSD.**
 
-### Nothing is queued: the next move is a choice
+### The next pass is P5.1
 
-For the first time since Phase 3 there is no "next pass". Both remaining phases
-are independent of each other and of everything above; pick on appetite.
+The 2026-08-23 choice between Phase 4 and Phase 5 was settled the next day:
+**Phase 5 is scoped** ([PHASE5.md](PHASE5.md), P5.1–P5.5), with its four risks
+retired on the target first (PHASE5 §4).
 
-### The two phases that are left
+**P5.1 — `de/install`: the install as a value.** An `InstallPlan` that compiles
+to a step list — the exact `gpart`/`newfs_msdos`/`zpool`/`tar` invocations, in
+order — plus the safety predicate that refuses a plan naming a mounted disk, the
+running root, or something that is not a whole disk. Pure, in `Session.swift`'s
+image: it resolves nothing and spawns nothing, so **every bit of it is testable
+on Linux**, where not one of those commands exists. Do the refusals first; it is
+the only predicate in this tree whose failure mode is somebody's data.
+
+Then **P5.2**, which is where the phase's claim comes true: `abyss-install` runs
+the step list as root, and `abyss/tests/live-install.sh` installs onto a
+file-backed disk in the VM and **boots the result under nested bhyve**. The
+definition of "it worked" is `login:` — everything before that line is a
+diagnostic.
+
+### The other phase that is left
 
 - **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
   volume/battery status items finally read a real mixer and battery rather than
@@ -1692,9 +1712,9 @@ are independent of each other and of everything above; pick on appetite.
   `si_support` for the FirePro D-series. **And it is where Phase 6's C1
   measurements should be repeated** — every number in PHASE6.md came off a
   headless backend with a synthetic clock, and a real GPU with `rtprio` is the
-  only place they mean what they claim.
-- **Phase 5 — the installer.** Untouched, and the only phase with no dependency
-  on any of the above.
+  only place they mean what they claim. **It now also owns the metal half of
+  Phase 5's verify**: PLAN.md wants a clean install onto the Mac Pro, and that
+  needs the Mac Pro to boot first.
 
 ### Standing smaller items, none blocking
 

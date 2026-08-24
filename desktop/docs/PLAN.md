@@ -79,7 +79,8 @@ and `de/ctext` already do. It does not mean linking Rust crates.
 | `Anchor` / `anchor` | session supervisor: pollable child descriptors, control service | `anchor` |
 | `Vents` | hardware bridges: sysctl, OSS volume, battery, devd | `vents` |
 | `undertow` | the compositor — Swift rewrite, Phase 6 ([PHASE6.md](PHASE6.md)) | `tide` |
-| `Installer` | Fedora-style graphical installer (Aqua app) | — (new) |
+| `Installer` | Fedora-style graphical installer (Aqua app), Phase 5 ([PHASE5.md](PHASE5.md)) | — (new) |
+| `abyss-install` | the installer's privileged half: a plan in, a partitioned disk out | — (new) |
 | `abyss-dbus` | the D-Bus bridge: `org.freedesktop.portal.*` for legacy apps, Phase 8 ([PHASE8.md](PHASE8.md)) | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
@@ -247,18 +248,39 @@ metal.
 
 ## Phase 5 — Fedora/Anaconda-style installer
 
-**Goal:** a guided graphical installer matching goal #5.
+**Goal:** a guided graphical installer matching goal #5 — a machine with an empty disk
+boots our medium, someone clicks through an Aqua installer, and it reboots into the
+Jaguar desktop.
+
+**Expanded to executable detail in [PHASE5.md](PHASE5.md)** — passes P5.1–P5.5, and
+four risks spiked on the target before the plan was written. Two corrections to the
+sketch below came out of those spikes:
+
+- **We do not drive `bsdinstall`** (corrected 2026-08-24 — this used to read "the GUI
+  drives the proven `bsdinstall` logic"). Its components are shell scripts wrapped
+  around `bsddialog`; `zfsboot` is a dialog program with an install inside it, and
+  driving a dialog from a GUI is a worse job than doing the install. The spike wrote
+  the GPT, the ESP, the pool and the extraction directly with `gpart`/`zpool`/`tar` —
+  every tool in base, no dialog anywhere — and **the result boots**.
+- **The GUI does not touch the disk.** An unprivileged `Installer` sends a plan to a
+  root `abyss-install` over `CurrentIPC` and gets progress back — `abyss-portal`'s
+  shape. That split is what lets the harness test the dangerous half with no GUI in it,
+  and lets the GUI half develop on Linux where `gpart` does not exist.
 
 - A **live environment** boots straight into a minimal Aqua desktop running the
   `Installer` Swift app (Aqua toolkit), with an Anaconda-style hub-and-spoke flow:
   welcome → language/keyboard → disk & partitioning (ZFS-on-root default, via `gpart`/
-  `zpool`) → timezone/network → user account → summary → install → reboot.
-- **Pragmatic v1:** the GUI drives the proven FreeBSD install steps (the `bsdinstall`
-  logic: distextract, partitioning, bootcode, user setup) behind the Aqua front-end;
-  grow native logic over time.
+  `zpool`) → timezone/network → user account → summary → install → reboot. Built with
+  `makefs` + `mkimg` from the same dist sets the installer extracts — no `make
+  release`, no source tree, no world build.
+- **Offline is a requirement, not a preference:** risk 5 below is Broadcom Wi-Fi on the
+  machine this project targets, so an installer that needs a network is one that does
+  not work on a Mac Pro 6,1 out of the box. The medium carries what it installs.
 
-**Verify:** clean install onto the Mac Pro (and the VM) end-to-end from the live image,
-booting into the Aqua desktop.
+**Verify:** clean install onto the VM end-to-end from the live image, booting into the
+Aqua desktop — proven by the harness, with **nested bhyve** booting what was installed
+and waiting for `login:`. **The Mac Pro half of this belongs to Phase 4**, since
+installing onto that machine first requires it to boot FreeBSD with a working GPU.
 
 ---
 
