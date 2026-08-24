@@ -127,32 +127,76 @@ public final class WlrootsSession {
     public private(set) var outputs: [UnsafeMutablePointer<wlr_output>] = []
     private var newOutputListener: UnsafeMutablePointer<tw_listener>?
 
-    /// Create a headless session with `outputCount` outputs of the given size.
+    /// Which backend to run on.
     ///
-    /// Headless because that is where C1–C3 are provable without a GPU, and the
-    /// build VM has no `/dev/dri` (PHASE6.md §7.1). A DRM backend is Phase 4.
-    public init(headlessOutputs outputCount: Int, width: Int32, height: Int32,
-                refreshMilliHz: Int32, verbose: Bool = false) throws {
+    /// Phases 1–8 ran headless by scope: C1–C3 are provable without a GPU and
+    /// the build VM has no `/dev/dri`. Phase 4 is where that stops being enough
+    /// — a machine somebody installs onto has a screen, and nothing above this
+    /// line has ever driven one.
+    public enum Kind: Equatable, Sendable {
+        /// Outputs we invent, at a size we choose. Deterministic, CPU-readable,
+        /// and the only thing the build VM can do.
+        case headless(count: Int, width: Int32, height: Int32, refreshMilliHz: Int32)
+        /// Whatever this machine actually is: **DRM/KMS on metal**, a nested
+        /// Wayland window inside another compositor, X11 under one. wlroots
+        /// decides, from the environment and from what it can open — which is
+        /// the same decision every wlroots compositor makes and not one worth
+        /// making differently.
+        case auto
+    }
+
+    /// The session, when the backend needed one. DRM does; nested does not.
+    /// Held because it owns the VT and the device fds — dropping it takes the
+    /// display down with it.
+    private var session: UnsafeMutablePointer<wlr_session>?
+
+    /// What we ended up on, for the log and for the tests.
+    public let kind: Kind
+
+    public convenience init(headlessOutputs outputCount: Int, width: Int32, height: Int32,
+                            refreshMilliHz: Int32, verbose: Bool = false) throws {
+        try self.init(.headless(count: outputCount, width: width, height: height,
+                                refreshMilliHz: refreshMilliHz), verbose: verbose)
+    }
+
+    public init(_ kind: Kind, verbose: Bool = false) throws {
+        self.kind = kind
         if verbose { tw_log_verbose() } else { tw_log_silence() }
 
-        // Software rendering, unless the caller says otherwise.
+        // Software rendering **for headless only**.
         //
-        // Phase 6 is software-rendered by scope (PHASE6.md §7.1) — the build VM
-        // has no `/dev/dri` and real GPU work is Phase 4 — but on a dev box with
-        // a GPU `wlr_renderer_autocreate` picks GLES2 and allocates GPU-backed
-        // buffers, which are **not CPU-readable**. That makes `capturePPM`
-        // impossible and the difference between the two machines invisible until
-        // it fails. Pinning pixman here keeps both platforms on the same path.
-        // `overwrite: 0` so WLR_RENDERER from the environment still wins.
-        setenv("WLR_RENDERER", "pixman", 0)
+        // On a dev box with a GPU `wlr_renderer_autocreate` picks GLES2 and
+        // allocates GPU-backed buffers, which are *not CPU-readable*: that makes
+        // `capturePPM` impossible and the difference between the two machines
+        // invisible until it fails. Pinning pixman keeps every headless run on
+        // one path. On a real backend it would be the wrong choice — a GPU we
+        // refuse to render with is a GPU we are not using — so the pin does not
+        // apply there. `overwrite: 0` so WLR_RENDERER from the environment wins
+        // either way.
+        if case .headless = kind { setenv("WLR_RENDERER", "pixman", 0) }
 
         guard let d = wl_display_create() else { throw BackendError.noDisplay }
         display = d
         eventLoop = wl_display_get_event_loop(d)
 
-        guard let b = wlr_headless_backend_create(eventLoop) else {
-            wl_display_destroy(d)
-            throw BackendError.noBackend
+        let b: UnsafeMutablePointer<wlr_backend>
+        switch kind {
+        case .headless:
+            guard let hb = wlr_headless_backend_create(eventLoop) else {
+                wl_display_destroy(d)
+                throw BackendError.noBackend
+            }
+            b = hb
+        case .auto:
+            // wlroots returns a multi-backend and, for DRM, a session that owns
+            // the VT and the device descriptors. Both have to be kept.
+            var sess: UnsafeMutablePointer<wlr_session>?
+            guard let ab = wlr_backend_autocreate(eventLoop, &sess) else {
+                wl_display_destroy(d)
+                throw BackendError.noBackend
+            }
+            b = ab
+            session = sess
         }
         backend = b
         guard let r = wlr_renderer_autocreate(b) else {
@@ -179,8 +223,17 @@ public final class WlrootsSession {
             wl_display_destroy(d)
             throw BackendError.noBackend
         }
-        for _ in 0..<outputCount {
-            _ = wlr_headless_add_output(b, UInt32(width), UInt32(height))
+        if case .headless(let count, let w, let h, _) = kind {
+            for _ in 0..<count { _ = wlr_headless_add_output(b, UInt32(w), UInt32(h)) }
+        } else {
+            // A real backend announces its own outputs, and may take a moment
+            // about it: DRM enumerates connectors and the Wayland backend has to
+            // round-trip to its host. Give the loop a chance to deliver them
+            // before deciding there is no display.
+            for _ in 0..<50 where outputs.isEmpty {
+                wl_display_flush_clients(display)
+                _ = wl_event_loop_dispatch(eventLoop, 20)
+            }
         }
         guard !outputs.isEmpty else {
             wl_display_destroy(d)
@@ -196,7 +249,22 @@ public final class WlrootsSession {
             var state = wlr_output_state()
             wlr_output_state_init(&state)
             wlr_output_state_set_enabled(&state, true)
-            wlr_output_state_set_custom_mode(&state, width, height, refreshMilliHz)
+            switch kind {
+            case .headless(_, let w, let h, let hz):
+                wlr_output_state_set_custom_mode(&state, w, h, hz)
+            case .auto:
+                // **Take the display's own preferred mode.** A custom mode is
+                // what a headless output needs and what a real one is entitled
+                // to refuse: a monitor has a native resolution and a refresh
+                // rate it was built for, and asking a panel for 1024x768 at
+                // 60.000Hz is asking it to scale. Some connectors report no
+                // modes at all (nothing plugged in, or a virtual connector), in
+                // which case there is nothing to set and the commit still
+                // enables it.
+                if let mode = wlr_output_preferred_mode(out) {
+                    wlr_output_state_set_mode(&state, mode)
+                }
+            }
             let ok = wlr_output_commit_state(out, &state)
             wlr_output_state_finish(&state)
             guard ok else { throw BackendError.modeRejected }

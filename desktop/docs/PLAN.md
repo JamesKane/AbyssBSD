@@ -231,6 +231,23 @@ fd to a sandboxed Swift app.
 **Goal:** real graphics and real hardware — what a GPU present path needs (the
 sibling hit the same wall: `DESKTOP.md` phase 2 was its one true blocker).
 
+**Expanded to executable detail in [PHASE4.md](PHASE4.md)** — passes P4.1–P4.6.
+**The last phase, and the first whose verification needs a machine that is not in
+the test loop**, so its deliverable is split: code provable here, plus a
+**bring-up checklist** (PHASE4 §5) worked through on the machine. The route onto
+that machine is the Phase 5 installer — which is why the medium, not the
+compositor, is what P4.3 has to make ready.
+
+Two corrections to the sketch below already:
+
+- **`undertow` chooses its backend** (P4.1, done): `wlr_backend_autocreate`
+  behind `--backend auto`. Headless stays the default — it is the only thing the
+  build VM can do, and the only thing that makes C1–C5 reproducible.
+- **Every C1–C5 number in PHASE6.md is provisional.** They were measured against
+  a synthetic clock in which a frame presents the instant it is committed;
+  `WLR_OUTPUT_PRESENT_HW_CLOCK` has never once been set in this project's
+  history. P4.5 re-measures them where the vblank is real.
+
 - **Boot:** FreeBSD 15 UEFI on Apple EFI (Mac Pro 6,1 quirks); ZFS-on-root.
 - **GPU:** dual **AMD FirePro D300/D500/D700** = GCN 1.0 / Southern Islands → `drm-kmod`
   **amdgpu with `si_support`** (or `radeonkms`); validate KMS, then the GPU phase:
@@ -242,7 +259,9 @@ sibling hit the same wall: `DESKTOP.md` phase 2 was its one true blocker).
 
 **Verify:** the compositor drives a real display at refresh rate on the Mac Pro; the
 flight recorder shows zero missed flips under load; the Aqua desktop is interactive on
-metal.
+metal. **Note what does not count:** a nested compositor presents when its *host*
+does, so a miss count measured there is measured against somebody else's clock
+(HANDOFF §2.48). Nested is for input and drawing; C1 is for DRM.
 
 ---
 
@@ -400,6 +419,12 @@ came out of those spikes:
    risk is ordinary: a ports toolchain can go stale, and the cross-SDK route
    stays documented as the fallback.
 2. **Mac Pro GCN 1.0 GPU** — `amdgpu si_support` maturity for FirePro D-series; dual-GPU.
+   **Narrowed 2026-08-24 (PHASE4 §4.2):** the version of this risk that would have
+   ended the phase is retired — `drm-{61,66}-kmod` are built for the FreeBSD 15
+   kernel ABI and **all five Southern Islands firmware packages are in ports**
+   (`tahiti`, `pitcairn`, `verde`, `oland`, `hainan`; the D300 is Pitcairn, the
+   D500/D700 are Tahiti). What remains is whether `si_support` actually binds,
+   which only the machine can answer.
 3. **Aqua fidelity in software rendering** — gloss/blur/pinstripe at HiDPI via Cairo.
 4. **Swift ARC vs. the latency contract** — **downgraded 2026-08-02 by
    measurement** (PHASE6.md §4.2), not closed. A structure-of-arrays loop body

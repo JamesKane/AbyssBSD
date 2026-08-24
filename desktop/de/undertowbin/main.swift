@@ -65,7 +65,9 @@ var assertSurfaces: Int? = nil
 var assertLayers: Int? = nil
 var assertUsable: String? = nil
 var configDir: String? = nil
-var socketName: String? = nil
+var socketName: String?
+/// nil means headless (the default everywhere but metal).
+var backendKind: WlrootsSession.Kind? = nil
 
 var i = 0
 while i < args.count {
@@ -102,6 +104,13 @@ while i < args.count {
     case "--assert-usable": assertUsable = value("--assert-usable")
     case "--config-dir": configDir = value("--config-dir")
     case "--socket": socketName = value("--socket")
+    case "--backend":
+        let b = value("--backend")
+        switch b {
+        case "headless": backendKind = nil
+        case "auto":     backendKind = .auto
+        default: die("--backend is headless or auto, not '\(b)'")
+        }
     case "-h", "--help": usage()
     default: die("unknown option '\(args[i])'")
     }
@@ -306,8 +315,25 @@ case "run":
     let session: WlrootsSession
     let compositor: Compositor
     do {
-        session = try WlrootsSession(headlessOutputs: 1, width: width, height: height,
-                                     refreshMilliHz: Int32(hz &* 1000), verbose: verbose)
+        // `--backend auto` is Phase 4: DRM on metal, a nested window inside
+        // another compositor, whatever this machine actually is. Headless stays
+        // the default because it is the only thing the build VM can do and the
+        // only thing that makes C1–C5 reproducible.
+        session = try WlrootsSession(backendKind
+                                     ?? .headless(count: 1, width: width, height: height,
+                                                  refreshMilliHz: Int32(hz &* 1000)),
+                                     verbose: verbose)
+        // **On a real backend the display's size is the truth, not ours.**
+        // Headless invents an output at whatever size it was asked for; a
+        // monitor arrives with a mode already, and a compositor that keeps
+        // using the numbers on its own command line lays the desktop out for a
+        // screen that is not there. Found the first time undertow ran nested:
+        // it was given 900x700, the output was 1280x720, and the menu bar's
+        // exclusive zone was computed for the wrong width.
+        if backendKind != nil, let first = session.outputs.first {
+            width = first.pointee.width
+            height = first.pointee.height
+        }
         compositor = try Compositor(session: session, outputWidth: width,
                                     outputHeight: height, configDir: configDir,
                                     socketName: socketName)

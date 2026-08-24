@@ -2,9 +2,9 @@
 
 What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
-([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE5.md](PHASE5.md),
-[PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md), [PHASE8.md](PHASE8.md)) for
-ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md),
+[PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md),
+[PHASE8.md](PHASE8.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
 Last updated: 2026-08-24. **Phases 0–3 and 5–8 are complete.** The Jaguar shell
@@ -20,8 +20,9 @@ on every run, nested twice over, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **Nothing is queued.** Phase 5 is complete, and Phase 4 (Mac Pro) is the
-   only one left — §5 says why three separate threads now point at it. Phase 8
+1. **The next pass is P4.3** — the medium goes metal-ready, so there is
+   something to boot on the Mac Pro. Phase 4 is scoped ([PHASE4.md](PHASE4.md))
+   and P4.1 is in. Phase 8
    closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
    Phase 5, which is **now complete**: an empty disk becomes a machine running
    the Jaguar desktop, on every run of the harness. **Read §2.43–§2.47 first** —
@@ -45,6 +46,9 @@ on every run, nested twice over, with no hardware and no human.
    - **§2.41** — whose lifetime is this listener, exactly? A compositor must
      outlive its input client, and only a test that shuts down in the right
      order will ever say so.
+   - **§2.48** — a nested compositor presents when its *host* does, so a
+     frame-contract number measured there is measured against somebody else's
+     clock. And a real display's size is the truth, not your command line.
    - **§2.47** — `getty` revokes the console, so a backgrounded service's
      output dies the moment a login prompt appears. Silent, and it looks
      exactly like a crash.
@@ -307,6 +311,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.45 | A package manager's closure is not your program's closure — `ldd`, not `pkg`; and announce a graceful fallback or no test can see it |
 | 2.46 | A GUI cannot be trusted to be right about itself — click it live, and let it publish its own geometry; `print` is buffered and invisible |
 | 2.47 | `getty` calls `revoke(2)` on the console — every other process's descriptor to it dies, silently |
+| 2.48 | A nested compositor's schedule is not its own — C1 there is measured against the host's clock; and the display's size beats your flags |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -573,6 +578,35 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.48 A nested compositor's schedule is not its own
+(P4.1 — `undertow` on a backend that is not headless, for the first time.)
+
+`undertow run --backend auto` inside a Wayland session works: a real output, a
+real mode, real buffers, real input from an actual mouse. It also reported
+**107 missed flips of 180**, while compositing in 18 µs against an 8 ms margin.
+
+Nothing is slow. A compositor inside another compositor presents when its *host*
+presents, so "missed" is measuring our latency against a clock we do not own.
+The metronome already distinguishes two cases — a hardware timestamp, passed
+through untouched, and a synthetic one, snapped to the nominal grid — and nesting
+is a **third** it does not model: a real timestamp from somebody else's clock.
+
+The decision is to leave it: nested is for input and drawing, and its miss count
+is *not applicable*. Tuning until that number looked good would be optimising
+against a clock we do not own, which is §2.37's error wearing different clothes.
+C1 gets re-measured on DRM, where the vblank really is ours — and where
+`WLR_OUTPUT_PRESENT_HW_CLOCK` will be set for the first time in this project's
+history. **Every C1–C5 number in PHASE6.md is provisional until then.**
+
+And the smaller one, from the same first run:
+
+- **On a real backend the display's size is the truth, not yours.** Headless
+  invents an output at whatever size it was asked for, so eight phases of code
+  learned to trust its own `--width`/`--height`. Given 900x700 on a 1280x720
+  output, the compositor laid the desktop out for a screen that was not there and
+  the menu bar reserved its strip across the wrong width. A monitor arrives with
+  a mode already; take it.
 
 ### 2.47 getty revokes the console, and your background service goes mute
 (P5.5 — the live medium running the installer, and installing from its own
@@ -1937,10 +1971,12 @@ whole arc nested twice over: a blank disk, our medium coming up on the Aqua
 installer, an install driven from the medium's own console, and a reboot into the
 Jaguar desktop as the account that was created. §2.47 is what it cost.
 
-### Nothing is queued: what is left is Phase 4
+### Phase 4 is scoped and started
 
-**Phase 4 — Mac Pro bring-up — is the only phase left**, and three separate
-things now point at it:
+**Phase 4 is the only phase left** ([PHASE4.md](PHASE4.md)), it is **scoped**, and
+**P4.1 is done** — `undertow` chooses its backend (`--backend auto`: DRM on metal,
+nested inside another compositor, headless by default). Three things pointed at
+this phase and all three are now in its plan:
 
 - **PLAN.md's own verify for Phase 5** says "onto the Mac Pro (and the VM)". The
   VM half is done; the metal half needs that machine to boot FreeBSD with a
@@ -1952,7 +1988,17 @@ things now point at it:
   on a real GPU with `rtprio`, which is the only place they mean what they claim.
 
 Its own risk is unchanged and is the biggest left: `amdgpu` `si_support` for the
-FirePro D-series.
+FirePro D-series — though the spike retired the version of it that would have
+ended the phase, since **all five Southern Islands firmware packages are in
+FreeBSD ports** for the 15.0 ABI (PHASE4 §4.2).
+
+**The next pass is P4.3 — the medium goes metal-ready**: `drm-kmod`, the SI
+firmware, a `loader.conf` that asks `amdgpu` for `si_support`, and a live session
+that says `--backend auto`. That is the thing to put on a USB stick, and PHASE4
+§5 is the checklist to work through when it boots. **The DRM path ships written
+and unproven** — the dev box holds DRM master in a Wayland session, so it cannot
+be exercised here, and saying so is better than a spike that proves the easy half
+(§4.3).
 
 ### Standing smaller items, and one the installer created
 

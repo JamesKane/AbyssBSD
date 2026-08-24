@@ -13,7 +13,8 @@ is the claim the D-Bus phase existed to make.
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
 on every run of the harness, nested twice over, with no hardware and no human.
-**Phase 4 (Mac Pro) is the only phase left**; see [What's next](#whats-next).
+**Phase 4 (Mac Pro) is the only phase left, and is now scoped and started**
+([PHASE4.md](PHASE4.md), P4.1 done); see [What's next](#whats-next).
 
 ## What this is
 
@@ -433,13 +434,16 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
 ([PHASE5.md](PHASE5.md)).
 
-> **Phase 4 — Mac Pro bring-up — is the only phase left**, and three separate
-> threads now point at it: PLAN.md's own verify for Phase 5 wants a clean install
-> onto that machine; **input from real hardware is untested** (every click and
-> keystroke in this tree comes from `wlr-virtual-pointer`, and `undertow` has
-> only a headless backend); and Phase 6's C1 numbers came off a synthetic clock
-> and should be repeated on a real GPU with `rtprio`. Its own risk is the biggest
-> left: `amdgpu` `si_support` for the FirePro D-series.
+> **Phase 4 is scoped, and P4.1 is done** ([PHASE4.md](PHASE4.md)): `undertow`
+> now chooses its backend — DRM on metal, nested inside another compositor,
+> headless by default. **The next pass is P4.3, the metal-ready medium**: the
+> route onto that machine is the Phase 5 installer, so the medium needs
+> `drm-kmod`, the Southern Islands firmware and a session that is not headless.
+> PHASE4 §5 is the checklist to work through when the stick boots.
+>
+> **The DRM path ships written and unproven** — this dev box holds DRM master in
+> a Wayland session, so it cannot be exercised here. Nested *can* be, and was:
+> a real output, a real mode, and input from an actual mouse.
 >
 > **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
@@ -555,6 +559,17 @@ binary. The disk spoke shows **every** disk with the reason beside the ones it
 will not use (a picker that silently omits your disk is one you argue with), and
 the confirmation names the disk in the sentence with the destructive verb on the
 button.
+
+**Phase 4 is scoped and P4.1 is in — `undertow` meets a real display.** Running
+it on a non-headless backend for the first time produced two findings that shape
+the phase. The display's **size is the truth, not ours**: given 900x700 on a
+1280x720 output it laid the desktop out for a screen that was not there, and the
+menu bar reserved its strip across the wrong width. And the frame contract's
+metric **does not survive nesting** — 107 missed of 180 while compositing in
+18 µs, because a compositor inside another compositor presents when its *host*
+does ([HANDOFF §2.48](HANDOFF.md)). That is not a bug to fix; it means **every
+C1–C5 number in PHASE6.md is provisional** until P4.5 re-measures them where the
+vblank is ours.
 
 **P5.5 is done, and with it Phase 5 — an empty disk becomes a desktop.**
 `abyss/tests/live-desktop.sh` runs the whole arc nested twice over: a blank 12 GB

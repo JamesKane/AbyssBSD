@@ -30,6 +30,11 @@
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
+/* Phase 4: the backend that drives a real display, and the session that owns the
+ * VT and the device descriptors it needs. `wlr_backend_autocreate` returns the
+ * session as an out-parameter, so the type has to be visible even though we
+ * never call anything on it — we only have to keep it alive. */
+#include <wlr/backend/session.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/render/pass.h>
