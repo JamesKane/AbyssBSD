@@ -106,7 +106,7 @@ depends on: **amdgpu loads harmlessly on a machine it cannot drive**, so
 
 **The backend is chosen from what the machine has.** One rule, in the live
 session: if `/dev/dri/card*` exists, `--backend auto`; otherwise headless. The
-build VM has no `/dev/dri`, so the harness's 39 live modes are untouched — and
+build VM has no `/dev/dri`, so the harness's live modes are untouched — and
 on a Mac Pro the same medium asks for the display. It says which it chose, which
 on metal is the first line worth reading.
 
@@ -196,7 +196,7 @@ the hard one.
 
 Unchanged for everything that can be: unit tests, live tests, both platforms,
 `abyss/tests/run.sh --vm --live` as the gate. Headless remains the default
-everywhere, so **nothing in this phase is allowed to make the existing 39 live
+everywhere, so **nothing in this phase is allowed to make the existing live
 modes depend on hardware.**
 
 What is new is the half a script cannot do. The bring-up checklist, in the order

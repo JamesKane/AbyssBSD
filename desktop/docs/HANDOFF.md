@@ -7,12 +7,12 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 [PHASE8.md](PHASE8.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-24. **Phases 0–3 and 5–8 are complete.** The Jaguar shell
+Last updated: 2026-08-25. **Phases 0–3 and 5–8 are complete.** The Jaguar shell
 runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
 plane, session supervisor and hardware bridges; the portals hand out descriptors;
 and **one command boots a desktop where an unmodified GTK 3 application, which
 has never heard of this desktop, opens a file through the Finder**.
-**315 unit tests + 39 live modes, green on Linux and FreeBSD.**
+**315 unit tests, 35 live modes and 18 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -20,17 +20,21 @@ on every run, nested twice over, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **The next step is not code — it is booting the stick.** Phase 4 is scoped
-   ([PHASE4.md](PHASE4.md)) and P4.1/P4.3 are in; §5 is the checklist. Phase 8
-   closed with P8.4; the 2026-08-23 choice between Phase 4 and Phase 5 went to
-   Phase 5, which is **now complete**: an empty disk becomes a machine running
-   the Jaguar desktop, on every run of the harness. **Read §2.43–§2.47 first** —
-   between them they are why this phase is verified the way it is, and four of
-   the five were found by running something rather than reading it. **Phase 4 (Mac Pro bring-up) is still open and still
-   independent** — and now owns the metal half of Phase 5's verify.
-2. Read §1 for what exists. It is long; the two newest parts are **Phase 6**
-   (the compositor) and **Phase 8** (the D-Bus bridge).
-3. Skim the §2 index for the trap nearest what you're about to touch. **The
+1. **The next step is not code — it is booting the stick.** Everything that can
+   be verified from here has been; **Phase 4 is the only phase left**, it is
+   scoped ([PHASE4.md](PHASE4.md)), and P4.1 and P4.3 are in. There is an image
+   at `../abyss-swift-vm/abyss-live-metal.img` built with `--stay --frames 0`,
+   and **[PHASE4 §5](PHASE4.md) is an ordered checklist** in which each step's
+   failure is a different problem. The one that decides the phase is step 3:
+   whether `amdgpu` binds a Southern Islands FirePro. Nobody has run it yet.
+2. **If the answer came back**, start from what the console said. The passes
+   below step 3 are written without knowing it and should be expected to change.
+3. Read §1 for what exists. It is long; the newest parts are **Phase 5** (the
+   installer, which is how anything reaches that machine) and **Phase 4 so
+   far**. **Read §2.43–§2.48 before writing anything** — six consecutive traps,
+   five of them found by *running* something rather than reading it, and
+   together they are why the last two phases are verified the way they are.
+4. Skim the §2 index for the trap nearest what you're about to touch. **The
    freshest scars all generalise, and most are about *testing* rather than
    code** — which is the pattern worth carrying into the next pass:
    - **§2.37** — a probe with no positive control measures nothing. A published
@@ -42,14 +46,11 @@ on every run, nested twice over, with no hardware and no human.
    - **§2.40** — an answer for one client must be *addressed* to it; and when you
      change what goes on the wire, ask what your **witness** can still see. Two
      green tests once covered a message its only real reader could not receive.
-   - **§2.41** — whose lifetime is this listener, exactly? A compositor must
-     outlive its input client, and only a test that shuts down in the right
-     order will ever say so.
    - **§2.48** — a nested compositor presents when its *host* does, so a
      frame-contract number measured there is measured against somebody else's
      clock. And a real display's size is the truth, not your command line.
-   - **§2.47** — `getty` revokes the console, so a backgrounded service's
-     output dies the moment a login prompt appears. Silent, and it looks
+   - **§2.47** — `getty` calls `revoke(2)` on the console, so a backgrounded
+     service goes mute the moment a login prompt appears. Silent, and it looks
      exactly like a crash.
    - **§2.46** — a GUI cannot be trusted to be right about itself: twenty
      green model tests missed a screen that looked like it worked. And never
@@ -57,6 +58,9 @@ on every run, nested twice over, with no hardware and no human.
    - **§2.45** — a package manager's closure is not your program's closure
      (5.66 GB vs 327 MB); and a silent graceful fallback is invisible to every
      test downstream unless something announces it.
+   - **§2.41** — whose lifetime is this listener, exactly? A compositor must
+     outlive its input client, and only a test that shuts down in the right
+     order will ever say so.
    - **§2.44** — an install that reports success is not an install that
      worked. Every step said ok, the log said ok, and the machine booted to the
      loader prompt. Where the output is a *thing*, assert on the thing.
@@ -69,7 +73,7 @@ on every run, nested twice over, with no hardware and no human.
 4. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 234 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 315 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -80,7 +84,7 @@ on every run, nested twice over, with no hardware and no human.
 
 ---
 
-## 1. What got built (Phases 0–3, 6, 7, and Phase 8 so far)
+## 1. What got built (Phases 0–3 and 5–8, and Phase 4 so far)
 
 A working Swift 6 desktop foundation that builds and tests clean on Linux and
 renders faithful Jaguar UI:
@@ -250,9 +254,28 @@ everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
   is a name; ours is a capability** (PHASE8 §6.6). The confused-deputy property
   still survives the hop: a foreign app names a directory, never a file.
 
+- **Phase 5 put it on a disk.** `de/install` is the install as a *value* — an
+  `InstallPlan` compiled to a step list of exact `gpart`/`zpool`/`zfs`/`tar`
+  invocations, with the refusals as a pure function of plan-and-machine, so a
+  Linux unit test can build the exact machine on which one must fire.
+  `abyss-install` runs that list as **root**; the Aqua installer commands it as
+  an **unprivileged** process over `CurrentIPC`, and the socket is handed to one
+  uid and the caller checked against it. `abyss/mk/live-image.sh` builds the
+  medium out of the same distribution sets the installer extracts — the runtime
+  closure computed with `ldd` rather than resolved by a package manager (§2.45)
+  — and the whole arc runs in the harness, nested twice over: **a blank disk
+  becomes a machine running the Jaguar desktop**, as the account the installer
+  created.
+- **Phase 4 has begun, and it is the first phase a test cannot finish.**
+  `undertow` chooses its backend (`--backend auto`: DRM on metal, nested inside
+  another compositor, headless by default), and the medium carries the drm stack,
+  the Southern Islands firmware and `seatd` — so there is an image to write to a
+  stick. What that image *does* on a Mac Pro is PHASE4 §5's checklist, and
+  nobody has run it yet.
+
 The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
-and `system-preferences.png` are the Phase-1 originals, and `freebsd-*.png` are
-the Phase-3 ones.
+and `system-preferences.png` are the Phase-1 originals, `freebsd-*.png` are the
+Phase-3 ones, and `live-medium.png` / `installer.png` are Phase 5's.
 
 ---
 
@@ -1810,6 +1833,13 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 | `--menubar --status` | the volume/battery **menu extras** are drawn (fed by `Vents`, or the documented test seam) |
 | `--pick` / `--cancel` | the Finder as a **portal picker**: choose → path + exit 0, Escape → exit 1, nothing launched |
 
+**What the numbers mean**, because they are three different things and the docs
+once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
+`undertow`-driven ones in the two tables above it); **18 live scripts** are the
+standalone ones `run.sh` invokes, listed below; **315 unit tests** are
+`swift test`. A count that is incremented without checking its denominator is a
+count that will be wrong, and this one was.
+
 **Run them all:** `abyss/tests/run-live.sh` drives every mode in order with a
 per-mode timeout and prints a pass/fail table (`-o DIR` keeps the PNGs and logs,
 or name a subset: `run-live.sh dock trash`). 35 modes today. These are the
@@ -1840,6 +1870,11 @@ or name a subset: `run-live.sh dock trash`). 35 modes today. These are the
 | `live-session-gtk.sh` | the same claim with **one command**: `anchor` brings up compositor, bus, portal, bridge and shell, and a stock GTK app gets its file. Asserts **nothing restarted** — the assertion that tells a dependency gate from a race — that the bridge owns the portal name on the bus anchor exported, and that `quit` leaves no stray `dbus-daemon` |
 | `live-sandbox.sh` | the client is in **capability mode** and `open(2)` fails, yet it reads the file |
 | `live-notify.sh` | a notification crosses the portal, becomes a toast, reserves no space, and its surface is released on expiry |
+| `live-screenshot.sh` | a client that cannot call `socket(2)` — so cannot reach the compositor — holds a picture of the screen, and the file it came from is already unlinked |
+| `live-install.sh` | **an install, and the machine it made boots.** A root `abyss-install` commanded by an unprivileged caller partitions the VM's scratch disk, and nested `bhyve` boots the result to `login:`. Refuses the disk it is running from, live. On Linux, a positive control: the probe must say what it could not find |
+| `live-medium.sh` | the live medium is **built** (`makefs` + `mkimg`, no `make release`) and **booted**, and the frame it captured is probed pixel by pixel. Asserts it carries `amdgpu.ko`, the Southern Islands firmware, `seatd` and the `si_support` knob — what a VM can check of PHASE4 §5 |
+| `live-installer.sh` | the **Aqua installer**, driven by a real pointer and a real keyboard on `undertow` against the real service in dry-run. Clicks come from the app's own published layout, never from constants (§2.46) |
+| `live-desktop.sh` | the whole arc, nested twice over: **a blank disk, our medium, an install from its console, and a reboot into the Jaguar desktop** as the account created |
 
 **The whole desktop at once:** `abyss/tests/live-session.sh [out.png]` runs
 `abyss/session.sh --headless` and asserts the shell *composes* — three layer
@@ -1869,14 +1904,14 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 234 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 315 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
 abyss/tests/run.sh --vm --live     # the gate before calling a pass done
 ```
 
-The 234 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 315 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -1932,104 +1967,55 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-**Where things stand.** Phases 0–3 and 6–8 are complete. The Jaguar shell runs on
-FreeBSD, on our own compositor, over a Swift control plane, session supervisor
-and hardware bridges — and **one command boots a desktop where an unmodified GTK
-3 application opens a file through the Finder**. **234 unit tests and 35 live
-modes, green on Linux and FreeBSD.**
+**Where things stand.** Phases 0–3 and 5–8 are complete. The Jaguar shell runs
+on FreeBSD, on our own compositor, over a Swift control plane, session supervisor
+and hardware bridges; one command boots a desktop where an unmodified GTK 3
+application opens a file through the Finder; and **a blank disk becomes a machine
+running that desktop**, on every run of the harness. **315 unit tests, 35 live
+modes and 18 live scripts, green on Linux and FreeBSD.**
 
-### The next pass is P5.1
+Phase 4 is scoped and started. Per-pass detail lives in the phase docs
+([PHASE4.md](PHASE4.md), [PHASE5.md](PHASE5.md)); this section is what to do
+next, not a record of what was done.
 
-The 2026-08-23 choice between Phase 4 and Phase 5 was settled the next day:
-**Phase 5 is scoped** ([PHASE5.md](PHASE5.md), P5.1–P5.5), with its four risks
-retired on the target first (PHASE5 §4).
+### 1. Boot the stick. Everything else waits on it.
 
-**P5.1 is done** — `de/install` is the install as a value: an `InstallPlan` that
-compiles to a step list (the exact `gpart`/`newfs_msdos`/`zpool`/`zfs`/`tar`
-invocations, in order) plus the safety predicate that refuses a plan naming a
-mounted disk, the running root, or something that is not a whole disk. Pure, in
-`Session.swift`'s image, with the machine as an argument — so all 28 of its tests
-run on Linux, where not one of those commands exists. **§2.43 is what running it
-found**, and it is the pass's real lesson.
+There is nothing left that can be verified from this machine. The image is
+`../abyss-swift-vm/abyss-live-metal.img`, built `--stay --frames 0` so it stays
+up and keeps the installer on screen; **[PHASE4 §5](PHASE4.md)** is the ordered
+checklist, and each step's failure is a different problem.
 
-**P5.2 is done too**, and with it the phase's claim: `abyss-install` runs the
-step list as root, hands its socket to one uid and asks the kernel who called
-(PHASE5 §4.4), and `abyss/tests/live-install.sh` installs onto the build VM's
-scratch disk and **boots the result under nested bhyve**. The definition of "it
-worked" is `login:` — see §2.44 for what that caught on its first injection.
+**Step 3 decides the phase**: whether `amdgpu` binds a Southern Islands FirePro
+(`dmesg | grep -i amdgpu`, `ls /dev/dri`). The medium asks for `si_support` in
+both spellings the module registers, and carries the Tahiti and Pitcairn firmware
+— so a failure there is the driver's answer, not a missing piece.
 
-**P5.3 is done too: the medium runs the desktop.** `abyss/mk/live-image.sh`
-builds a 327 MB image in 15 seconds and `live-medium.sh` boots it nested and
-checks the frame it drew, pixel by pixel. The lesson is §2.45 — a package
-manager's closure is not your program's closure — and the assertion that had to
-be *invented* is worth reading before P5.4: a medium with no fonts at all passed
-every check until the desktop was made to announce what its text stack got.
+### 2. Then rewrite the passes below it
 
-**P5.5 is done, and with it Phase 5.** `abyss/tests/live-desktop.sh` runs the
-whole arc nested twice over: a blank disk, our medium coming up on the Aqua
-installer, an install driven from the medium's own console, and a reboot into the
-Jaguar desktop as the account that was created. §2.47 is what it cost.
+P4.2 (real input), P4.5 (C1 against a real vblank) and P4.6 (NVMe, Thunderbolt,
+audio, network) are written **without knowing what step 3 says**, and should be
+expected to change. Two things are already known to be waiting:
 
-### Phase 4 is scoped and started
+- **Every C1–C5 number in PHASE6.md is provisional.** They came off a synthetic
+  clock in which a frame presents the instant it is committed;
+  `WLR_OUTPUT_PRESENT_HW_CLOCK` has never once been set in this project's
+  history (§2.48).
+- **The volume and battery status items have reported "absent" since P3.7**, and
+  a real machine is the first one that would give them something to read.
 
-**Phase 4 is the only phase left** ([PHASE4.md](PHASE4.md)), it is **scoped**, and
-**P4.1 is done** — `undertow` chooses its backend (`--backend auto`: DRM on metal,
-nested inside another compositor, headless by default). Three things pointed at
-this phase and all three are now in its plan:
-
-- **PLAN.md's own verify for Phase 5** says "onto the Mac Pro (and the VM)". The
-  VM half is done; the metal half needs that machine to boot FreeBSD with a
-  working GPU.
-- **Input from real hardware is untested.** Every click and keystroke in this
-  tree comes from `wlr-virtual-pointer` and `virtual-keyboard`. `undertow` has
-  only a headless backend; there is no KMS, no libinput device, no real seat.
-- **Phase 6's C1 numbers came off a synthetic clock.** They should be repeated
-  on a real GPU with `rtprio`, which is the only place they mean what they claim.
-
-Its own risk is unchanged and is the biggest left: `amdgpu` `si_support` for the
-FirePro D-series — though the spike retired the version of it that would have
-ended the phase, since **all five Southern Islands firmware packages are in
-FreeBSD ports** for the 15.0 ABI (PHASE4 §4.2).
-
-**P4.3 is done: the medium is metal-ready**, carrying the drm stack, all five
-Southern Islands firmware sets and `seatd`, with a `loader.conf` that asks for
-`si_support` — both spellings, because loading the module in the build VM showed
-both registered. The live session picks its backend from whether `/dev/dri`
-exists, so the harness is untouched and a real machine gets asked for a display.
-
-**The next step is a person.** PHASE4 §5 is an ordered bring-up checklist —
-does the stick boot, does it reach multi-user, does `amdgpu` attach, does
-`undertow` find an output, is the installer on the screen, and only then the
-numbers. Each step's failure is a different problem, which is why they are
-ordered. **The DRM path ships written and unproven**: the dev box holds DRM
-master in a Wayland session, so it cannot be exercised here, and saying so is
-better than a spike that proves the easy half (PHASE4 §4.3).
-
-### Standing smaller items, and one the installer created
+### 3. Standing smaller items, none blocking
 
 - **There is no login window** (PHASE5 §6.8). The installed machine starts the
   desktop from `rc` as the account the installer created — right for a machine
   with one user, wrong for a machine with two. PLAN.md's Phase 2 sketch listed
   `LoginWindow`; this is the first thing that actually wants it.
-
-### The other phase that is left
-
-- **Phase 4 — Mac Pro bring-up.** The real hardware story, and where the
-  volume/battery status items finally read a real mixer and battery rather than
-  reporting absent (P3.7). It is also the biggest single risk left: `amdgpu`
-  `si_support` for the FirePro D-series. **And it is where Phase 6's C1
-  measurements should be repeated** — every number in PHASE6.md came off a
-  headless backend with a synthetic clock, and a real GPU with `rtprio` is the
-  only place they mean what they claim. **It now also owns the metal half of
-  Phase 5's verify**: PLAN.md wants a clean install onto the Mac Pro, and that
-  needs the Mac Pro to boot first.
-
-### Standing smaller items, none blocking
-
+- **The live medium's root is mounted read-write.** Fine for a disk image,
+  wrong for a USB stick somebody can pull out mid-write; a shipped medium wants
+  read-only plus tmpfs (PHASE5 P5.3).
 - **Golden-image tests** — snapshot the deterministic PNG scenes and diff in CI
   (`finderSampleEntries`/`desktopSampleEntries` exist for exactly this). The
   cheapest guard against silent visual regressions, and the surface worth
-  guarding keeps widening.
+  guarding keeps widening — the installer added five more screens.
 - **A real Aqua save panel** — `file.save` currently leans on ⌘S saving into the
   folder on screen, because picking from a listing cannot name a file that does
   not exist yet (PHASE7.md P7.2). A name field and a New Folder button would
@@ -2049,15 +2035,23 @@ better than a spike that proves the easy half (PHASE4 §4.3).
   until the picker exits. Worth fixing when something needs it; not worth threads
   now.
 
-### Two rules that earned their place
+### Three rules that earned their place
 
 **A pass is not done until `abyss/tests/run.sh --vm --live` is green.** Two
 Phase-3 bugs were invisible on Linux and failed only on FreeBSD (§2.33, §2.34).
 
-**A test that has never failed has not been shown to test anything.** Phase 6 and
-Phase 8 both caught a false pass by deliberately breaking the code and checking
-the suite noticed (§2.37, §2.39). It costs ten minutes and it is the only thing
-standing between "green" and "green for the reason I think".
+**A test that has never failed has not been shown to test anything.** Phases 6,
+8, 5 and 4 each caught a false pass by deliberately breaking the code and
+checking the suite noticed (§2.37, §2.39, §2.43, §2.46). It costs ten minutes and
+it is the only thing standing between "green" and "green for the reason I think".
+
+**A model of the work is not the work.** Five of the last six traps (§2.43–§2.48)
+were found by *running* something that had already been reviewed, tested and
+believed: a step list with 28 tests was wrong four ways, an install that reported
+success booted to a loader prompt, a medium that passed every pixel check had no
+fonts, a GUI with twenty green model tests had a screen that only looked like it
+worked. Where a pass's output describes what some other program will do, or what
+some other machine will show, it is not finished until something has done it.
 
 ## 6. Gotchas inherited from the sibling (still true here)
 
@@ -2074,6 +2068,18 @@ standing between "green" and "green for the reason I think".
 - Swift lives **off PATH** in the guest (`/usr/local/swift6/bin`), and a
   non-interactive `ssh host 'cmd'` reads no profile — so use `abyss/vm/build.sh`
   or `abyss/tests/run.sh --vm` rather than ssh'ing `swift` by hand (§2.28).
+- **The build VM has a third disk, and the tests wipe it.** `abyss/vm/run.sh`
+  attaches `../abyss-swift-vm/abyss-scratch.qcow2` (12G) as `vtbd2`, and
+  `live-install.sh` writes a GPT over whatever is on it on every `--live` run.
+  It is a real virtio disk rather than an `md(4)` device because `geom disk
+  list` does not show md devices, so the installer's own probe cannot see one.
+- **The distribution sets are cached in the guest at `/home/build/dist`**, which
+  is *outside* the rsync'd tree (`sync.sh --delete` would otherwise remove them).
+  `live-install.sh`, `live-medium.sh` and `live-desktop.sh` skip loudly without
+  them rather than failing; fetch base.txz and kernel.txz there once.
+- **`--vm --live` is about twelve minutes now**, most of it the two nested boots.
+  If that becomes a reason not to run it, the boot checks belong behind their own
+  flag — said out loud in `run.sh`, never quietly dropped (PHASE5 §6.6).
 
 ---
 
@@ -2102,7 +2108,7 @@ standing between "green" and "green for the reason I think".
 | `de/abyssopen`, `de/ccap` | the sandboxed client (files **and** `--screenshot`) and Capsicum's `cap_enter` |
 | `de/abyssnotify` | `notify-send`, brokerless — through the portal, as a jailed app would |
 | `de/abyssgrab` | capture an output to a PNG via `wlr-screencopy`; the portal forks it, so the portal itself is never a Wayland client |
-| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, `Backend` (the wlroots bridge), `Compositor` (globals, socket, windows), `SurfaceScene` (our SoA scene — deliberately **not** `wlr_scene`), `Seat` (input, cursor, focus; `PointerRouting` is the pure hit-test) and `LayerShell` (the shell's surfaces; `LayerArrange` is the pure placement rule) — `undertow` is its own bench harness |
+| `de/undertow`, `de/undertowbin` | **the compositor** (PHASE6.md): `Metronome`, `FlightRecorder`, `Output`/`FrameSink`, `Backend` (the wlroots bridge), `Compositor` (globals, socket, windows), `SurfaceScene` (our SoA scene — deliberately **not** `wlr_scene`), `Seat` (input, cursor, focus; `PointerRouting` is the pure hit-test) and `LayerShell` (the shell's surfaces; `LayerArrange` is the pure placement rule) — `undertow` is its own bench harness. **`Backend.Kind` (P4.1)** picks headless or `wlr_backend_autocreate`; headless is the default because it is the only thing the build VM can do |
 | `de/cwlroots` | **29 lines of C**, and that is the whole wlroots binding: Swift imports the headers directly, but `wl_signal_add` is a static inline and `wl_container_of` is a macro, so every wlroots event arrives through one trampoline (§2.1 at scale) |
 | `de/cwlrootssys`, `de/cwaylandserver` | pkg-config flag carriers for wlroots-0.19 and libwayland-**server** (§2.29's pattern) |
 | `de/callocprobe` | counts allocations by symbol interposition; the enforcement half of PLAN.md risk 4. **Executable-only, and useless without its positive control** (§2.37) |

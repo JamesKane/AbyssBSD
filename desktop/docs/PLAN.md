@@ -28,6 +28,19 @@ rewrite of the Rust `pool`, sharing only the on-disk format — is the pattern.)
 xkbcommon, cairo, FreeType/HarfBuzz, libnv) or a shim over one, exactly as `de/cwayland`
 and `de/ctext` already do. It does not mean linking Rust crates.
 
+### Where this stands (2026-08-25)
+
+**Phases 0–3 and 5–8 are complete; Phase 4 is scoped and started.** The Jaguar
+desktop runs on FreeBSD on our own Swift compositor, foreign GTK apps get the
+Finder through a D-Bus bridge we wrote, and a blank disk becomes a machine
+running that desktop — all of it proven by `abyss/tests/run.sh --vm --live` on
+both platforms, with no hardware and no human in the loop.
+
+What is left is the hardware: **Phase 4**, whose verification needs a Mac Pro
+that no test can reach. See [PHASE4.md](PHASE4.md) §5 — an ordered bring-up
+checklist — and note that **every C1–C5 number in [PHASE6.md](PHASE6.md) is
+provisional** until it is re-measured against a real vblank.
+
 ### Decisions locked in (from planning Q&A)
 
 1. **Compositor: rewrite in Swift** (corrected 2026-07-27 — this used to read

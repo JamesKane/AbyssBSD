@@ -3,12 +3,13 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-24. **Phases 0–3 and 5–8 are complete.** The Jaguar desktop
+Last updated: 2026-08-25. **Phases 0–3 and 5–8 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**315 unit tests + 39 live modes, green on Linux *and* FreeBSD.**
+**315 unit tests, 35 live modes and 18 live scripts, green on Linux *and*
+FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5):
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
@@ -431,9 +432,9 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 6–8 are complete.** The choice recorded here on 2026-08-23 —
-Phase 4 or Phase 5 — was made: **Phase 5, the installer, is scoped**
-([PHASE5.md](PHASE5.md)).
+**Phases 0–3 and 5–8 are complete.** Phase 4 — the Mac Pro — is the only one
+left, and is the first whose verification needs a machine no test can reach.
+Everything below this box is the record of what got built, newest last.
 
 > **Phase 4 is scoped; P4.1 and P4.3 are done — there is a stick to boot**
 > ([PHASE4.md](PHASE4.md)). `undertow` chooses its backend, and the medium now
