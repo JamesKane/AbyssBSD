@@ -411,18 +411,27 @@ sudo sh -c "cat >> $stage/usr/local/libexec/abyss-live-session" <<'SESSION'
 # rather than ornamental: the installer hands its socket to exactly one uid and
 # then asks the kernel who called.
 #
-# It runs in the FOREGROUND of rc, which means the console does not come up until
-# the session ends. That is deliberate, and the alternative was tried: a
-# backgrounded session goes **silent** the moment `getty` starts, because getty
-# calls `revoke(2)` on the console and that invalidates every descriptor any
-# other process is holding to it. The session printed exactly one line and then
-# nothing, which looks like a crash and is a redirection. Built with `--stay`
-# the machine waits at a console afterwards, which is when a person — or a test
-# — can use it.
+# **Where it runs, and where it talks, depends on whether anybody can see it.**
+# Same rule as the backend, and for the same reason — ask the machine, do not
+# take a flag:
 #
-# Everything it says goes to the console on purpose. This is the only report a
-# headless live system can make about itself, and one that comes up silently and
-# wrongly is indistinguishable from one that works.
+#   No display (the build VM). A harness is watching, and the console is the
+#   only channel it has. So: FOREGROUND, reporting to the console, and the
+#   virtual terminals do not arrive until the session ends. That is not a
+#   limitation to work around — a backgrounded session goes **silent** the
+#   moment `getty` starts, because getty calls `revoke(2)` on the console and
+#   invalidates every descriptor anyone else holds to it (HANDOFF §2.47). It
+#   printed exactly one line and then nothing, three times, and looked like a
+#   crash every time.
+#
+#   A display (a Mac Pro). A person is watching the screen, and what they need
+#   is a console they can switch to WHILE the installer is up — which means rc
+#   has to finish, which means the session has to be in the background. Its own
+#   log then goes to a file rather than a terminal it cannot keep, and Alt-F2
+#   reaches a getty on another virtual terminal while the compositor holds its
+#   own.
+#
+# One machine cannot have both, and which one it wants is not a matter of taste.
 set -u
 user=abyss
 rundir="/var/run/abyss-$user"
@@ -477,10 +486,23 @@ run() {
   # job in a test is to come up, say what happened, and stop, so the harness
   # never has to guess whether it is finished or merely slow. Built with
   # `--stay` it stays, for a person at the console or a test driving one.
-  [ "$stay" = 1 ] || (sleep 2; /sbin/shutdown -p now) &
+  # Never power off a machine somebody is looking at.
+  [ "$stay" = 1 ] || [ "$haveDisplay" = 1 ] || (sleep 2; /sbin/shutdown -p now) &
 }
 
-run
+# The choice above, made from what the machine has.
+haveDisplay=0
+for card in /dev/dri/card*; do
+  [ -e "$card" ] && haveDisplay=1 && break
+done
+
+if [ "$haveDisplay" = 1 ]; then
+  echo "abyss-live: a display is present — the session goes to the background so"
+  echo "abyss-live: the virtual terminals come up; its log is /var/log/abyss-live.log"
+  run >> /var/log/abyss-live.log 2>&1 &
+else
+  run
+fi
 SESSION
 sudo chmod 755 "$stage/usr/local/libexec/abyss-live-session"
 

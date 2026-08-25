@@ -110,6 +110,16 @@ build VM has no `/dev/dri`, so the harness's 39 live modes are untouched — and
 on a Mac Pro the same medium asks for the display. It says which it chose, which
 on metal is the first line worth reading.
 
+**Where the session runs depends on whether anybody can see it**, and it is the
+same rule as the backend: ask the machine. With no display a harness is watching
+and the console is its only channel, so the session runs in rc's foreground and
+reports there. With a display a *person* is watching, and what they need is a
+console they can switch to **while** the installer is up — so the session goes to
+the background, rc finishes, the virtual terminals arrive, and its log goes to
+`/var/log/abyss-live.log` rather than a terminal `getty` is about to revoke
+(§2.47). One machine cannot have both, and which it wants is not a matter of
+taste.
+
 *What a VM can check, it checks:* the medium carries `amdgpu.ko`, carries the
 Pitcairn firmware (the D300), carries `seatd`, asks for `si_support`, loads the
 driver at boot, starts `seatd`, and picks headless where there is no display.
@@ -192,6 +202,9 @@ modes depend on hardware.**
 What is new is the half a script cannot do. The bring-up checklist, in the order
 the answers matter:
 
+0. **Write it.** `abyss/mk/live-image.sh --stay --frames 0` is the metal build:
+   it does not power itself off, and the installer stays up rather than running
+   out a frame budget meant for a test.
 1. **Does the stick boot?** Apple EFI, `\EFI\BOOT\BOOTX64.EFI`, the loader menu.
    *If not:* the medium's GPT/ESP layout, before anything about graphics.
 2. **Does it reach multi-user?** `Setting hostname: abyss-live` on the console.
