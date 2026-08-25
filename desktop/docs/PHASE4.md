@@ -5,7 +5,7 @@ in this loop. Read [PLAN.md](PLAN.md) for the locked decisions, [PHASE6.md](PHAS
 for the frame contract this has to meet on metal, and [PHASE5.md](PHASE5.md) for
 the installer that is how anything gets onto that machine at all.
 
-Last updated: 2026-08-24. **Scoped; P4.1 and P4.3 are done — there is a stick to
+Last updated: 2026-08-25. **Scoped; P4.1 and P4.3 are done — there is a stick to
 boot.** Three risks were spiked first: two retired, one *deliberately left open*
 because only the hardware can close it (§4).
 
@@ -202,9 +202,15 @@ modes depend on hardware.**
 What is new is the half a script cannot do. The bring-up checklist, in the order
 the answers matter:
 
-0. **Write it.** `abyss/mk/live-image.sh --stay --frames 0` is the metal build:
-   it does not power itself off, and the installer stays up rather than running
-   out a frame budget meant for a test.
+0. **Build it, then write it.** `abyss/mk/live-image.sh --stay --frames 0` is
+   the metal build: it does not power itself off, and the installer stays up
+   rather than running out a frame budget meant for a test. Then
+   `abyss/mk/write-stick.sh /dev/sdX` puts it on the stick — **the whole disk,
+   never a partition.** The image is a whole-disk GPT and UEFI reads the table
+   at LBA 1 of the *disk*; written to `/dev/sdX4` its ESP is buried inside a
+   filesystem no firmware will ever parse, and the machine silently boots what
+   it booted before — which reads as step 1 failing and is not. `--dry-run`
+   rehearses every check without root.
 1. **Does the stick boot?** Apple EFI, `\EFI\BOOT\BOOTX64.EFI`, the loader menu.
    *If not:* the medium's GPT/ESP layout, before anything about graphics.
 2. **Does it reach multi-user?** `Setting hostname: abyss-live` on the console.
