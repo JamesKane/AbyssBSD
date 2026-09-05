@@ -7,9 +7,15 @@ runs on machines nobody here owns. Read [PLAN.md](PLAN.md) for the locked decisi
 for the frame contract this has to meet on metal, and [PHASE5.md](PHASE5.md) for
 the installer that is how anything gets onto that machine at all.
 
-Last updated: 2026-08-25. **Scoped; P4.1 and P4.3 are done — there is a stick to
-boot.** Three risks were spiked first: two retired, one *deliberately left open*
-because only the hardware can close it (§4).
+Last updated: 2026-09-05. **Retargeted.** The bring-up machine is now an
+**Intel i7-12700KF with an AMD Radeon RX 6750 XT** (§1.1); the 2013 Mac Pro is
+demoted to a second row of the matrix and keeps every accommodation already
+written for it. P4.1 and P4.3 are done, and P4.0 got a medium onto the Mac Pro's
+firmware — work that survives the retarget because none of it was about the GPU.
+
+**The retarget retires this phase's largest risk by evidence rather than by
+argument**, and buys something the Mac Pro could never offer: a positive control
+(§1.2).
 
 ---
 
@@ -22,15 +28,77 @@ clock where a frame "presents" the instant it is committed.
 
 That was the right scope and it is now spent. The claim this phase has to make:
 
-> The Aqua desktop is interactive on a Mac Pro: a real display at its own refresh
-> rate, a real mouse and keyboard, and the frame contract holding against a
-> vblank we did not invent.
+> The Aqua desktop is interactive on real hardware: a real display at its own
+> refresh rate, a real mouse and keyboard, and the frame contract holding against
+> a vblank we did not invent.
 
 **And the way it gets there is the installer.** That is not a convenience — it is
-the delivery mechanism. To try anything on that machine, an image built by
-`abyss/mk/live-image.sh` has to boot on Apple's EFI, bind a GPU, and put the
+the delivery mechanism. To try anything on any machine, an image built by
+`abyss/mk/live-image.sh` has to boot its firmware, bind a GPU, and put the
 installer on the screen. Every pass below is therefore shaped by "can it be put
 on a USB stick and booted", not by "does it work in the VM".
+
+### 1.1 The machine, and why it changed
+
+The target was a Mac Pro 2013 because that is the machine this project was
+started for. It has been fighting: Apple's EFI would not list a medium whose ESP
+was legal everywhere else (P4.0), its PCIe bridges bury the installer under a
+power fault that never clears (P4.0), and the question its GPU asks —
+does `si_support` bind GCN 1.0? — has never been answered.
+
+The bring-up machine is now this, and it is the machine that runs the harness's
+own workloads:
+
+| | |
+|---|---|
+| Board | MSI MS-7D25 (LGA 1700), ordinary AMI UEFI |
+| CPU | Intel Core i7-12700KF — 20 threads, 5.00 GHz. **KF: no integrated graphics** |
+| GPU | **AMD Radeon RX 6750 XT** — Navi 22, RDNA 2, `amdgpu` codename `navy_flounder` |
+| Memory | 128 GiB |
+| Display | AOC AG271QG4, **2560x1440 @ 60 Hz**, 27" — ~109 DPI, so **scale 1** |
+| Network | `igc0` (Intel I225/I226 2.5 GbE), DHCP, working |
+| Storage | ZFS root, ~900 GB |
+| Today | **FreeBSD 15.0-RELEASE-p12, running MATE 1.28.2 on X11** |
+
+**What retires immediately, and by evidence:**
+
+- **`si_support` and GCN 1.0** — the biggest open risk in the project (§6.2).
+  Navi 22 is claimed by `amdgpu` with no tunable at all, and this machine is
+  rendering a desktop on FreeBSD 15.0 today. The risk does not get argued down;
+  it stops applying.
+- **Apple's EFI.** An ordinary UEFI reads an ordinary ESP. P4.0's FAT16 fix stays
+  because FAT16 is legal for a removable ESP everywhere and costs nothing.
+- **The dual GPU** (§6.3). One card, one display.
+- **Apple NVMe quirks and Thunderbolt 2** (P4.6). Gone, and replaced by hardware
+  FreeBSD already drives.
+- **Broadcom Wi-Fi** (PLAN risk 5) leaves this phase's critical path. `igc0` has
+  an address.
+
+**What is new, and is a cost:** this machine is *fast*. Twenty threads at 5 GHz
+means C2's eleven hostile clients are less hostile here than on a 2013 Xeon, and
+60 Hz is a 16.67 ms budget rather than a tighter one. **A contract measured only
+on the fast machine is a contract measured once.** The Mac Pro stays in the
+matrix precisely because it is the slow row.
+
+### 1.2 The retarget's real prize: a positive control
+
+The Mac Pro's failure mode was ambiguity. A black screen there could be Apple's
+EFI, the medium's layout, `si_support` refusing GCN 1.0, `drm-kmod` against the
+15.0 ABI, `undertow`'s DRM backend, or our own scene — six candidates and no way
+to separate them, which is why PHASE4 §5 had to be an ordered checklist in the
+first place.
+
+This machine **already draws a desktop on FreeBSD 15.0**. The GPU binds, the
+display modesets, libinput sees the keyboard and mouse, ZFS roots, and the
+network is up — all of it demonstrated by somebody else's window manager.
+
+> **So on this machine a black screen means us.** Every layer under our own is a
+> known-good control, which is §2.37's principle applied to hardware bring-up:
+> a probe with no positive control measures nothing, and until now this phase
+> had none.
+
+That is worth more than any single risk it retires, and it is the reason the
+retarget is an improvement rather than a retreat.
 
 ### What is genuinely different about this phase
 
@@ -50,13 +118,40 @@ admission that the phase was not scoped.
 | A compositor | `undertow`, headless only | the backend it runs on becomes a choice (P4.1) |
 | A frame contract and its meter | the metronome + flight recorder (P6.1) | a **real vblank** to measure against |
 | Input plumbing | `Seat`, driven by virtual devices (P6.4) | libinput, and devices that are physically there |
-| A way onto the machine | the live medium (P5.3) | `drm-kmod`, GPU firmware, and a session that is not headless |
-| Refusals that know the machine | `DiskInventory` (P5.1) | Apple NVMe, and disks that are not `vtbd0` |
+| A way onto the machine | the live medium (P5.3) | `drm-kmod`, **RDNA 2 + Southern Islands** firmware, and a session that is not headless |
+| Refusals that know the machine | `DiskInventory` (P5.1) | NVMe, and disks that are not `vtbd0` — on a box whose other disk is the reason it is useful (§6.6) |
 | A supervisor | `anchor` (P3.6, P8.4) | `rtprio` for the present thread |
 
 ---
 
 ## 3. Ordered passes
+
+**P4.0 — the medium reaches the machine. ✅ done, and its own caveat came true.**
+Two Apple-firmware findings, both measured on the target: the ESP had to be
+FAT16 with media descriptor 0xf8 before a Mac Pro would list the stick at all,
+and `hw.pci.enable_pcie_hp="0"` before the installer could be seen under a power
+fault the machine re-logs forever.
+
+That pass said in writing that the fix had been proven **on a stick reformatted
+in place**, and that `live-image.sh`'s own run of it was still unexercised. It
+was, and it was broken in two places at once — found the first time it ran, as
+part of the retarget:
+
+- **`makefs` parses `media_descriptor` in decimal only.** `0xf8` fails with
+  "Media descriptor \`f8': illegal number"; `248` builds and writes 0xf8. So the
+  medium had not been buildable at all since P4.0. **"makefs accepts the option
+  name" is not "makefs accepts the value"** — the earlier pass checked the
+  former and reported it as the latter.
+- **The assertion that would have caught it could not run, and died silently.**
+  `dd bs=1` on `/dev/mdNp1` is "Invalid argument" — a FreeBSD character device
+  does whole-sector transfers only — and because that `dd` sat inside a command
+  substitution in an assignment, `set -e` killed the script with no FAIL line and
+  no indication which check had gone. It now reads the boot sector once and
+  slices the file.
+
+The medium itself was right all along: FAT16, 0xf8, and `live-medium.sh` is
+green on it. **A test that cannot fail out loud is worth less than no test**, and
+this one managed to be an unrunnable check on an unbuildable artifact.
 
 **P4.1 — `undertow` chooses its backend. ✅ done.**
 `wlr_backend_autocreate` behind `--backend auto`: DRM/KMS on metal, a nested
@@ -84,10 +179,20 @@ acceleration. Nested gives most of that for free — the events come from the
 host's actual mouse and keyboard — which is why nested is worth having even
 though it can never answer C1.
 
-**P4.3 — the medium goes metal-ready. ✅ done.** The image now carries **45
-kernel modules** — `drm-66-kmod`'s six (amdgpu, radeonkms, i915kms, drm, ttm,
-dmabuf) and 39 Southern Islands firmware blobs — plus `seatd`, for 4.7 MB of
-packages.
+**P4.3 — the medium goes metal-ready. ✅ done, and retargeted.** The image
+carries `drm-66-kmod`'s six modules (amdgpu, radeonkms, i915kms, drm, ttm,
+dmabuf), `seatd`, and **two families of GPU firmware**: RDNA 2 for the primary
+target — `navy_flounder` (Navi 22, the RX 6750 XT) with `sienna_cichlid`,
+`dimgrey_cavefish` and `beige_goby` riding along for the rest of the RX 6000
+line, 12.4 MB — and the five Southern Islands blobs for the Mac Pro, 2.3 MB.
+
+**The Navi 22 → `navy_flounder` mapping was read, not remembered**: the firmware
+name came out of `amdgpu.ko`'s own strings (`amdgpu/navy_flounder_dmcub.bin`) and
+the package's file list, which is the same discipline that measured the
+`si_support` sysctl namespace rather than inferring it from the driver's message.
+`live-medium.sh` asserts on the blob being on the stick, because the failure it
+prevents — a machine that comes up with no display and no error worth reading —
+is indistinguishable from every other way this phase can fail.
 
 **Packages, not an `ldd` closure**, and the distinction is the point: nothing we
 build links a kernel module, so `ldd` will never mention one. P5.3's lesson was
@@ -128,29 +233,48 @@ driver at boot, starts `seatd`, and picks headless where there is no display.
 *What it cannot:* whether `si_support` binds a real FirePro. That is §5, step 3,
 and it is the question this whole pass exists to let somebody ask.
 
-**P4.4 — first light.** Boot the stick on the Mac Pro and work the checklist in
-§5. The interesting failures are all early: Apple's EFI is particular about what
-it will boot, and `amdgpu` binding GCN 1.0 is the biggest open risk in the
-project (§6.2). The output of this pass is *findings*, and the plan below it will
-be rewritten by them — which is the honest thing to say about a pass nobody has
-run yet.
+**P4.4 — first light.** Boot the stick on the 12700KF and work the checklist in
+§5. **The interesting failures have moved.** They used to be early — will the
+firmware boot this, will the GPU bind — and on this machine both of those are
+answered before we arrive (§1.1). What is left is steps 4 and 5: does
+`undertow --backend auto` find the output, and is the installer on the screen.
+Those are the two steps that are about *our* code, and they are now the only ones
+without a control underneath them.
+
+The output of this pass is still *findings*, and the plan below it will be
+rewritten by them — which is the honest thing to say about a pass nobody has run
+yet.
 
 **P4.5 — C1 against a real vblank.** Every number in PHASE6.md came off a
-synthetic clock. Re-measure on the Mac Pro: the metronome's EWMA prediction now
-has a hardware timestamp to learn from (`WLR_OUTPUT_PRESENT_HW_CLOCK`, which the
-code already distinguishes and which has never once been set in this project's
+synthetic clock. Re-measure here: the metronome's EWMA prediction finally has a
+hardware timestamp to learn from (`WLR_OUTPUT_PRESENT_HW_CLOCK`, which the code
+already distinguishes and which has never once been set in this project's
 history). Plus `allow.rtprio` for the present thread. **The C1–C5 numbers in
 PHASE6.md should be treated as provisional until this pass replaces them.**
 
-**P4.6 — the rest of the machine.** Apple NVMe quirks, Thunderbolt 2, audio (the
-volume status item has reported "no mixer" since P3.7 and would finally have
-one), and the network. Broadcom Wi-Fi is weak on FreeBSD and the answer is
-probably a USB Ethernet adapter — which is also why the installer was built
-offline-first (PHASE5 §6.2).
+**The budget is 16.67 ms**, because the panel is 2560x1440 at 60 Hz — and the
+scale is **1**, since 109 DPI is not HiDPI, so the toolkit's 2x path is *not*
+exercised by this machine and must not be assumed proven by it.
+
+**And a number measured only here is measured once (§1.1).** Twenty threads at
+5 GHz is a generous machine to hold a frame contract on; the contract's claim is
+that it holds on ordinary hardware. Either the Mac Pro or a deliberately
+constrained run (fewer cores pinned, C2's adversaries turned up) has to supply
+the second row, and P4.5 is not finished with one.
+
+**P4.6 — the rest of the machine.** Much smaller than it was. Apple NVMe quirks
+and Thunderbolt 2 are gone with the Mac Pro; `igc0` already has a DHCP address,
+so the network is a *positive* result to record rather than a problem to solve.
+What remains is **audio** — the volume status item has reported "no mixer" since
+P3.7 and would finally have a mixer to report — and whatever the checklist turns
+up.
+
+The installer stays offline-first regardless (PHASE5 §6.2). That was never really
+about Broadcom; it is about a medium that carries what it installs.
 
 ---
 
-## 4. The spikes — two retired, one left open on purpose
+## 4. The spikes — and what the retarget did to them
 
 ### 4.1 Can `undertow` run on anything but headless? — **Yes, and it already does.**
 
@@ -167,16 +291,32 @@ composite-p99-us=18
 A real output, a real mode, real buffers, and input from an actual mouse. That is
 the whole non-headless path exercised without a Mac Pro in the room.
 
-### 4.2 Is the FirePro D-series even packaged? — **The pieces are, on FreeBSD 15.**
+### 4.2 Is the GPU packaged? — **Both of them are, and the new one needs no knob.**
 
-`drm-61-kmod` and `drm-66-kmod` are built for the 15.0 kernel ABI (`1500068`),
-and **all five Southern Islands firmware packages exist**:
+*Originally:* `drm-61-kmod` and `drm-66-kmod` are built for the 15.0 kernel ABI
+(`1500068`), and all five Southern Islands firmware packages exist —
 `gpu-firmware-amd-kmod-{tahiti,pitcairn,verde,oland,hainan}`. The Mac Pro's D300
-is Pitcairn; the D500 and D700 are Tahiti.
+is Pitcairn; the D500 and D700 are Tahiti. That retired the version of the risk
+that would have ended the phase ("the firmware is not distributed for this OS at
+all") and left the real one open: does `si_support` actually bind GCN 1.0?
 
-This does not prove `si_support` binds — see §6.2 — but it retires the version of
-the risk that would have ended the phase, which was "the firmware is not
-distributed for this OS at all".
+*After the retarget,* re-run against the same repo:
+
+| | |
+|---|---|
+| The chip | RX 6750 XT = Navi 22 = RDNA 2 |
+| `amdgpu`'s name for it | **`navy_flounder`** — read out of `amdgpu.ko`'s strings (`amdgpu/navy_flounder_dmcub.bin`), not recalled |
+| The package | `gpu-firmware-amd-kmod-navy-flounder`, 3.0 MB, 12 firmware modules (ce, dmcub, me, mec, mec2, pfp, rlc, sdma, smc, sos, ta, vcn) |
+| The rest of the family | `sienna-cichlid` (Navi 21), `dimgrey-cavefish` (Navi 23), `beige-goby` (Navi 24) — 12.4 MB for all four |
+| A tunable to enable it | **None.** RDNA 2 is claimed by default; `si_support` exists because Southern Islands is *not* |
+
+**And the strongest evidence is not in the ports tree at all:** the machine is
+running FreeBSD 15.0-RELEASE-p12 with a MATE desktop on it right now. `amdgpu`
+binding this card is not a prediction.
+
+Southern Islands stays on the medium anyway. It is 2.3 MB, it is written and
+tested, and deleting a working row of the matrix to make a retarget look tidier
+would be throwing away the only thing P4.3 bought.
 
 ### 4.3 Does the frame contract hold on a real display? — **Unanswerable here, and the attempt was informative.**
 
@@ -213,20 +353,38 @@ the answers matter:
    filesystem no firmware will ever parse, and the machine silently boots what
    it booted before — which reads as step 1 failing and is not. `--dry-run`
    rehearses every check without root.
-1. **Does the stick boot?** Apple EFI, `\EFI\BOOT\BOOTX64.EFI`, the loader menu.
-   *If not:* the medium's GPT/ESP layout, before anything about graphics.
+1. **Does the stick boot?** UEFI boot menu, `\EFI\BOOT\BOOTX64.EFI`, the loader
+   menu. *If not:* the medium's GPT/ESP layout, before anything about graphics.
+   On the MSI board this is an ordinary AMI UEFI and P4.0's FAT16 ESP is
+   comfortably inside what it reads; on the Mac Pro it was the whole problem.
 2. **Does it reach multi-user?** `Setting hostname: abyss-live` on the console.
    *If not:* it is a driver or a root-mount problem and the screen is irrelevant.
 3. **Does `amdgpu` attach?** `kldstat`, `dmesg | grep -i amdgpu`, `/dev/dri/card0`.
-   *This is the risk.* If SI does not bind, §6.2's fallbacks are the next move.
+   **This step has a control now** — the machine's own FreeBSD install binds this
+   card daily, so a failure here is the *medium's* (a missing `navy_flounder`
+   blob, a `kld_list` that did not run) and not the driver's. On the Mac Pro this
+   was the step that could end the phase; here it is a step that can only find our
+   own packaging bug. §6.2 keeps the Southern Islands fallbacks for that row.
 4. **Does `undertow --backend auto` find an output?** Its own log names the
-   connector and the mode.
-5. **Is the installer on the screen?** Which is the phase's first real
-   deliverable, and the first time any of this has been *seen*.
+   connector and the mode; expect `2560x1440 @ 60Hz`, scale 1. **This is now the
+   first step without a control under it** — nothing else in the stack has ever
+   driven DRM for us.
+5. **Is the installer on the screen?** The phase's first real deliverable, and
+   the first time any of this has been *seen*.
 6. **Then, and only then, the numbers.** C1 with a hardware clock, under load,
-   with and without `rtprio`.
+   with and without `rtprio` — and see P4.5 on why one machine's numbers are not
+   the contract.
 
-Each step's failure is a different phase, which is why they are ordered.
+Each step's failure is a different phase, which is why they are ordered — and on
+this machine steps 1–3 are the ones somebody else's software has already passed,
+which is what §1.2 buys.
+
+**One hazard that is new and is not a code problem: this machine has a working
+FreeBSD 15.0 install on a ~900 GB ZFS pool, and the installer's job is to wipe a
+disk.** `DiskInventory` lists what it finds and the plan names its target
+explicitly, but nothing in the software knows that one of those disks is the
+reason the machine is useful. Install to a second disk, or accept losing the
+control that §1.2 is entirely built on.
 
 ---
 
@@ -246,18 +404,28 @@ is set for the first time in this project's life. The alternative — tuning unt
 the nested number looks good — would be optimising against a clock we do not own,
 which is the same error as §2.37's probe with no positive control.
 
-**6.2 `amdgpu` and GCN 1.0.** Unchanged as the biggest risk in the project, and
-now the *only* one that can end a phase. Southern Islands support in `amdgpu` is
-off by default and behind `si_support`; `radeonkms` is the older alternative and
-does not do atomic modesetting, which the present path wants. Fallbacks in order:
-`amdgpu` with `si_support=1`; `radeonkms`; and, if neither binds, the machine
-still installs and runs headless — the desktop just cannot be seen, which is a
-Phase 4 failure rather than a project one.
+**6.2 `amdgpu` and GCN 1.0 — no longer this phase's risk, and still the Mac
+Pro's.** It was the biggest risk in the project and the only one that could end a
+phase. **The retarget retires it for the primary target by evidence:** Navi 22
+needs no tunable and the machine renders a desktop on FreeBSD 15.0 today.
 
-**6.3 The dual GPU.** The Mac Pro has two FirePros and a display connected to
-one. wlroots' multi-GPU handling exists but is the least travelled path in it.
-Expect to pin the primary with `WLR_DRM_DEVICES` before expecting anything
-clever.
+It survives as a *matrix* question rather than a *phase* question. Southern
+Islands support in `amdgpu` is off by default and behind `si_support`;
+`radeonkms` is the older alternative and does not do atomic modesetting, which
+the present path wants. Fallbacks, in order, when the Mac Pro row is attempted:
+`amdgpu` with `si_support=1`; `radeonkms`; and if neither binds, that machine
+installs and runs headless — one empty cell in the matrix rather than a stalled
+project. **That reframing is the whole value of the retarget:** the same unanswered
+question now costs a row instead of a phase.
+
+**6.3 Multi-GPU — deferred with the Mac Pro, not solved.** The Mac Pro has two
+FirePros with a display on one, and wlroots' multi-GPU handling is the least
+travelled path in it; `WLR_DRM_DEVICES` pins a primary. The 12700KF is a **KF**,
+so it has no integrated graphics and exactly one GPU — which means **`undertow`
+will never have been run on a machine with two, and the first laptop with an
+Intel iGPU plus a discrete card will find that out.** Worth writing down as an
+untested path rather than a fixed one; `i915kms` stays on the medium for the row
+that will need it.
 
 **6.4 A person is in the loop, and people are slow.** Every pass from P4.4 on has
 a human boot cycle in it. The way to keep that cheap is to make the medium say as
@@ -267,3 +435,17 @@ of one.
 
 **6.5 There is still no login window** (PHASE5 §6.8), and on a real machine that
 somebody else uses, it starts to matter.
+
+**6.6 The control is destructible, and it is the phase's most valuable asset.**
+§1.2's whole argument rests on the target machine having a working FreeBSD
+install underneath our medium. Installing over it converts the positive control
+into another unknown, at exactly the moment the unknowns start. **Install to a
+second disk.** If that is not possible, take the boot environment story seriously
+early (Phase 17) or keep a second stick with the working system's loader — either
+way, decide it before the install, not after.
+
+**6.7 One machine's numbers are not a contract.** P4.5 will produce C1–C5 against
+a real vblank for the first time, on 20 threads at 5 GHz driving 60 Hz. That is a
+generous machine, and a contract that only holds there is not the contract this
+project claims. The second row is either the Mac Pro or a deliberately
+constrained run on this one; **either is fine and neither is optional.**

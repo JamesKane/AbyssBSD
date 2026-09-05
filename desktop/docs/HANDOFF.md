@@ -334,6 +334,8 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.46 | A GUI cannot be trusted to be right about itself — click it live, and let it publish its own geometry; `print` is buffered and invisible |
 | 2.47 | `getty` calls `revoke(2)` on the console — every other process's descriptor to it dies, silently |
 | 2.48 | A nested compositor's schedule is not its own — C1 there is measured against the host's clock; and the display's size beats your flags |
+| 2.49 | "The option was accepted" is not "the value was accepted" — `makefs` takes `media_descriptor` in decimal only, and a fix verified by hand never ran in the builder |
+| 2.50 | A check that dies inside `$( )` under `set -e` fails **silently** — and `dd bs=1` on a raw device is `Invalid argument` |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -600,6 +602,70 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.50 A check that dies inside a command substitution fails silently
+(Retarget to the RX 6750 XT — the first time `live-image.sh` ran its own ESP
+code, which P4.0 had said in writing it never had.)
+
+`live-medium.sh` asserts the ESP's shape by reading two fields out of the boot
+sector:
+
+```sh
+esp_type=$(sudo dd if="/dev/${md}p1" bs=1 skip=54 count=8 2>/dev/null)
+```
+
+Two things wrong, and the second hides the first.
+
+- **`dd bs=1` on a raw FreeBSD device is `Invalid argument`.** A character device
+  does whole-sector transfers only, so an unaligned single-byte read cannot work
+  no matter what is on the disk. Read the sector once into a file and slice
+  *that*.
+- **Under `set -eu`, a command substitution in an assignment takes the whole
+  script with it.** The `2>/dev/null` swallowed dd's complaint, `set -e` saw a
+  non-zero status, and the script exited **with no FAIL line and no last check
+  named** — the log simply stopped one `ok:` short of where the failure was. Ten
+  minutes went into "which assertion is missing" before "why is there no error".
+
+The rule: **a check that cannot fail out loud is worth less than no check**,
+because a silent exit reads as a suite that ran out of things to say. Where a
+test's own plumbing can fail, give it its own `|| fail` with a message naming the
+device, and never let a `$( )` be the thing that decides whether the script
+lives.
+
+### 2.49 "The option was accepted" is not "the value was accepted"
+(Same run. The medium had not been buildable for two weeks and nothing said so.)
+
+P4.0 fixed a real bug on real hardware: a Mac Pro would not list our stick until
+the ESP was FAT16 with media descriptor **0xf8** instead of makefs's FAT32 with
+0xf0, the *floppy* byte. It was verified by reformatting the stick **by hand**,
+and the pass said plainly that `live-image.sh`'s own run of the same thing was
+still to be exercised.
+
+It was exercised, and it failed on the first line:
+
+```
+makefs: Media descriptor `f8': illegal number
+```
+
+**`makefs(8)` parses `media_descriptor` in decimal only.** Measured across the
+spellings rather than guessed:
+
+| value | result |
+|---|---|
+| `0xf8`, `0xF8`, `f8`, `F8` | `illegal number` |
+| `0370` | read as **370**, "greater than 255" |
+| **`248`** | builds, and writes 0xf8 at offset 21 |
+
+What made it survivable for two weeks is the shape of the earlier claim.
+P4.0 checked that makefs **accepted the four option *names*** it was using, and
+reported that as evidence the invocation worked. Accepting a name is a check on
+the parser's vocabulary, not on its arithmetic — the same gap as §2.37's probe
+with no positive control, one level down: **the thing that was verified was
+adjacent to the thing that mattered.**
+
+The pairing is the lesson. This bug was unrunnable *and* undetected because the
+assertion written to catch it could not execute (§2.50). One bug hid the other,
+and both lived in the exact path a commit message had already pointed at.
 
 ### 2.48 A nested compositor's schedule is not its own
 (P4.1 — `undertow` on a backend that is not headless, for the first time.)

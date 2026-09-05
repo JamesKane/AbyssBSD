@@ -14,8 +14,11 @@ FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
 on every run of the harness, nested twice over, with no hardware and no human.
-**Phase 4 (Mac Pro) is the last phase that was on the original roadmap; it is
-scoped, P4.1 and P4.3 are done, and the stick now boots on the machine**
+**Phase 4 — first metal — is the last phase that was on the original roadmap; it
+is scoped, P4.1 and P4.3 are done, and the stick boots. Retargeted 2026-09-05
+from the Mac Pro to an i7-12700KF / RX 6750 XT that already runs FreeBSD 15.0
+(PHASE4 §1.1), which retires the project's biggest risk by evidence and buys a
+positive control**
 ([PHASE4.md](PHASE4.md)). **It is no longer the last phase:** [PRODUCT.md](PRODUCT.md)
 argued what a system needs beyond a desktop, and [PLAN.md](PLAN.md) now carries
 that as **Phases 9–18, ordered by dependency**. See [What's next](#whats-next).
@@ -434,7 +437,7 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 5–8 are complete.** Phase 4 — the Mac Pro — is in flight, and
+**Phases 0–3 and 5–8 are complete.** Phase 4 — first metal — is in flight, and
 is the first whose verification needs a machine no test can reach. **After it the
 roadmap continues to Phase 18** ([PLAN.md](PLAN.md) — the interaction substrate,
 the menu protocol, the theme system, `Fathom`, Islands/Shoals/Ebb, preferences
@@ -443,12 +446,36 @@ of it ordered so a phase never precedes what it needs. Everything below this box
 is the record of what got built, newest last.
 
 > **Phase 4 is scoped; P4.1 and P4.3 are done — there is a stick to boot**
-> ([PHASE4.md](PHASE4.md)). `undertow` chooses its backend, and the medium now
-> carries **45 kernel modules** (the drm stack and Southern Islands firmware),
-> `seatd`, and a `loader.conf` that asks `amdgpu` for `si_support`. The live
-> session picks its backend from what the machine has — `/dev/dri` present means
-> a display, absent means headless — so the harness is untouched and a Mac Pro
+> ([PHASE4.md](PHASE4.md)). `undertow` chooses its backend, and the medium
+> carries the drm stack, `seatd`, **two families of GPU firmware** — RDNA 2 for
+> the primary target and Southern Islands for the Mac Pro — and a `loader.conf`
+> that asks `amdgpu` for `si_support` on the row that needs it. The live session
+> picks its backend from what the machine has: `/dev/dri` present means a
+> display, absent means headless, so the harness is untouched and real hardware
 > gets asked for a screen.
+>
+> **Retargeted 2026-09-05.** Bring-up is an **i7-12700KF with an RX 6750 XT**
+> (Navi 22, RDNA 2 — `amdgpu` codename `navy_flounder`, read out of the module's
+> own strings rather than remembered). That machine runs **FreeBSD
+> 15.0-RELEASE-p12 with MATE on X11 today**, which does two things: it retires
+> `si_support`/GCN 1.0 — the biggest risk in the project — *by evidence rather
+> than argument*, and it gives the phase a **positive control**. Every layer
+> below ours is demonstrably working there, so a black screen means us
+> (PHASE4 §1.2). The Mac Pro keeps every accommodation P4.0 and P4.3 wrote and
+> becomes the matrix's second row: the same unanswered question now costs one row
+> instead of a phase. **Hazard worth naming: that machine's working install is
+> the control, and the installer wipes disks** (PHASE4 §6.6).
+>
+> **Rebuilding the medium for the retarget found two bugs in P4.0's own
+> unexercised path**, exactly where that pass said in writing to look.
+> `makefs` parses `media_descriptor` in **decimal only**, so `0xf8` failed and
+> **the medium had not been buildable since P4.0**; and the assertion that would
+> have caught it could not run — `dd bs=1` on a raw FreeBSD device is "Invalid
+> argument", and sitting inside a command substitution under `set -e` it killed
+> `live-medium.sh` **silently**, with no FAIL line and no clue which check died.
+> Both fixed; the ESP is FAT16 / 0xf8 and `live-medium.sh` is green.
+> **A test that cannot fail out loud is worth less than no test** — this one was
+> an unrunnable check on an unbuildable artifact.
 >
 > **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
 > each step's failure is a different problem. Write the image to a stick and work
@@ -468,10 +495,12 @@ is the record of what got built, newest last.
 > a Wayland session, so it cannot be exercised here. Nested *can* be, and was:
 > a real output, a real mode, and input from an actual mouse.
 >
-> **Phase 4 (Mac Pro bring-up) is still there and still independent.** It is the
+> **Phase 4 (first metal) is still there and still independent.** It is the
 > real hardware story — a real GPU, `rtprio`, the volume and battery status items
-> reading a real mixer instead of reporting absent — and carries the biggest
-> single risk left, `amdgpu` `si_support` for the FirePro D-series. It is also
+> reading a real mixer instead of reporting absent. Its biggest single risk used
+> to be `amdgpu` `si_support` for the FirePro D-series; after the retarget that
+> is a matrix cell, and what is left is that one fast machine's C1 numbers are
+> not a contract (PHASE4 §6.7). It is also
 > where Phase 6's C1 measurements should be repeated, because every number in
 > PHASE6.md came off a headless backend with a synthetic clock. **It owns the
 > metal half of Phase 5's verify**, too: installing onto that machine first
@@ -588,6 +617,10 @@ and all five Southern Islands firmware sets (the Mac Pro's D300 is Pitcairn, the
 D500/D700 Tahiti), plus `seatd` so an unprivileged session can take DRM master —
 4.7 MB of packages, named precisely rather than resolved as a closure, because
 **nothing we build links a kernel module and `ldd` will never mention one**.
+*(Superseded 2026-09-05: the medium now also carries the four RDNA 2 firmware
+sets — `navy_flounder`, `sienna_cichlid`, `dimgrey_cavefish`, `beige_goby`, 12.4
+MB — for the retargeted primary machine. The reasoning above is unchanged and is
+why adding a second family cost one line.)*
 
 The `si_support` knob was *measured*: `amdgpu` prints the fix in Linux's spelling
 and FreeBSD mangles module parameters into a sysctl namespace, so the module was

@@ -43,8 +43,11 @@ An opinion is a rejection, so each is stated with what it rules out.
    handbook", `rc.conf` as a user interface, and a hardware story that is one
    machine.
 
-Thesis 5 is in tension with the roadmap: **Phase 4 is scoped as "the Mac Pro",
-and thesis 5 says the deliverable is a hardware *matrix*.** See §9.
+Thesis 5 was in tension with the roadmap: **Phase 4 was scoped as "the Mac Pro",
+and thesis 5 says the deliverable is a hardware *matrix*.** Partly resolved on
+2026-09-05 — bring-up retargeted to an i7-12700KF / RX 6750 XT and the Mac Pro
+became the matrix's second row (PHASE4 §1.1), which is the shape thesis 5 asked
+for. See §9.
 
 ---
 
@@ -173,9 +176,14 @@ Missing:
   processes; it does not confine them. Needs jail lifecycle, a filesystem story
   (a private ZFS dataset per agent is cheap — we already install ZFS), and
   `vnet` if the agent gets network.
-- **Where the model runs.** **GCN 1.0 on FreeBSD means no local GPU inference** —
-  no ROCm, no CUDA. So a small CPU model or a remote API; a remote API needs the
-  network pane and a credential store we do not have.
+- **Where the model runs.** **No local GPU inference on FreeBSD** — no ROCm, no
+  CUDA. Worth being precise about why, because the reason changed: it used to be
+  the *hardware* (GCN 1.0 could not run it anyway), and since the retarget it is
+  purely the *operating system* — an RX 6750 XT is RDNA 2 and would run local
+  inference happily on Linux. The blocker is now something FreeBSD could
+  plausibly gain, which makes it worth re-checking rather than assuming. Until
+  then: a small CPU model or a remote API, and a remote API needs the network
+  pane and a credential store we do not have.
 - **The grant UI.** The portal refuses; it has no human in the loop. "This agent
   wants to read `~/Documents/foo.txt`" — Allow / Deny / Always, a revocable list,
   an audit log. A Preferences pane and a sheet: thesis 2 applies to thesis 4.
@@ -191,8 +199,8 @@ The widest gap, and the least code-shaped.
 
 | | Have | Gap |
 |---|---|---|
-| Machines that boot it | **zero** | PHASE4 §5 has never run past step 1. §6.4 turns that checklist into something the medium runs by itself |
-| GPUs | `amdgpu` + Southern Islands firmware + `i915kms` on the medium; **`si_support` unproven** | Intel and AMD are plausible from what the medium carries; NVIDIA is a separate decision. **A hardware support matrix is a deliverable, not a side effect** — and §6.4 is how it gets populated by people who are not us |
+| Machines that boot it | **zero installed.** The medium boots on the Mac Pro (P4.0), and the retarget machine already runs FreeBSD 15.0 with somebody else's desktop | PHASE4 §5 has never run past step 2. §6.4 turns that checklist into something the medium runs by itself |
+| GPUs | `amdgpu` + **RDNA 2 and Southern Islands** firmware + `i915kms` on the medium. **RDNA 2 is proven** — the bring-up machine runs FreeBSD 15.0 on an RX 6750 XT today; `si_support` for GCN 1.0 is still unproven and is now one matrix cell rather than a gate | Intel and AMD are plausible from what the medium carries; NVIDIA is a separate decision. **A hardware support matrix is a deliverable, not a side effect** — and §6.4 is how it gets populated by people who are not us |
 | Wifi | **nothing** | FreeBSD's weak spot and thesis 5's hardest promise. `iwlwifi` covers modern Intel; Broadcom is risk 5 |
 | Suspend / lid / power | **nothing** | A laptop that does not sleep is not a desktop that just works |
 | Login | **nothing** — `LoginWindow` was named in PLAN.md, never built | Login window, multi-user sessions, `anchor` per user |
@@ -751,10 +759,16 @@ column as everything else here; runner-up was *Hadal*.
 ## 9. What this does to the roadmap
 
 **Phase 4 stops being the last phase.** Under thesis 5 it is the *first hardware
-bring-up*, and its deliverable grows a second half: not only "the Mac Pro works"
-but "here is the probe and the matrix that says what else does". The next action
-is unchanged — the stick still needs booting, and PHASE4 §5 step 3 still decides
-whether `si_support` binds — but "done" means something different.
+bring-up*, and its deliverable grows a second half: not only "one machine works"
+but "here is the probe and the matrix that says what else does".
+
+**That argument was taken literally on 2026-09-05.** Bring-up moved off the Mac
+Pro onto an i7-12700KF / RX 6750 XT that already runs FreeBSD 15.0, and the Mac
+Pro became the matrix's second row rather than the phase's gate (PHASE4 §1.1).
+The unanswered `si_support` question did not get answered — it stopped being able
+to stall the project, which is what a matrix is *for*. The retarget also bought a
+**positive control**: on a machine where every layer below ours demonstrably
+works, a black screen means us (PHASE4 §1.2).
 
 **Everything in this document is now on [PLAN.md](PLAN.md) as Phases 9–18,
 ordered by dependency**, and that document is the roadmap — this section says

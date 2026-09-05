@@ -93,7 +93,7 @@ echo "ok: $closure shared objects carried, computed from the binaries that need 
 mods=$(sed -n 's/^ *[0-9]* package(s), \([0-9]*\) kernel modules.*/\1/p' "$work/build")
 [ -n "$mods" ] && [ "$mods" -gt 20 ] \
   || { grep -i warning "$work/build" | sed 's/^/    /'
-       fail "the medium carries $mods kernel modules; it needs the drm stack and SI firmware"; }
+       fail "the medium carries $mods kernel modules; it needs the drm stack and the GPU firmware"; }
 echo "ok: $mods kernel modules carried — the driver and the firmware for it"
 
 # ------------------------------------------------------------------- 2. boot
@@ -179,17 +179,30 @@ md=$(sudo mdconfig -a -t vnode -f "$img")
 mkdir -p "$work/mnt"
 sudo mount "/dev/${md}p3" "$work/mnt"
 
-# The one knob that decides whether a Mac Pro shows a picture, and the one thing
-# about it a VM can check: that it is written down. Southern Islands is off by
-# default in amdgpu — without this the FirePros are not claimed at all, which
-# looks like a missing driver and is a default (PHASE4 §6.2).
+# **The primary target's firmware, which is the whole point of the medium
+# carrying packages rather than an ldd closure.** The RX 6750 XT is Navi 22, and
+# amdgpu asks for it by the codename `navy_flounder` — a name this test asserts
+# on because getting it wrong produces a machine that comes up with no display
+# and no error worth reading. A VM with no AMD GPU cannot bind it; it can prove
+# the blob is on the stick.
+sudo test -s "$work/mnt/boot/modules/amdgpu_navy_flounder_pfp_bin.ko" \
+  || fail "the medium has no navy_flounder firmware — that is the RX 6750 XT (Navi 22)"
+sudo test -s "$work/mnt/boot/modules/amdgpu_sienna_cichlid_pfp_bin.ko" \
+  || fail "the medium has no sienna_cichlid firmware — the rest of the RX 6000 line rides along"
+
+# The knob that decides whether the *secondary* target shows a picture, and the
+# one thing about it a VM can check: that it is written down. Southern Islands
+# is off by default in amdgpu — without this the Mac Pro's FirePros are not
+# claimed at all, which looks like a missing driver and is a default
+# (PHASE4 §6.2). RDNA 2 needs none of it.
 sudo grep -q 'amdgpu_si_support="1"' "$work/mnt/boot/loader.conf" \
   || fail "the medium does not ask amdgpu for Southern Islands — the Mac Pro's GPUs"
 
 # The other Mac Pro knob a VM can only check is written down. Its PCIe bridges
 # report a power fault that never clears, and pcib(4) re-logs it in a loop until
 # the installer is buried; it is a loader tunable, so the medium is the only
-# place it can be set in time.
+# place it can be set in time. Inert on every other machine — and Phase 12 is
+# where it stops being unconditional.
 sudo grep -q 'hw.pci.enable_pcie_hp="0"' "$work/mnt/boot/loader.conf" \
   || fail "the medium leaves PCIe HotPlug on — a Mac Pro scrolls Power Fault Detected over the installer"
 sudo test -s "$work/mnt/boot/modules/amdgpu.ko" \
@@ -197,7 +210,7 @@ sudo test -s "$work/mnt/boot/modules/amdgpu.ko" \
 sudo test -s "$work/mnt/boot/modules/amdgpu_pitcairn_pfp_bin.ko" \
   || fail "the medium has no Pitcairn firmware — that is the FirePro D300"
 sudo test -s "$work/mnt/usr/local/bin/seatd" || fail "the medium has no seatd"
-echo "ok: amdgpu, Southern Islands firmware, seatd, and si_support asked for"
+echo "ok: amdgpu, RDNA 2 + Southern Islands firmware, seatd, and si_support asked for"
 
 # **The ESP's own geometry, because Apple's firmware reads it and bhyve's does
 # not care.** A 40 MB FAT32 needs 512-byte clusters to reach FAT32's minimum
@@ -207,8 +220,17 @@ echo "ok: amdgpu, Southern Islands firmware, seatd, and si_support asked for"
 # fields out of the boot sector directly: the FAT16 filesystem-type string at
 # offset 54, and the media descriptor at offset 21. Read from the raw ESP
 # because it is checking the filesystem, not anything inside it.
-esp_type=$(sudo dd if="/dev/${md}p1" bs=1 skip=54 count=8 2>/dev/null)
-esp_media=$(sudo dd if="/dev/${md}p1" bs=1 skip=21 count=1 2>/dev/null \
+#
+# **Read the whole sector, then slice the file.** `dd bs=1` straight off
+# `/dev/mdNp1` fails with "Invalid argument" — a FreeBSD character device only
+# does whole-sector transfers — and because that dd sits inside a command
+# substitution in an assignment, `set -e` killed this script *silently*, with no
+# FAIL line and no clue which check died. Both bugs were in the path P4.0 said in
+# writing it had not exercised, and both showed up the first time it ran.
+sudo dd if="/dev/${md}p1" bs=512 count=1 of="$work/esp-boot.bin" 2>/dev/null \
+  || fail "could not read the ESP's boot sector from /dev/${md}p1"
+esp_type=$(dd if="$work/esp-boot.bin" bs=1 skip=54 count=8 2>/dev/null)
+esp_media=$(dd if="$work/esp-boot.bin" bs=1 skip=21 count=1 2>/dev/null \
             | od -An -tx1 | tr -d ' \n')
 case "$esp_type" in
   FAT16*) ;;

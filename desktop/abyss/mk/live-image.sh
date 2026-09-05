@@ -83,16 +83,30 @@ BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus
 #
 #   drm-66-kmod   what `drm-kmod` resolves to on FreeBSD 15. 3.7 MB, six
 #                 modules: amdgpu, radeonkms, i915kms, drm, ttm, dmabuf.
-#   gpu-firmware  Southern Islands, which is what the Mac Pro's FirePros are —
-#                 the D300 is Pitcairn, the D500 and D700 are Tahiti. The other
-#                 three SI chips ride along at ~190 KB each; a medium that
-#                 refuses to start on a slightly different card for want of a
-#                 megabyte is a poor trade.
+#   gpu-firmware  Two families, because we bring up on two machines (PHASE4 §1).
+#
+#                 **RDNA 2 — the primary target.** The RX 6750 XT is Navi 22,
+#                 which amdgpu calls `navy_flounder`; the mapping was read out
+#                 of `amdgpu.ko`'s own strings, not remembered. Its three
+#                 siblings ride along because they are the rest of the RX 6000
+#                 line and the whole family is 12.4 MB: sienna_cichlid (Navi 21,
+#                 6800/6900), dimgrey_cavefish (Navi 23, 6600/6650), beige_goby
+#                 (Navi 24, 6400/6500). A medium that refuses to start on the
+#                 card next to the one we own is a medium that cannot populate a
+#                 hardware matrix.
+#
+#                 **Southern Islands — the secondary target**, and 2.3 MB. The
+#                 Mac Pro's FirePros are SI: the D300 is Pitcairn, the D500 and
+#                 D700 are Tahiti. Kept, not deleted, because it is written,
+#                 tested and cheap, and because the matrix is the deliverable.
+#
 #   seatd         37 KB, and the reason the session can take DRM master without
 #                 being root. The desktop runs as an unprivileged user on
 #                 purpose (PHASE5 §4.4); libseat is already in our closure, but
 #                 the daemon it talks to is not.
 GPU_PKGS="drm-66-kmod seatd
+          gpu-firmware-amd-kmod-navy-flounder gpu-firmware-amd-kmod-sienna-cichlid
+          gpu-firmware-amd-kmod-dimgrey-cavefish gpu-firmware-amd-kmod-beige-goby
           gpu-firmware-amd-kmod-tahiti gpu-firmware-amd-kmod-pitcairn
           gpu-firmware-amd-kmod-verde gpu-firmware-amd-kmod-oland
           gpu-firmware-amd-kmod-hainan"
@@ -343,22 +357,30 @@ console="comconsole,vidconsole"
 # class can consume the disk and leave no /dev/ufs or /dev/gpt provider at all.
 kern.geom.label.disk_ident.enable="0"
 
-# **The Mac Pro scrolls "pcib26: Power Fault Detected" forever without this,
-# and nothing else on the screen survives.** The 2013 Mac Pro's internal PCIe
-# bridges report a power-fault bit that never clears, so pcib(4) re-logs it in a
-# loop and the installer is buried under it. It is a loader tunable — there is
-# no sysctl to undo it once the machine is up — so it has to be here, on the
-# medium, before anyone can see anything. Measured on the target machine: the
-# message is what a MacPro6,1 does, not what AbyssBSD does.
+# **A Mac Pro accommodation, carried unconditionally because the medium cannot
+# yet ask what machine it is on.** The 2013 Mac Pro's internal PCIe bridges
+# report a power-fault bit that never clears, so pcib(4) re-logs "pcib26: Power
+# Fault Detected" in a loop and the installer is buried under it. It is a loader
+# tunable — no sysctl undoes it once the machine is up — so it has to be here,
+# before anyone can see anything. Measured on that machine: the message is what
+# a MacPro6,1 does, not what AbyssBSD does. On the RDNA 2 target and on any
+# ordinary desktop it changes nothing, because nobody hot-plugs a PCIe bridge on
+# a machine like that. **Where it stops being unconditional is Phase 12**:
+# `Fathom` probes machine identity, and this is the first tunable that should be
+# gated on the answer rather than shipped to everyone.
 hw.pci.enable_pcie_hp="0"
 
-# **Southern Islands is off by default in amdgpu, and the Mac Pro is Southern
-# Islands.** Without this the FirePros are simply not claimed and the machine
-# comes up with no display — which looks like a missing driver and is a default.
-# `amdgpu` prints the fix itself ("Use radeon.si_support=0 amdgpu.si_support=1
-# to override") in Linux's names; FreeBSD's linuxkpi registers BOTH of the
-# spellings below, which was measured by loading the module and reading
-# `sysctl -aN`, not guessed from the message.
+# **Southern Islands is off by default in amdgpu, and the secondary target is
+# Southern Islands.** Without this the Mac Pro's FirePros are simply not claimed
+# and the machine comes up with no display — which looks like a missing driver
+# and is a default. `amdgpu` prints the fix itself ("Use radeon.si_support=0
+# amdgpu.si_support=1 to override") in Linux's names; FreeBSD's linuxkpi
+# registers BOTH of the spellings below, which was measured by loading the
+# module and reading `sysctl -aN`, not guessed from the message.
+#
+# **RDNA 2 needs none of this** — Navi 22 is claimed by default, which is the
+# single biggest reason the primary target moved. These four lines are inert on
+# it, and are the cost of keeping the Mac Pro in the matrix.
 compat.linuxkpi.amdgpu_si_support="1"
 hw.amdgpu.si_support="1"
 # ...and radeonkms must not claim them first. It is not in `kld_list`, so this
@@ -592,8 +614,21 @@ sudo cp "$stage/boot/loader.efi" "$espdir/EFI/BOOT/BOOTX64.efi"
 # `sectors_per_cluster` is pinned rather than left to makefs: 40 MB in 2 KB
 # clusters is 20,480 of them, comfortably inside FAT16's 65,524 ceiling, where a
 # default that came out at 1 sector would put it 16,000 over and fail the build.
+#
+# **`media_descriptor` is 248 and not `0xf8`, and that is measured.** makefs(8)
+# on FreeBSD 15.0 parses this option in **decimal only**: `0xf8` fails with
+# "Media descriptor `f8': illegal number" (it eats the prefix and chokes on the
+# digits), and `0370` is read as three hundred and seventy. Only `248` builds,
+# and the boot sector it writes carries 0xf8 at offset 21 — which is what the
+# assertion downstream reads.
+#
+# This is P4.0's own caveat coming true: that pass fixed the Mac Pro by
+# reformatting a stick **in place** and said in writing that `live-image.sh`'s
+# run of the same thing was still unexercised. It was, and it was broken — the
+# medium has not been buildable since. **"makefs accepts the option name" is not
+# "makefs accepts the value"**, which is §2.37 wearing yet another hat.
 sudo makefs -t msdos \
-            -o fat_type=16,media_descriptor=0xf8,OEM_string=MSWIN4.1 \
+            -o fat_type=16,media_descriptor=248,OEM_string=MSWIN4.1 \
             -o sectors_per_cluster=4,volume_label=EFISYS \
             -s 40m "$esp" "$espdir" > /dev/null
 sudo makefs -t ffs -o label=ABYSSLIVE -o version=2 -b 10% -f 10% \

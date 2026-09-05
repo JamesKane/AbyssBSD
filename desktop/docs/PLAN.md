@@ -5,7 +5,9 @@
 We are starting **AbyssBSD**, a FreeBSD `releng/15.0` fork whose headline feature is a
 **new desktop environment written in Swift 6**, styled as a faithful clone of
 **Mac OS X 10.2 "Jaguar" Aqua**, running on **Wayland**, with a Fedora/Anaconda-style
-graphical installer, targeting the **Mac Pro 2013 (MacPro6,1)** and newer.
+graphical installer. The bring-up target was the **Mac Pro 2013 (MacPro6,1)**;
+since 2026-09-05 it is an **Intel i7-12700KF with an AMD Radeon RX 6750 XT**
+(PHASE4 §1.1), with the Mac Pro kept as the matrix's second row.
 
 This supersedes the sibling project at `/home/jkane/Projects/OS/AbyssBSD` (Rust DE),
 which is being **abandoned as the product** but is an invaluable source of design and
@@ -37,9 +39,16 @@ running that desktop — all of it proven by `abyss/tests/run.sh --vm --live` on
 both platforms, with no hardware and no human in the loop. The medium now boots
 on the Mac Pro itself: its ESP is FAT16 because Apple's firmware would not read
 the FAT32 one, and `hw.pci.enable_pcie_hp="0"` stops the machine burying its own
-installer under a power-fault it re-logs forever. What [PHASE4 §5](PHASE4.md)
-step 3 asks — whether `si_support` binds a FirePro — is still open, and is still
-the biggest risk in the project.
+installer under a power-fault it re-logs forever.
+
+**And then the target moved** (PHASE4 §1.1). Bring-up is now an i7-12700KF with
+an RX 6750 XT — a machine already running FreeBSD 15.0-RELEASE-p12 with a MATE
+desktop on it. That **retires the project's biggest risk by evidence rather than
+argument**: Navi 22 needs no `si_support`, and `amdgpu` binding this card is not
+a prediction. It also buys what the Mac Pro could never offer — **a positive
+control**, since every layer below ours is demonstrably working, so a black
+screen there means us (PHASE4 §1.2). The Mac Pro keeps its accommodations and
+becomes a row of the matrix instead of the gate on a phase.
 
 **And Phase 4 is no longer the last phase.** [PRODUCT.md](PRODUCT.md) is why:
 this tree is engine and shell, its application layer is two programs, and the
@@ -190,7 +199,7 @@ table below.
 | 6 | `undertow`, the Swift compositor | 2 | 4, 5, 8, 9, 13, 16 | ✅ |
 | 8 | The D-Bus bridge — portals for everyone else | 6, 7 | 10's foreign half, 15 | ✅ |
 | 5 | The installer — a machine with an empty disk | 6, 8 | 4, 12, 17 | ✅ |
-| 4 | The Mac Pro — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** |
+| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** |
 | 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | **next** |
 | 10 | The menu protocol | 3, 8; *before* 15 | 15, and thesis 2 at all | |
 | 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | |
@@ -501,7 +510,7 @@ with a working GPU.
 
 ---
 
-## Phase 4 — Mac Pro 2013 (MacPro6,1) hardware bringup
+## Phase 4 — first metal: real graphics, real input, real numbers
 
 **Needs:** 5 — the installer is not a convenience here, it is the delivery mechanism. **Unblocks:** 12, Phase 13's C6, and Phase 16's power work.
 
@@ -527,16 +536,22 @@ Two corrections to the sketch below already:
   `WLR_OUTPUT_PRESENT_HW_CLOCK` has never once been set in this project's
   history. P4.5 re-measures them where the vblank is real.
 
-- **Boot:** FreeBSD 15 UEFI on Apple EFI (Mac Pro 6,1 quirks); ZFS-on-root.
-- **GPU:** dual **AMD FirePro D300/D500/D700** = GCN 1.0 / Southern Islands → `drm-kmod`
-  **amdgpu with `si_support`** (or `radeonkms`); validate KMS, then the GPU phase:
-  DRM/KMS via `seatd`, hardware cursor, atomic page-flip, real vblank, dmabuf +
-  explicit-sync, direct scanout, dual-GPU handling. **`allow.rtprio`** custom-kernel jail
-  param (already built in the sibling) grants the present thread bounded RT.
-- **Peripherals:** Apple NVMe quirks, Thunderbolt 2, audio; Broadcom Wi-Fi is weak on
-  FreeBSD — plan Ethernet/USB-NIC fallback.
+- **Boot:** FreeBSD 15 UEFI, ZFS-on-root. Ordinary AMI UEFI on the primary
+  target; Apple EFI's quirks are P4.0's and stay written down for the Mac Pro row.
+- **GPU (primary):** **AMD Radeon RX 6750 XT** — Navi 22, RDNA 2, claimed by
+  `amdgpu` with **no tunable at all**. Then the GPU phase proper: DRM/KMS via
+  `seatd`, hardware cursor, atomic page-flip, real vblank, dmabuf +
+  explicit-sync, direct scanout. **`allow.rtprio`** custom-kernel jail param
+  (already built in the sibling) grants the present thread bounded RT.
+- **GPU (secondary):** dual **AMD FirePro D300/D500/D700** = GCN 1.0 / Southern
+  Islands → `amdgpu` with **`si_support`** (or `radeonkms`), and multi-GPU
+  handling. Unproven, and now a matrix cell rather than a blocker (PHASE4 §6.2).
+- **Peripherals:** audio, and `igc0` — Intel 2.5 GbE that already has a DHCP
+  address. Apple NVMe and Thunderbolt 2 leave with the Mac Pro; Broadcom Wi-Fi
+  leaves this phase's critical path with it.
 
-**Verify:** the compositor drives a real display at refresh rate on the Mac Pro; the
+**Verify:** the compositor drives a real display at its own refresh rate — 2560x1440
+at 60 Hz, so a 16.67 ms budget and scale 1; the
 flight recorder shows zero missed flips under load; the Aqua desktop is interactive on
 metal. **Note what does not count:** a nested compositor presents when its *host*
 does, so a miss count measured there is measured against somebody else's clock
@@ -1006,13 +1021,22 @@ the audit log showing what it was granted; and a revocation that takes effect.
    cost of one `Package.swift` change. See docs/SWIFT-ON-FREEBSD.md. The residual
    risk is ordinary: a ports toolchain can go stale, and the cross-SDK route
    stays documented as the fallback.
-2. **Mac Pro GCN 1.0 GPU** — `amdgpu si_support` maturity for FirePro D-series; dual-GPU.
-   **Narrowed 2026-08-24 (PHASE4 §4.2):** the version of this risk that would have
-   ended the phase is retired — `drm-{61,66}-kmod` are built for the FreeBSD 15
-   kernel ABI and **all five Southern Islands firmware packages are in ports**
-   (`tahiti`, `pitcairn`, `verde`, `oland`, `hainan`; the D300 is Pitcairn, the
-   D500/D700 are Tahiti). What remains is whether `si_support` actually binds,
-   which only the machine can answer.
+2. ~~**Mac Pro GCN 1.0 GPU**~~ — **DOWNGRADED 2026-09-05 by retarget, not by
+   argument.** It was the biggest risk in the project and the only one that could
+   end a phase. Bring-up moved to an RX 6750 XT (Navi 22, RDNA 2), which `amdgpu`
+   claims with no tunable — on a machine already running FreeBSD 15.0 with a
+   desktop on it, so this is evidence rather than a prediction (PHASE4 §4.2).
+   **What survives is a matrix cell, not a gate:** whether `si_support` binds GCN
+   1.0 is still unanswered, still only answerable by the Mac Pro, and now costs
+   one empty row instead of a stalled project. `drm-{61,66}-kmod` are built for
+   the FreeBSD 15 kernel ABI and all five Southern Islands firmware packages are
+   in ports, so the medium still carries them.
+
+   **The replacement risk is smaller and real: one machine's numbers are not a
+   contract.** 20 threads at 5 GHz driving 60 Hz is a generous place to hold C1,
+   and a second, slower row is required before P4.5's numbers replace PHASE6's
+   (PHASE4 §6.7). Multi-GPU also goes untested — the 12700K**F** has no iGPU, so
+   `undertow` will never have run on a machine with two (PHASE4 §6.3).
 3. **Aqua fidelity in software rendering** — gloss/blur/pinstripe at HiDPI via Cairo.
 4. **Swift ARC vs. the latency contract** — **downgraded 2026-08-02 by
    measurement** (PHASE6.md §4.2), not closed. A structure-of-arrays loop body
@@ -1026,9 +1050,12 @@ the audit log showing what it was granted; and a revocation that takes effect.
    loop: the real present path also touches wlroots and the triple buffer, and
    ARC hides in innocuous captures. Hence an in-tree allocation counter that
    runs as a **test** every build, with `tide`'s C1–C5 benches as the gate.
-5. **Broadcom Wi-Fi** on FreeBSD — likely wired/USB fallback on the Mac Pro. It
+5. **Broadcom Wi-Fi** on FreeBSD — **off Phase 4's critical path since the
+   retarget**, because the new target has working Intel 2.5 GbE (`igc0`). It
    stops being a Phase 4 footnote and becomes thesis 5's hardest promise at
-   Phase 14, where a Network pane has to have something to configure.
+   Phase 14, where a Network pane has to have something to configure — and at
+   Phase 12, where `Fathom` has to report honestly on a machine whose wifi is
+   not recognised.
 6. **A stale browser engine** — Phase 15's default, and the first real test of
    §6.3's "overlay, not a fork" discipline. Verified against the build VM's own
    FreeBSD 15.0 repo: `gtk4` is 4.20.4 and `mesa-dri` 26.1.3, but `webkit2-gtk_*`
