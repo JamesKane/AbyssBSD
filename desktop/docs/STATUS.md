@@ -498,6 +498,18 @@ is the record of what got built, newest last.
 > stick, which is the half that was wrong, but a renderer cannot be *created*
 > without a render node the VM does not have. Only the machine can close it.
 >
+> **Steps 1–5 pass on the 12700KF** (2026-09-05): the stick boots, `amdgpu` binds
+> the RX 6750 XT at 2560x1440, and **the Aqua installer is on screen**. P4.5's
+> first C1 against a real vblank says **58 of 300 frames missed while compositing
+> in 12us** — we do not hold the frame contract on hardware, and PHASE6's numbers
+> are now known not to transfer (PHASE4 §5.7). `docs/reports/` has the matrix's
+> first row, retrieved off the stick's ESP exactly as designed.
+>
+> **The loop no longer needs a camera** (§5.8): `live-image.sh --ssh-key PUBKEY`
+> bakes a key in and starts sshd, and `abyss/mk/metal.sh report|log|fetch|ssh`
+> drives the machine from here. **Opt-in only** — root on the medium has an empty
+> password, so a default build runs no sshd and `live-medium.sh` asserts it.
+>
 > **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
 > each step's failure is a different problem. Write the image to a stick and work
 > down it — **steps 0–6 only.**

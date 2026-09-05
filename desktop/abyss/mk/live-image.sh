@@ -12,7 +12,11 @@
 #
 #   usage: abyss/mk/live-image.sh [--out PATH] [--dist DIR] [--stage DIR]
 #                                 [--build-dir DIR] [--size N] [--keep]
-#                                 [--stay] [--frames N]
+#                                 [--stay] [--frames N] [--ssh-key PUBKEY]
+#
+# `--ssh-key` bakes a public key in and starts sshd, so a bring-up machine can be
+# driven from the dev box instead of photographed. **Developer builds only** —
+# see the comment on `sshkey` below for why that is not a preference.
 #
 # FreeBSD only, and it says so: `makefs`, `mkimg` and the runtime closure have no analogue
 # on the dev box, and an image built anywhere else would be a different image.
@@ -36,6 +40,18 @@ frames=1800
 # that goes quiet tells you nothing about where. `ABYSS_LIVE_TRACE=1` when
 # building turns it on (HANDOFF §2.47 is what it found).
 trace=${ABYSS_LIVE_TRACE:-}
+# **A public key to bake in, which turns the medium into something you can talk
+# to instead of photograph.** Off unless asked for, and §6.4's cost is why it
+# exists: every pass from P4.4 on has a human boot cycle in it, and the loop has
+# been build → write a stick → boot → photograph the screen → type what it said
+# back in. Three of the last four findings were read off a phone camera.
+#
+# **It is opt-in because root on this medium has an empty password** (line
+# ~600), which is right for a live installer whose console *is* the machine and
+# catastrophic the moment that machine is on a network. So a medium with sshd on
+# it is a thing a developer builds for themselves, never the artifact anybody
+# else is handed, and the key is the one belonging to whoever built it.
+sshkey=${ABYSS_LIVE_SSH_KEY:-}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,6 +63,7 @@ while [ $# -gt 0 ]; do
     --keep)      keep=1; shift ;;
     --stay)      stay=1; shift ;;
     --frames)    frames=$2; shift 2 ;;
+    --ssh-key)   sshkey=$2; shift 2 ;;
     -h|--help)   sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "usage: live-image.sh [--out PATH] [--dist DIR] [--size N] [--keep]" >&2; exit 2 ;;
   esac
@@ -58,6 +75,15 @@ die() { echo "live-image: $1" >&2; exit 1; }
 [ -s "$dist/base.txz" ] && [ -s "$dist/kernel.txz" ] || die "no distribution sets in $dist"
 [ -x "$builddir/undertow" ] || die "no build in $builddir — run swift build first"
 sudo -n true 2>/dev/null || die "this needs passwordless sudo (it extracts a base system)"
+if [ -n "$sshkey" ]; then
+  [ -r "$sshkey" ] || die "no readable public key at $sshkey"
+  # A private key here would be baked onto a stick and handed around. The check
+  # is cheap and the mistake is not.
+  grep -q "PRIVATE KEY" "$sshkey" \
+    && die "$sshkey is a PRIVATE key — pass the .pub"
+  grep -qE '^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-)' "$sshkey" \
+    || die "$sshkey does not look like an OpenSSH public key"
+fi
 
 # Runtime data the desktop reads by path rather than links against, so no
 # amount of `ldd` will find it: the four DejaVu faces `de/ctext/ctext.c` names
@@ -445,6 +471,40 @@ kld_list="amdgpu"
 seatd_enable="YES"
 RC
 
+# **sshd, only when a key was baked in.** Everything about this is conditional on
+# purpose: a live installer that answers on port 22 by default, with a root
+# account that has no password, would be a machine anybody on the network owns.
+if [ -n "$sshkey" ]; then
+  sudo sh -c "cat >> $stage/etc/rc.conf" <<'RCSSH'
+# Developer build (--ssh-key). Not present on a medium built without it.
+sshd_enable="YES"
+RCSSH
+
+  # **Keys only, and say so three times.** `PermitRootLogin without-password`
+  # alone is not enough: the account has an EMPTY password, and an empty password
+  # is exactly what `PermitEmptyPasswords` exists to allow. Each of these three
+  # closes the same door, and the cost of a redundant line here is nothing
+  # against the cost of one of them being wrong.
+  sudo sh -c "cat >> $stage/etc/ssh/sshd_config" <<'SSHD'
+
+# --- AbyssBSD live medium, developer build ------------------------------
+# The root account on this medium has NO PASSWORD (the console is the machine).
+# Therefore: public keys, and nothing else, ever.
+PermitRootLogin without-password
+PasswordAuthentication no
+PermitEmptyPasswords no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+SSHD
+
+  sudo mkdir -p "$stage/root/.ssh"
+  sudo cp "$sshkey" "$stage/root/.ssh/authorized_keys"
+  sudo chmod 700 "$stage/root/.ssh"
+  sudo chmod 600 "$stage/root/.ssh/authorized_keys"
+  sudo chown -R 0:0 "$stage/root/.ssh"
+  echo "   sshd enabled, key: $(awk '{print $1, substr($2,1,16)"..."}' "$sshkey" | head -1)"
+fi
+
 sudo sh -c "cat > $stage/boot/loader.conf" <<'LOADER'
 # The AbyssBSD live medium.
 vfs.root.mountfrom="ufs:/dev/ufs/ABYSSLIVE"
@@ -584,6 +644,20 @@ run() {
   # silent, which looked like a crash and was a redirection.
   [ -z "${ABYSS_LIVE_TRACE:-}" ] || set -x
   echo "abyss-live: $(cat /etc/abyss-live)"
+
+  # **Where to reach it, on the one channel that always works.** A medium you can
+  # ssh into is worth nothing if the address is a secret, and this is a machine
+  # whose screen may be the thing under investigation. Printed unconditionally:
+  # on a build with no sshd it is still the answer to "did the network come up",
+  # which is a Fathom question somebody would otherwise reboot to ask.
+  for _if in $(ifconfig -l 2>/dev/null); do
+    case "$_if" in lo*) continue ;; esac
+    for _ip in $(ifconfig "$_if" inet 2>/dev/null | awk '/inet /{print $2}'); do
+      echo "abyss-live: $_if $_ip"
+    done
+  done
+  [ ! -s /root/.ssh/authorized_keys ] \
+    || echo "abyss-live: sshd is enabled for root by key (developer build)"
 
   # The privileged half first: the disk spoke is empty until it answers.
   # Straight to the console, not into a file read at the end: a service that

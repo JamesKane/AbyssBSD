@@ -606,6 +606,61 @@ microseconds. If so the fixes are ordered — `rtprio` for the present thread
 (already scoped in this phase and never applied), then the margin ceiling, which
 is a config constant chosen when every clock was synthetic.
 
+### 5.8 Shortening the loop: talk to the machine, do not photograph it
+
+§6.4 named the cost of this phase before it started — *a person is in the loop,
+and people are slow* — and predicted the mitigation would be making the medium
+say more on its own console. That was right and it is no longer enough. The loop
+has been:
+
+> build an image → write a stick → walk to the machine → boot → read the screen →
+> **photograph it** → walk back → type it in
+
+**Three of the last four findings on that machine were read off a phone camera**,
+including one where the line that mattered had scrolled off. The console is a
+good channel for a machine that cannot do better; this one has working Ethernet
+and reported it in the first boot log.
+
+So `live-image.sh --ssh-key PUBKEY` bakes a key in and starts sshd, and
+`abyss/mk/metal.sh` drives it:
+
+```
+abyss/mk/metal.sh report        # fathom --measure, on this screen, no stick
+abyss/mk/metal.sh log           # the live session's log
+abyss/mk/metal.sh fetch PATH    # a report, a capture, a core
+abyss/mk/metal.sh ssh           # a shell
+```
+
+**Why it is opt-in, and why that is not a preference.** Root on the medium has an
+**empty password** — correct for a live installer, where the console *is* the
+machine and an account nobody can log into is one nobody can rescue with. The
+moment such a machine answers on a network, it is a machine anybody on that
+network owns. So:
+
+- sshd is enabled **only** when `--ssh-key` was passed, and that is a build a
+  developer makes for themselves out of their own key;
+- the config says keys-only three times — `PermitRootLogin without-password`,
+  `PasswordAuthentication no`, `PermitEmptyPasswords no` — because the account
+  has an empty password and that is exactly the case the third one exists for.
+  A redundant line here costs nothing against one of them being wrong;
+- the builder refuses a **private** key, a file that is not a key, and a file it
+  cannot read, since the failure mode is a private key baked onto a stick that
+  gets handed around;
+- **`live-medium.sh` asserts the default medium has neither sshd nor an
+  `authorized_keys`.** That is a negative test, and it is the one that matters:
+  it fails if a convenience somebody added for themselves ever escapes into the
+  artifact strangers are handed. Verified by building both ways and checking the
+  assertion trips on the developer build.
+
+**What this does not do.** The bring-up machine does not become part of the test
+suite. `abyss/tests/run.sh` stays hermetic and nothing in it may depend on a
+particular desktop being switched on; the gate is still the VM. What is shortened
+is the *diagnostic* loop, which is a person's time rather than the contract.
+
+And the console now prints every interface and address at boot regardless of
+build — on a medium with no sshd that is still the answer to "did the network
+come up", which is a question somebody would otherwise reboot to ask.
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the

@@ -218,6 +218,20 @@ sudo test -s "$work/mnt/usr/local/bin/seatd" || fail "the medium has no seatd"
 sudo test -x "$work/mnt/usr/local/bin/fathom" \
   || fail "the medium has no fathom — the one machine that needs it cannot run it"
 
+# **The medium built the ordinary way must not answer on the network.** root here
+# has no password, because on a live installer the console *is* the machine —
+# which is right until the machine is on a LAN. `--ssh-key` turns sshd on for a
+# developer's own build; the artifact anybody else is handed must not have it,
+# and this is the assertion that keeps those two facts from drifting apart.
+#
+# A negative test, and deliberately so: it fails if a convenience someone added
+# for themselves ever escapes into the default path.
+sudo grep -q '^sshd_enable' "$work/mnt/etc/rc.conf" \
+  && fail "this medium starts sshd, and root has no password — that is a machine anybody on the network owns"
+sudo test -e "$work/mnt/root/.ssh/authorized_keys" \
+  && fail "this medium ships an authorized_keys — a key was baked into an artifact meant for strangers"
+echo "ok: no sshd and no baked key on a default build — the console is still the only way in"
+
 # **The driver Mesa `dlopen`s, which no `ldd` will ever name (PHASE4 §5.3).**
 # `libEGL` and `libgbm` are dispatch stubs; the code that drives an AMD card is
 # `libgallium` reached through `/usr/local/lib/dri/*_dri.so`, loaded by name at
