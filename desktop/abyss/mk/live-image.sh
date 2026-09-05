@@ -645,20 +645,6 @@ run() {
   [ -z "${ABYSS_LIVE_TRACE:-}" ] || set -x
   echo "abyss-live: $(cat /etc/abyss-live)"
 
-  # **Where to reach it, on the one channel that always works.** A medium you can
-  # ssh into is worth nothing if the address is a secret, and this is a machine
-  # whose screen may be the thing under investigation. Printed unconditionally:
-  # on a build with no sshd it is still the answer to "did the network come up",
-  # which is a Fathom question somebody would otherwise reboot to ask.
-  for _if in $(ifconfig -l 2>/dev/null); do
-    case "$_if" in lo*) continue ;; esac
-    for _ip in $(ifconfig "$_if" inet 2>/dev/null | awk '/inet /{print $2}'); do
-      echo "abyss-live: $_if $_ip"
-    done
-  done
-  [ ! -s /root/.ssh/authorized_keys ] \
-    || echo "abyss-live: sshd is enabled for root by key (developer build)"
-
   # The privileged half first: the disk spoke is empty until it answers.
   # Straight to the console, not into a file read at the end: a service that
   # fails to start is the thing you most need to see, and the end may never
@@ -702,6 +688,45 @@ run() {
   # Never power off a machine somebody is looking at.
   [ "$stay" = 1 ] || [ "$haveDisplay" = 1 ] || (sleep 2; /sbin/shutdown -p now) &
 }
+
+# **Where to reach it, printed BEFORE the branch below.**
+#
+# This lived inside `run()` for exactly one build, which is one too many: on a
+# machine with a display `run` is backgrounded with its output redirected into
+# /var/log/abyss-live.log — so the address went to a log file on precisely the
+# machines somebody would want to ssh into, and the console showed nothing. That
+# is §2.47's shape again, self-inflicted: console output has to be emitted by the
+# part that still has a console.
+#
+# **And it waits, because DHCP has not finished when rc gets here.** `abyss_live`
+# is REQUIRE: LOGIN, dhclient runs in the background, and the first metal boot
+# log shows the link still settling at this point. Printing "no address" the
+# instant we ask would be worse than not printing: it is a wrong answer rather
+# than a missing one. So: poll briefly, stop the moment there is something to
+# say, and give up after ten seconds with a sentence that says which it was.
+announce_addresses() {
+  _found=0
+  _tries=0
+  while [ "$_tries" -lt 20 ]; do
+    for _if in $(ifconfig -l 2>/dev/null); do
+      case "$_if" in lo*) continue ;; esac
+      for _ip in $(ifconfig "$_if" inet 2>/dev/null | awk '/inet /{print $2}'); do
+        echo "abyss-live: $_if $_ip"
+        _found=1
+      done
+    done
+    [ "$_found" = 1 ] && break
+    _tries=$((_tries + 1))
+    sleep 0.5
+  done
+  if [ "$_found" = 0 ]; then
+    echo "abyss-live: no network address after 10s —"
+    echo "abyss-live: interfaces: $(ifconfig -l 2>/dev/null)"
+  elif [ -s /root/.ssh/authorized_keys ]; then
+    echo "abyss-live: sshd is up for root by key (developer build) — abyss/mk/metal.sh"
+  fi
+}
+announce_addresses
 
 # The choice above, made from what the machine has.
 haveDisplay=0

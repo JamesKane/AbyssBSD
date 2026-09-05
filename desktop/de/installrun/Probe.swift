@@ -46,6 +46,10 @@ public func probeMachine() throws -> DiskInventory {
     // machine with many disks, and a medium that cannot scan should still be
     // able to install. What it must never do is report *no* pools when it simply
     // failed — see the caller's use of `scanned`.
+    // `gpart show` for every disk at once: what is on each, and where it is not.
+    // Best-effort — a machine with no partition tables at all answers with an
+    // error, and that is "no partitions", not "could not tell".
+    let gpart = (try? capture(["gpart", "show"])) ?? ""
     let importScan = (try? capture(["zpool", "import"])) ?? ""
     let importable = parseImportablePools(importScan)
     // What this machine calls itself, from the kernel environment — **not from
@@ -58,7 +62,7 @@ public func probeMachine() throws -> DiskInventory {
     }
     return inventory(geom: geom, mounts: mounts, labels: labels,
                      poolVdevs: poolVdevs, importablePools: importable,
-                     machine: machine)
+                     machine: machine, layouts: parseGpartShow(gpart))
     #else
     throw ProbeError.notSupported(
         "disk discovery needs FreeBSD's geom(8), mount(8) and zpool(8);"
@@ -91,20 +95,93 @@ func capture(_ argv: [String]) throws -> String {
 /// One command answers name, size and description together, which is why it is
 /// preferred over `sysctl kern.disks` plus a `diskinfo` per disk — and
 /// `diskinfo` needs to open the device, which needs root even to *look*.
-public func parseGeomDiskList(_ text: String) -> [(name: String, bytes: UInt64, descr: String)] {
-    var out: [(String, UInt64, String)] = []
+/// One disk's layout from `gpart show`: what is on it, and where it is not.
+///
+/// **Free space is the point.** An installer that only ever takes whole disks
+/// has one answer for a machine whose disks all have something on them, and it
+/// is "destroy something". A disk with room to spare has a third answer.
+public struct DiskLayout: Equatable, Sendable {
+    /// `GPT`, `MBR`, or empty when the disk has no partition table at all.
+    public let scheme: String
+    /// Partition types in table order: `efi`, `ms-basic-data`, `ntfs`.
+    public let kinds: [String]
+    /// Every gap, in sectors, largest first.
+    public let freeSectors: [UInt64]
+
+    public init(scheme: String, kinds: [String], freeSectors: [UInt64]) {
+        self.scheme = scheme
+        self.kinds = kinds
+        self.freeSectors = freeSectors.sorted(by: >)
+    }
+    /// The biggest single gap — an install needs contiguous room, not a total.
+    public var largestFreeSectors: UInt64 { freeSectors.first ?? 0 }
+}
+
+/// Parse `gpart show` for every disk it lists.
+///
+/// The format is columnar and has three line shapes, all of which appear in the
+/// fixtures captured from the bring-up machine: a `=>` header naming the disk
+/// and scheme, partition rows whose third column is an index, and free rows
+/// whose third column is `-`. MBR rows carry an extra `[active]` that must not
+/// be read as a type.
+public func parseGpartShow(_ text: String) -> [String: DiskLayout] {
+    var out: [String: DiskLayout] = [:]
+    var disk = ""
+    var scheme = ""
+    var kinds: [String] = []
+    var free: [UInt64] = []
+
+    func flush() {
+        guard !disk.isEmpty else { return }
+        out[disk] = DiskLayout(scheme: scheme, kinds: kinds, freeSectors: free)
+        disk = ""; scheme = ""; kinds = []; free = []
+    }
+
+    for raw in text.split(separator: "\n") {
+        let f = raw.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        guard !f.isEmpty else { continue }
+        if f[0] == "=>" {
+            // "=>  34  1953525101  nda0  GPT  (932G)"
+            flush()
+            guard f.count >= 5 else { continue }
+            disk = f[3]
+            scheme = f[4]
+            continue
+        }
+        guard !disk.isEmpty, f.count >= 4 else { continue }
+        // "34  2014  - free -  (1.0M)" versus "2048  204800  1  efi  (100M)"
+        if f[2] == "-" {
+            free.append(UInt64(f[1]) ?? 0)
+        } else if Int(f[2]) != nil {
+            kinds.append(f[3])
+        }
+    }
+    flush()
+    return out
+}
+
+public func parseGeomDiskList(_ text: String)
+    -> [(name: String, bytes: UInt64, descr: String, sectorBytes: UInt64)] {
+    var out: [(String, UInt64, String, UInt64)] = []
     var name = ""
     var bytes: UInt64 = 0
+    // **`gpart show` counts in the provider's sectors, not in 512-byte units.**
+    // Assuming 512 on a 4Kn disk under-reports free space eightfold — safe in
+    // direction and wrong in fact, which is the kind of wrong that survives.
+    var sector: UInt64 = 0
     var descr = ""
     func flush() {
-        if !name.isEmpty { out.append((name, bytes, descr)) }
-        name = ""; bytes = 0; descr = ""
+        if !name.isEmpty { out.append((name, bytes, descr, sector)) }
+        name = ""; bytes = 0; descr = ""; sector = 0
     }
     for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
         let line = trimmed(String(rawLine))
         if line.hasPrefix("Geom name:") {
             flush()
             name = trimmed(String(line.dropFirst("Geom name:".count)))
+        } else if line.hasPrefix("Sectorsize:") {
+            let rest = trimmed(String(line.dropFirst("Sectorsize:".count)))
+            sector = UInt64(rest.prefix { $0.isNumber }) ?? 0
         } else if line.hasPrefix("Mediasize:") {
             // "Mediasize: 85899345920 (80G)" — the number, not the pretty part.
             let rest = trimmed(String(line.dropFirst("Mediasize:".count)))
@@ -244,7 +321,8 @@ func isVdevTypeNode(_ name: String) -> Bool {
 public func inventory(geom: String, mounts: String, labels: String,
                       poolVdevs: [String: [String]],
                       importablePools: [String: [String]] = [:],
-                      machine: MachineIdentity? = nil) -> DiskInventory {
+                      machine: MachineIdentity? = nil,
+                      layouts: [String: DiskLayout] = [:]) -> DiskInventory {
     let found = parseGeomDiskList(geom)
     let names = found.map(\.name)
     let labelMap = parseLabelComponents(labels)
@@ -290,10 +368,19 @@ public func inventory(geom: String, mounts: String, labels: String,
     }
 
     let disks = found.map { f in
-        Disk(name: f.name, bytes: f.bytes, description: f.descr,
-             mountedAt: (mountedAt[f.name] ?? []).sorted(),
-             holdsRunningRoot: rootDisks.contains(f.name),
-             existingPools: (existing[f.name] ?? []).sorted())
+        let layout = layouts[f.name]
+        // **Sectors to bytes with the disk's OWN sector size**, not an assumed
+        // 512: `gpart show` counts in the provider's sectors, and a 4Kn disk
+        // would otherwise be reported with eight times less free space than it
+        // has — an under-report, which fails safe, but wrongly.
+        let sector = f.sectorBytes > 0 ? f.sectorBytes : 512
+        return Disk(name: f.name, bytes: f.bytes, description: f.descr,
+                    mountedAt: (mountedAt[f.name] ?? []).sorted(),
+                    holdsRunningRoot: rootDisks.contains(f.name),
+                    existingPools: (existing[f.name] ?? []).sorted(),
+                    partitionKinds: layout?.kinds ?? [],
+                    freeBytes: (layout?.largestFreeSectors ?? 0) * sector,
+                    hasPartitionTable: !(layout?.scheme ?? "").isEmpty)
     }
     return DiskInventory(disks: disks, importedPools: poolVdevs.keys.sorted(),
                          machine: machine)

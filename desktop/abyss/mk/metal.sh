@@ -29,8 +29,16 @@ set -eu
 # ask it about. (write-stick.sh's rule, for the same reason.)
 case "${1:-}" in -h|--help) sed -n '2,26p' "$0"; exit 0 ;; esac
 
+# Where the project keeps keys for machines it talks to — outside the repo, so
+# a private key cannot be committed, and beside the VM's own. A separate key
+# from the VM's on purpose: the bring-up machine is somebody's desk, and the two
+# should be revocable independently.
+root_dir=$(cd "$(dirname "$0")/../.." && pwd)
+ABYSS_VM_DIR="$root_dir/abyss/vm"; export ABYSS_VM_DIR
+. "$root_dir/abyss/vm/config.sh"
+
 host="${ABYSS_METAL_HOST:-}"
-key="${ABYSS_METAL_KEY:-$HOME/.ssh/id_ed25519}"
+key="${ABYSS_METAL_KEY:-$ABYSS_VM_HOME/id_metal}"
 user="${ABYSS_METAL_USER:-root}"
 
 die() { echo "metal: $1" >&2; exit 1; }

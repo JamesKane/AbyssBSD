@@ -661,6 +661,61 @@ And the console now prints every interface and address at boot regardless of
 build — on a medium with no sshd that is still the answer to "did the network
 come up", which is a question somebody would otherwise reboot to ask.
 
+### 5.9 The disk model, rewritten by what the machine actually had
+
+Reaching the bring-up machine over ssh turned the disk question from a guess into
+a fact, and the fact broke the model.
+
+```
+nda0  931.5 GiB  WD_BLACK SN850X     GPT  efi, ms-reserved, ms-basic-data, ms-recovery
+nda1  931.5 GiB  Samsung 990 PRO     GPT  efi, freebsd-boot, freebsd-swap, freebsd-zfs  → zroot
+ada0  223.5 GiB  INTEL SSDSC2BW240A4 MBR  ntfs, ntfs, !39
+da0    14.5 GiB  Kingston            the live medium itself
+```
+
+**The refusal worked, and only for us.** `nda1` was correctly refused —
+*"already holds a ZFS pool called zroot"* — and `nda0`, carrying 931 GB of
+Windows, and `ada0`, carrying 223 GB of NTFS, were offered as clean targets with
+no objection at all. A guard that protects the filesystem we happen to use is one
+that eats everybody else's.
+
+**The rule that generalises is not "refuse anything with partitions"** — that
+refuses every disk on any machine that has ever been used. It is:
+
+> **Refuse a disk with nowhere to put the install, and say what is in the way.**
+> A disk with room takes the install *beside* what is already there. A full one
+> is refused until somebody confirms, in words, that it is to be erased.
+
+Three cases, and only one of them destroys anything:
+
+| Disk | What happens |
+|---|---|
+| no partition table | create one; nothing to destroy |
+| a table with room | **add into free space**; the existing partitions are untouched |
+| a table with no room | refused, naming its contents and the shortfall — until `--erase-this-disk` |
+
+Four things this needed, each of which was wrong before:
+
+- **Free space has to be measured, and contiguously.** `gpart show`'s gaps, in
+  the disk's **own** sector size — assuming 512 on a 4Kn disk under-reports
+  eightfold, which fails safe and is still wrong.
+- **Partitions are addressed by label, not index.** `p1`/`p2`/`p3` is only true
+  of a table we just created; an install into free space lands wherever `gpart`
+  puts it, and a hard-coded index formats the wrong partition. Every `gpart add`
+  already set a label, so this was a change of *reference*, not of behaviour.
+- **The confirmation has to cross the wire.** The person says "erase it" in the
+  unprivileged half and the privileged half spends that permission; a flag that
+  stopped at the socket would be a guard that silently never lifts, and worse,
+  looks like it did.
+- **The harness says the same words a person does.** `live-install.sh` reinstalls
+  over its own scratch disk every run, so it now passes `--erase-this-disk`. The
+  test does not get a quieter path to destruction than the human.
+
+**And on that machine the answer is still "no room anywhere":** the largest
+contiguous gap across ~2 TB of disks is 1.7 MiB. Every disk is full. What changed
+is that the installer now says so, names what would be lost, and requires the
+sentence — rather than presenting two Windows disks as empty.
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the

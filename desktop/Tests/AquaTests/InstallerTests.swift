@@ -44,7 +44,8 @@ final class InstallerTests: XCTestCase {
         // the test that would have caught the whitelist being out of date.
         let inv = DiskInventory(disks: [
             Disk(name: "nvd0", bytes: 900 << 30, description: "Samsung SSD 980",
-                 existingPools: ["zroot"]),
+                 existingPools: ["zroot"], partitionKinds: ["efi", "freebsd-zfs"],
+                 freeBytes: 1 << 20, hasPartitionTable: true),
             Disk(name: "da0", bytes: 64 << 30, description: "SanDisk Cruzer"),
         ], importedPools: [])
         var m = InstallerModel(inventory: inv)

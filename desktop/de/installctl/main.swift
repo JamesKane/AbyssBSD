@@ -52,6 +52,7 @@ var disk = "", pool = "abyss", dist = "", host = "abyss", tz = "", rootHash = ""
 var swapMiB: UInt64?
 var sets: [String] = []
 var users: [Account] = []
+var erase = false
 var serviceName = "install"
 var assumeYes = false
 
@@ -91,6 +92,12 @@ while i < args.count {
         users.append(Account(name: spec[0], passwordHash: spec[1],
                              groups: spec.count > 2
                                  ? spec[2].split(separator: ",").map(String.init) : []))
+    // **The confirmation, spelled out.** A disk that is already full is refused
+    // until somebody says this — and the flag is long and unpleasant on purpose,
+    // because it is the sentence that turns "refuse" into "destroy what is
+    // there". `--force` would have been shorter and would not have said what it
+    // does.
+    case "--erase-this-disk": erase = true
     case "-h", "--help": usage()
     default:
         emit(2, "abyss-installctl: unknown option '\(flag)'")
@@ -106,7 +113,8 @@ var plan = InstallPlan(disk: disk, poolName: pool,
                        distDirectory: dist.isEmpty ? defaults.distDirectory : dist,
                        hostname: host, timezone: tz,
                        rootPasswordHash: rootHash.isEmpty ? "*" : rootHash,
-                       accounts: users)
+                       accounts: users,
+                       eraseExistingData: erase)
 
 var request = Msg()
 request.set("method", verb == "disks" ? "disks" : verb)

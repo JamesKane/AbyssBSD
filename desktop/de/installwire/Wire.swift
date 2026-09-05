@@ -50,6 +50,12 @@ public enum Wire {
         m.set("timezone", p.timezone)
         m.set("keymap", p.keymap)
         m.set("rootpw", p.rootPasswordHash)
+        // **The confirmation has to cross the wire or it does nothing.** The
+        // unprivileged half is where a person says "yes, erase it"; the
+        // privileged half is where that permission is spent. A flag that stops
+        // at the socket is a guard that silently never lifts — and worse, one
+        // that looks like it did.
+        m.set("erase", p.eraseExistingData ? UInt64(1) : UInt64(0))
         m.set("sets.count", UInt64(p.sets.count))
         for (i, s) in p.sets.enumerated() { m.set("set.\(i)", s) }
         m.set("accounts.count", UInt64(p.accounts.count))
@@ -91,7 +97,8 @@ public enum Wire {
             timezone: m.string("timezone") ?? "",
             keymap: m.string("keymap") ?? "",
             rootPasswordHash: m.string("rootpw") ?? "*",
-            accounts: accounts)
+            accounts: accounts,
+            eraseExistingData: (m.uint64("erase") ?? 0) == 1)
     }
 
     // MARK: - The machine

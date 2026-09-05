@@ -81,18 +81,44 @@ func steps(for plan: InstallPlan, on inventory: DiskInventory = DiskInventory(di
     let dev = "/dev/" + plan.disk
     let mnt = plan.mountpoint
     let pool = plan.poolName
-    let esp = "\(dev)p\(plan.espPartition)"
-    let poolDev = "\(dev)p\(plan.poolPartition)"
+    // **Address the new partitions by LABEL, not by index.**
+    //
+    // `p1`/`p2`/`p3` is only true of a table we just created. An install into
+    // free space on somebody's existing disk lands at whatever index `gpart`
+    // picks next, and hard-coding the number quietly formats the wrong
+    // partition. Every `gpart add` below already sets a label, and the tree
+    // already trusts `/dev/gpt/*` for the installed machine's fstab — which is
+    // exactly why `loader.conf` disables the disk-ident class (§2.43's fourth
+    // finding). The prefix keeps it distinct from the live medium's own labels.
+    let esp = "/dev/gpt/\(plan.labelPrefix)esp"
+    let poolDev = "/dev/gpt/\(plan.labelPrefix)zfs"
 
     // ---- the partition table ---------------------------------------------
-    s.append(.run(["gpart", "destroy", "-F", plan.disk],
-                  what: "clear any existing partition table",
-                  onFailure: "the old partition table on \(plan.disk) could not be removed",
-                  destructive: true, mayFail: true))
-    s.append(.run(["gpart", "create", "-s", "gpt", plan.disk],
-                  what: "create the GPT",
-                  onFailure: "a GPT could not be written to \(plan.disk)",
-                  destructive: true))
+    //
+    // **Three cases, and only one of them destroys anything.**
+    //
+    //   erasing        the person confirmed: replace the table wholesale
+    //   no table       a blank disk: create one, destroy nothing
+    //   free space     somebody's disk with room: add beside what is there
+    //
+    // The third is the one that did not exist. An installer that only takes
+    // whole disks has a single answer for a machine whose disks all have
+    // something on them, and that answer is "destroy something".
+    let target = inventory.disk(named: plan.disk)
+    let erasing = plan.eraseExistingData
+    let hasTable = target?.hasPartitionTable ?? false
+    if erasing {
+        s.append(.run(["gpart", "destroy", "-F", plan.disk],
+                      what: "clear any existing partition table",
+                      onFailure: "the old partition table on \(plan.disk) could not be removed",
+                      destructive: true, mayFail: true))
+    }
+    if erasing || !hasTable {
+        s.append(.run(["gpart", "create", "-s", "gpt", plan.disk],
+                      what: "create the GPT",
+                      onFailure: "a GPT could not be written to \(plan.disk)",
+                      destructive: true))
+    }
     s.append(.run(["gpart", "add", "-a", "1m", "-s", mib(plan.espBytes),
                    "-t", "efi", "-l", plan.labelPrefix + "esp", plan.disk],
                   what: "add the EFI system partition",

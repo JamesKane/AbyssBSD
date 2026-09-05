@@ -4,7 +4,7 @@ The last phase that depends on nothing. Read [PLAN.md](PLAN.md) for the locked
 decisions, [PHASE8.md](PHASE8.md) for the session this installs, and
 [HANDOFF.md](HANDOFF.md) for the interop traps.
 
-Last updated: 2026-08-24. **Phase 5 is COMPLETE — P5.1–P5.5.** A machine with an
+Last updated: 2026-09-05. **Phase 5 is COMPLETE — P5.1–P5.5.** A machine with an
 empty disk boots our medium, the Aqua installer comes up on it, and the machine
 reboots into the Jaguar desktop as the account that was created — proven on every
 run of the harness, nested twice over, with no hardware and no human.

@@ -27,7 +27,7 @@ public enum PlanRefusal: Error, Equatable {
     case sizeNotWholeMiB(String, UInt64)
     case relativePath(String, String)
     case noAdministrator
-    case diskHoldsExistingSystem(String, pools: [String])
+    case diskIsFull(String, contents: [String], freeBytes: UInt64, needBytes: UInt64)
 
     /// The sentence to put in front of a person.
     public var message: String {
@@ -61,16 +61,19 @@ public enum PlanRefusal: Error, Equatable {
         case .noAdministrator:
             return "nobody could log in to the installed system:"
                  + " set a root password or give an account the wheel group"
-        case .diskHoldsExistingSystem(let d, let pools):
-            let which = pools.count == 1
-                ? "a ZFS pool called \(pools[0])"
-                : "ZFS pools called \(pools.joined(separator: ", "))"
-            return "\(d) already holds \(which) — installing here destroys it."
-                 + " Choose another disk, or confirm that this one is to be erased"
+        case .diskIsFull(let d, let contents, let free, let need):
+            // **Say what is on it, and how short it is.** A refusal a person
+            // cannot act on is one they work around, and "choose another disk"
+            // is not advice on a machine where every disk is full — knowing
+            // *what* would be destroyed is what makes the next decision theirs.
+            let what = contents.isEmpty ? "partitions" : contents.joined(separator: ", ")
+            return "\(d) is fully partitioned (\(what)) — \(gib(free)) free,"
+                 + " and this install needs \(gib(need)) in one piece."
+                 + " Choose a disk with room, or confirm that this one is to be erased"
         }
     }
 
-    private func gib(_ bytes: UInt64) -> String {
+    func gib(_ bytes: UInt64) -> String {
         let tenths = (bytes * 10) / (1024 * 1024 * 1024)
         return "\(tenths / 10).\(tenths % 10) GiB"
     }
@@ -184,8 +187,22 @@ public func problems(_ plan: InstallPlan, on inventory: DiskInventory) -> [PlanR
         // Not permanent: `eraseExistingData` lifts it, because an installer that
         // can never reinstall is broken. The guard is that it is off by default
         // and the sentence that turns it on names the pool being destroyed.
-        if !disk.existingPools.isEmpty, !plan.eraseExistingData {
-            found.append(.diskHoldsExistingSystem(disk.name, pools: disk.existingPools))
+        // **A disk with room is installable; a full one is not.**
+        //
+        // The old rule refused any disk carrying a ZFS pool, which protected our
+        // own filesystem and offered somebody's Windows as a clean target. The
+        // rule that generalises is not "refuse anything with partitions" — that
+        // would refuse every disk on a machine that has ever been used — it is
+        // **refuse a disk with nowhere to put the install**, and say what is in
+        // the way.
+        //
+        // A disk with no table at all is empty, not full: nothing to destroy,
+        // and `steps` creates the table rather than replacing one.
+        if !plan.eraseExistingData, disk.hasPartitionTable,
+           disk.freeBytes < plan.minimumDiskBytes {
+            found.append(.diskIsFull(disk.name, contents: disk.contents,
+                                     freeBytes: disk.freeBytes,
+                                     needBytes: plan.minimumDiskBytes))
         }
         if disk.bytes < plan.minimumDiskBytes {
             found.append(.diskTooSmall(disk.name, has: disk.bytes, needs: plan.minimumDiskBytes))

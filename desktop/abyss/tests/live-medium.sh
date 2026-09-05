@@ -232,6 +232,32 @@ sudo test -e "$work/mnt/root/.ssh/authorized_keys" \
   && fail "this medium ships an authorized_keys — a key was baked into an artifact meant for strangers"
 echo "ok: no sshd and no baked key on a default build — the console is still the only way in"
 
+# **The address has to be announced by the part that still has a console.**
+#
+# This is a static check on the shipped script, and it exists because the dynamic
+# one cannot work here. On a machine with no display the session runs in the
+# FOREGROUND, so anything it prints reaches the console whether it is inside
+# `run()` or not — and this VM has no display, so **the harness takes the one
+# path where the bug is invisible**. On a machine with a display `run` is
+# backgrounded into /var/log/abyss-live.log, and an address printed inside it
+# goes to a log file on precisely the machines somebody wants to ssh into.
+#
+# That happened, for one build. §2.47 for the third time: console output must be
+# emitted by the part that still has a console.
+_sess="$work/mnt/usr/local/libexec/abyss-live-session"
+_announce=$(sudo grep -n '^announce_addresses$' "$_sess" | head -1 | cut -d: -f1)
+# **The branch itself, not the first line that mentions the variable.** The
+# shutdown guard a few lines earlier also reads `$haveDisplay`, and matching that
+# made this check fail on a script that was correct — a false positive in the
+# guard against a false negative, which is its own small lesson about anchoring
+# on structure rather than on a substring.
+_branch=$(sudo grep -n '^if \[ "\$haveDisplay" = 1 \]' "$_sess" | head -1 | cut -d: -f1)
+[ -n "$_announce" ] \
+  || fail "the medium never announces its address — a machine you cannot find is one you cannot ssh to"
+[ -n "$_branch" ] && [ "$_announce" -lt "$_branch" ] \
+  || fail "the address is announced after the display branch, so on a real machine it goes to a log file instead of the console"
+echo "ok: the address is announced before the session is backgrounded (line $_announce < $_branch)"
+
 # **The driver Mesa `dlopen`s, which no `ldd` will ever name (PHASE4 §5.3).**
 # `libEGL` and `libgbm` are dispatch stubs; the code that drives an AMD card is
 # `libgallium` reached through `/usr/local/lib/dri/*_dri.so`, loaded by name at

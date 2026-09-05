@@ -149,6 +149,112 @@ final class InstallRunTests: XCTestCase {
         XCTAssertFalse(parseZpoolVdevs(text).contains("mirror-0"))
     }
 
+    func testTheEraseConfirmationSurvivesTheWire() {
+        // **A guard that stops at the socket is one that silently never lifts —
+        // and worse, one that looks like it did.** The person says "erase it" in
+        // the unprivileged half; the privileged half is where that permission is
+        // spent, and the two are different processes.
+        for erase in [true, false] {
+            var m = Msg()
+            Wire.encode(InstallPlan(disk: "ada0", eraseExistingData: erase), into: &m)
+            XCTAssertEqual(Wire.decodePlan(m).eraseExistingData, erase)
+        }
+    }
+
+    func testAPlanFromAnOlderClientDefaultsToNotErasing() {
+        // No `erase` key at all: the safe direction is the one that refuses.
+        var m = Msg()
+        m.set("disk", "ada0")
+        XCTAssertFalse(Wire.decodePlan(m).eraseExistingData)
+    }
+
+    // MARK: - What is on a disk, and where it is not
+
+    /// `gpart show`, captured from the bring-up machine on 2026-09-05. Three
+    /// disks, three shapes: a GPT full of Windows, an **MBR** whose rows carry an
+    /// extra `[active]`, and a GPT full of FreeBSD. Invented text would not have
+    /// contained the MBR row that breaks a naive column split.
+    static let gpartText = """
+    =>        34  1953525101  nda0  GPT  (932G)
+              34        2014        - free -  (1.0M)
+            2048      204800     1  efi  (100M)
+          206848       32768     2  ms-reserved  (16M)
+          239616  1951543296     3  ms-basic-data  (931G)
+      1951782912     1738752     4  ms-recovery  (849M)
+      1953521664        3471        - free -  (1.7M)
+
+    =>       63  468862065  ada0  MBR  (224G)
+             63       1985        - free -  (993K)
+           2048     204800     1  ntfs  [active]  (100M)
+         206848  467603877     2  ntfs  (223G)
+      467810725       1627        - free -  (814K)
+      467812352    1046528     3  !39  (511M)
+      468858880       3248        - free -  (1.6M)
+
+    =>        40  1953525095  nda1  GPT  (932G)
+              40      532480     1  efi  (260M)
+          532520        1024     2  freebsd-boot  (512K)
+          533544         984        - free -  (492K)
+          534528     4194304     3  freebsd-swap  (2.0G)
+         4728832  1948794880     4  freebsd-zfs  (929G)
+      1953523712        1423        - free -  (712K)
+    """
+
+    func testGpartShowIsParsedIntoContentsAndGaps() {
+        let l = parseGpartShow(Self.gpartText)
+        XCTAssertEqual(l["nda0"]?.scheme, "GPT")
+        XCTAssertEqual(l["nda0"]?.kinds, ["efi", "ms-reserved", "ms-basic-data", "ms-recovery"])
+        XCTAssertEqual(l["nda1"]?.kinds, ["efi", "freebsd-boot", "freebsd-swap", "freebsd-zfs"])
+        XCTAssertEqual(l.keys.sorted(), ["ada0", "nda0", "nda1"])
+    }
+
+    func testAnMBRRowsExtraActiveFlagIsNotReadAsAPartitionType() {
+        // `2048  204800  1  ntfs  [active]  (100M)` — a naive parse that took a
+        // fixed column would report the type of the boot partition as
+        // "[active]". Only the MBR disk on that machine has this shape.
+        XCTAssertEqual(parseGpartShow(Self.gpartText)["ada0"]?.scheme, "MBR")
+        XCTAssertEqual(parseGpartShow(Self.gpartText)["ada0"]?.kinds, ["ntfs", "ntfs", "!39"])
+    }
+
+    func testTheLargestGapIsContiguousAndNotATotal() {
+        // An install needs room in one piece. nda0's gaps are 2014 and 3471
+        // sectors; the answer is 3471, not 5485.
+        XCTAssertEqual(parseGpartShow(Self.gpartText)["nda0"]?.largestFreeSectors, 3471)
+        XCTAssertEqual(parseGpartShow(Self.gpartText)["nda1"]?.largestFreeSectors, 1423)
+    }
+
+    func testEveryDiskOnTheBringUpMachineIsFull() {
+        // The finding this redesign came from: three disks, ~2 TB between them,
+        // and the largest contiguous gap anywhere is 1.7 MiB. Not one of them
+        // can take an install without destroying something — which is a fact
+        // about that machine, and the installer now says so instead of offering
+        // them as clean targets.
+        let l = parseGpartShow(Self.gpartText)
+        for d in ["nda0", "nda1", "ada0"] {
+            let bytes = (l[d]?.largestFreeSectors ?? 0) * 512
+            XCTAssertLessThan(bytes, 4 << 20, "\(d) has \(bytes) bytes free")
+        }
+    }
+
+    func testADiskWithNoTableParsesAsNothingRatherThanFailing() {
+        XCTAssertTrue(parseGpartShow("").isEmpty)
+        XCTAssertTrue(parseGpartShow("gpart: No such geom: ada9.").isEmpty)
+    }
+
+    func testSectorSizeComesFromTheDiskAndNotFromAnAssumption() {
+        // `gpart show` counts in the provider's sectors. Assuming 512 on a 4Kn
+        // disk under-reports free space eightfold.
+        let text = """
+        Geom name: nda0
+        Providers:
+        1. Name: nda0
+           Mediasize: 1000204886016 (932G)
+           Sectorsize: 4096
+           descr: WD_BLACK SN850X 1000GB
+        """
+        XCTAssertEqual(parseGeomDiskList(text).first?.sectorBytes, 4096)
+    }
+
     // MARK: - Pools that are here but not imported
 
     /// `zpool import`, captured verbatim in the build VM on a machine carrying

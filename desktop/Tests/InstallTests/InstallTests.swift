@@ -65,46 +65,72 @@ final class InstallTests: XCTestCase {
 
     // MARK: - The disk that already holds somebody's system
 
-    func testADiskHoldingAnUnimportedPoolIsRefused() {
-        // **The refusal a live medium needs and no other caller does.** From a
-        // USB stick the machine's own disk is unmounted and its pool unimported,
-        // so `diskIsMounted` and `diskHoldsRunningRoot` are both silent — they
-        // describe the *running* system, and the running system is the stick.
-        // Before this, a disk carrying a whole FreeBSD install was presented as
-        // a clean target with nothing said about it.
-        let m = machine(existingPools: ["zroot"])
-        let ps = problems(goodPlan(), on: m)
-        XCTAssertTrue(ps.contains(.diskHoldsExistingSystem("ada0", pools: ["zroot"])), "\(ps)")
-        XCTAssertThrowsError(try compile(goodPlan(), on: m))
+    /// A disk with a table and no room — the shape of all three fixed disks on
+    /// the bring-up machine.
+    private func fullDisk(pools: [String] = [], kinds: [String] = ["efi", "ntfs"]) -> DiskInventory {
+        DiskInventory(disks: [Disk(name: "ada0", bytes: 64 << 30, description: "Samsung",
+                                   existingPools: pools, partitionKinds: kinds,
+                                   freeBytes: 2 << 20, hasPartitionTable: true)])
     }
 
-    func testTheRefusalNamesThePoolItWouldDestroy() {
-        // A refusal a person cannot act on is one they work around, so the
-        // sentence has to carry the thing being lost.
-        let one = PlanRefusal.diskHoldsExistingSystem("ada0", pools: ["zroot"])
-        XCTAssertTrue(one.message.contains("zroot"), one.message)
-        XCTAssertTrue(one.message.contains("ada0"), one.message)
-        let two = PlanRefusal.diskHoldsExistingSystem("ada0", pools: ["zroot", "tank"])
-        XCTAssertTrue(two.message.contains("pools called zroot, tank"), two.message)
+    func testAFullDiskIsRefusedWhateverIsOnIt() {
+        // **The rule that generalises.** The old one refused a disk carrying a
+        // ZFS pool, which protected our filesystem and offered somebody's
+        // Windows as a clean target — verified on the bring-up machine, where
+        // `nda1` (zroot) was correctly refused and `nda0` (931 GB of Windows)
+        // and `ada0` (223 GB of NTFS) were not.
+        for kinds in [["efi", "ms-basic-data", "ms-recovery"], ["ntfs", "ntfs"]] {
+            let ps = problems(goodPlan(), on: fullDisk(kinds: kinds))
+            XCTAssertTrue(ps.contains(where: { if case .diskIsFull = $0 { return true }; return false }),
+                          "\(kinds) was offered as a clean target: \(ps)")
+        }
+    }
+
+    func testTheRefusalSaysWhatIsOnItAndHowShortItIs() {
+        // "Choose another disk" is not advice on a machine where every disk is
+        // full. What makes the next decision theirs is knowing what would go.
+        let m = fullDisk(pools: ["zroot"], kinds: ["efi", "freebsd-swap", "freebsd-zfs"])
+        let msg = problems(goodPlan(), on: m).compactMap { p -> String? in
+            if case .diskIsFull = p { return p.message }; return nil
+        }.first
+        XCTAssertNotNil(msg)
+        XCTAssertTrue(msg!.contains("ZFS pool zroot"), msg!)
+        XCTAssertTrue(msg!.contains("freebsd-zfs"), msg!)
+        XCTAssertTrue(msg!.contains("free"), msg!)
+    }
+
+    func testADiskWithRoomIsInstallableWithoutDestroyingAnything() {
+        // **The case that did not exist before.** Somebody's disk with space to
+        // spare takes an install beside what is already there — no confirmation,
+        // because nothing is being destroyed.
+        let roomy = DiskInventory(disks: [Disk(name: "ada0", bytes: 512 << 30,
+                                               description: "Samsung",
+                                               partitionKinds: ["efi", "ntfs"],
+                                               freeBytes: 200 << 30,
+                                               hasPartitionTable: true)])
+        XCTAssertEqual(problems(goodPlan(), on: roomy), [])
+    }
+
+    func testABlankDiskIsEmptyNotFull() {
+        // No table is not the same as a full table: nothing to destroy, and a
+        // table to create rather than replace.
+        let blank = DiskInventory(disks: [Disk(name: "ada0", bytes: 64 << 30,
+                                               description: "Samsung",
+                                               hasPartitionTable: false)])
+        XCTAssertEqual(problems(goodPlan(), on: blank), [])
     }
 
     func testSayingEraseLiftsItAndNothingElse() {
         // An installer that can never reinstall is broken, so the guard is not
         // that this is impossible — it is that it is off by default. The opt-in
         // must lift THIS refusal and leave every other one standing.
-        XCTAssertEqual(problems(goodPlan(erase: true), on: machine(existingPools: ["zroot"])), [])
-        let stillMounted = problems(goodPlan(erase: true),
-                                    on: machine(mountedAt: ["/media"], existingPools: ["zroot"]))
-        XCTAssertTrue(stillMounted.contains(.diskIsMounted("ada0", at: ["/media"])), "\(stillMounted)")
+        XCTAssertEqual(problems(goodPlan(erase: true), on: fullDisk(pools: ["zroot"])), [])
         let stillRoot = problems(goodPlan(erase: true),
-                                 on: machine(holdsRoot: true, existingPools: ["zroot"]))
+                                 on: DiskInventory(disks: [Disk(name: "ada0", bytes: 64 << 30,
+                                                                holdsRunningRoot: true,
+                                                                partitionKinds: ["efi"],
+                                                                hasPartitionTable: true)]))
         XCTAssertTrue(stillRoot.contains(.diskHoldsRunningRoot("ada0")), "\(stillRoot)")
-    }
-
-    func testAnEmptyDiskIsStillAccepted() {
-        // The positive control for this refusal specifically: a machine with no
-        // existing pools must still install, or the check is just a wall.
-        XCTAssertEqual(problems(goodPlan(), on: machine(existingPools: [])), [])
     }
 
     func testAPartitionIsNotADisk() {
@@ -370,9 +396,56 @@ final class InstallTests: XCTestCase {
         XCTAssertFalse(s.contains { if case .run(let a, _) = $0.action {
             return a.contains("freebsd-swap") }; return false })
         XCTAssertFalse(fstab(p).contains("swap\tsw"))
-        // ...and the pool goes on p2, not p3.
+        // ...and the pool is addressed **by label**, which is what makes the
+        // index irrelevant. It used to be `/dev/ada0p2` here and `p3` with swap,
+        // and that arithmetic is only true of a table we just created — an
+        // install into free space on somebody's disk lands wherever `gpart`
+        // puts it, and a hard-coded index would format the wrong partition.
         XCTAssertTrue(s.contains { if case .run(let a, _) = $0.action {
-            return a.first == "zpool" && a.contains("/dev/ada0p2") }; return false })
+            return a.first == "zpool" && a.contains("/dev/gpt/abysszfs") }; return false })
+    }
+
+    func testInstallingIntoFreeSpaceDestroysNoPartitionTable() {
+        // **The case the whole redesign is for.** A disk with room takes the
+        // install beside what is already there: no `destroy`, and no `create`
+        // either, because the table it would replace is the one being kept.
+        let roomy = DiskInventory(disks: [Disk(name: "ada0", bytes: 512 << 30,
+                                               description: "Samsung",
+                                               partitionKinds: ["efi", "ntfs"],
+                                               freeBytes: 200 << 30,
+                                               hasPartitionTable: true)])
+        let s = try! compile(goodPlan(), on: roomy)
+        func runs(_ argv: String...) -> Bool {
+            s.contains { if case .run(let a, _) = $0.action {
+                return argv.allSatisfy(a.contains) }; return false }
+        }
+        XCTAssertFalse(runs("gpart", "destroy"), "an install into free space destroyed the table")
+        XCTAssertFalse(runs("gpart", "create"), "an install into free space replaced the table")
+        // ...and it still adds its own three partitions.
+        XCTAssertTrue(runs("gpart", "add", "efi"))
+        XCTAssertTrue(runs("gpart", "add", "freebsd-zfs"))
+    }
+
+    func testABlankDiskGetsATableButNothingIsDestroyed() {
+        let blank = DiskInventory(disks: [Disk(name: "ada0", bytes: 64 << 30,
+                                               hasPartitionTable: false)])
+        let s = try! compile(goodPlan(), on: blank)
+        func runs(_ argv: String...) -> Bool {
+            s.contains { if case .run(let a, _) = $0.action {
+                return argv.allSatisfy(a.contains) }; return false }
+        }
+        XCTAssertFalse(runs("gpart", "destroy"), "there was no table to destroy")
+        XCTAssertTrue(runs("gpart", "create"), "a blank disk still needs a GPT")
+    }
+
+    func testErasingIsTheOnlyPathThatDestroysATable() {
+        let occupied = DiskInventory(disks: [Disk(name: "ada0", bytes: 64 << 30,
+                                                  partitionKinds: ["ntfs"],
+                                                  freeBytes: 1 << 20,
+                                                  hasPartitionTable: true)])
+        let s = try! compile(goodPlan(erase: true), on: occupied)
+        XCTAssertTrue(s.contains { if case .run(let a, _) = $0.action {
+            return a.contains("destroy") }; return false })
     }
 
     func testAPasswordHashNeverAppearsInArgv() {
@@ -522,12 +595,25 @@ final class InstallTests: XCTestCase {
                             accounts: [Account(name: "jkane", fullName: "J Kane",
                                                passwordHash: "$6$user",
                                                groups: ["wheel", "operator"],
-                                               shell: "/bin/sh")])
-        // **On a Mac Pro deliberately**, so the golden list keeps showing the
-        // loader.conf *with* the power-fault workaround in it. That is the
-        // longer of the two shapes and the one worth having in a diff; the three
-        // tests above are what pin the conditional itself.
-        let text = render(try! compile(p, on: machine(identity: macPro)))
+                                               shell: "/bin/sh")],
+                            // The confirmation, because this fixture erases an
+                            // occupied disk on purpose. Without it the compile
+                            // is refused — which is itself the guard working.
+                            eraseExistingData: true)
+        // **On a Mac Pro, and erasing a disk that already has something on it.**
+        // Two deliberate choices, both to keep the *longest and most dangerous*
+        // shape in the diff: the loader.conf with the power-fault workaround, and
+        // the partition table being destroyed rather than added to. The
+        // conditionals themselves are pinned by the tests above and below; this
+        // is the one that makes a change to the destructive sequence have to be
+        // defended.
+        let occupied = DiskInventory(disks: [Disk(name: "ada0", bytes: 64 << 30,
+                                                  description: "QEMU HARDDISK",
+                                                  partitionKinds: ["efi", "ntfs"],
+                                                  freeBytes: 1 << 20,
+                                                  hasPartitionTable: true)],
+                                     machine: macPro)
+        let text = render(try! compile(p, on: occupied))
         XCTAssertEqual(text, InstallTests.goldenStepList,
                        "the step list changed:\n\(text)")
     }
@@ -548,9 +634,9 @@ extension InstallTests {
 5. add the pool partition [destructive]
    $ gpart add -a 1m -t freebsd-zfs -l abysszfs ada0
 6. format the EFI partition [destructive]
-   $ newfs_msdos -F 32 -c 1 /dev/ada0p1
+   $ newfs_msdos -F 32 -c 1 /dev/gpt/abyssesp
 7. create the pool [destructive]
-   $ zpool create -f -o altroot=/mnt -o cachefile=/tmp/abyss-install-zpool.cache -O compress=lz4 -O atime=off -O mountpoint=none abyss /dev/ada0p3
+   $ zpool create -f -o altroot=/mnt -o cachefile=/tmp/abyss-install-zpool.cache -O compress=lz4 -O atime=off -O mountpoint=none abyss /dev/gpt/abysszfs
 8. create abyss/ROOT
    $ zfs create -o mountpoint=none abyss/ROOT
 9. create abyss/ROOT/default
@@ -588,7 +674,7 @@ extension InstallTests {
 25. make the ESP mount point
    $ mkdir -p /mnt/boot/efi
 26. mount the EFI partition
-   $ mount -t msdosfs /dev/ada0p1 /mnt/boot/efi
+   $ mount -t msdosfs /dev/gpt/abyssesp /mnt/boot/efi
 27. make EFI/BOOT
    $ mkdir -p /mnt/boot/efi/EFI/BOOT
 28. install the boot loader

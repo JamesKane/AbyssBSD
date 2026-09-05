@@ -143,9 +143,15 @@ echo "ok: exactly one installable disk on this machine: $target"
 
 # The SAME plan `install` is about to be given, so that "check said yes" is a
 # promise about the install that follows rather than about a similar one.
+#
+# **`--erase-this-disk` is here because the harness genuinely is erasing one.**
+# The scratch disk carries the previous run's install, and a disk with something
+# on it and no room is now refused until somebody says so. This test says so, in
+# the same words a person would have to — which is the point: the harness does
+# not get a quieter path to destruction than the human does.
 plan="--disk $target --pool abyssp52 --dist $dist --hostname jaguar
       --timezone America/Chicago --root-hash \$6\$rootp52
-      --user abyss:\$6\$userp52:wheel"
+      --user abyss:\$6\$userp52:wheel --erase-this-disk"
 
 # shellcheck disable=SC2086
 "$ctl" check $plan > "$work/check" 2>&1 \

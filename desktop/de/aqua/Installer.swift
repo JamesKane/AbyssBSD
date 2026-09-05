@@ -212,7 +212,7 @@ public struct InstallerModel: Sendable {
         for p in problems {
             switch p {
             case .diskHoldsRunningRoot, .diskIsMounted, .diskTooSmall, .notAWholeDisk,
-                 .diskHoldsExistingSystem:
+                 .diskIsFull:
                 return p.message
             case .emptyDisk, .noSuchDisk, .badPoolName, .poolNameInUse, .noSets,
                  .baseSetNotFirst, .sizeNotWholeMiB, .relativePath, .noAdministrator:

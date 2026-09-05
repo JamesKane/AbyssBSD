@@ -39,16 +39,47 @@ public struct Disk: Equatable, Sendable {
     /// lists what *could* be imported and imports nothing, which was verified
     /// both ways before this field existed.
     public let existingPools: [String]
+    /// Partition types already on this disk — `efi`, `ntfs`, `ms-basic-data`,
+    /// `freebsd-zfs`. Empty means no partition table at all.
+    ///
+    /// **`existingPools` was only ever half the guard.** It answers "is somebody's
+    /// ZFS here", which on the bring-up machine correctly refused the disk
+    /// holding `zroot` — and said nothing about the two beside it carrying a
+    /// Windows install and 223 GB of NTFS. Those were offered as clean targets.
+    /// A refusal that protects only the filesystems we happen to use is one that
+    /// eats everybody else's.
+    public let partitionKinds: [String]
+    /// The largest **contiguous** gap on the disk, in bytes.
+    ///
+    /// Contiguous rather than total, because partitions are extents and an
+    /// install needs room in one piece. This is what turns "every disk has
+    /// something on it" from a dead end into a question: a disk with space to
+    /// spare can take an install *beside* what is already there.
+    public let freeBytes: UInt64
+    /// Whether the disk has a partition table at all. A blank disk is not a full
+    /// one, and the two need different treatment: nothing to destroy, but a
+    /// table to create.
+    public let hasPartitionTable: Bool
 
     public init(name: String, bytes: UInt64, description: String = "",
                 mountedAt: [String] = [], holdsRunningRoot: Bool = false,
-                existingPools: [String] = []) {
+                existingPools: [String] = [], partitionKinds: [String] = [],
+                freeBytes: UInt64 = 0, hasPartitionTable: Bool = false) {
         self.name = name
         self.bytes = bytes
         self.description = description
         self.mountedAt = mountedAt
         self.holdsRunningRoot = holdsRunningRoot
         self.existingPools = existingPools
+        self.partitionKinds = partitionKinds
+        self.freeBytes = freeBytes
+        self.hasPartitionTable = hasPartitionTable
+    }
+
+    /// Everything a person should be told before this disk is touched — pool
+    /// names first, because a name is more use than a type.
+    public var contents: [String] {
+        existingPools.map { "ZFS pool \($0)" } + partitionKinds
     }
 }
 
