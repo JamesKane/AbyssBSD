@@ -25,14 +25,30 @@ public struct Disk: Equatable, Sendable {
     /// True if the running system's root filesystem lives here. The strongest
     /// refusal of the set: this is the disk you are running from.
     public let holdsRunningRoot: Bool
+    /// ZFS pools that live on this disk and are **not imported** — somebody
+    /// else's installed system, seen from a live medium.
+    ///
+    /// **This is the field that makes the other refusals mean anything on a
+    /// live medium.** `mountedAt` and `holdsRunningRoot` both describe the
+    /// *running* system, and on a medium the running system is the USB stick:
+    /// the machine's own disk is not mounted, its pool is not imported, and
+    /// every existing refusal is therefore silent about it. A disk holding a
+    /// working FreeBSD install looked exactly like an empty one.
+    ///
+    /// Found by scanning, not by importing — `zpool import` with no arguments
+    /// lists what *could* be imported and imports nothing, which was verified
+    /// both ways before this field existed.
+    public let existingPools: [String]
 
     public init(name: String, bytes: UInt64, description: String = "",
-                mountedAt: [String] = [], holdsRunningRoot: Bool = false) {
+                mountedAt: [String] = [], holdsRunningRoot: Bool = false,
+                existingPools: [String] = []) {
         self.name = name
         self.bytes = bytes
         self.description = description
         self.mountedAt = mountedAt
         self.holdsRunningRoot = holdsRunningRoot
+        self.existingPools = existingPools
     }
 }
 

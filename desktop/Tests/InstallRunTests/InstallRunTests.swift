@@ -149,6 +149,113 @@ final class InstallRunTests: XCTestCase {
         XCTAssertFalse(parseZpoolVdevs(text).contains("mirror-0"))
     }
 
+    // MARK: - Pools that are here but not imported
+
+    /// `zpool import`, captured verbatim in the build VM on a machine carrying
+    /// three pool shapes at once — a mirror, a single device, and one on a
+    /// partition. Invented text would only have exercised the shape I happened
+    /// to imagine, which is this file's standing rule.
+    static let zpoolImportText = """
+      pool: capmirror
+        id: 15841513621478346893
+     state: ONLINE
+    action: The pool can be imported using its name or numeric identifier.
+    config:
+
+    \tcapmirror   ONLINE
+    \t  mirror-0  ONLINE
+    \t    md0     ONLINE
+    \t    md1     ONLINE
+
+      pool: capsingle
+        id: 2816878795490912526
+     state: ONLINE
+    action: The pool can be imported using its name or numeric identifier.
+    config:
+
+    \tcapsingle   ONLINE
+    \t  md2       ONLINE
+
+      pool: abyssp52
+        id: 3911584180507105418
+     state: ONLINE
+    action: The pool can be imported using its name or numeric identifier.
+    config:
+
+    \tabyssp52    ONLINE
+    \t  vtbd2p3   ONLINE
+    """
+
+    /// The scratch disk, captured from the same machine: an installed system
+    /// that nothing has mounted. This is the live-medium case in miniature.
+    static let geomWithScratchText = geomText + """
+
+    Geom name: vtbd2
+    Providers:
+    1. Name: vtbd2
+       Mediasize: 12884901888 (12G)
+       Sectorsize: 512
+       Mode: r0w0e0
+       descr: (null)
+       ident: (null)
+       rotationrate: unknown
+       fwsectors: 63
+       fwheads: 16
+
+    """
+
+    static let labelWithScratchText = labelText + """
+
+    gpt/abyssp52esp  N/A  vtbd2p1
+    gpt/abyssp52swap  N/A  vtbd2p2
+    gpt/abyssp52zfs  N/A  vtbd2p3
+    """
+
+    func testImportablePoolsAreParsedIntoTheirDevices() {
+        let got = parseImportablePools(Self.zpoolImportText)
+        XCTAssertEqual(got["capmirror"]?.sorted(), ["md0", "md1"],
+                       "a mirror's two leaves are both real devices")
+        XCTAssertEqual(got["capsingle"], ["md2"])
+        XCTAssertEqual(got["abyssp52"], ["vtbd2p3"])
+        XCTAssertEqual(got.keys.sorted(), ["abyssp52", "capmirror", "capsingle"])
+    }
+
+    func testTheVdevKindRowIsNotMistakenForADevice() {
+        // `mirror-0` is a structural row of the config tree. Taking it for a
+        // device would attribute the pool to a disk that does not exist.
+        XCTAssertFalse(parseImportablePools(Self.zpoolImportText)["capmirror"]!
+                        .contains("mirror-0"))
+        XCTAssertTrue(isVdevTypeNode("mirror-0"))
+        XCTAssertTrue(isVdevTypeNode("raidz2-1"))
+        XCTAssertTrue(isVdevTypeNode("logs"))
+        // ...and a real device whose name merely starts the same way is not one.
+        XCTAssertFalse(isVdevTypeNode("mirrordisk0"))
+        XCTAssertFalse(isVdevTypeNode("da0"))
+        XCTAssertFalse(isVdevTypeNode("vtbd2p3"))
+    }
+
+    func testAScanThatFoundNothingParsesAsNothing() {
+        // "No pools" is the answer that lets an install proceed, so it has to be
+        // reachable — and distinguishable from a parse that went wrong.
+        XCTAssertTrue(parseImportablePools("").isEmpty)
+        XCTAssertTrue(parseImportablePools("no pools available to import").isEmpty)
+    }
+
+    func testAnUnimportedPoolIsAttributedToItsDisk() {
+        // The live-medium case, end to end: the target disk carries somebody's
+        // whole installed system, and NOTHING else in the inventory says so.
+        let inv = inventory(geom: Self.geomWithScratchText, mounts: Self.mountText,
+                            labels: Self.labelWithScratchText,
+                            poolVdevs: ["zroot": parseZpoolVdevs(Self.zpoolText)],
+                            importablePools: parseImportablePools(Self.zpoolImportText))
+        let target = inv.disk(named: "vtbd2")
+        XCTAssertEqual(target?.existingPools, ["abyssp52"], "vtbd2p3 belongs to vtbd2")
+        XCTAssertEqual(target?.mountedAt, [], "and it is not mounted —")
+        XCTAssertEqual(target?.holdsRunningRoot, false, "— nor is it the running root.")
+        XCTAssertFalse(inv.importedPools.contains("abyssp52"),
+                       "scanning must not make it look imported")
+    }
+
     func testTheProbeRefusesLoudlyWhereItCannotWork() throws {
         // Not a skip. An installer whose disk discovery quietly does nothing on
         // the machine you develop on is one that ships broken.

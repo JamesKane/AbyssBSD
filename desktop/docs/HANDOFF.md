@@ -336,6 +336,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.48 | A nested compositor's schedule is not its own — C1 there is measured against the host's clock; and the display's size beats your flags |
 | 2.49 | "The option was accepted" is not "the value was accepted" — `makefs` takes `media_descriptor` in decimal only, and a fix verified by hand never ran in the builder |
 | 2.50 | A check that dies inside `$( )` under `set -e` fails **silently** — and `dd bs=1` on a raw device is `Invalid argument` |
+| 2.51 | Every safety predicate you have describes the **running** system — and on a live medium the running system is the USB stick |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -602,6 +603,45 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.51 On a live medium, "is this disk in use?" has the wrong subject
+(The retarget, again — checking whether the medium was safe to boot on a machine
+whose single disk could not be lost.)
+
+`Safety.swift` had three refusals guarding somebody's data, and on a live medium
+**all three are silent about the disk you are about to erase**:
+
+| Refusal | What it actually asks | On a medium |
+|---|---|---|
+| `diskHoldsRunningRoot` | is this the disk I booted from? | that is the **USB stick** |
+| `diskIsMounted` | is anything mounted from it? | nothing is — see below |
+| `poolNameInUse` | is a pool of that name imported? | none are imported at all |
+
+The common cause is one word: every one of them describes the **running** system,
+and the whole point of a live medium is that the running system is not the
+machine's. The medium deliberately sets no `zfs_enable`, so it imports nothing —
+which is what makes it *safe to boot* and simultaneously what makes it *blind*.
+A disk carrying a complete FreeBSD install is unmounted, unimported, and
+indistinguishable from an empty one.
+
+The missing question is "what is *on* it", and the answer is a scan rather than a
+mount: **`zpool import` with no arguments lists pools available to import and
+imports nothing.** Verified both ways before the code was written — the scan
+found a pool on a disk and `zpool list` afterwards was unchanged. `gpart show` is
+the same shape for the non-ZFS case.
+
+The generalisation is worth more than the fix: **when a program runs somewhere
+other than the system it is acting on, re-read every predicate for whose system
+it is asking about.** An installer, a rescue image, a recovery tool and a jail
+all have this seam, and the predicate that looks most obviously correct — "am I
+running from that disk?" — is the one that inverts.
+
+**And the fix was half-invisible for the same reason twice.** `InstallerModel.objection(to:)`
+matched refusals with a `switch` ending in `default: continue`, so the new
+refusal was raised by the model and *silently dropped by the picker* — the disk
+stayed choosable (§2.46, for the second time in this installer). The repair is
+structural, not a test: the switch is now exhaustive, so the next refusal added
+to `Safety.swift` will not compile until the screen has been taught to show it.
 
 ### 2.50 A check that dies inside a command substitution fails silently
 (Retarget to the RX 6750 XT — the first time `live-image.sh` ran its own ESP

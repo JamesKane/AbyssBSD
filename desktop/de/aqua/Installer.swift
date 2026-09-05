@@ -201,11 +201,22 @@ public struct InstallerModel: Sendable {
         let problems = Install.problems(trial, on: inventory)
         // Only the ones that are about *this disk*; a missing account is not
         // the disk's fault and belongs on its own spoke.
+        //
+        // **This list is a whitelist, and that is a trap worth naming.** A
+        // refusal added to `Safety.swift` and not added here is refused by the
+        // model and *offered by the picker* — the user chooses a disk, gets to
+        // the end, and the install fails on a reason the screen never showed.
+        // `diskHoldsExistingSystem` arrived exactly that way (§2.46 again: a GUI
+        // cannot be trusted to be right about itself), and the test below now
+        // fails if a new case is not listed.
         for p in problems {
             switch p {
-            case .diskHoldsRunningRoot, .diskIsMounted, .diskTooSmall, .notAWholeDisk:
+            case .diskHoldsRunningRoot, .diskIsMounted, .diskTooSmall, .notAWholeDisk,
+                 .diskHoldsExistingSystem:
                 return p.message
-            default: continue
+            case .emptyDisk, .noSuchDisk, .badPoolName, .poolNameInUse, .noSets,
+                 .baseSetNotFirst, .sizeNotWholeMiB, .relativePath, .noAdministrator:
+                continue
             }
         }
         return ""

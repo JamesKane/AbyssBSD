@@ -15,19 +15,23 @@ final class InstallTests: XCTestCase {
     private func machine(diskBytes: UInt64 = 64 * 1024 * 1024 * 1024,
                          mountedAt: [String] = [],
                          holdsRoot: Bool = false,
-                         pools: [String] = []) -> DiskInventory {
+                         pools: [String] = [],
+                         existingPools: [String] = []) -> DiskInventory {
         DiskInventory(disks: [Disk(name: "ada0", bytes: diskBytes,
                                    description: "QEMU HARDDISK",
                                    mountedAt: mountedAt,
-                                   holdsRunningRoot: holdsRoot)],
+                                   holdsRunningRoot: holdsRoot,
+                                   existingPools: existingPools)],
                       importedPools: pools)
     }
 
     /// A plan that is fine, so a test can break exactly one thing about it.
-    private func goodPlan(disk: String = "ada0", pool: String = "abyss") -> InstallPlan {
+    private func goodPlan(disk: String = "ada0", pool: String = "abyss",
+                          erase: Bool = false) -> InstallPlan {
         InstallPlan(disk: disk, poolName: pool, hostname: "abyss",
                     accounts: [Account(name: "jkane", fullName: "J Kane",
-                                       passwordHash: "$6$fake", groups: ["wheel"])])
+                                       passwordHash: "$6$fake", groups: ["wheel"])],
+                    eraseExistingData: erase)
     }
 
     // MARK: - The refusals
@@ -55,6 +59,50 @@ final class InstallTests: XCTestCase {
         let ps = problems(goodPlan(), on: machine(mountedAt: ["/"], holdsRoot: true))
         XCTAssertTrue(ps.contains(.diskHoldsRunningRoot("ada0")))
         XCTAssertFalse(ps.contains(where: { if case .diskIsMounted = $0 { return true }; return false }))
+    }
+
+    // MARK: - The disk that already holds somebody's system
+
+    func testADiskHoldingAnUnimportedPoolIsRefused() {
+        // **The refusal a live medium needs and no other caller does.** From a
+        // USB stick the machine's own disk is unmounted and its pool unimported,
+        // so `diskIsMounted` and `diskHoldsRunningRoot` are both silent — they
+        // describe the *running* system, and the running system is the stick.
+        // Before this, a disk carrying a whole FreeBSD install was presented as
+        // a clean target with nothing said about it.
+        let m = machine(existingPools: ["zroot"])
+        let ps = problems(goodPlan(), on: m)
+        XCTAssertTrue(ps.contains(.diskHoldsExistingSystem("ada0", pools: ["zroot"])), "\(ps)")
+        XCTAssertThrowsError(try compile(goodPlan(), on: m))
+    }
+
+    func testTheRefusalNamesThePoolItWouldDestroy() {
+        // A refusal a person cannot act on is one they work around, so the
+        // sentence has to carry the thing being lost.
+        let one = PlanRefusal.diskHoldsExistingSystem("ada0", pools: ["zroot"])
+        XCTAssertTrue(one.message.contains("zroot"), one.message)
+        XCTAssertTrue(one.message.contains("ada0"), one.message)
+        let two = PlanRefusal.diskHoldsExistingSystem("ada0", pools: ["zroot", "tank"])
+        XCTAssertTrue(two.message.contains("pools called zroot, tank"), two.message)
+    }
+
+    func testSayingEraseLiftsItAndNothingElse() {
+        // An installer that can never reinstall is broken, so the guard is not
+        // that this is impossible — it is that it is off by default. The opt-in
+        // must lift THIS refusal and leave every other one standing.
+        XCTAssertEqual(problems(goodPlan(erase: true), on: machine(existingPools: ["zroot"])), [])
+        let stillMounted = problems(goodPlan(erase: true),
+                                    on: machine(mountedAt: ["/media"], existingPools: ["zroot"]))
+        XCTAssertTrue(stillMounted.contains(.diskIsMounted("ada0", at: ["/media"])), "\(stillMounted)")
+        let stillRoot = problems(goodPlan(erase: true),
+                                 on: machine(holdsRoot: true, existingPools: ["zroot"]))
+        XCTAssertTrue(stillRoot.contains(.diskHoldsRunningRoot("ada0")), "\(stillRoot)")
+    }
+
+    func testAnEmptyDiskIsStillAccepted() {
+        // The positive control for this refusal specifically: a machine with no
+        // existing pools must still install, or the check is just a wall.
+        XCTAssertEqual(problems(goodPlan(), on: machine(existingPools: [])), [])
     }
 
     func testAPartitionIsNotADisk() {

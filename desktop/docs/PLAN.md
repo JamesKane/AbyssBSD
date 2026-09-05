@@ -163,12 +163,13 @@ needs.** Two consequences worth saying out loud:
 ```
 built ───────────────────────────────────────────────────────────────────
   0 ─► 1 ─► 2 ─► 3 ─┬─► 7 ─┐
-                    │      ├─► 8 ─► 5 ─► 4     ◄── in flight, on the machine
-                    └─► 6 ─┘                │
+                    │      ├─► 8 ─► 5 ─► 4     ◄── in flight, steps 0–6 only:
+                    └─► 6 ─┘                │      one disk, so no install
                           │                 │
 next ─────────────────────┼─────────────────┼────────────────────────────
-                          │                 ├──────────────► 12  Fathom
-                          │                 │
+                          │                 ├──► 12  Fathom  ◄── NEXT, and it
+                          │                 │        │           feeds 4 back
+                          │                 │        └───────────┘
                           └─► 9  substrate ─┴──────────────► 13  Islands,
                                  │                               Shoals, Ebb
                                  ├─► 10  menus ──┐
@@ -182,8 +183,14 @@ next ─────────────────────┼───
 ```
 
 Read an arrow as "needs". **13 needs both 9 and 4**, which is the only place two
-branches rejoin; 17 needs 15 *and* 14; everything else takes its edges from the
-table below.
+branches rejoin; 17 needs 15 *and* 14; **18 needs 10 directly as well as through
+14**, because the agent consumes the same published vocabulary the menu bar does
+([PRODUCT.md §5.5](PRODUCT.md)); everything else takes its edges from the table
+below.
+
+**12 is the one edge that runs backwards.** It needs what Phase 4 has already
+established, and then Phase 4 needs *it* to go any further — because a machine
+with one disk cannot be installed onto, so it has to be measured instead.
 
 ### The whole roadmap, in one table
 
@@ -200,24 +207,37 @@ table below.
 | 8 | The D-Bus bridge — portals for everyone else | 6, 7 | 10's foreign half, 15 | ✅ |
 | 5 | The installer — a machine with an empty disk | 6, 8 | 4, 12, 17 | ✅ |
 | 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** |
-| 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | **next** |
-| 10 | The menu protocol | 3, 8; *before* 15 | 15, and thesis 2 at all | |
+| 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | |
+| 10 | The menu protocol | 3, 8; *before* 15 | 15, **18**, and thesis 2 at all | |
 | 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | |
-| 12 | `Fathom` — the medium measures the machine | 4, 5 | the hardware matrix, 16's power work | |
+| 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | **next** |
 | 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | |
 | 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | |
 | 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | |
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | |
 | 17 | Delivery — the overlay, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | |
-| 18 | Confinement, then agents | 7, 14 | thesis 4 | |
+| 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | |
 
 **Phases 9–12 are mutually independent** — 9, 10 and 11 need nothing from each
-other, and 12 needs only 4. They are listed in that order because among
-independent work the tiebreak is fan-out and cost growth: 9 unblocks five later
-phases, 10 and 11 both get more expensive with every application Phase 15 adds,
-and 12's dependency on Phase 4 is *perishable* — Fathom is [PHASE4 §5](PHASE4.md)
-written down as a program, and it is cheapest to write while the checklist is
-fresh and the machine is still on the bench.
+other, and 12 needs only what Phase 4 has already done. Among independent work
+the tiebreak is normally fan-out and cost growth: 9 unblocks five later phases,
+and 10 and 11 both get more expensive with every application Phase 15 adds.
+
+**A hardware constraint overrides that tiebreak, and 12 runs first
+(2026-09-05).** The bring-up machine has **one disk**, and it holds the working
+FreeBSD install that Phase 4's positive control is made of (PHASE4 §1.2), so the
+install cannot happen until there is somewhere to put it. The install was never
+what the metal was for — every question only real hardware can answer is
+answered without writing a disk (PHASE4 §5.1) — but the medium has to *say* what
+it found, and today it barely does.
+
+**That inverts the argument 12 was ordered on.** It sat behind Phase 4 because
+*a person must walk the checklist before its probes can be encoded*; that
+assumed the person could finish the walk. They cannot — steps 0–6 are reachable
+and the rest is not — so `Fathom` stops being the record of a completed walk and
+becomes **the instrument for the part that can be done.** The dependency is
+weaker than it looked, too: steps 0–6 have been specified since PHASE4 §5 was
+written, and three of them have been run.
 
 **Where an edge is soft, it is marked *before* and not *needs*.** Phase 11 could
 follow Phase 15; there are 192 `Theme.` call sites across 14 files today and
@@ -634,10 +654,25 @@ Both halves, because the foreign half is already ours to write:
 - **Decide undo before there are applications to retrofit.** It is a
   toolkit-level concern, and deciding it after the application layer exists is
   how it ends up never decided.
+- **Publish a vocabulary, not a menu** ([PRODUCT.md §5.5](PRODUCT.md)). A menu
+  tree is an application's vocabulary in machine-readable form — the object
+  AppleScript called a *dictionary*, which 10.2 shipped alongside the global menu
+  bar because they are two consumers of one thing. **This phase is therefore on
+  thesis 4's critical path**: built as menus-only — titles, items, activation,
+  void — Phase 18 has to grow a second automation surface beside the human one,
+  which is exactly what a plugin API is and what we reject. The delta is three
+  design points and no extra code: a verb carries **argument types and a sentence
+  of description**; activation **returns a result** rather than nothing; and the
+  channel **answers a query** — *what can you do* — rather than only pushing.
+  Free now, a phase later. `Aqua` publishes it from the menu definition every
+  application already builds, and `abyss-dbus` yields the same for every GTK and
+  Qt application on the machine — one bridge, two consumers.
 
 **Verify:** the Finder's own menus in the bar, driven live by pointer and by
 keyboard; `gtkpick`'s menus in the bar through the bridge, with the other end
-never ours (§2.39's discipline).
+never ours (§2.39's discipline); and **a non-bar consumer** — a test client that
+asks the Finder what it can do and invokes one verb by name, which is the check
+that the surface is a vocabulary and not a drawing routine.
 
 ---
 
@@ -717,8 +752,17 @@ straight-line cairo (risk 7).
 
 ## Phase 12 — `Fathom`: the medium measures the machine
 
-**Needs:** 4 — a person has to work the checklist before it can be encoded — and
-5. **Unblocks:** the hardware support matrix, and every hardware pass after it.
+**Needs:** 5, and Phase 4 steps 0–6 (specified, three of them run).
+**Unblocks:** the hardware support matrix, every hardware pass after it — **and
+Phase 4 itself.**
+
+> **Pulled to the front on 2026-09-05.** The bring-up machine has one disk and it
+> holds the control Phase 4 is built on, so the install is deferred and the metal
+> has to be measured without being spent (PHASE4 §5.1). This phase was ordered
+> behind Phase 4 on the argument that *a person must walk the checklist before
+> its probes can be encoded* — which assumed the walk could finish. It cannot, so
+> `Fathom` becomes the instrument for the part that can be done rather than the
+> record of a walk that completed.
 
 **Goal:** Phase 4's second half. [PHASE4 §5](PHASE4.md) is a six-step ordered
 checklist where each step's failure is a different problem, and it exists because
@@ -808,7 +852,8 @@ load; an Ebb drawn over the eleven adversary clients C2 already survives.
 ## Phase 14 — preferences that write
 
 **Needs:** 9, 10, 11. **Unblocks:** 15 (a browser wants a network), 16, 17
-(updates want a network), 18 (agents want a network and a credential store).
+(updates want a network), 18 (a remote model wants a network, and the agent's
+panes and requesters live here).
 
 **Goal:** System Preferences stops being a painting.
 `Aqua.paintSystemPreferences` is backed by nothing, and **thesis 5's core claim
@@ -945,7 +990,8 @@ booting the environment it had.
 
 ## Phase 18 — confinement, then agents
 
-**Needs:** 7 (the portal is the model), 14 (a network and a credential store).
+**Needs:** 7 (the portal is the model), **10** (the vocabulary the agent acts
+through — see below), 14 (a network and a credential store).
 **Unblocks:** thesis 4.
 
 **Goal:** the project's strongest position, and zero code toward it today.
@@ -963,20 +1009,69 @@ Finder is a claim nobody else can make.
   GTK application runs today with the user's full authority** (PRODUCT.md §5.4),
   so this half earns its keep before any agent exists — which is the argument for
   pulling it forward if Phase 15's foreign applications become load-bearing.
-- **The grant UI**, which is where thesis 2 applies to thesis 4: the portal
-  refuses, and it has no human in the loop. "This agent wants to read
-  `~/Documents/foo.txt`" — Allow / Deny / Always, a revocable list, an audit log.
-  A sheet and a Preferences pane, which is why this needs 10, 11 and 14 to have
-  happened.
-- **Where the model runs is a constraint, not a preference.** GCN 1.0 on FreeBSD
-  means **no local GPU inference** — no ROCm, no CUDA. So a small CPU model or a
-  remote API, and a remote API is precisely why this needs Phase 14's network
-  pane and a credential store we do not have.
+- **A class is data, not code.** What a jail contains is a declared table over
+  `PoolConfig`: `edit` gets one directory and the toolkit; `debug` gets one
+  process's view and the debugger and no other; `admin` gets what a person names,
+  and asks first. **The cost that does not transfer from the Plan 9 designs this
+  borrows from:** a jail is a process tree, a devfs ruleset and a dataset, not a
+  mount table — so pooled, long-lived jails per class, never one per prompt.
+- **The confinement is the grant, so there is no per-action popup.** The earlier
+  draft of this phase asked for "This agent wants to read `~/Documents/foo.txt` —
+  Allow / Deny / Always"; that is permission-by-popup, it trains a person to say
+  yes, and it stacks a dialog on top of a capability that already had a human in
+  the loop when someone clicked the file. **Four named requesters and no others**
+  (PRODUCT.md §4.4): the first write in a session to a file that exists; anything
+  in the `admin` class; egress to a host not already granted; a spend that crosses
+  the budget. Plus a revocable list and an append-only transcript — the session
+  *is* the log, it outlives the process, and it is never rewritten, because the
+  frontier models refuse an edited history. The surface is a sheet and a
+  Preferences pane, which is why this still needs 10, 11 and 14.
+- **The vocabulary is Phase 10's, and that is a hard dependency.** An agent does
+  not get a tool interface of its own; it consumes the same published vocabulary
+  the menu bar and a script consume (PRODUCT.md §5.5). If Phase 10 shipped as
+  menus-only this phase pays for a second surface — which is the reason that
+  constraint is written into Phase 10 eight phases early. `abyss-dbus` extends
+  the same vocabulary to GTK and Qt applications. **Pixels** (`screencopy`,
+  already in `Surface`) are the documented fallback for an application that
+  cannot describe itself, and stop being used the day it can.
+- **Where the model runs is a constraint, not a preference — and the reason
+  changed.** It used to be the hardware: GCN 1.0 could not run local inference
+  whatever the OS did. Since the 2026-09-05 retarget it is purely the *operating
+  system* — an RX 6750 XT is RDNA 2 and would run local inference happily on
+  Linux, and FreeBSD has neither ROCm nor CUDA. That is something FreeBSD could
+  plausibly gain, so **re-check it rather than assuming it**. Until then a small
+  CPU model from ports or a remote API, and **we do not write an inference
+  engine** — same rule as the browser.
+- **One wire format, local and remote alike**, so the line above is a backend
+  swap and not a redesign. **The credential is a design, not a gap:** the key
+  lives in a process outside the jail, egress goes through the thing that adds
+  the header, and the agent cannot read it because that process is not in its
+  namespace. **The budget is a line** — tokens or currency per session, counted,
+  stopping at the next tool call with the reason visible; Phase 11's §8.5 rule in
+  another dimension.
 - **The agent application** is a chat window: WIMP-native, and it needs nothing
-  from Phase 15.
+  from Phase 15. But the first *task* is not chat — **a crash is handed to the
+  agent from the notice that says it crashed.** "Application quit unexpectedly"
+  carries a button; the click opens a session in the `debug` class on that
+  process and no other; it reads and reports and writes nothing. No network, no
+  vocabulary, so it lands first rather than last. Agent state — working, waiting,
+  idle — shows on the Dock tile, the menu bar and **Phase 13's island switcher**,
+  so a session waiting for a yes is visible without hunting for its window.
+- **Off is one file.** Absent it there is no menu item, no chord, no spend
+  indicator and no process parked on a crash, and the rest of the desktop does
+  not know the difference.
 
 **Verify:** an agent in a jail with its own `vnet` and exactly one descriptor;
-the audit log showing what it was granted; and a revocation that takes effect.
+the transcript showing what it was granted; a revocation that takes effect; a
+budget stop with its reason on screen; and the crash notice starting a `debug`
+session that can see one process and not a second one.
+
+**And it is testable before any of that exists.** A **stub model backend** —
+canned replies, tool calls included, answering the same wire format — runs every
+check above in the build VM with no model on disk and no network (§2.43). The
+sandbox check needs §2.37's companion: **one control, a jail deliberately built
+without the restriction, so the check is watched failing.** A confinement test
+that has never failed is a comment.
 
 ---
 
@@ -994,6 +1089,15 @@ the audit log showing what it was granted; and a revocation that takes effect.
 - **An IDE, a git client, an office suite.** Ports has them; our job is making
   them look and behave like they belong, which is Phases 11 and 15.
 - **A TUI for anything.** The terminal is the one exception, and it is not a TUI.
+- **An inference engine.** Phase 18 runs a model from ports behind one wire
+  format. Same rule as the browser: adopt engines, do not write them.
+- **An agent that cannot be removed.** Off is one file, and the rest of the
+  desktop does not know the difference.
+- **A second automation surface.** Phase 10 publishes a vocabulary once; the menu
+  bar, a script and Phase 18's agent are all consumers of it. No plugin API per
+  application, and no agent-only tool interface beside the human one.
+- **Driving programs by screenshot.** Pixels are the fallback for an application
+  that cannot describe itself, and stop being used the day it can.
 
 ---
 

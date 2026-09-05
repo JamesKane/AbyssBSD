@@ -36,7 +36,19 @@ public func probeMachine() throws -> DiskInventory {
     for p in poolNames {
         poolVdevs[p] = parseZpoolVdevs((try? capture(["zpool", "list", "-Hv", p])) ?? "")
     }
-    return inventory(geom: geom, mounts: mounts, labels: labels, poolVdevs: poolVdevs)
+    // **Pools that are here but not imported — which on a live medium is all of
+    // them.** `zpool import` with no arguments *scans* and lists what could be
+    // imported; it imports nothing. Verified both ways before this line existed:
+    // the scan found a pool on a disk and `zpool list` afterwards was unchanged.
+    //
+    // Best-effort, and deliberately so: it needs root, it can take a moment on a
+    // machine with many disks, and a medium that cannot scan should still be
+    // able to install. What it must never do is report *no* pools when it simply
+    // failed — see the caller's use of `scanned`.
+    let importScan = (try? capture(["zpool", "import"])) ?? ""
+    let importable = parseImportablePools(importScan)
+    return inventory(geom: geom, mounts: mounts, labels: labels,
+                     poolVdevs: poolVdevs, importablePools: importable)
     #else
     throw ProbeError.notSupported(
         "disk discovery needs FreeBSD's geom(8), mount(8) and zpool(8);"
@@ -159,8 +171,69 @@ public func diskOf(provider: String, labels: [String: String], disks: [String]) 
 
 /// Build the inventory from four pieces of captured text. Pure, so the tests
 /// feed it output captured from a real machine rather than a machine.
+/// Pools `zpool import` can see but nobody has imported, and the devices each
+/// one lives on.
+///
+/// Parsed from the real thing rather than from a description of it — the fixture
+/// this is tested against was captured off a machine carrying a mirror, a
+/// single-device pool and a partition-backed one at once, because a parser that
+/// has only met one vdev shape has only been shown to handle one.
+///
+/// The config block is a tree: the pool's own name first, then vdev *type* nodes
+/// (`mirror-0`, `raidz1-0`, `logs`, `cache`, …), then the leaves that are real
+/// devices. Only the leaves map to a disk.
+public func parseImportablePools(_ text: String) -> [String: [String]] {
+    func trim(_ s: Substring) -> String {
+        String(s.drop(while: { $0 == " " || $0 == "\t" })
+                .reversed().drop(while: { $0 == " " || $0 == "\t" || $0 == "\r" })
+                .reversed())
+    }
+    var out: [String: [String]] = [:]
+    var pool: String?
+    var inConfig = false
+    for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        let line = String(raw)
+        let trimmed = trim(Substring(line))
+        if trimmed.hasPrefix("pool:") {
+            pool = trim(trimmed.dropFirst("pool:".count))
+            inConfig = false
+            if let p = pool, !p.isEmpty, out[p] == nil { out[p] = [] }
+            continue
+        }
+        if trimmed == "config:" { inConfig = true; continue }
+        guard inConfig, let p = pool else { continue }
+        if trimmed.isEmpty { continue }
+        // The config block is indented; anything flush left has ended it.
+        guard line.hasPrefix("\t") || line.hasPrefix(" ") else { inConfig = false; continue }
+        guard let name = trimmed.split(separator: " ").first.map(String.init) else { continue }
+        if name == p { continue }                       // the pool's own row
+        if isVdevTypeNode(name) { continue }            // mirror-0, raidz2-1, logs…
+        out[p, default: []].append(name)
+    }
+    return out
+}
+
+/// True for the structural rows of a `zpool` config tree, which name a vdev
+/// *kind* rather than a device: `mirror-0`, `raidz1-2`, `draid2:4d:1c:0s-0`,
+/// `replacing-0`, and the bare section headings.
+func isVdevTypeNode(_ name: String) -> Bool {
+    if ["logs", "cache", "spares", "dedup", "special"].contains(name) { return true }
+    for kind in ["mirror", "raidz", "raidz1", "raidz2", "raidz3", "draid",
+                 "replacing", "spare", "indirect"] where name.hasPrefix(kind) {
+        // `mirror-0` and `draid2:4d:1c:0s-0` both carry a trailing `-<n>`;
+        // a device called `mirrorX` would not, and must not be eaten here.
+        if let dash = name.lastIndex(of: "-"),
+           !name[name.index(after: dash)...].isEmpty,
+           name[name.index(after: dash)...].allSatisfy(\.isNumber) {
+            return true
+        }
+    }
+    return false
+}
+
 public func inventory(geom: String, mounts: String, labels: String,
-                      poolVdevs: [String: [String]]) -> DiskInventory {
+                      poolVdevs: [String: [String]],
+                      importablePools: [String: [String]] = [:]) -> DiskInventory {
     let found = parseGeomDiskList(geom)
     let names = found.map(\.name)
     let labelMap = parseLabelComponents(labels)
@@ -195,10 +268,21 @@ public func inventory(geom: String, mounts: String, labels: String,
         }
     }
 
+    // Which disk does each *un-imported* pool sit on? Same mapping as above —
+    // a vdev of `vtbd2p3` means the pool lives on `vtbd2`.
+    var existing: [String: [String]] = [:]
+    for (pool, vdevs) in importablePools {
+        for v in vdevs {
+            guard let d = diskOf(provider: v, labels: labelMap, disks: names) else { continue }
+            if !(existing[d]?.contains(pool) ?? false) { existing[d, default: []].append(pool) }
+        }
+    }
+
     let disks = found.map { f in
         Disk(name: f.name, bytes: f.bytes, description: f.descr,
              mountedAt: (mountedAt[f.name] ?? []).sorted(),
-             holdsRunningRoot: rootDisks.contains(f.name))
+             holdsRunningRoot: rootDisks.contains(f.name),
+             existingPools: (existing[f.name] ?? []).sorted())
     }
     return DiskInventory(disks: disks, importedPools: poolVdevs.keys.sorted())
 }

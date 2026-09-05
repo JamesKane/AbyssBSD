@@ -27,6 +27,7 @@ public enum PlanRefusal: Error, Equatable {
     case sizeNotWholeMiB(String, UInt64)
     case relativePath(String, String)
     case noAdministrator
+    case diskHoldsExistingSystem(String, pools: [String])
 
     /// The sentence to put in front of a person.
     public var message: String {
@@ -60,6 +61,12 @@ public enum PlanRefusal: Error, Equatable {
         case .noAdministrator:
             return "nobody could log in to the installed system:"
                  + " set a root password or give an account the wheel group"
+        case .diskHoldsExistingSystem(let d, let pools):
+            let which = pools.count == 1
+                ? "a ZFS pool called \(pools[0])"
+                : "ZFS pools called \(pools.joined(separator: ", "))"
+            return "\(d) already holds \(which) — installing here destroys it."
+                 + " Choose another disk, or confirm that this one is to be erased"
         }
     }
 
@@ -167,6 +174,18 @@ public func problems(_ plan: InstallPlan, on inventory: DiskInventory) -> [PlanR
         if disk.holdsRunningRoot { found.append(.diskHoldsRunningRoot(disk.name)) }
         else if !disk.mountedAt.isEmpty {
             found.append(.diskIsMounted(disk.name, at: disk.mountedAt))
+        }
+        // **The refusal that only a live medium needs.** The two above describe
+        // the *running* system, and on a medium the running system is the USB
+        // stick — so a disk carrying somebody's whole FreeBSD install is
+        // unmounted, its pool unimported, and silent to both. Without this a
+        // machine with one disk in it presents that disk as a clean target.
+        //
+        // Not permanent: `eraseExistingData` lifts it, because an installer that
+        // can never reinstall is broken. The guard is that it is off by default
+        // and the sentence that turns it on names the pool being destroyed.
+        if !disk.existingPools.isEmpty, !plan.eraseExistingData {
+            found.append(.diskHoldsExistingSystem(disk.name, pools: disk.existingPools))
         }
         if disk.bytes < plan.minimumDiskBytes {
             found.append(.diskTooSmall(disk.name, has: disk.bytes, needs: plan.minimumDiskBytes))

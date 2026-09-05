@@ -379,12 +379,80 @@ Each step's failure is a different phase, which is why they are ordered — and 
 this machine steps 1–3 are the ones somebody else's software has already passed,
 which is what §1.2 buys.
 
-**One hazard that is new and is not a code problem: this machine has a working
-FreeBSD 15.0 install on a ~900 GB ZFS pool, and the installer's job is to wipe a
-disk.** `DiskInventory` lists what it finds and the plan names its target
-explicitly, but nothing in the software knows that one of those disks is the
-reason the machine is useful. Install to a second disk, or accept losing the
-control that §1.2 is entirely built on.
+### 5.1 There is no second disk, so the install is not part of this
+
+**The bring-up machine has one disk, and it holds the working FreeBSD install
+that §1.2's entire argument rests on.** So the install is deferred until there is
+somewhere to put it, and the checklist above stops after step 6.
+
+That costs less than it sounds, because **the install was never what the metal
+was for.** Steps 0–6 are every question only real hardware can answer — does it
+boot, does `amdgpu` bind, does `undertow` find the output, does the desktop draw,
+does the frame contract hold against a vblank we did not invent — and **not one
+of them writes to a disk.** What the install would add is "does an installed
+system boot", which the harness already proves on every `--vm --live` run,
+nested twice over, on an empty disk it made itself (P5.5). Metal adds a real GPU
+and a real clock to that; it does not add a more real `zpool create`.
+
+| Answered without installing | Needs an install |
+|---|---|
+| UEFI boots the medium; loader menu | an installed system boots on its own |
+| multi-user reached | `bectl` and the boot-environment story (Phase 17) |
+| `amdgpu` binds Navi 22, `/dev/dri/card0` | |
+| connector, mode, EDID, refresh rate | |
+| `undertow --backend auto` finds the output | |
+| the Aqua desktop drawn on real hardware | |
+| real keyboard, real mouse, libinput | |
+| **C1–C5 against a real vblank**, with and without `rtprio` | |
+| network device, DHCP, audio device | |
+| disks enumerated — read-only | |
+
+**So the medium has to become an instrument, not only a delivery mechanism**, and
+that is `Fathom` (§6.4 of PRODUCT.md). It was Phase 12 on the dependency order
+with Phase 4 in front of it; the constraint inverts that, and PLAN.md now runs it
+next. The reasoning it was ordered on — *a person must walk the checklist before
+its probes can be encoded* — assumed the person could finish. They cannot: steps
+0–6 are reachable and the rest is not, so the probe stops being a record of the
+walk and becomes the instrument for it.
+
+### 5.2 The refusal that a live medium needs and nothing else does
+
+Checking whether the medium was safe to boot turned up something worse than the
+hazard it was checking for.
+
+The medium does **not** set `zfs_enable`, so it imports no pools — which is why
+booting it is safe. But it is also why `DiskInventory` could not see that a disk
+was occupied. Every refusal in `Safety.swift` describes the **running** system:
+
+- `diskHoldsRunningRoot` — on a medium, that is the USB stick;
+- `diskIsMounted` — the machine's own disk is not mounted, because nothing
+  imported its pool;
+- `poolNameInUse` — checks *imported* pools, and there are none.
+
+> **So a disk carrying a whole working FreeBSD install was presented by the
+> installer as a clean, choosable target, with nothing said about it.** On a
+> machine with one disk, that is the entire machine offered for erasure by a
+> picker with no objection to raise.
+
+The fix is a probe, and it is the first `Fathom` probe in everything but name:
+**`zpool import` with no arguments *scans* and lists pools available to import,
+and imports nothing.** Verified both ways in the build VM before the code existed
+— the scan found a pool on a disk, and `zpool list` afterwards was unchanged.
+`Disk.existingPools` carries the result, and `diskHoldsExistingSystem` refuses
+by default, naming the pool it would destroy.
+
+Two details that matter more than the refusal:
+
+- **It is not permanent.** `InstallPlan.eraseExistingData` lifts it, because an
+  installer that can never reinstall is broken. The guard is that it is off by
+  default and the sentence that turns it on names what is lost — `write-stick.sh`'s
+  `--allow-fixed` in the other half of the product.
+- **The GUI silently ignored it at first**, because `InstallerModel.objection(to:)`
+  matched a *whitelist* of refusals with a `default: continue`. The model refused
+  and the picker offered the disk anyway. That is §2.46 for the second time in
+  this installer, and the fix is structural rather than a test: the switch is now
+  exhaustive, so the next refusal added to `Safety.swift` is a **compile error**
+  here instead of a silent omission.
 
 ---
 
@@ -436,13 +504,13 @@ of one.
 **6.5 There is still no login window** (PHASE5 §6.8), and on a real machine that
 somebody else uses, it starts to matter.
 
-**6.6 The control is destructible, and it is the phase's most valuable asset.**
-§1.2's whole argument rests on the target machine having a working FreeBSD
-install underneath our medium. Installing over it converts the positive control
-into another unknown, at exactly the moment the unknowns start. **Install to a
-second disk.** If that is not possible, take the boot environment story seriously
-early (Phase 17) or keep a second stick with the working system's loader — either
-way, decide it before the install, not after.
+**6.6 The control is destructible — resolved by not installing.** §1.2's whole
+argument rests on the target machine having a working FreeBSD install underneath
+our medium, and there is no second disk to install onto (§5.1). So the install is
+deferred rather than risked, the checklist stops at step 6, and `Fathom` moves in
+front of it so the machine can be measured without being spent. The refusal in
+§5.2 is the belt to that brace: even if somebody clicks through, the disk holding
+the control is not choosable.
 
 **6.7 One machine's numbers are not a contract.** P4.5 will produce C1–C5 against
 a real vblank for the first time, on 20 threads at 5 GHz driving 60 Hz. That is a

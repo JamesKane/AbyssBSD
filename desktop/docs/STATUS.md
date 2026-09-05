@@ -479,7 +479,31 @@ is the record of what got built, newest last.
 >
 > **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
 > each step's failure is a different problem. Write the image to a stick and work
-> down it.
+> down it — **steps 0–6 only.**
+>
+> **There is no second disk, so the install is deferred and `Fathom` (Phase 12)
+> is pulled to the front** (2026-09-05). The bring-up machine's single disk holds
+> the working FreeBSD install that Phase 4's positive control is made of, so it
+> cannot be spent. That costs less than it sounds: **every question only real
+> hardware can answer is answered without writing a disk** — GPU binding, mode,
+> input, the desktop drawing, and C1–C5 against a real vblank — and the one thing
+> an install would add, "does an installed system boot", the harness already
+> proves nested on every `--vm --live` run. What the medium lacks is a way to
+> *say* what it found, which is what Fathom is. PLAN.md's ordering has the
+> reversal and why (PHASE4 §5.1).
+>
+> **Checking that the medium was safe to boot found something worse.** Booting is
+> safe — the medium sets no `zfs_enable` and imports nothing. But that is exactly
+> why `DiskInventory` could not see an occupied disk: `diskHoldsRunningRoot`,
+> `diskIsMounted` and `poolNameInUse` all describe the **running** system, and on
+> a medium that is the USB stick. **A disk holding a whole FreeBSD install was
+> offered by the installer as a clean target with no objection.** Fixed with the
+> first Fathom probe in all but name — `zpool import` with no arguments *scans*
+> and imports nothing (verified both ways) — plus a `diskHoldsExistingSystem`
+> refusal that names the pool, and an `eraseExistingData` opt-in so reinstalling
+> is still possible. The GUI dropped the new refusal silently at first
+> (`objection(to:)` was a whitelist with a `default:`); its switch is now
+> exhaustive, so the next one is a compile error. HANDOFF §2.51.
 >
 > **Phase 9 — the interaction substrate — is scoped** ([PHASE9.md](PHASE9.md),
 > P9.1–P9.7) and needs no hardware, so it is the work that runs in parallel with

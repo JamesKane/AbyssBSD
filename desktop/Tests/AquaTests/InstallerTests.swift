@@ -36,6 +36,32 @@ final class InstallerTests: XCTestCase {
         return m
     }
 
+    func testTheDiskPickerShowsADiskThatAlreadyHoldsASystem() {
+        // **The live-medium case, at the screen.** From a USB stick the target
+        // machine's disk is unmounted and its pool unimported, so every other
+        // objection is silent about it — and `objection(to:)` is a whitelist, so
+        // the model refusing is not the same as the picker saying so. This is
+        // the test that would have caught the whitelist being out of date.
+        let inv = DiskInventory(disks: [
+            Disk(name: "nvd0", bytes: 900 << 30, description: "Samsung SSD 980",
+                 existingPools: ["zroot"]),
+            Disk(name: "da0", bytes: 64 << 30, description: "SanDisk Cruzer"),
+        ], importedPools: [])
+        var m = InstallerModel(inventory: inv)
+        m.accountName = "jkane"; m.accountPassword = "x"; m.accountConfirm = "x"
+
+        let occupied = inv.disk(named: "nvd0")!
+        XCTAssertFalse(m.canChoose(occupied),
+                       "a disk carrying somebody's FreeBSD install is not choosable")
+        XCTAssertTrue(m.objection(to: occupied).contains("zroot"),
+                      "and the row names what would be destroyed: \(m.objection(to: occupied))")
+
+        // The positive control: the empty stick beside it is still choosable, so
+        // this is a refusal and not a wall.
+        XCTAssertEqual(m.objection(to: inv.disk(named: "da0")!), "")
+        XCTAssertTrue(m.canChoose(inv.disk(named: "da0")!))
+    }
+
     // MARK: - The hub
 
     func testTheInstallButtonIsDeadUntilTheRequiredSpokesAreAnswered() {

@@ -53,6 +53,14 @@ public struct InstallPlan: Equatable, Sendable {
     public let keymap: String
     public let rootPasswordHash: String
     public let accounts: [Account]
+    /// Permission to destroy a ZFS pool already on the target disk.
+    ///
+    /// Default `false`, so an install over somebody's existing system is
+    /// **refused until a person says the words**. This is `write-stick.sh`'s
+    /// `--allow-fixed` in the other half of the product: the guard is not that
+    /// the operation is impossible, it is that it cannot happen by default and
+    /// the sentence that unlocks it names what will be lost.
+    public let eraseExistingData: Bool
 
     public init(disk: String,
                 poolName: String = "abyss",
@@ -65,7 +73,8 @@ public struct InstallPlan: Equatable, Sendable {
                 timezone: String = "",
                 keymap: String = "",
                 rootPasswordHash: String = "*",
-                accounts: [Account] = []) {
+                accounts: [Account] = [],
+                eraseExistingData: Bool = false) {
         self.disk = disk
         self.poolName = poolName
         self.espBytes = espBytes
@@ -78,6 +87,7 @@ public struct InstallPlan: Equatable, Sendable {
         self.keymap = keymap
         self.rootPasswordHash = rootPasswordHash
         self.accounts = accounts
+        self.eraseExistingData = eraseExistingData
     }
 
     /// The distribution set that carries the Aqua desktop.
