@@ -767,6 +767,17 @@ Phase 4 itself.**
 > `Fathom` becomes the instrument for the part that can be done rather than the
 > record of a walk that completed.
 
+**Expanded to executable detail in [PHASE12.md](PHASE12.md)** — passes
+P12.1–P12.6, and four risks spiked on both platforms before the plan was written.
+The most useful result is the dullest: **the build VM answers "no" to every probe
+here** — no `/dev/dri`, an empty `net.wlan.devices`, an unknown battery oid and a
+`/dev/sndstat` that says so in a sentence — which makes it the positive control
+this phase cannot be written without. Two others changed the shape: machine
+identity lives in **`kenv`, not sysctl**, so `Vents` gains its one new mechanism
+and `hw.pci.enable_pcie_hp` finally stops being unconditional; and the
+measurement half is **already built** — `undertow bench-metronome` prints all of
+it — so P12.4 is a serialisation pass, not a benchmarking one.
+
 **Goal:** Phase 4's second half. [PHASE4 §5](PHASE4.md) is a six-step ordered
 checklist where each step's failure is a different problem, and it exists because
 a person works down it by hand on the one machine we own. **`Fathom` is that

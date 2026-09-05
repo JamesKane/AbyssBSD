@@ -490,7 +490,13 @@ is the record of what got built, newest last.
 > an install would add, "does an installed system boot", the harness already
 > proves nested on every `--vm --live` run. What the medium lacks is a way to
 > *say* what it found, which is what Fathom is. PLAN.md's ordering has the
-> reversal and why (PHASE4 §5.1).
+> reversal and why (PHASE4 §5.1), and **[PHASE12.md](PHASE12.md) scopes it** —
+> P12.1–P12.6. Its spikes: the build VM answers *no* to every probe (the positive
+> control the phase needs), machine identity is **`kenv` not sysctl** so `Vents`
+> gains one small bridge and `hw.pci.enable_pcie_hp` stops being unconditional,
+> the measurement is **already built** in `undertow bench-metronome` and only
+> needs serialising, and the report goes on the **ESP** because FAT is the one
+> filesystem every desktop OS reads.
 >
 > **Checking that the medium was safe to boot found something worse.** Booting is
 > safe — the medium sets no `zfs_enable` and imports nothing. But that is exactly
