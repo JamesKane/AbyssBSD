@@ -1,8 +1,9 @@
 # What kind of OS this is — five theses, and the gap between them and the tree
 
 The argument about what we are building a desktop *for*, and an inventory of how
-far the tree is from it. [PLAN.md](PLAN.md) is the roadmap, [STATUS.md](STATUS.md)
-what is built, [HANDOFF.md](HANDOFF.md) the traps.
+far the tree is from it. **[PLAN.md](PLAN.md) is the roadmap** — everything argued
+here lands there as Phases 9–18, ordered by dependency (§9) — [STATUS.md](STATUS.md)
+is what is built, [HANDOFF.md](HANDOFF.md) the traps.
 
 ---
 
@@ -596,9 +597,12 @@ which is part of why people adopt it. A desktop that cannot be re-skinned is not
 more opinionated, just less finished, and "we are a faithful clone" is a reason to
 make Jaguar the **default**, not the only thing the code can express.
 
-**10.2 is what we ship. Nothing in the architecture may prevent someone building a
-mid-90s retro-cyberpunk theme or a modern GPU-effects extravaganza. We simply do
-not ship those.**
+**10.2 is the default we ship. Nothing in the architecture may prevent someone
+building a mid-90s retro-cyberpunk theme or a modern GPU-effects extravaganza.**
+
+**And we ship one of those ourselves, because otherwise the claim is untested.**
+See §8.7: `Trench` is the second theme, and it exists as the format's positive
+control rather than as the start of a catalogue.
 
 ### 8.1 The tree is already the right shape
 
@@ -647,6 +651,10 @@ must itself be expressed in the theme format.** If Jaguar needs a back door no
 other theme can use, the format is wrong and we find out immediately. `AquaDemo`
 already renders scenes to PNG, so the regression gate is a golden-image diff —
 pixel fidelity as a *test*, not a hope.
+
+**That check is necessary and not sufficient**, which is what §8.7 is for: the
+format was written by someone looking at Aqua, so Aqua fitting it proves less
+than it appears to.
 
 A theme that genuinely needs code is then a **port**, trusted like any other
 package, not a file you download and double-click.
@@ -702,6 +710,35 @@ after Phase 4.
 today, and every app in §4.1 adds more. Doing this at 192 is far cheaper than at
 six hundred — enough to move it ahead of most of §4.1.
 
+### 8.7 `Trench` — the second theme, and why there has to be one
+
+**A theme engine with one theme in it is §2.37's probe with no positive control.**
+Re-expressing Aqua in the format (§8.3) cannot fail in the way that matters,
+because the format was written by someone looking at Aqua. The only test that can
+fail is a theme that shares none of Aqua's assumptions and still comes out of the
+same interpreter with no code path of its own.
+
+So we ship a second one. **`Trench`** — 90s skeuomorphic cyberpunk, drawn from
+**AmigaOS MUI**, the **SGI IRIX Interactive Desktop** and **NeXTSTEP**. The three
+sources are not a mood board; each breaks a *different* Aqua assumption, which is
+the whole reason for picking three:
+
+| Source | What it contributes | The assumption it breaks |
+|---|---|---|
+| **AmigaOS / MUI** | hard bevelled chrome, chunky 3D frames, widget geometry configurable to a fault | that a control is a rounded rect with a gradient. MUI's are bevels and 9-slices, and **layer 2** has to express both or it is not a format |
+| **SGI IRIX / Motif** | the industrial register: deep insets, scheme-driven colour, the engineering workstation | that a theme is a *palette*. IRIX schemes move geometry and shading together, which is what stops **layer 1** from being mistaken for the whole job |
+| **NeXTSTEP** | dark, heavy, monochrome with one accent; scroll knobs and title bars that are nothing like Aqua's | that chrome *layout* is fixed. This is what makes **layer 3** real rather than decorative |
+
+**Jaguar stays the default and stays the product.** `Trench` is the proof the
+engine is an engine — and it is also the cheapest way to find out that layer 4's
+effects and §8.4's legibility floor mean something, since a dark high-contrast
+theme exercises both differently.
+
+**Two themes is not a catalogue**, and §10's refusal is unchanged: what we will
+not do is curate a *pack* of looks and carry the churn of keeping it current. Two
+is the number that makes the format testable. The name is from the same water
+column as everything else here; runner-up was *Hadal*.
+
 ---
 
 ## 9. What this does to the roadmap
@@ -712,29 +749,40 @@ but "here is the probe and the matrix that says what else does". The next action
 is unchanged — the stick still needs booting, and PHASE4 §5 step 3 still decides
 whether `si_support` binds — but "done" means something different.
 
-The order after it, by what unblocks the most:
+**Everything in this document is now on [PLAN.md](PLAN.md) as Phases 9–18,
+ordered by dependency**, and that document is the roadmap — this section says
+what changed, not what order to work in. Two orderings of the same work in two
+files is how they drift.
 
-1. **Repair the desktop's own claims** — clipboard and drag-and-drop in `Surface`,
-   resize/zoom/minimize in `undertow`, a global keybind table, server-side
-   decorations. All small, all missing, and together the difference between a demo
-   and a desktop.
-2. **The menu protocol**, both halves — ours over `CurrentIPC`, foreign through
-   `abyss-dbus`. Thesis 2 is not delivered without it.
-3. **Islands, Shoals and Ebb** (§7), gated by C6. Cheaper than it looks because
-   the scene already scales; shares the keybind-table prerequisite with step 1.
-4. **`.desktop` → `.app`** (§6.1). Cheap, and it makes everything after it look
-   like it belongs.
-5. **`Fathom`** (§6.4) — the medium stops being a delivery mechanism and becomes a
-   test. Belongs early: it is what makes every subsequent hardware claim
-   measurable instead of anecdotal.
-6. **The theme system, layers 1 and 2** (§8) — before the application layer grows.
-7. **Preferences that write**, starting with Network and Sound — thesis 5's core
-   and thesis 4's prerequisite.
-8. **Terminal**, the escape hatch that makes every other gap survivable.
-9. **Login window, lock, idle, power.**
-10. **`abyss update` over boot environments** (§6.2).
-11. **The rest of §4.1**, in the order a person actually misses them.
-12. **Jails, then agents** (§4.4).
+| PLAN phase | What it is | Where it comes from here |
+|---|---|---|
+| **9** — the interaction substrate | clipboard, drag-and-drop, a keybind table, the window requests we ignore, server-side decorations, the XWayland decision | §4.2, §4.3, §5.2 |
+| **10** — the menu protocol | ours over `CurrentIPC`, foreign through `abyss-dbus` | §4.2 |
+| **11** — the theme system, layers 1–3 | tokens, declarative widget drawing, chrome — plus `Trench` as the format's positive control | §8, §8.7, §5.3 |
+| **12** — `Fathom` | PHASE4 §5 as a program; the hardware matrix | §6.4, §4.5 |
+| **13** — Islands, Shoals and Ebb | workspaces, window sets, Exposé — and C6 | §7 |
+| **14** — preferences that write | Network, Sound, Displays, Energy over `PoolConfig`/`Vents`/`rc.conf` | §4.5 |
+| **15** — the application layer | `.desktop` → `.app`, the browser, Terminal, TextEdit, Grab, Activity Monitor, Disk Utility | §6.1, §5.1, §4.1 |
+| **16** — the session | login window, lock, idle, suspend, first run | §4.5 |
+| **17** — delivery | the Abyss overlay, and `abyss update` over boot environments | §6.2, §6.3 |
+| **18** — confinement, then agents | jails first (they are not only for agents), then the grant UI and the agent | §4.4, §5.4 |
+
+**What the dependency ordering changed about this document's own instincts**, in
+both directions:
+
+- **The theme system moved earlier** than "ahead of most of §4.1" — it is Phase
+  11, ahead of *all* of the application layer, because 192 `Theme.` call sites is
+  the cheapest this will ever be.
+- **`Fathom` moved later** than "belongs early", and the reason is honest: it
+  needs a person to have walked PHASE4 §5 before its probes can be right. It is
+  Phase 4's second half and it cannot precede Phase 4's first.
+- **Jails moved out of last place.** §5.4's point — that a `pkg`-installed GTK app
+  runs with the user's full authority — makes confinement worth building before
+  the agent that motivated it, so Phase 18 is explicitly "jails, then agents"
+  rather than "agents, which need jails".
+- **The Terminal stopped being its own step.** It is one item in Phase 15, because
+  what actually gated it was the clipboard, the menus and the theme — not its own
+  difficulty.
 
 ---
 
@@ -742,8 +790,11 @@ The order after it, by what unblocks the most:
 
 - **Tiling as a layout policy.** Drag-to-edge snapping is the one affordance worth
   offering; §7 is why that is not a concession.
-- **A theme *catalogue*.** Curating a pack of looks and the churn of keeping it
-  current. One theme, faithfully, is what we ship — the *system* is required (§8).
+- **A theme *catalogue*.** Curating a pack of looks and carrying the churn of
+  keeping it current. We ship **two** — Jaguar as the product and `Trench` as the
+  format's positive control (§8.7) — because the theme *system* is required (§8)
+  and a system with one theme in it is unproven. Two is a test; twenty is a
+  product line we are not in.
 - **A browser.** Adopt one — §5.1 says which, and why the choice is an engine
   rather than a chrome.
 - **An IDE, a git client, an office suite.** Ports has them; our job is making them

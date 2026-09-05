@@ -14,9 +14,11 @@ FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
 on every run of the harness, nested twice over, with no hardware and no human.
-**Phase 4 (Mac Pro) is the only phase left; it is scoped, and P4.1 and P4.3 are
-done — there is an image to write to a stick and boot**
-([PHASE4.md](PHASE4.md)); see [What's next](#whats-next).
+**Phase 4 (Mac Pro) is the last phase that was on the original roadmap; it is
+scoped, P4.1 and P4.3 are done, and the stick now boots on the machine**
+([PHASE4.md](PHASE4.md)). **It is no longer the last phase:** [PRODUCT.md](PRODUCT.md)
+argued what a system needs beyond a desktop, and [PLAN.md](PLAN.md) now carries
+that as **Phases 9–18, ordered by dependency**. See [What's next](#whats-next).
 
 ## What this is
 
@@ -432,9 +434,13 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 5–8 are complete.** Phase 4 — the Mac Pro — is the only one
-left, and is the first whose verification needs a machine no test can reach.
-Everything below this box is the record of what got built, newest last.
+**Phases 0–3 and 5–8 are complete.** Phase 4 — the Mac Pro — is in flight, and
+is the first whose verification needs a machine no test can reach. **After it the
+roadmap continues to Phase 18** ([PLAN.md](PLAN.md) — the interaction substrate,
+the menu protocol, the theme system, `Fathom`, Islands/Shoals/Ebb, preferences
+that write, the application layer, the session, delivery, and confinement), all
+of it ordered so a phase never precedes what it needs. Everything below this box
+is the record of what got built, newest last.
 
 > **Phase 4 is scoped; P4.1 and P4.3 are done — there is a stick to boot**
 > ([PHASE4.md](PHASE4.md)). `undertow` chooses its backend, and the medium now

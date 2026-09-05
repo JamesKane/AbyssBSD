@@ -1,7 +1,9 @@
 # Phase 4 — the Mac Pro: real graphics, real input, real numbers (scope)
 
-The last phase, and the first one whose verification needs a machine that is not
-in this loop. Read [PLAN.md](PLAN.md) for the locked decisions, [PHASE6.md](PHASE6.md)
+The first phase whose verification needs a machine that is not in this loop —
+and, since [PRODUCT.md](PRODUCT.md), no longer the last phase: PLAN.md now runs
+to Phase 18, and **Phase 12 is §5 below turned into a program** so the checklist
+runs on machines nobody here owns. Read [PLAN.md](PLAN.md) for the locked decisions, [PHASE6.md](PHASE6.md)
 for the frame contract this has to meet on metal, and [PHASE5.md](PHASE5.md) for
 the installer that is how anything gets onto that machine at all.
 
