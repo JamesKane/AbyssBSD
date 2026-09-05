@@ -201,16 +201,36 @@ if [ "$(uname -s)" = FreeBSD ]; then
   # Now a disk it can have. Try each row until one takes: which disk that is
   # depends on the machine, and the point is that exactly one of them is
   # installable — not that it is the third.
+  #
+  # **A disk with something on it asks first**, and this is where that gets
+  # exercised with a real pointer rather than in a model test. The scratch disk
+  # in the build VM carries the previous run's install, so the ordinary path
+  # through this installer now goes through the sheet — which is the point: the
+  # question is not an edge case, it is what most machines will do.
   rows=$(grep -o "Installer: layout .*" "$work/aqua.log" | tail -1 | tr ' ' '\n' | grep -c '^row')
   n=0
+  asked=0
   while [ $n -lt "$rows" ]; do
     grep -q "Installer: disk is " "$work/aqua.log" && break
     click "row$n"; click primary
+    # If it asked, answer. `primary` on the sheet is the destructive button and
+    # is deliberately NOT the default — clicking it is a decision, here as on
+    # the screen.
+    if grep -q "Installer: asking before erasing " "$work/aqua.log"; then
+      asked=1
+      click primary
+    fi
     n=$((n + 1))
   done
   grep -q "Installer: disk is " "$work/aqua.log" || fail "no disk could be chosen at all"
   chosen=$(grep -o "Installer: disk is .*" "$work/aqua.log" | tail -1 | awk '{print $4}')
-  echo "ok: chose $chosen — the one disk on this machine with no objection"
+  if [ "$asked" = 1 ]; then
+    grep -q "Installer: erasing $chosen was confirmed" "$work/aqua.log" \
+      || fail "the sheet was answered but the confirmation was never recorded for $chosen"
+    echo "ok: $chosen had something on it, the installer asked, and a click answered"
+  else
+    echo "ok: chose $chosen — it had room, so nothing was asked"
+  fi
 
   grep -q "Installer: ready to install" "$work/aqua.log" \
     || fail "a complete hub did not arm the Install button"

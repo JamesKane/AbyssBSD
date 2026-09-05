@@ -625,9 +625,17 @@ extension AquaWindow {
                     let took = installer.chooseSelection()
                     switch spoke {
                     case .disk:
-                        took ? installerLog("disk is \(installer.disk)")
-                             : installerLog("refused that disk: "
-                                 + installer.objection(to: installer.installableDisks[installer.selection]))
+                        if took {
+                            installerLog("disk is \(installer.disk)")
+                        } else if case .eraseConfirm(let d) = installer.page {
+                            // Not a refusal — a question. The log says which,
+                            // because "refused that disk" for a disk the person
+                            // is about to be asked about reads as a dead end.
+                            installerLog("asking before erasing \(d)")
+                        } else {
+                            installerLog("refused that disk: "
+                                + installer.objection(to: installer.installableDisks[installer.selection]))
+                        }
                     case .keyboard: installerLog("keyboard is \(installer.keymap)")
                     case .timezone: installerLog("time zone is \(installer.timezone)")
                     case .account: break
@@ -638,6 +646,23 @@ extension AquaWindow {
             } else if l.secondary.contains(pointerX, pointerY) {
                 installer.back()
                 accountFocus = nil
+            }
+
+        case .eraseConfirm:
+            if l.primary.contains(pointerX, pointerY) {
+                installer.confirmErase()
+                installerLog("erasing \(installer.disk) was confirmed")
+                // **And that a disk is now chosen, and whether that completed
+                // the hub** — in the same words the other path uses. Confirming
+                // *is* choosing; a caller watching for "disk is" or "ready to
+                // install" should not have to know which route the person took
+                // to get there, and one of these two lines missing is a screen
+                // that quietly stops reporting its own state (§2.46).
+                installerLog("disk is \(installer.disk)")
+                installerLog(installer.canInstall ? "ready to install" : "not ready")
+            } else if l.secondary.contains(pointerX, pointerY) {
+                installer.cancelErase()
+                installerLog("erasing was cancelled")
             }
 
         case .confirm:
@@ -711,6 +736,12 @@ extension AquaWindow {
                 if installer.canInstall { installer.page = .confirm }
             case .spoke(let s):
                 if s == .account { installer.back() } else { installer.chooseSelection() }
+            case .eraseConfirm:
+                // Return is the *default* button and the default is Cancel, so
+                // Return does not erase anything. A destructive action reachable
+                // by the key people press to dismiss things is not a
+                // confirmation.
+                installer.cancelErase()
             case .confirm:
                 installer.page = .installing
                 onInstall?(installerPlan())
@@ -720,6 +751,7 @@ extension AquaWindow {
         case KeySym.escape:
             switch installer.page {
             case .spoke: installer.back()
+            case .eraseConfirm: installer.cancelErase()
             case .confirm: installer.page = .hub
             default: break
             }

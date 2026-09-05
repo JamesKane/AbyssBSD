@@ -50,6 +50,12 @@ public func installerLayout(w: Double, h: Double, model: InstallerModel) -> Inst
     case .hub:       l.primaryLabel = "Install\u{2026}";     l.secondaryLabel = "Quit"
     case .spoke(let s):
         l.primaryLabel = s == .account ? "Done" : "Choose";  l.secondaryLabel = "Back"
+    // **The destructive verb, and the disk's own name, on the button.** "OK" on
+    // a sheet like this is how people click through them; "Erase nda1" is a
+    // sentence somebody can disagree with. Cancel is second, which is where the
+    // eye and the Escape key both go.
+    case .eraseConfirm(let d):
+        l.primaryLabel = "Erase \(d)"; l.secondaryLabel = "Cancel"
     case .confirm:   l.primaryLabel = "Erase and Install";   l.secondaryLabel = "Cancel"
     case .installing: break
     case .done(let ok, _):
@@ -90,7 +96,7 @@ public func installerLayout(w: Double, h: Double, model: InstallerModel) -> Inst
                 y += 27
             }
         }
-    case .confirm:
+    case .eraseConfirm, .confirm:
         break
     case .installing:
         l.progress = Rect(pad, h / 2, w - pad * 2, 14)
@@ -149,6 +155,11 @@ public func paintInstaller(_ cr: OpaquePointer, w: Double, h: Double,
         }
         Draw.gelButton(cr, l.secondary, label: l.secondaryLabel, blue: false, pressed: false)
         Draw.gelButton(cr, l.primary, label: l.primaryLabel, blue: true, pressed: pressed)
+
+    case .eraseConfirm:
+        paintEraseConfirm(cr, w: w, h: h, model: model)
+        Draw.gelButton(cr, l.secondary, label: l.secondaryLabel, blue: true, pressed: false)
+        Draw.gelButton(cr, l.primary, label: l.primaryLabel, blue: false, pressed: pressed)
 
     case .confirm:
         paintConfirm(cr, w: w, h: h, model: model)
@@ -275,6 +286,47 @@ private func paintAccountSpoke(_ cr: OpaquePointer, w: Double, l: InstallerLayou
     if !model.passwordProblem.isEmpty {
         Draw.textLeft(cr, model.passwordProblem, x: pad, baselineY: l.adminCheck.y + 44,
                       color: Theme.attentionText, size: 11)
+    }
+}
+
+// MARK: - Asking before destroying somebody else's data
+
+/// The sheet that stands between a full disk and being chosen.
+///
+/// **Cancel is the blue one.** Aqua's default button is the lickable one, and on
+/// every other screen in this installer that is the affirmative — here it is the
+/// way out. That inversion is the whole point: the default action on a sheet
+/// that destroys somebody's Windows install should be *not doing that*, and the
+/// eye goes to the blue button whether or not the words were read.
+private func paintEraseConfirm(_ cr: OpaquePointer, w: Double, h: Double,
+                               model: InstallerModel) {
+    guard let d = model.eraseSubject else { return }
+    Draw.textLeft(cr, "Erase \(d.name)?", x: pad, baselineY: 26,
+                  color: Theme.bodyText, size: 15, style: .bold)
+
+    // The disk, so it can be recognised — a name alone is not identification on
+    // a machine with three of them.
+    Draw.textLeft(cr, "\(gib(d.bytes)) — \(d.description.isEmpty ? "disk" : d.description)",
+                  x: pad, baselineY: 52, color: Theme.secondaryText, size: 12)
+
+    // **What is on it, in attention colour, one item per line.** A comma-joined
+    // sentence reads as prose and gets skimmed; a list reads as an inventory and
+    // gets counted.
+    var y = 84.0
+    Draw.textLeft(cr, "This disk contains:", x: pad, baselineY: y,
+                  color: Theme.bodyText, size: 12)
+    y += 20
+    let items = d.contents.isEmpty ? ["existing partitions"] : d.contents
+    for item in items {
+        Draw.textLeft(cr, "\u{2022}  " + item, x: pad + 12, baselineY: y,
+                      color: Theme.attentionText, size: 12)
+        y += 18
+    }
+    y += 10
+    for line in ["Installing AbyssBSD here erases the whole disk.",
+                 "This cannot be undone."] {
+        Draw.textLeft(cr, line, x: pad, baselineY: y, color: Theme.bodyText, size: 12)
+        y += 18
     }
 }
 

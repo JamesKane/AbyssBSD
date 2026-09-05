@@ -716,6 +716,57 @@ contiguous gap across ~2 TB of disks is 1.7 MiB. Every disk is full. What change
 is that the installer now says so, names what would be lost, and requires the
 sentence — rather than presenting two Windows disks as empty.
 
+### 5.10 The sheet, and three leaks it found
+
+§5.9 gave the installer a rule; this gives a person a way to answer it. Choosing
+a full disk used to return false — the row said why and the button did nothing —
+so on a machine where every disk is full the installer was a dead end with
+nothing to click. Now it asks.
+
+**The sheet names the disk, its size, and what is on it as a list rather than a
+sentence.** A confirmation that says only "are you sure?" teaches people to click
+through; one that says *nda0, 931.5 GiB, WD_BLACK SN850X, contains: efi,
+ms-reserved, ms-basic-data, ms-recovery* is something a person can recognise and
+disagree with. **Cancel is the blue default button**, inverting this installer's
+own convention on purpose: the eye goes to the lickable one whether or not the
+words were read, and on a sheet that destroys somebody's Windows the default
+action must be not doing that. Return cancels; only a deliberate click on
+*Erase nda0* proceeds.
+
+**Consent is scoped to the disk it was given for**, and getting that right took
+three corrections — each found by a test written for the property it broke:
+
+- **The trigger.** Testing the flag alone let a yes for `nda1` carry to `nda0`:
+  the disk was taken *without* the permission, and the install would have been
+  refused at the end with no way back.
+- **The predicates.** `isBlocked` and `needsErasing` built trial plans through
+  `plan()`, which inherits the current consent — so the moment one disk was
+  confirmed, **every** disk looked permitted and the sheet stopped opening.
+- **The plan itself.** `plan(disk: other)` inherited a yes given about something
+  else. Now the permission is dropped whenever an override disk differs from the
+  chosen one, so the guarantee does not depend on callers remembering it.
+
+The rule that survived all three: **a consent that outlives the thing it was
+about is not consent.** Looking at another disk does not withdraw the answer you
+already gave; choosing one does.
+
+**And the live test found a fourth leak, which was the real one.**
+`live-installer.sh` chose a disk that plainly had a pool on it. The GUI evaluates
+these rules against whatever crossed the socket — and `existingPools`,
+`partitionKinds`, `freeBytes` and `hasPartitionTable` **were not in the wire
+format**. Every disk arrived looking empty, every row showed no objection, and
+the sheet could never have opened.
+
+The *service* refuses against its own locally-probed inventory, which is why an
+install could never actually have eaten a disk — and also why nothing noticed.
+That is §2.46 once more: the model was right, the screen was judging something
+else, and only clicking it found out.
+
+The live test now drives the sheet with a real pointer, because in the build VM
+the scratch disk carries the previous run's install — so **the ordinary path
+through this installer goes through the question**, which is what most machines
+will do.
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the

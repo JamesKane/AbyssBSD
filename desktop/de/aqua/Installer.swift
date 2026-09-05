@@ -49,6 +49,12 @@ public enum Spoke: Int, CaseIterable, Sendable, Equatable {
 public enum InstallerPage: Equatable, Sendable {
     case hub
     case spoke(Spoke)
+    /// **Erasing a disk that already has something on it**, named, with its
+    /// contents listed. A separate stop from `.confirm` and deliberately so:
+    /// that one asks "shall I install", this one asks "shall I destroy what is
+    /// already here", and a person who has answered the second still gets the
+    /// first.
+    case eraseConfirm(disk: String)
     /// The point of no return, with the disk named in the sentence.
     case confirm
     case installing
@@ -65,7 +71,22 @@ public struct InstallerModel: Sendable {
 
     // ---- what the user chose
     public var keymap: String
-    public var disk: String
+    /// The disk to install onto.
+    ///
+    /// **Assigning a different one withdraws any erase confirmation.** A person
+    /// who agreed to destroy `nda1` has not agreed to destroy `nda0`, and a
+    /// consent that outlives the thing it was about is not consent. This is a
+    /// property of the *setter* rather than of the screen, because the screen is
+    /// not the only caller and the guarantee must not depend on which one it is.
+    public var disk: String {
+        didSet { if disk != oldValue { eraseConfirmed = false } }
+    }
+    /// Permission to destroy what is on `disk`, granted only by the sheet.
+    ///
+    /// `private(set)` so nothing can quietly set it: the one way to turn this on
+    /// is `confirmErase()`, which requires a person to have been shown what
+    /// would be lost.
+    public private(set) var eraseConfirmed: Bool = false
     public var timezone: String
     public var hostname: String
     public var accountName: String
@@ -197,7 +218,9 @@ public struct InstallerModel: Sendable {
 
     /// Why this disk cannot be chosen, or empty if it can.
     public func objection(to d: Disk) -> String {
-        let trial = plan(disk: d.name, passwordHash: "$6$x")   // same sets as the real one
+        // `erase: false` — the row tells the truth about what is on a disk
+        // whether or not somebody has already agreed to destroy it.
+        let trial = plan(disk: d.name, passwordHash: "$6$x", erase: false)
         let problems = Install.problems(trial, on: inventory)
         // Only the ones that are about *this disk*; a missing account is not
         // the disk's fault and belongs on its own spoke.
@@ -222,7 +245,38 @@ public struct InstallerModel: Sendable {
         return ""
     }
 
-    public func canChoose(_ d: Disk) -> Bool { objection(to: d).isEmpty }
+    /// Whether anything stops this disk being used **that a person cannot
+    /// answer**. The running root, a mounted filesystem, a disk too small: no
+    /// sentence makes those installable.
+    public func isBlocked(_ d: Disk) -> Bool {
+        let trial = plan(disk: d.name, passwordHash: "$6$x", erase: false)
+        for p in Install.problems(trial, on: inventory) {
+            switch p {
+            case .diskHoldsRunningRoot, .diskIsMounted, .diskTooSmall, .notAWholeDisk:
+                return true
+            case .diskIsFull:
+                // **Answerable, and therefore not a blocker.** This is the whole
+                // difference the sheet exists to express: "there is no room" is
+                // a fact about the disk, and whether to make room is a decision
+                // that belongs to the person, not to us.
+                continue
+            case .emptyDisk, .noSuchDisk, .badPoolName, .poolNameInUse, .noSets,
+                 .baseSetNotFirst, .sizeNotWholeMiB, .relativePath, .noAdministrator:
+                continue
+            }
+        }
+        return false
+    }
+
+    /// Whether choosing this disk means destroying what is on it.
+    public func needsErasing(_ d: Disk) -> Bool {
+        let trial = plan(disk: d.name, passwordHash: "$6$x", erase: false)
+        return Install.problems(trial, on: inventory).contains {
+            if case .diskIsFull = $0 { return true }; return false
+        }
+    }
+
+    public func canChoose(_ d: Disk) -> Bool { !isBlocked(d) }
 
     // MARK: - The plan
 
@@ -239,10 +293,17 @@ public struct InstallerModel: Sendable {
     /// thing it exists to install is the thing it is running on.
     public static let sets = ["base.txz", "kernel.txz", InstallPlan.desktopSet]
 
+    /// - Parameter erase: overrides the granted permission. **The predicates
+    ///   that ask "what is wrong with this disk" must pass `false`**, because
+    ///   they are asking about the disk and not about what has already been
+    ///   permitted — a trial plan that inherits the current consent reports
+    ///   every disk as fine the moment one of them is, which is how a yes for
+    ///   `nda1` silently became a yes for `nda0`.
     public func plan(disk overrideDisk: String? = nil,
                      passwordHash: String,
                      sets: [String] = InstallerModel.sets,
-                     distDirectory: String = "/usr/freebsd-dist") -> InstallPlan {
+                     distDirectory: String = "/usr/freebsd-dist",
+                     erase: Bool? = nil) -> InstallPlan {
         var accounts: [Account] = []
         if !accountName.isEmpty {
             accounts.append(Account(name: accountName,
@@ -260,7 +321,18 @@ public struct InstallerModel: Sendable {
                            // The account is the administrator; root gets no
                            // password of its own, exactly as a Mac does.
                            rootPasswordHash: "*",
-                           accounts: accounts)
+                           accounts: accounts,
+                           // Only ever set by the sheet, and cleared the moment
+                           // a different disk is chosen (see `disk`'s setter).
+                           // **Consent belongs to `disk`, so a plan built for a
+                           // different one carries none of it.** Otherwise
+                           // `plan(disk: other)` quietly inherits a yes that was
+                           // given about something else — the same leak as
+                           // `chooseSelection`'s, one layer down, and the reason
+                           // this is enforced here rather than left to callers
+                           // to remember.
+                           eraseExistingData: erase ?? (eraseConfirmed
+                               && (overrideDisk == nil || overrideDisk == disk)))
     }
 
     // MARK: - Moving around
@@ -307,9 +379,24 @@ public struct InstallerModel: Sendable {
         case .disk:
             guard installableDisks.indices.contains(selection) else { return false }
             let d = installableDisks[selection]
-            // A disk with an objection is shown, with its reason, and simply
-            // does not take.
-            guard canChoose(d) else { return false }
+            // A disk nothing can make installable is shown, with its reason, and
+            // simply does not take.
+            guard !isBlocked(d) else { return false }
+            // **A disk that is merely full asks first.** Returning false here
+            // was the old behaviour and it was a dead end: the row said why and
+            // the button did nothing, so on a machine where every disk is full
+            // the installer was unusable with no way forward and nothing to
+            // click. Now it opens the sheet, which is the place a person can
+            // actually answer.
+            // **Consent is scoped to the disk it was given for.** Testing the
+            // flag alone let a yes for `nda1` carry silently to `nda0`: the
+            // setter withdrew it a line later, so the disk was taken *without*
+            // the permission and the install would have been refused at the end
+            // with no way back. The flag is only an answer about `disk`.
+            if needsErasing(d), !(eraseConfirmed && disk == d.name) {
+                page = .eraseConfirm(disk: d.name)
+                return false
+            }
             disk = d.name
         case .account:
             break
@@ -319,6 +406,46 @@ public struct InstallerModel: Sendable {
     }
 
     public mutating func back() { page = .hub }
+
+    // MARK: - The erase sheet
+
+    /// The disk the sheet is asking about, if it is open.
+    public var eraseSubject: Disk? {
+        guard case .eraseConfirm(let name) = page else { return nil }
+        return inventory.disk(named: name)
+    }
+
+    /// What is about to be destroyed, in a person's words.
+    ///
+    /// **The sheet's whole job is this sentence.** A confirmation that says only
+    /// "are you sure?" teaches people to click through; one that names the disk,
+    /// its size and what is actually on it gives them something to recognise —
+    /// and on the bring-up machine the difference is between "some disk" and
+    /// "the 931 GB one with Windows on it".
+    public var eraseWarning: String {
+        guard let d = eraseSubject else { return "" }
+        let what = d.contents.isEmpty ? "existing partitions" : d.contents.joined(separator: ", ")
+        return "\(d.name) contains \(what).\n"
+             + "Installing AbyssBSD here erases the whole disk. "
+             + "This cannot be undone."
+    }
+
+    /// Yes: destroy what is on it, and take it.
+    public mutating func confirmErase() {
+        guard case .eraseConfirm(let name) = page else { return }
+        // Order matters: `disk`'s setter withdraws consent when the disk
+        // changes, so the flag has to be set *after* the disk it is about.
+        disk = name
+        eraseConfirmed = true
+        page = .hub
+    }
+
+    /// No. Back to the list, with nothing chosen and nothing granted.
+    public mutating func cancelErase() {
+        guard case .eraseConfirm = page else { return }
+        eraseConfirmed = false
+        page = .spoke(.disk)
+    }
 }
 
 /// The keyboard layouts the installer offers. A short, honest list rather than

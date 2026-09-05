@@ -168,6 +168,45 @@ final class InstallRunTests: XCTestCase {
         XCTAssertFalse(Wire.decodePlan(m).eraseExistingData)
     }
 
+    func testEveryFactARefusalIsMadeOfSurvivesTheWire() {
+        // **The GUI judges disks against whatever crossed this socket.** Four
+        // fields did not, so every disk arrived looking empty: no objection on
+        // any row, and an erase sheet that could never open. The service refused
+        // correctly the whole time — which is why nothing was ever eaten, and
+        // also why nothing noticed.
+        let inv = DiskInventory(disks: [
+            Disk(name: "nda1", bytes: 931 << 30, description: "Samsung 990 PRO",
+                 mountedAt: ["/data"], holdsRunningRoot: false,
+                 existingPools: ["zroot", "tank"],
+                 partitionKinds: ["efi", "freebsd-swap", "freebsd-zfs"],
+                 freeBytes: 728_576, hasPartitionTable: true),
+        ], importedPools: ["zroot"],
+           machine: MachineIdentity(maker: "Micro-Star", product: "MS-7D25"))
+
+        var m = Msg()
+        Wire.encode(inv, into: &m)
+        let back = Wire.decodeInventory(m)
+        XCTAssertEqual(back, inv, "the inventory is not what was sent")
+        // ...and spelled out, because `Equatable` passing is not the same as the
+        // fields being there when somebody adds a fifth.
+        let d = back.disk(named: "nda1")!
+        XCTAssertEqual(d.existingPools, ["zroot", "tank"])
+        XCTAssertEqual(d.partitionKinds, ["efi", "freebsd-swap", "freebsd-zfs"])
+        XCTAssertEqual(d.freeBytes, 728_576)
+        XCTAssertTrue(d.hasPartitionTable)
+        XCTAssertEqual(back.machine?.product, "MS-7D25")
+    }
+
+    func testADiskWithNothingOnItSurvivesTheWireAsEmptyNotAsMissing() {
+        // The empty case has to round-trip too, or "no partitions" and "the
+        // sender was old" become the same value.
+        let inv = DiskInventory(disks: [Disk(name: "ada0", bytes: 1 << 30)])
+        var m = Msg(); Wire.encode(inv, into: &m)
+        let d = Wire.decodeInventory(m).disk(named: "ada0")!
+        XCTAssertEqual(d.partitionKinds, [])
+        XCTAssertFalse(d.hasPartitionTable)
+    }
+
     // MARK: - What is on a disk, and where it is not
 
     /// `gpart show`, captured from the bring-up machine on 2026-09-05. Three

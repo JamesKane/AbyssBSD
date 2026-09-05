@@ -52,15 +52,180 @@ final class InstallerTests: XCTestCase {
         m.accountName = "jkane"; m.accountPassword = "x"; m.accountConfirm = "x"
 
         let occupied = inv.disk(named: "nvd0")!
-        XCTAssertFalse(m.canChoose(occupied),
-                       "a disk carrying somebody's FreeBSD install is not choosable")
+        // **The meaning changed when the sheet arrived, and the test with it.**
+        // A full disk is no longer un-choosable — it is choosable *after being
+        // asked about*, which is the whole point. What must still be true is
+        // that the row says what is on it, and that choosing it does not
+        // silently take it.
+        XCTAssertTrue(m.needsErasing(occupied), "it needs erasing —")
+        XCTAssertFalse(m.isBlocked(occupied), "— but nothing makes it impossible")
         XCTAssertTrue(m.objection(to: occupied).contains("zroot"),
                       "and the row names what would be destroyed: \(m.objection(to: occupied))")
+        m.enter(.disk)
+        m.selection = 0
+        XCTAssertFalse(m.chooseSelection(), "it must ask before taking it")
+        XCTAssertEqual(m.page, .eraseConfirm(disk: "nvd0"))
 
         // The positive control: the empty stick beside it is still choosable, so
         // this is a refusal and not a wall.
         XCTAssertEqual(m.objection(to: inv.disk(named: "da0")!), "")
         XCTAssertTrue(m.canChoose(inv.disk(named: "da0")!))
+    }
+
+    // MARK: - Asking before destroying somebody else's data
+
+    /// The bring-up machine, as the installer sees it: three disks, all full,
+    /// one of them ours and two of them somebody else's.
+    private func crowdedMachine() -> DiskInventory {
+        DiskInventory(disks: [
+            Disk(name: "nda0", bytes: 931 << 30, description: "WD_BLACK SN850X",
+                 partitionKinds: ["efi", "ms-reserved", "ms-basic-data", "ms-recovery"],
+                 freeBytes: 1_776_128, hasPartitionTable: true),
+            Disk(name: "nda1", bytes: 931 << 30, description: "Samsung SSD 990 PRO",
+                 existingPools: ["zroot"],
+                 partitionKinds: ["efi", "freebsd-boot", "freebsd-swap", "freebsd-zfs"],
+                 freeBytes: 728_576, hasPartitionTable: true),
+            Disk(name: "da0", bytes: 14 << 30, description: "Kingston DataTraveler",
+                 mountedAt: ["/"], holdsRunningRoot: true,
+                 partitionKinds: ["efi", "freebsd-ufs"],
+                 freeBytes: 0, hasPartitionTable: true),
+        ])
+    }
+
+    private func atDiskSpoke() -> InstallerModel {
+        var m = InstallerModel(inventory: crowdedMachine())
+        m.accountName = "jkane"; m.accountPassword = "x"; m.accountConfirm = "x"
+        m.enter(.disk)
+        return m
+    }
+
+    func testAFullDiskAsksInsteadOfDoingNothing() {
+        // **The dead end this replaces.** Choosing a full disk used to return
+        // false: the row said why and the button did nothing, so on a machine
+        // where every disk is full the installer was unusable with nothing to
+        // click. Now it opens a sheet, which is where a person can answer.
+        var m = atDiskSpoke()
+        m.selection = 0                        // nda0 — somebody's Windows
+        XCTAssertFalse(m.chooseSelection(), "it must not be chosen yet")
+        XCTAssertEqual(m.page, .eraseConfirm(disk: "nda0"))
+        XCTAssertEqual(m.disk, "", "nothing is chosen until the sheet is answered")
+    }
+
+    func testTheSheetNamesTheDiskAndWhatIsOnIt() {
+        // A confirmation that says only "are you sure?" teaches people to click
+        // through. This one has to be disagreeable with.
+        var m = atDiskSpoke()
+        m.selection = 0
+        _ = m.chooseSelection()
+        XCTAssertTrue(m.eraseWarning.contains("nda0"), m.eraseWarning)
+        XCTAssertTrue(m.eraseWarning.contains("ms-basic-data"), m.eraseWarning)
+        XCTAssertTrue(m.eraseWarning.contains("cannot be undone"), m.eraseWarning)
+        // ...and for our own disk it names the pool, which is more use than a type.
+        var n = atDiskSpoke()
+        n.selection = 1
+        _ = n.chooseSelection()
+        XCTAssertTrue(n.eraseWarning.contains("ZFS pool zroot"), n.eraseWarning)
+    }
+
+    func testConfirmingTakesTheDiskAndGrantsThePermission() {
+        var m = atDiskSpoke()
+        m.selection = 1
+        _ = m.chooseSelection()
+        m.confirmErase()
+        XCTAssertEqual(m.disk, "nda1")
+        XCTAssertTrue(m.eraseConfirmed)
+        XCTAssertEqual(m.page, .hub)
+        // And the permission reaches the plan, or it granted nothing.
+        XCTAssertTrue(m.plan(passwordHash: "$6$x").eraseExistingData)
+    }
+
+    func testCancellingGrantsNothingAndChoosesNothing() {
+        var m = atDiskSpoke()
+        m.selection = 1
+        _ = m.chooseSelection()
+        m.cancelErase()
+        XCTAssertEqual(m.disk, "")
+        XCTAssertFalse(m.eraseConfirmed)
+        XCTAssertEqual(m.page, .spoke(.disk), "it goes back to the list, not to the hub")
+    }
+
+    func testConsentDoesNotFollowThePersonToAnotherDisk() {
+        // **The property that matters most here.** Somebody who agreed to
+        // destroy nda1 has not agreed to destroy nda0, and a consent that
+        // outlives the thing it was about is not consent.
+        var m = atDiskSpoke()
+        m.selection = 1
+        _ = m.chooseSelection()
+        m.confirmErase()
+        XCTAssertTrue(m.eraseConfirmed)
+
+        m.enter(.disk)
+        m.selection = 0                        // now the other one
+        XCTAssertFalse(m.chooseSelection(), "it must ask again")
+        XCTAssertEqual(m.page, .eraseConfirm(disk: "nda0"))
+
+        // **What "scoped" means, precisely.** The permission for nda1 is still
+        // set, and that is right: nothing about nda1 changed, and withdrawing it
+        // for merely *looking* at another disk would silently un-choose a disk
+        // the person never changed. What it cannot do is apply to nda0 — so a
+        // plan for nda0 carries no permission, and the sheet had to open.
+        XCTAssertTrue(m.eraseConfirmed, "nda1's own answer survives being asked about another disk")
+        XCTAssertFalse(m.plan(disk: "nda0", passwordHash: "$6$x").eraseExistingData,
+                       "a plan built for another disk inherits no permission")
+        XCTAssertTrue(m.plan(disk: "nda1", passwordHash: "$6$x").eraseExistingData,
+                      "and the disk it WAS given for still has it")
+
+        // Cancelling leaves the earlier choice exactly as it was.
+        m.cancelErase()
+        XCTAssertEqual(m.disk, "nda1")
+        XCTAssertFalse(m.eraseConfirmed, "cancelling withdraws the pending question's consent")
+    }
+
+    func testConfirmingASecondDiskMovesTheConsentToIt() {
+        var m = atDiskSpoke()
+        m.selection = 1
+        _ = m.chooseSelection(); m.confirmErase()
+        XCTAssertEqual(m.disk, "nda1")
+
+        m.enter(.disk); m.selection = 0
+        _ = m.chooseSelection(); m.confirmErase()
+        XCTAssertEqual(m.disk, "nda0")
+        XCTAssertTrue(m.eraseConfirmed)
+        XCTAssertTrue(m.plan(passwordHash: "$6$x").eraseExistingData)
+    }
+
+    func testAssigningTheDiskDirectlyAlsoWithdrawsConsent() {
+        // The guarantee lives in the setter, not on the screen, because the
+        // screen is not the only caller.
+        var m = atDiskSpoke()
+        m.selection = 1
+        _ = m.chooseSelection()
+        m.confirmErase()
+        m.disk = "nda0"
+        XCTAssertFalse(m.eraseConfirmed)
+    }
+
+    func testADiskNothingCanMakeInstallableIsStillJustRefused() {
+        // The running root is not a question. There is no sentence that makes
+        // the stick you booted from a place to install.
+        var m = atDiskSpoke()
+        m.selection = 2                        // da0, the live medium
+        XCTAssertTrue(m.isBlocked(m.installableDisks[2]))
+        XCTAssertFalse(m.chooseSelection())
+        XCTAssertEqual(m.page, .spoke(.disk), "no sheet — there is nothing to ask")
+    }
+
+    func testTheSheetsDefaultButtonIsCancel() {
+        // Aqua's default button is the blue one, and on every other screen here
+        // that is the affirmative. On a sheet that destroys somebody's Windows
+        // the default action must be not doing that.
+        var m = atDiskSpoke()
+        m.selection = 0
+        _ = m.chooseSelection()
+        let l = installerLayout(w: 520, h: 380, model: m)
+        XCTAssertEqual(l.secondaryLabel, "Cancel")
+        XCTAssertTrue(l.primaryLabel.contains("nda0"),
+                      "the destructive button names the disk: \(l.primaryLabel)")
     }
 
     // MARK: - The hub

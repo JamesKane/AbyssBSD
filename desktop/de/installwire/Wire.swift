@@ -111,9 +111,26 @@ public enum Wire {
             m.set("disk.\(i).descr", d.description)
             m.set("disk.\(i).mounted", d.mountedAt.joined(separator: ","))
             m.set("disk.\(i).root", d.holdsRunningRoot)
+            // **Everything a refusal is made of, or the screen judges blind.**
+            // The *service* evaluates `problems` against its own locally-probed
+            // inventory and refuses correctly — which is why an install could
+            // never actually eat a disk. The **GUI** evaluates the same rules
+            // against whatever crossed this socket, and these four fields did
+            // not: so every disk arrived looking empty, every row showed no
+            // objection, and the erase sheet could never open. Caught by
+            // `live-installer.sh` choosing a disk that plainly had a pool on it
+            // (§2.46 — a GUI cannot be trusted to be right about itself).
+            m.set("disk.\(i).pools", d.existingPools.joined(separator: ","))
+            m.set("disk.\(i).kinds", d.partitionKinds.joined(separator: ","))
+            m.set("disk.\(i).free", d.freeBytes)
+            m.set("disk.\(i).table", d.hasPartitionTable)
         }
         m.set("pools.count", UInt64(inv.importedPools.count))
         for (i, p) in inv.importedPools.enumerated() { m.set("pool.\(i)", p) }
+        if let mach = inv.machine {
+            m.set("machine.maker", mach.maker)
+            m.set("machine.product", mach.product)
+        }
     }
 
     public static func decodeInventory(_ m: Msg) -> DiskInventory {
@@ -122,17 +139,30 @@ public enum Wire {
             guard let name = m.string("disk.\(i).name") else { continue }
             let mounted = (m.string("disk.\(i).mounted") ?? "")
                 .split(separator: ",").map(String.init)
+            func list(_ key: String) -> [String] {
+                (m.string("disk.\(i).\(key)") ?? "")
+                    .split(separator: ",").map(String.init).filter { !$0.isEmpty }
+            }
             disks.append(Disk(name: name,
                               bytes: m.uint64("disk.\(i).bytes") ?? 0,
                               description: m.string("disk.\(i).descr") ?? "",
                               mountedAt: mounted,
-                              holdsRunningRoot: m.bool("disk.\(i).root") ?? false))
+                              holdsRunningRoot: m.bool("disk.\(i).root") ?? false,
+                              existingPools: list("pools"),
+                              partitionKinds: list("kinds"),
+                              freeBytes: m.uint64("disk.\(i).free") ?? 0,
+                              hasPartitionTable: m.bool("disk.\(i).table") ?? false))
         }
         var pools: [String] = []
         for i in 0..<Int(m.uint64("pools.count") ?? 0) {
             if let p = m.string("pool.\(i)") { pools.append(p) }
         }
-        return DiskInventory(disks: disks, importedPools: pools)
+        var machine: MachineIdentity?
+        if let mk = m.string("machine.maker"), let pr = m.string("machine.product"),
+           !mk.isEmpty, !pr.isEmpty {
+            machine = MachineIdentity(maker: mk, product: pr)
+        }
+        return DiskInventory(disks: disks, importedPools: pools, machine: machine)
     }
 
     // MARK: - Progress
