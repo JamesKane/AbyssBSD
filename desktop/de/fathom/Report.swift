@@ -1,0 +1,153 @@
+// Fathom — the report, as a value (PHASE12.md P12.3).
+//
+// **Rendered, never printed.** A value can be asserted on, diffed, saved and
+// sent; a `print` can only be read once by whoever was standing there. That is
+// the same reason `InstallPlan` is a value and the installer's step list is
+// compiled rather than executed inline, and it is what makes P12.5 — getting the
+// report off the machine — a rendering choice rather than a rewrite.
+//
+// **What is in it is a decision, not an accident** (PHASE12 §6.2). This report
+// is meant to be sent to us, so it is a privacy surface before it is anything
+// else, and the field list is settled *on the way in* rather than redacted on
+// the way out. What every probe here reports is a **kind of hardware**; what
+// none of them reports is *which* machine:
+//
+//   in   — maker and model, CPU model, memory size, GPU/card nodes, kernel
+//          modules bound, interface *names*, audio device names, battery
+//          presence, disk models and sizes
+//   out  — serial numbers, MAC addresses, IP addresses, hostname, disk serials,
+//          ZFS pool names, mount points, user names, anything under /home
+//
+// A pool name is somebody's word and a mount point is a layout; neither says
+// anything about whether this machine can run a desktop, which is the only
+// question the matrix asks.
+
+/// One disk, as much of it as a *hardware* report may say.
+///
+/// Deliberately not `Install.Disk`: that carries `mountedAt` and `existingPools`
+/// because a refusal needs them, and neither belongs in a file that gets
+/// e-mailed to strangers.
+public struct DiskFact: Equatable, Sendable {
+    public let name: String
+    public let bytes: UInt64
+    public let model: String
+    public init(name: String, bytes: UInt64, model: String) {
+        self.name = name
+        self.bytes = bytes
+        self.model = model
+    }
+}
+
+/// What this machine is, and whether the desktop can run on it.
+public struct FathomReport: Equatable, Sendable {
+    public let results: [ProbeResult]
+    public init(_ results: [ProbeResult]) { self.results = results }
+
+    public var counts: (present: Int, absent: Int, unknown: Int) {
+        var p = 0, a = 0, u = 0
+        for r in results {
+            switch r.status {
+            case .present: p += 1
+            case .absent:  a += 1
+            case .unknown: u += 1
+            }
+        }
+        return (p, a, u)
+    }
+
+    /// True when nothing could not be asked.
+    ///
+    /// **Note what this is not:** it is not "this machine is fine". A report full
+    /// of honest `absent` answers is complete and still describes a machine that
+    /// cannot show a desktop. Completeness and suitability are different
+    /// questions and the report must not blur them (§6.4 — be slow to add a
+    /// verdict).
+    public var isComplete: Bool { counts.unknown == 0 }
+}
+
+/// The disks, as hardware rather than as somewhere to install.
+public func probeDisks(_ disks: [DiskFact]) -> ProbeResult {
+    guard !disks.isEmpty else {
+        return ProbeResult("Disks", .absent, "no disks found: there is nowhere to install")
+    }
+    let parts = disks.map { d -> String in
+        let tenths = (d.bytes * 10) / (1024 * 1024 * 1024)
+        let size = "\(tenths / 10).\(tenths % 10) GiB"
+        return d.model.isEmpty ? "\(d.name) \(size)" : "\(d.name) \(size) (\(d.model))"
+    }
+    return ProbeResult("Disks", .present, parts.joined(separator: "; "))
+}
+
+// MARK: - The console rendering
+
+/// The report as plain text, for a console.
+///
+/// **Written before the Aqua one and kept first**, because the machine that most
+/// needs this report is the machine that cannot draw one: a report that does not
+/// survive the failure it describes is not a report. So: ASCII only, no colour,
+/// no box drawing, one line per probe, and nothing that needs a terminal wider
+/// than 80 columns to stay aligned.
+///
+/// **`unknown` is spelled differently from `absent` on purpose.** They are two
+/// characters apart in this output and a world apart in meaning, and the whole
+/// point of the third status is lost if a reader's eye slides over it (§6.1).
+///
+/// **ASCII is enforced rather than intended.** The first version of this had an
+/// em dash in its own title and three more in probe details — written out of
+/// habit from the prose two lines above them — which is precisely the kind of
+/// thing that renders as garbage on the console of a machine too broken to do
+/// anything else. `asciiOnly` folds what it can and drops what it cannot, so a
+/// detail string written carelessly later degrades instead of corrupting.
+public func renderText(_ report: FathomReport, title: String = "Fathom") -> String {
+    var out = asciiOnly(title) + ": what this machine is\n"
+    out += String(repeating: "=", count: 40) + "\n"
+
+    let width = report.results.map(\.name.count).max() ?? 0
+    for r in report.results {
+        let pad = String(repeating: " ", count: max(0, width - r.name.count))
+        out += "\(r.name)\(pad)  \(mark(r.status))  \(asciiOnly(r.detail))\n"
+    }
+
+    let c = report.counts
+    out += String(repeating: "-", count: 40) + "\n"
+    out += "\(c.present) present, \(c.absent) absent"
+    if c.unknown > 0 {
+        // Named in the summary rather than left to be counted off the list: an
+        // incomplete report that looks complete is the failure mode this whole
+        // status exists to prevent.
+        out += ", \(c.unknown) COULD NOT BE ASKED"
+    }
+    out += "\n"
+    return out
+}
+
+/// Fold a string to ASCII, so a console renders it rather than mangling it.
+///
+/// The typographic characters this project's prose is full of are the ones that
+/// break here: an em dash, a curly quote, an ellipsis. Folded where there is an
+/// obvious equivalent and dropped where there is not — a missing character is a
+/// smaller lie than a replacement glyph.
+func asciiOnly(_ s: String) -> String {
+    var out = ""
+    for ch in s {
+        switch ch {
+        case "\u{2014}", "\u{2013}": out += "-"        // em dash, en dash
+        case "\u{2018}", "\u{2019}": out += "'"        // curly single quotes
+        case "\u{201C}", "\u{201D}": out += "\""       // curly double quotes
+        case "\u{2026}": out += "..."                   // ellipsis
+        default:
+            if ch.unicodeScalars.allSatisfy(\.isASCII) { out.append(ch) }
+        }
+    }
+    return out
+}
+
+/// The three-character mark for a status. Aligned, so a column of them reads as
+/// a shape before it reads as words.
+func mark(_ s: ProbeStatus) -> String {
+    switch s {
+    case .present: return "[ok]"
+    case .absent:  return "[--]"
+    case .unknown: return "[??]"
+    }
+}

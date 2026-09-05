@@ -418,6 +418,13 @@ let package = Package(
             dependencies: ["Anchor"],
             path: "Tests/AnchorTests"
         ),
+        // The half that is allowed to look at the machine. Kept out of `Fathom`
+        // so the probes stay pure — the same split as `Install`/`InstallRun`.
+        .executableTarget(
+            name: "fathom",
+            dependencies: ["Fathom", "Vents"],
+            path: "de/fathombin"
+        ),
         .testTarget(
             name: "FathomTests",
             dependencies: ["Fathom"],

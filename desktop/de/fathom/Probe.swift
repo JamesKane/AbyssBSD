@@ -94,8 +94,8 @@ public func probeGPU(driEntries: [String]?) -> ProbeResult {
     let render = entries.filter { $0.hasPrefix("renderD") }.sorted()
     guard !cards.isEmpty else {
         return ProbeResult("GPU", .absent,
-                           render.isEmpty ? "no /dev/dri/card* — nothing to display on"
-                                          : "only \(render.joined(separator: ", ")) — a render node is not a display")
+                           render.isEmpty ? "no /dev/dri/card*: nothing to display on"
+                                          : "only \(render.joined(separator: ", ")): a render node is not a display")
     }
     let extra = render.isEmpty ? "" : " (+ \(render.joined(separator: ", ")))"
     return ProbeResult("GPU", .present, cards.joined(separator: ", ") + extra)
@@ -136,7 +136,7 @@ public func probeNetwork(interfaceList: String?) -> ProbeResult {
     let all = trimmed(raw).split(separator: " ").map(String.init)
     let real = all.filter { $0 != "lo0" && !$0.hasPrefix("lo") }
     guard !real.isEmpty else {
-        return ProbeResult("Network", .absent, "only loopback — no network device was recognised")
+        return ProbeResult("Network", .absent, "only loopback: no network device was recognised")
     }
     return ProbeResult("Network", .present, real.joined(separator: ", "))
 }
@@ -186,9 +186,16 @@ public func probeAudio(sndstat: String?) -> ProbeResult {
 ///
 /// A desktop has none, and that is `absent` rather than a fault: this probe
 /// distinguishes "no battery in this machine" from "could not ask".
-public func probeBattery(life: Int64?, present: Bool) -> ProbeResult {
+public func probeBattery(life: Int64?, present: Bool, canAsk: Bool = true) -> ProbeResult {
+    // **"No battery" and "cannot ask about batteries" are different machines**,
+    // and only one of them is a fact about hardware. A platform with no sysctl
+    // answers nil to everything; calling that "mains only" would be the report
+    // inventing something it never looked at.
+    guard canAsk else {
+        return ProbeResult("Power", .unknown, "no way to ask this platform about power")
+    }
     guard present else {
-        return ProbeResult("Power", .absent, "no battery — mains only")
+        return ProbeResult("Power", .absent, "no battery, mains only")
     }
     guard let pct = life, pct >= 0, pct <= 100 else {
         return ProbeResult("Power", .unknown, "hw.acpi.battery.life did not answer a percentage")

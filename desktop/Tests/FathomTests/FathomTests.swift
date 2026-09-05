@@ -168,6 +168,103 @@ final class FathomTests: XCTestCase {
         XCTAssertEqual(probeMemory(physBytes: 17_135_251_456).detail, "15.9 GiB")
     }
 
+    // MARK: - The report
+
+    func testTheSummaryNamesUnknownsInsteadOfLettingThemBlendIn() {
+        // An incomplete report that looks complete is the failure this whole
+        // status exists to prevent, so the count is called out in words rather
+        // than left to be inferred from a column.
+        let r = FathomReport([
+            ProbeResult("GPU", .present, "card0"),
+            ProbeResult("Wi-Fi", .absent, "none"),
+            ProbeResult("Audio", .unknown, "could not read /dev/sndstat"),
+        ])
+        let text = renderText(r)
+        XCTAssertTrue(text.contains("COULD NOT BE ASKED"), text)
+        XCTAssertTrue(text.contains("1 present, 1 absent, 1 COULD NOT BE ASKED"), text)
+    }
+
+    func testACompleteReportDoesNotMentionUnknownsAtAll() {
+        // The build VM's own shape: plenty absent, nothing unasked. Saying
+        // "0 could not be asked" would train a reader to skip the line that
+        // matters when it is not zero.
+        let r = FathomReport([
+            ProbeResult("GPU", .absent, "none"),
+            ProbeResult("Network", .present, "igc0"),
+        ])
+        XCTAssertTrue(r.isComplete)
+        XCTAssertFalse(renderText(r).contains("COULD NOT"), renderText(r))
+    }
+
+    func testAbsentAndUnknownDoNotLookAlike() {
+        // Two characters apart in the output and a world apart in meaning.
+        XCTAssertNotEqual(mark(.absent), mark(.unknown))
+        XCTAssertNotEqual(mark(.present), mark(.absent))
+        // ...and all the same width, so a column of them reads as a shape.
+        XCTAssertEqual(Set(ProbeStatus.allCases.map { mark($0).count }).count, 1)
+    }
+
+    func testCompletenessIsNotSuitability() {
+        // **A report can be complete and describe a machine that cannot show a
+        // desktop.** Blurring the two is how a probe suite starts telling people
+        // their hardware is fine (§6.4).
+        let noGPU = FathomReport([
+            ProbeResult("GPU", .absent, "no /dev/dri/card*"),
+            ProbeResult("Network", .present, "igc0"),
+        ])
+        XCTAssertTrue(noGPU.isComplete, "nothing went unasked —")
+        XCTAssertEqual(noGPU.counts.absent, 1, "— and the machine still has no GPU")
+    }
+
+    func testTheTextRenderingStaysPlainEnoughForABrokenMachine() {
+        // The machine that most needs this report is the one that cannot draw
+        // one, so: ASCII only, and no line longer than 80 columns for the
+        // fixtures we control.
+        let text = renderText(FathomReport([
+            ProbeResult("GPU", .present, "card0 (+ renderD128)"),
+            ProbeResult("Power", .unknown, "no way to ask this platform about power"),
+        ]))
+        for scalar in text.unicodeScalars where scalar != "\n" {
+            XCTAssertTrue(scalar.isASCII, "non-ASCII \(scalar) would not render on a console")
+        }
+        for line in text.split(separator: "\n") {
+            XCTAssertLessThanOrEqual(line.count, 80, "\(line)")
+        }
+    }
+
+    func testAProbeDetailWrittenCarelesslyDegradesRatherThanCorrupts() {
+        // The renderer enforces ASCII instead of trusting whoever writes the
+        // next probe. This project's prose is full of em dashes and curly
+        // quotes, and the first version of this file put four of them into
+        // strings a console has to print.
+        let r = FathomReport([ProbeResult("GPU", .absent, "no card \u{2014} \u{201C}none\u{201D}\u{2026}")])
+        let text = renderText(r)
+        XCTAssertTrue(text.contains("no card - \"none\"..."), text)
+        for scalar in text.unicodeScalars where scalar != "\n" {
+            XCTAssertTrue(scalar.isASCII, "\(scalar) survived the fold")
+        }
+    }
+
+    func testDisksAreReportedAsHardwareAndNotAsSomewhereToInstall() {
+        // The privacy line drawn on the way in (§6.2): a model and a size say
+        // whether a desktop can run here; a pool name and a mount point say
+        // whose machine it is, and this report gets e-mailed to strangers.
+        let r = probeDisks([DiskFact(name: "nvd0", bytes: 1_000_204_886_016,
+                                     model: "Samsung SSD 980")])
+        XCTAssertEqual(r.status, .present)
+        XCTAssertTrue(r.detail.contains("nvd0"), r.detail)
+        XCTAssertTrue(r.detail.contains("Samsung SSD 980"), r.detail)
+        XCTAssertEqual(probeDisks([]).status, .absent)
+    }
+
+    func testNoWayToAskAboutPowerIsNotTheSameAsNoBattery() {
+        // Found by running the CLI on Linux, where every sysctl answers nil: the
+        // report said "no battery — mains only" about a machine it had not
+        // looked at. A platform that cannot be asked is `unknown`.
+        XCTAssertEqual(probeBattery(life: nil, present: false, canAsk: false).status, .unknown)
+        XCTAssertEqual(probeBattery(life: nil, present: false, canAsk: true).status, .absent)
+    }
+
     // MARK: - The tunable that has been unconditional
 
     func testOnlyAMacProAsksForPCIeHotplugToBeDisabled() {

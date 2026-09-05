@@ -134,7 +134,8 @@ hypothetical — smbios strings are settable, and people do set them to Apple's
 models. `testTheMakerAndTheModelBothHaveToMatch` exists because of that, and now
 the break fails two assertions.
 
-**P12.3 — the report, as a value and at two fidelities.**
+**P12.3 — the report, as a value and at two fidelities.** *(The value and the
+console rendering are done; the Aqua view is what remains.)*
 `FathomReport` is a struct, rendered rather than printed — the same shape as
 `InstallPlan`, and for the same reason: a value can be asserted on, diffed and
 sent, and a printed one cannot.
@@ -148,6 +149,31 @@ a person is watching, absent means a console is all there is**:
 
 **A report that cannot survive the failure it reports is not a report**, so the
 console form is written first and the Aqua one is the addition.
+
+**What the console half landed, and two bugs that only running it found:**
+
+- `FathomReport` + `renderText`, and a `fathom` binary that gathers. The
+  gathering is in the binary and nowhere else, so `Fathom` stays pure — the
+  `Install`/`InstallRun` split again, for the same payoff.
+- **The field list is decided on the way in** (§6.2): kinds of hardware go in,
+  identity stays out. No serials, MACs, IPs, hostname, pool names or mount
+  points. `DiskFact` exists rather than reusing `Install.Disk` precisely because
+  that type carries `mountedAt` and `existingPools`, which a refusal needs and a
+  file e-mailed to a stranger does not.
+- Exit status follows **completeness, not suitability**. A machine with no
+  battery and no wifi is a complete report and a fine desktop.
+
+*Running it on Linux immediately produced `Network [ok] ifconfig:, option, '-l',
+not, recognised.` — a command that ran and **failed** being read as data, with
+the error message as its evidence. stderr now goes to /dev/null and a non-zero
+exit is nil. The same run said "no battery, mains only" about a platform it
+cannot ask at all; `canAsk` separates those. Both are the §6.1 failure mode
+arriving by the back door, in a tool built to prevent it.*
+
+*And the ASCII test caught the author: the first rendering had an em dash in its
+own title and three more in probe details, written out of habit from the prose
+two lines above them. `asciiOnly` now folds rather than trusts — the console this
+is for belongs to a machine too broken to draw anything else.*
 
 **P12.4 — the measurement, collected.**
 The differentiator, and it is mostly already built (§4.3): `undertow
