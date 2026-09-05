@@ -175,7 +175,7 @@ own title and three more in probe details, written out of habit from the prose
 two lines above them. `asciiOnly` now folds rather than trusts — the console this
 is for belongs to a machine too broken to draw anything else.*
 
-**P12.4 — the measurement, collected.**
+**P12.4 — the measurement, collected. ✅ done.**
 The differentiator, and it is mostly already built (§4.3): `undertow
 bench-metronome` prints period estimate, latch margin, composite cost p50/p99/p99.9,
 missed flips per mille, degraded frames and a verdict, and `FlightRecorder`
@@ -188,6 +188,31 @@ your frame budget before you install. On metal that runs with a hardware clock
 for the first time in the project's history (P4.5) — and the report must record
 *which* clock it measured against, because a number from a nominal grid and a
 number from a real vblank are not the same measurement (§2.48).
+
+**What P12.4 landed, and the trap it walked into on the first run:**
+
+- `undertow run` now emits `period-us`, `vblank-source` and **`backend`**, so the
+  numbers a person photographs off a screen say what they were measured against.
+  `bench-metronome` has printed the clock since P6.1; `run` never did, and `run`
+  is the mode somebody invokes on a strange machine.
+- `probeFrameContract` reads those `key=value` lines and **refuses a verdict**
+  (§6.4). A terrible result and a perfect one differ in their numbers, not in
+  their status; there is a test that fails if the word "ok" or "pass" appears in
+  the detail.
+
+*The trap: the first version labelled a run `[hardware clock]` whenever
+`sawHardwareClock` was true — and running `fathom --measure` on the dev box
+produced exactly that for a **nested** compositor. §2.48 has three cases, not
+two, and the third is the one that lies: a nested backend passes real timestamps
+through from the host's vblank, so the clock flag is true and the numbers mean
+nothing. Only the backend distinguishes them, so `undertow` now reports it and a
+nested result reads `NOT APPLICABLE`.*
+
+*And a smaller one, from the same run: `Frame contract [??] undertow did not
+report` is true and useless. The tool now quotes the machine — `could not
+measure: undertow: could not create a wlroots backend` — which is the sentence
+somebody would otherwise reboot to read. The rule is not "discard stderr", it is
+**never parse stderr as data**: it is captured separately and only ever quoted.*
 
 **P12.5 — the report leaves the machine.**
 The matrix is populated by people who are not us, so the report has to be

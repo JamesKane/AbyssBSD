@@ -422,6 +422,24 @@ public final class WlrootsOutput: Output {
                     missed: e.presented && vblank > target)
     }
 
+    /// Which backend this output actually landed on.
+    ///
+    /// **Not the same question as `Backend.Kind`**, which is what we *asked*
+    /// for: `--backend auto` resolves to DRM on metal, a nested Wayland window
+    /// inside a session, or X11 under one. §2.48 is the reason this has to be
+    /// reported rather than inferred — a nested output passes through real
+    /// present timestamps taken from the **host's** vblank, so `sawHardwareClock`
+    /// is true there and its numbers still mean nothing. Only the backend
+    /// distinguishes "measured against our own clock" from "measured against
+    /// somebody else's".
+    public var backendName: String {
+        if wlr_output_is_drm(output) { return "drm" }
+        if wlr_output_is_wl(output) { return "nested-wayland" }
+        if wlr_output_is_x11(output) { return "nested-x11" }
+        if wlr_output_is_headless(output) { return "headless" }
+        return "unknown"
+    }
+
     /// Give a backend with no hardware clock an honest vblank grid.
     ///
     /// A headless output presents the instant it is committed, so its "vblank"

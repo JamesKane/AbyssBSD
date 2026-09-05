@@ -455,6 +455,19 @@ case "run":
     out("composite-p99-us=\(recorder.costPercentileNs(99) / 1000)")
     out("margin-us=\(metronome.margin.marginNs / 1000)")
     out("missed=\(recorder.missedCount) of \(recorder.retained)")
+    // **Say what the numbers were measured against, in the output that gets
+    // read.** `bench-metronome` has printed the vblank source since P6.1; `run`
+    // never did — and `run` is the mode a person invokes on a strange machine
+    // and photographs off a screen. Every line above is a duration, and a
+    // duration measured against a synthetic grid is not the same quantity as one
+    // measured against a real vblank (§2.48). Unlabelled they are
+    // indistinguishable, which is how a nominal-clock miss count gets quoted as
+    // a hardware result.
+    out("period-us=\(output.periodHintNs / 1000)")
+    out("vblank-source=\(output.sawHardwareClock ? "hardware" : "nominal")")
+    // And **whose** clock, which `vblank-source` alone cannot say: a nested
+    // backend reports real timestamps from the host's vblank (§2.48).
+    out("backend=\(output.backendName)")
     var runFailed = false
     if let want = assertLayers, compositor.mappedLayers.count != want {
         emit(2, "FAIL: expected \(want) mapped layer surface(s),"

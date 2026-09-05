@@ -30,6 +30,15 @@
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
+/* **Which backend an output actually landed on, which is not what we asked
+ * for.** `--backend auto` gives DRM on metal, a nested Wayland window inside a
+ * session, or X11 — and §2.48's whole lesson is that those are three different
+ * clocks wearing one name. A nested output reports *real* present timestamps
+ * from somebody else's vblank, so "did we see a hardware clock" cannot tell it
+ * apart from DRM. The backend can. */
+#include <wlr/backend/drm.h>
+#include <wlr/backend/wayland.h>
+#include <wlr/backend/x11.h>
 /* Phase 4: the backend that drives a real display, and the session that owns the
  * VT and the device descriptors it needs. `wlr_backend_autocreate` returns the
  * session as an out-parameter, so the type has to be visible even though we

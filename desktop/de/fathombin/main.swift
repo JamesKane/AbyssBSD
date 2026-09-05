@@ -10,6 +10,7 @@
 // same payoff.
 //
 //   fathom              the report, as text
+//   fathom --measure    also run the compositor and report the frame contract
 //   fathom --quiet      exit status only: 0 complete, 1 something unaskable
 //
 // **Exit status is about completeness, not suitability.** A machine with no
@@ -48,32 +49,56 @@ func emit(_ fd: Int32, _ s: String) {
 /// - **A non-zero exit is nil.** Anything else re-invents the same bug for the
 ///   next command that fails politely.
 func capture(_ argv: [String]) -> String? {
-    var fds: [Int32] = [0, 0]
-    guard pipe(&fds) == 0 else { return nil }
+    run(argv).stdout
+}
+
+/// Run a command and keep both halves apart.
+///
+/// **Why stderr is kept at all**, having just been thrown away: a probe that
+/// fails should say what the machine said. "undertow did not report" is true and
+/// useless; "undertow: could not create a wlroots renderer" is the answer
+/// somebody drove to a different city to read off a screen. The rule is not
+/// "discard stderr", it is **never parse stderr as data** — so it is captured
+/// separately and only ever quoted, never fed to a parser.
+func run(_ argv: [String]) -> (stdout: String?, reason: String) {
+    var outFds: [Int32] = [0, 0]
+    var errFds: [Int32] = [0, 0]
+    guard pipe(&outFds) == 0 else { return (nil, "could not create a pipe") }
+    guard pipe(&errFds) == 0 else {
+        close(outFds[0]); close(outFds[1])
+        return (nil, "could not create a pipe")
+    }
     let pid = fork()
     if pid == 0 {
-        close(fds[0])
-        dup2(fds[1], 1)
-        if let devnull = Optional(open("/dev/null", O_WRONLY)), devnull >= 0 {
-            dup2(devnull, 2)
-            close(devnull)
-        }
-        close(fds[1])
+        close(outFds[0]); close(errFds[0])
+        dup2(outFds[1], 1)
+        dup2(errFds[1], 2)
+        close(outFds[1]); close(errFds[1])
         var cargs: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) }
         cargs.append(nil)
         execvp(argv[0], &cargs)
         _exit(127)
     }
-    guard pid > 0 else { close(fds[0]); close(fds[1]); return nil }
-    close(fds[1])
-    var text = ""
-    var buf = [UInt8](repeating: 0, count: 4096)
-    while true {
-        let n = buf.withUnsafeMutableBytes { read(fds[0], $0.baseAddress, 4096) }
-        if n <= 0 { break }
-        text += String(decoding: buf[0..<n], as: UTF8.self)
+    guard pid > 0 else {
+        close(outFds[0]); close(outFds[1]); close(errFds[0]); close(errFds[1])
+        return (nil, "could not fork")
     }
-    close(fds[0])
+    close(outFds[1]); close(errFds[1])
+
+    func drain(_ fd: Int32) -> String {
+        var text = ""
+        var buf = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let n = buf.withUnsafeMutableBytes { read(fd, $0.baseAddress, 4096) }
+            if n <= 0 { break }
+            text += String(decoding: buf[0..<n], as: UTF8.self)
+        }
+        close(fd)
+        return text
+    }
+    let outText = drain(outFds[0])
+    let errText = drain(errFds[0])
+
     var status: Int32 = 0
     waitpid(pid, &status, 0)
     // A command that did not exist, or ran and failed, tells us nothing. One that
@@ -81,8 +106,22 @@ func capture(_ argv: [String]) -> String? {
     // an answer and nil is not.
     let exited = (status & 0x7f) == 0
     let code = (status >> 8) & 0xff
-    guard exited, code == 0 else { return nil }
-    return text
+    guard exited, code == 0 else {
+        // The last non-empty line: a failing program's useful sentence is
+        // usually its last, and the ones above it are context we did not ask for.
+        let last = errText.split(separator: "\n")
+            .map { String($0) }.last { !$0.trimmingPrefixSpaces().isEmpty }
+        return (nil, last ?? "\(argv[0]) exited \(code) and said nothing")
+    }
+    return (outText, "")
+}
+
+extension String {
+    func trimmingPrefixSpaces() -> String {
+        var s = Substring(self)
+        while let c = s.first, c == " " || c == "\t" { s = s.dropFirst() }
+        return String(s)
+    }
 }
 
 /// The contents of a directory, or nil if it could not be read.
@@ -142,6 +181,45 @@ let report = FathomReport([
                  canAsk: canAsk),
 ])
 
-let quiet = CommandLine.arguments.dropFirst().contains("--quiet")
-if !quiet { emit(1, renderText(report)) }
-exit(report.isComplete ? 0 : 1)
+// ------------------------------------------------------------ measurement
+//
+// **Opt-in, because it is the one probe that costs something.** Everything above
+// reads a file or a sysctl; this one starts a compositor, takes the display, and
+// runs for a few seconds. A report you might want on a machine you are unsure
+// of should not seize the screen unasked.
+//
+// **And not measuring is shown rather than silently omitted.** A row missing
+// from a list is invisible; a footer that says why is not. This is the same rule
+// as `unknown` one level up — the report must never look more complete than it
+// is — but it is deliberately *not* an `unknown`, because a question nobody
+// asked is not a question the machine refused to answer, and the exit status
+// should not claim otherwise.
+let args = Array(CommandLine.arguments.dropFirst())
+let measure = args.contains("--measure")
+var results = report.results
+
+if measure {
+    // Absolute path first, then bare so `execvp` searches PATH — the medium
+    // installs to /usr/local/bin, a developer has it somewhere else.
+    let installed = "/usr/local/bin/undertow"
+    let undertow = installed.withCString { access($0, X_OK) == 0 } ? installed : "undertow"
+    let r = run([undertow, "run", "--backend", "auto", "--frames", "300"])
+    if let out = r.stdout {
+        results.append(probeFrameContract(runOutput: out))
+    } else {
+        // Quote the machine rather than paraphrase it. This is the line somebody
+        // would otherwise have to reboot to read.
+        results.append(ProbeResult("Frame contract", .unknown,
+                                   "could not measure: \(r.reason)"))
+    }
+}
+
+let final = FathomReport(results)
+let quiet = args.contains("--quiet")
+if !quiet {
+    emit(1, renderText(final))
+    if !measure {
+        emit(1, "\n(frame contract not measured; pass --measure to run the compositor)\n")
+    }
+}
+exit(final.isComplete ? 0 : 1)

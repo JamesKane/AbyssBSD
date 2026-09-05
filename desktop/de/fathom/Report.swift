@@ -151,3 +151,80 @@ func mark(_ s: ProbeStatus) -> String {
     case .unknown: return "[??]"
     }
 }
+
+// MARK: - The measurement
+
+/// The frame contract, from `undertow run`'s own key=value output.
+///
+/// **This is the probe that makes Fathom different from every other live CD.**
+/// Anything can say the GPU bound; this says whether the machine holds the frame
+/// contract, and by how much it misses. The numbers already existed — the
+/// metronome and the flight recorder have printed them since P6.1 — so this is a
+/// serialisation pass and not a benchmarking one.
+///
+/// **It reports numbers and refuses to render a verdict** (PHASE12 §6.4). A
+/// pass/fail here would be calibrated on whatever machine happened to be
+/// convenient, and the first one is a 20-thread 5 GHz desktop. What a reader
+/// needs is the miss rate, the cost, and the budget those were measured against;
+/// what they must not be given is our opinion of their hardware.
+///
+/// **And it carries the clock.** A duration measured against a synthetic grid is
+/// not the same quantity as one measured against a real vblank (§2.48), so a
+/// nominal-clock result says so in the same breath as the number. Getting that
+/// wrong is how a headless miss count gets quoted as a hardware result.
+public func probeFrameContract(runOutput: String?) -> ProbeResult {
+    guard let text = runOutput, !text.isEmpty else {
+        return ProbeResult("Frame contract", .unknown, "undertow did not report")
+    }
+    var fields: [String: String] = [:]
+    for line in text.split(separator: "\n") {
+        let parts = line.split(separator: "=", maxSplits: 1)
+        guard parts.count == 2 else { continue }
+        fields[trimmed(parts[0])] = trimmed(parts[1])
+    }
+
+    // `missed=45 of 300`
+    guard let missedRaw = fields["missed"] else {
+        return ProbeResult("Frame contract", .unknown,
+                           "undertow reported no frame counts")
+    }
+    let bits = missedRaw.split(separator: " ").map(String.init)
+    guard bits.count >= 3, let missed = Int(bits[0]), let total = Int(bits[2]) else {
+        return ProbeResult("Frame contract", .unknown,
+                           "could not read a frame count from \"\(missedRaw)\"")
+    }
+    guard total > 0 else {
+        // The compositor ran and presented nothing. An answer about the machine,
+        // not a failure to ask — and one that matters, because every rate below
+        // would otherwise be a division by zero dressed as a result.
+        return ProbeResult("Frame contract", .absent, "no frames were presented")
+    }
+
+    let permille = (missed * 1000) / total
+    var detail = "\(missed) of \(total) missed (\(permille) per mille)"
+    if let cost = fields["composite-p99-us"] { detail += ", composite p99 \(cost)us" }
+    if let period = fields["period-us"] { detail += ", period \(period)us" }
+
+    // **Whose clock, and not merely whether one was seen.** §2.48: a nested
+    // compositor presents when its *host* presents, and passes real timestamps
+    // through — so `vblank-source=hardware` is true there and the numbers still
+    // mean nothing. Only the backend separates "our own vblank" from "somebody
+    // else's", which is why the label is built from both fields and why a nested
+    // result is called not-applicable rather than reported as a measurement.
+    let clock = fields["vblank-source"]
+    switch fields["backend"] {
+    case "drm":
+        detail += clock == "hardware" ? " [hardware clock, DRM]"
+                                      : " [DRM but NO hardware clock: treat as provisional]"
+    case "nested-wayland", "nested-x11":
+        detail += " [NESTED: measured against the host's clock, NOT APPLICABLE]"
+    case "headless":
+        detail += " [HEADLESS: a synthetic grid, not a hardware measurement]"
+    default:
+        // Output from a build that predates the label. Saying nothing would let
+        // it read as a hardware measurement, which is the failure being guarded.
+        detail += clock == "hardware" ? " [clock hardware, backend unstated]"
+                                      : " [clock and backend unstated]"
+    }
+    return ProbeResult("Frame contract", .present, detail)
+}

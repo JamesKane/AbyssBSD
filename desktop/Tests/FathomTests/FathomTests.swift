@@ -265,6 +265,91 @@ final class FathomTests: XCTestCase {
         XCTAssertEqual(probeBattery(life: nil, present: false, canAsk: true).status, .absent)
     }
 
+    // MARK: - The measurement
+
+    /// `undertow run --backend auto --frames 300` on the RX 6750 XT, captured
+    /// off the screen on 2026-09-05 — the first frame numbers this project has
+    /// ever taken from real hardware.
+    static let metalRun = """
+    WAYLAND_DISPLAY=wayland-0
+    usable=0,0,2560x1440
+    surfaces-created=0
+    layers=0 of 0
+    wake-late-p99-us=715
+    composite-p99-us=9
+    margin-us=8000
+    missed=45 of 300
+    period-us=16666
+    vblank-source=hardware
+    backend=drm
+    verdict ok
+    """
+
+    func testTheFrameContractIsReadOffUndertowsOwnOutput() {
+        let r = probeFrameContract(runOutput: Self.metalRun)
+        XCTAssertEqual(r.status, .present)
+        XCTAssertTrue(r.detail.contains("45 of 300"), r.detail)
+        XCTAssertTrue(r.detail.contains("150 per mille"), r.detail)
+        XCTAssertTrue(r.detail.contains("composite p99 9us"), r.detail)
+    }
+
+    func testOnlyDRMWithAHardwareClockCountsAsAMeasurement() {
+        // §2.48 has three cases, not two, and the third is the trap: a **nested**
+        // compositor presents when its host does and passes real timestamps
+        // through, so `vblank-source=hardware` is true there and the numbers mean
+        // nothing. Found by running `fathom --measure` on the dev box, where
+        // `--backend auto` gives a nested window and the first version of this
+        // probe cheerfully labelled it "[hardware clock]".
+        func detail(_ backend: String, _ clock: String) -> String {
+            probeFrameContract(runOutput: "missed=45 of 300\nbackend=\(backend)\nvblank-source=\(clock)").detail
+        }
+        XCTAssertTrue(detail("drm", "hardware").contains("hardware clock, DRM"))
+        XCTAssertTrue(detail("nested-wayland", "hardware").contains("NOT APPLICABLE"))
+        XCTAssertTrue(detail("nested-x11", "hardware").contains("NOT APPLICABLE"))
+        XCTAssertTrue(detail("headless", "nominal").contains("HEADLESS"))
+        // DRM without a hardware clock is a real and different case again.
+        XCTAssertTrue(detail("drm", "nominal").contains("provisional"))
+    }
+
+    func testAnUnstatedClockIsNotSilentlyAssumedToBeHardware() {
+        // Output from a build that predates the label. Saying nothing would let
+        // it read as a hardware measurement, which is the failure this guards.
+        let old = "missed=0 of 300\ncomposite-p99-us=9"
+        XCTAssertTrue(probeFrameContract(runOutput: old).detail.contains("unstated"))
+        // A hardware clock with no backend named is still not a DRM result.
+        let half = "missed=0 of 300\nvblank-source=hardware"
+        XCTAssertTrue(probeFrameContract(runOutput: half).detail.contains("backend unstated"))
+    }
+
+    func testNoFramesIsAnAnswerAboutTheMachineNotAFailureToAsk() {
+        // And it stops every rate below being a division by zero dressed up as
+        // a result.
+        let none = "missed=0 of 0\nvblank-source=hardware"
+        XCTAssertEqual(probeFrameContract(runOutput: none).status, .absent)
+    }
+
+    func testTheProbeReportsNumbersAndRefusesAVerdict() {
+        // §6.4: a pass/fail here would be calibrated on whatever machine was
+        // convenient, and the first one is a 20-thread 5 GHz desktop. A terrible
+        // result and a perfect one differ in their numbers and not in their
+        // status — the reader draws the conclusion.
+        let bad = "missed=299 of 300\nvblank-source=hardware"
+        let good = "missed=0 of 300\nvblank-source=hardware"
+        XCTAssertEqual(probeFrameContract(runOutput: bad).status,
+                       probeFrameContract(runOutput: good).status)
+        for word in ["ok", "fail", "pass", "good", "bad", "verdict"] {
+            XCTAssertFalse(probeFrameContract(runOutput: bad).detail.lowercased().contains(word),
+                           "the probe rendered a verdict: \(probeFrameContract(runOutput: bad).detail)")
+        }
+    }
+
+    func testUnreadableOutputIsUnknown() {
+        XCTAssertEqual(probeFrameContract(runOutput: nil).status, .unknown)
+        XCTAssertEqual(probeFrameContract(runOutput: "").status, .unknown)
+        XCTAssertEqual(probeFrameContract(runOutput: "nothing useful here").status, .unknown)
+        XCTAssertEqual(probeFrameContract(runOutput: "missed=lots of frames").status, .unknown)
+    }
+
     // MARK: - The tunable that has been unconditional
 
     func testOnlyAMacProAsksForPCIeHotplugToBeDisabled() {
