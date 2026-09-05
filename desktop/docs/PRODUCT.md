@@ -38,7 +38,9 @@ An opinion is a rejection, so each is stated with what it rules out.
    are how the thesis wins.
 4. **Agents are a good idea and belong in jails.** *Rejects:* the industry
    default — a CLI agent running as you, with your credentials, over your whole
-   home directory.
+   home directory — and, equally, permission-by-popup, which is that same agent
+   with a dialog in front of it. Confinement is the grant; a requester is for the
+   few things confinement cannot say (§4.4).
 5. **It should just work on the vast majority of systems.** *Rejects:* "read the
    handbook", `rc.conf` as a user interface, and a hardware story that is one
    machine.
@@ -170,28 +172,129 @@ paths**, and PHASE7's demo client calls `cap_enter(2)` first, so it has no
 filesystem at all. An agent whose only reach into your data is a descriptor a
 human granted by clicking a file in the Finder is a claim nobody else can make.
 
+Much of what follows is adapted from `GHOST`, a Plan 9 agent design read on
+2026-09-05, the way §2 adapts Omarchy: **the mechanism does not transfer and the
+arguments do.** Plan 9 gives an agent a per-process namespace for the price of a
+syscall; we have `jail(2)`, `nullfs` and Capsicum, which are coarser and are
+*not* free per task. Where that changes a cost, it is said so.
+
+#### The confinement is the grant
+
+**This document used to propose the wrong thing.** It asked for "This agent wants
+to read `~/Documents/foo.txt` — Allow / Deny / Always" as the human in the loop.
+That is the model `GHOST` refuses in one line — *an agent that asks before every
+action trains a person to say yes; a sandbox that cannot name a file cannot touch
+it, and needs no popup* — and it is right. We built the capability substrate
+first and then wrote the popup down anyway. The grant already happened, at the
+moment a person clicked a file in a Finder; a dialog stacked on top of a
+descriptor re-introduces precisely the fatigue the descriptor exists to remove.
+
+So the requester is for the short, **enumerated** list of actions confinement
+cannot express, and nothing else:
+
+1. the first write, in a session, to a file that already exists;
+2. anything in the `admin` class;
+3. egress to a host not already granted;
+4. a spend that would cross the budget (below).
+
+Everything else is inside the jail or impossible. **A list that grows is the
+design failing; a list that stays at four is the design working.** The surface is
+a sheet and a Preferences pane — thesis 2 still applies to thesis 4 — but it is a
+sheet a person sees a few times a session, not a few times a minute.
+
 Missing:
 
-- **Jail plumbing.** Nothing in `de/` calls `jail(2)`. `Anchor` supervises
-  processes; it does not confine them. Needs jail lifecycle, a filesystem story
-  (a private ZFS dataset per agent is cheap — we already install ZFS), and
-  `vnet` if the agent gets network.
+- **Jail plumbing, and a class is data.** Nothing in `de/` calls `jail(2)`.
+  `Anchor` supervises processes; it does not confine them. Needs jail lifecycle,
+  a filesystem story (a private ZFS dataset per agent is cheap — we already
+  install ZFS), and `vnet` where there is network. **What a jail contains should
+  be a declared class, not code**: `edit` gets one directory and the toolkit,
+  `debug` gets one process's view and the debugger and no other, `admin` gets
+  what a person names and asks first. That is a `PoolConfig` table, which is a
+  mechanism we already have. **The cost that does not transfer:** a jail is a
+  process tree, a devfs ruleset and a dataset, so one per prompt is not
+  affordable the way a mount table is — expect pooled, long-lived jails per class
+  rather than one per task, and say so before someone designs for the cheap case.
+- **The vocabulary the agent acts through.** Not a tool API of its own — §5.5.
+  This is the single largest dependency thesis 4 has, and it is being built in
+  Phase 10 for another reason entirely.
 - **Where the model runs.** **No local GPU inference on FreeBSD** — no ROCm, no
   CUDA. Worth being precise about why, because the reason changed: it used to be
   the *hardware* (GCN 1.0 could not run it anyway), and since the retarget it is
   purely the *operating system* — an RX 6750 XT is RDNA 2 and would run local
   inference happily on Linux. The blocker is now something FreeBSD could
   plausibly gain, which makes it worth re-checking rather than assuming. Until
-  then: a small CPU model or a remote API, and a remote API needs the network
-  pane and a credential store we do not have.
-- **The grant UI.** The portal refuses; it has no human in the loop. "This agent
-  wants to read `~/Documents/foo.txt`" — Allow / Deny / Always, a revocable list,
-  an audit log. A Preferences pane and a sheet: thesis 2 applies to thesis 4.
-- **The agent application.** A chat window is WIMP-native and needs nothing from
-  §4.1.
+  then: a small CPU model from ports or a remote API. **We do not write an
+  inference engine** (§10) — `GHOST` budgets four thousand lines for one because
+  Plan 9 has no ports tree; we have one.
+- **One wire format, local and remote alike.** The interface between the desktop
+  and a model is the Messages API's JSON whichever end answers it. This is worth
+  deciding now rather than later, because it is what makes the line above a
+  *backend swap instead of a redesign*: the day FreeBSD gains ROCm, or the day a
+  CPU model is good enough, nothing above the backend learns about it.
+- **The credential, which is a design and not a gap.** "A credential store we do
+  not have" was the wrong framing. The requirement is `factotum`'s principle: the
+  key lives in a process **outside** the jail, egress goes through something that
+  adds the header, and the agent cannot read the credential because the thing
+  holding it is not in its namespace. Stated that way it is a small daemon and a
+  `CurrentIPC` channel, not a keychain we have to invent first.
+- **The budget is a line.** Tokens or currency per session, counted as it spends,
+  stopping at the next tool call with the reason where the person can see it.
+  This is §8.5's rule in another dimension — *a budget, not a boolean* — and the
+  same instinct that gates effects on C1's miss budget should gate an agent on a
+  number the user set.
+- **Off is one file.** Present, and the agent does not start: no menu item, no
+  chord, no spend indicator, no process parked on a crash, and **the rest of the
+  desktop does not know the difference.** For an OS whose thesis 5 is "it just
+  works", an agent that cannot be removed is a liability, so this is a rejection
+  and it is in §10.
 
-Ordering consequence: thesis 4 depends on thesis 5's network and thesis 2's
-preferences. It is not the next thing; it is what the next things make possible.
+#### What it is for, and how it is tested
+
+- **The agent application** is a chat window: WIMP-native, and it needs nothing
+  from §4.1. But a chat window is not an *answer* to what an agent is for on a
+  desktop. The concrete one, taken from `GHOST` (which took it from Omarchy):
+  **a crash is handed to the agent from the notice that says it crashed.** The
+  "application quit unexpectedly" notification carries a button; the click starts
+  a session in the `debug` class, on that process and no other. It reads and
+  reports and writes nothing. It needs no network and no menu vocabulary, which
+  makes it the first task rather than the last.
+- **State is shown where a person is looking.** Working, waiting, idle — on the
+  Dock tile and in the menu bar, and once §7 exists, **on the island switcher**,
+  so an agent waiting for a yes on another island is visible without hunting for
+  its window. Thesis 4 and §7 have no relationship in this document today, and
+  this is it. It is also §4.5's rule again: a state nobody can see is a lie.
+- **The transcript is append-only, and it is a file.** Not a feature of the grant
+  UI — the session *is* the log, it outlives the process, and a person can read
+  or grep it. There is a technical reason as well as an audit one: the frontier
+  models refuse an edited history, so a transcript that is rewritten is a
+  transcript that stops working.
+- **Pixels are the fallback, never the way in.** `Surface` already has
+  `screencopy` and we ship `abyssgrab`, so an application with no published
+  vocabulary can still be read as an image. It is slow, costly and blind to what
+  the program knows about itself, and it stops the day that application publishes
+  a vocabulary. Driving a desktop by screenshot when the desktop can describe
+  itself is the industry's answer and we should say we are not taking it.
+- **A stub backend is how any of this is testable.** Canned replies, tool calls
+  included, answering the same wire format. Every check here — the class
+  boundary, the four requesters, the budget stop, the transcript — then runs in
+  the build VM with **no model on disk and no network**, which is §2.43's
+  discipline and the only way this phase gets tested before it gets hardware.
+  And the check that makes the sandbox check mean something is §2.37's: **one
+  control, a jail deliberately built without the restriction, so we can watch the
+  check fail.** A confinement test that has never failed is a comment.
+
+**What this phase does *not* cost us.** `GHOST` spends roughly half its total
+budget on a TLS 1.3 client, an X.509 parser and an HTTP client, because Plan 9
+has none. We have base OpenSSL and a ports tree, and we are not writing an
+inference engine either. Most of that design's line count is not our line count —
+which is worth knowing before this phase is estimated from the outside.
+
+Ordering consequence: thesis 4 depends on thesis 5's network, thesis 2's
+preferences, and — newly, and most importantly — **thesis 2's menu protocol**
+(§5.5). It is not the next thing; it is what the next things make possible, and
+one of those next things needs a decision made in its own phase to keep it that
+way.
 
 ### 4.5 Thesis 5 — it just works
 
@@ -218,7 +321,7 @@ The widest gap, and the least code-shaped.
 
 These block several theses at once, which is what makes them worth doing first.
 Three are already above — **the clipboard** and **the menu protocol** (§4.2), and
-**server-side decorations** (§4.3). Four more:
+**server-side decorations** (§4.3). Five more:
 
 ### 5.1 The browser — pick an engine, not a browser
 
@@ -303,6 +406,53 @@ full authority. Jails (§4.4) answer both, which argues for building that substr
 earlier than the agent motivating it.
 
 ---
+
+### 5.5 The menu protocol is also the automation surface
+
+**The cheapest decision in this document, and it expires.** Phase 10 builds a
+`CurrentIPC` channel over which an application publishes its menu tree and the
+bar routes activation back (§4.2). A menu tree is an application's vocabulary in
+machine-readable form — which is the same object AppleScript called a
+*dictionary*, and 10.2 shipped both the dictionary and the global menu bar
+because they are two consumers of one thing.
+
+`GHOST` states the rule as a rejection: **an application has one automation
+surface, and the person and the agent use the same one.** What it refuses is a
+plugin API per application — COM, AppleEvents as most programs actually shipped
+it, editor extension APIs — because each grows a second surface beside the human
+one and the two drift.
+
+The consequence for us is an ordering claim §4.4 could not make on its own:
+
+> **Phase 10 is on thesis 4's critical path.** Designed as menus-only — titles,
+> items, activation, void — it satisfies thesis 2 and leaves Phase 18 to build a
+> second automation surface, which is the thing above that we would be refusing.
+> Designed as *published vocabulary, of which the menu bar is the first
+> consumer*, the agent's tool list comes for free.
+
+The delta is small and it is only cheap **now**: a verb carries argument types
+and a sentence of description; activation returns a result rather than nothing;
+and the channel answers a query — *what can you do* — rather than only pushing.
+Phase 10's text already says it must land before Phase 15 because every
+application built without it has to be retrofitted. This is that same argument
+carried one phase further, and it costs a design constraint written down rather
+than any code.
+
+Two things fall out, both free:
+
+- **`Aqua` serves the contract.** Every application already builds a menu
+  definition to hand the bar; publishing it makes every Aqua application
+  scriptable the day it links, with nothing written per application. `GHOST`'s
+  version of this — the toolkit's named gadgets *are* the vocabulary — is the
+  same observation about a different toolkit.
+- **`abyss-dbus` serves it for foreign applications too.** §4.2 already has us
+  translating `org.gtk.Menus`/`org.gtk.Actions` and `com.canonical.dbusmenu` into
+  our bar. That is a vocabulary for every GTK and Qt application on the machine,
+  through a bridge we are building anyway. **One bridge, two consumers** — the
+  menu bar and the agent — which is a better return than either justifies alone.
+
+And it is the reason §4.4's pixel fallback stays a fallback: an application that
+can describe itself is never driven by screenshot.
 
 ## 6. Four proposals
 
@@ -778,7 +928,7 @@ files is how they drift.
 | PLAN phase | What it is | Where it comes from here |
 |---|---|---|
 | **9** — the interaction substrate | clipboard, drag-and-drop, a keybind table, the window requests we ignore, server-side decorations, the XWayland decision | §4.2, §4.3, §5.2 |
-| **10** — the menu protocol | ours over `CurrentIPC`, foreign through `abyss-dbus` | §4.2 |
+| **10** — the menu protocol | ours over `CurrentIPC`, foreign through `abyss-dbus` — **as published vocabulary, not menus only** | §4.2, §5.5 |
 | **11** — the theme system, layers 1–3 | tokens, declarative widget drawing, chrome — plus `Trench` as the format's positive control | §8, §8.7, §5.3 |
 | **12** — `Fathom` | PHASE4 §5 as a program; the hardware matrix | §6.4, §4.5 |
 | **13** — Islands, Shoals and Ebb | workspaces, window sets, Exposé — and C6 | §7 |
@@ -786,7 +936,7 @@ files is how they drift.
 | **15** — the application layer | `.desktop` → `.app`, the browser, Terminal, TextEdit, Grab, Activity Monitor, Disk Utility | §6.1, §5.1, §4.1 |
 | **16** — the session | login window, lock, idle, suspend, first run | §4.5 |
 | **17** — delivery | the Abyss overlay, and `abyss update` over boot environments | §6.2, §6.3 |
-| **18** — confinement, then agents | jails first (they are not only for agents), then the grant UI and the agent | §4.4, §5.4 |
+| **18** — confinement, then agents | jails first (they are not only for agents), classes as data, the four requesters, the budget, the off switch, the crash task | §4.4, §5.4 |
 
 **What the dependency ordering changed about this document's own instincts**, in
 both directions:
@@ -804,6 +954,16 @@ both directions:
 - **The Terminal stopped being its own step.** It is one item in Phase 15, because
   what actually gated it was the clipboard, the menus and the theme — not its own
   difficulty.
+- **Phase 10 acquired a second reason to exist**, on 2026-09-05, and it is the
+  only change here that must be made *inside another phase's design* rather than
+  by reordering. The menu protocol is the agent's vocabulary (§5.5); designing it
+  as menus-only is free today and costs a whole second automation surface in
+  Phase 18. Nothing moves in the order — a constraint gets written down eight
+  phases early, which is the cheapest kind of dependency there is.
+- **Thesis 4's popup went away.** §4.4 asked for Allow / Deny / Always on every
+  file and now asks for four named requesters, because confinement *is* the
+  grant. That is a smaller Phase 18, not a larger one — as is not writing a TLS
+  stack or an inference engine.
 
 ---
 
@@ -823,3 +983,17 @@ both directions:
 - **A TUI for anything.** The one exception is the terminal itself, which is not a
   TUI — it is the escape hatch that lets us ship a GUI without having shipped every
   GUI yet.
+- **An inference engine.** A model is a program we run, from ports, behind one
+  wire format (§4.4). The same argument as the browser: we adopt engines, we do
+  not write them.
+- **An agent that cannot be removed.** Off is one file, and with it absent there
+  is no menu item, no chord, no spend indicator and no process parked on a crash.
+  A person who wants none of it gets none of it, and the rest of the desktop does
+  not know the difference.
+- **A second automation surface.** An application publishes its vocabulary once
+  and the menu bar, a script and an agent are all consumers of it (§5.5). No
+  plugin API per application, and no agent-only tool interface bolted beside the
+  human one.
+- **Driving programs by screenshot.** Pixels are the documented fallback for an
+  application that cannot describe itself, and they stop being used the day it
+  can (§4.4).
