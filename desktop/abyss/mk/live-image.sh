@@ -76,7 +76,9 @@ sudo -n true 2>/dev/null || die "this needs passwordless sudo (it extracts a bas
 DATA="/usr/local/share/fonts/dejavu
       /usr/local/share/xkeyboard-config-2
       /usr/local/etc/fonts
-      /usr/local/share/libinput"
+      /usr/local/share/libinput
+      /usr/local/share/glvnd
+      /usr/local/share/vulkan/icd.d"
 
 # **Objects nothing links and something `dlopen`s — the converse of §2.45, and
 # it cost a boot on metal to find (PHASE4 §5.3).**
@@ -107,6 +109,32 @@ DATA="/usr/local/share/fonts/dejavu
 # anything. `live-medium.sh` asserts the files are on the stick, which is the
 # half that was wrong; only the machine can prove the renderer is created.
 DLOPEN_DIR="/usr/local/lib/dri"
+
+# **The plugin chain is three deep, and we found it one layer at a time.**
+#
+#   libEGL.so.1        libglvnd's vendor-neutral *dispatch*. This is what our
+#                      binaries link, so this is all `ldd` ever named.
+#   libEGL_mesa.so.0   Mesa's actual EGL, `dlopen`ed by the dispatch — and found
+#                      through `share/glvnd/egl_vendor.d/50_mesa.json`, a file
+#                      read **by path**, which is why it is in DATA above.
+#   libgallium /       the driver proper, reached from `dri/radeonsi_dri.so`.
+#   dri/*_dri.so
+#
+# Miss the middle link and the symptom names none of it: EGL reports
+# `EGL_EXT_platform_base not supported` — a *client* extension, queried before
+# any driver is consulted — then "Failed to create EGL context", and wlroots
+# skips GLES2 entirely. That is what the second metal boot printed with the DRI
+# drivers already on the stick (PHASE4 §5.5).
+#
+# **`libvulkan_radeon.so` and the Vulkan ICDs are here for a related reason.**
+# `libvulkan.so.1` is on the medium whether we like it or not — wlroots links it
+# — and a loader with no driver is precisely the artifact this phase keeps
+# tripping over: present, inert, and loud about it (`ERROR_INCOMPATIBLE_DRIVER`
+# in that same log, which is a false lead for anyone reading it). Either complete
+# it or do not ship it, and we cannot not ship it; so it is completed, and
+# wlroots gains the fallback renderer it was already trying to use.
+DLOPEN_LIBS="/usr/local/lib/libEGL_mesa.so.0
+             /usr/local/lib/libvulkan_radeon.so"
 
 # The products that go on the medium. An explicit list, not a glob over
 # `.build/debug`, because that directory is full of SwiftPM's own intermediates.
@@ -216,9 +244,16 @@ done
 # The dlopened roots, closed over exactly like the binaries above.
 [ -d "$DLOPEN_DIR" ] \
   || die "$DLOPEN_DIR is missing on this machine — install mesa-dri, or the medium ships a GPU it cannot render on"
-dlopen_roots=$(ls "$DLOPEN_DIR"/libdril_dri.so /usr/local/lib/libgallium-*.so 2>/dev/null)
+dlopen_roots=$(ls "$DLOPEN_DIR"/libdril_dri.so /usr/local/lib/libgallium-*.so $DLOPEN_LIBS 2>/dev/null)
 [ -n "$dlopen_roots" ] \
   || die "no libdril_dri.so or libgallium in /usr/local/lib — mesa-dri/mesa-libs are not installed here"
+# Each of these is a link in the chain above; a missing one produces a symptom
+# that names something else entirely, so they are checked by name rather than
+# left to a glob that quietly matches less than it should.
+for want in "$DLOPEN_DIR/libdril_dri.so" /usr/local/lib/libEGL_mesa.so.0 \
+            /usr/local/lib/libvulkan_radeon.so; do
+  [ -e "$want" ] || die "$want is missing on this machine — the medium would ship a GPU it cannot render on"
+done
 for r in $dlopen_roots; do
   libs="$libs
 $r

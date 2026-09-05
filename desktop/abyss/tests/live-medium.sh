@@ -224,6 +224,46 @@ sudo test -e "$work/mnt/usr/local/lib/dri/radeonsi_dri.so" \
   || fail "the medium has no radeonsi DRI driver — a real AMD GPU would find /dev/dri and no renderer"
 sudo test -s "$work/mnt/usr/local/lib/libgallium-"*.so \
   || fail "the medium has no libgallium — the DRI entry points would resolve to nothing"
+
+# **The middle link, and the one whose absence names something else.** `libEGL`
+# on the medium is libglvnd's dispatch; it finds Mesa's real EGL by reading
+# `egl_vendor.d/50_mesa.json` and dlopening what it names. Without either, EGL
+# reports `EGL_EXT_platform_base not supported` — a client extension, checked
+# before any driver — and wlroots skips GLES2 with no mention of a missing file
+# (PHASE4 §5.5).
+sudo test -s "$work/mnt/usr/local/share/glvnd/egl_vendor.d/50_mesa.json" \
+  || fail "the medium has no glvnd EGL vendor config — libEGL would find no driver at all"
+sudo test -e "$work/mnt/usr/local/lib/libEGL_mesa.so.0" \
+  || fail "the medium has no libEGL_mesa — the vendor config would name a library that is not there"
+# The loader is on the medium because wlroots links it; a loader with no driver
+# is present, inert, and loud about it. Either complete it or do not ship it.
+sudo test -s "$work/mnt/usr/local/share/vulkan/icd.d/radeon_icd.x86_64.json" \
+  || fail "the medium has libvulkan and no ICD — it would report ERROR_INCOMPATIBLE_DRIVER and mislead"
+sudo test -s "$work/mnt/usr/local/lib/libvulkan_radeon.so" \
+  || fail "the medium has no Vulkan driver, so its fallback renderer is a false promise"
+
+# **And the check that the four above cannot make: does the chain RESOLVE?**
+#
+# Three times now a file has been present and inert — a dispatch with no vendor,
+# a loader with no driver, a plugin directory with nothing behind it — and each
+# time the symptom named something else. `test -s` cannot tell the difference;
+# libEGL can.
+#
+# The property that makes this testable without a GPU: **EGL client extensions
+# are queried on `EGL_NO_DISPLAY`**, before any device is opened. So this VM,
+# which has no `/dev/dri` at all, can still say whether the medium's libEGL finds
+# a driver — pointed at the medium's own tree with the two variables libglvnd
+# reads, so it reports on the stick and not on the machine holding it.
+if cc -o "$work/eglprobe" "$root/abyss/tests/eglprobe.c"        -I/usr/local/include -L/usr/local/lib -lEGL 2>/dev/null; then
+  if env LD_LIBRARY_PATH="$work/mnt/usr/local/lib"          __EGL_VENDOR_LIBRARY_DIRS="$work/mnt/usr/local/share/glvnd/egl_vendor.d"          "$work/eglprobe" > "$work/egl.log" 2>&1; then
+    echo "ok: the medium's libEGL finds a vendor — EGL_EXT_platform_base present"
+  else
+    sed 's/^/    /' "$work/egl.log"
+    fail "the medium's libEGL finds no driver — wlroots would skip GLES2 on real hardware"
+  fi
+else
+  echo "note: no EGL headers here, skipping the vendor-chain probe"
+fi
 echo "ok: amdgpu, RDNA 2 + Southern Islands firmware, seatd, and si_support asked for"
 
 # **The ESP's own geometry, because Apple's firmware reads it and bhyve's does

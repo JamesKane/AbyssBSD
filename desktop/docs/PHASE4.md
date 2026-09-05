@@ -458,6 +458,45 @@ the session that failed runs as `abyss`. The medium already puts that user in th
 the last two boots have each disproved. The next run settles it in two commands,
 and `--verbose` turns on wlroots' own log, which names what it could not create.
 
+### 5.5 Third boot: the log names the link, and it was the middle one
+
+`--verbose` turned on wlroots' own log and ended the guessing. DRM is entirely
+healthy — `Found 1 GPUs`, `Initializing DRM backend for /dev/dri/card0 (amdgpu)`,
+`Using atomic DRM interface`, `Found 6 DRM CRTCs`, `Found 14 DRM planes` — and
+then:
+
+```
+[render/egl.c:208] EGL_EXT_platform_base not supported
+[render/egl.c:563] Failed to create EGL context
+[render/wlr_renderer.c:199] Failed to create a GLES2 renderer. Skipping!
+[render/vulkan/vulkan.c:182] Could not create instance: ERROR_INCOMPATIBLE_DRIVER
+[render/wlr_renderer.c:279] Could not initialize renderer
+```
+
+**`EGL_EXT_platform_base` is a client extension**, queried on `EGL_NO_DISPLAY`
+before any device is opened. Its absence does not mean the GPU is wrong; it means
+libEGL found **no vendor at all**.
+
+`libEGL.so.1` on FreeBSD is libglvnd — a vendor-neutral dispatch that locates the
+real driver by reading `share/glvnd/egl_vendor.d/50_mesa.json` and `dlopen`ing
+what it names. §2.52 carried the DRI drivers at the far end of that chain and
+left the middle out, so the medium had a dispatch, no vendor config, no
+`libEGL_mesa.so.0`, and a perfectly good gallium behind a door nothing opened.
+The Vulkan line below it is the same shape again: `libvulkan.so.1` is on the
+medium because wlroots links it, with no ICD to drive — a false lead for whoever
+reads the log next.
+
+Fixed: `egl_vendor.d` and the Vulkan ICDs join the data read by path,
+`libEGL_mesa.so.0` and `libvulkan_radeon.so` join the dlopen closure roots, and
+each link is now checked **by name** rather than left to a glob.
+
+**And the assertion changed kind.** Three boots in a row died on a file that was
+present being unable to reach a file that was not, and every `test -s` we had
+passed each time. `abyss/tests/eglprobe.c` asks libEGL for its client extensions
+against the medium's own tree; because client extensions need no device, **the
+build VM runs it with no GPU**, and pointing it at an empty vendor directory
+reproduces the metal failure exactly. HANDOFF §2.54.
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the

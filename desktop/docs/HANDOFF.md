@@ -339,6 +339,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.51 | Every safety predicate you have describes the **running** system — and on a live medium the running system is the USB stick |
 | 2.52 | `ldd` is not your closure either, when something in it `dlopen`s — Mesa's driver is a plugin, and headless never asks for it |
 | 2.53 | Take **every** fact from the display, not just the ones that broke first — we fixed size in P4.1 and reported a 60 Hz panel as 240 Hz for a phase |
+| 2.54 | A plugin chain fails at whichever link you did not carry, and names none of them — `test -s` proves presence, only the loader proves resolution |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -605,6 +606,53 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.54 Present is not resolved — carry the whole plugin chain, then prove it
+(Third metal boot, `--verbose`. The one that finally named the link.)
+
+§2.52 added Mesa's DRI driver to the medium because `ldd` cannot see a `dlopen`.
+The next boot failed the same way, and wlroots' own log said why:
+
+```
+[render/egl.c:208] EGL_EXT_platform_base not supported
+[render/egl.c:563] Failed to create EGL context
+[render/wlr_renderer.c:199] Failed to create a GLES2 renderer. Skipping!
+[render/vulkan/vulkan.c:182] Could not create instance: ERROR_INCOMPATIBLE_DRIVER
+```
+
+DRM was fine throughout — 1 GPU, atomic interface, 6 CRTCs, 14 planes. **The
+chain is three deep and we had carried the ends:**
+
+| Link | What it is | On the stick? |
+|---|---|---|
+| `libEGL.so.1` | libglvnd's vendor-neutral **dispatch** | yes — our binaries link it |
+| `egl_vendor.d/50_mesa.json` | says which vendor to load, **read by path** | **no** |
+| `libEGL_mesa.so.0` | Mesa's actual EGL, `dlopen`ed by the dispatch | **no** |
+| `dri/*_dri.so` → `libgallium` | the driver proper | yes, since §2.52 |
+
+`EGL_EXT_platform_base` is a **client** extension — queried on `EGL_NO_DISPLAY`,
+before any device exists — so its absence means the dispatch found no vendor at
+all. The message says nothing about a missing JSON, and the Vulkan line beneath
+it is a second instance of the same thing (`libvulkan.so.1` linked by wlroots,
+no ICD carried) producing a scary error that is a **false lead**.
+
+Two rules, and the second is the one worth keeping:
+
+1. **Carry the whole chain, or do not carry the loader.** A dispatch with no
+   vendor and a loader with no driver are the same artifact: present, resolving
+   every symbol, answering every call, and doing nothing. We could not decline to
+   ship `libvulkan.so.1` — wlroots links it — so it got completed instead.
+2. **`test -s` proves presence; only the loader proves resolution.** Three
+   consecutive boots died on a file that was there being unable to reach a file
+   that was not, and every filename assertion we had passed each time.
+
+So the check is now the mechanism rather than the manifest: `abyss/tests/eglprobe.c`
+asks libEGL for its client extensions with `__EGL_VENDOR_LIBRARY_DIRS` and
+`LD_LIBRARY_PATH` pointed at the *medium's* tree. Because client extensions need
+no device, **the build VM — which has no `/dev/dri` at all — can run it**, and it
+reproduces the metal failure exactly when the vendor directory is pointed
+elsewhere. A three-times-repeated runtime surprise became a check that runs on
+every build.
 
 ### 2.53 Half a lesson is a lesson you get to learn twice
 (Second metal boot. The compositor drove a real display and mislabelled it.)
