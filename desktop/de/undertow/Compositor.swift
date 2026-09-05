@@ -317,6 +317,19 @@ public final class Compositor {
     /// (HANDOFF §2.22); P6.7 is where that debt is paid.
     fileprivate func place(_ t: Toplevel) {
         everMapped.append(t.placeKey ?? "?")
+        // **A window that appears takes the keyboard.**
+        //
+        // Focus was only ever given on click (`Seat.button`), which is right for
+        // *changing* focus and wrong for the first window: until somebody
+        // clicked, every application was deaf. On the live medium that is an
+        // installer you cannot type into until you have clicked it, and no test
+        // had caught it because the harness drives a pointer before a keyboard
+        // in every mode that uses both.
+        //
+        // Found by trying to send a Finder a ⌘C (P9.2), which is the first thing
+        // in this project's history to want the keyboard without wanting the
+        // mouse first.
+        seat?.focus(t)
         // A remembered position wins. This is the spatial Finder's whole
         // behaviour — a folder's window reopens where you left it — and it is
         // the thing HANDOFF §2.22 recorded as waiting for a compositor of our

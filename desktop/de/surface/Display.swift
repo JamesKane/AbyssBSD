@@ -97,12 +97,14 @@ public final class Display {
     weak var activePopup: Popup?
     // Serial of the most recent pointer button event — xdg_popup.grab needs it.
     var lastPointerSerial: UInt32 = 0
-    /// The most recent serial from any input event.
+    /// The most recent serial from **any** input event, pointer or keyboard.
     ///
     /// The clipboard needs one: wlroots checks that a `set_selection` quotes a
     /// serial the client was actually given, which is what stops a program
-    /// taking the clipboard off an input it never received.
-    public var lastInputSerial: UInt32 { lastPointerSerial }
+    /// taking the clipboard off an input it never received. Kept separately from
+    /// `lastPointerSerial` because a popup grab specifically wants a *pointer*
+    /// serial, and conflating them would let a menu open off a keystroke.
+    public internal(set) var lastInputSerial: UInt32 = 0
 
     private var dataDeviceManager: OpaquePointer?
     /// The clipboard, once both `wl_seat` and `wl_data_device_manager` exist.
@@ -368,6 +370,7 @@ public final class Display {
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
                 d.lastPointerSerial = serial
+                d.lastInputSerial = serial
                 d.updatePointerTarget(surfaceRaw)
                 d.routePointerMotion(sx, sy)
             }
@@ -388,6 +391,7 @@ public final class Display {
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
                 d.lastPointerSerial = serial
+                d.lastInputSerial = serial
                 d.routePointerButton(button, pressed: state == 1)
             }
             // libwayland aborts if it dispatches an event whose listener slot is
@@ -510,9 +514,15 @@ public final class Display {
             let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
             d.keyboardBlur(surface)
         }
-        kl.key = { data, _, _, _, key, state in
+        kl.key = { data, _, serial, _, key, state in
             guard let data else { return }
             let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
+            // **The serial a copy is allowed to quote.** ⌘C is a key press, and
+            // the clipboard may only be taken with the serial of an input event
+            // the client actually received (P9.1). This one was being discarded,
+            // which would have left every keyboard-driven copy quoting a stale
+            // pointer serial — or none at all on a desktop nobody had clicked.
+            d.lastInputSerial = serial
             // wl_keyboard.key_state: 1 == pressed.
             let pressed = state == 1
             guard let ev = d.keyboardState?.event(evdev: key, pressed: pressed)

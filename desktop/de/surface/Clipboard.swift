@@ -53,6 +53,20 @@ public final class Clipboard {
     /// Boxes handed to C as listener `data`. Kept so they outlive the callbacks.
     private var boxes: [UnsafeMutableRawPointer] = []
 
+    /// Whether the current selection is one we ourselves offered.
+    ///
+    /// **This is what stops a program deadlocking on its own clipboard.** A
+    /// selection is a promise by the source to write into a descriptor when
+    /// asked — so reading a selection *we* own means asking ourselves, from a
+    /// thread that is about to block on the read, for a `send` event that only
+    /// the event loop we just stopped servicing could deliver. The process hangs
+    /// with nothing in any log.
+    ///
+    /// Found by `fileops`: copy and paste in one Finder window, which is the
+    /// first thing anybody does with a clipboard and the one case the
+    /// two-process test could not reach.
+    public private(set) var ownsSelection = false
+
     init?(display: Display, manager: OpaquePointer, seat: OpaquePointer) {
         guard let d = opt(aw_data_device_manager_get_data_device(raw(manager), raw(seat)))
         else { return nil }
@@ -115,6 +129,11 @@ public final class Clipboard {
         if let old = currentOffer, old != offer { aw_data_offer_destroy(raw(old)) }
         currentOffer = offer
         if offer == nil { offeredTypes = [] }
+        // A selection arriving while we still hold a live source is ours: the
+        // compositor echoes it back to the owner like any other focused client.
+        // When somebody else copies, our source is cancelled first, so this is
+        // already false by the time their selection lands.
+        ownsSelection = ownedSource != nil
     }
 
     /// What the clipboard currently holds, or nil if it holds nothing we can read.
@@ -124,6 +143,11 @@ public final class Clipboard {
     /// promise — this is a menu command, not the frame path. The read ends when
     /// the source closes its end, including when the source has already exited.
     public func read(preferring types: [String] = ClipboardMIME.offered) -> (mime: String, bytes: [UInt8])? {
+        // **Never read our own selection.** See `ownsSelection`: the answer
+        // would have to come from this process, which is the one blocking. A
+        // caller that put the bytes there already has them, so nil here is not
+        // a loss — it is the caller being sent back to what it already knows.
+        guard !ownsSelection else { return nil }
         guard let offer = currentOffer else { return nil }
         guard let mime = types.first(where: { offeredTypes.contains($0) })
                 ?? offeredTypes.first
@@ -165,6 +189,7 @@ public final class Clipboard {
         if let old = ownedSource { aw_data_source_destroy(raw(old)) }
         ownedSource = source
         ownedBytes = bytes
+        ownsSelection = true
 
         let me = Unmanaged.passUnretained(self).toOpaque()
         var sl = wl_data_source_listener()
@@ -196,6 +221,7 @@ public final class Clipboard {
             aw_data_source_destroy(UnsafeMutableRawPointer(mine))
             c.ownedSource = nil
             c.ownedBytes = []
+            c.ownsSelection = false
         }
         // Drag-and-drop's half of this interface (P9.3), filled for §2.3's reason.
         sl.target = { _, _, _ in }

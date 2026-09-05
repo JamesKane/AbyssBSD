@@ -280,6 +280,26 @@ public final class Seat {
         // wlroots drops it from the seat itself when it is destroyed.
         wlr_seat_set_keyboard(seat, keyboard)
         addCapability(UInt32(WL_SEAT_CAPABILITY_KEYBOARD.rawValue))
+
+        // **Deliver the focus we recorded before there was a keyboard to
+        // deliver it with.**
+        //
+        // `focus(_:)` records `focused` and then returns early when the seat has
+        // no keyboard, with a comment saying the client will be told when one
+        // arrives. Nothing told it. So a window focused before any keyboard
+        // existed — which, now that mapping focuses, is *every* window on a
+        // machine whose keyboard is a virtual device created afterwards — never
+        // received `keyboard.enter` and was deaf for the rest of its life.
+        //
+        // Invisible until P9.2 wanted to send a ⌘C without clicking first: every
+        // harness mode that uses a keyboard drives a pointer beforehand, and a
+        // click re-runs `focus` when a keyboard does exist.
+        if let t = focused {
+            wlr_seat_keyboard_notify_enter(seat, t.surface,
+                                           &keyboard.pointee.keycodes.0,
+                                           keyboard.pointee.num_keycodes,
+                                           &keyboard.pointee.modifiers)
+        }
     }
 
     private func addCapability(_ cap: UInt32) {

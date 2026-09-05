@@ -131,7 +131,8 @@ also proves the compositor is now receiving and judging these requests instead o
 ignoring them. **The round trip belongs to P9.2**, where the Finder copies from a
 ⌘C that has a serial because a person pressed it.
 
-**P9.2 — the Finder's clipboard gets a wire.**
+**P9.2 — the Finder's clipboard gets a wire. ✅ done, and it found two defects
+older than this phase.**
 `FinderApp.clipboard` already exists and already backs ⌘C/⌘X/⌘V; it is a field on
 the application object, so it works between Finder windows and reaches nothing
 else (§4.2). This pass gives it a wire rather than replacing it: the copy
@@ -146,6 +147,41 @@ shape (§2.39: the other end is never ours) pointed at a new protocol.
 Cut keeps its current semantics — the move happens on paste, not on cut — because
 that is what the Finder already does and what a user expects from a file manager
 rather than a text field.
+
+**What P9.2 landed, and the three things that had to be true first:**
+
+- `setClipboard` publishes a `text/uri-list` (`file://…`) and `text/plain`, with
+  the serial of the ⌘C that caused it. `clipboardPath()` reads the seat and falls
+  back to the cache; the field survives only because **`cut` has no
+  representation on the wire** — the selection carries a path, and whether the
+  person meant *move* is ours to remember.
+- **The keyboard serial was being discarded.** `wl_keyboard.key` carries one and
+  `Display` ignored it, so every keyboard-driven copy would have quoted a stale
+  pointer serial, or none at all on a desktop nobody had clicked.
+- **`undertow` gave keyboard focus only on click.** Until somebody clicked, every
+  application was deaf — on the live medium, an installer you cannot type into
+  until you have clicked it. No test had caught it because every harness mode
+  that uses a keyboard drives a pointer first. Mapping now focuses.
+- **And focus recorded before a keyboard existed was never delivered.**
+  `Seat.focus` returned early with a comment saying the client would be told when
+  one arrived; nothing told it. With focus-on-map that became *every* window on a
+  machine whose keyboard is a virtual device created afterwards.
+
+> **Then `fileops` hung**, and the reason is the one every clipboard
+> implementation meets: **a client must never read a selection it owns.** A
+> selection is a promise to write into a descriptor when asked, so reading your
+> own means asking yourself, from the thread about to block on the read, for a
+> `send` only the event loop you just stopped servicing can deliver. Copy and
+> paste in one window — the first thing anybody does — deadlocks.
+>
+> `Clipboard.ownsSelection` answers from the cache instead. Worth noting the
+> coverage: `live-clipboard.sh` uses two processes throughout and **cannot** find
+> this; `fileops` did.
+
+The reading half has a limit worth stating: `wl_data_device.selection` is
+delivered only to the client with keyboard focus, so a surfaceless tool cannot
+read the clipboard any more than it can write one. That is the same guard from
+both sides, and it is why §6.7's decision covers both directions.
 
 **P9.3 — drag and drop.**
 The same protocol, one more grab. Server: `request_start_drag` →

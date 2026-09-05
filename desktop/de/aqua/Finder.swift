@@ -655,16 +655,74 @@ public final class FinderApp {
     /// toggle in any window updates it — the Finder remembers the mode.
     public private(set) var toolbarVisible: Bool
 
-    /// The copy/cut clipboard, shared by every window (copy in one, paste in
-    /// another — which is the point of having several open).
+    /// What we ourselves last put on the clipboard.
+    ///
+    /// **A cache, not the clipboard** (P9.2). It used to be the whole of it: a
+    /// field on this object, so ⌘C in one Finder window and ⌘V in another
+    /// worked, and nothing crossed a process boundary — copy in the Finder and
+    /// paste in a GTK application was not merely unimplemented, it was
+    /// unreachable. The desktop's Edit menu has listed Cut/Copy/Paste since
+    /// P2.4, wired to nothing.
+    ///
+    /// It stays because `cut` has no representation on the wire: the selection
+    /// carries a path, and whether the person meant *move* is ours to remember.
+    /// The path itself now comes from the seat.
     private(set) var clipboard: (path: String, cut: Bool)?
 
+    /// Put a path on the **system** clipboard, and remember whether it was a cut.
+    ///
+    /// Offered as `text/uri-list` (a `file://` URI, which is what another file
+    /// manager reads) and `text/plain` (the bare path, which is what everything
+    /// else does).
     func setClipboard(path: String, cut: Bool) {
         clipboard = (path, cut)
-        FinderWindow.log("\(cut ? "cut" : "copied") \(path)")
+        if let clip = display.clipboard {
+            // The serial comes from the ⌘C that caused this — see
+            // `Display.lastInputSerial`. A copy nobody asked for has no serial
+            // and is refused, which is the protocol's guard and not ours.
+            let uri = "file://" + path
+            let ok = clip.write(Array(uri.utf8),
+                                types: [ClipboardMIME.uriList, ClipboardMIME.text])
+            FinderWindow.log("\(cut ? "cut" : "copied") \(path)"
+                             + (ok ? " — offered to the desktop" : " — locally only"))
+        } else {
+            // A compositor with no data device is a real case; the Finder still
+            // copies between its own windows rather than refusing to work.
+            FinderWindow.log("\(cut ? "cut" : "copied") \(path) — locally only")
+        }
     }
 
     func clearClipboard() { clipboard = nil }
+
+    /// The path to paste: **what is on the seat**, falling back to our own cache.
+    ///
+    /// The seat wins because somebody else may have copied since we did — that
+    /// is the whole point of a system clipboard. The cache answers when the
+    /// selection is not something we can read, and carries the `cut` flag either
+    /// way, since only we know whether our own copy meant move.
+    func clipboardPath() -> (path: String, cut: Bool)? {
+        // Our own copy is answered from the cache — reading it off the wire
+        // would be this process asking itself for bytes while blocked waiting
+        // for them (`Clipboard.ownsSelection`). `read` returns nil in that case
+        // anyway; asking first keeps the intent visible.
+        if display.clipboard?.ownsSelection == true { return clipboard }
+        if let r = display.clipboard?.read(preferring: [ClipboardMIME.uriList,
+                                                        ClipboardMIME.text]) {
+            var s = String(decoding: r.bytes, as: UTF8.self)
+            // A uri-list may carry several lines and CRLF endings; the Finder
+            // pastes one thing, so take the first and be forgiving about it.
+            if let nl = s.firstIndex(where: { $0 == "\n" || $0 == "\r" }) {
+                s = String(s[s.startIndex..<nl])
+            }
+            if s.hasPrefix("file://") { s = String(s.dropFirst("file://".count)) }
+            if s.hasPrefix("/") {
+                // Ours, if it is the same path — so a cut we made stays a cut.
+                if let c = clipboard, c.path == s { return c }
+                return (s, false)
+            }
+        }
+        return clipboard
+    }
 
     /// Re-read every window showing `directory` (a file operation in one window
     /// must show up in the others looking at the same folder).
@@ -1051,7 +1109,7 @@ public final class FinderWindow: WindowDelegate {
 
     /// ⌘V: copy (or move, after a cut) the clipboard item into this folder.
     private func paste() {
-        guard let clip = app?.clipboard else { return }
+        guard let clip = app?.clipboardPath() else { return }
         let source = clip.path
         guard finderExists(source) else {
             FinderWindow.log("paste failed: \(source) is gone")
