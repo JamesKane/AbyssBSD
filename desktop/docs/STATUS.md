@@ -454,6 +454,16 @@ is the record of what got built, newest last.
 > each step's failure is a different problem. Write the image to a stick and work
 > down it.
 >
+> **Phase 9 — the interaction substrate — is scoped** ([PHASE9.md](PHASE9.md),
+> P9.1–P9.7) and needs no hardware, so it is the work that runs in parallel with
+> a person at a Mac Pro. Its spikes found something worth knowing now: **the
+> clipboard is broken for everyone under `undertow`.** The compositor creates
+> `wlr_data_device_manager` but never answers `request_set_selection`, which
+> wlroots requires, so a copy is discarded whoever makes it — a foreign GTK app
+> included. It has gone unnoticed because no test in this tree has ever copied
+> anything. The server fix is four lines; the client half is the pass
+> (PHASE9 §4.1).
+>
 > **The DRM path ships written and unproven** — this dev box holds DRM master in
 > a Wayland session, so it cannot be exercised here. Nested *can* be, and was:
 > a real output, a real mode, and input from an actual mouse.

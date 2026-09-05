@@ -136,7 +136,7 @@ thesis 2 is undelivered no matter how good the widgets are.
 |---|---|---|
 | Menus in the bar | static titles drawn by the bar itself | **A menu protocol.** Ours: a `CurrentIPC` channel publishing a menu tree, the bar routing activation back. **Foreign apps already have an answer and we own the bridge** — GTK exports `org.gtk.Menus`/`org.gtk.Actions`, Qt/KDE use `com.canonical.dbusmenu`; `abyss-dbus` is where that translation belongs |
 | Global key bindings | **none.** `undertow` has no hotkey table | Cmd-Tab, Cmd-Q, Cmd-W, Cmd-Space, Cmd-Shift-3/4, volume/brightness keys. Compositor-level, config-driven. **S**, and it makes the desktop feel finished out of proportion to its size |
-| Copy and paste | `wlr_data_device_manager_create` in the compositor, so *foreign* apps can copy to each other. **`Surface` has no client-side data device** — no Aqua app in this tree can copy or paste | `wl_data_device` + `wl_data_source` in `Surface`, wired into the Finder and text fields. **A defect, not a feature** |
+| Copy and paste | **Broken for everyone, and worse than this document first said.** `undertow` creates `wlr_data_device_manager` but never answers `wlr_seat.request_set_selection`, which wlroots requires — so a copy is discarded whoever makes it, foreign apps included. `Surface` has no client-side data device at all; the Finder's ⌘C/⌘X/⌘V run off `FinderApp.clipboard`, a **process-local field**, and the menu bar's Edit menu is wired to nothing | Four lines of server-side arbitration, then `wl_data_device` + `wl_data_source` in `Surface` and a wire under the clipboard the Finder already has. **A defect, not a feature** — see [PHASE9 §4.1](PHASE9.md) |
 | Drag and drop | none | Same protocol; drag a file to the Trash, a Finder window, a Dock tile |
 | Application switcher | none | Cmd-Tab over `Compositor.toplevels`, drawn in Aqua |
 | Contextual menus | Trash only | Right-click in the Finder, on the desktop, on Dock tiles |
@@ -149,7 +149,7 @@ The cheapest thesis: wlroots plus what `undertow` does gets most of it.
 | | Have | Gap |
 |---|---|---|
 | Click to focus, raise | ✅ `Seat.focus` | — |
-| Interactive move | ✅ `request_move` handled | — |
+| Interactive move | `request_move` handled — **and no client here sends it.** `Surface.Window` issues only `set_title` and `set_app_id`, so no Aqua window can be dragged by its title bar; the only client that has ever asked is `adversary.c` (PHASE9 §4.2) | The client half: `move` from the title-bar drag. **S** |
 | Interactive resize | **`request_resize` unhandled** | Handle it; add resize edges to the Aqua frame. **S** |
 | Zoom / minimize / fullscreen | **no handlers** | `set_maximized`/`set_minimized`/`set_fullscreen`. Minimize wants the Dock genie. **S–M** |
 | Remembered positions | ✅ `WindowPlaces` | — |
@@ -257,7 +257,7 @@ with a real security-support model.
 shown to render a page under `undertow`, which is the test that matters and which
 `abyss/tests/live-gtk.sh` is the pattern for (§2.43).
 
-### 5.2 XWayland — an unmade decision
+### 5.2 XWayland — an unmade decision (now costed: [PHASE9 §4.4](PHASE9.md))
 
 There is none in the tree, and **§5.1 narrows the question: the browser does not
 force it.** Both `gtk3` and `gtk4` link `libwayland-client`, so GTK browsers run
@@ -267,11 +267,18 @@ not a runtime requirement.
 
 What remains is the long tail: Wayland-native coverage in ports is real but
 partial, and without XWayland some of what a user installs will not run, which
-thesis 5 forbids. wlroots supplies it for roughly the cost of `undertow`'s other
-globals. Against: X clients cannot be given Aqua decorations as cleanly, and it
-widens the attack surface. **Decide it explicitly and write the reason down**, the
-way the D-Bus bridge decision was — we took a broker we did not like, scoped it to
-the legacy path, and said so.
+thesis 5 forbids. Against: X clients cannot be given Aqua decorations as cleanly
+— they arrive as `wlr_xwayland_surface`, not `xdg_toplevel`, so the decoration
+path needs a second branch — and it widens the attack surface.
+
+**Cost is no longer part of the argument, because it was measured.** wlroots is
+built with `WLR_HAS_XWAYLAND` on Linux *and* in the FreeBSD VM, `Xwayland` is in
+ports, and the live medium grows by **≈6 MiB** once you subtract the packages
+`undertow`'s own `ldd` closure already pulls in — on a three-gigabyte image
+(PHASE9 §4.4). **Decide it explicitly and write the reason down**, the way the
+D-Bus bridge decision was — we took a broker we did not like, scoped it to the
+legacy path, and said so. [PHASE9 §6.3](PHASE9.md) is the recommendation: take
+it, off by default in the harness, on in the installed system.
 
 ### 5.3 What foreign applications look like
 

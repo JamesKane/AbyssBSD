@@ -4,7 +4,7 @@ What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md),
 [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md),
-[PHASE8.md](PHASE8.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
 Last updated: 2026-08-25. **Phases 0–3 and 5–8 are complete.** The Jaguar shell

@@ -548,6 +548,15 @@ does, so a miss count measured there is measured against somebody else's clock
 
 **Needs:** 6. **Unblocks:** 10, 11, 13, 14, 15 — everything below it.
 
+**Expanded to executable detail in [PHASE9.md](PHASE9.md)** — passes P9.1–P9.7,
+and four risks spiked on both platforms before the plan was written. One of them
+changed the phase's shape and corrects this document's source: **the clipboard is
+not missing for our applications, it is broken for everyone.** `undertow` creates
+`wlr_data_device_manager` but never answers `request_set_selection`, which
+wlroots requires a compositor to do, so a copy is discarded whoever makes it —
+including the foreign GTK applications Phase 8 exists to serve. The server fix is
+four lines and it comes first.
+
 **Goal:** the desktop stops making claims it cannot keep. Six small pieces, none
 of them research, that together are the difference between a demo and a desktop
 ([PRODUCT.md](PRODUCT.md) §4.2–§4.3).
@@ -573,8 +582,10 @@ of them research, that together are the difference between a demo and a desktop
 - **Decide XWayland, and write the reason down** (PRODUCT.md §5.2). The browser
   does not force it — both GTK stacks are Wayland-native and Chromium's port
   depends on `wayland` outright — but the long tail of ports is what thesis 5
-  promises, and wlroots supplies XWayland for about the cost of `undertow`'s
-  other globals. Decide it the way the D-Bus bridge was decided: take it or
+  promises. **Cost is measured and is not the argument:** wlroots is built with
+  `WLR_HAS_XWAYLAND` on both platforms, `Xwayland` is in ports, and the medium
+  grows by ≈6 MiB net of what `undertow`'s own closure already carries
+  (PHASE9 §4.4). Decide it the way the D-Bus bridge was decided: take it or
   refuse it, scope it, and say so.
 
 **Verify:** live modes — copy in the Finder, paste in a text field; drag a file
