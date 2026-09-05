@@ -199,6 +199,25 @@ sudo test -s "$work/mnt/boot/modules/amdgpu_pitcairn_pfp_bin.ko" \
 sudo test -s "$work/mnt/usr/local/bin/seatd" || fail "the medium has no seatd"
 echo "ok: amdgpu, Southern Islands firmware, seatd, and si_support asked for"
 
+# **The ESP's own geometry, because Apple's firmware reads it and bhyve's does
+# not care.** A 40 MB FAT32 needs 512-byte clusters to reach FAT32's minimum
+# cluster count, and makefs gives it media descriptor 0xf0 — the floppy byte.
+# Every UEFI we can boot here reads that happily; a Mac Pro would not list the
+# stick at all, with nothing on screen to say why. So this asserts the two
+# fields out of the boot sector directly: the FAT16 filesystem-type string at
+# offset 54, and the media descriptor at offset 21. Read from the raw ESP
+# because it is checking the filesystem, not anything inside it.
+esp_type=$(sudo dd if="/dev/${md}p1" bs=1 skip=54 count=8 2>/dev/null)
+esp_media=$(sudo dd if="/dev/${md}p1" bs=1 skip=21 count=1 2>/dev/null \
+            | od -An -tx1 | tr -d ' \n')
+case "$esp_type" in
+  FAT16*) ;;
+  *) fail "the ESP is '$esp_type', not FAT16 — a Mac Pro will not list this stick" ;;
+esac
+[ "$esp_media" = f8 ] \
+  || fail "the ESP's media descriptor is 0x$esp_media, not 0xf8 — the floppy byte on an ESP"
+echo "ok: the ESP is FAT16 with media descriptor 0xf8 — the shape Apple's firmware reads"
+
 ppm="$work/frame.ppm"
 sudo cp "$work/mnt/var/log/abyss-live.ppm" "$ppm" 2>/dev/null \
   || fail "the medium captured no frame"

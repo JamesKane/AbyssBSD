@@ -572,7 +572,29 @@ sudo mkdir -p "$espdir/EFI/BOOT"
 # The loader out of what we just staged, not out of the machine doing the
 # building — the medium must boot the loader that matches its own kernel.
 sudo cp "$stage/boot/loader.efi" "$espdir/EFI/BOOT/BOOTX64.efi"
-sudo makefs -t msdos -o fat_type=32,sectors_per_cluster=1,volume_label=EFISYS \
+# **FAT16, not FAT32, and this is the difference between a stick a Mac Pro
+# lists and one it does not.** A 40 MB FAT32 has to use 512-byte clusters to
+# clear FAT32's 65525-cluster minimum at all — ~80,600 clusters, legal on paper
+# and unlike any ESP firmware normally meets — and makefs pairs it with media
+# descriptor 0xf0, the *floppy* byte, where an ESP carries 0xf8. Apple's FAT
+# driver would not read it: the stick simply did not appear when Option was
+# held, with no error to read anywhere. Reformatted FAT16 with 0xf8 in place,
+# nothing else on the stick touched, it appeared. Measured on the target
+# machine, which is the only place this can be measured — every UEFI
+# implementation we boot in a VM reads the FAT32 version fine, which is exactly
+# why this survived to a Mac Pro. FAT12/16/32 are all legal for an ESP on
+# removable media, so FAT16 costs nothing here.
+#
+# The experiment changed FAT type, cluster size, media byte and OEM string at
+# once, so which of them Apple objected to is not known — this reproduces all
+# four rather than guessing at the one. `OEM_string` is the least likely of them
+# (the field is documented as informational) and the cheapest to carry.
+# `sectors_per_cluster` is pinned rather than left to makefs: 40 MB in 2 KB
+# clusters is 20,480 of them, comfortably inside FAT16's 65,524 ceiling, where a
+# default that came out at 1 sector would put it 16,000 over and fail the build.
+sudo makefs -t msdos \
+            -o fat_type=16,media_descriptor=0xf8,OEM_string=MSWIN4.1 \
+            -o sectors_per_cluster=4,volume_label=EFISYS \
             -s 40m "$esp" "$espdir" > /dev/null
 sudo makefs -t ffs -o label=ABYSSLIVE -o version=2 -b 10% -f 10% \
             -s "$size" "$ufs" "$stage" > /dev/null
