@@ -210,6 +210,20 @@ sudo test -s "$work/mnt/boot/modules/amdgpu.ko" \
 sudo test -s "$work/mnt/boot/modules/amdgpu_pitcairn_pfp_bin.ko" \
   || fail "the medium has no Pitcairn firmware — that is the FirePro D300"
 sudo test -s "$work/mnt/usr/local/bin/seatd" || fail "the medium has no seatd"
+
+# **The driver Mesa `dlopen`s, which no `ldd` will ever name (PHASE4 §5.3).**
+# `libEGL` and `libgbm` are dispatch stubs; the code that drives an AMD card is
+# `libgallium` reached through `/usr/local/lib/dri/*_dri.so`, loaded by name at
+# runtime. Without them a machine with `/dev/dri/card0` present still fails
+# `wlr_renderer_autocreate`, which is exactly what the first metal boot did.
+#
+# This VM has no `/dev/dri`, so it cannot prove the renderer is *created* — it
+# takes the pixman path and never asks Mesa anything. What it can prove is that
+# the files are on the stick, which is the half that was wrong.
+sudo test -e "$work/mnt/usr/local/lib/dri/radeonsi_dri.so" \
+  || fail "the medium has no radeonsi DRI driver — a real AMD GPU would find /dev/dri and no renderer"
+sudo test -s "$work/mnt/usr/local/lib/libgallium-"*.so \
+  || fail "the medium has no libgallium — the DRI entry points would resolve to nothing"
 echo "ok: amdgpu, RDNA 2 + Southern Islands firmware, seatd, and si_support asked for"
 
 # **The ESP's own geometry, because Apple's firmware reads it and bhyve's does

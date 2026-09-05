@@ -337,6 +337,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.49 | "The option was accepted" is not "the value was accepted" — `makefs` takes `media_descriptor` in decimal only, and a fix verified by hand never ran in the builder |
 | 2.50 | A check that dies inside `$( )` under `set -e` fails **silently** — and `dd bs=1` on a raw device is `Invalid argument` |
 | 2.51 | Every safety predicate you have describes the **running** system — and on a live medium the running system is the USB stick |
+| 2.52 | `ldd` is not your closure either, when something in it `dlopen`s — Mesa's driver is a plugin, and headless never asks for it |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -603,6 +604,56 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.52 `ldd` is not your closure either — Mesa loads its driver by name
+(The first boot of our own medium on a real GPU. It got further than anything
+before it and stopped one step short of a picture.)
+
+`live-image.sh` computes what the medium carries by running `ldd` over the twelve
+binaries we ship — 67 shared objects, 22 MB — rather than asking `pkg`, which
+P5.3 measured at 5.66 GB for the same job (§2.45). That is the right method and
+it was carried one step too far.
+
+On the RX 6750 XT the medium booted, reached multi-user, bound `amdgpu`, and put
+`/dev/dri/card0` **and** `renderD128` on the console. Then:
+
+```
+abyss-session: auto backend (card0 render128)
+undertow: could not create a wlroots renderer
+anchor: failed to start the session
+```
+
+**`libEGL` and `libgbm` are dispatch stubs.** They are what our binaries link, so
+they are what `ldd` names, and they are not the driver. The code that drives an
+AMD card is `libgallium` (42 MB), reached through
+`/usr/local/lib/dri/radeonsi_dri.so`, opened **by name at runtime** — and it in
+turn wants `libLLVM.so.19.1` (118 MB), because radeonsi compiles shaders with
+LLVM. Nothing we build mentions any of the three, so none of them was on the
+stick, and `wlr_renderer_autocreate` had nothing to create a renderer with.
+
+**Why no test could have caught it.** The build VM has no `/dev/dri`, so there is
+no render node, so `undertow` takes the **pixman software renderer** and never
+asks Mesa for anything. The GLES2 path had never been executed in this
+project's history. Worth knowing: `WLR_RENDERER=gles2` fails headless in the VM
+with the *same message* even with `mesa-dri` installed — one sentence for two
+unrelated causes, which is its own small trap.
+
+**The fix is a root, not a package.** These are extra roots for the same `ldd`
+closure, so `libgallium` pulls `libLLVM` and the rest exactly as every other
+library arrives. Adding `mesa-dri`/`mesa-libs` to the package list instead — the
+first thing tried — produced a **5 GB staging root against a 3 GB image**,
+because `pkg fetch -d` is transitive and Mesa drags in the world. That is P5.3's
+lesson re-learned from the other side within the same hour.
+
+> **The rule: a closure computed over what you link is complete only if nothing
+> you link loads code by name.** Any plugin host — Mesa, PAM, `nss`, a codec
+> loader, `dlopen` anywhere — is a root your closure does not know about, and the
+> failure appears only on a machine that reaches the plugin.
+
+The whole `dri/` directory rides along because its 51 entries are symlinks to one
+small loader, so Intel's `iris` and the `swrast` fallbacks cost nothing beyond
+AMD's — a medium that refuses to start on the next machine along cannot populate
+a hardware matrix.
 
 ### 2.51 On a live medium, "is this disk in use?" has the wrong subject
 (The retarget, again — checking whether the medium was safe to boot on a machine

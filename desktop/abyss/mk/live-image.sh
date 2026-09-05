@@ -69,6 +69,36 @@ DATA="/usr/local/share/fonts/dejavu
       /usr/local/share/xkeyboard-config-2
       /usr/local/etc/fonts"
 
+# **Objects nothing links and something `dlopen`s — the converse of §2.45, and
+# it cost a boot on metal to find (PHASE4 §5.3).**
+#
+# P5.3's lesson was "a package manager's closure is not your program's closure —
+# use `ldd`". The other half: **`ldd` is not your program's closure either, when
+# something in it loads code by name at runtime.** Mesa is a plugin loader.
+# `libEGL` and `libgbm` are dispatch stubs, so `ldd` over our binaries names them
+# and stops; the code that actually drives an AMD card is `libgallium`, reached
+# through `/usr/local/lib/dri/radeonsi_dri.so`, and nothing we build mentions
+# either. The first boot on a real GPU found `/dev/dri/card0` present and
+# `wlr_renderer_autocreate` failing, which is what that absence looks like.
+#
+# **The method was right and the root set was wrong.** These are extra *roots*
+# for the same `ldd` closure, not a package list — so `libgallium` pulls
+# `libLLVM` (radeonsi compiles shaders with it) and the rest transitively, the
+# way every other library here arrives. Naming packages instead put a 5 GB
+# staging root behind a 3 GB image, which is precisely the mistake P5.3 already
+# wrote down.
+#
+# The whole `dri/` directory comes along because its entries are symlinks to one
+# small loader — so Intel's `iris` and the `swrast` fallbacks cost nothing beyond
+# AMD's, and a medium that refuses to start on the next machine along is a medium
+# that cannot populate a matrix.
+#
+# **The build VM cannot catch this**: with no `/dev/dri` there is no render node,
+# so headless takes the pixman software renderer and never asks Mesa for
+# anything. `live-medium.sh` asserts the files are on the stick, which is the
+# half that was wrong; only the machine can prove the renderer is created.
+DLOPEN_DIR="/usr/local/lib/dri"
+
 # The products that go on the medium. An explicit list, not a glob over
 # `.build/debug`, because that directory is full of SwiftPM's own intermediates.
 BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus
@@ -104,6 +134,7 @@ BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus
 #                 being root. The desktop runs as an unprivileged user on
 #                 purpose (PHASE5 §4.4); libseat is already in our closure, but
 #                 the daemon it talks to is not.
+#
 GPU_PKGS="drm-66-kmod seatd
           gpu-firmware-amd-kmod-navy-flounder gpu-firmware-amd-kmod-sienna-cichlid
           gpu-firmware-amd-kmod-dimgrey-cavefish gpu-firmware-amd-kmod-beige-goby
@@ -173,6 +204,18 @@ for b in $BINARIES; do
   libs="$libs
 $(ldd "$builddir/$b" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/')"
 done
+# The dlopened roots, closed over exactly like the binaries above.
+[ -d "$DLOPEN_DIR" ] \
+  || die "$DLOPEN_DIR is missing on this machine — install mesa-dri, or the medium ships a GPU it cannot render on"
+dlopen_roots=$(ls "$DLOPEN_DIR"/libdril_dri.so /usr/local/lib/libgallium-*.so 2>/dev/null)
+[ -n "$dlopen_roots" ] \
+  || die "no libdril_dri.so or libgallium in /usr/local/lib — mesa-dri/mesa-libs are not installed here"
+for r in $dlopen_roots; do
+  libs="$libs
+$r
+$(ldd "$r" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/')"
+done
+
 libs=$(echo "$libs" | sort -u | grep .)
 [ -n "$libs" ] || die "ldd found nothing — is $builddir a FreeBSD build?"
 for lib in $libs; do
@@ -181,6 +224,11 @@ for lib in $libs; do
 done
 # shellcheck disable=SC2086
 echo "   $(echo "$libs" | wc -l | tr -d ' ') shared objects, $(du -ch $libs | tail -1 | awk '{print $1}')"
+
+# The `dri/` directory by name: Mesa opens `radeonsi_dri.so`, and every entry is
+# a symlink to the one loader whose closure was just taken.
+sudo mkdir -p "$de$DLOPEN_DIR"
+sudo cp -R "$DLOPEN_DIR/." "$de$DLOPEN_DIR/"
 
 echo "== runtime data"
 for d in $DATA; do

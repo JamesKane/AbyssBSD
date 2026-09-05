@@ -454,6 +454,51 @@ Two details that matter more than the refusal:
   exhaustive, so the next refusal added to `Safety.swift` is a **compile error**
   here instead of a silent omission.
 
+### 5.3 The first metal boot: steps 1–3 pass, and step 4 was ours
+
+Run on the RX 6750 XT, 2026-09-05. **The checklist got to step 4 on the first
+attempt**, which on the Mac Pro it never did.
+
+| Step | Result | Evidence |
+|---|---|---|
+| 1. Does the stick boot? | ✅ | MSI's UEFI read the FAT16 ESP — P4.0's Apple fix works on ordinary firmware too |
+| 2. Multi-user? | ✅ | `FreeBSD/amd64 (abyss-live) (ttyv0)` — our medium's own hostname |
+| 3. Does `amdgpu` attach? | ✅ | `name=drmn0 id=amdgpudrmfb`, framebuffer `2560x1440x32 stride=10240`. The panel's **native mode**, driven by our driver: `navy_flounder` loaded |
+| 4. Does `undertow` find an output? | ❌ | `abyss-session: auto backend (card0 render128)` — both nodes present, the right branch taken — then `undertow: could not create a wlroots renderer` |
+| 5. Installer on screen? | — | not reached |
+
+Two things came free with step 3: `igc0: link state changed to UP`, so the
+network works on this box and thesis 5's weakest area answers positively; and
+`ichsmb0: <Intel Alder Lake SMBus controller>`, confirming the platform.
+
+**And the failure was ours, which is exactly what §1.2 bought.** On the Mac Pro
+this screen would have had six candidate causes. Here every layer below us was
+demonstrably working — the GPU bound, the mode was set, the render node existed,
+the session picked `--backend auto` correctly — so the only remaining suspect was
+the compositor, and it was.
+
+**The cause: `ldd` is not a closure when something `dlopen`s** (HANDOFF §2.52).
+The medium carries what our binaries link. `libEGL` and `libgbm` are dispatch
+stubs; the driver is `libgallium` reached through `radeonsi_dri.so` and opened by
+name, wanting `libLLVM` behind it. None of the three is named by anything we
+build, so none was on the stick and there was nothing to make a GLES2 renderer
+from. **The build VM cannot reach this path at all** — with no `/dev/dri` it takes
+the pixman software renderer, so the GLES2 path had never run in this project's
+history.
+
+Fixed by adding the dlopened objects as **roots of the same `ldd` closure**, so
+`libgallium` pulls `libLLVM` transitively the way everything else arrives; the
+medium grows about 170 MB and carries `iris` and `swrast` alongside `radeonsi`
+for nothing, since the 51 `dri/` entries are symlinks to one loader. *Naming them
+as packages instead — the first attempt — put a 5 GB staging root behind a 3 GB
+image, which is P5.3's lesson from the other side.*
+
+**What is asserted and what is not.** `live-medium.sh` now checks the files are on
+the stick, which is the half that was wrong. It cannot check that a renderer is
+*created*, because that needs a render node the build VM does not have. **Step 4
+is still unproven and only the machine can prove it** — which is this phase's
+whole shape, and worth saying rather than implying the fix is verified.
+
 ---
 
 ## 6. Risks / open decisions

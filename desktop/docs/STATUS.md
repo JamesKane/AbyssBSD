@@ -477,6 +477,27 @@ is the record of what got built, newest last.
 > **A test that cannot fail out loud is worth less than no test** — this one was
 > an unrunnable check on an unbuildable artifact.
 >
+> **The stick booted on the 12700KF (2026-09-05) and the checklist reached step
+> 4 on the first attempt.** Steps 1–3 pass: MSI's UEFI read the FAT16 ESP,
+> multi-user came up, and **`amdgpu` bound the RX 6750 XT** — `id=amdgpudrmfb`
+> at the panel's native `2560x1440x32`, so `navy_flounder` loaded. `igc0` came up
+> too. Then `undertow: could not create a wlroots renderer`.
+>
+> **The failure was ours, which is exactly what the retarget bought.** Every layer
+> below us was demonstrably working, so there was one suspect. The cause:
+> **`ldd` is not a closure when something `dlopen`s** — `libEGL` and `libgbm` are
+> dispatch stubs, and the driver is `libgallium` reached through
+> `radeonsi_dri.so` by name, with `libLLVM` behind it. Nothing we build names any
+> of them, so none was on the stick. The build VM cannot reach that path at all:
+> with no `/dev/dri` it takes the pixman software renderer, so GLES2 had never run
+> in this project's history. Fixed by adding the dlopened objects as **roots of
+> the same `ldd` closure** (+170 MB, and `iris`/`swrast` ride along free).
+> HANDOFF §2.52, PHASE4 §5.3.
+>
+> **Step 4 is still unproven** — `live-medium.sh` asserts the files are on the
+> stick, which is the half that was wrong, but a renderer cannot be *created*
+> without a render node the VM does not have. Only the machine can close it.
+>
 > **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
 > each step's failure is a different problem. Write the image to a stick and work
 > down it — **steps 0–6 only.**
