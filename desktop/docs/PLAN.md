@@ -180,6 +180,7 @@ next ─────────────────────┼───
                                                         ├─► 16  the session
                                                         └─► 18  confinement,
                                                                  then agents
+                                                                 ▲ and 10, direct
 ```
 
 Read an arrow as "needs". **13 needs both 9 and 4**, which is the only place two
@@ -631,8 +632,10 @@ its edge; a stock GTK application wearing an Aqua frame.
 
 ## Phase 10 — the menu protocol
 
-**Needs:** 3 (`CurrentIPC`), 8 (`abyss-dbus`). ***Before*** **15** — every
-application built without it has to be retrofitted.
+**Needs:** 3 (`CurrentIPC`), 8 (`abyss-dbus`). **Unblocks: 18** — thesis 4 acts
+through the vocabulary this phase publishes, so a hard edge, not a preference
+([PRODUCT.md §5.5](PRODUCT.md)). ***Before*** **15** — every application built
+without it has to be retrofitted.
 
 **Goal:** the menu bar stops being a picture of a menu bar. `Aqua.MenuBar` draws
 File/Edit/View for nobody; no application publishes a menu to it. In Jaguar the
