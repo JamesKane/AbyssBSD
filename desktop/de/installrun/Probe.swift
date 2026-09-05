@@ -8,6 +8,7 @@
 // tested against an assumption.
 
 import Install
+import Vents
 
 #if canImport(Glibc)
 import Glibc
@@ -47,8 +48,17 @@ public func probeMachine() throws -> DiskInventory {
     // failed — see the caller's use of `scanned`.
     let importScan = (try? capture(["zpool", "import"])) ?? ""
     let importable = parseImportablePools(importScan)
+    // What this machine calls itself, from the kernel environment — **not from
+    // sysctl**, where `smbios.system.*` is not (PHASE12 §4.2). nil when the
+    // machine does not say, which is a real answer and not a failure: it is what
+    // stops a Mac Pro's loader tunable being written to a board that never asked
+    // for it.
+    let machine = Vents.Kenv.machine().map {
+        MachineIdentity(maker: $0.maker, product: $0.product)
+    }
     return inventory(geom: geom, mounts: mounts, labels: labels,
-                     poolVdevs: poolVdevs, importablePools: importable)
+                     poolVdevs: poolVdevs, importablePools: importable,
+                     machine: machine)
     #else
     throw ProbeError.notSupported(
         "disk discovery needs FreeBSD's geom(8), mount(8) and zpool(8);"
@@ -233,7 +243,8 @@ func isVdevTypeNode(_ name: String) -> Bool {
 
 public func inventory(geom: String, mounts: String, labels: String,
                       poolVdevs: [String: [String]],
-                      importablePools: [String: [String]] = [:]) -> DiskInventory {
+                      importablePools: [String: [String]] = [:],
+                      machine: MachineIdentity? = nil) -> DiskInventory {
     let found = parseGeomDiskList(geom)
     let names = found.map(\.name)
     let labelMap = parseLabelComponents(labels)
@@ -284,7 +295,8 @@ public func inventory(geom: String, mounts: String, labels: String,
              holdsRunningRoot: rootDisks.contains(f.name),
              existingPools: (existing[f.name] ?? []).sorted())
     }
-    return DiskInventory(disks: disks, importedPools: poolVdevs.keys.sorted())
+    return DiskInventory(disks: disks, importedPools: poolVdevs.keys.sorted(),
+                         machine: machine)
 }
 
 // MARK: - Running a command for its stdout

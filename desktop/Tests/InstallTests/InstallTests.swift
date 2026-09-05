@@ -16,13 +16,15 @@ final class InstallTests: XCTestCase {
                          mountedAt: [String] = [],
                          holdsRoot: Bool = false,
                          pools: [String] = [],
-                         existingPools: [String] = []) -> DiskInventory {
+                         existingPools: [String] = [],
+                         identity: MachineIdentity? = nil) -> DiskInventory {
         DiskInventory(disks: [Disk(name: "ada0", bytes: diskBytes,
                                    description: "QEMU HARDDISK",
                                    mountedAt: mountedAt,
                                    holdsRunningRoot: holdsRoot,
                                    existingPools: existingPools)],
-                      importedPools: pools)
+                      importedPools: pools,
+                      machine: identity)
     }
 
     /// A plan that is fine, so a test can break exactly one thing about it.
@@ -410,15 +412,47 @@ final class InstallTests: XCTestCase {
                       "fstab names a GPT label that may not exist on the installed machine")
     }
 
-    func testTheInstalledMachineDoesNotDrownItsOwnFirstBootInPowerFaults() {
+    private let macPro = MachineIdentity(maker: "Apple Inc.", product: "MacPro6,1")
+    private let msi = MachineIdentity(maker: "Micro-Star International Co., Ltd.",
+                                      product: "MS-7D25")
+
+    func testAMacProStillGetsItsPowerFaultWorkaround() {
         // A 2013 Mac Pro's internal PCIe bridges report a power fault that never
         // clears, and pcib(4) re-logs it forever: the console scrolls and nothing
         // else on it can be read. The live medium sets this too, but that only
         // gets the install done — the machine we just wrote has its own
         // loader.conf, and it is a loader tunable, so a shell on the installed
         // system is too late to fix it.
-        XCTAssertTrue(loaderConf(goodPlan()).contains("hw.pci.enable_pcie_hp=\"0\""),
-                      "the installed machine would scroll Power Fault Detected on its first boot")
+        XCTAssertTrue(loaderConf(goodPlan(), machine: macPro)
+                        .contains("hw.pci.enable_pcie_hp=\"0\""),
+                      "the installed Mac Pro would scroll Power Fault Detected on its first boot")
+    }
+
+    func testEveryOtherMachineNoLongerInheritsIt() {
+        // **This is the pass.** It used to be written to every machine, because
+        // nothing could ask what machine it was on. A workaround for somebody
+        // else's PCIe bridges has no business in the loader.conf of a board that
+        // has none.
+        XCTAssertFalse(loaderConf(goodPlan(), machine: msi).contains("enable_pcie_hp"))
+    }
+
+    func testAMachineThatWillNotSayWhatItIsDoesNotGetIt() {
+        // The deliberate direction to fail in. Omitting it costs a Mac Pro a
+        // scrolling console — visible, and recoverable by reinstalling from a
+        // medium that still sets it. Adding it everywhere costs a silent,
+        // permanent change to machines nobody examined.
+        XCTAssertFalse(loaderConf(goodPlan(), machine: nil).contains("enable_pcie_hp"))
+    }
+
+    func testTheRestOfLoaderConfIsUnchangedEitherWay() {
+        // The positive control: the quirk is the only thing that varies, so a
+        // bug that emptied loader.conf would not pass the two tests above.
+        for m in [macPro, msi, nil] {
+            let c = loaderConf(goodPlan(), machine: m)
+            XCTAssertTrue(c.contains("zfs_load=\"YES\""), "\(String(describing: m))")
+            XCTAssertTrue(c.contains("kern.geom.label.disk_ident.enable=\"0\""))
+            XCTAssertTrue(c.contains("vfs.root.mountfrom="))
+        }
     }
 
     func testAPlainFreeBSDInstallDoesNotStartADesktopItDoesNotHave() {
@@ -489,7 +523,11 @@ final class InstallTests: XCTestCase {
                                                passwordHash: "$6$user",
                                                groups: ["wheel", "operator"],
                                                shell: "/bin/sh")])
-        let text = render(try! compile(p, on: machine()))
+        // **On a Mac Pro deliberately**, so the golden list keeps showing the
+        // loader.conf *with* the power-fault workaround in it. That is the
+        // longer of the two shapes and the one worth having in a diff; the three
+        // tests above are what pin the conditional itself.
+        let text = render(try! compile(p, on: machine(identity: macPro)))
         XCTAssertEqual(text, InstallTests.goldenStepList,
                        "the step list changed:\n\(text)")
     }

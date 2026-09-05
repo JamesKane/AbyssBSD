@@ -414,17 +414,27 @@ console="comconsole,vidconsole"
 # class can consume the disk and leave no /dev/ufs or /dev/gpt provider at all.
 kern.geom.label.disk_ident.enable="0"
 
-# **A Mac Pro accommodation, carried unconditionally because the medium cannot
-# yet ask what machine it is on.** The 2013 Mac Pro's internal PCIe bridges
-# report a power-fault bit that never clears, so pcib(4) re-logs "pcib26: Power
-# Fault Detected" in a loop and the installer is buried under it. It is a loader
-# tunable — no sysctl undoes it once the machine is up — so it has to be here,
-# before anyone can see anything. Measured on that machine: the message is what
-# a MacPro6,1 does, not what AbyssBSD does. On the RDNA 2 target and on any
-# ordinary desktop it changes nothing, because nobody hot-plugs a PCIe bridge on
-# a machine like that. **Where it stops being unconditional is Phase 12**:
-# `Fathom` probes machine identity, and this is the first tunable that should be
-# gated on the answer rather than shipped to everyone.
+# **A Mac Pro accommodation, and on the medium it stays unconditional — which is
+# a different answer from the installed system's, for a reason.** The 2013 Mac
+# Pro's internal PCIe bridges report a power-fault bit that never clears, so
+# pcib(4) re-logs "pcib26: Power Fault Detected" in a loop and the installer is
+# buried under it. It is a loader tunable — no sysctl undoes it once the machine
+# is up — so it has to be in this file, written before anyone can see anything.
+#
+# **The medium cannot ask what machine it is on, because it is built before it
+# meets one.** loader.conf is read by the loader; there is no earlier moment at
+# which a probe could run. So the medium carries the workaround for everybody and
+# accepts that it is inert on almost every machine — which it is, since nobody
+# hot-plugs a PCIe bridge on an ordinary desktop.
+#
+# **The installed system is the opposite case and P12.2 changed it.** By the time
+# `abyss-install` writes a loader.conf it is *running on* the target, so it asks:
+# `Vents.Kenv` reads `smbios.system.*`, and only a Mac Pro gets the line
+# (`de/install/Steps.swift`). A workaround for somebody else's bridges has no
+# business in the permanent configuration of a board that has none.
+#
+# One tunable, two answers, and the difference is whether the machine is
+# available to be asked.
 hw.pci.enable_pcie_hp="0"
 
 # **Southern Islands is off by default in amdgpu, and the secondary target is

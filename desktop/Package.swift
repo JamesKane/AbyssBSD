@@ -214,6 +214,13 @@ let package = Package(
         // testable on Linux, where not one of the commands it names exists.
         .target(
             name: "Install",
+            // `Fathom` so the machine-quirk rules have exactly one definition:
+            // whether a machine needs a workaround is a fact *about the
+            // machine*, and the installer is one consumer of it rather than its
+            // owner. Both targets are dependency-free, so `Install` keeps the
+            // property that earns it its tests — every refusal still checks on
+            // Linux, where `gpart` does not exist.
+            dependencies: ["Fathom"],
             path: "de/install"
         ),
         // What this machine is, as a value (PHASE12.md). Pure functions over
@@ -238,7 +245,9 @@ let package = Package(
         ),
         .target(
             name: "InstallRun",
-            dependencies: ["Install", "InstallWire", "CurrentIPC", "CPlatform"],
+            // `Vents` for the kernel environment: the machine's identity is in
+            // `kenv`, not sysctl, and this is the half that is allowed to look.
+            dependencies: ["Install", "InstallWire", "CurrentIPC", "CPlatform", "Vents"],
             path: "de/installrun"
         ),
         // The privileged half: runs as root, commanded by an unprivileged GUI,

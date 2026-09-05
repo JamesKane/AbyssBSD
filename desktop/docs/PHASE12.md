@@ -82,8 +82,7 @@ which is the only way to know the check can fail. A `Fathom` that reports
 "GPU: ok" on a machine with no GPU is worse than no `Fathom`, because it converts
 an obvious failure into a confident lie.
 
-**P12.2 — machine identity, and the tunable that has been unconditional.**
-*(The `kenv` half is done; making the tunable conditional is what remains.)*
+**P12.2 — machine identity, and the tunable that has been unconditional. ✅ done.**
 `smbios.system.maker` and `smbios.system.product` are in the **kernel
 environment, not the sysctl tree** (§4.2), and `Vents` has no way to read it. Add
 `av_kenv` to `de/cvents` on the exact `av_sysctl_read` pattern, and `Vents.Kenv`
@@ -107,6 +106,25 @@ time a probe *changes* what the medium does rather than only reporting it.
 - `needsPCIeHotplugDisabled(maker:product:)` — the rule that ends the
   unconditional tunable, pure so it is testable **without a Mac Pro**, which is
   the only way it could be tested at all now that we do not bring up on one.
+- `MachineIdentity` on `DiskInventory`, filled by the privileged half from
+  `Vents.Kenv`. It rides on the inventory rather than the plan because it is a
+  fact about the machine and not a choice the user made — the same reason the
+  disks are there — **and so it never crosses the wire**: the unprivileged half
+  sends intent, and the half that is allowed to look at the machine supplies
+  this.
+- `loaderConf(_:machine:)` writes `hw.pci.enable_pcie_hp="0"` **only for a Mac
+  Pro**. A machine that does not identify itself does not get it, which is the
+  deliberate direction to fail in: omitting it costs a Mac Pro a scrolling
+  console — visible, and recoverable by reinstalling from a medium that still
+  sets it — while adding it everywhere costs a silent, permanent change to
+  machines nobody examined.
+
+**One tunable, two answers, and the difference is whether the machine can be
+asked.** The *medium* keeps it unconditionally and that is not an oversight:
+loader.conf is read by the loader, so there is no earlier moment at which a probe
+could run, and the medium is built before it ever meets a machine. The *installed*
+system is written by a program already running on the target. Both halves now say
+so where somebody changing them will read it.
 
 **And breaking the code found a hole in the tests, which is the whole reason for
 doing it.** Deleting the `maker` check from that rule left the entire suite green:

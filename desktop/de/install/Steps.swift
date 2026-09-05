@@ -11,6 +11,8 @@
 // be defended rather than noticed later.
 
 /// One thing to do, and what it means if it fails.
+import Fathom
+
 public struct Step: Equatable, Sendable {
     public enum Action: Equatable, Sendable {
         /// Run a command. `stdin` exists so a password hash never appears in
@@ -66,7 +68,7 @@ private func mib(_ bytes: UInt64) -> String { "\(bytes / (1024 * 1024))M" }
 /// execute, and nothing a later bug can decide to run anyway.
 public func compile(_ plan: InstallPlan, on inventory: DiskInventory) throws -> [Step] {
     try check(plan, on: inventory)
-    return steps(for: plan)
+    return steps(for: plan, on: inventory)
 }
 
 /// The step list for a plan already known to be safe.
@@ -74,7 +76,7 @@ public func compile(_ plan: InstallPlan, on inventory: DiskInventory) throws -> 
 /// Split out from `compile` so a test can render the list for a machine it does
 /// not have, but **not public**: the only way to get a step list from outside
 /// this module is to pass the safety check.
-func steps(for plan: InstallPlan) -> [Step] {
+func steps(for plan: InstallPlan, on inventory: DiskInventory = DiskInventory(disks: [])) -> [Step] {
     var s: [Step] = []
     let dev = "/dev/" + plan.disk
     let mnt = plan.mountpoint
@@ -205,7 +207,8 @@ func steps(for plan: InstallPlan) -> [Step] {
 
     // ---- configuration ------------------------------------------------------
     s.append(Step(.write(path: mnt + "/boot/loader.conf",
-                         contents: loaderConf(plan), mode: 0o644),
+                         contents: loaderConf(plan, machine: inventory.machine),
+                         mode: 0o644),
                   what: "write loader.conf",
                   onFailure: "loader.conf could not be written —"
                            + " the machine would not find its root filesystem"))
@@ -260,7 +263,7 @@ func steps(for plan: InstallPlan) -> [Step] {
 
 // MARK: - The files we write
 
-public func loaderConf(_ plan: InstallPlan) -> String {
+public func loaderConf(_ plan: InstallPlan, machine: MachineIdentity? = nil) -> String {
     var out = "# Written by the AbyssBSD installer.\n"
     out += "zfs_load=\"YES\"\n"
     out += "vfs.root.mountfrom=\"zfs:\(plan.poolName)/ROOT/default\"\n"
@@ -280,23 +283,29 @@ public func loaderConf(_ plan: InstallPlan) -> String {
     // reads, and no swap. Measured: with this line, /dev/gpt appears and
     // swapinfo shows the partition; without it, neither.
     out += "kern.geom.label.disk_ident.enable=\"0\"\n"
-    // **A Mac Pro accommodation, written to every machine because the installer
-    // cannot yet ask which machine it is.** Without it a 2013 Mac Pro's first
-    // boot is "pcib26: Power Fault Detected" scrolling and nothing else — its
-    // internal PCIe bridges report a power-fault bit that never clears, so
-    // pcib(4) re-logs it forever. The live medium sets it too, but that only
-    // rescues the install: the machine we just built has its own loader.conf,
-    // and a fresh install that spews over its own first boot is the install
-    // having failed. It is a loader tunable, so there is no fixing it after the
-    // fact from a shell.
+    // **A Mac Pro accommodation, and since P12.2 only Mac Pros get it.**
+    // Without it a 2013 Mac Pro's first boot is "pcib26: Power Fault Detected"
+    // scrolling and nothing else — its internal PCIe bridges report a
+    // power-fault bit that never clears, so pcib(4) re-logs it forever. The live
+    // medium sets it too, but that only rescues the install: the machine we just
+    // built has its own loader.conf, and a fresh install that spews over its own
+    // first boot is the install having failed. It is a loader tunable, so there
+    // is no fixing it after the fact from a shell.
     //
-    // On the RDNA 2 target and on any ordinary desktop this changes nothing,
-    // because nobody hot-plugs a PCIe bridge on a machine like that — which is
-    // the argument for shipping it unconditionally *for now*. **Phase 12 is
-    // where it stops being unconditional:** `Fathom` probes machine identity,
-    // and this is the first tunable that should be gated on the answer rather
-    // than given to everybody.
-    out += "hw.pci.enable_pcie_hp=\"0\"\n"
+    // It used to be written to **every** machine, because nothing could ask what
+    // machine it was on. That was defensible while it was true and stopped being
+    // true when `Vents.Kenv` landed: `smbios.system.*` names the machine, and a
+    // workaround for somebody else's PCIe bridges has no business in the
+    // loader.conf of a board that has none.
+    //
+    // **A machine that does not identify itself does not get it.** That is the
+    // deliberate direction to fail in: the cost of omitting it is a Mac Pro
+    // whose console scrolls, which is visible and recoverable by reinstalling
+    // from a medium that still sets it; the cost of adding it everywhere is a
+    // silent, permanent change to machines we never examined.
+    if needsPCIeHotplugDisabled(maker: machine?.maker, product: machine?.product) {
+        out += "hw.pci.enable_pcie_hp=\"0\"\n"
+    }
     return out
 }
 

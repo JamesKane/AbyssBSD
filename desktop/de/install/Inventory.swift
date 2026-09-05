@@ -52,18 +52,43 @@ public struct Disk: Equatable, Sendable {
     }
 }
 
+/// What a machine calls itself, from `smbios.system.*` in the kernel
+/// environment (PHASE12 §4.2).
+///
+/// Optional wherever it appears, because a machine that does not identify itself
+/// is a real case — a VM, a board with no SMBIOS — and it must be distinguishable
+/// from one that identifies itself as something else. Guessing here is how a
+/// workaround ends up on a machine that has nothing to work around.
+public struct MachineIdentity: Equatable, Sendable {
+    public let maker: String
+    public let product: String
+    public init(maker: String, product: String) {
+        self.maker = maker
+        self.product = product
+    }
+}
+
 /// Everything the safety predicate is allowed to know about the machine.
 public struct DiskInventory: Equatable, Sendable {
     public let disks: [Disk]
+    /// What this machine says it is, or nil if it does not say.
+    ///
+    /// Here rather than in the plan because it is a fact about the machine and
+    /// not a choice the user made — the same reason the disks are here. It never
+    /// crosses the wire: the unprivileged half sends intent, and the privileged
+    /// half, which is the only one that may look at the machine, supplies this.
+    public let machine: MachineIdentity?
     /// Pools already imported here. A live medium that is itself ZFS-rooted —
     /// which the build VM is — already has `zroot`, so an install plan that
     /// defaults to that name would collide with the machine running it. Found
     /// the honest way: the spike had to rename its pool to get started.
     public let importedPools: [String]
 
-    public init(disks: [Disk], importedPools: [String] = []) {
+    public init(disks: [Disk], importedPools: [String] = [],
+                machine: MachineIdentity? = nil) {
         self.disks = disks
         self.importedPools = importedPools
+        self.machine = machine
     }
 
     public func disk(named name: String) -> Disk? {
