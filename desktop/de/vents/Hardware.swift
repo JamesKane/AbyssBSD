@@ -18,6 +18,58 @@ extension Vents {
 
     // MARK: - sysctl
 
+    /// The kernel environment — **a different namespace from sysctl**, and the
+    /// only place the machine says what it is.
+    ///
+    /// `smbios.system.maker` and `smbios.system.product` are what distinguish a
+    /// MacPro6,1 from an MSI desktop, and they are not in the sysctl tree:
+    /// `sysctl -aN | grep smbios` finds only `dev.smbios.*`, which are device
+    /// nodes. Phase 12 needs this so a Mac Pro's loader tunable stops being
+    /// written to every machine we install (PHASE4 §5.2).
+    public enum Kenv {
+        /// Whether this platform has a kernel environment at all (false on
+        /// Linux, where the bridge is a stub).
+        public static var isSupported: Bool { av_sysctl_supported() != 0 }
+
+        /// A kenv variable, or nil if it is not set.
+        ///
+        /// FreeBSD's `kenv(2)` caps a value at `KENV_MVALLEN`; 1024 is
+        /// comfortably above it and this is not a hot path.
+        public static func string(_ name: String) -> String? {
+            var buf = [CChar](repeating: 0, count: 1024)
+            let n = buf.withUnsafeMutableBufferPointer {
+                av_kenv_read(name, $0.baseAddress, $0.count)
+            }
+            guard n >= 0 else { return nil }
+            return String(cString: buf)
+        }
+
+        /// What this machine calls itself: maker and product, trimmed, with
+        /// the quotes `kenv` reports stripped.
+        ///
+        /// Returns nil when either is missing rather than half an answer — a
+        /// machine identified as `Apple Inc.` with no model is not identified.
+        public static func machine() -> (maker: String, product: String)? {
+            guard let mk = string("smbios.system.maker").map(unquote),
+                  let pr = string("smbios.system.product").map(unquote),
+                  !mk.isEmpty, !pr.isEmpty
+            else { return nil }
+            return (mk, pr)
+        }
+
+        /// `kenv` renders values with surrounding quotes; the value does not
+        /// contain them.
+        static func unquote(_ s: String) -> String {
+            var v = Substring(s)
+            while v.first == " " { v = v.dropFirst() }
+            while v.last == " " { v = v.dropLast() }
+            if v.count >= 2, v.first == "\"", v.last == "\"" {
+                v = v.dropFirst().dropLast()
+            }
+            return String(v)
+        }
+    }
+
     public enum Sysctl {
         /// Whether this platform answers sysctl at all (false on Linux, where
         /// the bridge is a stub).

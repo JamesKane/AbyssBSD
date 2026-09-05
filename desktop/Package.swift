@@ -216,6 +216,15 @@ let package = Package(
             name: "Install",
             path: "de/install"
         ),
+        // What this machine is, as a value (PHASE12.md). Pure functions over
+        // captured text and **no dependencies at all** — the same property that
+        // earns `Install` its tests, for the same reason: every probe has to be
+        // checkable on a machine that has none of the hardware, which is most of
+        // them. The gathering half lives with the caller.
+        .target(
+            name: "Fathom",
+            path: "de/fathom"
+        ),
         // The installer's doing half: running a step list, looking at the
         // machine, and the service `abyss-install` hosts. Separate from
         // `Install` so that target keeps the property that earns it its tests —
@@ -399,6 +408,11 @@ let package = Package(
             name: "AnchorTests",
             dependencies: ["Anchor"],
             path: "Tests/AnchorTests"
+        ),
+        .testTarget(
+            name: "FathomTests",
+            dependencies: ["Fathom"],
+            path: "Tests/FathomTests"
         ),
         .testTarget(
             name: "InstallTests",

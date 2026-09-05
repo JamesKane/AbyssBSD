@@ -12,8 +12,26 @@
 #include <sys/sysctl.h>
 #include <sys/ioctl.h>
 #include <sys/soundcard.h>
+#include <kenv.h>
 
 int av_sysctl_supported(void) { return 1; }
+
+/* The kernel environment, which is NOT the sysctl tree — and the difference is
+ * the reason this exists. `smbios.system.maker` and `smbios.system.product` name
+ * the machine, and `sysctl -aN | grep smbios` finds only `dev.smbios.*` device
+ * nodes. Phase 12 needs the machine's identity to stop handing a Mac Pro
+ * accommodation to every machine we install (PHASE4 §5.2), and this is the only
+ * way to ask. */
+long av_kenv_read(const char *name, char *buf, size_t len) {
+    if (name == NULL || buf == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* kenv(2) returns the length written, not counting the NUL, or -1. */
+    int n = kenv(KENV_GET, name, buf, (int)len);
+    if (n < 0) return -1;
+    return (long)n;
+}
 
 long av_sysctl_read(const char *name, void *buf, size_t len) {
     if (name == NULL) {
@@ -55,6 +73,12 @@ int av_mixer_set_volume(int fd, int *level) {
 int av_sysctl_supported(void) { return 0; }
 
 long av_sysctl_read(const char *name, void *buf, size_t len) {
+    (void)name; (void)buf; (void)len;
+    errno = ENOSYS;
+    return -1;
+}
+
+long av_kenv_read(const char *name, char *buf, size_t len) {
     (void)name; (void)buf; (void)len;
     errno = ENOSYS;
     return -1;

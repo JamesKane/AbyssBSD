@@ -5,6 +5,8 @@
 // `abyss/tests/live-vents.sh` something to drive.
 //
 //   ventsctl sysctl <name>        print a sysctl (string or number)
+//   ventsctl kenv [name]          a kernel-environment variable, or the
+//                                 machine's identity with no argument
 //   ventsctl volume [percent]     read, or set, the master OSS level
 //   ventsctl battery              charge, and whether it's charging
 //   ventsctl devd [seconds]       stream devd events (default 5s)
@@ -30,10 +32,24 @@ func fail(_ s: String) -> Never { emit(2, "ventsctl: \(s)"); exit(1) }
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let cmd = args.first else {
-    fail("usage: ventsctl sysctl <name> | volume [pct] | battery | devd [secs]")
+    fail("usage: ventsctl sysctl <name> | kenv [name] | volume [pct] | battery | devd [secs]")
 }
 
 switch cmd {
+// **kenv is not sysctl**, and the machine's own identity lives only there
+// (PHASE12 §4.2). With no argument this answers the question Phase 12 actually
+// needs — what machine is this — so that a Mac Pro's loader tunable can stop
+// being written to every machine we install.
+case "kenv":
+    guard Vents.Kenv.isSupported else { unavailable("no kernel environment on this platform") }
+    if args.count >= 2 {
+        guard let v = Vents.Kenv.string(args[1]) else { unavailable("\(args[1]) is not set") }
+        out(v)
+    } else {
+        guard let m = Vents.Kenv.machine() else { unavailable("this machine does not identify itself") }
+        out("\(m.maker)\t\(m.product)")
+    }
+
 case "sysctl":
     guard args.count >= 2 else { fail("sysctl needs a name") }
     guard Vents.Sysctl.isSupported else { unavailable("no sysctl on this platform") }

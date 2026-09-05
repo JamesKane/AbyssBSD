@@ -32,6 +32,11 @@
  */
 long av_sysctl_read(const char *name, void *buf, size_t len);
 
+/* Read a kernel-environment variable into `buf`. Returns the length written
+ * (excluding the NUL) or -1. `kenv` is a different namespace from sysctl, and
+ * the machine's own identity lives only there. */
+long av_kenv_read(const char *name, char *buf, size_t len);
+
 /* Is this platform able to answer sysctl queries at all? 1 on FreeBSD, 0 where
  * the bridge is a stub (Linux), so callers can hide a status item rather than
  * report a fake reading. */

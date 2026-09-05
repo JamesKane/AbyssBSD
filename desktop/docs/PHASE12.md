@@ -69,7 +69,7 @@ The honest summary is that **most of this exists and none of it is collected.**
 
 ## 3. Ordered passes
 
-**P12.1 — the probes, negative case first.**
+**P12.1 — the probes, negative case first. ✅ done.**
 A new `de/fathom` target: pure functions from captured text to values, the
 `Probe.swift` pattern that P5.1 established and that `DiskInventory` proved.
 Nothing here runs a command; a caller gathers, these interpret.
@@ -83,6 +83,7 @@ which is the only way to know the check can fail. A `Fathom` that reports
 an obvious failure into a confident lie.
 
 **P12.2 — machine identity, and the tunable that has been unconditional.**
+*(The `kenv` half is done; making the tunable conditional is what remains.)*
 `smbios.system.maker` and `smbios.system.product` are in the **kernel
 environment, not the sysctl tree** (§4.2), and `Vents` has no way to read it. Add
 `av_kenv` to `de/cvents` on the exact `av_sysctl_read` pattern, and `Vents.Kenv`
@@ -93,6 +94,27 @@ every machine.** It is a MacPro6,1 accommodation that both loader.conf writers
 currently give to everybody, and both of them say in a comment that Phase 12 is
 where that ends. This is the pass that keeps that promise, and it is the first
 time a probe *changes* what the medium does rather than only reporting it.
+
+**What P12.1 and P12.2 actually landed**, and one thing they found:
+
+- `de/fathom` — nine probes as pure functions over captured text, no
+  dependencies, `ProbeStatus` carrying **three** answers so `unknown` cannot be
+  spelled `absent`.
+- `Vents.Kenv` over a new `av_kenv_read`, proven on FreeBSD: it reads
+  `smbios.system.maker`/`product`, and a missing key returns nil rather than an
+  empty string. `ventsctl kenv` exposes it by hand, exiting 2 when the machine
+  does not identify itself.
+- `needsPCIeHotplugDisabled(maker:product:)` — the rule that ends the
+  unconditional tunable, pure so it is testable **without a Mac Pro**, which is
+  the only way it could be tested at all now that we do not bring up on one.
+
+**And breaking the code found a hole in the tests, which is the whole reason for
+doing it.** Deleting the `maker` check from that rule left the entire suite green:
+no fixture paired a non-Apple maker with a Mac-shaped product, so the conjunction
+was never exercised and half the check was decoration. The case is not
+hypothetical — smbios strings are settable, and people do set them to Apple's
+models. `testTheMakerAndTheModelBothHaveToMatch` exists because of that, and now
+the break fails two assertions.
 
 **P12.3 — the report, as a value and at two fidelities.**
 `FathomReport` is a struct, rendered rather than printed — the same shape as
