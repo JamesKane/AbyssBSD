@@ -211,6 +211,13 @@ sudo test -s "$work/mnt/boot/modules/amdgpu_pitcairn_pfp_bin.ko" \
   || fail "the medium has no Pitcairn firmware — that is the FirePro D300"
 sudo test -s "$work/mnt/usr/local/bin/seatd" || fail "the medium has no seatd"
 
+# **The probe has to be ON the medium to be of any use on a strange machine.**
+# It was written, tested and left off the stick for two commits, which is the
+# quiet way a diagnostic tool becomes a thing that only works where it is not
+# needed.
+sudo test -x "$work/mnt/usr/local/bin/fathom" \
+  || fail "the medium has no fathom — the one machine that needs it cannot run it"
+
 # **The driver Mesa `dlopen`s, which no `ldd` will ever name (PHASE4 §5.3).**
 # `libEGL` and `libgbm` are dispatch stubs; the code that drives an AMD card is
 # `libgallium` reached through `/usr/local/lib/dri/*_dri.so`, loaded by name at

@@ -228,3 +228,45 @@ public func probeFrameContract(runOutput: String?) -> ProbeResult {
     }
     return ProbeResult("Frame contract", .present, detail)
 }
+
+// MARK: - Getting it off the machine
+
+/// The filename a report should be saved under.
+///
+/// **The matrix is populated by people who are not us, so the retrieval path
+/// cannot assume a network** — and the machines where the network does not come
+/// up are exactly thesis 5's weak spot. The report goes on the medium's own ESP,
+/// which is FAT: the one filesystem Windows, macOS and Linux all read. Pull the
+/// stick out, plug it into whatever computer you do have, and the report is a
+/// file.
+///
+/// **The name identifies the machine and not the person** (§6.2, again, because
+/// a filename is as public as the contents). Maker and model go in; hostname,
+/// serial and user do not. Two different machines on one stick get two files,
+/// which is the case the matrix is for; the same machine twice overwrites, which
+/// is the case a person is for.
+///
+/// FAT-safe by construction: lowercase ASCII, digits and hyphens only.
+public func reportFilename(maker: String?, product: String?) -> String {
+    func slug(_ s: String?) -> String {
+        var out = ""
+        var lastWasDash = false
+        for ch in (s ?? "").lowercased() {
+            if ch.isLetter || ch.isNumber, ch.isASCII {
+                out.append(ch)
+                lastWasDash = false
+            } else if !out.isEmpty && !lastWasDash {
+                out.append("-")
+                lastWasDash = true
+            }
+        }
+        while out.last == "-" { out.removeLast() }
+        return out
+    }
+    let parts = [slug(maker), slug(product)].filter { !$0.isEmpty }
+    guard !parts.isEmpty else { return "fathom-unknown.txt" }
+    // Long enough to distinguish machines, short enough that no filesystem
+    // argues about it.
+    let name = parts.joined(separator: "-")
+    return "fathom-" + String(name.prefix(48)) + ".txt"
+}

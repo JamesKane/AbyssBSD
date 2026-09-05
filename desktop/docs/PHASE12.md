@@ -214,7 +214,7 @@ measure: undertow: could not create a wlroots backend` — which is the sentence
 somebody would otherwise reboot to read. The rule is not "discard stderr", it is
 **never parse stderr as data**: it is captured separately and only ever quoted.*
 
-**P12.5 — the report leaves the machine.**
+**P12.5 — the report leaves the machine. ✅ done.**
 The matrix is populated by people who are not us, so the report has to be
 retrievable by someone with one computer and no network.
 
@@ -224,6 +224,22 @@ a mount away (§4.4). FAT is the one filesystem Windows, macOS and Linux all rea
 pull the stick out, plug it into anything, and the report is a file. Writing it
 to the UFS root instead would make it readable only by the system that could not
 be installed.
+
+**What P12.5 landed:** `fathom --save` mounts the ESP by the label the medium's
+own build gives it (`/dev/msdosfs/EFISYS` — no partition-table parsing), writes
+`fathom-<maker>-<model>.txt`, and unmounts. Verified end to end against a real
+ESP: written, unmounted, mounted again elsewhere, read back.
+
+The filename identifies **the machine and not the person** — §6.2 applies to a
+filename as much as to the contents, and this one ends up on a stick that gets
+handed around. Two different machines on one stick get two files, which is the
+case the matrix is for; the same machine twice overwrites, which is the case a
+person is for. FAT-safe by construction: lowercase ASCII, digits and hyphens.
+
+*And `fathom` is now actually **on** the medium.* It had been written, tested and
+left out of `BINARIES` for two passes — the quiet way a diagnostic tool becomes
+something that only works where it is not needed. `live-medium.sh` asserts it,
+because that is exactly the kind of omission no test was looking for.
 
 **P12.6 — the spoke, and the gate.**
 `Fathom` becomes a spoke in P5.4's hub, and can refuse in the attention styling

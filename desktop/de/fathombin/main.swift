@@ -12,6 +12,9 @@
 //   fathom              the report, as text
 //   fathom --measure    also run the compositor and report the frame contract
 //   fathom --quiet      exit status only: 0 complete, 1 something unaskable
+//   fathom --save       also write it to the medium's ESP, so it leaves with the
+//                       stick — FAT is the one filesystem every desktop reads
+//   fathom --save-to D  write it to a directory of your choosing instead
 //
 // **Exit status is about completeness, not suitability.** A machine with no
 // battery and no wifi produces a complete report and a perfectly good desktop;
@@ -215,9 +218,67 @@ if measure {
 }
 
 let final = FathomReport(results)
+
+// ------------------------------------------------------------------ save
+//
+// **The matrix is populated by strangers, so retrieval cannot assume a
+// network** — and the machines where the network does not come up are exactly
+// the ones worth hearing about. The ESP is FAT16 and every desktop OS reads
+// FAT, so a report written there leaves with the stick and opens on whatever
+// computer the person actually has.
+func saveReport(_ text: String, to directory: String, name: String) -> String? {
+    let path = directory + "/" + name
+    let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+    guard fd >= 0 else { return nil }
+    defer { close(fd) }
+    let bytes = Array(text.utf8)
+    let n = bytes.withUnsafeBufferPointer { write(fd, $0.baseAddress, bytes.count) }
+    return n == bytes.count ? path : nil
+}
+
+let name = reportFilename(maker: machine?.maker, product: machine?.product)
+let text = renderText(final)
+
+if let i = args.firstIndex(of: "--save-to"), i + 1 < args.count {
+    if let path = saveReport(text, to: args[i + 1], name: name) {
+        emit(1, "fathom: wrote \(path)\n")
+    } else {
+        emit(2, "fathom: could not write into \(args[i + 1])\n")
+        exit(2)
+    }
+} else if args.contains("--save") {
+    // The ESP by the label the medium's own build gives it, rather than by
+    // parsing a partition table: `makefs -o volume_label=EFISYS` puts it there
+    // and geom_label makes it a device node.
+    let esp = "/dev/msdosfs/EFISYS"
+    let mount = "/tmp/fathom-esp"
+    _ = mkdir(mount, 0o700)
+    // **FAT stores no permissions**, so `-m 644` sets what *this* mount
+    // synthesises and nothing more — verified both ways: the same file reads
+    // `-rwx------` under a default mount and `-rw-r--r--` under this one. How it
+    // appears anywhere else is that reader's mount's business, not ours, which
+    // is the point of writing to FAT rather than to the UFS root: every desktop
+    // OS mounts it readable and none of them needs to be told how.
+    guard run(["mount_msdosfs", "-m", "644", "-M", "755", esp, mount]).stdout != nil else {
+        emit(2, "fathom: could not mount \(esp) — is this the live medium, and are you root?\n")
+        exit(2)
+    }
+    let saved = saveReport(text, to: mount, name: name)
+    _ = run(["umount", mount])
+    guard let path = saved else {
+        emit(2, "fathom: mounted the ESP and could not write to it\n")
+        exit(2)
+    }
+    // Report the name it will have *on the stick*, not the temporary mount
+    // point, because the whole point is reading it somewhere else.
+    emit(1, "fathom: wrote \(name) to the stick's EFI partition"
+         + " — readable on any machine that reads FAT\n")
+    _ = path
+}
+
 let quiet = args.contains("--quiet")
 if !quiet {
-    emit(1, renderText(final))
+    emit(1, text)
     if !measure {
         emit(1, "\n(frame contract not measured; pass --measure to run the compositor)\n")
     }

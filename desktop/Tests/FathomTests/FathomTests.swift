@@ -350,6 +350,51 @@ final class FathomTests: XCTestCase {
         XCTAssertEqual(probeFrameContract(runOutput: "missed=lots of frames").status, .unknown)
     }
 
+    // MARK: - Getting the report off the machine
+
+    func testTheFilenameIdentifiesTheMachineAndNotThePerson() {
+        // §6.2 applies to the filename too — it is as public as the contents,
+        // and it ends up on a stick that gets handed around.
+        XCTAssertEqual(reportFilename(maker: "Apple Inc.", product: "MacPro6,1"),
+                       "fathom-apple-inc-macpro6-1.txt")
+        XCTAssertEqual(reportFilename(maker: "Micro-Star International Co., Ltd.",
+                                      product: "MS-7D25"),
+                       "fathom-micro-star-international-co-ltd-ms-7d25.txt")
+    }
+
+    func testTwoMachinesOnOneStickGetTwoFiles() {
+        // The case the matrix is for. The same machine twice overwrites, which
+        // is the case a person is for.
+        let a = reportFilename(maker: "Apple Inc.", product: "MacPro6,1")
+        let b = reportFilename(maker: "Apple Inc.", product: "MacBookPro11,3")
+        XCTAssertNotEqual(a, b)
+        XCTAssertEqual(a, reportFilename(maker: "Apple Inc.", product: "MacPro6,1"))
+    }
+
+    func testTheFilenameIsSafeOnAFilesystemWeDoNotControl() {
+        // It is written to FAT and read on whatever the person owns. Lowercase
+        // ASCII, digits and hyphens; nothing that needs quoting or a codepage.
+        for (mk, pr) in [("Wéird Ünïcode", "Ma/chine\\Name"),
+                         ("   ", "  "),
+                         ("A", String(repeating: "x", count: 200))] {
+            let f = reportFilename(maker: mk, product: pr)
+            XCTAssertTrue(f.hasPrefix("fathom-"), f)
+            XCTAssertTrue(f.hasSuffix(".txt"), f)
+            XCTAssertLessThanOrEqual(f.count, 64, f)
+            for ch in f.dropLast(4).dropFirst(7) {
+                XCTAssertTrue(ch.isASCII && (ch.isLowercase || ch.isNumber || ch == "-"),
+                              "\(ch) in \(f)")
+            }
+        }
+    }
+
+    func testAMachineThatWillNotSayWhatItIsStillGetsAFile() {
+        // A report from an unidentified machine is still a data point, and
+        // refusing to name the file would lose it.
+        XCTAssertEqual(reportFilename(maker: nil, product: nil), "fathom-unknown.txt")
+        XCTAssertEqual(reportFilename(maker: "", product: ""), "fathom-unknown.txt")
+    }
+
     // MARK: - The tunable that has been unconditional
 
     func testOnlyAMacProAsksForPCIeHotplugToBeDisabled() {
