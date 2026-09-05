@@ -338,6 +338,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.50 | A check that dies inside `$( )` under `set -e` fails **silently** — and `dd bs=1` on a raw device is `Invalid argument` |
 | 2.51 | Every safety predicate you have describes the **running** system — and on a live medium the running system is the USB stick |
 | 2.52 | `ldd` is not your closure either, when something in it `dlopen`s — Mesa's driver is a plugin, and headless never asks for it |
+| 2.53 | Take **every** fact from the display, not just the ones that broke first — we fixed size in P4.1 and reported a 60 Hz panel as 240 Hz for a phase |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -604,6 +605,34 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.53 Half a lesson is a lesson you get to learn twice
+(Second metal boot. The compositor drove a real display and mislabelled it.)
+
+§2.48 said: **on a real backend the display's size is the truth, not your flags.**
+P4.1 applied it — `width` and `height` now come from `wlr_output` — and stopped
+there. `--hz` kept its default of 240, so the first run on a 60 Hz panel printed:
+
+```
+undertow: DP-1 2560x1440 @ 240Hz
+```
+
+Two thirds measured, one third invented, in one line, with nothing to mark which
+was which. The metronome was fine — it seeds from `output.periodHintNs`, which
+reads the output's real millihertz — so this was never a *behaviour* bug. It was
+a **reporting** bug, and it is the worse kind here: every other number in that
+report is a duration, and a duration is meaningless without the period it is
+measured against. A frame budget quoted at 240 Hz when the panel runs at 60 is
+off by a factor of four in the reader's head, and the reader was me.
+
+The generalisation, and the reason this gets a number of its own: **when a class
+of fact turns out to come from the machine rather than from you, take the whole
+class.** Size and refresh arrived from the same struct, in the same commit's
+reach, for the same reason. Fixing the field that broke first and leaving its
+siblings is how one lesson becomes two bugs a phase apart.
+
+Worth pairing with §2.45 → §2.52, which is the same shape: a rule about closures
+learned from packages, then re-learned from `dlopen` within the hour.
 
 ### 2.52 `ldd` is not your closure either — Mesa loads its driver by name
 (The first boot of our own medium on a real GPU. It got further than anything

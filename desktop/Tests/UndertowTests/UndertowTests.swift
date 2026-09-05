@@ -32,6 +32,31 @@ private func ensureRuntimeDir() {
 
 final class UndertowTests: XCTestCase {
 
+    // MARK: - The display's rate is the truth, not the flag
+
+    func testTheRefreshRateComesFromTheDisplay() {
+        // wlroots reports millihertz. 60 Hz and 144 Hz are the ordinary cases.
+        XCTAssertEqual(displayHz(refreshMilliHz: 60_000, fallback: 240), 60)
+        XCTAssertEqual(displayHz(refreshMilliHz: 144_000, fallback: 240), 144)
+        XCTAssertEqual(displayHz(refreshMilliHz: 240_000, fallback: 60), 240)
+    }
+
+    func testAPanelThatIsNotAWholeNumberOfHzStillRoundsToOne() {
+        // 59.94 Hz is a real mode and truncating it reports 59, which then reads
+        // as a machine that is missing a frame a second.
+        XCTAssertEqual(displayHz(refreshMilliHz: 59_940, fallback: 240), 60)
+        XCTAssertEqual(displayHz(refreshMilliHz: 143_980, fallback: 240), 144)
+    }
+
+    func testAnOutputWithNoModeLeavesTheCallersDefaultAlone() {
+        // Nothing plugged in, or a virtual connector: wlroots reports 0. The
+        // fallback stands, because inventing a rate here would be the same
+        // mistake one layer down.
+        XCTAssertEqual(displayHz(refreshMilliHz: 0, fallback: 60), 60)
+        XCTAssertEqual(displayHz(refreshMilliHz: -1, fallback: 75), 75)
+    }
+
+
     override func setUp() {
         super.setUp()
         ensureRuntimeDir()

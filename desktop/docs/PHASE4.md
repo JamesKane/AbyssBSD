@@ -415,6 +415,49 @@ its probes can be encoded* — assumed the person could finish. They cannot: ste
 0–6 are reachable and the rest is not, so the probe stops being a record of the
 walk and becomes the instrument for it.
 
+### 5.4 Second boot: DRM works, and two of our numbers were fiction
+
+The Mesa fix did not make the session draw — and the run that proved *why* was
+the pixman one, which is what that test was for.
+
+```
+WLR_RENDERER=pixman undertow run --backend auto --frames 300
+undertow: DP-1 2560x1440 @ 240Hz on wayland-0
+usable=0,0,2560x1440   composite-p99-us=9   wake-late-p99-us=715
+margin-us=8000         missed=45 of 300
+```
+
+**Step 4 passes with software rendering.** A real connector, the panel's real
+size, a cleared blue field and the compositor's own cursor rectangle on screen.
+DRM, KMS, modesetting, the scene and the present loop are all fine on this
+machine; **the GLES2 renderer is the only thing failing**, which is a much
+smaller claim than the first boot allowed.
+
+Two things in that output were wrong, and both are ours:
+
+- **`@ 240Hz` is a lie, and it is this binary's default read back.** `--hz`
+  defaults to 240; P4.1 learned that a real output's *size* beats our flags and
+  took `width`/`height` from it, and **left the refresh rate on the flag**. The
+  metronome was seeded from `output.periodHintNs` and so was right all along —
+  the *report* was wrong. In a project whose deliverable is measurement, a number
+  labelled with a refresh rate nothing measured is the worse of the two bugs.
+  Fixed: `displayHz(refreshMilliHz:fallback:)`, rounding to nearest so 59.94 Hz
+  is 60 and not 59, with the period printed beside the rate.
+- **`libinput error: Failed to load the device quirks`** — the medium was missing
+  `/usr/local/share/libinput`, 257 KB of data read by path. The same class as the
+  Mesa driver and a different mechanism: not code loaded by name but data. The
+  build VM drives input through `wlr-virtual-pointer`, which never consults a
+  quirks file, so nothing had ever asked for it. Added to `DATA` beside the fonts
+  and the keymaps.
+
+**What is still open, and the shape of the answer.** `wlr_renderer_autocreate`
+fails while `radeonsi_dri.so`, `libgallium` and `libLLVM` are all on the stick.
+The untested split is *who was running*: pixman was run by hand **as root**, and
+the session that failed runs as `abyss`. The medium already puts that user in the
+`video` group, so the render node ought to be reachable — but "ought to" is what
+the last two boots have each disproved. The next run settles it in two commands,
+and `--verbose` turns on wlroots' own log, which names what it could not create.
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the

@@ -62,12 +62,21 @@ sudo -n true 2>/dev/null || die "this needs passwordless sudo (it extracts a bas
 # Runtime data the desktop reads by path rather than links against, so no
 # amount of `ldd` will find it: the four DejaVu faces `de/ctext/ctext.c` names
 # for FreeBSD (the whole directory, because losing text is a poor trade for
-# 8 MB), the keyboard layouts libxkbcommon compiles keymaps from, and
-# fontconfig's configuration — linked in through cairo even though we select
-# faces by path ourselves.
+# 8 MB), the keyboard layouts libxkbcommon compiles keymaps from, fontconfig's
+# configuration — linked in through cairo even though we select faces by path
+# ourselves — and **libinput's device quirks**, 257 KB, whose absence the first
+# metal boot reported in as many words:
+#
+#   libinput error: Failed to load the device quirks from /usr/local/share/libinput
+#
+# Same class as the Mesa driver below and a different mechanism: not code loaded
+# by name, but data read by path. The build VM drives input through
+# `wlr-virtual-pointer`, which never consults a quirks file, so nothing here had
+# ever asked for it.
 DATA="/usr/local/share/fonts/dejavu
       /usr/local/share/xkeyboard-config-2
-      /usr/local/etc/fonts"
+      /usr/local/etc/fonts
+      /usr/local/share/libinput"
 
 # **Objects nothing links and something `dlopen`s — the converse of §2.45, and
 # it cost a boot on metal to find (PHASE4 §5.3).**

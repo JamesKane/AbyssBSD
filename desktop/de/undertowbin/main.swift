@@ -333,6 +333,15 @@ case "run":
         if backendKind != nil, let first = session.outputs.first {
             width = first.pointee.width
             height = first.pointee.height
+            // **And its refresh rate, which this took a phase to learn twice.**
+            // Taking the size and leaving `--hz` meant every line we printed on
+            // metal was labelled with the rate we asked for rather than the one
+            // the panel has: the first run on a 60 Hz monitor announced 240 Hz,
+            // which is simply this binary's default read back. The metronome was
+            // already seeded from `output.periodHintNs` and so was right; the
+            // *report* was wrong, which in a project whose deliverable is
+            // measurement is the worse of the two.
+            hz = displayHz(refreshMilliHz: first.pointee.refresh, fallback: hz)
         }
         compositor = try Compositor(session: session, outputWidth: width,
                                     outputHeight: height, configDir: configDir,
@@ -358,7 +367,10 @@ case "run":
     // read one line and know where to point a client. Anything else means
     // racing a sleep against a compositor's startup.
     out("WAYLAND_DISPLAY=\(compositor.socketName)")
+    // The rate comes from the output, not from the flag — see above. Said in the
+    // one line a person reads off a screen they cannot copy and paste from.
     emit(2, "undertow: \(output.name) \(output.width)x\(output.height) @ \(hz)Hz"
+         + " (period \(us(output.periodHintNs)))"
          + " on \(compositor.socketName)")
 
     let recorder = FlightRecorder(capacity: max(frames, 1))

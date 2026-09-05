@@ -98,3 +98,27 @@ public protocol FrameSink {
     /// asks a client for anything, which is why a client cannot stall it (C2).
     mutating func latchAndComposite(now: UInt64, target: UInt64) -> FrameStats
 }
+
+/// The display's refresh rate in whole Hz, from wlroots' millihertz.
+///
+/// **The other half of §2.48, and it went unapplied for a phase.** P4.1 learned
+/// that on a real backend the display's *size* is the truth and our flags are
+/// not, and took `width`/`height` from the output. It left `--hz` alone — so the
+/// compositor went on reporting the rate it was *asked* for while running at the
+/// rate the panel actually has, and the first metal run printed `@ 240Hz` on a
+/// 60 Hz monitor because 240 is this binary's default.
+///
+/// That is worse than a cosmetic bug in a project whose deliverable is
+/// measurement: every number in that report was labelled with a refresh rate
+/// nothing had measured. A frame budget quoted against the wrong period is not a
+/// frame budget.
+///
+/// Zero means the output has no mode — nothing plugged in, or a virtual
+/// connector — and the caller's own default stands, because inventing a rate
+/// here would be the same mistake one layer down.
+public func displayHz(refreshMilliHz: Int32, fallback: UInt64) -> UInt64 {
+    guard refreshMilliHz > 0 else { return fallback }
+    // Round to nearest rather than truncate: 59.94 Hz reports 59940 mHz and is
+    // a 60 Hz display everywhere except in a truncation.
+    return UInt64((Int64(refreshMilliHz) + 500) / 1000)
+}
