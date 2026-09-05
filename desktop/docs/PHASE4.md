@@ -672,6 +672,13 @@ much as possible on its own console — which it already does (PHASE5 §4.3's li
 session reports on itself) — so that one boot answers several questions instead
 of one.
 
+> The other half of that — **making the medium answerable rather than only
+> talkative** — is costed in [PROPOSAL-LIVE-SSH.md](PROPOSAL-LIVE-SSH.md):
+> a key-only `sshd`, local network only, off unless the image is built for it.
+> OpenSSH is already in `base.txz`, so it carries no new byte; it is a
+> development tool for our own LAN and explicitly **not** a retrieval path
+> (PHASE12 §4.4 keeps that). Proposed, not implemented, and not gating anything.
+
 **6.5 There is still no login window** (PHASE5 §6.8), and on a real machine that
 somebody else uses, it starts to matter.
 
