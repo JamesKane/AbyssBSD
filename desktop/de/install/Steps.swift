@@ -280,6 +280,16 @@ public func loaderConf(_ plan: InstallPlan) -> String {
     // reads, and no swap. Measured: with this line, /dev/gpt appears and
     // swapinfo shows the partition; without it, neither.
     out += "kern.geom.label.disk_ident.enable=\"0\"\n"
+    // **Without this a 2013 Mac Pro's first boot is "pcib26: Power Fault
+    // Detected" scrolling and nothing else.** Its internal PCIe bridges report
+    // a power-fault bit that never clears, so pcib(4) re-logs it forever. The
+    // live medium sets it too, but that only rescues the install — the machine
+    // we just built has its own loader.conf, and a fresh install that spews
+    // over its own first boot is the install having failed. It is a loader
+    // tunable, so there is no fixing it after the fact from a shell. On
+    // hardware that does not need it, disabling PCIe HotPlug costs a desktop
+    // nothing: nobody hot-plugs a bridge on a machine like this.
+    out += "hw.pci.enable_pcie_hp=\"0\"\n"
     return out
 }
 

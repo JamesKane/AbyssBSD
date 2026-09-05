@@ -343,6 +343,15 @@ console="comconsole,vidconsole"
 # class can consume the disk and leave no /dev/ufs or /dev/gpt provider at all.
 kern.geom.label.disk_ident.enable="0"
 
+# **The Mac Pro scrolls "pcib26: Power Fault Detected" forever without this,
+# and nothing else on the screen survives.** The 2013 Mac Pro's internal PCIe
+# bridges report a power-fault bit that never clears, so pcib(4) re-logs it in a
+# loop and the installer is buried under it. It is a loader tunable — there is
+# no sysctl to undo it once the machine is up — so it has to be here, on the
+# medium, before anyone can see anything. Measured on the target machine: the
+# message is what a MacPro6,1 does, not what AbyssBSD does.
+hw.pci.enable_pcie_hp="0"
+
 # **Southern Islands is off by default in amdgpu, and the Mac Pro is Southern
 # Islands.** Without this the FirePros are simply not claimed and the machine
 # comes up with no display — which looks like a missing driver and is a default.

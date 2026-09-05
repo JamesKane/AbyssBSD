@@ -185,6 +185,13 @@ sudo mount "/dev/${md}p3" "$work/mnt"
 # looks like a missing driver and is a default (PHASE4 §6.2).
 sudo grep -q 'amdgpu_si_support="1"' "$work/mnt/boot/loader.conf" \
   || fail "the medium does not ask amdgpu for Southern Islands — the Mac Pro's GPUs"
+
+# The other Mac Pro knob a VM can only check is written down. Its PCIe bridges
+# report a power fault that never clears, and pcib(4) re-logs it in a loop until
+# the installer is buried; it is a loader tunable, so the medium is the only
+# place it can be set in time.
+sudo grep -q 'hw.pci.enable_pcie_hp="0"' "$work/mnt/boot/loader.conf" \
+  || fail "the medium leaves PCIe HotPlug on — a Mac Pro scrolls Power Fault Detected over the installer"
 sudo test -s "$work/mnt/boot/modules/amdgpu.ko" \
   || fail "the medium has no amdgpu.ko"
 sudo test -s "$work/mnt/boot/modules/amdgpu_pitcairn_pfp_bin.ko" \

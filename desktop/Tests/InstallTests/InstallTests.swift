@@ -362,6 +362,17 @@ final class InstallTests: XCTestCase {
                       "fstab names a GPT label that may not exist on the installed machine")
     }
 
+    func testTheInstalledMachineDoesNotDrownItsOwnFirstBootInPowerFaults() {
+        // A 2013 Mac Pro's internal PCIe bridges report a power fault that never
+        // clears, and pcib(4) re-logs it forever: the console scrolls and nothing
+        // else on it can be read. The live medium sets this too, but that only
+        // gets the install done — the machine we just wrote has its own
+        // loader.conf, and it is a loader tunable, so a shell on the installed
+        // system is too late to fix it.
+        XCTAssertTrue(loaderConf(goodPlan()).contains("hw.pci.enable_pcie_hp=\"0\""),
+                      "the installed machine would scroll Power Fault Detected on its first boot")
+    }
+
     func testAPlainFreeBSDInstallDoesNotStartADesktopItDoesNotHave() {
         // The rule is derived from the sets, not assumed: install base and
         // kernel and you get base and kernel, with nothing in rc.conf about a
@@ -511,6 +522,7 @@ extension InstallTests {
      | comconsole_speed="115200"
      | console="comconsole,vidconsole"
      | kern.geom.label.disk_ident.enable="0"
+     | hw.pci.enable_pcie_hp="0"
 33. write rc.conf
    > /mnt/etc/rc.conf (644)
      | # Written by the AbyssBSD installer.
