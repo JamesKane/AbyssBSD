@@ -285,6 +285,42 @@ void aw_screencopy_manager_destroy(void *manager) {
     zwlr_screencopy_manager_v1_destroy((struct zwlr_screencopy_manager_v1 *)manager);
 }
 
+void *aw_bind_data_device_manager(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &wl_data_device_manager_interface, version);
+}
+
+void *aw_data_device_manager_get_data_device(void *manager, void *seat) {
+    return wl_data_device_manager_get_data_device(
+        (struct wl_data_device_manager *)manager, (struct wl_seat *)seat);
+}
+
+void *aw_data_device_manager_create_data_source(void *manager) {
+    return wl_data_device_manager_create_data_source(
+        (struct wl_data_device_manager *)manager);
+}
+
+void aw_data_device_set_selection(void *device, void *source, uint32_t serial) {
+    wl_data_device_set_selection((struct wl_data_device *)device,
+                                 (struct wl_data_source *)source, serial);
+}
+
+void aw_data_source_offer(void *source, const char *mime) {
+    wl_data_source_offer((struct wl_data_source *)source, mime);
+}
+
+void aw_data_source_destroy(void *source) {
+    wl_data_source_destroy((struct wl_data_source *)source);
+}
+
+void aw_data_offer_receive(void *offer, const char *mime, int fd) {
+    wl_data_offer_receive((struct wl_data_offer *)offer, mime, fd);
+}
+
+void aw_data_offer_destroy(void *offer) {
+    wl_data_offer_destroy((struct wl_data_offer *)offer);
+}
+
 void *aw_seat_get_pointer(void *seat) {
     return wl_seat_get_pointer((struct wl_seat *)seat);
 }

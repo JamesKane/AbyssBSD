@@ -76,7 +76,8 @@ things that travel on it, the client half of a window request before the server
 half that answers it, and the keybind table before anything that would want a
 key.
 
-**P9.1 — the selection, both ends.**
+**P9.1 — the selection, both ends. ✅ done, and it found the protocol's own
+guard.**
 The pass that turns out to be a repair rather than a feature (§4.1). Two halves,
 and the server one is four lines:
 
@@ -98,6 +99,37 @@ positive control asserts nothing.** "Paste produced no error" passes on a system
 where nothing was ever copied. Every test here asserts on the **bytes that came
 back through the pipe**, and the negative case — paste with an empty selection —
 is exercised so we know the check can fail.
+
+**What P9.1 landed, and the thing it discovered:**
+
+- **Server:** `undertow` answers `request_set_selection` and calls
+  `wlr_seat_set_selection`. Four lines, and until now the global was published
+  with nothing behind it — so a copy was discarded for *every* client, ours and
+  the foreign GTK applications Phase 8 exists to serve.
+- **Client:** `Surface.Clipboard` — `wl_data_device`, a source that answers
+  `send` by writing into the descriptor and **closing it** (a source that writes
+  and does not close is a paste that hangs), and a reader that makes a pipe,
+  flushes, closes its own write end, and reads to EOF. Every listener slot
+  filled, including the four drag events that fire whether or not P9.3 exists.
+- `abyssclip copy|paste`, on `abyssgrab`'s pattern.
+
+> **The finding: a client may only take the clipboard using a serial from an
+> input event it received.** wlroots checks it and says so —
+> *"Rejecting set_selection request, serial 0 was never given to client"* — and
+> that is the protocol stopping a background process quietly owning your
+> selection. It is a security property, not an obstacle.
+
+`abyssclip` has no surface, so it receives no input, so it has no serial and
+**cannot legitimately copy**. That is why `wl-clipboard` and every other
+clipboard CLI uses `wlr-data-control`: a protocol whose entire purpose is
+clipboard access without a surface. §6.7 records that decision rather than
+making it here.
+
+So `live-clipboard.sh` pins what is real today — an empty clipboard reads empty
+rather than stale, and a copy with no input behind it is refused *by name*, which
+also proves the compositor is now receiving and judging these requests instead of
+ignoring them. **The round trip belongs to P9.2**, where the Finder copies from a
+⌘C that has a serial because a person pressed it.
 
 **P9.2 — the Finder's clipboard gets a wire.**
 `FinderApp.clipboard` already exists and already backs ⌘C/⌘X/⌘V; it is a field on
@@ -419,6 +451,23 @@ this phase makes half-real still lists Undo and Redo, and after P9.2 they will b
 the only two items in it that do nothing. **That is the right outcome for this
 phase** and worth saying so, because the temptation to fix it here is exactly how
 a toolkit-level decision gets made by accident in one application.
+
+**6.7 A clipboard tool needs `wlr-data-control`, and that is a decision.**
+P9.1 established that `wl_data_device.set_selection` requires an input serial, so
+a surfaceless tool cannot copy — correctly. Every real clipboard CLI and every
+clipboard manager therefore speaks `zwlr_data_control_manager_v1` (or its `ext-`
+successor), which exists precisely to grant that access deliberately rather than
+by accident.
+
+wlroots ships both (`wlr_data_control_v1.h`, `wlr_ext_data_control_v1.h`), so the
+compositor half is one call. The client half is a vendored XML, a scanner line
+and a binding — the `wlr-screencopy` shape.
+
+**The reason it is a decision and not a task:** it is a protocol that hands any
+client that can bind it the whole clipboard, in both directions, with no serial
+and no window. That is the right answer for a clipboard manager and a
+deliberately wide door for anything else — so it wants the same treatment §5.2
+gave XWayland: take it or refuse it, scope it, and write down which.
 
 **6.6 This phase can quietly become Phase 15.**
 Every pass here ends in something that would be nicer with one more application

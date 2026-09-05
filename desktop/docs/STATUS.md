@@ -510,6 +510,17 @@ is the record of what got built, newest last.
 > drives the machine from here. **Opt-in only** — root on the medium has an empty
 > password, so a default build runs no sshd and `live-medium.sh` asserts it.
 >
+> **Installing is deferred until the desktop is mature** (decided 2026-09-05).
+> That retires Phase 4's install half and most of P4.6, and drops P12.6 — the
+> spoke that *gates* an install — while the report itself stands. It does **not**
+> retire P4.5's result: the frame contract does not hold on hardware, and that
+> needs no install.
+>
+> **Phase 9 is the work** ([PHASE9.md](PHASE9.md)) — the interaction substrate,
+> which unblocks five later phases and is the list of things this desktop depicts
+> and does not do. **P9.1 is in**: the compositor answers `request_set_selection`
+> at last, `Surface` has a client-side clipboard, and `abyssclip` exists.
+>
 > **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
 > each step's failure is a different problem. Write the image to a stick and work
 > down it — **steps 0–6 only.**

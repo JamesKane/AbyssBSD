@@ -93,6 +93,13 @@ public final class Seat {
 
     /// The toplevel with keyboard focus, if any.
     public private(set) weak var focused: Toplevel?
+    /// How many times a client's clipboard offer has been accepted.
+    ///
+    /// **The positive control for a clipboard test.** "Paste produced no error"
+    /// passes on a compositor that discards every copy — which is exactly what
+    /// this one did until P9.1. A test that asserts on pasted *bytes* still
+    /// cannot tell "nobody copied" from "the copy was dropped"; this can.
+    public private(set) var selectionsAccepted = 0
 
     public init(compositor: Compositor, outputWidth: Int32, outputHeight: Int32) throws {
         self.compositor = compositor
@@ -126,6 +133,31 @@ public final class Seat {
             let ev = data.assumingMemoryBound(to: wlr_virtual_pointer_v1_new_pointer_event.self)
             guard let pointer = ev.pointee.new_pointer else { return }
             seat.attach(pointer: &pointer.pointee.pointer)
+        }, me))
+
+        // **The clipboard, which has never worked for anybody.**
+        //
+        // `wlr_data_device_manager_create` publishes the global and nothing
+        // else. wlroots says so in its own header — *"Compositors should listen
+        // to this event and call `wlr_seat_set_selection()` if they want to
+        // accept the client's request"* — and until now nothing did, so every
+        // `set_selection` was discarded: ours, and the foreign GTK applications
+        // Phase 8 exists to serve. No error, no log line, no protocol violation;
+        // just a copy that goes nowhere (§2.45's shape, in a protocol).
+        //
+        // It went unnoticed because no test in this tree had ever copied
+        // anything: every live run involving a GTK app exercises the *file
+        // chooser*.
+        listeners.append(tw_listen(&s.pointee.events.request_set_selection, { ctx, data in
+            guard let ctx, let data else { return }
+            let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(to: wlr_seat_request_set_selection_event.self)
+            // **The serial is checked by wlroots, not by us**, which is the
+            // point of routing it back through the seat rather than storing the
+            // source ourselves: a client cannot set the clipboard from a serial
+            // it was never given.
+            wlr_seat_set_selection(seat.seat, ev.pointee.source, ev.pointee.serial)
+            seat.selectionsAccepted += 1
         }, me))
 
         guard let vk = wlr_virtual_keyboard_manager_v1_create(compositor.session.display)

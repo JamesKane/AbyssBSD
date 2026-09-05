@@ -144,6 +144,22 @@ void aw_screencopy_manager_destroy(void *manager);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);
+
+/* --- the clipboard (P9.1) ------------------------------------------------
+ *
+ * `wl_data_device` is CORE wayland, so there is no protocol XML and no scanner
+ * line here — but every request below is a `static inline` in the generated
+ * header, which is §2.1 for the sixth time. The listener structs are ordinary
+ * C and Swift sees them directly; only the requests need wrapping.
+ */
+void *aw_bind_data_device_manager(void *registry, uint32_t name, uint32_t version);
+void *aw_data_device_manager_get_data_device(void *manager, void *seat);
+void *aw_data_device_manager_create_data_source(void *manager);
+void aw_data_device_set_selection(void *device, void *source, uint32_t serial);
+void aw_data_source_offer(void *source, const char *mime);
+void aw_data_source_destroy(void *source);
+void aw_data_offer_receive(void *offer, const char *mime, int fd);
+void aw_data_offer_destroy(void *offer);
 void *aw_seat_get_keyboard(void *seat);
 
 #endif /* ABYSS_CWAYLAND_H */

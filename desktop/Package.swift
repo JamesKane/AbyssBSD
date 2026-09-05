@@ -420,6 +420,13 @@ let package = Package(
         ),
         // The half that is allowed to look at the machine. Kept out of `Fathom`
         // so the probes stay pure — the same split as `Install`/`InstallRun`.
+        // The clipboard from a shell — a tool, and the vehicle that lets a
+        // script prove copy and paste actually cross a process boundary.
+        .executableTarget(
+            name: "abyssclip",
+            dependencies: ["Surface"],
+            path: "de/abyssclip"
+        ),
         .executableTarget(
             name: "fathom",
             dependencies: ["Fathom", "Vents"],

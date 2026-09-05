@@ -97,6 +97,41 @@ public final class Display {
     weak var activePopup: Popup?
     // Serial of the most recent pointer button event — xdg_popup.grab needs it.
     var lastPointerSerial: UInt32 = 0
+    /// The most recent serial from any input event.
+    ///
+    /// The clipboard needs one: wlroots checks that a `set_selection` quotes a
+    /// serial the client was actually given, which is what stops a program
+    /// taking the clipboard off an input it never received.
+    public var lastInputSerial: UInt32 { lastPointerSerial }
+
+    private var dataDeviceManager: OpaquePointer?
+    /// The clipboard, once both `wl_seat` and `wl_data_device_manager` exist.
+    ///
+    /// nil on a compositor that offers no data device — which is a real case
+    /// and not a crash: an application should degrade to no clipboard rather
+    /// than refuse to start.
+    public private(set) var clipboard: Clipboard?
+
+    private func attachClipboardIfReady() {
+        guard clipboard == nil, let m = dataDeviceManager, let s = seat else { return }
+        clipboard = Clipboard(display: self, manager: m, seat: s)
+    }
+
+    /// Push queued requests to the compositor now.
+    ///
+    /// Ordinarily the run loop does this. The clipboard cannot wait for it: a
+    /// paste asks the *other* client to write into a pipe and then blocks
+    /// reading it, so a request still sitting in libwayland's buffer is a
+    /// deadlock with nothing in any log.
+    public func flush() { wl_display_flush(display) }
+
+    /// Send everything queued and wait for the compositor to answer it.
+    ///
+    /// The constructor already does two of these — globals, then the follow-ups
+    /// they issue. A clipboard reader needs a third: the data device's own
+    /// events, including the selection we may already have been handed, arrive
+    /// only after the device object exists, which is after the second.
+    public func roundtrip() { wl_display_roundtrip(display) }
     // Whether the pointer is currently over the popup surface (vs the window).
     private var pointerOnPopup = false
 
@@ -204,6 +239,13 @@ public final class Display {
             compositor = opt(aw_bind_compositor(raw(registry), name, min(version, 4)))
         case "wl_shm":
             shm = opt(aw_bind_shm(raw(registry), name, 1))
+        case "wl_data_device_manager":
+            // v3 is where drag actions live (P9.3); the selection half works at
+            // any version, and asking for more than the compositor has is an
+            // error rather than a downgrade.
+            dataDeviceManager = opt(aw_bind_data_device_manager(raw(registry), name,
+                                                                min(version, 3)))
+            attachClipboardIfReady()
         case "wl_seat":
             guard let s = opt(aw_bind_seat(raw(registry), name, min(version, 5)))
             else { return }
@@ -216,6 +258,10 @@ public final class Display {
             }
             sl.name = { _, _, _ in }
             addListener(to: s, listener: sl, data: me)
+            // **Either global may arrive first.** The registry advertises in
+            // whatever order the compositor chose, so the clipboard is built
+            // when the second of the two lands rather than from one of them.
+            attachClipboardIfReady()
         case "xdg_wm_base":
             guard let b = opt(aw_bind_xdg_wm_base(raw(registry), name, min(version, 2)))
             else { return }

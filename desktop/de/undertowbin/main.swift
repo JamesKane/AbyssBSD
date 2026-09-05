@@ -425,7 +425,16 @@ case "run":
     var settleFrames = -1
     var earlyCaptured = false
     var drawn = 0
+    // **Report the clipboard as it happens, not only in the summary.** An
+    // unbounded run never reaches the summary — which is the whole point of it —
+    // so a counter that only appears at the end is invisible to exactly the
+    // sessions a person is using. Comparing one Int per frame costs nothing.
+    var reportedSelections = 0
     while unbounded || drawn < frames {
+        if seat.selectionsAccepted != reportedSelections {
+            reportedSelections = seat.selectionsAccepted
+            out("selections-accepted=\(reportedSelections)")
+        }
         drawn += 1
         metronome.step(output: &o, sink: &s, recorder: recorder)
         // Release clients to draw the next frame, and push the events out.
@@ -475,6 +484,10 @@ case "run":
     // created. `missed=0` with `surfaces-created=0` means the adversaries never
     // arrived, which is a passing bench that proves nothing (PHASE6.md P6.5).
     out("surfaces-created=\(compositor.surfacesCreated)")
+    // The positive control for a clipboard test: a paste that matched a stale
+    // selection looks identical to one that worked, unless the compositor says
+    // how many offers it accepted (P9.1).
+    out("selections-accepted=\(seat.selectionsAccepted)")
     out("layers=\(compositor.mappedLayers.count) of \(compositor.layers.count)")
     // The usable area is the ONLY observable proof that an exclusive zone was
     // honoured — a layer surface never appears in a window tree, so §2.26's

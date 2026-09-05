@@ -113,6 +113,11 @@ if [ "$live" -eq 1 ]; then
   sh "$root/abyss/tests/live-sandbox.sh"
   echo "== notifications =="
   sh "$root/abyss/tests/live-notify.sh" >/dev/null
+  # The clipboard: an empty one says so, and a copy with no input behind it is
+  # refused by name (PHASE9 P9.1). Against undertow, because undertow's own
+  # handling is the thing under test.
+  echo "== the clipboard =="
+  sh "$root/abyss/tests/live-clipboard.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   echo "== the screenshot portal =="
