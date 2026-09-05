@@ -350,6 +350,45 @@ final class FathomTests: XCTestCase {
         XCTAssertEqual(probeFrameContract(runOutput: "missed=lots of frames").status, .unknown)
     }
 
+    func testAMissedFrameReportSaysWhichTermAteIt() {
+        // "58 of 300 missed while compositing in 12us" is a true sentence that
+        // sends somebody back to the machine. The margin is four measured terms;
+        // the largest is the answer.
+        let out = """
+        missed=58 of 300
+        composite-p99-us=12
+        period-us=16680
+        margin-wake-us=300
+        margin-cost-us=12
+        margin-commit-us=7000
+        margin-safety-us=400
+        margin-pinned=yes
+        backend=drm
+        vblank-source=hardware
+        """
+        let d = probeFrameContract(runOutput: out).detail
+        XCTAssertTrue(d.contains("display commit"), d)
+        XCTAssertTrue(d.contains("PINNED"), d)
+    }
+
+    func testAPerfectRunSaysNothingAboutMargins() {
+        // The diagnosis is for a machine with a problem. A clean result should
+        // read as a clean result, not as a wall of terms nobody needs.
+        let out = "missed=0 of 300\nmargin-commit-us=7000\nmargin-pinned=yes\nbackend=drm\nvblank-source=hardware"
+        let d = probeFrameContract(runOutput: out).detail
+        XCTAssertFalse(d.contains("dominated"), d)
+        XCTAssertFalse(d.contains("PINNED"), d)
+    }
+
+    func testAPinnedMarginIsDistinguishedFromAMerelyLargeOne() {
+        // A number at its ceiling and a number that happens to be big look
+        // identical without the flag — and they are the difference between
+        // "slow" and "the control loop has given up".
+        let base = "missed=10 of 300\nmargin-commit-us=7000\nbackend=drm\nvblank-source=hardware"
+        XCTAssertFalse(probeFrameContract(runOutput: base + "\nmargin-pinned=no").detail.contains("PINNED"))
+        XCTAssertTrue(probeFrameContract(runOutput: base + "\nmargin-pinned=yes").detail.contains("PINNED"))
+    }
+
     // MARK: - Getting the report off the machine
 
     func testTheFilenameIdentifiesTheMachineAndNotThePerson() {

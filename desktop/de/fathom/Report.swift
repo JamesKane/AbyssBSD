@@ -205,6 +205,29 @@ public func probeFrameContract(runOutput: String?) -> ProbeResult {
     if let cost = fields["composite-p99-us"] { detail += ", composite p99 \(cost)us" }
     if let period = fields["period-us"] { detail += ", period \(period)us" }
 
+    // **When frames are being missed, say which term is eating them.** A report
+    // that says "19% missed" and stops is a report that sends somebody back to
+    // the machine. The margin is `wake + cost + commit + safety`, each measured,
+    // so the largest one is the answer — and `margin-pinned` says whether the
+    // control loop has hit its ceiling, which is the difference between "slow"
+    // and "given up".
+    if missed > 0 {
+        let terms = [("waking late", fields["margin-wake-us"]),
+                     ("compositing", fields["margin-cost-us"]),
+                     ("display commit", fields["margin-commit-us"]),
+                     ("unattributed", fields["margin-safety-us"])]
+            .compactMap { name, v -> (String, Int)? in
+                guard let v, let n = Int(v) else { return nil }
+                return (name, n)
+            }
+        if let worst = terms.max(by: { $0.1 < $1.1 }), worst.1 > 0 {
+            detail += "; margin dominated by \(worst.0) (\(worst.1)us)"
+        }
+        if fields["margin-pinned"] == "yes" {
+            detail += "; MARGIN PINNED AT ITS CEILING, the loop cannot compensate further"
+        }
+    }
+
     // **Whose clock, and not merely whether one was seen.** §2.48: a nested
     // compositor presents when its *host* presents, and passes real timestamps
     // through — so `vblank-source=hardware` is true there and the numbers still

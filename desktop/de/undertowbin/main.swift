@@ -493,6 +493,21 @@ case "run":
     // measured against a real vblank (§2.48). Unlabelled they are
     // indistinguishable, which is how a nominal-clock miss count gets quoted as
     // a hardware result.
+    // **The margin's parts, not just its total.** `margin = wakeHigh + costHigh +
+    // commitHigh + safety`, and P6.1 measured them separately precisely so a
+    // miss could be attributed. Run mode then reported only the sum — which on
+    // the first hardware measurement left "58 of 300 missed while compositing in
+    // 12us" with no way to say which term ate the frame (PHASE4 §5.7).
+    //
+    // `margin-pinned` is the one that matters most: the margin is clamped to
+    // three quarters of a period, so a loop that wants more than that is a loop
+    // that has given up and will miss for ever. A number at its ceiling and a
+    // number that happens to be large look identical without this.
+    out("margin-wake-us=\(metronome.margin.wakeHighNs / 1000)")
+    out("margin-cost-us=\(metronome.margin.costHighNs / 1000)")
+    out("margin-commit-us=\(metronome.margin.commitHighNs / 1000)")
+    out("margin-safety-us=\(metronome.margin.safetyNs / 1000)")
+    out("margin-pinned=\(metronome.margin.marginNs >= metronome.margin.ceilNs ? "yes" : "no")")
     out("period-us=\(output.periodHintNs / 1000)")
     out("vblank-source=\(output.sawHardwareClock ? "hardware" : "nominal")")
     // And **whose** clock, which `vblank-source` alone cannot say: a nested

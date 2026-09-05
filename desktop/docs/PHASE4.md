@@ -541,6 +541,71 @@ The session's restart was `anchor` doing its job correctly on a child that exite
 cannot tell a clean exit from a premature one, so the thing that must be right is
 what the child considers "done".
 
+### 5.7 P4.5: the first C1 measurement against a real vblank, and it does not hold
+
+`fathom --measure --save` ran on the 12700KF, wrote its report to the stick's
+ESP, and the stick was read on another machine. **That is the whole retrieval
+path the matrix depends on, working on the first attempt** — and it produced this:
+
+```
+Machine         [ok]  Micro-Star International Co., Ltd. MS-7D25
+CPU             [ok]  12th Gen Intel(R) Core(TM) i7-12700KF (20 cores)
+Memory          [ok]  127.8 GiB
+Boot            [ok]  UEFI
+Modules         [ok]  amdgpu, drm loaded
+GPU             [ok]  card0 (+ renderD128)
+Network         [ok]  igc0
+Audio           [ok]  pcm0 ... pcm7
+Frame contract  [ok]  58 of 300 missed (193 per mille), composite p99 12us,
+                      period 16680us [hardware clock, DRM]
+9 present, 2 absent
+```
+
+Everything above the last line is good news, some of it new: **UEFI** is the boot
+path the build VM cannot produce, and **eight audio devices** are the first sound
+hardware this project has ever seen — the volume status item has reported "no
+mixer" since P3.7.
+
+**The last line is the phase's real result, and it is a failure.**
+
+> **We do not hold the frame contract on real hardware.** 58 of 300 frames
+> missed — 19.3% — while compositing in **12 microseconds** against a **16.68 ms**
+> period. The work is 0.07% of the budget and one frame in five is late.
+
+Two things follow immediately:
+
+- **The period confirms the display fix.** 16680 µs is 59.95 Hz: the panel is
+  60 Hz, exactly as §5.4 predicted once `--hz` stopped being believed. Every
+  earlier number labelled 240 Hz was mislabelled.
+- **PHASE6's C1–C5 are no longer provisional; they are known not to transfer.**
+  They were measured against a synthetic clock where a frame presents the instant
+  it is committed. On a real one, they do not hold.
+
+**This is what P4.5 existed to find**, and it is worth being plain that finding it
+is the pass succeeding rather than the compositor failing: nothing before this
+could have discovered it, because nothing before this had a vblank we did not
+invent.
+
+**What the numbers already rule out.** Compositing is not the problem at 12 µs,
+and neither is the scene. The margin is the sum of four separately measured
+terms — `wake + cost + commit + safety` (P6.1) — and `cost` is the one we know is
+tiny. The earlier pixman run showed `margin-us=8000` against a 16.68 ms period,
+which is the margin **clamped at its ceiling**: `min(8 ms, ¾ × period)`. A control
+loop pinned at its ceiling is one that has asked for more than it is allowed and
+will keep missing.
+
+So run mode now reports the parts rather than the sum — `margin-wake-us`,
+`margin-cost-us`, `margin-commit-us`, `margin-safety-us`, and `margin-pinned` —
+and `probeFrameContract` names the dominant term in the report itself. "19% missed"
+is a true sentence that sends somebody back to the machine; "19% missed, margin
+dominated by display commit, PINNED AT ITS CEILING" is a diagnosis.
+
+**The hypothesis to test next, stated so it can be wrong:** `commitHigh`
+dominates, because `wlr_output_commit` on DRM is costing milliseconds rather than
+microseconds. If so the fixes are ordered — `rtprio` for the present thread
+(already scoped in this phase and never applied), then the margin ceiling, which
+is a config constant chosen when every clock was synthetic.
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the
