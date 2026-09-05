@@ -37,7 +37,11 @@ running that desktop — all of it proven by `abyss/tests/run.sh --vm --live` on
 both platforms, with no hardware and no human in the loop.
 
 What is left is the hardware: **Phase 4**, whose verification needs a Mac Pro
-that no test can reach. See [PHASE4.md](PHASE4.md) §5 — an ordered bring-up
+that no test can reach. What is left *after* it is not on this roadmap at all —
+[PRODUCT.md](PRODUCT.md) is the forward note that says why: this tree is engine
+and shell, its application layer is two programs, and the five theses that decide
+what fills it (GUI over TUI, WIMP over tiling, traditional window management,
+jailed agents, and hardware breadth) are written down there with the gap map. See [PHASE4.md](PHASE4.md) §5 — an ordered bring-up
 checklist — and note that **every C1–C5 number in [PHASE6.md](PHASE6.md) is
 provisional** until it is re-measured against a real vblank.
 
@@ -53,12 +57,28 @@ provisional** until it is re-measured against a real vblank.
    as on Linux, both being in ports. The hard part stays hard: the allocation-free
    real-time present path is where ARC is a genuine risk, and it is the one place
    we'd reach for Embedded Swift or a C shim (risk 4 below).
-2. **Aqua fidelity: faithful 10.2 clone.** Pinstripes, lickable gel buttons,
-   traffic-light controls, the magnifying Dock, Apple menu, pinstriped menu
-   bar. The 512pixels Aqua screenshot library is the spec. (Brushed metal is
-   deliberately out of scope — it only became a widespread window texture in
-   Panther/Tiger; Jaguar used it sparingly and the era-faithful default is the
-   pinstriped/white Aqua window.)
+2. **Aqua fidelity: 10.2 is an *aesthetic* target, not a functional one.**
+   Pinstripes, lickable gel buttons, traffic-light controls, the magnifying
+   Dock, Apple menu, pinstriped menu bar. The 512pixels Aqua screenshot library
+   is the spec — for how things *look*, not for what the system is allowed to
+   *do*. The version number names a visual language we are cloning, not a
+   feature set we are frozen at: capabilities 10.2 never had are in scope
+   provided they are drawn in this vocabulary (PRODUCT.md §7.5).
+
+   **Brushed metal is out, and its successors with it — Leopard's dark unified
+   title bars, Lion-era skeuomorphism, the flattening from Yosemite onward —
+   because they are ugly.** That is the whole reason and it needs no other.
+
+   **And 10.2 is the *default*, not a limit compiled into the toolkit.** Nothing
+   in the architecture may prevent a user adopting a 90s retro-cyberpunk theme
+   or a GPU-effects extravaganza; we simply do not ship those, curate them, or
+   maintain a catalogue of them. **The theme system is therefore a must-have**,
+   and PRODUCT.md §8 is its architecture: tokens and widget drawing as *data*
+   (never a loadable dylib, which would put third-party code in every app
+   process and contradict everything Phase 7 was for), compositor effects
+   arbitrated against the C1 frame budget rather than offered as a checkbox, and
+   the shipped Aqua theme expressed in the theme format itself so the format
+   cannot quietly be inadequate.
 3. **Dev platform: Linux-first, then port.** Swift 6 is first-class on Linux; build the
    toolkit + shell on this workstation against a stock wlroots compositor (sway/labwc)
    for fast iteration, then bring Swift up on FreeBSD and run the same way there.

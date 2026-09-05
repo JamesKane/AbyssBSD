@@ -7,8 +7,9 @@
 // pill hides the toolbar, and that is exactly what turns it **spatial**: each
 // folder then gets its own window, and re-opening a folder that already has one
 // raises it (via xdg-activation) instead of making a second. Both modes live
-// here, switched by `toolbarVisible`. (Brushed metal arrived with 10.3; Jaguar's
-// Finder is standard Aqua, which is why this reuses paintWindowChrome.) The Rust
+// here, switched by `toolbarVisible`. (This reuses `paintWindowChrome` because the
+// pinstriped/white Aqua window is the only window we ship — brushed metal and
+// every successor texture are excluded on taste. PLAN.md decision 2.) The Rust
 // sibling's `reef-fm` was spatial-only and GNOME-2 flavoured, so only its
 // structure carries over, not its behaviour.
 //
