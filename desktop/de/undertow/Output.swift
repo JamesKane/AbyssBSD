@@ -122,3 +122,25 @@ public func displayHz(refreshMilliHz: Int32, fallback: UInt64) -> UInt64 {
     // a 60 Hz display everywhere except in a truncation.
     return UInt64((Int64(refreshMilliHz) + 500) / 1000)
 }
+
+/// Whether a run has no frame limit.
+///
+/// **Zero is the honest spelling of "no limit".** A desktop runs until it is
+/// stopped; a bench runs a fixed count and reports. Until P4.4 this binary only
+/// ever did the second, so the distinction had no name and the default of 1200
+/// frames silently applied to a live session — which on metal is the installer
+/// disappearing after thirty seconds and being restarted (PHASE4 §5.6).
+///
+/// Pure and here rather than inline in the argument parser, so the rule is
+/// somewhere a test can reach.
+public func runIsUnbounded(frames: Int) -> Bool { frames == 0 }
+
+/// How many frames of history an unbounded run should keep.
+///
+/// Sizing from the frame count gives 1 when there is no count, which answers
+/// nothing; growing without bound leaks in a process meant to run for days. Ten
+/// seconds at 240 Hz is enough to say what just happened and small enough to
+/// forget.
+public func recorderCapacity(frames: Int) -> Int {
+    runIsUnbounded(frames: frames) ? 2400 : max(frames, 1)
+}

@@ -336,8 +336,13 @@ mkdir -p "$ABYSS_RUNTIME_DIR" && chmod 700 "$ABYSS_RUNTIME_DIR"
 sock="${ABYSS_WAYLAND_SOCKET:-abyss-0}"
 mode="${ABYSS_SESSION_MODE:-desktop}"
 frames="${ABYSS_SESSION_FRAMES:-0}"
-limit=""
-[ "$frames" = 0 ] || limit="--frames $frames"
+# **Zero is passed through, not dropped.** It used to mean "omit the flag", which
+# handed undertow its *default* of 1200 frames — so the live session ran for
+# about thirty seconds, exited normally, and `anchor` restarted it. On the build
+# VM that is invisible: the harness always asks for a frame count. On a machine
+# with a person in front of it, it is the installer vanishing mid-sentence
+# (PHASE4 §5.6). `--frames 0` now means "until stopped".
+limit="--frames $frames"
 
 # **Use the display if there is one.**
 #

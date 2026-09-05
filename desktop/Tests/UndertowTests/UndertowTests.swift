@@ -32,6 +32,31 @@ private func ensureRuntimeDir() {
 
 final class UndertowTests: XCTestCase {
 
+    // MARK: - A desktop is not a bench with a large number in it
+
+    func testAFrameLimitIsOptionalAndZeroMeansUntilStopped() {
+        // Every use of `undertow` in this project's history was a bench or a
+        // fixed-count test, so a frame limit was always right and the default of
+        // 1200 was never questioned. On metal the installer appeared, ran out
+        // its frames after ~30 seconds, exited normally, and `anchor` restarted
+        // it — a session ending on a *success* path (PHASE4 §5.6).
+        //
+        // The rule as a pure function, so it is pinned somewhere a test can see
+        // it rather than only in an argument parser.
+        XCTAssertTrue(runIsUnbounded(frames: 0))
+        XCTAssertFalse(runIsUnbounded(frames: 1))
+        XCTAssertFalse(runIsUnbounded(frames: 1200))
+    }
+
+    func testAnUnboundedRunKeepsARollingWindowRatherThanNoneOrAllOfIt() {
+        // Sizing the recorder from the frame count gives 1 for an unbounded run,
+        // which answers no question at all; growing it without bound is a leak
+        // in a process meant to run for days.
+        XCTAssertEqual(recorderCapacity(frames: 0), 2400)
+        XCTAssertEqual(recorderCapacity(frames: 300), 300)
+        XCTAssertEqual(recorderCapacity(frames: 1), 1)
+    }
+
     // MARK: - The display's rate is the truth, not the flag
 
     func testTheRefreshRateComesFromTheDisplay() {

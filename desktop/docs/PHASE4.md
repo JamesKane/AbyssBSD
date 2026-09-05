@@ -497,6 +497,50 @@ against the medium's own tree; because client extensions need no device, **the
 build VM runs it with no GPU**, and pointing it at an empty vendor directory
 reproduces the metal failure exactly. HANDOFF §2.54.
 
+### 5.6 Step 5: the installer, on metal — and a desktop is not a bench
+
+**The Aqua installer came up on the RX 6750 XT.** Jaguar blue, the boot volume on
+the desktop, the hub with Keyboard / Installation Disk / Date & Time / User
+Account, and *Still to do: installation disk, user account.* along the bottom.
+That is [§5](PHASE4.md)'s step 5 — **the phase's first real deliverable, and the
+first time any of this has been seen on hardware.**
+
+Steps 1–5 now pass. The EGL vendor chain (§5.5) was the last thing between the
+compositor and a picture.
+
+**Then it exited after about thirty seconds and `anchor` restarted it.**
+
+The cause is a default nobody had ever had reason to question. `undertow run`
+takes `--frames`, and its default is 1200 — because **every use of this binary in
+the project's history has been a bench or a fixed-count test.** A frame limit was
+always right, so "no limit" had no spelling. `abyss-session` did try: it treats
+`ABYSS_SESSION_FRAMES=0` as "omit the flag", which handed undertow the default
+instead of unbounding it.
+
+On the build VM this is invisible, and not by luck — the harness always asks for
+a frame count, because an assertion needs a run that ends. On a machine with a
+person in front of it, it is the installer vanishing mid-sentence.
+
+> **A desktop is not a bench with a large number in it.** `--frames 0` now means
+> *until stopped*, `abyss-session` passes it through, and the rule lives in
+> `runIsUnbounded(frames:)` where a test can reach it rather than only in an
+> argument parser.
+
+Three things fell out of doing it properly, all of them the same instinct:
+
+- **An unbounded run keeps a rolling window**, not one frame and not all of them.
+  Sizing the recorder from the frame count gives 1 when there is no count, which
+  answers nothing; growing it forever leaks in a process meant to run for days.
+- **`--assert-*` with `--frames 0` is refused.** Every assertion is checked after
+  the loop, so on an unbounded run it would sit in a command line looking like a
+  gate and gating nothing — §2.37's shape, in the arguments rather than the code.
+- **`--capture` likewise**, since an unbounded run never reaches the end.
+
+The session's restart was `anchor` doing its job correctly on a child that exited
+**successfully**. Worth noting for the login-window work (§6.5): a supervisor
+cannot tell a clean exit from a premature one, so the thing that must be right is
+what the child considers "done".
+
 ### 5.2 The refusal that a live medium needs and nothing else does
 
 Checking whether the medium was safe to boot turned up something worse than the

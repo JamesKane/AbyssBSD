@@ -116,7 +116,31 @@ while i < args.count {
     }
     i += 1
 }
-guard hz > 0, frames > 0, surfaces >= 0 else { die("--hz/--frames must be positive") }
+// **`--frames 0` means run until stopped, and until now there was no such
+// thing.** Every use of this binary in the project's history has been a bench or
+// a fixed-count test, so a frame limit was always right and the default of 1200
+// was never questioned. On a real machine in front of a person it is wrong: the
+// compositor ran, the installer appeared, and thirty seconds later the loop ran
+// out and `anchor` dutifully restarted it (PHASE4 §5.6).
+//
+// A desktop is not a bench with a large number in it. Zero is the honest
+// spelling of "no limit", and it stays opt-in so every harness invocation keeps
+// the bounded behaviour its assertions depend on.
+guard hz > 0, frames >= 0, surfaces >= 0 else { die("--hz must be positive, --frames must not be negative") }
+let unbounded = runIsUnbounded(frames: frames)
+// **An assertion that never runs is worse than no assertion**, and every
+// `--assert-*` here is checked after the loop. Combined with an unbounded run
+// they would sit in a command line looking like a gate and gating nothing —
+// §2.37's shape, in the arguments rather than in the code.
+if unbounded {
+    let asserts = args.filter { $0.hasPrefix("--assert-") }
+    if !asserts.isEmpty {
+        die("\(asserts[0]) needs a frame count: an assertion after an unbounded run never runs")
+    }
+    if capturePath != nil || captureEarlyPath != nil {
+        die("--capture needs a frame count: an unbounded run never reaches the end")
+    }
+}
 let periodNs = 1_000_000_000 / hz
 
 /// ns → "1234.56 us". No Foundation here, as everywhere else under de/.
@@ -255,7 +279,7 @@ case "headless":
 
     // Same warmup argument as the synthetic bench: the margin control loop
     // discovers the backend's real commit latency by missing once or twice.
-    let warmup = min(max(frames / 8, 16), 240)
+    let warmup = unbounded ? 240 : min(max(frames / 8, 16), 240)
     var o = output
     metronome.run(frames: warmup, output: &o, sink: &scene,
                   recorder: FlightRecorder(capacity: warmup))
@@ -373,7 +397,11 @@ case "run":
          + " (period \(us(output.periodHintNs)))"
          + " on \(compositor.socketName)")
 
-    let recorder = FlightRecorder(capacity: max(frames, 1))
+    // An unbounded session cannot size its recorder from a frame count, and must
+    // not grow one without bound either — so it keeps a rolling window. Ten
+    // seconds at 240Hz is enough to answer "what just happened" and small enough
+    // to forget.
+    let recorder = FlightRecorder(capacity: recorderCapacity(frames: frames))
     var metronome = Metronome<WlrootsOutput, SurfaceScene>(periodHintNs: output.periodHintNs)
     var o = output
     var s = scene
@@ -384,7 +412,7 @@ case "run":
     // the first frames of the process's life rather than its behaviour under
     // load. With this, a healthy baseline is exactly zero missed frames, which
     // is what lets the C2 gate be a flat zero rather than a tolerance.
-    let warmup = min(max(frames / 8, 16), 240)
+    let warmup = unbounded ? 240 : min(max(frames / 8, 16), 240)
     let warmupRecorder = FlightRecorder(capacity: warmup)
     for _ in 0..<warmup {
         metronome.step(output: &o, sink: &s, recorder: warmupRecorder)
@@ -396,7 +424,9 @@ case "run":
     // usually work (HANDOFF §2.31's lesson about racing startup, one level up).
     var settleFrames = -1
     var earlyCaptured = false
-    for _ in 0..<frames {
+    var drawn = 0
+    while unbounded || drawn < frames {
+        drawn += 1
         metronome.step(output: &o, sink: &s, recorder: recorder)
         // Release clients to draw the next frame, and push the events out.
         // Without this a client renders once and waits for ever.
