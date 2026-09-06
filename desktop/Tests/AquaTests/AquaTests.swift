@@ -1032,6 +1032,51 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(finderCopyName("Documents", exists: exists), "Documents copy")
     }
 
+    // MARK: - What a drop contains (P9.3)
+
+    func testDroppedPathTakesTheFirstURI() {
+        let list = "file:///home/me/Read%20Me.txt\r\nfile:///home/me/second.txt\r\n"
+        XCTAssertEqual(finderDroppedPath(Array(list.utf8)), "/home/me/Read Me.txt")
+    }
+
+    func testDroppedPathSkipsCommentsAndBlanks() {
+        // RFC 2483: a line starting with '#' is a comment, not a URI.
+        let list = "# comment\r\n\r\n   file:///tmp/x   \r\n"
+        XCTAssertEqual(finderDroppedPath(Array(list.utf8)), "/tmp/x")
+    }
+
+    func testDroppedPathAcceptsABarePath() {
+        // Some sources send text/plain with no scheme; that is still a path.
+        XCTAssertEqual(finderDroppedPath(Array("/tmp/plain".utf8)), "/tmp/plain")
+    }
+
+    func testDroppedPathRefusesWhatIsNotLocal() {
+        XCTAssertNil(finderDroppedPath(Array("http://example.com/x".utf8)))
+        XCTAssertNil(finderDroppedPath(Array("file://otherbox/tmp/x".utf8)))
+        XCTAssertNil(finderDroppedPath(Array("".utf8)))
+        // localhost is this machine, and is spelled out in the RFC.
+        XCTAssertEqual(finderDroppedPath(Array("file://localhost/tmp/x".utf8)), "/tmp/x")
+    }
+
+    func testFileURIRoundTrip() {
+        // A space and a non-ASCII name — the two things a raw path gets wrong.
+        let path = "/home/me/Caf\u{e9} Notes/Read Me.txt"
+        let uri = finderFileURI(path)
+        XCTAssertEqual(uri, "file:///home/me/Caf%C3%A9%20Notes/Read%20Me.txt")
+        XCTAssertEqual(finderDroppedPath(Array(uri.utf8)), path)
+        // Slashes stay slashes, or the URI names a different file.
+        XCTAssertEqual(finderFileURI("/a/b"), "file:///a/b")
+    }
+
+    func testPercentDecoding() {
+        XCTAssertEqual(finderPercentDecode("/a%20b%2Fc"), "/a b/c")
+        XCTAssertEqual(finderPercentDecode("/caf%C3%A9"), "/caf\u{e9}")
+        XCTAssertEqual(finderPercentDecode("/plain"), "/plain")
+        // A truncated or malformed escape is a path we cannot read exactly.
+        XCTAssertNil(finderPercentDecode("/a%2"))
+        XCTAssertNil(finderPercentDecode("/a%zz"))
+    }
+
     func testFinderPasteNameOnlyRenamesOnCollision() {
         let taken: Set<String> = ["Read Me.txt"]
         func exists(_ n: String) -> Bool { taken.contains(n) }

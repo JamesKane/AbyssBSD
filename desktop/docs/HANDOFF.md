@@ -607,6 +607,72 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.57 `wl_proxy_destroy` tells the compositor nothing
+(P9.3. A drop that vanished, traced back to every window this project has closed.)
+
+A file dragged onto the Dock arrived. The next one, dragged after a window had
+been closed, did not — and neither did a click. The Dock was alive, it held its
+layer surface, and the pointer was over a tile. undertow's hit-test said why:
+
+```
+HIT 540,550 -> toplevel Documents @164,300 520x400 (tops=2 layers=1)
+```
+
+The Finder had closed that window. `Surface.Window.close()` destroyed the local
+proxies with `aw_proxy_destroy` — and **`wl_proxy_destroy` sends no request**.
+The destructor request lives in the generated per-interface function
+(`xdg_toplevel_destroy`, `wl_surface_destroy`), so freeing the proxy frees *our*
+handle and leaves the compositor's object mapped, buffered and hit-testable for
+the rest of the connection. Every window, popup and layer surface this project
+has ever closed has leaked one, and each left a rectangle of dead screen that
+swallowed clicks into a window nobody could see.
+
+Nothing could observe it from either side. The client is right that the window
+is gone; the compositor is right that nothing asked it to let go. And every
+close test ever written asked the *client* whether it had closed the window —
+`Finder: closed … (1 open)`, a tree count taken before the close — so all of
+them passed.
+
+The fix is three one-line wrappers (`aw_surface_destroy`,
+`aw_xdg_surface_destroy`, `aw_xdg_toplevel_destroy`; popups and layer surfaces
+already had theirs and used them for the role object only). The rule is the
+general one: **`wl_proxy_destroy` is for objects with no destructor request.
+Everything else has one, and not sending it is a leak on the other side of the
+socket.** The regression test is `live-dnd.sh` dropping on a Dock tile that sits
+exactly where a closed window used to be.
+
+### 2.56 A surface the pointer cannot reach is not a drop target
+(P9.3, found while the file kept falling through the Trash.)
+
+undertow's pointer routing searched `mappedToplevels` and stopped. Layer
+surfaces — the Dock, the menu bar, the desktop, everything the *shell itself*
+draws — were never in the hit-test, so under our own compositor none of them
+could be clicked, hovered or dropped on. Nothing had noticed because every test
+that clicks the Dock runs on **sway** (`live-sway.sh` and all 35 modes of
+`run-live.sh`), which routes them correctly. The compositor under test was the
+one component the Dock tests never exercised: §2.37's shape again, a probe that
+only ever ran against the positive control.
+
+Routing is the protocol's own order — overlay and top above the windows, bottom
+and background below them — and a click on a layer surface must **not** take
+keyboard focus, which is what `keyboard_interactivity: none` asks for.
+
+### 2.55 A drag that ends where it started is one process asking itself
+(P9.3. §2.45's deadlock, reached by the other door.)
+
+`ownsSelection` exists because a client that reads a selection it owns blocks
+the event loop that would have delivered its own `send`. Drag and drop has the
+identical hazard and a much more ordinary trigger: **drag a file from one window
+to another window of the same application.** The drop handler pipes, calls
+`receive`, and reads to EOF — from itself. The Finder hung with `dragging …` as
+its last line.
+
+Same fix, same reason: if the drag source is ours, the bytes are already in
+hand — hand them to the drop callback and finish the offer without the pipe. The
+lesson is worth stating once for the whole protocol family: **any Wayland
+transfer where this process is both ends must short-circuit, because the
+"transfer" is a request for an event only our own blocked loop could deliver.**
+
 ### 2.54 Present is not resolved — carry the whole plugin chain, then prove it
 (Third metal boot, `--verbose`. The one that finally named the link.)
 

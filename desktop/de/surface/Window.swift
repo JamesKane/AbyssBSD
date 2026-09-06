@@ -114,7 +114,12 @@ final class ShmBuffer {
 
 public final class Window {
     let display: Display
-    let surface: OpaquePointer
+    /// The `wl_surface` this window draws on.
+    ///
+    /// Public because a drag has to name the surface it started from — the
+    /// compositor validates the press against *that* surface, so an application
+    /// cannot start a drag on somebody else's window.
+    public let surface: OpaquePointer
     let xdgSurface: OpaquePointer
     let xdgToplevel: OpaquePointer
 
@@ -216,9 +221,17 @@ public final class Window {
         display.unregister(window: self)
         for b in buffers { b.destroy() }
         buffers.removeAll()
-        aw_proxy_destroy(raw(xdgToplevel))
-        aw_proxy_destroy(raw(xdgSurface))
-        aw_proxy_destroy(raw(surface))
+        // **The destructor requests, not `wl_proxy_destroy`.** Freeing the
+        // local proxy tells the compositor nothing: the surface stays mapped
+        // there for ever, keeps its buffer, and goes on swallowing every click
+        // and every drag that lands in the rectangle where the window used to
+        // be. Nothing in the client can see it — the window is gone here — and
+        // the compositor is behaving correctly, which is why this survived
+        // every close test the project has: they all asked whether the client
+        // closed the window (P9.3).
+        aw_xdg_toplevel_destroy(raw(xdgToplevel))
+        aw_xdg_surface_destroy(raw(xdgSurface))
+        aw_surface_destroy(raw(surface))
         wl_display_flush(display.display)
     }
 

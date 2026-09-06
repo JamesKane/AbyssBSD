@@ -646,7 +646,7 @@ public func finderTypeSelect(_ entries: [FinderEntry], prefix: String,
 /// normally one window that navigates in place; in spatial mode each folder gets
 /// its own, and asking for a folder that already has one raises it.
 public final class FinderApp {
-    private let display: Display
+    let display: Display
     private var windows: [FinderWindow] = []
     private let width: Int32
     private let height: Int32
@@ -680,7 +680,7 @@ public final class FinderApp {
             // The serial comes from the ⌘C that caused this — see
             // `Display.lastInputSerial`. A copy nobody asked for has no serial
             // and is refused, which is the protocol's guard and not ours.
-            let uri = "file://" + path
+            let uri = finderFileURI(path)
             let ok = clip.write(Array(uri.utf8),
                                 types: [ClipboardMIME.uriList, ClipboardMIME.text])
             FinderWindow.log("\(cut ? "cut" : "copied") \(path)"
@@ -708,14 +708,10 @@ public final class FinderApp {
         if display.clipboard?.ownsSelection == true { return clipboard }
         if let r = display.clipboard?.read(preferring: [ClipboardMIME.uriList,
                                                         ClipboardMIME.text]) {
-            var s = String(decoding: r.bytes, as: UTF8.self)
-            // A uri-list may carry several lines and CRLF endings; the Finder
-            // pastes one thing, so take the first and be forgiving about it.
-            if let nl = s.firstIndex(where: { $0 == "\n" || $0 == "\r" }) {
-                s = String(s[s.startIndex..<nl])
-            }
-            if s.hasPrefix("file://") { s = String(s.dropFirst("file://".count)) }
-            if s.hasPrefix("/") {
+            // The same parser a drop uses: a uri-list may carry several lines
+            // and CRLF endings, and its entries are percent-encoded, so the
+            // Finder takes the first and decodes it (`finderDroppedPath`).
+            if let s = finderDroppedPath(r.bytes) {
                 // Ours, if it is the same path — so a cut we made stays a cut.
                 if let c = clipboard, c.path == s { return c }
                 return (s, false)
@@ -757,7 +753,30 @@ public final class FinderApp {
                                        width: width, height: height)
         else { return false }
         windows.append(first)
+        acceptDrops()
         return true
+    }
+
+    /// Take files dropped on any of our windows.
+    ///
+    /// **One handler for the application, not one per window**, because the
+    /// clipboard belongs to the connection: `wl_data_device` is per seat, and
+    /// the drop event says *where* it landed rather than *which window* took it.
+    /// The window is found from the `wl_surface` the drag entered — see
+    /// `Clipboard.dragSurface` for why the pointer cannot answer this.
+    private func acceptDrops() {
+        guard let clip = display.clipboard else { return }
+        clip.acceptedDragTypes = [ClipboardMIME.uriList, ClipboardMIME.text]
+        clip.onDrop = { [weak self] _, bytes, _, _ in
+            guard let self else { return }
+            guard let s = finderDroppedPath(bytes), finderExists(s) else { return }
+            // The window the drag was over is the one that was dropped on. A
+            // drop on a surface that is not one of our windows is not ours.
+            let surf = clip.dragSurface
+            guard let target = self.windows.first(where: { $0.surface == surf })
+            else { return }
+            target.receiveDrop(of: s)
+        }
     }
 
     /// Open (or raise) a window for `path` — what the Desktop calls when an icon
@@ -820,6 +839,10 @@ public final class FinderWindow: WindowDelegate {
     private var pointerX = 0.0
     private var pointerY = 0.0
     private var draggingThumb = false
+    /// The row a press landed on, until it becomes a click or a drag.
+    private var pressedRow: Int?
+    private var pressAtX = 0.0
+    private var pressAtY = 0.0
     private var thumbGrabDy = 0.0
     private var backPressed = false
     private var lastClickIndex: Int?
@@ -1190,6 +1213,31 @@ public final class FinderWindow: WindowDelegate {
             dragThumb(to: y - thumbGrabDy)
             window?.setNeedsDisplay()
         }
+        // **A drag begins when a press turns into movement**, not when the
+        // button goes down: a click that happens to wobble by a pixel is still
+        // a click, and starting a drag on every press would make selecting a
+        // file impossible. Four pixels is the usual threshold and is far enough
+        // that nobody reaches it by accident.
+        if let idx = pressedRow, !draggingThumb {
+            let dx = x - pressAtX, dy = y - pressAtY
+            if dx * dx + dy * dy > 16 { beginDrag(of: idx) }
+        }
+    }
+
+    /// Hand a file to the rest of the desktop.
+    private func beginDrag(of index: Int) {
+        pressedRow = nil                       // one drag per press
+        guard entries.indices.contains(index), let surface = window?.surface,
+              let clip = app?.display.clipboard else { return }
+        let path = finderJoin(directory, entries[index].name)
+        let uri = finderFileURI(path)
+        // The serial is the pointer press that started this — the compositor
+        // checks it (`validate_pointer_grab_serial`), which is what stops a
+        // program starting a drag nobody initiated.
+        let ok = clip.startDrag(Array(uri.utf8), from: surface,
+                                serial: app?.display.lastPointerSerial ?? 0,
+                                types: [ClipboardMIME.uriList, ClipboardMIME.text])
+        FinderWindow.log(ok ? "dragging \(path)" : "could not start a drag of \(path)")
     }
 
     private func dragThumb(to thumbTopY: Double) {
@@ -1213,6 +1261,7 @@ public final class FinderWindow: WindowDelegate {
         if pressed, edit != nil { commitRename() }
         guard pressed else {
             draggingThumb = false
+            pressedRow = nil
             if backPressed {
                 backPressed = false
                 if layout.backButton.contains(pointerX, pointerY) { goBack() }
@@ -1274,11 +1323,31 @@ public final class FinderWindow: WindowDelegate {
                 activate(hit)
             } else {
                 select(hit)
+                // Armed, not started: `pointerMoved` decides whether this press
+                // was a click or the beginning of a drag.
+                pressedRow = hit
+                pressAtX = pointerX
+                pressAtY = pointerY
             }
         } else {
             lastClickIndex = nil
             select(nil)                 // click in empty space deselects
         }
+    }
+
+    /// This window's `wl_surface` — how a drop is matched back to a window.
+    var surface: OpaquePointer? { window?.surface }
+
+    /// A file was dropped here: copy it in, exactly as ⌘V would.
+    func receiveDrop(of path: String) {
+        let name = finderPasteName(finderDisplayName(path), exists: exists)
+        let dest = finderJoin(directory, name)
+        guard finderCopyPath(from: path, to: dest) else {
+            FinderWindow.log("drop failed: \(path) -> \(dest)")
+            return
+        }
+        FinderWindow.log("dropped \(path) -> \(dest)")
+        app?.refreshWindows(showing: directory, selecting: name) ?? refresh(selecting: name)
     }
 
     public func windowShouldClose(_ window: Window) {

@@ -386,6 +386,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
                 self?.trashChanged()
             }
         }
+
+        acceptDrops(display)
     }
 
     private func trashChanged() {
@@ -412,6 +414,85 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
 
     /// Recompute the displayed tiles (pinned + running-unpinned + Trash) and
     /// which have a running indicator.
+    // MARK: - Drops (P9.3)
+
+    /// Take files dragged onto a tile.
+    ///
+    /// The Dock is a second client, so a file dragged out of the Finder and onto
+    /// the Trash crosses a process boundary — which is the point: this is the
+    /// protocol doing the work, not one program's internal bookkeeping.
+    ///
+    /// **A drag is a grab, so the pointer events stop for its duration.** The
+    /// magnification and the hit-test both read `pointerX`/`pointerY`, so the
+    /// drag's own motion is fed into them: the tiles swell under the dragged
+    /// file exactly as they do under the cursor, and the tile that takes the
+    /// drop is the one the person watched grow.
+    private func acceptDrops(_ display: Display) {
+        guard let clip = display.clipboard else {
+            Dock.log("no data device — drops are off")
+            return
+        }
+        clip.acceptedDragTypes = [ClipboardMIME.uriList, ClipboardMIME.text]
+        clip.onDragMotion = { [weak self] x, y in
+            guard let self, clip.dragSurface == self.layer?.surface else { return }
+            self.pointerMoved(x: x, y: y)
+        }
+        clip.onDragLeave = { [weak self] in self?.pointerLeft() }
+        clip.onDrop = { [weak self] _, bytes, x, y in
+            guard let self, clip.dragSurface == self.layer?.surface else { return }
+            guard let path = finderDroppedPath(bytes), finderExists(path) else { return }
+            guard let (i, _) = self.tile(at: x, y) else {
+                Dock.log("dropped \(path) on no tile")
+                return
+            }
+            self.dropped(path, on: self.displayItems[i])
+        }
+    }
+
+    /// The tile under a point, using the frames the last paint actually drew —
+    /// magnified tiles are not where the unmagnified layout says they are.
+    private func tile(at x: Double, _ y: Double) -> (Int, DockTileFrame)? {
+        let h = Double(layer?.size.height ?? 0)
+        let iconBottom = h - DockMetrics.bottomMargin - DockMetrics.panelPadV
+        for (i, f) in frames.enumerated() {
+            let rect = Rect(f.centerX - f.size / 2, iconBottom - f.size, f.size, f.size)
+            if x >= rect.x, x <= rect.x + rect.w, y >= rect.y, y <= rect.y + rect.h {
+                return (i, f)
+            }
+        }
+        return nil
+    }
+
+    /// What a tile does with a file dropped on it.
+    ///
+    /// The Trash takes anything. An application tile opens the document with
+    /// that application — and the Finder is the only application here that can
+    /// open anything yet, so every other tile says so rather than swallowing
+    /// the drop and doing nothing, which is the worse of the two failures.
+    private func dropped(_ path: String, on item: DockItem) {
+        if item.isTrash {
+            guard let dest = finderMoveToTrash(path) else {
+                Dock.log("could not throw away \(path)")
+                return
+            }
+            Dock.log("threw away \(path) -> \(dest)")
+            trashChanged()          // the watcher will also fire; this is idempotent
+            return
+        }
+        guard item.appID == "org.abyssbsd.finder", let exe = Launcher.selfExecutable() else {
+            Dock.log("\(item.label) does not open documents")
+            return
+        }
+        // A folder opens itself; a file opens the folder it lives in.
+        let dir = finderIsDirectory(path) ? path : (finderParent(path) ?? path)
+        if Launcher.launchDetached([exe], extraEnv: ["AQUA_SCENE": "finder",
+                                                     "ABYSS_FINDER_DIR": dir]) {
+            Dock.log("opened \(dir) for \(path)")
+        } else {
+            Dock.log("failed to open \(dir)")
+        }
+    }
+
     private func rebuild() {
         let runningIDs = Set((toplevels?.current ?? []).map { $0.appID })
         var items = pinned
@@ -465,21 +546,17 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft || button == kBtnRight, pressed,
               let px = pointerX else { return }
-        // Hit-test the tile the pointer is over (using the drawn frames).
-        let h = Double(layer?.size.height ?? 0)
-        let iconBottom = h - DockMetrics.bottomMargin - DockMetrics.panelPadV
-        for (i, f) in frames.enumerated() {
-            let rect = Rect(f.centerX - f.size / 2, iconBottom - f.size, f.size, f.size)
-            guard px >= rect.x, px <= rect.x + rect.w,
-                  pointerY >= rect.y, pointerY <= rect.y + rect.h else { continue }
-            if button == kBtnRight {
-                openTileMenu(displayItems[i], frame: f, iconBottom: iconBottom)
-            } else {
-                activate(displayItems[i])
-            }
+        guard let (i, f) = tile(at: px, pointerY) else {
+            if button == kBtnRight { closeMenu() }
             return
         }
-        if button == kBtnRight { closeMenu() }
+        if button == kBtnRight {
+            let h = Double(layer?.size.height ?? 0)
+            openTileMenu(displayItems[i], frame: f,
+                         iconBottom: h - DockMetrics.bottomMargin - DockMetrics.panelPadV)
+        } else {
+            activate(displayItems[i])
+        }
     }
 
     /// A tile's contextual menu. Only the Trash has one so far — "Empty Trash"

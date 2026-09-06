@@ -46,9 +46,42 @@ public final class Clipboard {
     private var currentOffer: OpaquePointer?
     /// MIME types that offer advertised.
     private var offeredTypes: [String] = []
+    /// Types from the most recent offer, before we know whether it is a
+    /// selection or a drag.
+    private var pendingOfferTypes: [String] = []
     /// What we ourselves put on the clipboard, kept alive to answer `send`.
     private var ownedBytes: [UInt8] = []
     private var ownedSource: OpaquePointer?
+    /// The source and bytes of a drag we started. Separate from the clipboard's,
+    /// because dragging must not silently replace what somebody copied.
+    private var dragSource: OpaquePointer?
+    private var dragBytes: [UInt8] = []
+
+    // ---- a drag passing over us
+    /// The offer the pointer is currently carrying over one of our surfaces.
+    private var dragOffer: OpaquePointer?
+    /// Types that offer advertises.
+    private var dragTypes: [String] = []
+    /// Where the pointer is, in surface coordinates — the drop target needs it.
+    public private(set) var dragX = 0.0
+    public private(set) var dragY = 0.0
+    /// **Which of our surfaces the drag is over.** A client with more than one
+    /// window cannot answer that from pointer focus: a drag is a *grab*, so the
+    /// pointer events stop for its duration and the last one we saw is from
+    /// before the drag began — usually the window the drag started in. The
+    /// `enter` event carries the surface, and it is the only thing that does.
+    public private(set) var dragSurface: OpaquePointer?
+    /// What this application is willing to receive. Empty means "nothing", and
+    /// the person is told so by the cursor rather than by a drop that does
+    /// nothing.
+    public var acceptedDragTypes: [String] = []
+    /// Called when something is dropped on us: the bytes and where.
+    public var onDrop: ((_ mime: String, _ bytes: [UInt8], _ x: Double, _ y: Double) -> Void)?
+    /// Called as a drag moves across us, and when it leaves. A target that
+    /// cannot show where the drop would land is one the person drops on by
+    /// guess, so this exists for the highlight and not for the data.
+    public var onDragMotion: ((_ x: Double, _ y: Double) -> Void)?
+    public var onDragLeave: (() -> Void)?
 
     /// Boxes handed to C as listener `data`. Kept so they outlive the callbacks.
     private var boxes: [UnsafeMutableRawPointer] = []
@@ -89,15 +122,48 @@ public final class Clipboard {
             let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
             c.adoptSelection(offer)
         }
-        // **Drag and drop is P9.3, and these four still have to be filled.**
-        // They fire whenever somebody drags anything over one of our surfaces,
-        // on any compositor, whether or not we implement drag — and a nil
-        // function pointer there is a crash in libwayland's dispatch, not a
-        // missing feature (§2.3).
-        dl.enter = { _, _, _, _, _, _, _ in }
-        dl.leave = { _, _ in }
-        dl.motion = { _, _, _, _, _ in }
-        dl.drop = { _, _ in }
+        // **Drag and drop (P9.3).** These four were filled with empty bodies in
+        // P9.1 because they fire whenever anything is dragged over one of our
+        // surfaces whether or not we implement drag, and a nil function pointer
+        // there is a crash in libwayland's dispatch (§2.3). Now they do the job.
+        dl.enter = { data, _, serial, surface, x, y, offer in
+            guard let data else { return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            c.dragOffer = offer
+            c.dragTypes = c.pendingOfferTypes
+            c.dragSurface = surface
+            c.dragX = wl_fixed_to_double(x)
+            c.dragY = wl_fixed_to_double(y)
+            c.onDragMotion?(c.dragX, c.dragY)
+            guard let offer else { return }
+            // **Accepting is what makes the source's cursor say "yes".** A
+            // destination that stays silent is one the person is told they may
+            // not drop on, so this has to happen on enter and not on drop.
+            let mime = c.dragTypes.first { c.acceptedDragTypes.contains($0) }
+            if let mime { aw_data_offer_accept(raw(offer), serial, mime) }
+            else { aw_data_offer_accept(raw(offer), serial, nil) }
+            // Copy, always: a file manager dragging within one desktop means
+            // copy unless it says otherwise, and `move` is a decision P9.4 and
+            // the Finder's own cut semantics own rather than the protocol.
+            aw_data_offer_set_actions(raw(offer), 1, 1)   // COPY, COPY
+        }
+        dl.leave = { data, _ in
+            guard let data else { return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            c.releaseDrag()
+        }
+        dl.motion = { data, _, _, x, y in
+            guard let data else { return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            c.dragX = wl_fixed_to_double(x)
+            c.dragY = wl_fixed_to_double(y)
+            c.onDragMotion?(c.dragX, c.dragY)
+        }
+        dl.drop = { data, _ in
+            guard let data else { return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            c.completeDrop()
+        }
         display.addListener(to: d, listener: dl, data: me)
     }
 
@@ -113,12 +179,20 @@ public final class Clipboard {
         // The types arrive as a burst of `offer` events on the offer object
         // itself, before the `selection` event that hands it over.
         offeredTypes = []
+        pendingOfferTypes = []
         let me = Unmanaged.passUnretained(self).toOpaque()
         var ol = wl_data_offer_listener()
-        ol.offer = { data, _, mime in
+        ol.offer = { data, offer, mime in
             guard let data, let mime else { return }
             let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
-            c.offeredTypes.append(String(cString: mime))
+            let s = String(cString: mime)
+            // One listener, two uses: the same object carries a clipboard
+            // selection and a drag, and which it is depends on whether `enter`
+            // or `selection` claims it afterwards. Recording both is simpler and
+            // cheaper than guessing early.
+            c.offeredTypes.append(s)
+            c.pendingOfferTypes.append(s)
+            _ = offer
         }
         ol.source_actions = { _, _, _ in }
         ol.action = { _, _, _ in }
@@ -173,6 +247,124 @@ public final class Clipboard {
         }
         close(fds[0])
         return (mime, out)
+    }
+
+    private func releaseDrag() {
+        if let o = dragOffer { aw_data_offer_destroy(raw(o)) }
+        dragOffer = nil
+        dragTypes = []
+        dragSurface = nil
+        onDragLeave?()
+    }
+
+    private func completeDrop() {
+        guard let offer = dragOffer, let cb = onDrop else { releaseDrag(); return }
+        guard let mime = dragTypes.first(where: { acceptedDragTypes.contains($0) })
+        else { releaseDrag(); return }
+
+        // **A drag that ends where it started is one process asking itself.**
+        // The bytes are already here, and going through the pipe would ask this
+        // process for a `wl_data_source.send` that only the event loop we are
+        // about to block in could deliver — the identical deadlock to reading a
+        // selection we own (`ownsSelection`), reached the identical way: by
+        // dragging a file from one window to another window of the same
+        // application, which is the first thing anybody does with drag and drop.
+        //
+        // The offer is still finished properly, so the source sees a completed
+        // drag rather than a cancelled one.
+        if dragSource != nil {
+            aw_data_offer_finish(raw(offer))
+            display.flush()
+            cb(mime, dragBytes, dragX, dragY)
+            releaseDrag()
+            return
+        }
+
+        var fds: [Int32] = [0, 0]
+        guard pipe(&fds) == 0 else { releaseDrag(); return }
+        aw_data_offer_receive(raw(offer), mime, fds[1])
+        display.flush()
+        close(fds[1])
+        var out: [UInt8] = []
+        var buf = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let n = buf.withUnsafeMutableBytes { Glibc.read(fds[0], $0.baseAddress, 4096) }
+            if n <= 0 { break }
+            out.append(contentsOf: buf[0..<n])
+        }
+        close(fds[0])
+        // **`finish` before destroy, and only after reading.** It tells the
+        // source the transfer is done so it can release its side; sending it
+        // early ends the drag while we are still reading from it.
+        aw_data_offer_finish(raw(offer))
+        display.flush()
+        cb(mime, out, dragX, dragY)
+        releaseDrag()
+    }
+
+    // MARK: - Starting a drag
+
+    /// Begin dragging `bytes` from `origin`.
+    ///
+    /// The serial must be from the **pointer press** that started the drag —
+    /// wlroots checks it with `validate_pointer_grab_serial`, which is what
+    /// stops a program starting a drag nobody initiated and harvesting whatever
+    /// the cursor passes over.
+    @discardableResult
+    public func startDrag(_ bytes: [UInt8], from origin: OpaquePointer,
+                          serial: UInt32,
+                          types: [String] = ClipboardMIME.offered) -> Bool {
+        guard let source = opt(aw_data_device_manager_create_data_source(raw(manager)))
+        else { return false }
+        dragBytes = bytes
+        if let old = dragSource { aw_data_source_destroy(raw(old)) }
+        dragSource = source
+
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        var sl = wl_data_source_listener()
+        sl.send = { data, _, mime, fd in
+            guard let data else { close(fd); return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            _ = mime
+            c.dragBytes.withUnsafeBufferPointer { b in
+                var off = 0
+                while off < b.count {
+                    let n = Glibc.write(fd, b.baseAddress! + off, b.count - off)
+                    if n <= 0 { break }
+                    off += n
+                }
+            }
+            close(fd)
+        }
+        sl.cancelled = { data, source in
+            guard let data, let source else { return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            guard let mine = c.dragSource,
+                  UnsafeRawPointer(mine) == UnsafeRawPointer(source) else { return }
+            aw_data_source_destroy(UnsafeMutableRawPointer(mine))
+            c.dragSource = nil
+        }
+        sl.target = { _, _, _ in }
+        sl.dnd_drop_performed = { _, _ in }
+        sl.dnd_finished = { data, source in
+            guard let data, let source else { return }
+            let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
+            guard let mine = c.dragSource,
+                  UnsafeRawPointer(mine) == UnsafeRawPointer(source) else { return }
+            aw_data_source_destroy(UnsafeMutableRawPointer(mine))
+            c.dragSource = nil
+        }
+        sl.action = { _, _, _ in }
+        display.addListener(to: source, listener: sl, data: me)
+
+        for t in types { aw_data_source_offer(raw(source), t) }
+        aw_data_source_set_actions(raw(source), 1)     // COPY
+        // No icon surface: the compositor draws nothing extra and the cursor is
+        // the feedback. A real icon is a surface per drag, which is Phase 11's
+        // business once the toolkit can render one out of band.
+        aw_data_device_start_drag(raw(device), raw(source), raw(origin), nil, serial)
+        display.flush()
+        return true
     }
 
     // MARK: - Putting something on it

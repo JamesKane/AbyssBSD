@@ -197,6 +197,54 @@ already knows how to copy into its own directory — `finderCopyPath` and
 `finderPasteName` are written and tested), and a Dock tile (open this document
 with that application).
 
+**What P9.3 landed, and the three things that were broken underneath it:**
+
+- **Server:** `request_start_drag` → `wlr_seat_validate_pointer_grab_serial` →
+  `wlr_seat_start_pointer_drag`, the drag icon tracked as a surface and drawn
+  under the cursor, and `drags-started=` reported as it happens — the positive
+  control, because a drop that did nothing and a drag the compositor refused to
+  start look identical from outside.
+- **Client:** the four data-device drag slots filled for real — `enter` accepts a
+  MIME (which is what makes the *source's* cursor say yes, so it must happen on
+  enter and not on drop) and asks for COPY; `drop` receives, reads to EOF,
+  `finish`es and destroys. `Clipboard.dragSurface` records which of our surfaces
+  the drag is over, because a drop arrives on the **seat** and a drag is a grab —
+  the last pointer event a multi-window client saw is from before the drag began,
+  and names the window the file came *out* of.
+- **One parser for what a drop contains, and one encoder for what we hand out.**
+  `text/uri-list` is CRLF-separated with `#` comments and percent-encoded URIs;
+  taking the bytes as a path mangles any name with a space in it, and handing out
+  a raw path makes one entry look like two to anything that follows the RFC.
+  `finderDroppedPath` and `finderFileURI` are pure, unit-tested as a round trip
+  and separately for the refusals (a remote `file://host/…`, a malformed escape).
+  Adding the encoder immediately broke ⌘V — the paste side was still stripping
+  `file://` by hand — which is the argument for one parser rather than three:
+  P9.2's test caught it in the same minute.
+- **Three targets, all asserted on disk:** the Trash (a Dock tile in another
+  process — the file is in `~/.Trash` and gone from where it was), another window
+  of the *same* Finder (the case that discriminates: "the first window" is also
+  the right answer whenever a process has one), and the Finder tile (a folder
+  dropped on it opens in a new window).
+
+> Three things had to be fixed to make any of that reach the screen, and all
+> three had been broken since long before this pass — §2.55, §2.56, §2.57:
+>
+> - **A drag that ends where it started deadlocks** the same way reading your own
+>   selection does, and drag-between-my-own-windows is a far more ordinary thing
+>   to do than copy-and-paste-in-one-window.
+> - **undertow never hit-tested layer surfaces**, so under our own compositor the
+>   Dock, the menu bar and the desktop could not be clicked at all. Every test
+>   that clicks the Dock runs on sway.
+> - **`wl_proxy_destroy` sends no request**, so every window this project has
+>   ever closed leaked a mapped, hit-testable surface in the compositor and left
+>   a rectangle of dead screen behind it.
+>
+> The last two are the same lesson twice: the shell's own surfaces had no test
+> that ran against the shell's own compositor.
+
+`abyss/tests/live-dnd.sh` is the whole of it — undertow, a Dock, a Finder, and a
+virtual pointer that presses, moves and releases.
+
 **P9.4 — the window requests we ignore, and the ones we never send.**
 The client half first, because there is not one. `Surface.Window` sends exactly
 two toplevel requests today, `set_title` and `set_app_id`, which is why **no Aqua

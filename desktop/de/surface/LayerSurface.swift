@@ -67,7 +67,7 @@ public extension LayerSurfaceDelegate {
 
 public final class LayerSurface {
     let display: Display
-    let surface: OpaquePointer
+    public let surface: OpaquePointer
     let layerSurface: OpaquePointer
 
     public weak var delegate: LayerSurfaceDelegate?
@@ -181,8 +181,8 @@ public final class LayerSurface {
         if display.layerSurface === self { display.layerSurface = nil }
         for b in buffers { b.destroy() }
         buffers.removeAll()
-        aw_proxy_destroy(raw(layerSurface))
-        aw_proxy_destroy(raw(surface))
+        aw_layer_surface_destroy(raw(layerSurface))
+        aw_surface_destroy(raw(surface))
         wl_display_flush(display.display)
     }
 

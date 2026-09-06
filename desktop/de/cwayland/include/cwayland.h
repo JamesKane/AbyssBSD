@@ -45,7 +45,16 @@ int aw_create_interval_timer(unsigned int ms);
 
 /* Generic: works for every proxy — add_listener is always the same forward. */
 int aw_add_listener(void *proxy, const void *listener, void *data);
+/* **Frees the local proxy and tells the compositor NOTHING.** `wl_proxy_destroy`
+ * sends no request: the destructor request is in the generated per-interface
+ * function, and skipping it leaves the server-side object alive for the life of
+ * the connection. Use it only for objects with no destructor request; every
+ * object that has one gets a wrapper below. */
 void aw_proxy_destroy(void *proxy);
+/* Destructor requests — the ones a client must actually send. */
+void aw_surface_destroy(void *surface);
+void aw_xdg_surface_destroy(void *xdg_surface);
+void aw_xdg_toplevel_destroy(void *toplevel);
 
 /* Registry + typed binds (avoids passing wl_interface pointers from Swift). */
 void *aw_display_get_registry(void *display);
@@ -160,6 +169,14 @@ void aw_data_source_offer(void *source, const char *mime);
 void aw_data_source_destroy(void *source);
 void aw_data_offer_receive(void *offer, const char *mime, int fd);
 void aw_data_offer_destroy(void *offer);
+
+/* --- drag and drop (P9.3), the same objects with a grab on them ---------- */
+void aw_data_device_start_drag(void *device, void *source, void *origin,
+                               void *icon, uint32_t serial);
+void aw_data_offer_accept(void *offer, uint32_t serial, const char *mime);
+void aw_data_offer_set_actions(void *offer, uint32_t actions, uint32_t preferred);
+void aw_data_offer_finish(void *offer);
+void aw_data_source_set_actions(void *source, uint32_t actions);
 void *aw_seat_get_keyboard(void *seat);
 
 #endif /* ABYSS_CWAYLAND_H */

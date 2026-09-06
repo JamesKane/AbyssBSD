@@ -96,7 +96,13 @@ public final class Display {
     // just route input to it and clear on teardown. Set in Popup.init.
     weak var activePopup: Popup?
     // Serial of the most recent pointer button event — xdg_popup.grab needs it.
-    var lastPointerSerial: UInt32 = 0
+    /// The most recent **pointer** serial.
+    ///
+    /// Kept apart from `lastInputSerial` because two things want specifically a
+    /// pointer serial and would be wrong with a keyboard one: a popup grab, and
+    /// starting a drag — the compositor validates both against a pointer press,
+    /// which is what stops a menu opening or a drag beginning off a keystroke.
+    public internal(set) var lastPointerSerial: UInt32 = 0
     /// The most recent serial from **any** input event, pointer or keyboard.
     ///
     /// The clipboard needs one: wlroots checks that a `set_selection` quotes a

@@ -430,10 +430,15 @@ case "run":
     // so a counter that only appears at the end is invisible to exactly the
     // sessions a person is using. Comparing one Int per frame costs nothing.
     var reportedSelections = 0
+    var reportedDrags = 0
     while unbounded || drawn < frames {
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted
             out("selections-accepted=\(reportedSelections)")
+        }
+        if seat.dragsStarted != reportedDrags {
+            reportedDrags = seat.dragsStarted
+            out("drags-started=\(reportedDrags)")
         }
         drawn += 1
         metronome.step(output: &o, sink: &s, recorder: recorder)
@@ -488,6 +493,9 @@ case "run":
     // selection looks identical to one that worked, unless the compositor says
     // how many offers it accepted (P9.1).
     out("selections-accepted=\(seat.selectionsAccepted)")
+    // The same positive control for a drag: a drop that did nothing and a drag
+    // the compositor refused to start look identical from the outside (P9.3).
+    out("drags-started=\(seat.dragsStarted)")
     out("layers=\(compositor.mappedLayers.count) of \(compositor.layers.count)")
     // The usable area is the ONLY observable proof that an exclusive zone was
     // honoured — a layer surface never appears in a window tree, so §2.26's

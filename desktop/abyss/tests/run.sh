@@ -118,6 +118,11 @@ if [ "$live" -eq 1 ]; then
   # handling is the thing under test.
   echo "== the clipboard =="
   sh "$root/abyss/tests/live-clipboard.sh" >/dev/null
+  # And the same protocol with a grab on it: a file pressed in one process and
+  # released on the Trash in another, plus the two other targets the shell
+  # draws (PHASE9 P9.3). Every claim is checked on disk.
+  echo "== drag and drop =="
+  sh "$root/abyss/tests/live-dnd.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   echo "== the screenshot portal =="

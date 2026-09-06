@@ -13,6 +13,18 @@ void aw_proxy_destroy(void *proxy) {
     wl_proxy_destroy((struct wl_proxy *)proxy);
 }
 
+void aw_surface_destroy(void *surface) {
+    wl_surface_destroy((struct wl_surface *)surface);
+}
+
+void aw_xdg_surface_destroy(void *xdg_surface) {
+    xdg_surface_destroy((struct xdg_surface *)xdg_surface);
+}
+
+void aw_xdg_toplevel_destroy(void *toplevel) {
+    xdg_toplevel_destroy((struct xdg_toplevel *)toplevel);
+}
+
 void *aw_display_get_registry(void *display) {
     return wl_display_get_registry((struct wl_display *)display);
 }
@@ -319,6 +331,30 @@ void aw_data_offer_receive(void *offer, const char *mime, int fd) {
 
 void aw_data_offer_destroy(void *offer) {
     wl_data_offer_destroy((struct wl_data_offer *)offer);
+}
+
+void aw_data_device_start_drag(void *device, void *source, void *origin,
+                               void *icon, uint32_t serial) {
+    wl_data_device_start_drag((struct wl_data_device *)device,
+                              (struct wl_data_source *)source,
+                              (struct wl_surface *)origin,
+                              (struct wl_surface *)icon, serial);
+}
+
+void aw_data_offer_accept(void *offer, uint32_t serial, const char *mime) {
+    wl_data_offer_accept((struct wl_data_offer *)offer, serial, mime);
+}
+
+void aw_data_offer_set_actions(void *offer, uint32_t actions, uint32_t preferred) {
+    wl_data_offer_set_actions((struct wl_data_offer *)offer, actions, preferred);
+}
+
+void aw_data_offer_finish(void *offer) {
+    wl_data_offer_finish((struct wl_data_offer *)offer);
+}
+
+void aw_data_source_set_actions(void *source, uint32_t actions) {
+    wl_data_source_set_actions((struct wl_data_source *)source, actions);
 }
 
 void *aw_seat_get_pointer(void *seat) {

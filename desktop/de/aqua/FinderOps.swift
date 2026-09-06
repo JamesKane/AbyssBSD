@@ -209,3 +209,101 @@ public func finderEmptyTrash() -> (removed: Int, failed: Int) {
     }
     return (removed, failed)
 }
+
+// MARK: - What a drop contains
+
+/// The first local path in a `text/uri-list` payload, or nil if there is none.
+///
+/// **A drop is not a string.** `text/uri-list` (RFC 2483) is a CRLF-separated
+/// list whose lines beginning with `#` are comments, and whose entries are URIs
+/// — so they are percent-encoded, and a file called `My Report` arrives as
+/// `file:///home/me/My%20Report`. Taking the bytes as a path gets that file
+/// wrong, and gets a multi-file drag wrong in a way that only shows up on the
+/// second file.
+///
+/// One entry, for now: the Finder drags one icon at a time (P9.3). The parser
+/// returns the first because that is what a list of one contains, and because
+/// the shape it walks is the one a list of many needs.
+public func finderDroppedPath(_ bytes: [UInt8]) -> String? {
+    // Split on the *bytes*. `"\r\n"` is one Swift `Character` — a grapheme
+    // cluster — so splitting a String on "\r" silently matches nothing and the
+    // whole list comes back as a single line with the separators still in it.
+    let cr = UInt8(ascii: "\r"), lf = UInt8(ascii: "\n")
+    let sp = UInt8(ascii: " "), tab = UInt8(ascii: "\t")
+    for rawLine in bytes.split(whereSeparator: { $0 == cr || $0 == lf }) {
+        var line = rawLine
+        while let c = line.first, c == sp || c == tab { line = line.dropFirst() }
+        while let c = line.last, c == sp || c == tab { line = line.dropLast() }
+        if line.isEmpty || line.first == UInt8(ascii: "#") { continue }
+        var s = String(decoding: line, as: UTF8.self)
+        if s.hasPrefix("file://") {
+            s = String(s.dropFirst("file://".count))
+            // `file://host/path` — an empty host is the local machine, and a
+            // remote one is not a path we can open.
+            if !s.hasPrefix("/") {
+                guard let slash = s.firstIndex(of: "/") else { continue }
+                if s[s.startIndex..<slash] != "localhost" { continue }
+                s = String(s[slash...])
+            }
+        }
+        guard s.hasPrefix("/"), let path = finderPercentDecode(s) else { continue }
+        return path
+    }
+    return nil
+}
+
+/// A path as a `file://` URI, percent-encoded per UTF-8 byte.
+///
+/// **The encoding is not optional.** Our own parser would read a raw path back
+/// happily, but a `text/uri-list` is what we hand to *other* applications — the
+/// GTK clients Phase 8 exists to serve — and a name with a space in it is two
+/// entries to anything that follows the RFC. Everything outside RFC 3986's
+/// unreserved set, `/` excepted, becomes `%XX`.
+///
+/// Deliberately the same rule as `DBusPortal.FileURI.encode`, written out again
+/// rather than depended on: the toolkit must not pull in D-Bus to name a file.
+/// `finderPercentDecode` is its inverse, and they are tested as a round trip.
+public func finderFileURI(_ path: String) -> String {
+    var out = "file://"
+    let hex = Array("0123456789ABCDEF".utf8)
+    for byte in Array(path.utf8) {
+        switch byte {
+        case UInt8(ascii: "A")...UInt8(ascii: "Z"),
+             UInt8(ascii: "a")...UInt8(ascii: "z"),
+             UInt8(ascii: "0")...UInt8(ascii: "9"),
+             UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"),
+             UInt8(ascii: "~"), UInt8(ascii: "/"):
+            out.unicodeScalars.append(Unicode.Scalar(byte))
+        default:
+            out.append("%")
+            out.unicodeScalars.append(Unicode.Scalar(hex[Int(byte >> 4)]))
+            out.unicodeScalars.append(Unicode.Scalar(hex[Int(byte & 0xf)]))
+        }
+    }
+    return out
+}
+
+/// Percent-decoding, byte-wise. Nil if an escape is malformed, because a path
+/// we cannot read exactly is a path we must not act on.
+public func finderPercentDecode(_ s: String) -> String? {
+    var out: [UInt8] = []
+    var it = Array(s.utf8)[...]
+    while let b = it.first {
+        it = it.dropFirst()
+        guard b == UInt8(ascii: "%") else { out.append(b); continue }
+        guard it.count >= 2, let hi = hexValue(it.first!),
+              let lo = hexValue(it.dropFirst().first!) else { return nil }
+        out.append(hi << 4 | lo)
+        it = it.dropFirst(2)
+    }
+    return String(decoding: out, as: UTF8.self)
+}
+
+private func hexValue(_ c: UInt8) -> UInt8? {
+    switch c {
+    case UInt8(ascii: "0")...UInt8(ascii: "9"): return c - UInt8(ascii: "0")
+    case UInt8(ascii: "a")...UInt8(ascii: "f"): return c - UInt8(ascii: "a") + 10
+    case UInt8(ascii: "A")...UInt8(ascii: "F"): return c - UInt8(ascii: "A") + 10
+    default: return nil
+    }
+}

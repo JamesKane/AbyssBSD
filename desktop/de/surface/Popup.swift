@@ -238,8 +238,8 @@ public final class Popup {
         for b in buffers { b.destroy() }
         buffers.removeAll()
         aw_xdg_popup_destroy(raw(xdgPopup))
-        aw_proxy_destroy(raw(xdgSurface))
-        aw_proxy_destroy(raw(surface))
+        aw_xdg_surface_destroy(raw(xdgSurface))
+        aw_surface_destroy(raw(surface))
         wl_display_flush(display.display)
     }
 

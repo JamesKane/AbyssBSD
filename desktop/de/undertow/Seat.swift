@@ -100,6 +100,12 @@ public final class Seat {
     /// this one did until P9.1. A test that asserts on pasted *bytes* still
     /// cannot tell "nobody copied" from "the copy was dropped"; this can.
     public private(set) var selectionsAccepted = 0
+    /// How many drags the compositor has started. The positive control for a
+    /// drag test, for the same reason `selectionsAccepted` is one for a copy.
+    public private(set) var dragsStarted = 0
+    /// The surface being dragged under the cursor, if any.
+    var dragIcon: UnsafeMutablePointer<wlr_drag_icon>?
+    var dragIconDestroy: UnsafeMutablePointer<tw_listener>?
 
     public init(compositor: Compositor, outputWidth: Int32, outputHeight: Int32) throws {
         self.compositor = compositor
@@ -160,6 +166,52 @@ public final class Seat {
             seat.selectionsAccepted += 1
         }, me))
 
+        // **Drag and drop (P9.3), which is the selection with a grab on it.**
+        //
+        // The serial check is the same guard as the clipboard's and is why this
+        // is routed through wlroots rather than started ourselves: a drag may
+        // only begin from a pointer press the client actually received, so a
+        // program cannot start one out of nowhere and collect whatever the
+        // pointer passes over.
+        listeners.append(tw_listen(&s.pointee.events.request_start_drag, { ctx, data in
+            guard let ctx, let data else { return }
+            let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(to: wlr_seat_request_start_drag_event.self)
+            guard let drag = ev.pointee.drag else { return }
+            if wlr_seat_validate_pointer_grab_serial(seat.seat, ev.pointee.origin,
+                                                     ev.pointee.serial) {
+                wlr_seat_start_pointer_drag(seat.seat, drag, ev.pointee.serial)
+                return
+            }
+            // Refused. **Destroy the source rather than leaking it**: the client
+            // is waiting to be told what happened to the drag it offered, and a
+            // source nobody owns is a client that hangs on its own cancel.
+            if let src = drag.pointee.source { wlr_data_source_destroy(src) }
+        }, me))
+
+        // The drag began. From here the pointer belongs to wlroots' drag grab —
+        // our `moveCursor` still calls `notify_enter`/`notify_motion`, and the
+        // grab turns those into `wl_data_device.enter`/`motion` for whichever
+        // surface is under the cursor. That indirection is why nothing in the
+        // motion path needed changing.
+        listeners.append(tw_listen(&s.pointee.events.start_drag, { ctx, data in
+            guard let ctx, let data else { return }
+            let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let drag = data.assumingMemoryBound(to: wlr_drag.self)
+            seat.dragsStarted += 1
+            seat.dragIcon = drag.pointee.icon
+            guard let icon = drag.pointee.icon else { return }
+            // The icon dies with the drag, and a pointer to a freed surface is
+            // a crash on the next frame rather than a missing picture.
+            seat.dragIconDestroy = tw_listen(&icon.pointee.events.destroy, { ctx2, _ in
+                guard let ctx2 else { return }
+                let s2 = Unmanaged<Seat>.fromOpaque(ctx2).takeUnretainedValue()
+                s2.dragIcon = nil
+                tw_listener_free(s2.dragIconDestroy)
+                s2.dragIconDestroy = nil
+            }, Unmanaged.passUnretained(seat).toOpaque())
+        }, me))
+
         guard let vk = wlr_virtual_keyboard_manager_v1_create(compositor.session.display)
         else { throw BackendError.noGlobals("zwp_virtual_keyboard_manager_v1") }
         listeners.append(tw_listen(&vk.pointee.events.new_virtual_keyboard, { ctx, data in
@@ -172,6 +224,7 @@ public final class Seat {
 
     deinit {
         for l in listeners { tw_listener_free(l) }
+        tw_listener_free(dragIconDestroy)
         for (_, group) in deviceListeners {
             for l in group { tw_listener_free(l) }
         }
@@ -320,6 +373,56 @@ public final class Seat {
         return (windows[h.index], h.localX, h.localY)
     }
 
+    /// What the pointer is over: an application's window, or one of the shell's
+    /// own surfaces.
+    public enum PointerTarget {
+        case toplevel(Toplevel, Double, Double)
+        case layer(LayerSurface, Double, Double)
+
+        var surface: UnsafeMutablePointer<wlr_surface> {
+            switch self {
+            case .toplevel(let t, _, _): return t.surface
+            case .layer(let l, _, _): return l.surface
+            }
+        }
+        var local: (Double, Double) {
+            switch self {
+            case .toplevel(_, let x, let y): return (x, y)
+            case .layer(_, let x, let y): return (x, y)
+            }
+        }
+    }
+
+    /// Hit-test everything the pointer can address, in paint order.
+    ///
+    /// **Layer surfaces were never in this search, so the shell's own surfaces
+    /// could not be clicked at all under undertow.** The Dock, the menu bar and
+    /// the desktop are layer surfaces; every test that clicked one ran on sway,
+    /// which does route them, so nothing here ever noticed — the same shape as
+    /// §2.37, a probe that only ever ran against a positive control.
+    ///
+    /// Found by P9.3: a file dragged onto the Trash never arrived, because the
+    /// drag could not enter a surface the pointer could not reach.
+    ///
+    /// The order is the layer-shell protocol's own: overlay and top sit above
+    /// the windows, bottom and background below them.
+    public func target(at x: Double, _ y: Double) -> PointerTarget? {
+        let layers = compositor.mappedLayers            // bottom-to-top
+        if let h = hitLayer(layers.filter { $0.layer >= 2 }, x, y) { return h }
+        if let (t, lx, ly) = toplevel(at: x, y) { return .toplevel(t, lx, ly) }
+        return hitLayer(layers.filter { $0.layer < 2 }, x, y)
+    }
+
+    private func hitLayer(_ layers: [LayerSurface], _ x: Double, _ y: Double)
+        -> PointerTarget? {
+        let rects = layers.map {
+            WindowRect(x: $0.rect.x, y: $0.rect.y,
+                       width: $0.rect.width, height: $0.rect.height)
+        }
+        guard let h = PointerRouting.hit(x, y, rects: rects) else { return nil }
+        return .layer(layers[h.index], h.localX, h.localY)
+    }
+
     private func moveCursor(to x: Double, _ y: Double, timeMsec: UInt32) {
         (cursorX, cursorY) = PointerRouting.clamp(x, y, width: outputWidth,
                                                   height: outputHeight)
@@ -332,16 +435,17 @@ public final class Seat {
             return
         }
 
-        guard let (t, lx, ly) = toplevel(at: cursorX, cursorY) else {
-            // Off every window: the pointer belongs to the desktop, and a client
+        guard let hit = target(at: cursorX, cursorY) else {
+            // Off every surface: the pointer belongs to the desktop, and a client
             // that still thought it had the pointer must be told it does not.
             wlr_seat_pointer_clear_focus(seat)
             return
         }
+        let (lx, ly) = hit.local
         // `notify_enter` is idempotent — wlroots only sends the protocol enter
         // when the surface actually changes — so this is the whole of
         // enter/leave bookkeeping.
-        wlr_seat_pointer_notify_enter(seat, t.surface, lx, ly)
+        wlr_seat_pointer_notify_enter(seat, hit.surface, lx, ly)
         wlr_seat_pointer_notify_motion(seat, timeMsec, lx, ly)
         wlr_seat_pointer_notify_frame(seat)
     }
@@ -359,8 +463,11 @@ public final class Seat {
         // Click to focus and raise, before the click is delivered: the client
         // should receive the press already focused, which is what makes
         // click-through-to-a-control behave the way a Mac user expects.
+        // Only a window takes focus: a click on the Dock or the menu bar must
+        // not steal the keyboard from whatever you were typing into, which is
+        // what `keyboard_interactivity: none` on those surfaces asks for.
         if state == WL_POINTER_BUTTON_STATE_PRESSED,
-           let (t, _, _) = toplevel(at: cursorX, cursorY) {
+           case .toplevel(let t, _, _)? = target(at: cursorX, cursorY) {
             focus(t)
         }
         _ = wlr_seat_pointer_notify_button(seat, timeMsec, button, state)
@@ -384,7 +491,22 @@ public final class Seat {
     }
 
     /// Draw the cursor. Called after the scene, so it is on top of everything.
+    ///
+    /// **The drag icon goes under it**, because that is what a person expects:
+    /// the thing being dragged follows the pointer and the pointer stays on top
+    /// of it. Without this a drag is invisible — the file moves, and nothing on
+    /// screen ever showed it moving, which reads as the desktop ignoring you.
     public func renderCursor(into pass: OpaquePointer) {
+        if let icon = dragIcon, let surface = icon.pointee.surface,
+           let tex = wlr_surface_get_texture(surface) {
+            var opts = wlr_render_texture_options()
+            opts.texture = tex
+            opts.dst_box = wlr_box(x: Int32(cursorX), y: Int32(cursorY),
+                                   width: surface.pointee.current.width,
+                                   height: surface.pointee.current.height)
+            opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
+            wlr_render_pass_add_texture(pass, &opts)
+        }
         guard cursorVisible else { return }
         var opts = wlr_render_rect_options()
         opts.box = wlr_box(x: Int32(cursorX), y: Int32(cursorY), width: 10, height: 16)
