@@ -40,6 +40,10 @@ public protocol WindowDelegate: AnyObject {
     // dispatch caveat: declared in the body so an override actually runs. A
     // multi-window app closes just this window and quits when the last goes.
     func windowShouldClose(_ window: Window)
+    // The compositor told us what this window now *is* — maximized, fullscreen,
+    // activated — which the client cannot know any other way (P9.4). Same
+    // dispatch caveat as the two above.
+    func windowStateChanged(_ window: Window)
 }
 
 public extension WindowDelegate {
@@ -52,6 +56,8 @@ public extension WindowDelegate {
     func windowDidRenderFrame(_ window: Window) {}
     // Single-window default: closing the window ends the process.
     func windowShouldClose(_ window: Window) { window.stopDisplay() }
+    // Most windows draw the same either way; the ones that do not override it.
+    func windowStateChanged(_ window: Window) {}
 }
 
 final class ShmBuffer {
@@ -112,6 +118,24 @@ final class ShmBuffer {
     }
 }
 
+/// Which edge or corner an interactive resize is dragging.
+///
+/// The values are `xdg_toplevel_resize_edge`'s own, so the compositor knows
+/// which corner to keep anchored — a resize from the left that moves the right
+/// edge instead is the classic symptom of guessing here.
+public struct ResizeEdge: OptionSet, Sendable {
+    public let rawValue: UInt32
+    public init(rawValue: UInt32) { self.rawValue = rawValue }
+    public static let top    = ResizeEdge(rawValue: 1)
+    public static let bottom = ResizeEdge(rawValue: 2)
+    public static let left   = ResizeEdge(rawValue: 4)
+    public static let right  = ResizeEdge(rawValue: 8)
+    public static let topLeft: ResizeEdge = [.top, .left]
+    public static let topRight: ResizeEdge = [.top, .right]
+    public static let bottomLeft: ResizeEdge = [.bottom, .left]
+    public static let bottomRight: ResizeEdge = [.bottom, .right]
+}
+
 public final class Window {
     let display: Display
     /// The `wl_surface` this window draws on.
@@ -134,6 +158,15 @@ public final class Window {
     private var logicalH: Int32
     private var pendingW: Int32
     private var pendingH: Int32
+    private var pendingStates: Set<UInt32> = []
+    /// What the compositor last told us this window is. Read it rather than
+    /// remembering what you asked for: the compositor may refuse, and on some it
+    /// is the only way to learn a window was maximized by a keybind or a snap.
+    public private(set) var isMaximized = false
+    public private(set) var isFullscreen = false
+    public private(set) var isActivated = false
+    /// True while the compositor is running an interactive resize we asked for.
+    public private(set) var isResizing = false
 
     private var buffers: [ShmBuffer] = []
     private var needsRedraw = true
@@ -175,11 +208,17 @@ public final class Window {
         display.addListener(to: xs, listener: xsl, data: me)
 
         var tll = xdg_toplevel_listener()
-        tll.configure = { data, _, width, height, _ in
+        tll.configure = { data, _, width, height, states in
             guard let data else { return }
             let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
             if width > 0 { w.pendingW = width }
             if height > 0 { w.pendingH = height }
+            // **The states are half of what a configure says.** A window that
+            // ignores them cannot know it was maximized — so its zoom light
+            // never un-zooms, and it goes on drawing a resize grip in a corner
+            // that can no longer be dragged. The array is `wl_array` of
+            // `uint32` state values.
+            w.pendingStates = Window.states(from: states)
         }
         tll.close = { data, _ in
             guard let data else { return }
@@ -254,6 +293,21 @@ public final class Window {
     }
 
     private func applyConfigure(serial: UInt32) {
+        // **The states take effect here, with the size.** A configure is one
+        // atomic answer: the toplevel event carries the size and the states, the
+        // xdg_surface event says "that is the whole of it", and applying half of
+        // them leaves a window that has been maximized and does not know it —
+        // whose zoom light then asks to maximize a second time and never
+        // un-zooms.
+        let wasMax = isMaximized, wasFull = isFullscreen, wasActive = isActivated
+        isMaximized  = pendingStates.contains(XDG_TOPLEVEL_STATE_MAXIMIZED.rawValue)
+        isFullscreen = pendingStates.contains(XDG_TOPLEVEL_STATE_FULLSCREEN.rawValue)
+        isActivated  = pendingStates.contains(XDG_TOPLEVEL_STATE_ACTIVATED.rawValue)
+        isResizing   = pendingStates.contains(XDG_TOPLEVEL_STATE_RESIZING.rawValue)
+        if isMaximized != wasMax || isFullscreen != wasFull || isActivated != wasActive {
+            needsRedraw = true
+            delegate?.windowStateChanged(self)
+        }
         if pendingW != logicalW || pendingH != logicalH || buffers.isEmpty {
             logicalW = pendingW
             logicalH = pendingH
@@ -386,6 +440,64 @@ public final class Window {
     }
 
     /// Retitle the toplevel (the Finder does this as it browses).
+    /// Decode an `xdg_toplevel.configure` states array.
+    private static func states(from array: UnsafeMutablePointer<wl_array>?) -> Set<UInt32> {
+        guard let a = array, let base = a.pointee.data else { return [] }
+        var out: Set<UInt32> = []
+        let count = a.pointee.size / MemoryLayout<UInt32>.size
+        let values = base.assumingMemoryBound(to: UInt32.self)
+        for i in 0..<count { out.insert(values[i]) }
+        return out
+    }
+
+    // MARK: - What a window may ask about itself (P9.4)
+
+    /// Hand the pointer to the compositor and let it move this window.
+    ///
+    /// **A Wayland client cannot place its own window**, so a title-bar drag is
+    /// not something the client implements — it is a request, made once, on the
+    /// press. The serial has to be from that press: the compositor validates it
+    /// (§4.2), which is what stops a program grabbing the pointer out of turn.
+    public func beginMove() {
+        guard !tornDown, let seat = display.seat else { return }
+        aw_xdg_toplevel_move(raw(xdgToplevel), raw(seat), display.lastPointerSerial)
+        display.flush()
+    }
+
+    /// The same, for a resize from `edge` — see `ResizeEdge`.
+    public func beginResize(_ edge: ResizeEdge) {
+        guard !tornDown, let seat = display.seat else { return }
+        aw_xdg_toplevel_resize(raw(xdgToplevel), raw(seat),
+                               display.lastPointerSerial, edge.rawValue)
+        display.flush()
+    }
+
+    /// Zoom, in Mac terms. The compositor decides what "maximized" means — for
+    /// undertow that is the usable area, not the output, because the menu bar's
+    /// exclusive zone is part of the answer.
+    public func setMaximized(_ on: Bool) {
+        guard !tornDown else { return }
+        if on { aw_xdg_toplevel_set_maximized(raw(xdgToplevel)) }
+        else { aw_xdg_toplevel_unset_maximized(raw(xdgToplevel)) }
+        display.flush()
+    }
+
+    /// Minimize. There is no `unset_minimized` in the protocol: a minimized
+    /// window is restored by the compositor (a Dock tile, a switcher), never by
+    /// the client, because a client that could un-minimize itself would.
+    public func minimize() {
+        guard !tornDown else { return }
+        aw_xdg_toplevel_set_minimized(raw(xdgToplevel))
+        display.flush()
+    }
+
+    public func setFullscreen(_ on: Bool) {
+        guard !tornDown else { return }
+        if on { aw_xdg_toplevel_set_fullscreen(raw(xdgToplevel), nil) }
+        else { aw_xdg_toplevel_unset_fullscreen(raw(xdgToplevel)) }
+        display.flush()
+    }
+
     public func setTitle(_ title: String) {
         title.withCString { aw_xdg_toplevel_set_title(raw(xdgToplevel), $0) }
     }

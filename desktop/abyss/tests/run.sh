@@ -123,6 +123,11 @@ if [ "$live" -eq 1 ]; then
   # draws (PHASE9 P9.3). Every claim is checked on disk.
   echo "== drag and drop =="
   sh "$root/abyss/tests/live-dnd.sh" >/dev/null
+  # What a window may ask about itself: moved by its title bar, zoomed to the
+  # usable area (not the output), resized from a corner that stays anchored,
+  # snapped to an edge, and put in the Dock and taken back out (P9.4).
+  echo "== window management =="
+  sh "$root/abyss/tests/live-window.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   echo "== the screenshot portal =="

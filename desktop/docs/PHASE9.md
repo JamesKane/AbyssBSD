@@ -271,6 +271,50 @@ Minimize needs somewhere to go, and the Dock is it. The genie is a Phase 13
 concern (it wants the same alpha and the same scaled `dst_box` Ebb wants); this
 pass minimizes to the tile without an animation and says so.
 
+**What P9.4 landed, and the tile that was never there:**
+
+- **Client:** `aw_*` wrappers for `move`, `resize`, `set_maximized`/`unset`,
+  `set_minimized`, `set_fullscreen`/`unset`, and — the half that is easy to
+  forget — the **states on a configure**. `Surface.Window` had been discarding
+  them, so a window could be maximized and not know it: its zoom light then asks
+  to maximize a second time and it never un-zooms. A configure is one atomic
+  answer; applying the size and dropping the states is applying half of it.
+- **Server:** `request_resize` (anchored: a resize from the left leaves the right
+  edge exactly where it was, fixed up on the client's commit rather than guessed
+  from the lagging size), `request_maximize` **to the usable area**, and
+  `request_minimize` / `request_fullscreen`. The menu bar's exclusive zone has
+  been computed since P6.4 and until now *nothing consumed it* — a maximized
+  window sliding under the menu bar is what an unconsumed zone looks like.
+- **One chrome rule for every window.** `windowChromeHit` is pure and shared, so
+  the Finder and the demo scenes answer a press on the frame the same way.
+  Resizing is the bottom edge and the two bottom corners only: 10.2 resized from
+  the grip, *and* a side band would take the outer 6px of every scrollbar thumb
+  in the Finder, whose scrollbar is the rightmost 15px of its window. The sway
+  suite passed with side bands in — no test drags a thumb by its outer edge, and
+  a person would have found it in a day.
+- **Snapping** is `WindowSnap`: a pure function from a cursor and a rectangle to
+  a rectangle, with its own unit tests, applied on release. The halves tile the
+  usable area exactly (a one-pixel gutter down the middle of the screen is the
+  kind of thing nobody reports and everybody sees) and the top corners maximize
+  rather than halve, because both readings are defensible and only one can
+  happen.
+
+> **The Dock had no tiles to minimize into.** undertow created the
+> `wlr-foreign-toplevel-management` *manager* and never made a single handle, so
+> under our own compositor the Dock listed no running applications, its tiles had
+> no dots, and clicking one raised nothing. Every test that showed otherwise ran
+> on sway — §2.56 again, one pass later and in the same place. Handles are made
+> on map, carry title/app_id/activated/minimized/maximized, and answer
+> activate/close/minimize/maximize; the window that focus moves to is now the one
+> the shell is told about.
+
+`abyss/tests/live-window.sh` is the pass: a menu bar (so the usable area is not
+the output), a window, a Dock and a virtual pointer. It drags the title bar,
+zooms and un-zooms, resizes from the corner, snaps to an edge, minimizes with the
+yellow light and **brings the window back by clicking its Dock tile**. Every
+claim is undertow's own geometry line — a Wayland client is never told where it
+is, so the compositor is the only witness.
+
 **P9.5 — the keybind table.**
 `Seat`'s key handler forwards unconditionally to
 `wlr_seat_keyboard_notify_key`. Interception goes in front of it:

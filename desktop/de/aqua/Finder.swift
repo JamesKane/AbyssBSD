@@ -1270,11 +1270,21 @@ public final class FinderWindow: WindowDelegate {
             return
         }
 
-        // Title bar: the pill toggles the toolbar (browser ⇄ spatial), the red
-        // light closes this window.
-        let w = Double(window?.size.width ?? 0)
-        if windowPillRect(w: w).contains(pointerX, pointerY) { toggleToolbar(); return }
-        if windowTrafficRects().close.contains(pointerX, pointerY) { closeWindow(); return }
+        // The chrome: the same rule every Aqua window uses (P9.4). The pill is
+        // the Finder's own — it toggles the toolbar (browser ⇄ spatial) — and
+        // the rest are requests to the compositor, because a client can neither
+        // move nor resize nor zoom its own window.
+        let size = window?.size ?? (width: 0, height: 0)
+        switch windowChromeHit(x: pointerX, y: pointerY,
+                               w: Double(size.width), h: Double(size.height)) {
+        case .pill:  toggleToolbar(); return
+        case .close: closeWindow(); return
+        case .minimize: window?.minimize(); return
+        case .zoom: window?.setMaximized(!(window?.isMaximized ?? false)); return
+        case .title: window?.beginMove(); return
+        case .resize(let edge): window?.beginResize(edge); return
+        case .content: break
+        }
 
         if toolbarVisible {
             if layout.backButton.contains(pointerX, pointerY) {

@@ -85,6 +85,19 @@ void *aw_xdg_surface_get_toplevel(void *xdg_surface);
 void aw_xdg_surface_ack_configure(void *xdg_surface, uint32_t serial);
 void aw_xdg_toplevel_set_title(void *toplevel, const char *title);
 void aw_xdg_toplevel_set_app_id(void *toplevel, const char *app_id);
+/* The requests a window makes about itself (P9.4). `move` and `resize` hand the
+ * pointer to the compositor for the duration — only it can place a window — and
+ * both carry the serial of the press that started them, which is what stops a
+ * program grabbing a pointer nobody handed it. `set_fullscreen` takes a NULL
+ * output to mean "you choose". */
+void aw_xdg_toplevel_move(void *toplevel, void *seat, uint32_t serial);
+void aw_xdg_toplevel_resize(void *toplevel, void *seat, uint32_t serial,
+                            uint32_t edges);
+void aw_xdg_toplevel_set_maximized(void *toplevel);
+void aw_xdg_toplevel_unset_maximized(void *toplevel);
+void aw_xdg_toplevel_set_minimized(void *toplevel);
+void aw_xdg_toplevel_set_fullscreen(void *toplevel, void *output);
+void aw_xdg_toplevel_unset_fullscreen(void *toplevel);
 
 /* xdg-shell popups (menus): a positioner anchors a child popup surface to a
  * rect in the parent, and grab routes input to it + dismisses on outside click. */

@@ -434,6 +434,12 @@ public final class Seat {
             compositor.updateMove(cursorX: cursorX, cursorY: cursorY)
             return
         }
+        // The same for a resize: the pointer belongs to the grab, and no client
+        // is told about the motion (P9.4).
+        if compositor.resizing != nil {
+            compositor.updateResize(cursorX: cursorX, cursorY: cursorY)
+            return
+        }
 
         guard let hit = target(at: cursorX, cursorY) else {
             // Off every surface: the pointer belongs to the desktop, and a client
@@ -454,8 +460,10 @@ public final class Seat {
                         timeMsec: UInt32) {
         // Releasing the button ends a drag, and the window's new position is
         // remembered there.
-        if state == WL_POINTER_BUTTON_STATE_RELEASED, compositor.moving != nil {
+        if state == WL_POINTER_BUTTON_STATE_RELEASED,
+           compositor.moving != nil || compositor.resizing != nil {
             compositor.endMove()
+            compositor.endResize()
             _ = wlr_seat_pointer_notify_button(seat, timeMsec, button, state)
             wlr_seat_pointer_notify_frame(seat)
             return
@@ -478,7 +486,12 @@ public final class Seat {
     public func focus(_ t: Toplevel) {
         compositor.raise(t)
         guard focused !== t else { return }
+        // The shell is told which window is active the same way it is told one
+        // exists — through its foreign-toplevel handle. Without this the Dock
+        // can list running applications and never say which one you are in.
+        focused?.setForeignActivated(false)
         focused = t
+        t.setForeignActivated(true)
         guard let kbd = wlr_seat_get_keyboard(seat) else {
             // No keyboard on the seat yet: focus is still ours to record, and
             // the client will be told when one arrives.
@@ -488,6 +501,21 @@ public final class Seat {
                                        &kbd.pointee.keycodes.0,
                                        kbd.pointee.num_keycodes,
                                        &kbd.pointee.modifiers)
+    }
+
+    /// Focus whatever is now on top, or nobody.
+    ///
+    /// For when the focused window stops being available without closing —
+    /// minimized, in this pass. Leaving focus on a window that is not on screen
+    /// makes the desktop deaf in a way nothing on screen explains.
+    public func focusTopmost() {
+        guard let t = compositor.mappedToplevels.last else {
+            focused?.setForeignActivated(false)
+            focused = nil
+            wlr_seat_keyboard_notify_clear_focus(seat)
+            return
+        }
+        focus(t)
     }
 
     /// Draw the cursor. Called after the scene, so it is on top of everything.

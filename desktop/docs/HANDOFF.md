@@ -607,6 +607,27 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.58 A global with nothing behind it is the same defect twice
+(P9.4, one pass after §2.56, in the same file and for the same reason.)
+
+undertow called `wlr_foreign_toplevel_manager_v1_create` at start-up and never
+created a **handle** for any window. The global was advertised, the Dock bound
+it, and it was told about nothing: no running applications, no dots on the tiles,
+and a click on a tile with nothing to raise. Found because minimize needs
+somewhere to go — a window that cannot be un-minimized is worse than one that
+cannot be minimized — and the somewhere is a tile that has to exist.
+
+This is §2.56's shape (the Dock could not be clicked under our own compositor)
+and §2.54's (a dispatch with no vendor), which makes three in two passes:
+
+> **Creating the manager is not implementing the protocol.** The half that
+> carries the data is the half nobody writes, and every test that would have
+> noticed was pointed at sway, which implements both halves.
+
+The general form, worth applying to the next protocol before it bites: for each
+global we advertise, name the object a client actually *receives* through it. If
+nothing in the tree constructs one, the global is furniture.
+
 ### 2.57 `wl_proxy_destroy` tells the compositor nothing
 (P9.3. A drop that vanished, traced back to every window this project has closed.)
 

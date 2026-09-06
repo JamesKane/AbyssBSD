@@ -208,6 +208,10 @@ public final class AquaWindow: WindowDelegate {
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft else { return }
+        // The frame first, and only for a press: a window is dragged, zoomed,
+        // minimized or resized by its own chrome, and until P9.4 none of that
+        // reached the compositor because the client never sent the requests.
+        if pressed, chromePointerButton() { return }
         switch sceneKind {
         case .widgets: widgetsPointerButton(pressed: pressed)
         case .scroll:  scrollPointerButton(pressed: pressed)
@@ -268,6 +272,40 @@ public final class AquaWindow: WindowDelegate {
         case KeySym.left:  tabs.tab = (tabs.tab - 1 + n) % n; window?.setNeedsDisplay()
         case KeySym.right: tabs.tab = (tabs.tab + 1) % n; window?.setNeedsDisplay()
         default: break
+        }
+    }
+
+    /// Act on a press in the window's chrome. Returns true if it was one.
+    ///
+    /// **A client cannot move, resize or zoom its own window** — it asks, and
+    /// the compositor does it, which is why each of these is one request and no
+    /// local state. The pill and the content are somebody else's business, so
+    /// they fall through to the scene.
+    private func chromePointerButton() -> Bool {
+        guard let w = window else { return false }
+        let size = w.size
+        switch windowChromeHit(x: pointerX, y: pointerY,
+                               w: Double(size.width), h: Double(size.height)) {
+        case .close:
+            w.close()
+            w.stopDisplay()
+            return true
+        case .minimize:
+            w.minimize()
+            return true
+        case .zoom:
+            // The compositor's answer is what "zoomed" means, so ask for the
+            // opposite of what it last told us rather than of what we asked for.
+            w.setMaximized(!w.isMaximized)
+            return true
+        case .title:
+            w.beginMove()
+            return true
+        case .resize(let edge):
+            w.beginResize(edge)
+            return true
+        case .pill, .content:
+            return false
         }
     }
 

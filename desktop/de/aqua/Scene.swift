@@ -3,6 +3,7 @@
 // (AquaWindow) and the offscreen PNG render used for visual verification.
 
 import CCairo
+import Surface
 import Vents
 
 #if canImport(Glibc)
@@ -40,6 +41,62 @@ public func windowTrafficRects() -> (close: Rect, minimize: Rect, zoom: Rect) {
     let x0 = Theme.trafficInset + r
     func box(_ cx: Double) -> Rect { Rect(cx - r, cy - r, 2 * r, 2 * r) }
     return (box(x0), box(x0 + Theme.trafficSpacing), box(x0 + 2 * Theme.trafficSpacing))
+}
+
+/// What the pointer is over in a window's chrome.
+///
+/// Client-side decorations mean the *client* decides what a press on its own
+/// frame means — but only the compositor can act on it, so each of these turns
+/// into an `xdg_toplevel` request (P9.4). Keeping the rule here, pure, means
+/// every window kind gets the same answer and the answer can be tested without
+/// a compositor (§2.9).
+public enum WindowChromeHit: Equatable, Sendable {
+    case close
+    case minimize
+    case zoom
+    case pill                  // the toolbar toggle; only the Finder uses it
+    case title                 // drag it to move the window
+    case resize(ResizeEdge)
+    case content               // not chrome — the scene's own business
+}
+
+/// How deep the invisible resize band along a window's **bottom** is.
+///
+/// **Only the bottom edge and the two bottom corners resize.** Two reasons, and
+/// they agree:
+///
+///   - 10.2 resized from the corner grip and nothing else, so side bands would
+///     be a modern habit wearing a Jaguar frame;
+///   - the side bands are not free. The Finder's scrollbar is the rightmost
+///     15px of its window, so a 6px band takes the right 6px of every thumb and
+///     arrow in it — a scrollbar that resizes the window when you grab the
+///     wrong half of it. The sway suite passed with the bands in, because no
+///     test drags a thumb by its outer edge; a person would find it in a day.
+///
+/// The top is the title bar's, for the same reason: aiming at it to *move* the
+/// window and resizing it instead is the worse failure of the two.
+public let windowResizeBand: Double = 6
+public let windowResizeCorner: Double = 14
+
+/// What is under (x, y) in a window of logical size (w, h).
+public func windowChromeHit(x: Double, y: Double, w: Double, h: Double) -> WindowChromeHit {
+    // The bottom first: it is the outermost few pixels, and a control that
+    // overlapped it would be unreachable from the other side.
+    let cornerL = x <= windowResizeCorner, cornerR = x >= w - windowResizeCorner
+    let cornerB = y >= h - windowResizeCorner
+    if cornerB && cornerR { return .resize(.bottomRight) }
+    if cornerB && cornerL { return .resize(.bottomLeft) }
+    if y >= h - windowResizeBand { return .resize(.bottom) }
+
+    if y < Theme.titleBarHeight {
+        let lights = windowTrafficRects()
+        if lights.close.contains(x, y) { return .close }
+        if lights.minimize.contains(x, y) { return .minimize }
+        if lights.zoom.contains(x, y) { return .zoom }
+        if windowPillRect(w: w).contains(x, y) { return .pill }
+        return .title
+    }
+    return .content
 }
 
 /// Draw the window frame, title bar (gradient + pinstripe + bright edge),

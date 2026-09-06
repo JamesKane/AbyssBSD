@@ -431,7 +431,35 @@ case "run":
     // sessions a person is using. Comparing one Int per frame costs nothing.
     var reportedSelections = 0
     var reportedDrags = 0
+    // **Where the windows are, as it changes.** A Wayland client is never told
+    // its own position and only learns its size a frame later, so the compositor
+    // is the only witness to a move, a snap or a maximize — and without one, a
+    // test for P9.4 can assert that a request was *made* but never that anything
+    // happened. One line per change, which on an idle desktop is none.
+    var reportedGeometry: [String: String] = [:]
+    // The same argument for the window-request counters (P9.4): an unbounded run
+    // is stopped with a signal and never reaches the summary below, so a counter
+    // printed only there cannot be asserted on by the tests that need it most.
+    var reportedWindowOps = ""
     while unbounded || drawn < frames {
+        let ops = "resizes-started=\(compositor.resizesStarted) " +
+                  "maximizes=\(compositor.maximizeCount) " +
+                  "minimizes=\(compositor.minimizeCount) " +
+                  "snaps=\(compositor.snapCount)"
+        if ops != reportedWindowOps {
+            reportedWindowOps = ops
+            out(ops)
+        }
+        for t in compositor.toplevels where t.mapped {
+            let key = t.placeKey ?? "?"
+            var flags = ""
+            if t.minimized { flags = " min" } else if t.maximized { flags = " max" }
+            let line = "\(t.x),\(t.y) \(t.width)x\(t.height)\(flags)"
+            if reportedGeometry[key] != line {
+                reportedGeometry[key] = line
+                out("window \(key) \(line)")
+            }
+        }
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted
             out("selections-accepted=\(reportedSelections)")
@@ -496,6 +524,13 @@ case "run":
     // The same positive control for a drag: a drop that did nothing and a drag
     // the compositor refused to start look identical from the outside (P9.3).
     out("drags-started=\(seat.dragsStarted)")
+    // The window requests P9.4 answered. Counters rather than a log, for the
+    // same reason as the two above: "nothing happened" and "it happened and did
+    // nothing" are indistinguishable without one.
+    out("resizes-started=\(compositor.resizesStarted)")
+    out("maximizes=\(compositor.maximizeCount)")
+    out("minimizes=\(compositor.minimizeCount)")
+    out("snaps=\(compositor.snapCount)")
     out("layers=\(compositor.mappedLayers.count) of \(compositor.layers.count)")
     // The usable area is the ONLY observable proof that an exclusive zone was
     // honoured — a layer surface never appears in a window tree, so §2.26's

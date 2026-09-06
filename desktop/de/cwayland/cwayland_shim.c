@@ -21,6 +21,37 @@ void aw_xdg_surface_destroy(void *xdg_surface) {
     xdg_surface_destroy((struct xdg_surface *)xdg_surface);
 }
 
+void aw_xdg_toplevel_move(void *toplevel, void *seat, uint32_t serial) {
+    xdg_toplevel_move((struct xdg_toplevel *)toplevel, (struct wl_seat *)seat, serial);
+}
+
+void aw_xdg_toplevel_resize(void *toplevel, void *seat, uint32_t serial,
+                            uint32_t edges) {
+    xdg_toplevel_resize((struct xdg_toplevel *)toplevel, (struct wl_seat *)seat,
+                        serial, edges);
+}
+
+void aw_xdg_toplevel_set_maximized(void *toplevel) {
+    xdg_toplevel_set_maximized((struct xdg_toplevel *)toplevel);
+}
+
+void aw_xdg_toplevel_unset_maximized(void *toplevel) {
+    xdg_toplevel_unset_maximized((struct xdg_toplevel *)toplevel);
+}
+
+void aw_xdg_toplevel_set_minimized(void *toplevel) {
+    xdg_toplevel_set_minimized((struct xdg_toplevel *)toplevel);
+}
+
+void aw_xdg_toplevel_set_fullscreen(void *toplevel, void *output) {
+    xdg_toplevel_set_fullscreen((struct xdg_toplevel *)toplevel,
+                                (struct wl_output *)output);
+}
+
+void aw_xdg_toplevel_unset_fullscreen(void *toplevel) {
+    xdg_toplevel_unset_fullscreen((struct xdg_toplevel *)toplevel);
+}
+
 void aw_xdg_toplevel_destroy(void *toplevel) {
     xdg_toplevel_destroy((struct xdg_toplevel *)toplevel);
 }

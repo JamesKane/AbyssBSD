@@ -40,6 +40,23 @@ public final class Toplevel {
     public var title: String? { xdgToplevel.pointee.title.map { String(cString: $0) } }
     public var placeKey: String? { WindowPlaces.key(appID: appID, title: title) }
 
+    /// **Minimized windows are not on screen and not under the pointer.** The
+    /// flag lives here rather than in a list because everything that asks "what
+    /// is showing" — the scene, the hit-test, the frame callbacks — asks through
+    /// `mappedToplevels`, and one flag keeps them from disagreeing.
+    public internal(set) var minimized = false
+    public internal(set) var maximized = false
+    /// Where the window was before it was maximized or snapped, so unmaximizing
+    /// puts it back rather than leaving it wherever the compositor decided.
+    var restoreBox: Rect?
+
+    /// This window's entry in `wlr-foreign-toplevel-management` — how the Dock
+    /// learns that an application is running, and how a click on a tile reaches
+    /// back to raise or un-minimize it. Created when the window maps, because a
+    /// window nobody can see yet is not something to list.
+    var foreign: UnsafeMutablePointer<wlr_foreign_toplevel_handle_v1>?
+    private var foreignListeners: [UnsafeMutablePointer<tw_listener>?] = []
+
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
 
@@ -54,10 +71,13 @@ public final class Toplevel {
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
             t.mapped = true
             t.compositor.place(t)
+            t.publish()
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.unmap, { ctx, _ in
             guard let ctx else { return }
-            Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue().mapped = false
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            t.mapped = false
+            t.withdraw()
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.commit, { ctx, _ in
             guard let ctx else { return }
@@ -69,6 +89,10 @@ public final class Toplevel {
             if t.xdgToplevel.pointee.base.pointee.initial_commit {
                 _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, 0, 0)  // 0,0: you choose
             }
+            // A resize in progress: the client just told us the size it managed,
+            // which is the only moment the anchored edge can be put back exactly
+            // where it was (P9.4).
+            t.compositor.resizeCommitted(t)
         }, me))
         listeners.append(tw_listen(&toplevel.pointee.events.destroy, { ctx, _ in
             guard let ctx else { return }
@@ -88,13 +112,128 @@ public final class Toplevel {
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
             t.compositor.beginMove(t)
         }, me))
+        // The rest of what a window may ask about itself (P9.4). Every one of
+        // these was published and unanswered: the client sent the request, the
+        // compositor had no listener, and nothing happened — which is why no
+        // Aqua window could be resized, zoomed or minimized until now.
+        listeners.append(tw_listen(&toplevel.pointee.events.request_resize, { ctx, data in
+            guard let ctx, let data else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(to: wlr_xdg_toplevel_resize_event.self)
+            t.compositor.beginResize(t, edges: ev.pointee.edges)
+        }, me))
+        listeners.append(tw_listen(&toplevel.pointee.events.request_maximize, { ctx, _ in
+            guard let ctx else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            // **The client's own pending state is the request.** There is no
+            // "unmaximize" event; both requests arrive here and the answer is in
+            // `requested.maximized`. Answering with a configure is mandatory
+            // even when we refuse, or the client waits for ever.
+            t.compositor.setMaximized(t, t.xdgToplevel.pointee.requested.maximized)
+        }, me))
+        listeners.append(tw_listen(&toplevel.pointee.events.request_minimize, { ctx, _ in
+            guard let ctx else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            t.compositor.setMinimized(t, t.xdgToplevel.pointee.requested.minimized)
+        }, me))
+        listeners.append(tw_listen(&toplevel.pointee.events.request_fullscreen, { ctx, _ in
+            guard let ctx else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            t.compositor.setFullscreen(t, t.xdgToplevel.pointee.requested.fullscreen)
+        }, me))
+        // A window that renames itself must rename its Dock tile too.
+        listeners.append(tw_listen(&toplevel.pointee.events.set_title, { ctx, _ in
+            guard let ctx else { return }
+            Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue().describe()
+        }, me))
+        listeners.append(tw_listen(&toplevel.pointee.events.set_app_id, { ctx, _ in
+            guard let ctx else { return }
+            Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue().describe()
+        }, me))
     }
 
     /// Free the listeners before the object they point at goes away. §2.2/§2.35,
     /// for the third time in this project — it is always this.
     func teardown() {
+        withdraw()
         for l in listeners { tw_listener_free(l) }
         listeners.removeAll()
+    }
+
+    // MARK: - foreign-toplevel: how the Dock sees this window
+
+    /// Announce this window to the shell, and listen for what the shell asks.
+    ///
+    /// **The manager global was created and no handle was ever made**, so under
+    /// our own compositor the Dock showed no running applications, its tiles had
+    /// no dots, and clicking one could not raise anything. Every test that
+    /// proved otherwise ran on sway. The same shape as §2.56, found in the same
+    /// pass and for the same reason: minimize needs somewhere to go, and the
+    /// somewhere is a tile that has to exist.
+    func publish() {
+        guard foreign == nil, let manager = compositor.foreignManager else { return }
+        guard let handle = wlr_foreign_toplevel_handle_v1_create(manager) else { return }
+        foreign = handle
+        describe()
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        foreignListeners.append(tw_listen(&handle.pointee.events.request_activate,
+                                          { ctx, _ in
+            guard let ctx else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            // A click on a Dock tile. Un-minimize first: raising a window that
+            // is not on screen is a click that appears to do nothing.
+            t.compositor.setMinimized(t, false)
+            t.compositor.raise(t)
+            t.compositor.seat?.focus(t)
+        }, me))
+        foreignListeners.append(tw_listen(&handle.pointee.events.request_close, { ctx, _ in
+            guard let ctx else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            wlr_xdg_toplevel_send_close(t.xdgToplevel)
+        }, me))
+        foreignListeners.append(tw_listen(&handle.pointee.events.request_minimize,
+                                          { ctx, data in
+            guard let ctx, let data else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(
+                to: wlr_foreign_toplevel_handle_v1_minimized_event.self)
+            t.compositor.setMinimized(t, ev.pointee.minimized)
+        }, me))
+        foreignListeners.append(tw_listen(&handle.pointee.events.request_maximize,
+                                          { ctx, data in
+            guard let ctx, let data else { return }
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(
+                to: wlr_foreign_toplevel_handle_v1_maximized_event.self)
+            t.compositor.setMaximized(t, ev.pointee.maximized)
+        }, me))
+    }
+
+    /// Keep the tile's label honest.
+    func describe() {
+        guard let handle = foreign else { return }
+        wlr_foreign_toplevel_handle_v1_set_title(handle, title ?? "")
+        wlr_foreign_toplevel_handle_v1_set_app_id(handle, appID ?? "")
+    }
+
+    /// Tell the shell what this window now is.
+    func republish() {
+        guard let handle = foreign else { return }
+        wlr_foreign_toplevel_handle_v1_set_minimized(handle, minimized)
+        wlr_foreign_toplevel_handle_v1_set_maximized(handle, maximized)
+    }
+
+    func setForeignActivated(_ on: Bool) {
+        guard let handle = foreign else { return }
+        wlr_foreign_toplevel_handle_v1_set_activated(handle, on)
+    }
+
+    /// The window is gone: take the tile with it, listeners first (§2.2).
+    func withdraw() {
+        for l in foreignListeners { tw_listener_free(l) }
+        foreignListeners.removeAll()
+        if let handle = foreign { wlr_foreign_toplevel_handle_v1_destroy(handle) }
+        foreign = nil
     }
 
     deinit { teardown() }
@@ -112,7 +251,7 @@ public final class Compositor {
     private var newSurfaceListener: UnsafeMutablePointer<tw_listener>?
     private var newLayerListener: UnsafeMutablePointer<tw_listener>?
     private var activationListener: UnsafeMutablePointer<tw_listener>?
-    private var foreignManager: UnsafeMutablePointer<wlr_foreign_toplevel_manager_v1>?
+    fileprivate var foreignManager: UnsafeMutablePointer<wlr_foreign_toplevel_manager_v1>?
     /// Shell surfaces (wallpaper, menu bar, Dock, toasts), in creation order.
     public private(set) var layers: [LayerSurface] = []
     /// The area a toplevel may use — the output minus every exclusive zone.
@@ -136,6 +275,23 @@ public final class Compositor {
     public private(set) var moving: Toplevel?
     private var moveDX: Double = 0
     private var moveDY: Double = 0
+    /// The window being resized, which edges are being dragged, and the box it
+    /// started from. The *anchored* edges are what this remembers: a resize from
+    /// the left moves the left edge and must leave the right one exactly where
+    /// it was, and doing that from the live size drifts by a pixel a frame.
+    public private(set) var resizing: Toplevel?
+    private var resizeEdges: UInt32 = 0
+    private var resizeStartX: Double = 0
+    private var resizeStartY: Double = 0
+    private var resizeStartBox = Rect(x: 0, y: 0, width: 0, height: 0)
+    private var resizeAnchorRight: Int32 = 0
+    private var resizeAnchorBottom: Int32 = 0
+    /// How many times each of these has happened — the positive controls, for
+    /// the same reason `selectionsAccepted` and `dragsStarted` are (§2.37).
+    public private(set) var resizesStarted = 0
+    public private(set) var maximizeCount = 0
+    public private(set) var minimizeCount = 0
+    public private(set) var snapCount = 0
     /// Set when a window is restored to a remembered position rather than
     /// cascaded — the observable difference a test can assert on.
     public private(set) var restoredCount = 0
@@ -378,11 +534,158 @@ public final class Compositor {
         t.y = Int32(min(max(cursorY - moveDY, Double(usableArea.y)), maxY))
     }
 
-    /// End the drag and remember where it landed.
+    /// End the drag: snap if it ended on an edge, then remember where it landed.
     func endMove() {
         guard let t = moving else { return }
         moving = nil
+        // **Snap on release, not during the drag.** A window that resizes while
+        // you are still moving it fights the pointer, and the person cannot see
+        // the zone they are about to commit to until they stop moving anyway.
+        if let seat,
+           let zone = WindowSnap.zone(cursorX: Int32(seat.cursorX),
+                                      cursorY: Int32(seat.cursorY),
+                                      area: usableArea) {
+            // Where it was before the snap, so unmaximizing gives it back.
+            if t.restoreBox == nil {
+                t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
+            }
+            let box = WindowSnap.rect(for: zone, in: usableArea)
+            t.x = box.x
+            t.y = box.y
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, box.width)),
+                                          Int32(max(0, box.height)))
+            if zone == .maximize { setMaximized(t, true) }
+            snapCount += 1
+        }
         rememberPlace(of: t)
+    }
+
+    // MARK: - Interactive resize
+
+    /// Begin a resize the client asked for, from `edges`.
+    func beginResize(_ t: Toplevel, edges: UInt32) {
+        guard let seat else { return }
+        resizing = t
+        resizeEdges = edges
+        resizeStartX = seat.cursorX
+        resizeStartY = seat.cursorY
+        resizeStartBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
+        resizeAnchorRight = t.x + t.width
+        resizeAnchorBottom = t.y + t.height
+        resizesStarted += 1
+        raise(t)
+    }
+
+    /// Follow the pointer. Called from the seat on every motion.
+    ///
+    /// The compositor decides the *size*; the client decides whether it can
+    /// honour it, and answers with a commit at whatever size it managed. So the
+    /// position of a left- or top-dragged window is fixed up when that commit
+    /// arrives (`resizeCommitted`) rather than here, or the anchored edge walks.
+    func updateResize(cursorX: Double, cursorY: Double) {
+        guard let t = resizing else { return }
+        let dx = Int32(cursorX - resizeStartX), dy = Int32(cursorY - resizeStartY)
+        var w = resizeStartBox.width, h = resizeStartBox.height
+        if resizeEdges & UInt32(WLR_EDGE_LEFT.rawValue) != 0 { w -= dx }
+        if resizeEdges & UInt32(WLR_EDGE_RIGHT.rawValue) != 0 { w += dx }
+        if resizeEdges & UInt32(WLR_EDGE_TOP.rawValue) != 0 { h -= dy }
+        if resizeEdges & UInt32(WLR_EDGE_BOTTOM.rawValue) != 0 { h += dy }
+        // A window smaller than its own title bar cannot be dragged back, so the
+        // floor is the compositor's business rather than the toolkit's.
+        w = max(w, Compositor.minimumWindowWidth)
+        h = max(h, Compositor.minimumWindowHeight)
+        _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, w, h)
+        if resizeEdges & UInt32(WLR_EDGE_TOP.rawValue) == 0 { t.y = resizeStartBox.y }
+        if resizeEdges & UInt32(WLR_EDGE_LEFT.rawValue) == 0 { t.x = resizeStartBox.x }
+    }
+
+    /// The client committed a new size during a resize: keep the anchored edges
+    /// where they were. Called from the surface commit listener.
+    func resizeCommitted(_ t: Toplevel) {
+        guard resizing === t else { return }
+        if resizeEdges & UInt32(WLR_EDGE_LEFT.rawValue) != 0 {
+            t.x = resizeAnchorRight - t.width
+        }
+        if resizeEdges & UInt32(WLR_EDGE_TOP.rawValue) != 0 {
+            t.y = resizeAnchorBottom - t.height
+        }
+    }
+
+    func endResize() {
+        guard let t = resizing else { return }
+        resizing = nil
+        resizeEdges = 0
+        rememberPlace(of: t)
+    }
+
+    public static let minimumWindowWidth: Int32 = 120
+    public static let minimumWindowHeight: Int32 = 40
+
+    // MARK: - Maximize, minimize, fullscreen
+
+    /// Zoom to the **usable area**, not the output.
+    ///
+    /// The menu bar's exclusive zone has been computed since P6.4 and until now
+    /// nothing consumed it. A window maximized to the output would slide under
+    /// the menu bar, which is the visible symptom of a zone that was arithmetic
+    /// and nothing else.
+    func setMaximized(_ t: Toplevel, _ on: Bool) {
+        if on {
+            if t.restoreBox == nil {
+                t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
+            }
+            t.x = usableArea.x
+            t.y = usableArea.y
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, usableArea.width)),
+                                          Int32(max(0, usableArea.height)))
+            maximizeCount += 1
+        } else if let box = t.restoreBox {
+            t.x = box.x
+            t.y = box.y
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, box.width)),
+                                          Int32(max(0, box.height)))
+            t.restoreBox = nil
+        }
+        t.maximized = on
+        // **The configure is not optional.** A client that asked and was never
+        // answered waits for ever — including when the answer is no.
+        _ = wlr_xdg_toplevel_set_maximized(t.xdgToplevel, on)
+        t.republish()
+    }
+
+    /// Minimize to the Dock tile. No animation — the genie is Phase 13's, and it
+    /// wants the same scaled `dst_box` and alpha that Ebb wants.
+    func setMinimized(_ t: Toplevel, _ on: Bool) {
+        guard t.minimized != on else { return }
+        t.minimized = on
+        if on {
+            minimizeCount += 1
+            // A minimized window must not keep the keyboard: the person just
+            // put it away, and a deaf desktop is what happens if it does.
+            if seat?.focused === t { seat?.focusTopmost() }
+        } else {
+            raise(t)
+            seat?.focus(t)
+        }
+        t.republish()
+    }
+
+    func setFullscreen(_ t: Toplevel, _ on: Bool) {
+        if on {
+            if t.restoreBox == nil {
+                t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
+            }
+            t.x = 0
+            t.y = 0
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, outputWidth, outputHeight)
+        } else if let box = t.restoreBox {
+            t.x = box.x
+            t.y = box.y
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, box.width)),
+                                          Int32(max(0, box.height)))
+            t.restoreBox = nil
+        }
+        _ = wlr_xdg_toplevel_set_fullscreen(t.xdgToplevel, on)
     }
 
     /// The seat, once one exists — set by `Seat.init`.
@@ -408,7 +711,7 @@ public final class Compositor {
 
     /// Windows that currently have something to show, bottom to top.
     public var mappedToplevels: [Toplevel] {
-        toplevels.filter { $0.mapped && wlr_surface_has_buffer($0.surface) }
+        toplevels.filter { $0.mapped && !$0.minimized && wlr_surface_has_buffer($0.surface) }
     }
 
     /// Tell every mapped client the frame is done, so it draws the next one.

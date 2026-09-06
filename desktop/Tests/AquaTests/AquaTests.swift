@@ -1032,6 +1032,40 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(finderCopyName("Documents", exists: exists), "Documents copy")
     }
 
+    // MARK: - Window chrome (P9.4)
+
+    func testChromeLightsBeatTheTitleBar() {
+        // The three lights sit in the title bar, so the title (drag-to-move)
+        // must be what is left over rather than the whole strip.
+        let lights = windowTrafficRects()
+        XCTAssertEqual(windowChromeHit(x: lights.close.x + 3, y: 11, w: 400, h: 300), .close)
+        XCTAssertEqual(windowChromeHit(x: lights.minimize.x + 3, y: 11, w: 400, h: 300), .minimize)
+        XCTAssertEqual(windowChromeHit(x: lights.zoom.x + 3, y: 11, w: 400, h: 300), .zoom)
+        XCTAssertEqual(windowChromeHit(x: 200, y: 11, w: 400, h: 300), .title)
+        XCTAssertEqual(windowChromeHit(x: 400 - 20, y: 11, w: 400, h: 300), .pill)
+    }
+
+    func testOnlyTheBottomAndItsCornersResize() {
+        XCTAssertEqual(windowChromeHit(x: 200, y: 299, w: 400, h: 300), .resize(.bottom))
+        XCTAssertEqual(windowChromeHit(x: 398, y: 298, w: 400, h: 300), .resize(.bottomRight))
+        XCTAssertEqual(windowChromeHit(x: 2, y: 298, w: 400, h: 300), .resize(.bottomLeft))
+        // **The sides are not resize bands**, and this is the assertion that
+        // says so: the Finder's scrollbar is the rightmost 15px of its window,
+        // so a side band would take the outer edge of every thumb in it.
+        XCTAssertEqual(windowChromeHit(x: 399, y: 150, w: 400, h: 300), .content)
+        XCTAssertEqual(windowChromeHit(x: 1, y: 150, w: 400, h: 300), .content)
+        // The top belongs to the title bar: aiming at it to drag the window must
+        // not resize it instead.
+        XCTAssertEqual(windowChromeHit(x: 1, y: 2, w: 400, h: 300), .title)
+        XCTAssertEqual(windowChromeHit(x: 399, y: 2, w: 400, h: 300), .title)
+    }
+
+    func testChromeLeavesTheContentAlone() {
+        // The overwhelming majority of a window is not chrome, and a hit-test
+        // that says otherwise steals clicks from every control in it.
+        XCTAssertEqual(windowChromeHit(x: 200, y: 150, w: 400, h: 300), .content)
+    }
+
     // MARK: - What a drop contains (P9.3)
 
     func testDroppedPathTakesTheFirstURI() {

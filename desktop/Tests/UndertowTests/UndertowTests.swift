@@ -458,6 +458,56 @@ final class UndertowTests: XCTestCase {
     /// The top window wins. This is the whole reason raising a window changes
     /// what a click hits, and it is one line that would be tedious to prove with
     /// a running desktop and trivial here.
+    // MARK: - Edge snapping (P9.4)
+
+    /// The usable area, not the output — a window snapped under the menu bar is
+    /// the same defect as one placed there.
+    private var snapArea: Rect { Rect(x: 0, y: 22, width: 800, height: 578) }
+
+    func testSnapZonesAreTheThreeEdgesAndNothingElse() {
+        let a = snapArea
+        XCTAssertEqual(WindowSnap.zone(cursorX: 2, cursorY: 300, area: a), .left)
+        XCTAssertEqual(WindowSnap.zone(cursorX: 799, cursorY: 300, area: a), .right)
+        XCTAssertEqual(WindowSnap.zone(cursorX: 400, cursorY: 24, area: a), .maximize)
+        // The middle is the overwhelming majority of the screen and snaps to
+        // nothing: a person who never drags to an edge never meets this.
+        XCTAssertNil(WindowSnap.zone(cursorX: 400, cursorY: 300, area: a))
+        // The bottom edge is deliberately not a zone — there is a Dock there.
+        XCTAssertNil(WindowSnap.zone(cursorX: 400, cursorY: 599, area: a))
+    }
+
+    func testTheTopCornersMaximizeRatherThanHalve() {
+        let a = snapArea
+        // Both readings are defensible; only one can happen, and a corner that
+        // sometimes did each would be a coin toss.
+        XCTAssertEqual(WindowSnap.zone(cursorX: 0, cursorY: 22, area: a), .maximize)
+        XCTAssertEqual(WindowSnap.zone(cursorX: 799, cursorY: 22, area: a), .maximize)
+    }
+
+    func testSnapHalvesTileTheAreaExactly() {
+        let a = snapArea
+        let l = WindowSnap.rect(for: .left, in: a)
+        let r = WindowSnap.rect(for: .right, in: a)
+        XCTAssertEqual(l.x, a.x)
+        XCTAssertEqual(l.x + l.width, r.x)                 // no gutter
+        XCTAssertEqual(r.x + r.width, a.x + a.width)       // no overhang
+        XCTAssertEqual(l.height, a.height)
+        XCTAssertEqual(WindowSnap.rect(for: .maximize, in: a), a)
+        // An odd width still tiles exactly.
+        let odd = Rect(x: 0, y: 0, width: 801, height: 100)
+        let ol = WindowSnap.rect(for: .left, in: odd)
+        let or = WindowSnap.rect(for: .right, in: odd)
+        XCTAssertEqual(ol.width + or.width, odd.width)
+        XCTAssertEqual(ol.x + ol.width, or.x)
+    }
+
+    func testAnEmptyAreaSnapsToNothing() {
+        // A compositor with no usable area (every zone taken) must not divide
+        // by it — and nil is the honest answer, not a zero-width half.
+        XCTAssertNil(WindowSnap.zone(cursorX: 0, cursorY: 0,
+                                     area: Rect(x: 0, y: 0, width: 0, height: 0)))
+    }
+
     func testTheTopmostWindowUnderThePointerWins() {
         let rects = [
             WindowRect(x: 0, y: 0, width: 200, height: 200),      // bottom
