@@ -54,6 +54,16 @@ public struct Config: Sendable, Equatable {
         }
     }
 
+    /// Every key/value in a section, sorted by key.
+    ///
+    /// Every reader until now knew the key it wanted. A *table* does not — the
+    /// keybind file's keys are the shortcuts themselves (P9.5) — so it needs to
+    /// ask what is there. Sorted, because a table read in hash order would
+    /// resolve two rows that collide differently on different runs.
+    public func pairs(_ section: String) -> [(String, String)] {
+        (sections[section] ?? [:]).sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+
     /// The schema version from the default section (0 if unset), for migrations.
     public var schemaVersion: UInt64 { uint64("", "schema_version") ?? 0 }
 

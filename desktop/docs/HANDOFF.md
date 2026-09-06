@@ -607,6 +607,30 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.59 Routing a key is not telling a window it has focus
+(P9.5. Six phases of windows drawing themselves active whether they were or not.)
+
+`Seat.focus` called `wlr_seat_keyboard_notify_enter` and stopped. That routes the
+*keys*; it says nothing about the **activated** state, which is the half a client
+draws with — the live title bar, the caret that blinks, the selection that is not
+grey. undertow set it on nobody, so every Aqua window since Phase 6 has rendered
+as the focused one, including the ones behind it.
+
+Nothing could catch it. The screenshots are of single-window scenes, where
+"always active" and "correctly active" are the same picture; the client had no
+way to ask; and the compositor was not lying, it was silent. It surfaced only
+when a test needed focus as an *observable* — Cmd-Tab's entire visible effect is
+which window says it now has focus — which is the same shape as §2.56 and §2.58
+from a third direction:
+
+> **A thing nothing ever asked for is a thing nobody notices is missing.** The
+> gap is never in the code that runs; it is in the state nobody reads until a
+> feature finally needs it.
+
+The client half was already there — P9.4 taught `Surface.Window` to decode the
+configure states and it has reported `activated` faithfully ever since. It was
+reporting a state the compositor never set.
+
 ### 2.58 A global with nothing behind it is the same defect twice
 (P9.4, one pass after §2.56, in the same file and for the same reason.)
 

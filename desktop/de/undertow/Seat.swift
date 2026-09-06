@@ -20,6 +20,7 @@
 // in Phase 4.
 
 import CWlroots
+import PoolConfig
 
 #if canImport(Glibc)
 import Glibc
@@ -310,6 +311,16 @@ public final class Seat {
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_keyboard_key_event.self)
+            // **The desktop hears it first (P9.5).** Everything the compositor
+            // owns — switching windows, closing one, taking a picture of the
+            // screen — can only be decided here, because after this line the
+            // focused client has it and the compositor never sees it again.
+            // The keyboard comes from the seat rather than the closure: a C
+            // function pointer cannot capture, and `wlr_seat_set_keyboard`
+            // below has already told the seat which device this is.
+            if let kbd = wlr_seat_get_keyboard(s.seat), s.intercept(key: e, keyboard: kbd) {
+                return
+            }
             wlr_seat_keyboard_notify_key(s.seat, e.pointee.time_msec,
                                          e.pointee.keycode, UInt32(e.pointee.state.rawValue))
         }, me))
@@ -489,8 +500,19 @@ public final class Seat {
         // The shell is told which window is active the same way it is told one
         // exists — through its foreign-toplevel handle. Without this the Dock
         // can list running applications and never say which one you are in.
-        focused?.setForeignActivated(false)
+        // **Tell the windows, not just the shell.** `keyboard_notify_enter`
+        // routes the keys; the *activated* state is what a client draws with —
+        // an active title bar, a live caret, a selection that is not grey — and
+        // undertow set it on nobody, so every Aqua window in this tree has been
+        // drawing itself focused since Phase 6, including the five that were
+        // not. Found in P9.5, because Cmd-Tab's only observable effect is which
+        // window says it now has focus.
+        if let old = focused {
+            _ = wlr_xdg_toplevel_set_activated(old.xdgToplevel, false)
+            old.setForeignActivated(false)
+        }
         focused = t
+        _ = wlr_xdg_toplevel_set_activated(t.xdgToplevel, true)
         t.setForeignActivated(true)
         guard let kbd = wlr_seat_get_keyboard(seat) else {
             // No keyboard on the seat yet: focus is still ours to record, and
@@ -501,6 +523,149 @@ public final class Seat {
                                        &kbd.pointee.keycodes.0,
                                        kbd.pointee.num_keycodes,
                                        &kbd.pointee.modifiers)
+    }
+
+    // MARK: - Keybinds (P9.5)
+
+    /// Keycodes whose press this compositor swallowed.
+    ///
+    /// **A release must follow its press or not exist.** Consuming Cmd-Tab's
+    /// press and forwarding its release hands the client half an event: a key it
+    /// never saw go down, coming up — which toolkits variously ignore, log, or
+    /// treat as a stuck modifier. Cheaper to remember the keycode than to debug
+    /// that in an application six months from now.
+    private var consumedKeys: Set<UInt32> = []
+    /// The table, and when its file was last looked at.
+    private var bindings = KeyBindings()
+    private var bindingsLoadedAt: time_t = 0
+    private var bindingsChecked: time_t = 0
+
+    /// Answer a key event ourselves, or say we did not. True means consumed.
+    fileprivate func intercept(key e: UnsafeMutablePointer<wlr_keyboard_key_event>,
+                               keyboard: UnsafeMutablePointer<wlr_keyboard>) -> Bool {
+        let keycode = e.pointee.keycode
+        guard e.pointee.state == WL_KEYBOARD_KEY_STATE_PRESSED else {
+            return consumedKeys.remove(keycode) != nil
+        }
+        reloadBindingsIfStale()
+        let mods = KeyModifiers(rawValue: wlr_keyboard_get_modifiers(keyboard)).normalized()
+        let app = focused?.appID
+
+        // Two symbols, and both are needed. The **translated** one is what the
+        // layout produces with the modifiers applied — which for Cmd-Shift-3 on
+        // a US layout is `numbersign`, not `3`. The **raw** one is the symbol
+        // printed on the key. A table written the way a person thinks ("Cmd,
+        // Shift and the 3 key") only works if both are tried.
+        var action: KeyAction? = nil
+        for sym in symbols(keyboard: keyboard, keycode: keycode) {
+            if let a = bindings.match(sym: sym, modifiers: mods, focusedAppID: app) {
+                action = a
+                break
+            }
+        }
+        guard let act = action else { return false }
+        consumedKeys.insert(keycode)
+        perform(act)
+        return true
+    }
+
+    /// The translated symbol, then the raw one. Duplicates are harmless: the
+    /// table is small and a second lookup of the same symbol costs nothing.
+    private func symbols(keyboard: UnsafeMutablePointer<wlr_keyboard>,
+                         keycode: UInt32) -> [UInt32] {
+        var out: [UInt32] = []
+        let xkbCode = keycode + 8
+        if let state = keyboard.pointee.xkb_state {
+            var syms: UnsafePointer<xkb_keysym_t>? = nil
+            let n = xkb_state_key_get_syms(state, xkbCode, &syms)
+            if let syms, n > 0 { for i in 0..<Int(n) { out.append(syms[i]) } }
+        }
+        if let keymap = keyboard.pointee.keymap {
+            let layout = keyboard.pointee.xkb_state.map {
+                xkb_state_key_get_layout($0, xkbCode)
+            } ?? 0
+            var syms: UnsafePointer<xkb_keysym_t>? = nil
+            let n = xkb_keymap_key_get_syms_by_level(keymap, xkbCode, layout, 0, &syms)
+            if let syms, n > 0 { for i in 0..<Int(n) where !out.contains(syms[i]) {
+                out.append(syms[i])
+            } }
+        }
+        return out
+    }
+
+    private func perform(_ action: KeyAction) {
+        switch action {
+        case .nextWindow:      compositor.cycleWindow(forward: true)
+        case .previousWindow:  compositor.cycleWindow(forward: false)
+        case .closeWindow:     compositor.closeFocusedWindow()
+        case .quitApplication: compositor.quitFocusedApplication()
+        case .run(let words):  Seat.spawnDetached(words)
+        }
+        keybindsFired += 1
+    }
+
+    /// How many bound keystrokes this compositor has answered — the positive
+    /// control, for the same reason `dragsStarted` is one (§2.37). "The key did
+    /// nothing" and "the key was never bound" look identical from outside.
+    public private(set) var keybindsFired = 0
+
+    /// The table, from `~/.config/abyss/keys.ini` over the built-in defaults.
+    ///
+    /// Re-read when the file's timestamp moves, checked at most once a second
+    /// and only on a keystroke — the shell's other configuration hot-reloads
+    /// (§2.18) and a shortcut table that needed a restart would be the one piece
+    /// of it that did not. No watcher, no timer: the only moment the answer can
+    /// matter is the moment somebody presses a key.
+    private func reloadBindingsIfStale() {
+        let now = time(nil)
+        if bindingsLoadedAt != 0, now - bindingsChecked < 1 { return }
+        bindingsChecked = now
+        let path = (compositor.configDir ?? Seat.defaultConfigDir()) + "/keys.ini"
+        var st = stat()
+        let mtime: time_t = stat(path, &st) == 0 ? st.st_mtim.tv_sec : 0
+        if bindingsLoadedAt != 0 && mtime == bindingsLoadedAt { return }
+        bindingsLoadedAt = mtime == 0 ? -1 : mtime
+
+        var config = Config()
+        for (spec, action) in KeyBindingParser.defaults {
+            config = config.set("keys", spec, action)
+        }
+        if let onDisk = try? Pool.load("keys", in: compositor.configDir) {
+            // Row by row, so a file that binds one key keeps the other defaults.
+            for (spec, action) in onDisk.pairs("keys") {
+                config = config.set("keys", spec, action)
+            }
+            for (app, specs) in onDisk.pairs("passthrough") {
+                config = config.set("passthrough", app, specs)
+            }
+        }
+        bindings = KeyBindingParser.table(from: config) { name in
+            name.withCString { xkb_keysym_from_name($0, XKB_KEYSYM_CASE_INSENSITIVE) }
+        }
+    }
+
+    private static func defaultConfigDir() -> String {
+        if let x = getenv("ABYSS_CONFIG_DIR") { return String(cString: x) }
+        if let h = getenv("HOME") { return String(cString: h) + "/.config/abyss" }
+        return "/tmp"
+    }
+
+    /// Run a command and forget it. No shell, and the child is reaped by init
+    /// rather than by us — a compositor that accumulated zombies every time
+    /// somebody pressed a volume key would be a slow leak nobody attributed.
+    private static func spawnDetached(_ words: [String]) {
+        guard let first = words.first else { return }
+        let pid = fork()
+        if pid == 0 {
+            if fork() != 0 { _exit(0) }          // orphan the grandchild
+            var argv: [UnsafeMutablePointer<CChar>?] = words.map { strdup($0) }
+            argv.append(nil)
+            execvp(first, &argv)
+            _exit(127)
+        } else if pid > 0 {
+            var status: Int32 = 0
+            _ = waitpid(pid, &status, 0)         // the middle process, immediately
+        }
     }
 
     /// Focus whatever is now on top, or nobody.

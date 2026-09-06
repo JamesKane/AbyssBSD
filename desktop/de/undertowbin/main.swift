@@ -431,6 +431,7 @@ case "run":
     // sessions a person is using. Comparing one Int per frame costs nothing.
     var reportedSelections = 0
     var reportedDrags = 0
+    var reportedKeybinds = 0
     // **Where the windows are, as it changes.** A Wayland client is never told
     // its own position and only learns its size a frame later, so the compositor
     // is the only witness to a move, a snap or a maximize — and without one, a
@@ -463,6 +464,10 @@ case "run":
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted
             out("selections-accepted=\(reportedSelections)")
+        }
+        if seat.keybindsFired != reportedKeybinds {
+            reportedKeybinds = seat.keybindsFired
+            out("keybinds-fired=\(reportedKeybinds)")
         }
         if seat.dragsStarted != reportedDrags {
             reportedDrags = seat.dragsStarted
@@ -524,6 +529,7 @@ case "run":
     // The same positive control for a drag: a drop that did nothing and a drag
     // the compositor refused to start look identical from the outside (P9.3).
     out("drags-started=\(seat.dragsStarted)")
+    out("keybinds-fired=\(seat.keybindsFired)")
     // The window requests P9.4 answered. Counters rather than a log, for the
     // same reason as the two above: "nothing happened" and "it happened and did
     // nothing" are indistinguishable without one.

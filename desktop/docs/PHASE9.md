@@ -340,6 +340,53 @@ volume/brightness keys through `Vents`.
 **This is the pass Phase 13 is blocked on**, so it is worth finishing rather than
 half-finishing: an island switcher with no keyboard route is a toy.
 
+**What P9.5 landed, and the state no window could see:**
+
+- **The table** is `KeyBindings` — parse and match, both pure and unit-tested,
+  for the same reason `PointerRouting.hit` and `WindowSnap.zone` are (§2.9).
+  Modifiers must match *exactly* (Cmd-Q and Cmd-Shift-Q are different
+  keystrokes), and the lock states are masked off, because a table that
+  distinguished Caps Lock would disable every shortcut the moment somebody left
+  it on.
+- **Two symbols are tried, translated and raw.** With Shift held, a US layout
+  turns the 3 key into `numbersign` — so a table written the way a person thinks
+  ("Cmd, Shift and the 3 key") only works if the symbol printed on the key is
+  tried as well as the one the layout produced.
+- **A consumed press consumes its release.** Forwarding the release of a key
+  whose press we swallowed hands the client half an event, which toolkits
+  variously ignore, log, or treat as a stuck modifier.
+- **Actions are compositor verbs or commands.** `next-window`,
+  `previous-window`, `close-window`, `quit-app` — and `run: …`, which is how the
+  volume keys reach `ventsctl` without the compositor taking a dependency on the
+  hardware bridges, and how a person binds anything else. Not a shell: no
+  quoting, no globbing, no `rm -rf $HOME` out of a config file the desktop reads
+  at every keystroke.
+- **The defaults are compiled in** and `~/.config/abyss/keys.ini` overrides them
+  row by row, re-read when its timestamp moves — checked at most once a second
+  and only on a keystroke, which is the only moment the answer can matter.
+
+**§6.2 is decided: an application may keep a combination, and it says so in the
+table.** `[passthrough] app_id = Cmd+Q Cmd+W`, with `*` for "this application
+keeps everything" — the case a virtual machine window or a remote desktop needs.
+Per-application, not a modifier that suppresses the table for one keystroke:
+a terminal declares itself once, in data, where a person can read it; a
+suppression modifier is a thing you have to know, and nothing on screen can tell
+you it exists. Phase 15's terminal now has a supported answer rather than a
+retrofit.
+
+> **And no window could tell whether it had focus.** `Seat.focus` routed the
+> keyboard and never called `wlr_xdg_toplevel_set_activated`, so every Aqua
+> window in this tree has drawn itself as the active one since Phase 6 —
+> including the five that were not. It surfaced here because Cmd-Tab's only
+> observable effect *is* which window says it now has focus, so the test needed
+> the thing that was missing (HANDOFF §2.59).
+
+`abyss/tests/live-keys.sh` drives a real keyboard through undertow and checks all
+four directions: an unbound key reaches the application (the control the rest
+rests on), a bound one is answered *and* withheld, a kept one arrives with the
+window still open, and Cmd-Tab moves focus to the other window — the raise
+Phase 13 is blocked on.
+
 **P9.6 — server-side decorations.**
 `xdg-decoration-unstable-v1` is the only new protocol XML in the phase, and it is
 present in `wayland-protocols` on both platforms (§4.3). The server side is

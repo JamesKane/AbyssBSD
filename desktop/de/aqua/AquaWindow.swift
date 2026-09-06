@@ -535,7 +535,29 @@ public final class AquaWindow: WindowDelegate {
         }
     }
 
+    public func windowStateChanged(_ window: Window) {
+        // The compositor's answer about what this window now *is* (P9.4). Worth
+        // saying out loud because activation is otherwise invisible: which
+        // window has focus is the whole observable effect of Cmd-Tab, and the
+        // client is the only one who can be asked.
+        let line = "AquaWindow: \(window.isActivated ? "activated" : "deactivated")" +
+                   (window.isMaximized ? " maximized" : "") + "\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
+        window.setNeedsDisplay()
+    }
+
     public func keyEvent(_ event: KeyEvent) {
+        // **Say what arrived.** Every other scene in this toolkit reports what
+        // it was told — the Finder logs its shortcuts, the Dock logs its clicks
+        // — and until P9.5 a window's keys were asserted only by screenshot.
+        // A compositor that swallows a key and one that never sent it produce
+        // identical pictures, so the keybind tests need the client's own word
+        // for what it received.
+        if event.pressed {
+            let line = "AquaWindow: key \(event.keysym)" +
+                       (event.text.isEmpty ? "" : " '\(event.text)'") + "\n"
+            line.withCString { _ = write(2, $0, strlen($0)) }
+        }
         switch sceneKind {
         case .widgets: widgetsKey(event); return
         case .scroll:  if event.pressed { scrollKey(event.keysym) }; return

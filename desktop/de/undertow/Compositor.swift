@@ -271,6 +271,9 @@ public final class Compositor {
     private var cascade: Int32 = 0
     /// Remembered window positions, persisted through PoolConfig.
     public let places: WindowPlaces
+    /// Where this compositor's configuration lives (nil = the user's own).
+    /// The keybind table is read from here, and re-read when it changes.
+    public private(set) var configDir: String?
     /// The window being dragged, and the pointer offset within it.
     public private(set) var moving: Toplevel?
     private var moveDX: Double = 0
@@ -317,6 +320,7 @@ public final class Compositor {
     public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32,
                 configDir: String? = nil, socketName: String? = nil) throws {
         self.places = WindowPlaces(configDir: configDir)
+        self.configDir = configDir
         self.session = session
         self.outputWidth = outputWidth
         self.outputHeight = outputHeight
@@ -616,6 +620,48 @@ public final class Compositor {
         resizing = nil
         resizeEdges = 0
         rememberPlace(of: t)
+    }
+
+    // MARK: - What a keybind can ask for (P9.5)
+
+    /// Raise and focus the next window in the stack, wrapping.
+    ///
+    /// **Cmd-Tab, and the whole of it for now.** The switcher *interface* — the
+    /// island with the icons — is Phase 13's; the binding and the raise are this
+    /// pass's, and they are what Phase 13 is blocked on.
+    func cycleWindow(forward: Bool) {
+        let windows = mappedToplevels          // bottom-to-top; the last is on top
+        guard windows.count > 1 else {
+            if let only = windows.first { seat?.focus(only) }
+            return
+        }
+        // Forward means "the one under the top", which is what Cmd-Tab does on a
+        // Mac: it goes to the window you were in before this one.
+        let next = forward ? windows[windows.count - 2] : windows[0]
+        seat?.focus(next)
+    }
+
+    /// Ask the focused window to close. The client decides what that means — a
+    /// document with unsaved changes is entitled to put up a sheet — which is
+    /// why this sends `close` rather than destroying anything.
+    func closeFocusedWindow() {
+        guard let t = seat?.focused else { return }
+        wlr_xdg_toplevel_send_close(t.xdgToplevel)
+    }
+
+    /// Cmd-Q: every window of the focused application, not just this one.
+    ///
+    /// That difference is the whole reason both bindings exist, and a compositor
+    /// that treated them the same would be quietly wrong in the direction people
+    /// notice — closing one window of five and calling it quitting.
+    func quitFocusedApplication() {
+        guard let t = seat?.focused, let app = t.appID, !app.isEmpty else {
+            closeFocusedWindow()
+            return
+        }
+        for w in toplevels where w.appID == app {
+            wlr_xdg_toplevel_send_close(w.xdgToplevel)
+        }
     }
 
     public static let minimumWindowWidth: Int32 = 120

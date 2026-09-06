@@ -354,7 +354,11 @@ let package = Package(
         // P6.2 puts real wlroots frames under it.
         .target(
             name: "Undertow",
-            dependencies: ["CWlroots", "PoolConfig"],
+            // CXkb because the keybind table turns a keycode into a keysym
+            // (P9.5). wlroots' headers declare xkbcommon's functions, so the
+            // *compile* worked without it and only the link failed — the module
+            // is here for the library, not for the declarations.
+            dependencies: ["CWlroots", "PoolConfig", "CXkb"],
             path: "de/undertow"
         ),
         .executableTarget(
@@ -462,7 +466,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UndertowTests",
-            dependencies: ["Undertow"],
+            dependencies: ["Undertow", "PoolConfig"],
             path: "Tests/UndertowTests"
         ),
     ]

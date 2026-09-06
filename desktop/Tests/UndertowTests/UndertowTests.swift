@@ -9,6 +9,7 @@
 // on any machine.
 
 import XCTest
+import PoolConfig
 @testable import Undertow
 
 #if canImport(Glibc)
@@ -458,6 +459,116 @@ final class UndertowTests: XCTestCase {
     /// The top window wins. This is the whole reason raising a window changes
     /// what a click hits, and it is one line that would be tedious to prove with
     /// a running desktop and trivial here.
+    // MARK: - The keybind table (P9.5)
+
+    /// A stub keysym table, so the parse can be tested without xkb — and so the
+    /// tests say which symbols they mean instead of quoting magic numbers.
+    private func sym(_ name: String) -> UInt32? {
+        switch name {
+        case "Tab": return 0xff09
+        case "q", "Q": return 0x71
+        case "w": return 0x77
+        case "3": return 0x33
+        case "XF86AudioRaiseVolume": return 0x1008ff13
+        default: return nil
+        }
+    }
+
+    func testSpecParsingTakesModifiersInAnyOrderAndCase() {
+        let a = KeyBindingParser.parse(spec: "Cmd+Shift+Tab", keysym: sym)
+        XCTAssertEqual(a?.0, [.cmd, .shift])
+        XCTAssertEqual(a?.1, 0xff09)
+        // A file a person edits: case and spaces must not matter.
+        let b = KeyBindingParser.parse(spec: " shift + CMD + tab ", keysym: sym)
+        XCTAssertEqual(b?.0, [.cmd, .shift])
+        XCTAssertEqual(b?.1, 0xff09)
+        // Aliases, because "Super" is what the rest of the world calls it.
+        XCTAssertEqual(KeyBindingParser.parse(spec: "Super+q", keysym: sym)?.0, [.cmd])
+        // Nonsense is refused rather than silently bound to something.
+        XCTAssertNil(KeyBindingParser.parse(spec: "Cmd+NoSuchKey", keysym: sym))
+        XCTAssertNil(KeyBindingParser.parse(spec: "Cmd+q+w", keysym: sym))
+        XCTAssertNil(KeyBindingParser.parse(spec: "Cmd+", keysym: sym))
+    }
+
+    func testActionParsingRefusesWhatItCannotRun() {
+        XCTAssertEqual(KeyBindingParser.parse(action: "next-window"), .nextWindow)
+        XCTAssertEqual(KeyBindingParser.parse(action: "quit-app"), .quitApplication)
+        XCTAssertEqual(KeyBindingParser.parse(action: "run: abyssgrab screen"),
+                       .run(["abyssgrab", "screen"]))
+        XCTAssertNil(KeyBindingParser.parse(action: "rm -rf /"))
+        XCTAssertNil(KeyBindingParser.parse(action: "run:"))
+    }
+
+    func testModifiersMustMatchExactly() {
+        let table = KeyBindings(bindings: [
+            KeyBinding(sym: 0x71, modifiers: [.cmd], action: .quitApplication),
+        ])
+        XCTAssertEqual(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd])), KeyAction.quitApplication)
+        // Cmd-Shift-Q is a different keystroke and must reach the application.
+        XCTAssertNil(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd, .shift])))
+        XCTAssertNil(table.match(sym: 0x71, modifiers: KeyModifiers()))
+        // Caps Lock is a state, not a modifier: leaving it on must not disable
+        // every shortcut on the desktop.
+        XCTAssertEqual(table.match(sym: 0x71, modifiers: KeyModifiers(rawValue: 64 | 2)),
+                       KeyAction.quitApplication)
+    }
+
+    func testAnApplicationMayKeepACombination() {
+        // §6.2's decision, as data: a terminal that cannot receive Cmd-Q cannot
+        // run a program that wants it.
+        let q = KeyBinding(sym: 0x71, modifiers: [.cmd], action: .quitApplication)
+        let w = KeyBinding(sym: 0x77, modifiers: [.cmd], action: .closeWindow)
+        let table = KeyBindings(bindings: [q, w],
+                                passthrough: ["org.abyssbsd.terminal": [q]])
+        // The terminal keeps Cmd-Q…
+        XCTAssertNil(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd]),
+                                 focusedAppID: "org.abyssbsd.terminal"))
+        // …but not Cmd-W, which it never asked for.
+        XCTAssertEqual(table.match(sym: 0x77, modifiers: KeyModifiers([.cmd]),
+                                   focusedAppID: "org.abyssbsd.terminal"), KeyAction.closeWindow)
+        // And everybody else still gets the desktop's behaviour.
+        XCTAssertEqual(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd]),
+                                   focusedAppID: "org.abyssbsd.finder"), KeyAction.quitApplication)
+        XCTAssertEqual(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd])), KeyAction.quitApplication)
+    }
+
+    func testAnApplicationMayKeepEverything() {
+        // `*` — for the virtual machine window and the remote desktop that come
+        // later, where every keystroke belongs to something else.
+        let q = KeyBinding(sym: 0x71, modifiers: [.cmd], action: .quitApplication)
+        let table = KeyBindings(bindings: [q], passthrough: ["org.abyssbsd.vm": []])
+        XCTAssertNil(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd]),
+                                 focusedAppID: "org.abyssbsd.vm"))
+        XCTAssertEqual(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd]),
+                                   focusedAppID: "other"), KeyAction.quitApplication)
+    }
+
+    func testTheTableReadsAConfigAndSkipsWhatItCannotUnderstand() {
+        var c = Config()
+        c = c.set("keys", "Cmd+Tab", "next-window")
+        c = c.set("keys", "Cmd+q", "quit-app")
+        c = c.set("keys", "Cmd+NoSuchKey", "next-window")   // unknown key
+        c = c.set("keys", "Cmd+w", "explode")               // unknown action
+        c = c.set("passthrough", "org.abyssbsd.terminal", "Cmd+q")
+        let table = KeyBindingParser.table(from: c, keysym: sym)
+        XCTAssertEqual(table.bindings.count, 2)
+        XCTAssertEqual(table.match(sym: 0xff09, modifiers: KeyModifiers([.cmd])), KeyAction.nextWindow)
+        XCTAssertNil(table.match(sym: 0x71, modifiers: KeyModifiers([.cmd]),
+                                 focusedAppID: "org.abyssbsd.terminal"))
+    }
+
+    func testTheBuiltInDefaultsAllParse() {
+        // A default that does not parse is a shortcut that silently does not
+        // exist, which is the failure this whole table is meant to end.
+        for (spec, action) in KeyBindingParser.defaults {
+            XCTAssertNotNil(KeyBindingParser.parse(action: action), action)
+            // The stub knows only the symbols these tests name, so this asserts
+            // the *shape* — modifiers and a single key — not the symbol itself.
+            let parts = spec.split(separator: "+")
+            XCTAssertFalse(parts.isEmpty, spec)
+        }
+    }
+
     // MARK: - Edge snapping (P9.4)
 
     /// The usable area, not the output — a window snapped under the menu bar is

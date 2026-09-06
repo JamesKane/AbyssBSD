@@ -171,6 +171,11 @@ if [ "$live" -eq 1 ]; then
   # snapped to an edge, and put in the Dock and taken back out (P9.4).
   phase "window management"
   sh "$root/abyss/tests/live-window.sh" >/dev/null
+  # And the keys the desktop hears first: a bound one never reaches the focused
+  # client, an unbound one always does, and an application may keep a
+  # combination for itself (P9.5, and §6.2's decision made into data).
+  echo "== keybinds =="
+  sh "$root/abyss/tests/live-keys.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"
