@@ -95,7 +95,7 @@ public struct InstallPlan: Equatable, Sendable {
     /// Built by `abyss/mk/live-image.sh` out of the very files the medium runs,
     /// so what the medium carries and what the installer installs are the same
     /// collection rather than two that have to be kept in step.
-    public static let desktopSet = "abyss.txz"
+    public static let desktopSet = "abyss.tzst"
 
     /// Whether this install puts the desktop on the machine.
     public var installsDesktop: Bool { sets.contains(InstallPlan.desktopSet) }

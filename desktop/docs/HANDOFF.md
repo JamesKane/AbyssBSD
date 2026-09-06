@@ -2229,8 +2229,32 @@ abyss/tests/run.sh                 # build + 315 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
-abyss/tests/run.sh --vm --live     # the gate before calling a pass done
+abyss/tests/run.sh --vm --live     # the gate before calling a pass done  (~273s)
+abyss/tests/run.sh --vm --live --full   # ... and the two nested installs (~1000s)
 ```
+
+**`--full` is the lane that puts an operating system on a disk**, and it is off
+by default because it was 681 of the 1111 seconds a run used to cost — more than
+everything else in the suite combined. `live-install.sh` installs under nested
+bhyve and `live-desktop.sh` installs and boots the result. Run them for anything
+touching the installer, the medium, the distribution sets or the boot path; the
+default lane names them, prices them and says so, because a skip nobody sees is a
+claim nobody checks.
+
+Two other things pay for that number, and both are measured rather than assumed
+(`run.sh` prints per-phase seconds now):
+
+- **The medium is cached** (`abyss/mk/live-image.sh`). The key covers the script
+  itself, the flags, the distribution sets and **every binary the medium carries,
+  by content** — so a one-line Swift change rebuilds, and only a genuinely
+  identical image is reused. What a hit skips is the assembly; the tests still
+  boot the image, so a wrong one fails exactly where a freshly built wrong one
+  would. `ABYSS_NO_CACHE=1` forces the build.
+- **The desktop set is zstd, not xz.** `tar -cJf` over that tree was 48 of the 92
+  seconds a build cost — 103s for 625 MB on the guest, against 1.7s for zstd at
+  +42% size, and bsdtar exposes no xz level knob. The set is `abyss.tzst` now,
+  because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
+
 
 The 315 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
@@ -2244,7 +2268,8 @@ namespace matching.
 **Both platforms, every time.** Phase 3 earned this rule: two bugs
 (`O_NONBLOCK` inheritance on `accept`, a string sysctl read as an integer) were
 invisible on Linux and failed only on FreeBSD. A pass is not done until
-`run.sh --vm --live` is green.
+`run.sh --vm --live` is green — plus `--full` when the pass touched the
+installer, the medium or the boot path.
 
 ---
 
@@ -2360,6 +2385,9 @@ expected to change. Two things are already known to be waiting:
 
 **A pass is not done until `abyss/tests/run.sh --vm --live` is green.** Two
 Phase-3 bugs were invisible on Linux and failed only on FreeBSD (§2.33, §2.34).
+Add `--full` when the pass touched the installer, the medium, the distribution
+sets or the boot path — that lane is the only one that puts an operating system
+on a disk and boots it.
 
 **A test that has never failed has not been shown to test anything.** Phases 6,
 8, 5 and 4 each caught a false pass by deliberately breaking the code and

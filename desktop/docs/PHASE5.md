@@ -387,7 +387,7 @@ to demonstrate it.
 
 **The medium carries what it installs.** The desktop is collected once and used
 twice: copied into the medium so the medium can run it, and tarred into
-`abyss.txz` so the installer can install it. The medium also carries `base.txz`
+`abyss.tzst` so the installer can install it. The medium also carries `base.txz`
 and `kernel.txz` — a live installer with nothing to install is a demonstration.
 
 **And the installed machine starts what was installed**, by a rule derived

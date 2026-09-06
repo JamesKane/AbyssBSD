@@ -433,7 +433,7 @@ final class InstallerTests: XCTestCase {
         let built = m.plan(passwordHash: "$6$fake", distDirectory: "/usr/freebsd-dist")
         let expected = InstallPlan(
             disk: "ada2",
-            sets: ["base.txz", "kernel.txz", "abyss.txz"],
+            sets: ["base.txz", "kernel.txz", "abyss.tzst"],
             distDirectory: "/usr/freebsd-dist",
             hostname: "jaguar",
             timezone: "America/Chicago",

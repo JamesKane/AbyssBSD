@@ -723,7 +723,7 @@ reboot into the Jaguar desktop with the wallpaper, menu bar and Dock, as the
 account the installer created.
 
 The medium carries what it installs: the desktop is collected once and used
-twice — copied in so the medium can run it, and tarred into `abyss.txz` so the
+twice — copied in so the medium can run it, and tarred into `abyss.tzst` so the
 installer can install it — alongside the `base.txz` and `kernel.txz` it was built
 from. And the installed machine starts what was installed by a rule derived
 rather than assumed: `rc.conf` enables the desktop exactly when that set was

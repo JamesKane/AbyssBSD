@@ -10,6 +10,16 @@
 #   abyss/tests/run.sh --live       # ... and every live mode under headless sway
 #   abyss/tests/run.sh --vm         # run this same script inside the FreeBSD VM
 #   abyss/tests/run.sh --vm --live  # ... including the live modes, there
+#   abyss/tests/run.sh --vm --live --full   # ... and the nested installs
+#
+# **`--full` is the lane that puts an operating system on a disk.** Two tests
+# install AbyssBSD under nested bhyve and boot what they installed, and together
+# they are 681 of the 1111 seconds a `--vm --live` run used to take — more than
+# everything else in the suite combined. They are off by default because most
+# changes cannot break them, and *on* is the rule for anything that touches the
+# installer, the medium, the distribution sets or the boot path. The run says
+# out loud which tests it did not run, because a skip nobody sees is a claim
+# nobody checks.
 #
 # The --vm lane is the Phase-3 addition: it syncs the tree into the build VM
 # (abyss/vm/*) and runs the identical script there, because the target is
@@ -45,12 +55,14 @@ phase_end() {
 
 live=0
 vm=0
+full=0
 for arg in "$@"; do
   case "$arg" in
     --live) live=1 ;;
     --vm)   vm=1 ;;
+    --full) full=1 ;;
     -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
-    *) echo "usage: run.sh [--live] [--vm]" >&2; exit 2 ;;
+    *) echo "usage: run.sh [--live] [--vm] [--full]" >&2; exit 2 ;;
   esac
 done
 
@@ -64,6 +76,7 @@ if [ "$vm" -eq 1 ]; then
   phase "abyss/tests/run.sh, in the guest"
   remote="export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && sh abyss/tests/run.sh"
   [ "$live" -eq 1 ] && remote="$remote --live"
+  [ "$full" -eq 1 ] && remote="$remote --full"
   # **Not `exec`.** Replacing this shell with ssh would take the timing with it:
   # the guest prints its own phases, but the sync — the one cost that is purely
   # the VM's — would never be reported, which is exactly the number a person
@@ -183,8 +196,9 @@ if [ "$live" -eq 1 ]; then
   # scratch disk, and the result BOOTED under nested bhyve (PHASE5.md P5.2).
   # On Linux it is a positive control — the probe must refuse and say why — and
   # on FreeBSD it skips loudly without the dist sets or bhyve's UEFI firmware.
-  phase "the installer, and what it installed"
-  sh "$root/abyss/tests/live-install.sh"
+  if [ "$full" -eq 1 ]; then
+    phase "the installer, and what it installed"
+    sh "$root/abyss/tests/live-install.sh"
 
   # ...and the medium it all arrives on: an image assembled from distribution
   # sets with base tools only, booted nested, running our compositor with the
@@ -203,8 +217,18 @@ if [ "$live" -eq 1 ]; then
   # And the whole thing, end to end: an empty disk, our medium, an install from
   # it, and a reboot into the Jaguar desktop (PHASE5.md P5.5). Nested twice
   # over, with nobody watching. On Linux, a positive control.
-  phase "empty disk to Jaguar desktop"
-  sh "$root/abyss/tests/live-desktop.sh"
+    phase "empty disk to Jaguar desktop"
+    sh "$root/abyss/tests/live-desktop.sh"
+  else
+    # **Named, timed, and told how to run.** These two are the only tests in the
+    # tree that put an operating system on a disk and boot it; skipping them
+    # quietly would leave the suite green about a claim it never checked.
+    phase "the nested installs — SKIPPED (--full runs them)"
+    echo "   the installer, and what it installed   (~190s)"
+    echo "   empty disk to Jaguar desktop           (~490s)"
+    echo "   Run --full before shipping anything that touches the installer,"
+    echo "   the medium, the distribution sets, or the boot path."
+  fi
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never

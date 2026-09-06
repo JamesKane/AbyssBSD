@@ -11,7 +11,7 @@
 # Nested twice over, with no hardware and no human:
 #
 #   1. BUILD    the medium, carrying the distribution sets AND the desktop
-#               (abyss.txz) — a live installer with nothing to install is a
+#               (abyss.tzst) — a live installer with nothing to install is a
 #               demonstration.
 #   2. BOOT it, with a blank second disk attached. The medium comes up running
 #               the INSTALLER, as an unprivileged user, talking to a root
@@ -75,7 +75,7 @@ echo "== building the medium (with the sets it installs) =="
 sh "$root/abyss/mk/live-image.sh" --out "$img" --dist "$dist" --stay --frames 1800 \
    > "$work/build" 2>&1 || { sed 's/^/    /' "$work/build"; fail "the medium would not build"; }
 sed -n 's/^== /    /p' "$work/build"
-grep -q "abyss.txz" "$work/build" || fail "the medium carries no desktop set"
+grep -q "abyss.tzst" "$work/build" || fail "the medium carries no desktop set"
 echo "ok: the medium carries base.txz, kernel.txz and the desktop"
 
 # A blank disk to install onto — the "machine with an empty disk".
@@ -144,10 +144,10 @@ echo "ok: logged in at the medium's console; the blank disk is there"
 # password is a real SHA-512 crypt of "abyss" — the GUI would hash what was
 # typed (`ap_crypt_sha512`, P5.4); a console caller brings its own, because
 # `InstallPlan` carries a hash and never a plaintext.
-printf 'abyss-installctl install --yes --disk vtbd1 --pool abyss --dist /usr/freebsd-dist --sets base.txz,kernel.txz,abyss.txz --hostname jaguar --timezone America/Chicago --user %s\n' \
+printf 'abyss-installctl install --yes --disk vtbd1 --pool abyss --dist /usr/freebsd-dist --sets base.txz,kernel.txz,abyss.tzst --hostname jaguar --timezone America/Chicago --user %s\n' \
   'abyss:$6$p55salt$oCskBpkeTosRXETLJcNEEhgJ8M6a7gX6ax8sDJfBE53jaoLkjT/lNs6lWTJnYg5DZ5F0CEEurlhagpuS1dvAV.:wheel' >&5
 waitfor "installed\." 600 "the install never finished"
-grep -q "extract abyss.txz" "$work/live.log" \
+grep -q "extract abyss.tzst" "$work/live.log" \
   || fail "the install never extracted the desktop — the machine would boot to a shell"
 echo "ok: installed onto vtbd1 from the medium, desktop and all"
 # The install's last step is `zpool export`, so the target disk is consistent

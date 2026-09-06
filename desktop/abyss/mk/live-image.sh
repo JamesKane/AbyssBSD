@@ -53,6 +53,22 @@ trace=${ABYSS_LIVE_TRACE:-}
 # else is handed, and the key is the one belonging to whoever built it.
 sshkey=${ABYSS_LIVE_SSH_KEY:-}
 
+# **Kept before the loop eats them.** The cache fingerprint has to include the
+# arguments — `--stay`, `--frames` and `--ssh-key` each change what is written
+# into the image — and by the time it runs, `$@` is empty. `live-medium.sh` and
+# `live-desktop.sh` build with different flags and must not share an entry.
+# `--out` is excluded deliberately: the same image written to two paths is the
+# same image, and including it would halve the hit rate for nothing.
+orig_args=""
+_skip_next=0
+for a in "$@"; do
+  if [ "$_skip_next" = 1 ]; then _skip_next=0; continue; fi
+  case "$a" in
+    --out) _skip_next=1 ;;          # the destination is not part of the content
+    *) orig_args="$orig_args $a" ;;
+  esac
+done
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --out)       out=$2; shift 2 ;;
@@ -208,12 +224,111 @@ GPU_PKGS="drm-66-kmod seatd
 
 # The desktop, as a distribution set. Named to match `InstallPlan.desktopSet`,
 # which is what makes rc.conf on the installed machine turn the desktop on.
-DESKTOP_SET="abyss.txz"
+DESKTOP_SET="abyss.tzst"
 work_sets="${TMPDIR:-/tmp}/abyss-live-sets"
+
+# ---------------------------------------------------------------- the cache
+#
+# **Building this image is most of what the test suite costs.** Two live tests
+# each build one (`live-medium.sh` and `live-desktop.sh`), and on the FreeBSD
+# guest they are 142s and more apiece — extracting two distribution sets,
+# fetching a dozen packages, and running `makefs` over three gigabytes, all of
+# it identical to the last run whenever nothing that goes *into* the image has
+# changed.
+#
+# So: fingerprint the inputs, and if a previous image was built from exactly
+# these, reuse it. The fingerprint is deliberately over-broad — a cache that
+# misses costs one rebuild, and a cache that wrongly hits costs a green test on
+# an image nobody built:
+#
+#   - this script itself, so any edit to a package list, a flag, or a line of
+#     assembly invalidates everything;
+#   - the arguments, because `--stay`, `--frames` and `--ssh-key` all change
+#     what is written into the image;
+#   - the distribution sets, by size and modification time;
+#   - **every binary the medium carries**, by content — this is the one that
+#     changes on an ordinary working day, and it is why the cache is honest
+#     rather than convenient: change one line of Swift and you get a rebuild;
+#   - the host's installed packages, since the runtime closure is copied out of
+#     them and a library that changed underneath us would otherwise be invisible.
+#
+# What is *not* cached is the part that matters: **the tests still boot the
+# image.** A cached image that is wrong fails exactly where a freshly built
+# wrong one would. What the hit skips is the assembly, and the log it replays is
+# the log that assembly actually produced, for inputs pinned by the fingerprint.
+#
+# `ABYSS_NO_CACHE=1` forces a rebuild.
+cache_dir="${ABYSS_IMAGE_CACHE:-${TMPDIR:-/tmp}/abyss-image-cache}"
+fingerprint() {
+  {
+    sha256 -q "$0" 2>/dev/null || sha256sum "$0"
+    echo "args:$orig_args"
+    for s in base.txz kernel.txz; do
+      [ -f "$dist/$s" ] && stat -f '%N %z %m' "$dist/$s" 2>/dev/null
+    done
+    for b in $BINARIES; do
+      [ -f "$builddir/$b" ] && { sha256 -q "$builddir/$b" 2>/dev/null || sha256sum "$builddir/$b"; }
+    done
+    pkg query '%n-%v' 2>/dev/null | sort
+  } | { sha256 -q 2>/dev/null || sha256sum | cut -d' ' -f1; }
+}
+
+fp=$(fingerprint)
+stamp="$cache_dir/$fp.stamp"
+cached="$cache_dir/$fp.img"
+cachelog="$cache_dir/$fp.log"
+if [ -z "${ABYSS_NO_CACHE:-}" ] && [ -s "$cached" ] && [ -f "$cachelog" ] \
+   && [ -f "$stamp" ]; then
+  # The log first, so every assertion a caller makes about the build still has
+  # the numbers the build produced. Then say plainly that nothing was built —
+  # a person reading a 4-second "build" must not have to wonder.
+  cat "$cachelog"
+  cp "$cached" "$out"
+  echo "== reused a medium built $(cat "$stamp") for these exact inputs"
+  echo "==   fingerprint $fp  (ABYSS_NO_CACHE=1 to rebuild)"
+  # The **apparent** size, not `du`. On ZFS the copy above is a block clone, so
+  # it costs a tenth of a second and allocates nothing until the transaction
+  # group commits — and `du` in that window reports 512B for a 3 GB image, which
+  # reads as a broken cache to anyone watching.
+  echo "== $out  ($(ls -lh "$out" | awk '{print $5}'))"
+  exit 0
+fi
+
+# Everything the build prints goes to the log as well as the terminal, so a
+# later run can replay it. `tee` would hide the exit status behind a pipeline,
+# so the log is written by redirecting into a file and echoing through.
+build_log=$(mktemp "${TMPDIR:-/tmp}/abyss-image-log.XXXXXX")
+# `say` also times the stages. Which stage of a build is expensive decides what
+# is worth caching, and until it was measured the answer was folklore — the
+# extraction and the package fetch turn out to be most of it, and neither
+# depends on a line of our code.
+_stage_t=$(date +%s)
+_stage_n=""
+say() {
+  case "$1" in
+    "== "*)
+      _now=$(date +%s)
+      if [ -n "$_stage_n" ]; then
+        _line="   ($_stage_n: $((_now - _stage_t))s)"
+        echo "$_line"; echo "$_line" >> "$build_log"
+      fi
+      _stage_n=${1#== }
+      _stage_t=$_now
+      ;;
+  esac
+  echo "$@"
+  echo "$@" >> "$build_log"
+}
+say_last_stage() {
+  [ -n "$_stage_n" ] || return 0
+  _line="   ($_stage_n: $(( $(date +%s) - _stage_t ))s)"
+  echo "$_line"; echo "$_line" >> "$build_log"
+  _stage_n=""
+}
 
 sudo rm -rf "$work_sets"; sudo mkdir -p "$work_sets"
 
-echo "== staging root: $stage"
+say "== staging root: $stage"
 # `chflags` first, always. An extracted base system carries schg on a good deal
 # of /var and /usr/bin, so `rm -rf` reports "Directory not empty" and explains
 # nothing — a rebuild script without this line works exactly once (HANDOFF §2.43).
@@ -221,11 +336,11 @@ sudo chflags -R noschg "$stage" 2>/dev/null || true
 sudo rm -rf "$stage"
 sudo mkdir -p "$stage"
 
-echo "== extracting base.txz and kernel.txz"
+say "== extracting base.txz and kernel.txz"
 sudo tar -xpf "$dist/base.txz"   -C "$stage"
 sudo tar -xpf "$dist/kernel.txz" -C "$stage"
 
-echo "== the runtime closure"
+say "== the runtime closure"
 # **Computed from the binaries, not installed from packages.** `pkg -r` was the
 # obvious route and it is the wrong one for an appliance image: asking for
 # `wlroots019 cairo harfbuzz dejavu …` produced a **5.66 GB** staging root, of
@@ -253,7 +368,7 @@ echo "== the runtime closure"
 # stable within a major release, which is the whole point of the guarantee.)
 # **The desktop is collected once, into a tree of its own**, and then used
 # twice: it is copied into the medium so the medium can run it, and it is
-# tarred into `abyss.txz` so the installer can install it. What the medium
+# tarred into `abyss.tzst` so the installer can install it. What the medium
 # carries and what it installs are therefore the same collection, not two that
 # have to be kept in step — the same argument as building the medium out of the
 # distribution sets in the first place.
@@ -294,14 +409,14 @@ for lib in $libs; do
   sudo cp -p "$lib" "$de$lib"
 done
 # shellcheck disable=SC2086
-echo "   $(echo "$libs" | wc -l | tr -d ' ') shared objects, $(du -ch $libs | tail -1 | awk '{print $1}')"
+say "   $(echo "$libs" | wc -l | tr -d ' ') shared objects, $(du -ch $libs | tail -1 | awk '{print $1}')"
 
 # The `dri/` directory by name: Mesa opens `radeonsi_dri.so`, and every entry is
 # a symlink to the one loader whose closure was just taken.
 sudo mkdir -p "$de$DLOPEN_DIR"
 sudo cp -R "$DLOPEN_DIR/." "$de$DLOPEN_DIR/"
 
-echo "== runtime data"
+say "== runtime data"
 for d in $DATA; do
   [ -d "$d" ] || die "$d is missing on this machine, so the medium would have no $(basename "$d")"
   sudo mkdir -p "$de$(dirname "$d")"
@@ -318,14 +433,38 @@ done
 sudo mkdir -p "$de/usr/local/share/X11"
 sudo ln -sf ../xkeyboard-config-2 "$de/usr/local/share/X11/xkb"
 
-echo "== the graphics stack"
+say "== the graphics stack"
 # Fetched into the *desktop* tree, so that what the medium runs and what the
 # installer installs stay the same collection — a machine installed from this
 # medium needs these modules exactly as much as the medium does.
+# **The fetch is kept between builds.** It is 31 of the 92 seconds a medium
+# costs and it depends on nothing we compile: the same package list against the
+# same repository is the same bytes. The cache key is the list plus the repo's
+# own catalogue timestamp, so a `pkg update` that moves the repository forward
+# invalidates it — which is the case that would otherwise ship yesterday's
+# firmware in today's image.
 gpudir="${TMPDIR:-/tmp}/abyss-live-gpu"
-sudo rm -rf "$gpudir"; sudo mkdir -p "$gpudir"
+gpu_key=$(printf '%s|%s' "$GPU_PKGS" \
+          "$(pkg -vv 2>/dev/null | sed -n 's/.*url *: *"\(.*\)".*/\1/p' | head -1)$(stat -f '%m' /var/db/pkg/repo-FreeBSD.sqlite 2>/dev/null)" \
+          | { sha256 -q 2>/dev/null || sha256sum | cut -d' ' -f1; })
+gpu_cache="${ABYSS_IMAGE_CACHE:-${TMPDIR:-/tmp}/abyss-image-cache}/gpu-$gpu_key"
+if [ -z "${ABYSS_NO_CACHE:-}" ] && [ -f "$gpu_cache/.complete" ]; then
+  sudo rm -rf "$gpudir"; sudo mkdir -p "$gpudir"
+  sudo cp -R "$gpu_cache/." "$gpudir/"
+  say "   (reusing the fetched graphics packages)"
+else
+  sudo rm -rf "$gpudir"; sudo mkdir -p "$gpudir"
+fi
 # shellcheck disable=SC2086
-if sudo pkg fetch -y -d -o "$gpudir" $GPU_PKGS > /dev/null 2>&1; then
+if [ -n "$(sudo find "$gpudir" -name '*.pkg' 2>/dev/null)" ] \
+   || sudo pkg fetch -y -d -o "$gpudir" $GPU_PKGS > /dev/null 2>&1; then
+  # Fill the cache before the packages are unpacked and the directory removed.
+  # `.complete` last, so an interrupted copy is never mistaken for a hit.
+  if [ -z "${ABYSS_NO_CACHE:-}" ] && [ ! -f "$gpu_cache/.complete" ]; then
+    mkdir -p "$gpu_cache" 2>/dev/null \
+      && sudo cp -R "$gpudir/." "$gpu_cache/" 2>/dev/null \
+      && sudo touch "$gpu_cache/.complete" 2>/dev/null || true
+  fi
   n=0
   for pkgfile in $(sudo find "$gpudir" -name '*.pkg'); do
     # `--exclude '+*'` drops pkg's own metadata (+MANIFEST and friends); what is
@@ -333,25 +472,25 @@ if sudo pkg fetch -y -d -o "$gpudir" $GPU_PKGS > /dev/null 2>&1; then
     sudo tar -xf "$pkgfile" -C "$de" --exclude '+*' 2>/dev/null && n=$((n + 1))
   done
   mods=$(sudo find "$de/boot/modules" -name '*.ko' 2>/dev/null | wc -l | tr -d ' ')
-  echo "   $n package(s), $mods kernel modules, $(sudo du -sh "$de/boot" 2>/dev/null | awk '{print $1}')"
+  say "   $n package(s), $mods kernel modules, $(sudo du -sh "$de/boot" 2>/dev/null | awk '{print $1}')"
   [ "$mods" -gt 4 ] || die "the graphics packages produced only $mods modules"
 else
   # A medium with no GPU stack still installs and still runs headless — it just
   # cannot be *seen* on real hardware. Loud, because that is the whole point of
   # this pass and a silent omission would look like a driver problem later.
-  echo "   WARNING: could not fetch $GPU_PKGS — this medium has no graphics"
-  echo "            stack and will come up blank on real hardware."
+  say "   WARNING: could not fetch $GPU_PKGS — this medium has no graphics"
+  say "            stack and will come up blank on real hardware."
 fi
 sudo rm -rf "$gpudir"
 
-echo "== the desktop"
+say "== the desktop"
 for b in $BINARIES; do
   sudo install -m 755 "$builddir/$b" "$de/usr/local/bin/$b"
 done
-echo "   $(echo $BINARIES | wc -w | tr -d ' ') binaries in /usr/local/bin"
+say "   $(echo $BINARIES | wc -w | tr -d ' ') binaries in /usr/local/bin"
 
 # How an installed machine starts the desktop. Ships inside the set, so a system
-# that extracted `abyss.txz` has it — and `rc.conf` turns it on only when that
+# that extracted `abyss.tzst` has it — and `rc.conf` turns it on only when that
 # set was installed (de/install/Steps.swift).
 sudo sh -c "cat > $de/usr/local/libexec/abyss-session" <<'SESSION'
 #!/bin/sh
@@ -439,14 +578,22 @@ run_rc_command "$1"
 RCD
 sudo chmod 755 "$de/etc/rc.d/abyss_desktop"
 
-echo "== abyss.txz — the desktop, as a distribution set"
-sudo tar -cJf "$work_sets/$DESKTOP_SET" -C "$de" .
-echo "   $(sudo ls -l "$work_sets/$DESKTOP_SET" | awk '{print $5}') bytes"
+say "== abyss.tzst — the desktop, as a distribution set"
+# **zstd, not xz, and the name says so.** On the build guest `tar -cJf` over
+# this tree is 48 seconds of the 92 a whole medium costs — xz at level 6,
+# single-threaded, and bsdtar exposes no level knob (`--options xz:…` is
+# "Unknown module name"). zstd is 1.7s for the same input at +42% size, which on
+# a 1.2 GB image inside a 3 GB file buys nothing to worry about. Everything that
+# reads a set uses `tar -xpf`, which sniffs the format — so the only thing the
+# extension has ever been is a claim about what is inside, and it is now a true
+# one.
+sudo tar -c --zstd -f "$work_sets/$DESKTOP_SET" -C "$de" .
+say "   $(sudo ls -l "$work_sets/$DESKTOP_SET" | awk '{print $5}') bytes"
 
 # ...and the same tree into the medium, so the medium runs what it installs.
 sudo tar -cf - -C "$de" . | sudo tar -xpf - -C "$stage"
 
-echo "== configuring the live system"
+say "== configuring the live system"
 sudo sh -c "cat > $stage/etc/rc.conf" <<'RC'
 # The AbyssBSD live medium.
 hostname="abyss-live"
@@ -502,7 +649,7 @@ SSHD
   sudo chmod 700 "$stage/root/.ssh"
   sudo chmod 600 "$stage/root/.ssh/authorized_keys"
   sudo chown -R 0:0 "$stage/root/.ssh"
-  echo "   sshd enabled, key: $(awk '{print $1, substr($2,1,16)"..."}' "$sshkey" | head -1)"
+  say "   sshd enabled, key: $(awk '{print $1, substr($2,1,16)"..."}' "$sshkey" | head -1)"
 fi
 
 sudo sh -c "cat > $stage/boot/loader.conf" <<'LOADER'
@@ -778,7 +925,7 @@ PROF
 sudo chown -R 1001:1001 "$stage/home/abyss"
 sudo pwd_mkdb -p -d "$stage/etc" "$stage/etc/master.passwd"
 
-echo "== the distribution sets the medium installs"
+say "== the distribution sets the medium installs"
 # **A live installer with nothing to install is a demonstration.** The medium
 # carries the same base.txz and kernel.txz it was built from, plus the desktop
 # set built above — so the machine it installs is the machine it is.
@@ -792,7 +939,7 @@ sudo ls -1 "$stage/usr/freebsd-dist" | sed 's/^/   /'
 # A marker, so "it booted" can never be satisfied by some other FreeBSD.
 sudo sh -c "echo 'AbyssBSD live medium, built by abyss/mk/live-image.sh' > $stage/etc/abyss-live"
 
-echo "== assembling"
+say "== assembling"
 esp="${TMPDIR:-/tmp}/abyss-live-esp.img"
 ufs="${TMPDIR:-/tmp}/abyss-live-root.ufs"
 espdir="${TMPDIR:-/tmp}/abyss-live-espdir"
@@ -852,4 +999,26 @@ sudo rm -f "$esp" "$ufs"
 sudo rm -rf "$espdir"
 [ "$keep" = 1 ] || { sudo chflags -R noschg "$stage" 2>/dev/null || true; sudo rm -rf "$stage"; }
 
-echo "== $out  ($(du -h "$out" | awk '{print $1}'))"
+say "== $out  ($(du -h "$out" | awk '{print $1}'))"
+
+say_last_stage
+
+# ------------------------------------------------------------ fill the cache
+#
+# Last, and only on success: a cache entry written by a build that failed
+# halfway is a green test on a broken image, which is the one outcome worse than
+# a slow one. The image is copied rather than linked so that a caller who edits
+# or deletes `$out` cannot corrupt the entry.
+if [ -z "${ABYSS_NO_CACHE:-}" ]; then
+  mkdir -p "$cache_dir"
+  if cp "$out" "$cache_dir/$fp.img.tmp" 2>/dev/null; then
+    mv "$cache_dir/$fp.img.tmp" "$cached"
+    cp "$build_log" "$cachelog"
+    date '+%Y-%m-%d %H:%M' > "$stamp"
+    echo "== cached as $fp (ABYSS_NO_CACHE=1 to rebuild, rm -rf $cache_dir to clear)"
+  else
+    rm -f "$cache_dir/$fp.img.tmp"
+    echo "== note: could not cache the image in $cache_dir; the next build will redo it"
+  fi
+fi
+rm -f "$build_log"
