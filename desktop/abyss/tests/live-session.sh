@@ -117,6 +117,24 @@ done
        grep '^session:' "$log"; exit 1; }
 echo "  supervision: killed the Dock ($dock_pid), it came back as $new_pid"
 
+# 5. **No X server (PHASE9 §6.3).** XWayland is decided against, and a decision
+#    that lives only in a document is one somebody re-litigates by accident.
+#
+#    The check is the **binary**, not the process table. Looking for a running
+#    `Xwayland` finds the dev box's own desktop session and fails on a machine
+#    that is behaving perfectly — and it would find nothing on a compositor that
+#    *does* have XWayland compiled in, because wlroots starts it lazily and no
+#    X client ever connects during this test. So the honest question is whether
+#    `undertow` can start one at all: if nothing in it references wlroots'
+#    XWayland entry points, no X server can come from our side, lazily or
+#    otherwise.
+if nm -D --undefined-only "$root/.build/debug/undertow" 2>/dev/null \
+     | grep -qi xwayland; then
+  echo "FAIL: undertow references wlroots' XWayland — decided against (PHASE9 §6.3)"
+  exit 1
+fi
+echo "  no X11: undertow cannot start an X server — it names none of its symbols"
+
 sleep 1  # let the restarted Dock paint before the capture
 WAYLAND_DISPLAY="$wd" grim "$out"
 test -s "$out" || { echo "FAIL: grim produced no image"; exit 1; }

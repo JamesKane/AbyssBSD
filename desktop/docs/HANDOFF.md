@@ -7,12 +7,14 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 [PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-08-25. **Phases 0–3 and 5–8 are complete.** The Jaguar shell
-runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift control
-plane, session supervisor and hardware bridges; the portals hand out descriptors;
-and **one command boots a desktop where an unmodified GTK 3 application, which
-has never heard of this desktop, opens a file through the Finder**.
-**315 unit tests, 35 live modes and 18 live scripts, green on Linux and FreeBSD.**
+Last updated: 2026-09-06. **Phases 0–3, 5–8 and 9 are complete.** The Jaguar
+shell runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift
+control plane, session supervisor and hardware bridges; the portals hand out
+descriptors; **one command boots a desktop where an unmodified GTK 3
+application, which has never heard of this desktop, opens a file through the
+Finder**; and since Phase 9 it is a desktop you can *use* — clipboard, drag and
+drop, window management, keybinds, and an Aqua frame around foreign windows.
+**418 unit tests, 35 live modes and 24 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -84,7 +86,7 @@ on every run, nested twice over, with no hardware and no human.
 
 ---
 
-## 1. What got built (Phases 0–3 and 5–8, and Phase 4 so far)
+## 1. What got built (Phases 0–3, 5–8 and 9, and Phase 4 so far)
 
 A working Swift 6 desktop foundation that builds and tests clean on Linux and
 renders faithful Jaguar UI:
@@ -2337,16 +2339,47 @@ Known-not-faithful, on purpose:
 
 ## 5. What I'd do next (in order)
 
-**Where things stand.** Phases 0–3 and 5–8 are complete. The Jaguar shell runs
-on FreeBSD, on our own compositor, over a Swift control plane, session supervisor
-and hardware bridges; one command boots a desktop where an unmodified GTK 3
-application opens a file through the Finder; and **a blank disk becomes a machine
-running that desktop**, on every run of the harness. **315 unit tests, 35 live
-modes and 18 live scripts, green on Linux and FreeBSD.**
+**Where things stand.** Phases 0–3, 5–8 **and 9** are complete. The Jaguar shell
+runs on FreeBSD, on our own compositor, over a Swift control plane, session
+supervisor and hardware bridges; one command boots a desktop where an unmodified
+GTK 3 application opens a file through the Finder; **a blank disk becomes a
+machine running that desktop**; and since Phase 9 the desktop is one you can
+*use* — copy and paste, drag and drop, move and resize and zoom and minimise
+windows, keyboard shortcuts, and an Aqua frame around applications that never
+heard of it. **418 unit tests, 35 live modes and 24 live scripts, green on Linux
+and FreeBSD.**
 
-Phase 4 is scoped and started. Per-pass detail lives in the phase docs
-([PHASE4.md](PHASE4.md), [PHASE5.md](PHASE5.md)); this section is what to do
-next, not a record of what was done.
+Per-pass detail lives in the phase docs; this section is what to do next, not a
+record of what was done.
+
+### 0. Read this first: what Phase 9 changed underneath everything
+
+Phase 9 was the interaction substrate ([PHASE9.md](PHASE9.md), P9.1–P9.7), and
+five of its seven passes found something **already broken** rather than merely
+missing. If you are picking this up cold, these are the ones that change how you
+read the rest of the tree:
+
+| Pass | What it added | What it found (§) |
+|---|---|---|
+| P9.1–9.2 | clipboard, ⌘C/⌘V across processes | a client must never read a selection it owns (§2.45) |
+| P9.3 | drag and drop, three targets | **`wl_proxy_destroy` sends nothing** — every closed window leaked a mapped surface (§2.57); layer surfaces were never hit-tested (§2.56); a self-drag deadlocks (§2.55) |
+| P9.4 | move/resize/zoom/minimise, edge snapping | undertow made **no foreign-toplevel handles**, so the Dock saw nothing under our own compositor (§2.58) |
+| P9.5 | the keybind table, `keys.ini`, `[passthrough]` | `Seat.focus` never set **`xdg_toplevel.activated`**, so every window had drawn itself focused since Phase 6 (§2.59) |
+| P9.6 | server-side decorations | `set_mode` before the initial commit **crashes wlroots**; GTK never asks to be decorated |
+| P9.7 | the XWayland decision: **no** | the reason is written in PHASE9 §6.3, and `live-session.sh` enforces it |
+
+**The pattern is one lesson in five costumes** (§2.54, §2.56, §2.58, §2.59): the
+gap is never in the code that runs. It is in the state nobody reads, or the
+object nobody creates, until a feature finally needs it. When you add a protocol,
+name the object a client actually *receives* through it; if nothing constructs
+one, the global is furniture.
+
+**Two structural changes to know about.** `AquaDraw` is now its own target —
+`Rect`, `Theme`, `Draw`, `Text` and the window chrome — because the compositor
+links it to paint frames; `Aqua` re-exports it, so call sites are unchanged. And
+the suite has lanes: `run.sh --vm --live` is ~280s, while **`--full` adds the two
+nested-bhyve install tests (~1000s total) and is the rule for anything touching
+the installer, the medium, the distribution sets or the boot path.**
 
 ### 1. Boot the stick. Everything else waits on it.
 
@@ -2372,6 +2405,20 @@ expected to change. Two things are already known to be waiting:
   history (§2.48).
 - **The volume and battery status items have reported "absent" since P3.7**, and
   a real machine is the first one that would give them something to read.
+
+### 2b. After metal, the roadmap resumes at Phase 10 — the menu protocol
+
+Phase 9 is done, so the next unbuilt phase is **10, the menu protocol**
+([PLAN.md](PLAN.md)): the menu bar stops being a picture of a menu bar. It is
+`Before` Phase 15 in the dependency order for a reason — every application built
+without it has to be retrofitted — and Phase 9 left it two things it needs: the
+keybind table already turns a combination into an action (P9.5), and §6.5 records
+that **undo has to be decided in the menu protocol**, before there are
+applications to retrofit.
+
+Phase 9 also left one thing open on purpose: **`wlr-data-control`** (PHASE9 §6.7)
+— the protocol a surfaceless clipboard tool needs, in both directions. Nothing
+asks for it yet; `abyssclip` is the thing that would.
 
 ### 3. Standing smaller items, none blocking
 

@@ -448,6 +448,30 @@ the compositor took the decoration, rasterised exactly one frame for it, and tha
 the yellow light **where the frame was painted** puts the window away — which is
 the claim a screenshot cannot make.
 
+**What P9.7 landed: the decision, and a test that keeps it.**
+
+**No XWayland.** §6.3 has the argument and the price; the short of it is that
+nothing on this roadmap needs it — the browser this project adopts is
+Wayland-native, and every application it writes is its own client — so what
+XWayland would buy is the long tail of ports rather than anything we ship. An
+X11-only port will not run on this desktop, and that is the cost of the decision
+rather than an oversight in it.
+
+One correction is recorded with it, because the wrong reason would have been
+easy: **the cost is not the frame path.** wlroots starts XWayland lazily, so a
+compositor built with it and no X client connected has no server process and
+nothing in the present loop that knows it exists. What an X11 application loses
+under XWayland, it loses under every compositor. The decision is about scope and
+attack surface, not about frames.
+
+And it is enforced rather than remembered: `live-session.sh` asserts that
+`undertow` names none of wlroots' XWayland symbols, so wiring it in fails the
+suite. The check is the **binary**, not the process table — looking for a running
+`Xwayland` finds the dev box's own desktop session and fails on a machine that is
+behaving perfectly, and would find nothing on a compositor that *does* have it
+compiled in, since no X client connects during the test. The guard was broken on
+purpose to confirm it fails (§2.37).
+
 **P9.7 — the XWayland decision.**
 Not a line of code until the decision is written down, which is the pass. §4.4
 measured it: wlroots has XWayland compiled in on both platforms, `Xwayland` is in
@@ -633,26 +657,44 @@ suppresses the compositor's table for one keystroke. **Pick one and write it in
 the table's format**, because retrofitting it after Phase 15 means changing every
 application.
 
-**6.3 XWayland — the recommendation is take it, scoped and off by default here.**
-§4.4 removed cost from the argument, so it is decided on merits:
+**6.3 XWayland — DECIDED: no. Not now, and not silently later.**
+The recommendation in this document was to take it, scoped and off by default.
+The decision went the other way, and the reasoning is worth keeping because the
+question will come back.
 
-*For:* thesis 5 forbids "some of what you install will not run", and Wayland-native
-coverage in ports is real but partial. wlroots supplies it for roughly the cost of
-`undertow`'s other globals, and it is already compiled in on both platforms.
+*What was measured, and what it settled.* §4.4 priced it: wlroots is built with
+`WLR_HAS_XWAYLAND` on both platforms, `Xwayland` is in ports, and the medium
+grows by ≈6 MiB net. **Cost was never the argument, and neither is the frame
+path** — wlroots starts XWayland *lazily*, so with no X11 client connected there
+is no server process and nothing in the present loop knows it exists. The
+performance an X11 application loses is lost by that application, under any
+compositor. Saying otherwise would be an easier argument and a false one.
 
-*Against:* an X client cannot be given an Aqua frame as cleanly as P9.6 gives one
-to a Wayland client — X11 windows come through `wlr_xwayland_surface`, not
-`xdg_toplevel`, so the decoration path needs a second branch. And it widens the
-attack surface of a session that currently has no X server in it at all.
+*What actually decided it.* Nothing on this roadmap needs it. PLAN.md's own note
+is the load-bearing sentence: **the browser does not force it** — both GTK stacks
+are Wayland-native and Chromium's FreeBSD port depends on `wayland` outright —
+and every application this project writes is its own client. What XWayland buys
+is the long tail of ports, which is thesis 5's promise and not thesis 5's
+deliverable.
 
-*The shape, which is the D-Bus bridge's shape:* **`--xwayland` off by default, on
-in the installed system, never on in the harness's live modes.** Nothing on the
-frame path knows it exists, and if it dies the desktop does not notice. PLAN.md
-has always called X11 a legacy adapter; this makes it one in code.
+*What it costs, said plainly.* An X11-only port will not run on this desktop.
+That is a real narrowing of "it just runs", and it is the price of the decision
+rather than an oversight in it. Two smaller things come free with the no: an X
+client cannot be given an Aqua frame the way P9.6 gives one to a Wayland client
+(`wlr_xwayland_surface` is not an `xdg_toplevel`, so the decoration path would
+need a second branch), and a session that contains no X server has no X server's
+attack surface.
 
-**What would flip it:** if the second decoration branch turns out to be more than
-a pass's work, XWayland is worth deferring to Phase 15, where the applications
-that need it actually arrive.
+**What would flip it: a named application somebody actually wants that is
+X11-only.** Not "the long tail" in the abstract — a name, in a phase that has
+users. Phase 15 and 16 are where that would surface, and the work is bounded:
+one global, one surface branch in the decoration path, one line in the medium.
+
+**And the decision is a test, not a memory.** `live-session.sh` asserts the
+running desktop has no X server in it and no `DISPLAY` in its environment, so
+wiring XWayland in by accident fails the suite rather than passing unnoticed —
+the same discipline as §2.56 and §2.58, applied to something we chose not to
+have rather than something we forgot to finish.
 
 **6.4 Primary selection is deliberately out.**
 `zwp_primary_selection` (middle-click paste) is an X11 idiom and not a Mac one.

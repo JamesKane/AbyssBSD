@@ -3,13 +3,16 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-08-25. **Phases 0–3 and 5–8 are complete.** The Jaguar desktop
+Last updated: 2026-09-06. **Phases 0–3, 5–8 and 9 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**315 unit tests, 35 live modes and 18 live scripts, green on Linux *and*
+**418 unit tests, 35 live modes and 24 live scripts, green on Linux *and*
 FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
+The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
+two nested-bhyve install tests (~1000s)** — the rule for anything touching the
+installer, the medium, the distribution sets or the boot path.
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5):
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
@@ -437,8 +440,30 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 5–8 are complete.** Phase 4 — first metal — is in flight, and
-is the first whose verification needs a machine no test can reach. **After it the
+**Phases 0–3, 5–8 and 9 are complete.** Phase 4 — first metal — is in flight, and
+is the first whose verification needs a machine no test can reach.
+
+> **Phase 9 — the interaction substrate — is COMPLETE**
+> ([PHASE9.md](PHASE9.md), P9.1–P9.7). The desktop is one you can *use*: the
+> clipboard crosses processes, files are dragged onto the Trash and into folders
+> and onto Dock tiles, windows move and resize and zoom and minimise and snap to
+> an edge, a keybind table decides what the desktop hears before the application
+> does, and applications that never heard of this desktop wear its window frame.
+>
+> **Five of the seven passes found something already broken rather than merely
+> missing** — HANDOFF §2.55–§2.59, and §5 has the table. The headline is
+> §2.57: **`wl_proxy_destroy` sends no request**, so every window this project
+> had ever closed leaked a mapped, hit-testable surface in the compositor and
+> left a rectangle of dead screen behind it. Nothing could see it from either
+> side, and every close test asked the *client* whether it had closed the window.
+>
+> **XWayland is decided: no** (PHASE9 §6.3). Nothing on the roadmap needs it —
+> the browser this project adopts is Wayland-native — so what it would buy is the
+> long tail of ports. The price is stated: an X11-only port will not run here.
+> `live-session.sh` asserts `undertow` names none of wlroots' XWayland symbols,
+> so the decision is enforced rather than remembered.
+>
+> **After metal, the roadmap resumes at Phase 10 — the menu protocol.** **After it the
 roadmap continues to Phase 18** ([PLAN.md](PLAN.md) — the interaction substrate,
 the menu protocol, the theme system, `Fathom`, Islands/Shoals/Ebb, preferences
 that write, the application layer, the session, delivery, and confinement), all

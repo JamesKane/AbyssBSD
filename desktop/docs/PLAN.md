@@ -382,8 +382,11 @@ it.
   no broker process). Take the sibling's compositor-owned portal *design*
   (`reef-portal`/`open`/`save`/`notify` — file chooser, screenshot/cast, notifications)
   and write it in Swift. **Legacy adapter:** a
-  **jailed D-Bus bridge** + XWayland for GTK/Qt apps, off the critical path, so legacy
-  apps that expect a session bus / portals / MPRIS / AT-SPI still work.
+  **jailed D-Bus bridge** for GTK/Qt apps, off the critical path, so legacy
+  apps that expect a session bus / portals / MPRIS / AT-SPI still work. (This
+  line said "+ XWayland" until Phase 9 decided against it — PHASE9 §6.3. The
+  GTK/Qt applications it names are Wayland-native; what X11 would have added is
+  the long tail of ports, and an X11-only port now does not run here.)
 - Run the whole stack headless in the VM (sway's headless backend today, ours later)
   and keep `tide`'s C1–C5 perf benches as the standing gate the Swift compositor will
   have to clear.
@@ -615,7 +618,8 @@ of them research, that together are the difference between a demo and a desktop
 - **Server-side decorations** (`xdg-decoration`) with `Aqua` painting the frame.
   The highest visual payoff in the gap map: a GTK headerbar on a Jaguar desktop
   looks broken in a way no missing feature does.
-- **Decide XWayland, and write the reason down** (PRODUCT.md §5.2). The browser
+- **XWayland: decided, no** (PHASE9 §6.3, and the reason is written there). The
+  browser
   does not force it — both GTK stacks are Wayland-native and Chromium's port
   depends on `wayland` outright — but the long tail of ports is what thesis 5
   promises. **Cost is measured and is not the argument:** wlroots is built with
