@@ -20,6 +20,29 @@ set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 
+# **Say where the minutes go.** This suite is the thing a person waits on, and
+# until it reported per-section time the only honest answer to "why is it slow"
+# was a guess. Each `phase` prints how long the *previous* one took, and the
+# total is the last line — so a run that got slower says which part did.
+_phase_start=$(date +%s)
+_phase_name=""
+_run_start=$_phase_start
+phase() {
+  _now=$(date +%s)
+  if [ -n "$_phase_name" ]; then
+    printf '   (%s: %ss)\n' "$_phase_name" "$((_now - _phase_start))"
+  fi
+  _phase_name=$1
+  _phase_start=$_now
+  echo "== $1 =="
+}
+phase_end() {
+  _now=$(date +%s)
+  [ -n "$_phase_name" ] && printf '   (%s: %ss)\n' "$_phase_name" "$((_now - _phase_start))"
+  _phase_name=""
+  printf 'total: %ss\n' "$((_now - _run_start))"
+}
+
 live=0
 vm=0
 for arg in "$@"; do
@@ -36,13 +59,20 @@ if [ "$vm" -eq 1 ]; then
   ABYSS_VM_DIR="$root/abyss/vm"
   export ABYSS_VM_DIR
   . "$root/abyss/vm/config.sh"
-  echo "== syncing to the FreeBSD VM =="
+  phase "syncing to the FreeBSD VM"
   "$root/abyss/vm/sync.sh"
-  echo "== abyss/tests/run.sh, in the guest =="
+  phase "abyss/tests/run.sh, in the guest"
   remote="export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && sh abyss/tests/run.sh"
   [ "$live" -eq 1 ] && remote="$remote --live"
+  # **Not `exec`.** Replacing this shell with ssh would take the timing with it:
+  # the guest prints its own phases, but the sync — the one cost that is purely
+  # the VM's — would never be reported, which is exactly the number a person
+  # waiting fifteen minutes wants.
   # shellcheck disable=SC2046
-  exec ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$remote"
+  ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$remote"
+  rc=$?
+  phase_end
+  exit $rc
 fi
 
 # FreeBSD has no pam_xdg, so nothing sets XDG_RUNTIME_DIR (HANDOFF §2.31) — and
@@ -53,13 +83,13 @@ fi
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-echo "== swift build =="
+phase "swift build"
 swift build
 
-echo "== swift test =="
+phase "swift test"
 swift test
 
-echo "== headless Aqua render (smoke) =="
+phase "headless Aqua render (smoke)"
 out="${TMPDIR:-/tmp}/aqua-smoke-$$.png"
 AQUA_RENDER_PNG="$out" AQUA_SCALE=2 .build/debug/AquaDemo
 test -s "$out" && echo "ok: $out" || { echo "FAIL: no PNG produced"; exit 1; }
@@ -67,85 +97,85 @@ rm -f "$out"
 
 # Two real processes handing a descriptor over the control plane. In the default
 # lane because it needs no compositor and takes about a second.
-echo "== control plane, two processes =="
+phase "control plane, two processes"
 sh "$root/abyss/tests/live-ipc.sh"
 
 # The compositor's frame contract (C1 + the allocation-free present path). In
 # the default lane on purpose: it needs no compositor, no GPU and no display,
 # which is exactly why the contract is built before the pixels (PHASE6.md P6.1).
-echo "== the frame contract =="
+phase "the frame contract"
 sh "$root/abyss/tests/bench-metronome.sh"
 
 # A real client on our own compositor. Also in the default lane, and notable for
 # being the first test here that starts no sway at all — undertow IS the
 # compositor (PHASE6.md P6.3).
-echo "== a real client on undertow =="
+phase "a real client on undertow"
 sh "$root/abyss/tests/live-undertow.sh"
 
 # ...and input reaching that client through our own seat, driven by the same
 # unmodified vpointer the harness points at sway (PHASE6.md P6.4).
-echo "== input through undertow =="
+phase "input through undertow"
 sh "$root/abyss/tests/live-undertow-input.sh"
 
 # C2 — the claim the architecture exists to make good: eleven hostile processes
 # cannot make the compositor drop a frame, and the healthy client keeps working
 # throughout (PHASE6.md P6.5).
-echo "== C2: no client can make us miss a frame =="
+phase "C2: no client can make us miss a frame"
 sh "$root/abyss/tests/live-undertow-c2.sh"
 
 # The destination of Phase 6: the Aqua shell — wallpaper, menu bar and Dock,
 # three layer-shell clients from Phase 2 — composing on undertow (P6.6).
-echo "== the Aqua shell on undertow =="
+phase "the Aqua shell on undertow"
 sh "$root/abyss/tests/live-undertow-shell.sh"
 
 # What only a compositor can do: a window remembers where it was dragged to, and
 # reopens there in a NEW session (HANDOFF §2.22's debt, paid in P6.7).
-echo "== remembered window positions =="
+phase "remembered window positions"
 sh "$root/abyss/tests/live-undertow-places.sh"
 
 # The file-chooser portal, end to end: a client, a picker, and a descriptor for
 # a file the client never named. Needs a compositor, so it sits in --live.
 if [ "$live" -eq 1 ]; then
-  echo "== the portal, end to end =="
+  phase "the portal, end to end"
   sh "$root/abyss/tests/live-portal.sh"
   # And the claim that makes it worth having: a client with no filesystem.
-  echo "== the sandboxed client =="
+  phase "the sandboxed client"
   sh "$root/abyss/tests/live-sandbox.sh"
-  echo "== notifications =="
+  phase "notifications"
   sh "$root/abyss/tests/live-notify.sh" >/dev/null
   # The clipboard: an empty one says so, and a copy with no input behind it is
   # refused by name (PHASE9 P9.1). Against undertow, because undertow's own
   # handling is the thing under test.
-  echo "== the clipboard =="
+  phase "the clipboard"
   sh "$root/abyss/tests/live-clipboard.sh" >/dev/null
   # And the same protocol with a grab on it: a file pressed in one process and
   # released on the Trash in another, plus the two other targets the shell
   # draws (PHASE9 P9.3). Every claim is checked on disk.
-  echo "== drag and drop =="
+  phase "drag and drop"
   sh "$root/abyss/tests/live-dnd.sh" >/dev/null
   # What a window may ask about itself: moved by its title bar, zoomed to the
   # usable area (not the output), resized from a corner that stays anchored,
   # snapped to an edge, and put in the Dock and taken back out (P9.4).
-  echo "== window management =="
+  phase "window management"
   sh "$root/abyss/tests/live-window.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
-  echo "== the screenshot portal =="
+  phase "the screenshot portal"
   sh "$root/abyss/tests/live-screenshot.sh"
   # The same portal, reached the way the rest of the world reaches one: a
   # session bus, org.freedesktop.portal.Desktop, and gdbus as an independent
   # witness that our Response decodes (PHASE8.md P8.2).
-  echo "== the portal on the session bus =="
+  phase "the portal on the session bus"
   sh "$root/abyss/tests/live-portal-dbus.sh"
   # And the caller the whole phase is for: a stock GTK 3 application, which has
   # never heard of us, getting the Finder as its file chooser (PHASE8.md P8.3).
   # Skips itself, loudly, on a box with no GTK runtime.
-  echo "== a real GTK application =="
+  phase "a real GTK application"
   sh "$root/abyss/tests/live-gtk.sh"
   # ...and the same claim with nobody assembling the session by hand: one
   # `anchor` command brings up compositor, bus, portal, bridge and shell
   # (PHASE8.md P8.4). Skips itself, loudly, on a box with no GTK runtime.
-  echo "== one command, a whole desktop =="
+  phase "one command, a whole desktop"
   sh "$root/abyss/tests/live-session-gtk.sh"
 
   # And the pass where an operating system gets onto a disk: a root
@@ -153,43 +183,45 @@ if [ "$live" -eq 1 ]; then
   # scratch disk, and the result BOOTED under nested bhyve (PHASE5.md P5.2).
   # On Linux it is a positive control — the probe must refuse and say why — and
   # on FreeBSD it skips loudly without the dist sets or bhyve's UEFI firmware.
-  echo "== the installer, and what it installed =="
+  phase "the installer, and what it installed"
   sh "$root/abyss/tests/live-install.sh"
 
   # ...and the medium it all arrives on: an image assembled from distribution
   # sets with base tools only, booted nested, running our compositor with the
   # wallpaper, menu bar and Dock composited on it — checked pixel by pixel
   # (PHASE5.md P5.3). On Linux, a positive control: the builder must refuse.
-  echo "== the live medium =="
+  phase "the live medium"
   sh "$root/abyss/tests/live-medium.sh"
 
   # And the face on the front of it: the Aqua installer, driven by a real
   # pointer and a real keyboard on our own compositor, against the real
   # `abyss-install` in dry-run (PHASE5.md P5.4). On Linux it drives the account
   # spoke and asserts the hub stays disarmed — a positive control, not a skip.
-  echo "== the Aqua installer =="
+  phase "the Aqua installer"
   sh "$root/abyss/tests/live-installer.sh"
 
   # And the whole thing, end to end: an empty disk, our medium, an install from
   # it, and a reboot into the Jaguar desktop (PHASE5.md P5.5). Nested twice
   # over, with nobody watching. On Linux, a positive control.
-  echo "== empty disk to Jaguar desktop =="
+  phase "empty disk to Jaguar desktop"
   sh "$root/abyss/tests/live-desktop.sh"
 fi
 
 # D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never
 # our own encoder on both ends (PHASE8.md P8.1). Needs no compositor.
-echo "== D-Bus, against a real bus =="
+phase "D-Bus, against a real bus"
 sh "$root/abyss/tests/live-dbus.sh"
 
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on
 # Linux it asserts the stubs report themselves absent). No compositor needed.
-echo "== hardware bridges =="
+phase "hardware bridges"
 sh "$root/abyss/tests/live-vents.sh"
 
 if [ "$live" -eq 1 ]; then
-  echo "== live modes (headless sway + grim) =="
+  phase "live modes (headless sway + grim)"
   sh "$root/abyss/tests/run-live.sh"
 fi
 
 echo "all green."
+
+phase_end

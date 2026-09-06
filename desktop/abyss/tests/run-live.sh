@@ -97,31 +97,72 @@ want() {
 }
 
 passed=0; failed=0; skipped=0; failed_labels=""
+# **The modes run several at a time.** Each one starts its own headless sway,
+# which announces its own `wayland-N`, so they share nothing but the CPU — and
+# run serially the whole suite is dominated by 35 sequential compositor
+# start-ups, which inside the build VM is most of a coffee break. `ABYSS_JOBS`
+# sets the width; 1 restores the old behaviour if a failure ever looks like a
+# collision rather than a bug.
+#
+# Output is per-mode files, collected after the wait, so interleaved lines
+# cannot mix: a parallel run must not be harder to read than a serial one.
+jobs_wanted=${ABYSS_JOBS:-}
+if [ -z "$jobs_wanted" ]; then
+  cpus=$( (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2) )
+  jobs_wanted=$(( cpus / 2 ))
+  [ "$jobs_wanted" -lt 1 ] && jobs_wanted=1
+  [ "$jobs_wanted" -gt 6 ] && jobs_wanted=6
+fi
+
 # Read the table a LINE at a time: several entries carry spaces ("widgets
 # --click"), and a `for entry in $modes` would word-split those into separate
 # bogus modes. The here-doc is on fd 3 so live-sway.sh keeps its own stdin, and
 # it is not a pipeline, so the counters below stay in this shell.
+running=0
+ordered=""
 while IFS= read -r entry <&3; do
   [ -n "$entry" ] || continue
   label=${entry%%:*}
   args=${entry#*:}
   if ! want "$label"; then skipped=$((skipped + 1)); continue; fi
+  ordered="$ordered $label"
   png="$outdir/$label.png"
-  printf '%-14s ' "$label"
+  # **Each mode gets its own `XDG_RUNTIME_DIR`.** Two sways starting at the same
+  # moment both take the first free socket name and both announce `wayland-1`;
+  # the loser's client then connects to the winner's compositor and dies as
+  # "AquaDemo exited early". Separate runtime directories make the collision
+  # impossible rather than unlikely.
+  rt="$outdir/rt-$label"
+  mkdir -p "$rt" && chmod 700 "$rt"
   # shellcheck disable=SC2086
-  if timeout "$ABYSS_LIVE_TIMEOUT" sh abyss/tests/live-sway.sh $args "$png" \
-       > "$outdir/$label.log" 2>&1; then
-    printf 'ok\n'
-    passed=$((passed + 1))
-  else
-    rc=$?
-    printf 'FAIL (rc=%s)\n' "$rc"
-    sed -n '$p' "$outdir/$label.log" | sed 's/^/               /'
-    failed=$((failed + 1)); failed_labels="$failed_labels $label"
-  fi
+  (
+    export XDG_RUNTIME_DIR="$rt"
+    if timeout "$ABYSS_LIVE_TIMEOUT" sh abyss/tests/live-sway.sh $args "$png" \
+         > "$outdir/$label.log" 2>&1; then
+      echo ok > "$outdir/$label.rc"
+    else
+      echo "$?" > "$outdir/$label.rc"
+    fi
+  ) &
+  running=$((running + 1))
+  if [ "$running" -ge "$jobs_wanted" ]; then wait; running=0; fi
 done 3<<EOF
 $modes
 EOF
+wait
+
+for label in $ordered; do
+  printf '%-14s ' "$label"
+  rc=$(cat "$outdir/$label.rc" 2>/dev/null || echo "no result")
+  if [ "$rc" = ok ]; then
+    printf 'ok\n'
+    passed=$((passed + 1))
+  else
+    printf 'FAIL (rc=%s)\n' "$rc"
+    sed -n '$p' "$outdir/$label.log" 2>/dev/null | sed 's/^/               /'
+    failed=$((failed + 1)); failed_labels="$failed_labels $label"
+  fi
+done
 
 # Two tests drive their own supervisor rather than AquaDemo: the shell session
 # script, and the Swift supervisor that replaces it.
