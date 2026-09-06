@@ -176,6 +176,11 @@ if [ "$live" -eq 1 ]; then
   # combination for itself (P9.5, and §6.2's decision made into data).
   echo "== keybinds =="
   sh "$root/abyss/tests/live-keys.sh" >/dev/null
+  # And a window that never heard of this desktop, wearing its frame: the
+  # compositor answers xdg-decoration server-side and paints an Aqua title bar
+  # around somebody else's surface (P9.6).
+  echo "== server-side decorations =="
+  sh "$root/abyss/tests/live-decorations.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

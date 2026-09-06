@@ -22,6 +22,12 @@
  *   zombie      connect, commit once, then hang for ever holding the
  *               connection and the surface. The compositor must show its last
  *               buffer and never wait for another.
+ *   decorated   map an xdg_toplevel and ask the compositor to draw its frame
+ *               (`zxdg_decoration_manager_v1`, SERVER_SIDE), then sit there.
+ *               Not adversarial at all — it is here because P9.6 needed a
+ *               client that *asks*, and GTK never does: GTK draws its own
+ *               decorations on Wayland whatever the compositor offers, so the
+ *               obvious candidate could not exercise the protocol.
  *   churn [n]   connect / set up / commit / disconnect, over and over.
  *               Resource create-and-destroy pressure on the protocol side.
  *   deaf        connect, commit, then never read the socket again while
@@ -53,6 +59,16 @@
 #include <sys/mman.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
+/* **Optional on purpose.** Only `live-decorations.sh` generates this header, and
+ * `live-undertow-c2.sh` — which has built this file since P6.5 — must not have
+ * to learn about a protocol its four hostile modes never speak. `__has_include`
+ * keeps one source file honest for both callers. */
+#if defined(__has_include)
+#  if __has_include("xdg-decoration-unstable-v1-client-protocol.h")
+#    include "xdg-decoration-unstable-v1-client-protocol.h"
+#    define ADVERSARY_HAS_DECORATION 1
+#  endif
+#endif
 
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
@@ -60,6 +76,9 @@ static struct xdg_wm_base *wm_base;
 static struct wl_seat *seat;
 static struct wl_pointer *pointer;
 static struct xdg_toplevel *g_toplevel;
+#ifdef ADVERSARY_HAS_DECORATION
+static struct zxdg_decoration_manager_v1 *g_decoration_manager;
+#endif
 static uint32_t last_serial;
 static int moved;
 
@@ -74,6 +93,11 @@ static void reg_global(void *data, struct wl_registry *reg, uint32_t name,
         wm_base = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
     else if (!strcmp(iface, "wl_seat"))
         seat = wl_registry_bind(reg, name, &wl_seat_interface, 3);
+#ifdef ADVERSARY_HAS_DECORATION
+    else if (!strcmp(iface, "zxdg_decoration_manager_v1"))
+        g_decoration_manager = wl_registry_bind(
+            reg, name, &zxdg_decoration_manager_v1_interface, 1);
+#endif
 }
 static void reg_remove(void *data, struct wl_registry *reg, uint32_t name) {
     (void)data; (void)reg; (void)name;
@@ -231,6 +255,64 @@ int main(int argc, char **argv) {
         teardown(&c);
         return 0;
     }
+
+#ifdef ADVERSARY_HAS_DECORATION
+    if (!strcmp(mode, "decorated")) {
+        /* P9.6's client: it asks the compositor to draw its frame, and then does
+         * nothing at all. GTK cannot play this part — it draws its own
+         * decorations on Wayland whatever the compositor offers — so the test
+         * for server-side decorations needs a client written to ask. */
+        int mw = argc > 2 ? atoi(argv[2]) : 260;
+        int mh = argc > 3 ? atoi(argv[3]) : 160;
+        struct wl_display *d = wl_display_connect(NULL);
+        if (!d) { fprintf(stderr, "adversary: cannot connect\n"); return 1; }
+        struct wl_registry *reg = wl_display_get_registry(d);
+        wl_registry_add_listener(reg, &reg_listener, NULL);
+        wl_display_roundtrip(d);
+        if (!compositor || !shm || !wm_base) {
+            fprintf(stderr, "adversary: missing compositor/shm/xdg_wm_base\n");
+            return 1;
+        }
+        if (!g_decoration_manager) {
+            fprintf(stderr, "adversary: no zxdg_decoration_manager_v1\n");
+            return 3;
+        }
+        xdg_wm_base_add_listener(wm_base, &wm_listener, NULL);
+
+        struct wl_surface *surf = wl_compositor_create_surface(compositor);
+        struct xdg_surface *xs = xdg_wm_base_get_xdg_surface(wm_base, surf);
+        xdg_surface_add_listener(xs, &xs_listener, NULL);
+        g_toplevel = xdg_surface_get_toplevel(xs);
+        xdg_toplevel_set_app_id(g_toplevel, "org.abyssbsd.undecorated");
+        xdg_toplevel_set_title(g_toplevel, "Foreign");   /* one word: the compositor keys windows by app_id/title */
+
+        struct zxdg_toplevel_decoration_v1 *deco =
+            zxdg_decoration_manager_v1_get_toplevel_decoration(g_decoration_manager,
+                                                               g_toplevel);
+        zxdg_toplevel_decoration_v1_set_mode(
+            deco, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+
+        wl_surface_commit(surf);            /* the initial commit */
+        wl_display_roundtrip(d);            /* ... answered with a configure */
+
+        struct wl_buffer *buf = make_buffer(mw, mh);
+        if (!buf) return 1;
+        wl_surface_attach(surf, buf, 0, 0);
+        wl_surface_damage(surf, 0, 0, mw, mh);
+        wl_surface_commit(surf);
+        wl_display_roundtrip(d);
+        fprintf(stderr, "adversary: asked to be decorated, mapped %dx%d\n", mw, mh);
+        fflush(stderr);
+        while (wl_display_dispatch(d) != -1) { }
+        return 0;
+    }
+
+#else
+    if (!strcmp(mode, "decorated")) {
+        fprintf(stderr, "adversary: built without xdg-decoration\n");
+        return 3;
+    }
+#endif
 
     if (!strcmp(mode, "move")) {
         if (argc < 4) {

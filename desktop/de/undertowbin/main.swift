@@ -432,6 +432,8 @@ case "run":
     var reportedSelections = 0
     var reportedDrags = 0
     var reportedKeybinds = 0
+    var reportedFrameClicks = 0
+    var reportedRasterisations = 0
     // **Where the windows are, as it changes.** A Wayland client is never told
     // its own position and only learns its size a frame later, so the compositor
     // is the only witness to a move, a snap or a maximize — and without one, a
@@ -464,6 +466,17 @@ case "run":
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted
             out("selections-accepted=\(reportedSelections)")
+        }
+        // §6.1 asked for the frame cache to be *measured*, and a number that
+        // only appears in the summary is invisible to exactly the runs that
+        // need it — an unbounded one never reaches the summary at all.
+        if compositor.decorations?.rasterisations ?? 0 != reportedRasterisations {
+            reportedRasterisations = compositor.decorations?.rasterisations ?? 0
+            out("frame-rasterisations=\(reportedRasterisations)")
+        }
+        if seat.frameClicks != reportedFrameClicks {
+            reportedFrameClicks = seat.frameClicks
+            out("frame-clicks=\(reportedFrameClicks)")
         }
         if seat.keybindsFired != reportedKeybinds {
             reportedKeybinds = seat.keybindsFired
@@ -530,6 +543,11 @@ case "run":
     // the compositor refused to start look identical from the outside (P9.3).
     out("drags-started=\(seat.dragsStarted)")
     out("keybinds-fired=\(seat.keybindsFired)")
+    out("frame-clicks=\(seat.frameClicks)")
+    // §6.1 asked for the frame cache to be *measured*: one rasterisation per
+    // decorated window on a desktop nobody is resizing, and this is the number
+    // that says so.
+    out("frame-rasterisations=\(compositor.decorations?.rasterisations ?? 0)")
     // The window requests P9.4 answered. Counters rather than a log, for the
     // same reason as the two above: "nothing happened" and "it happened and did
     // nothing" are indistinguishable without one.

@@ -81,6 +81,21 @@ public final class SurfaceScene: FrameSink {
         for l in layers where l.layer <= 1 { add(layer: l) }
         for t in compositor.mappedToplevels {
             guard count < capacity else { break }   // bounded, never grows
+            // **The frame goes under the window it frames** (P9.6). One entry
+            // in the same arrays as everything else: the present path does not
+            // learn a second kind of thing, it just walks one more rect.
+            if t.decorated, let deco = compositor.decorations,
+               let renderer = compositor.rendererForFrames,
+               let frame = deco.texture(for: t, renderer: renderer,
+                                        active: compositor.seat?.focused === t) {
+                let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
+                                             width: t.width, height: t.height)
+                texture[count] = frame
+                x[count] = box.x; y[count] = box.y
+                w[count] = box.w; h[count] = box.h
+                count += 1
+                guard count < capacity else { break }
+            }
             guard let tex = wlr_surface_get_texture(t.surface) else { continue }
             texture[count] = tex
             x[count] = t.x; y[count] = t.y

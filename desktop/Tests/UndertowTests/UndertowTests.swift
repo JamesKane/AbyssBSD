@@ -9,6 +9,7 @@
 // on any machine.
 
 import XCTest
+import AquaDraw
 import PoolConfig
 @testable import Undertow
 
@@ -459,6 +460,33 @@ final class UndertowTests: XCTestCase {
     /// The top window wins. This is the whole reason raising a window changes
     /// what a click hits, and it is one line that would be tedious to prove with
     /// a running desktop and trivial here.
+    // MARK: - Server-side decorations (P9.6)
+
+    func testTheFrameAndTheSurfaceAreInversesOfEachOther() {
+        // Everything has to agree about where the frame is: placement, the
+        // hit-test, the move grab, the snap rectangle. Two functions that
+        // disagree by a pixel are a title bar you can see and cannot click.
+        let f = FrameMetrics.frame(forSurfaceAt: 100, 200, width: 400, height: 300)
+        let s = FrameMetrics.surface(forFrameAt: f.x, f.y)
+        XCTAssertEqual(s.x, 100)
+        XCTAssertEqual(s.y, 200)
+    }
+
+    func testTheFrameIsTallerByATitleBarAndWiderByItsBorders() {
+        let f = FrameMetrics.frame(forSurfaceAt: 0, 0, width: 400, height: 300)
+        XCTAssertEqual(f.w, 400 + 2 * Int32(FrameMetrics.border))
+        XCTAssertEqual(f.h, 300 + Int32(FrameMetrics.titleHeight) + Int32(FrameMetrics.border))
+        // The frame starts above and to the left of the surface it wraps.
+        XCTAssertEqual(f.y, -Int32(FrameMetrics.titleHeight))
+        XCTAssertEqual(f.x, -Int32(FrameMetrics.border))
+    }
+
+    func testTheFrameUsesTheToolkitsOwnTitleBarHeight() {
+        // The whole argument for §6.1: one grammar, so a re-skin in Phase 11
+        // reaches the window frames without a second implementation.
+        XCTAssertEqual(FrameMetrics.titleHeight, Theme.titleBarHeight)
+    }
+
     // MARK: - The keybind table (P9.5)
 
     /// A stub keysym table, so the parse can be tested without xkb — and so the
@@ -573,7 +601,9 @@ final class UndertowTests: XCTestCase {
 
     /// The usable area, not the output — a window snapped under the menu bar is
     /// the same defect as one placed there.
-    private var snapArea: Rect { Rect(x: 0, y: 22, width: 800, height: 578) }
+    private var snapArea: Undertow.Rect {
+        Undertow.Rect(x: 0, y: 22, width: 800, height: 578)
+    }
 
     func testSnapZonesAreTheThreeEdgesAndNothingElse() {
         let a = snapArea
@@ -605,7 +635,7 @@ final class UndertowTests: XCTestCase {
         XCTAssertEqual(l.height, a.height)
         XCTAssertEqual(WindowSnap.rect(for: .maximize, in: a), a)
         // An odd width still tiles exactly.
-        let odd = Rect(x: 0, y: 0, width: 801, height: 100)
+        let odd = Undertow.Rect(x: 0, y: 0, width: 801, height: 100)
         let ol = WindowSnap.rect(for: .left, in: odd)
         let or = WindowSnap.rect(for: .right, in: odd)
         XCTAssertEqual(ol.width + or.width, odd.width)
@@ -616,7 +646,7 @@ final class UndertowTests: XCTestCase {
         // A compositor with no usable area (every zone taken) must not divide
         // by it — and nil is the honest answer, not a zero-width half.
         XCTAssertNil(WindowSnap.zone(cursorX: 0, cursorY: 0,
-                                     area: Rect(x: 0, y: 0, width: 0, height: 0)))
+                                     area: Undertow.Rect(x: 0, y: 0, width: 0, height: 0)))
     }
 
     func testTheTopmostWindowUnderThePointerWins() {
@@ -684,7 +714,9 @@ final class UndertowTests: XCTestCase {
 
     // MARK: - Layer-shell arrangement (P6.6)
 
-    private func fullOutput() -> Rect { Rect(x: 0, y: 0, width: 800, height: 600) }
+    private func fullOutput() -> Undertow.Rect {
+        Undertow.Rect(x: 0, y: 0, width: 800, height: 600)
+    }
 
     /// The menu bar: a top strip that reserves its height. This is the exact
     /// arrangement `live-session.sh` has asserted against sway since Phase 2 —

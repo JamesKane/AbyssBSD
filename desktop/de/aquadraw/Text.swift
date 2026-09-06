@@ -164,7 +164,9 @@ public enum Text {
     /// The integer device pixel size to shape/hint at for a logical point
     /// `size` — scaled by `renderScale` so glyphs snap to the device grid. At
     /// scale 1 this is just `round(size)`.
-    static func px(_ size: Double) -> Int32 {
+    /// Public since P9.6: the toolkit measures labels with it, and the toolkit
+    /// is a different module now.
+    public static func px(_ size: Double) -> Int32 {
         Int32((size * Double(renderScale)).rounded())
     }
 }

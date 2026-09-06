@@ -151,10 +151,21 @@ let package = Package(
             dependencies: ["DBus", "CurrentIPC"],
             path: "de/dbusportal"
         ),
+        // The drawing grammar — Rect, Theme, Draw, Text and the window chrome
+        // they compose into. Its own target because **the compositor links it
+        // too** (P9.6): server-side decorations mean undertow paints an Aqua
+        // title bar, and the alternative was writing Aqua twice and keeping two
+        // of them in step (PHASE9 §6.1). Nothing here has ever depended on
+        // `Surface`, which is what made it separable.
+        .target(
+            name: "AquaDraw",
+            dependencies: ["CCairo", "CText"],
+            path: "de/aquadraw"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
+            dependencies: ["AquaDraw", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
                            "Vents", "CurrentIPC",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
@@ -358,7 +369,10 @@ let package = Package(
             // (P9.5). wlroots' headers declare xkbcommon's functions, so the
             // *compile* worked without it and only the link failed — the module
             // is here for the library, not for the declarations.
-            dependencies: ["CWlroots", "PoolConfig", "CXkb"],
+            // AquaDraw + cairo because the compositor paints the window frames
+            // now (P9.6): server-side decorations mean an Aqua title bar with
+            // gel lights, drawn from the same grammar the toolkit uses.
+            dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo"],
             path: "de/undertow"
         ),
         .executableTarget(
@@ -466,7 +480,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UndertowTests",
-            dependencies: ["Undertow", "PoolConfig"],
+            dependencies: ["Undertow", "PoolConfig", "AquaDraw"],
             path: "Tests/UndertowTests"
         ),
     ]

@@ -46,6 +46,13 @@ public final class Toplevel {
     /// `mappedToplevels`, and one flag keeps them from disagreeing.
     public internal(set) var minimized = false
     public internal(set) var maximized = false
+    /// Whether the compositor draws this window's frame (P9.6). Set when a
+    /// client asks through `xdg-decoration` — our own Aqua windows never ask,
+    /// because they draw their own chrome and always have.
+    public internal(set) var decorated = false
+    /// A decoration request waiting for this window's initial commit — see
+    /// `Decorations.take`, and the assertion it exists to avoid.
+    var decoration: UnsafeMutablePointer<wlr_xdg_toplevel_decoration_v1>?
     /// Where the window was before it was maximized or snapped, so unmaximizing
     /// puts it back rather than leaving it wherever the compositor decided.
     var restoreBox: Rect?
@@ -88,6 +95,9 @@ public final class Toplevel {
             // wrong — a hang with no error anywhere.
             if t.xdgToplevel.pointee.base.pointee.initial_commit {
                 _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, 0, 0)  // 0,0: you choose
+                // ...and the decoration mode, which could not be answered
+                // before this commit (P9.6).
+                t.compositor.decorations?.answer(t)
             }
             // A resize in progress: the client just told us the size it managed,
             // which is the only moment the anchored edge can be put back exactly
@@ -271,6 +281,12 @@ public final class Compositor {
     private var cascade: Int32 = 0
     /// Remembered window positions, persisted through PoolConfig.
     public let places: WindowPlaces
+    /// The renderer the frame textures are uploaded to (P9.6). The session owns
+    /// it; the scene needs it at latch time, and reaching through `session`
+    /// there would put a `let` from another file on the frame path.
+    var rendererForFrames: UnsafeMutablePointer<wlr_renderer>? { session.renderer }
+    /// Server-side decorations: the manager, and the frame textures (P9.6).
+    public private(set) var decorations: Decorations?
     /// Where this compositor's configuration lives (nil = the user's own).
     /// The keybind table is read from here, and re-read when it changes.
     public private(set) var configDir: String?
@@ -391,6 +407,9 @@ public final class Compositor {
         // decision, and the portal never sees either one.)
         _ = wlr_screencopy_manager_v1_create(session.display)
 
+        // Who draws the frames (P9.6). Always us — see `Decorations`.
+        decorations = Decorations(compositor: self, session: session)
+
         if let activation = wlr_xdg_activation_v1_create(session.display) {
             activationListener = tw_listen(&activation.pointee.events.request_activate,
                                            { ctx, data in
@@ -469,6 +488,18 @@ public final class Compositor {
               .sorted { $0.layer < $1.layer }
     }
 
+    /// A window became decorated: make room for the frame.
+    ///
+    /// The client asked for its size and got it; the *frame* is extra, and it
+    /// has to come out of the compositor's placement rather than the client's
+    /// idea of how big it is. Moving the surface down and right by the frame's
+    /// own metrics is the whole adjustment.
+    func reframe(_ t: Toplevel) {
+        let inset = FrameMetrics.surface(forFrameAt: t.x, t.y)
+        t.x = inset.x
+        t.y = inset.y
+    }
+
     /// Where a newly mapped window goes.
     ///
     /// Centred, then cascaded — the Mac's own rule, and a decision only a
@@ -509,6 +540,14 @@ public final class Compositor {
         let area = usableArea
         t.x = max(area.x, area.x + (area.width - w) / 2 + offset)
         t.y = max(area.y, area.y + (area.height - h) / 2 + offset)
+        // A decorated window is centred by its *frame*: the surface sits a
+        // title bar lower, and clamping to the usable area's top would otherwise
+        // put the title bar under the menu bar on the very first window.
+        if t.decorated {
+            let inset = FrameMetrics.surface(forFrameAt: t.x, t.y)
+            t.x = inset.x
+            t.y = max(inset.y, area.y + Int32(FrameMetrics.titleHeight))
+        }
     }
 
     /// Persist a window's position under its key.
@@ -519,7 +558,7 @@ public final class Compositor {
 
     // MARK: - Interactive move
 
-    fileprivate func beginMove(_ t: Toplevel) {
+    func beginMove(_ t: Toplevel) {
         guard let seat else { return }
         moving = t
         moveDX = seat.cursorX - Double(t.x)
@@ -680,10 +719,22 @@ public final class Compositor {
             if t.restoreBox == nil {
                 t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
             }
-            t.x = usableArea.x
-            t.y = usableArea.y
-            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, usableArea.width)),
-                                          Int32(max(0, usableArea.height)))
+            // **A decorated window's frame has to fit too.** Maximizing the
+            // surface to the usable area would put the title bar we drew above
+            // it off the top of the screen — a window you cannot move, close or
+            // un-zoom, because every control is off-screen.
+            var box = usableArea
+            if t.decorated {
+                let inset = FrameMetrics.surface(forFrameAt: box.x, box.y)
+                box = Rect(x: inset.x, y: inset.y,
+                           width: box.width - 2 * Int32(FrameMetrics.border),
+                           height: box.height - Int32(FrameMetrics.titleHeight)
+                                              - Int32(FrameMetrics.border))
+            }
+            t.x = box.x
+            t.y = box.y
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, box.width)),
+                                          Int32(max(0, box.height)))
             maximizeCount += 1
         } else if let box = t.restoreBox {
             t.x = box.x
@@ -738,6 +789,7 @@ public final class Compositor {
     weak var seat: Seat?
 
     fileprivate func forget(_ t: Toplevel) {
+        decorations?.forget(t)
         t.teardown()
         toplevels.removeAll { $0 === t }
     }

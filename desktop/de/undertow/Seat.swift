@@ -19,6 +19,7 @@
 // rectangle for now; a real cursor theme belongs with the hardware cursor plane
 // in Phase 4.
 
+import AquaDraw
 import CWlroots
 import PoolConfig
 
@@ -389,17 +390,24 @@ public final class Seat {
     public enum PointerTarget {
         case toplevel(Toplevel, Double, Double)
         case layer(LayerSurface, Double, Double)
+        /// The compositor's own frame around a window (P9.6), in frame-local
+        /// coordinates. **No client owns these pixels**, which is why it is a
+        /// separate case rather than a toplevel hit with odd coordinates: a
+        /// press here must never be forwarded to anybody.
+        case frame(Toplevel, Double, Double)
 
-        var surface: UnsafeMutablePointer<wlr_surface> {
+        var surface: UnsafeMutablePointer<wlr_surface>? {
             switch self {
             case .toplevel(let t, _, _): return t.surface
             case .layer(let l, _, _): return l.surface
+            case .frame: return nil
             }
         }
         var local: (Double, Double) {
             switch self {
             case .toplevel(_, let x, let y): return (x, y)
             case .layer(_, let x, let y): return (x, y)
+            case .frame(_, let x, let y): return (x, y)
             }
         }
     }
@@ -420,8 +428,55 @@ public final class Seat {
     public func target(at x: Double, _ y: Double) -> PointerTarget? {
         let layers = compositor.mappedLayers            // bottom-to-top
         if let h = hitLayer(layers.filter { $0.layer >= 2 }, x, y) { return h }
-        if let (t, lx, ly) = toplevel(at: x, y) { return .toplevel(t, lx, ly) }
+        // Windows top to bottom, and **each window's frame belongs to it**: the
+        // surface first, then the frame around it, before considering the window
+        // underneath. Testing every surface and then every frame would let a
+        // window below take a click on the frame of the window above it.
+        for t in compositor.mappedToplevels.reversed() {
+            let lx = x - Double(t.x), ly = y - Double(t.y)
+            if lx >= 0, ly >= 0, lx < Double(t.width), ly < Double(t.height) {
+                return .toplevel(t, lx, ly)
+            }
+            guard t.decorated else { continue }
+            let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
+                                         width: t.width, height: t.height)
+            let fx = x - Double(box.x), fy = y - Double(box.y)
+            if fx >= 0, fy >= 0, fx < Double(box.w), fy < Double(box.h) {
+                return .frame(t, fx, fy)
+            }
+        }
         return hitLayer(layers.filter { $0.layer < 2 }, x, y)
+    }
+
+    /// What a press on the compositor's own frame means.
+    ///
+    /// The geometry is `AquaDraw`'s — the same `windowTrafficRects` the painter
+    /// used, so the lights are exactly where they were drawn. The *rules* are
+    /// this side's: there is no toolbar pill on a foreign window's frame, and
+    /// the resize band is the bottom and its corners, as P9.4 settled.
+    enum FrameHit { case close, minimize, zoom, title, resize(UInt32), body }
+
+    func frameHit(_ t: Toplevel, x: Double, y: Double) -> FrameHit {
+        let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
+                                     width: t.width, height: t.height)
+        let w = Double(box.w), h = Double(box.h)
+        let corner = 14.0, band = 6.0
+        let bottom = y >= h - band, cornerB = y >= h - corner
+        if cornerB, x >= w - corner {
+            return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue | WLR_EDGE_RIGHT.rawValue))
+        }
+        if cornerB, x <= corner {
+            return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue | WLR_EDGE_LEFT.rawValue))
+        }
+        if bottom { return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue)) }
+        if y < FrameMetrics.titleHeight {
+            let lights = windowTrafficRects()
+            if lights.close.contains(x, y) { return .close }
+            if lights.minimize.contains(x, y) { return .minimize }
+            if lights.zoom.contains(x, y) { return .zoom }
+            return .title
+        }
+        return .body
     }
 
     private func hitLayer(_ layers: [LayerSurface], _ x: Double, _ y: Double)
@@ -458,11 +513,17 @@ public final class Seat {
             wlr_seat_pointer_clear_focus(seat)
             return
         }
+        // A frame has no client behind it: nobody is told the pointer is there,
+        // and whoever had it is told it left.
+        guard let surface = hit.surface else {
+            wlr_seat_pointer_clear_focus(seat)
+            return
+        }
         let (lx, ly) = hit.local
         // `notify_enter` is idempotent — wlroots only sends the protocol enter
         // when the surface actually changes — so this is the whole of
         // enter/leave bookkeeping.
-        wlr_seat_pointer_notify_enter(seat, hit.surface, lx, ly)
+        wlr_seat_pointer_notify_enter(seat, surface, lx, ly)
         wlr_seat_pointer_notify_motion(seat, timeMsec, lx, ly)
         wlr_seat_pointer_notify_frame(seat)
     }
@@ -485,9 +546,24 @@ public final class Seat {
         // Only a window takes focus: a click on the Dock or the menu bar must
         // not steal the keyboard from whatever you were typing into, which is
         // what `keyboard_interactivity: none` on those surfaces asks for.
-        if state == WL_POINTER_BUTTON_STATE_PRESSED,
-           case .toplevel(let t, _, _)? = target(at: cursorX, cursorY) {
+        let hit = target(at: cursorX, cursorY)
+        if state == WL_POINTER_BUTTON_STATE_PRESSED, case .toplevel(let t, _, _)? = hit {
             focus(t)
+        }
+        // A press on the compositor's own frame is answered here and forwarded
+        // to nobody — there is no client on the other side of those pixels.
+        if state == WL_POINTER_BUTTON_STATE_PRESSED, case .frame(let t, let fx, let fy)? = hit {
+            focus(t)
+            switch frameHit(t, x: fx, y: fy) {
+            case .close:    wlr_xdg_toplevel_send_close(t.xdgToplevel)
+            case .minimize: compositor.setMinimized(t, true)
+            case .zoom:     compositor.setMaximized(t, !t.maximized)
+            case .title:    compositor.beginMove(t)
+            case .resize(let edges): compositor.beginResize(t, edges: edges)
+            case .body:     break
+            }
+            frameClicks += 1
+            return
         }
         _ = wlr_seat_pointer_notify_button(seat, timeMsec, button, state)
         wlr_seat_pointer_notify_frame(seat)
@@ -608,6 +684,10 @@ public final class Seat {
     /// control, for the same reason `dragsStarted` is one (§2.37). "The key did
     /// nothing" and "the key was never bound" look identical from outside.
     public private(set) var keybindsFired = 0
+    /// Presses answered by the compositor's own window frames (P9.6) — the
+    /// positive control again: a frame that is drawn and not clickable and one
+    /// that is never drawn look identical from a screenshot.
+    public private(set) var frameClicks = 0
 
     /// The table, from `~/.config/abyss/keys.ini` over the built-in defaults.
     ///

@@ -406,6 +406,48 @@ check, not one this document gets to assert.
 Jaguar desktop looks broken in a way no missing feature does, and one protocol's
 work makes every foreign window Mac-shaped.
 
+**What P9.6 landed, and §6.1 decided by moving code rather than arguing:**
+
+- **`AquaDraw` is a target now.** `Rect`, `Theme`, `Draw`, `Text` and the window
+  chrome they compose into — none of which ever depended on `Surface`, which is
+  what made them separable — moved out of the toolkit so **the compositor can
+  link them**. `Aqua` re-exports the module, so the extraction changed no call
+  site in a toolkit that uses `Draw` and `Theme` unqualified everywhere. That is
+  §6.1's first option taken: the alternatives were a rect-and-gradient renderer
+  inside undertow, which cannot draw a gel traffic light and so fails the only
+  test that matters, or writing Aqua twice and keeping two of them in step.
+- **The frame is rasterised once per window** and cached against its size, title
+  and focus, so a desktop nobody is resizing does no cairo work at all. §6.1
+  asked for that to be measured rather than asserted, so undertow reports
+  `frame-rasterisations=` as it happens and the live test asserts it is 1.
+- **`FrameMetrics` is pure and shared** by placement, the hit-test, the move
+  grab and the maximize rectangle. A frame whose geometry the input path
+  computes differently from the paint path is a title bar you can see and cannot
+  click, so there is one function and four callers.
+- **The frame is a first-class pointer target.** `PointerTarget.frame` carries no
+  surface, because no client owns those pixels — a press there is answered by the
+  compositor and forwarded to nobody. Maximizing a decorated window fits the
+  *frame* into the usable area, not the surface; otherwise the title bar goes off
+  the top of the screen and takes every control with it.
+
+> **Two things this pass had to find out the hard way.** `set_mode` schedules a
+> configure, and scheduling one before the client's initial commit is an
+> assertion failure *inside wlroots* — `surface->initialized` — which takes the
+> compositor down with the ordinary ordering, where a client asks for
+> decorations while setting the window up. The answer is deferred to the initial
+> configure it belongs in.
+>
+> And **the obvious test client cannot play the part**: GTK draws its own
+> decorations on Wayland whatever the compositor offers and does not implement
+> this protocol at all, `GTK_CSD=0` included. So the client that asks is a new
+> `decorated` mode of `adversary.c`, which is otherwise P6.5's hostile-client
+> harness.
+
+`abyss/tests/live-decorations.sh` runs that client against undertow and asserts
+the compositor took the decoration, rasterised exactly one frame for it, and that
+the yellow light **where the frame was painted** puts the window away — which is
+the claim a screenshot cannot make.
+
 **P9.7 — the XWayland decision.**
 Not a line of code until the decision is written down, which is the pass. §4.4
 measured it: wlroots has XWayland compiled in on both platforms, `Xwayland` is in
