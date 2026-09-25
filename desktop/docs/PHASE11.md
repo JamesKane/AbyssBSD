@@ -619,6 +619,69 @@ The medium carries all of them. `Text.announce` already says `NO GLYPHS` for a
 missing menu glyph (P10.4). It learns to say which *role* fell back, and to
 which face.
 
+**Done.** What landed:
+
+- **Four roles**: `interface` (body, controls, menus), `chrome` (window
+  titles, the menu bar), `readout` (an LCD, a clock) and `mono`. The theme
+  names a family for each in `[fonts]`. Text asks for a role:
+  - `Text.shape(role:)`, and `Draw.text`/`textLeft`/`textWidth(role:)`,
+    defaulting to interface;
+  - `role=` on a draw list's text;
+  - the window title and the menu bar are `chrome`, measured and painted
+    with the same role (§2.9).
+- **Families are found by name**, through fontconfig (a new `CFontconfig`
+  system library under ctext), with `fonts/` and each theme's own `fonts/`
+  added. **Only a match that IS the family counts**, not fontconfig's best
+  substitute, which would be another typeface under the requested name; nor
+  a regular face offered for a bold. Behind each role:
+  - its own face for the style, else its own regular (a role keeps its
+    typeface before it keeps a weight);
+  - then **the existing fallback chain**, for codepoints the family lacks.
+
+  A role whose family is not here *is* the old chain, which is why Aqua did
+  not move. `mono` falls back to fontconfig's `monospace` before the chain,
+  because a fixed-pitch role must not end up proportional.
+- **Every process says what each role got**:
+  `Text: role chrome = Chakra Petch (…/ChakraPetch-Regular.ttf)`, or
+  `Text: role chrome wants Lucida Grande — not found, drawing with Noto Sans (…)`.
+  Aqua's four say they fell back: Jaguar's Lucida Grande and Monaco do not
+  ship free.
+- **Plan Neo's families are vendored** in `fonts/`, with their OFL licences
+  and a README naming the sources (the choice was made at the start of this
+  pass: vendor all four, not packages for Plex):
+  - IBM Plex Sans Condensed (4 styles) and Plex Mono (2);
+  - Chakra Petch (2) and VT323.
+
+  That is 1.2 MB, and the same files on Linux, in the FreeBSD guest and on the
+  medium, which `live-image.sh` now carries to `/usr/local/share/abyss/fonts`
+  and fingerprints.
+- **Case transform, tracking and ghost text** were built into draw-list text
+  in P11.3. What this pass adds is the face under them.
+
+**Verified (short checks only):**
+- the golden gate, **43 scenes**, on Linux and in the FreeBSD guest. **Every
+  Aqua scene is pixel-identical.** The three test-theme scenes were updated
+  on purpose: `chrome-test` now names Plan Neo's four families, so its title
+  is Chakra Petch and its body Plex. The new `drawlist-roles@2x` draws the
+  sample sheet with the buttons in Plex, the brushed plate in Chakra Petch and
+  the LCD in VT323.
+- **`TextRoleTests`**, 7, green on both platforms:
+  - a vendored family found by name, to the file;
+  - a missing one falling back to the chain, not to a substitute, with glyphs
+    identical to before roles;
+  - a role changing glyphs, widths and metrics;
+  - Chakra Petch bold from its own file, and VT323 (no bold) staying VT323;
+  - ⌘ drawn from the chain behind VT323;
+  - mono falling back fixed-pitch;
+  - `role=` refused by name.
+- `swift test` on Linux, 518, green.
+
+**Not run:** `live-medium.sh` (its new check that the medium's desktop
+announced its roles, and that the medium carries `fonts/`), `run.sh --live`,
+`run.sh --vm --live`, `--full`. Each is over a minute, and owed with the
+phase gates. **The medium is the one place fontconfig's configuration is not
+known to be present**; the role lines are what will say so.
+
 **P11.8 — icons are data.** `Icons.swift` becomes an icon set in the draw-list
 vocabulary: paths, fills, strokes, gradients and a cast shadow. Aqua's set
 reproduces today's icons under the gate. An importer for a small SVG subset is

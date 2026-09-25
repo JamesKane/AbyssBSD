@@ -271,7 +271,7 @@ fingerprint() {
     done
     # The themes are data the medium carries (PHASE11 P11.2) — a theme edit
     # must rebuild the image, not hit a cache built before it.
-    find "$root/themes" -type f | sort | while read -r f; do
+    find "$root/themes" "$root/fonts" -type f | sort | while read -r f; do
       sha256 -q "$f" 2>/dev/null || sha256sum "$f"
     done
     pkg query '%n-%v' 2>/dev/null | sort
@@ -433,6 +433,10 @@ done
 [ -f "$root/themes/aqua/theme.ini" ] || die "no themes/aqua/theme.ini to put on the medium"
 sudo mkdir -p "$de/usr/local/share/abyss"
 sudo cp -R "$root/themes" "$de/usr/local/share/abyss/"
+# The vendored fonts (P11.7) — Plex, Chakra Petch, VT323, with their OFL
+# licences — beside the themes, where the toolkit tells fontconfig to look.
+[ -d "$root/fonts" ] || die "no fonts/ to put on the medium"
+sudo cp -R "$root/fonts" "$de/usr/local/share/abyss/"
 # libxkbcommon looks in /usr/local/share/X11/xkb, which on FreeBSD is a symlink
 # into the versioned xkeyboard-config directory. Copying the target without the
 # link leaves a compositor that cannot compile a keymap.

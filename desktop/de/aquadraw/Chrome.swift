@@ -155,11 +155,11 @@ public func paintWindowChrome(_ cr: OpaquePointer, w: Double, h: Double,
     switch l.titleAlign {
     case .center:
         Draw.text(cr, title, centerX: l.titleX, centerY: cy, color: Theme.titleText,
-                  size: Theme.fontSize, style: style)
+                  size: Theme.fontSize, style: style, role: .chrome)
     case .left:
-        let tw = Draw.textWidth(cr, title, size: Theme.fontSize, style: style)
+        let tw = Draw.textWidth(cr, title, size: Theme.fontSize, style: style, role: .chrome)
         Draw.text(cr, title, centerX: l.titleX + tw / 2, centerY: cy, color: Theme.titleText,
-                  size: Theme.fontSize, style: style)
+                  size: Theme.fontSize, style: style, role: .chrome)
     }
     l.gadgets[split...].forEach(gadget)
     cairo_restore(cr)

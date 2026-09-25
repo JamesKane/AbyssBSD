@@ -246,11 +246,11 @@ public enum Draw {
     /// a font is loaded; falls back to cairo toy-text otherwise.
     public static func text(_ cr: OpaquePointer, _ s: String, centerX: Double,
                             centerY: Double, color: Color, size: Double,
-                            style: Text.Style = .regular) {
+                            style: Text.Style = .regular, role: Text.Role = .interface) {
         if Text.available {
             let px = Text.px(size)   // device px
-            let glyphs = Text.shape(s, px: px, style: style)
-            let m = Text.metrics(px: px)
+            let glyphs = Text.shape(s, px: px, style: style, role: role)
+            let m = Text.metrics(px: px, role: role)
             // Positions are logical; px-shaped metrics/width are device px, so
             // convert down by the render scale for the centring math.
             let sc = Double(Text.renderScale)
@@ -278,11 +278,11 @@ public enum Draw {
     /// Draw left-aligned text with the baseline at (x, baselineY).
     public static func textLeft(_ cr: OpaquePointer, _ s: String, x: Double,
                                 baselineY: Double, color: Color, size: Double,
-                                style: Text.Style = .regular) {
+                                style: Text.Style = .regular, role: Text.Role = .interface) {
         if Text.available {
             let px = Text.px(size)
             setColor(cr, color)
-            Text.drawShaped(cr, Text.shape(s, px: px, style: style),
+            Text.drawShaped(cr, Text.shape(s, px: px, style: style, role: role),
                             x: x, baselineY: baselineY, px: px)
             return
         }
@@ -297,10 +297,10 @@ public enum Draw {
     /// Width in points of `s` at `size` — shaped metrics when a font is loaded,
     /// else cairo toy-text extents. Used for layout (centring, wrapping).
     public static func textWidth(_ cr: OpaquePointer, _ s: String, size: Double,
-                                 style: Text.Style = .regular) -> Double {
+                                 style: Text.Style = .regular, role: Text.Role = .interface) -> Double {
         if Text.available {
             // Shaped at device px; return the logical width for layout.
-            return Text.width(Text.shape(s, px: Text.px(size), style: style))
+            return Text.width(Text.shape(s, px: Text.px(size), style: style, role: role))
                 / Double(Text.renderScale)
         }
         selectFont(cr, size: size)

@@ -86,7 +86,8 @@ frame|frame|
 frame-depth|frame|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes
 window-depth@2x|window|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes AQUA_SCALE=2
 drawlist|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl
-drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2'
+drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2
+drawlist-roles@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes AQUA_SCALE=2'
 
 render() {  # render NAME SCENE EXTRA OUT
   # EXTRA is split on spaces HERE, not by the caller's IFS — the scene loop

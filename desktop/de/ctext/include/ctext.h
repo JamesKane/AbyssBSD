@@ -36,6 +36,35 @@ enum {
     AT_NSTYLES     = 4,
 };
 
+/* Type roles (PHASE11 P11.7). A theme names a family for each; text asks for a
+ * role. A role whose family is not found — by name, through fontconfig — draws
+ * with the default chain below, exactly as all text did before roles. Keep in
+ * sync with Text.swift `Role`. */
+enum {
+    AT_ROLE_INTERFACE = 0,   /* body text, controls, menus */
+    AT_ROLE_CHROME    = 1,   /* window titles, the menu bar */
+    AT_ROLE_READOUT   = 2,   /* an LCD, a clock: numbers to be read at a glance */
+    AT_ROLE_MONO      = 3,   /* fixed pitch */
+    AT_NROLES         = 4,
+};
+
+/* Add a directory of font files fontconfig should know (the vendored fonts/,
+ * a theme's own). Before at_font_set_role to matter. */
+void at_font_add_dir(const char *dir);
+
+/* Give `role` the family named `family` (NULL or "" clears it). Each style is
+ * matched separately; a style the family lacks uses the family's regular.
+ * Returns 1 if the family's regular face was found, 0 if the role falls back
+ * to the default chain. Only a match whose family IS `family` counts — not
+ * fontconfig's best substitute, which would be a different typeface wearing
+ * the requested name. */
+int at_font_set_role(int role, const char *family);
+
+/* The family `role` draws its regular text with, and that face's file — the
+ * role's own when found, else the default chain's primary. For announcing. */
+const char *at_font_role_family(int role);
+const char *at_font_role_file(int role);
+
 /* Open the primary face (first candidate that works) then any fallbacks.
  * Idempotent; returns 1 once a primary face is available, else 0 (the caller
  * then falls back to cairo toy-text). Candidate order: $AQUA_FONT, then a
@@ -64,11 +93,17 @@ void *at_font_face(int idx);
  * Returns -1 on error / no font. */
 int at_font_shape(const char *text, int len, int px, int style,
                   at_glyph *out, int cap);
+/* The same, from `role`'s faces (at_font_shape is AT_ROLE_INTERFACE). */
+int at_font_shape_role(const char *text, int len, int px, int style, int role,
+                       at_glyph *out, int cap);
 
 /* Vertical metrics of the primary face at `px` pixels, in pixels. `ascent` is
  * positive above the baseline, `descent` positive below. */
 double at_font_ascent(int px);
 double at_font_descent(int px);
 double at_font_line_height(int px);
+/* The same, for `role`'s regular face. */
+double at_font_ascent_role(int px, int role);
+double at_font_descent_role(int px, int role);
 
 #endif /* ABYSS_CTEXT_H */

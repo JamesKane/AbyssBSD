@@ -51,7 +51,8 @@
 // its top, EVERY apart — a pinstripe); `rules slant FROM EVERY UNTIL PAINT
 // WIDTH` (45° lines rising left to right — a progress bar's candy stripe);
 // `text "…"|$label X Y [left|center|right] [baseline] [bold] [upper]
-// [tracking=N] [size=S] [color=C] [placeholder=C] [ghost="…"] [ghostalpha=A]`;
+// [tracking=N] [size=S] [color=C] [placeholder=C] [ghost="…"] [ghostalpha=A]
+// [role=interface|chrome|readout|mono]`;
 // `push`, `pop`, `clip`.
 //
 // **States:** `when a,b op…` runs the op when the widget has any of those
@@ -158,6 +159,7 @@ struct TextOp: Sendable {
     var placeholder: ColorRef?
     var ghost: String?
     var ghostAlpha = 0.13
+    var role = Text.Role.interface
 }
 
 enum Op: Sendable {
@@ -625,6 +627,11 @@ enum DrawListParser {
                         guard v.hasPrefix("\""), v.hasSuffix("\""), v.count >= 2 else { throw DrawListError(line: line, message: "ghost wants a \"quoted string\"") }
                         t.ghost = String(v.dropFirst().dropLast())
                     case "ghostalpha": guard let a = Double(v), a >= 0, a <= 1 else { throw DrawListError(line: line, message: "ghostalpha wants 0…1") }; t.ghostAlpha = a
+                    case "role":
+                        guard let r = Text.Role.allCases.first(where: { $0.name == v }) else {
+                            throw DrawListError(line: line, message: "\(v) is not a role (interface chrome readout mono)")
+                        }
+                        t.role = r
                     default: throw DrawListError(line: line, message: "\(k) is not a text option")
                     }
                 }
@@ -1101,13 +1108,13 @@ public enum DrawListRunner {
             // The plain cases are Draw's own text calls, so a list draws a label
             // exactly where the Swift recipe it replaced did (P11.4's gate).
             if t.tracking == 0 && t.align == .center && !t.baseline {
-                Draw.text(cr, s, centerX: x, centerY: y, color: c, size: size, style: style); return
+                Draw.text(cr, s, centerX: x, centerY: y, color: c, size: size, style: style, role: t.role); return
             }
             if t.tracking == 0 && t.align == .left && t.baseline {
-                Draw.textLeft(cr, s, x: x, baselineY: y, color: c, size: size, style: style); return
+                Draw.textLeft(cr, s, x: x, baselineY: y, color: c, size: size, style: style, role: t.role); return
             }
             let px = Text.px(size)
-            var glyphs = Text.shape(s, px: px, style: style)
+            var glyphs = Text.shape(s, px: px, style: style, role: t.role)
             if t.tracking != 0 {
                 let tr = t.tracking * Double(Text.renderScale)
                 for i in glyphs.indices { glyphs[i].x_advance += tr }
@@ -1115,7 +1122,7 @@ public enum DrawListRunner {
             let width = Text.width(glyphs) / Double(Text.renderScale)
             let baseline: Double
             if t.baseline { baseline = y } else {
-                let m = Text.metrics(px: px)
+                let m = Text.metrics(px: px, role: t.role)
                 baseline = y + (m.ascent - m.descent) / 2 / Double(Text.renderScale)
             }
             let left: Double

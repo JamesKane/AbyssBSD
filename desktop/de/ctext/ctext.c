@@ -10,11 +10,13 @@
 #include FT_FREETYPE_H
 #include <hb.h>
 #include <hb-ft.h>
+#include <fontconfig/fontconfig.h>
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>   /* strcasecmp */
 
-#define MAX_FACES 16
+#define MAX_FACES 48   /* the default chain (~14) plus four roles' four styles */
 
 static FT_Library g_lib;
 /* Two FT_Face instances per font file, from the same path. `g_shape` is resized
@@ -27,6 +29,8 @@ static FT_Library g_lib;
 static FT_Face    g_shape[MAX_FACES];
 static FT_Face    g_render[MAX_FACES];
 static int        g_nfaces = 0;
+static char      *g_path[MAX_FACES];   /* each face's file, for dedup and announcing */
+static int        g_index[MAX_FACES];
 static int        g_state  = 0; /* 0 = untried, 1 = primary loaded, -1 = failed */
 
 /* Per-style face priority lists (indices into g_shape/g_render), and whether
@@ -35,16 +39,25 @@ static int g_style_faces[AT_NSTYLES][MAX_FACES];
 static int g_style_n[AT_NSTYLES];
 static int g_style_own[AT_NSTYLES];
 
-// Open a face file; returns its global index, or -1 on failure.
-static int add_face(const char *path) {
-    if (g_nfaces >= MAX_FACES || path == NULL || path[0] == '\0') return -1;
+// Open face `index` of a font file; returns its global index, or -1 on
+// failure. A file already open is not opened twice (a role's family may be one
+// the default chain already has).
+static int add_face_at(const char *path, int index) {
+    if (path == NULL || path[0] == '\0') return -1;
+    for (int i = 0; i < g_nfaces; i++)
+        if (g_index[i] == index && g_path[i] && strcmp(g_path[i], path) == 0) return i;
+    if (g_nfaces >= MAX_FACES) return -1;
     FT_Face s, r;
-    if (FT_New_Face(g_lib, path, 0, &s) != 0) return -1;
-    if (FT_New_Face(g_lib, path, 0, &r) != 0) { FT_Done_Face(s); return -1; }
+    if (FT_New_Face(g_lib, path, index, &s) != 0) return -1;
+    if (FT_New_Face(g_lib, path, index, &r) != 0) { FT_Done_Face(s); return -1; }
     g_shape[g_nfaces]  = s;
     g_render[g_nfaces] = r;
+    g_path[g_nfaces]   = strdup(path);
+    g_index[g_nfaces]  = index;
     return g_nfaces++;
 }
+
+static int add_face(const char *path) { return add_face_at(path, 0); }
 
 static void style_add(int style, int gi) {
     if (gi < 0 || g_style_n[style] >= MAX_FACES) return;
@@ -172,6 +185,94 @@ int at_font_init(void) {
 
 int at_font_face_count(void) { return g_nfaces; }
 
+/* ------------------------------------------------------------------ roles */
+
+static int  g_role_faces[AT_NROLES][AT_NSTYLES][MAX_FACES];
+static int  g_role_n[AT_NROLES][AT_NSTYLES];
+static int  g_role_primary[AT_NROLES] = { -1, -1, -1, -1 };  /* own regular face */
+
+void at_font_add_dir(const char *dir) {
+    if (dir && dir[0]) FcConfigAppFontAddDir(NULL, (const FcChar8 *)dir);
+}
+
+/* The face fontconfig matches for `family` in a weight/slant — only if it IS
+ * that family (not a substitute) and has the weight/slant asked for (not a
+ * regular face standing in for bold). -1 otherwise. */
+static int fc_face(const char *family, int bold, int italic) {
+    FcPattern *p = FcPatternCreate();
+    if (!p) return -1;
+    FcPatternAddString(p, FC_FAMILY, (const FcChar8 *)family);
+    FcPatternAddInteger(p, FC_WEIGHT, bold ? FC_WEIGHT_BOLD : FC_WEIGHT_REGULAR);
+    FcPatternAddInteger(p, FC_SLANT, italic ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
+    FcConfigSubstitute(NULL, p, FcMatchPattern);
+    FcDefaultSubstitute(p);
+    FcResult res;
+    FcPattern *m = FcFontMatch(NULL, p, &res);
+    FcPatternDestroy(p);
+    if (!m) return -1;
+    int ok = 0, gi = -1;
+    /* A generic name (monospace, sans-serif, serif) asks for fontconfig's own
+     * choice, so there is no family to match: whatever it picks is the answer. */
+    int generic = !strcasecmp(family, "monospace") || !strcasecmp(family, "sans-serif")
+               || !strcasecmp(family, "serif");
+    FcChar8 *fam = NULL;
+    for (int k = 0; !generic && FcPatternGetString(m, FC_FAMILY, k, &fam) == FcResultMatch; k++)
+        if (strcasecmp((const char *)fam, family) == 0) { ok = 1; break; }
+    if (generic) ok = 1;
+    int w = 0, sl = 0;
+    if (ok && FcPatternGetInteger(m, FC_WEIGHT, 0, &w) == FcResultMatch)
+        ok = bold ? w >= FC_WEIGHT_DEMIBOLD : w < FC_WEIGHT_DEMIBOLD;
+    if (ok && FcPatternGetInteger(m, FC_SLANT, 0, &sl) == FcResultMatch)
+        ok = italic ? sl != FC_SLANT_ROMAN : sl == FC_SLANT_ROMAN;
+    FcChar8 *file = NULL;
+    int index = 0;
+    if (ok && FcPatternGetString(m, FC_FILE, 0, &file) == FcResultMatch) {
+        FcPatternGetInteger(m, FC_INDEX, 0, &index);
+        gi = add_face_at((const char *)file, index);
+    }
+    FcPatternDestroy(m);
+    return gi;
+}
+
+int at_font_set_role(int role, const char *family) {
+    if (role < 0 || role >= AT_NROLES || !at_font_init()) return 0;
+    for (int st = 0; st < AT_NSTYLES; st++) g_role_n[role][st] = 0;
+    g_role_primary[role] = -1;
+    if (!family || !family[0]) return 0;
+    int own[AT_NSTYLES];
+    for (int st = 0; st < AT_NSTYLES; st++)
+        own[st] = fc_face(family, st == AT_BOLD || st == AT_BOLD_ITALIC,
+                          st == AT_ITALIC || st == AT_BOLD_ITALIC);
+    if (own[AT_REGULAR] < 0) return 0;   /* not here: the role is the default chain */
+    g_role_primary[role] = own[AT_REGULAR];
+    for (int st = 0; st < AT_NSTYLES; st++) {
+        /* The family's own face for the style, else its regular — a role keeps
+         * its typeface before it keeps a weight — then the default chain, for
+         * the codepoints the family lacks. */
+        int first = own[st] >= 0 ? own[st] : own[AT_REGULAR];
+        g_role_faces[role][st][g_role_n[role][st]++] = first;
+        for (int i = 0; i < g_style_n[st] && g_role_n[role][st] < MAX_FACES; i++)
+            g_role_faces[role][st][g_role_n[role][st]++] = g_style_faces[st][i];
+    }
+    return 1;
+}
+
+static int role_primary(int role) {
+    return (role >= 0 && role < AT_NROLES && g_role_primary[role] >= 0) ? g_role_primary[role] : 0;
+}
+
+const char *at_font_role_family(int role) {
+    if (!at_font_init()) return NULL;
+    int f = role_primary(role);
+    return f < g_nfaces ? g_shape[f]->family_name : NULL;
+}
+
+const char *at_font_role_file(int role) {
+    if (!at_font_init()) return NULL;
+    int f = role_primary(role);
+    return f < g_nfaces ? g_path[f] : NULL;
+}
+
 /* Whether any loaded face has a glyph for `cp`. Read-only on the shaping
  * faces' charmaps — no size is set, nothing is rendered. */
 int at_font_covers(unsigned int cp) {
@@ -198,15 +299,18 @@ static FT_Face sized(int idx, int px) {
     return g_shape[idx];
 }
 
-double at_font_ascent(int px) {
-    FT_Face f = at_font_init() ? sized(0, px) : NULL;
+double at_font_ascent_role(int px, int role) {
+    FT_Face f = at_font_init() ? sized(role_primary(role), px) : NULL;
     return f ? f->size->metrics.ascender / 64.0 : 0.0;
 }
 
-double at_font_descent(int px) {
-    FT_Face f = at_font_init() ? sized(0, px) : NULL;
+double at_font_descent_role(int px, int role) {
+    FT_Face f = at_font_init() ? sized(role_primary(role), px) : NULL;
     return f ? -(f->size->metrics.descender) / 64.0 : 0.0;
 }
+
+double at_font_ascent(int px) { return at_font_ascent_role(px, AT_ROLE_INTERFACE); }
+double at_font_descent(int px) { return at_font_descent_role(px, AT_ROLE_INTERFACE); }
 
 double at_font_line_height(int px) {
     FT_Face f = at_font_init() ? sized(0, px) : NULL;
@@ -240,8 +344,14 @@ static unsigned long utf8_next(const char *s, int len, int i, int *adv) {
 // The first face in `style`'s list that has a glyph for `cp`; then the regular
 // list; face 0 as a last resort (it renders .notdef). A style with no own faces
 // resolves entirely against regular.
-static int face_for(unsigned long cp, int style) {
+static int face_for(unsigned long cp, int style, int role) {
     if (style < 0 || style >= AT_NSTYLES || g_style_n[style] == 0) style = AT_REGULAR;
+    if (role >= 0 && role < AT_NROLES && g_role_primary[role] >= 0) {
+        for (int i = 0; i < g_role_n[role][style]; i++) {
+            int gi = g_role_faces[role][style][i];
+            if (FT_Get_Char_Index(g_shape[gi], cp) != 0) return gi;
+        }
+    }
     for (int i = 0; i < g_style_n[style]; i++) {
         int gi = g_style_faces[style][i];
         if (FT_Get_Char_Index(g_shape[gi], cp) != 0) return gi;
@@ -290,6 +400,11 @@ static int shape_run(int fi, const char *text, int total, int start, int end,
 
 int at_font_shape(const char *text, int len, int px, int style,
                   at_glyph *out, int cap) {
+    return at_font_shape_role(text, len, px, style, AT_ROLE_INTERFACE, out, cap);
+}
+
+int at_font_shape_role(const char *text, int len, int px, int style, int role,
+                       at_glyph *out, int cap) {
     if (!at_font_init() || text == NULL) return -1;
     if (len < 0) len = (int)strlen(text);
     if (len == 0) return 0;
@@ -301,7 +416,7 @@ int at_font_shape(const char *text, int len, int px, int style,
     while (i < len) {
         int adv;
         unsigned long cp = utf8_next(text, len, i, &adv);
-        int f = face_for(cp, style);
+        int f = face_for(cp, style, role);
         if (run_face < 0) {
             run_face = f;
         } else if (f != run_face) {

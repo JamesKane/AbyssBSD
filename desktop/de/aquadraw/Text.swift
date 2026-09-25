@@ -68,6 +68,79 @@ public enum Text {
         case regular = 0, bold = 1, italic = 2, boldItalic = 3
     }
 
+    /// What a run of text is *for* (PHASE11 P11.7): the theme names a family
+    /// per role, `[fonts]` in theme.ini. Maps to the AT_ROLE_* face lists in
+    /// CText; a role whose family is not here draws with the default chain.
+    public enum Role: Int32, Sendable, CaseIterable {
+        case interface = 0   // body text, controls, menus
+        case chrome = 1      // window titles, the menu bar
+        case readout = 2     // an LCD, a clock
+        case mono = 3        // fixed pitch
+
+        public var name: String {
+            switch self {
+            case .interface: return "interface"
+            case .chrome: return "chrome"
+            case .readout: return "readout"
+            case .mono: return "mono"
+            }
+        }
+    }
+
+    /// Where fontconfig should look besides the system (P11.7): the vendored
+    /// fonts, next to the themes. Set once, before the first role is given.
+    nonisolated(unsafe) private static var dirsAdded = false
+    public static func addFontDirs(_ dirs: [String]) {
+        guard !dirsAdded else { return }
+        dirsAdded = true
+        for d in dirs { at_font_add_dir(d) }
+    }
+
+    /// What each role got: its family when found, and what it asked for.
+    nonisolated(unsafe) public private(set) static var roleRequest: [Role: String] = [:]
+    nonisolated(unsafe) private static var roleApplied: [Role: String] = [:]
+
+    /// Give every role the family `families` names (the theme's `[fonts]`).
+    /// Cheap to repeat: a role already holding that family is not re-matched.
+    public static func useRoles(_ families: [Role: String]) {
+        guard available else { return }
+        for r in Role.allCases {
+            let f = families[r] ?? ""
+            roleRequest[r] = f
+            guard roleApplied[r] != f else { continue }
+            roleApplied[r] = f
+            // A fixed-pitch role must not fall back to a proportional face: mono
+            // falls back to fontconfig's `monospace` before the default chain.
+            if at_font_set_role(r.rawValue, f) == 0 && r == .mono {
+                _ = at_font_set_role(r.rawValue, "monospace")
+            }
+            shapeCache.removeAll(keepingCapacity: true)
+        }
+    }
+
+    /// The family `role` actually draws with, its file, and whether that is
+    /// the one the theme asked for.
+    public static func resolved(_ role: Role) -> (family: String, file: String, wanted: Bool) {
+        let fam = at_font_role_family(role.rawValue).map { String(cString: $0) } ?? "?"
+        let file = at_font_role_file(role.rawValue).map { String(cString: $0) } ?? "?"
+        let want = roleRequest[role] ?? ""
+        return (fam, file, !want.isEmpty && fam.lowercased() == want.lowercased())
+    }
+
+    /// One line per role: what it asked for and what it got (§2.45 — a role
+    /// that fell back draws text that looks fine and is the wrong typeface).
+    public static func announceRoles() {
+        guard available else { return }
+        for r in Role.allCases {
+            let (fam, file, ok) = resolved(r)
+            let want = roleRequest[r] ?? ""
+            let line = ok
+                ? "Text: role \(r.name) = \(fam) (\(file))\n"
+                : "Text: role \(r.name) wants \(want.isEmpty ? "nothing" : want) — not found, drawing with \(fam) (\(file))\n"
+            line.withCString { _ = write(2, $0, strlen($0)) }
+        }
+    }
+
     /// Whether `style` loaded its own face (vs. falling back to regular).
     public static func styleAvailable(_ style: Style) -> Bool {
         at_font_style_available(style.rawValue) != 0
@@ -78,7 +151,7 @@ public enum Text {
     // the same static labels are otherwise re-shaped through HarfBuzz every
     // redraw. Single-threaded UI paints, hence nonisolated(unsafe) (as with the
     // face cache). Cleared wholesale past a cap so it can't grow unbounded.
-    private struct ShapeKey: Hashable { let s: String; let px: Int32; let style: Int32 }
+    private struct ShapeKey: Hashable { let s: String; let px: Int32; let style: Int32; let role: Int32 }
     nonisolated(unsafe) private static var shapeCache: [ShapeKey: [at_glyph]] = [:]
     private static let shapeCacheCap = 1024
 
@@ -113,16 +186,16 @@ public enum Text {
     /// positions + the face each came from). Cached across frames. Empty when no
     /// font is loaded or `s` is empty.
     public static func shape(_ s: String, px: Int32,
-                             style: Style = .regular) -> [at_glyph] {
+                             style: Style = .regular, role: Role = .interface) -> [at_glyph] {
         guard available, !s.isEmpty, px > 0 else { return [] }
-        let key = ShapeKey(s: s, px: px, style: style.rawValue)
+        let key = ShapeKey(s: s, px: px, style: style.rawValue, role: role.rawValue)
         if let g = shapeCache[key] { return g }
         let glyphs: [at_glyph] = s.withCString { cstr in
             var cap = Int32(s.utf8.count + 16)
             while true {
                 var buf = [at_glyph](repeating: at_glyph(), count: Int(cap))
                 let n = buf.withUnsafeMutableBufferPointer {
-                    at_font_shape(cstr, -1, px, style.rawValue, $0.baseAddress, cap)
+                    at_font_shape_role(cstr, -1, px, style.rawValue, role.rawValue, $0.baseAddress, cap)
                 }
                 if n < 0 { return [] }
                 if n <= cap { buf.removeLast(Int(cap - n)); return buf }
@@ -139,8 +212,8 @@ public enum Text {
         glyphs.reduce(0) { $0 + $1.x_advance }
     }
 
-    public static func metrics(px: Int32) -> Metrics {
-        Metrics(ascent: at_font_ascent(px), descent: at_font_descent(px))
+    public static func metrics(px: Int32, role: Role = .interface) -> Metrics {
+        Metrics(ascent: at_font_ascent_role(px, role.rawValue), descent: at_font_descent_role(px, role.rawValue))
     }
 
     /// Paint a shaped run with its origin pen at logical (`x`, `baselineY`). The

@@ -76,6 +76,14 @@ let package = Package(
             pkgConfig: "freetype2",
             providers: [.apt(["libfreetype-dev"]), .brew(["freetype"])]
         ),
+        // Font families by name (P11.7): a theme names a family per role, and
+        // fontconfig finds its files — the vendored fonts/ included.
+        .systemLibrary(
+            name: "CFontconfig",
+            path: "de/cfontconfig",
+            pkgConfig: "fontconfig",
+            providers: [.apt(["libfontconfig-dev"]), .brew(["fontconfig"])]
+        ),
         .systemLibrary(
             name: "CHarfBuzz",
             path: "de/charfbuzz",
@@ -95,7 +103,7 @@ let package = Package(
         // Swift; Aqua paints the shaped run via cairo-ft).
         .target(
             name: "CText",
-            dependencies: ["CFreeType", "CHarfBuzz"],
+            dependencies: ["CFreeType", "CHarfBuzz", "CFontconfig"],
             path: "de/ctext",
             sources: ["ctext.c"],
             publicHeadersPath: "include"

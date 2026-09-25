@@ -251,6 +251,13 @@ public struct ThemeTokens: Sendable, Equatable {
     public var inactiveFrameWash: Color = Color(1, 1, 1, 0.35)
 
     public var fontFamily: String = "Lucida Grande"
+    // Type by role (P11.7): a family per role, found by name. Jaguar's are
+    // Lucida Grande and Monaco — neither ships free, so on this desktop each
+    // falls back to the default chain, exactly as all text did before roles.
+    public var fontInterface: String = "Lucida Grande"
+    public var fontChrome: String = "Lucida Grande"
+    public var fontReadout: String = "Lucida Grande"
+    public var fontMono: String = "Monaco"
 
     // The window frame's shape (P11.6): which gadgets, on which side, in what
     // order; where the title sits and how heavy it is. `[chrome]` in theme.ini.
@@ -443,6 +450,10 @@ public struct ThemeTokens: Sendable, Equatable {
     ]
     nonisolated(unsafe) static let fontKeys: [(String, WritableKeyPath<ThemeTokens, String>)] = [
         ("fontFamily", \.fontFamily),
+        ("interface", \.fontInterface),
+        ("chrome", \.fontChrome),
+        ("readout", \.fontReadout),
+        ("mono", \.fontMono),
     ]
 }
 
@@ -474,6 +485,8 @@ public enum Theme {
     /// as tokens it does not set do.
     public static func use(_ tokens: ThemeTokens, lists theirs: DrawListFile? = nil) {
         current = tokens
+        Text.useRoles([.interface: tokens.fontInterface, .chrome: tokens.fontChrome,
+                       .readout: tokens.fontReadout, .mono: tokens.fontMono])
         colorTable = ThemeTokens.colorKeys.map { tokens[keyPath: $0.1] }
         metricTable = ThemeTokens.metricKeys.map { tokens[keyPath: $0.1] }
         lists = theirs.map { JaguarLists.file.merging($0) } ?? JaguarLists.file

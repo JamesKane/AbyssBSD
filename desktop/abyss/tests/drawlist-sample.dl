@@ -11,7 +11,7 @@ list mui-button
   unless pressed bevel 1 #bea9ff/0.38 #000000/0.62
   when pressed bevel 1 #000000/0.62 #bea9ff/0.38
   stroke #000000 1
-  text $label w/2 h/2 center bold upper tracking=1.6 size=12 color=#e8e6ff
+  text $label w/2 h/2 center bold upper tracking=1.6 size=12 color=#e8e6ff role=interface
 end
 
 list brushed
@@ -20,7 +20,7 @@ list brushed
   fill stripes 90 1 #ffffff/0.035 2 #ffffff/0
   fill stripes 90 2 #000000/0.06 5 #000000/0
   bevel 1 #bea9ff/0.38 #000000/0.62
-  text "PLAN NEO" w/2 h/2 center bold tracking=4 size=13 color=#1a1433
+  text "PLAN NEO" w/2 h/2 center bold tracking=4 size=13 color=#1a1433 role=chrome
 end
 
 list anodized
@@ -51,5 +51,5 @@ list lcd
   rect 0 0 w h 3
   fill #1d1405
   innershadow #000000/0.75 7
-  text "14:07" 9 h/2 size=26 color=#ffb000 ghost="88:88" ghostalpha=0.13
+  text "14:07" 9 h/2 size=26 color=#ffb000 ghost="88:88" ghostalpha=0.13 role=readout
 end

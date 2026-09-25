@@ -88,14 +88,14 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
         } else {
             let style: Text.Style = m.bold ? .bold : .regular
             width = Draw.textWidth(cr, m.title, size: MenuBarMetrics.fontSize,
-                                   style: style) + 2 * MenuBarMetrics.titlePadX
+                                   style: style, role: .chrome) + 2 * MenuBarMetrics.titlePadX
         }
         rects.append(Rect(x, 0, width, h))
         x += width
     }
     var clockRect = Rect(0, 0, 0, 0)
     if showClock && !clock.isEmpty {
-        let cw = Draw.textWidth(cr, clock, size: MenuBarMetrics.fontSize) + 4
+        let cw = Draw.textWidth(cr, clock, size: MenuBarMetrics.fontSize, role: .chrome) + 4
         clockRect = Rect(w - cw - MenuBarMetrics.clockMarginRight, 0, cw, h)
     }
     // Status items are right-aligned against whatever the clock left free (or
@@ -129,12 +129,12 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
             let style: Text.Style = m.bold ? .bold : .regular
             Draw.textLeft(cr, m.title, x: r.x + MenuBarMetrics.titlePadX,
                           baselineY: h - 6.5, color: color,
-                          size: MenuBarMetrics.fontSize, style: style)
+                          size: MenuBarMetrics.fontSize, style: style, role: .chrome)
         }
     }
     if showClock && !clock.isEmpty {
         Draw.textLeft(cr, clock, x: layout.clockRect.x + 2, baselineY: h - 6.5,
-                      color: Theme.menuBarText, size: MenuBarMetrics.fontSize)
+                      color: Theme.menuBarText, size: MenuBarMetrics.fontSize, role: .chrome)
     }
     if !status.isEmpty {
         let statusRight = layout.clockRect.w > 0

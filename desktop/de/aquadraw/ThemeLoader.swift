@@ -353,6 +353,10 @@ public enum ThemeLoader {
     public static func loadCurrent() -> Outcome {
         let ch = choice()
         let dirs = searchPath()
+        // Fonts live beside the themes (P11.7): <config>/fonts, the install's
+        // share/abyss/fonts, the repository's fonts/ — and a theme's own. Known
+        // to fontconfig before any role is matched.
+        Text.addFontDirs(fontDirs(themeDirs: dirs, theme: ch.name))
         for d in dirs {
             let path = "\(d)/\(ch.name)/theme.ini"
             guard let text = readFile(path) else { continue }
@@ -375,6 +379,17 @@ public enum ThemeLoader {
         return .notFound(name: ch.name, looked: dirs)
     }
 
+    /// Where font files may be, for a theme chosen from `themeDirs`: each
+    /// `…/themes` directory's sibling `…/fonts`, and `<themes>/<theme>/fonts`.
+    public static func fontDirs(themeDirs: [String], theme: String) -> [String] {
+        var out: [String] = []
+        for d in themeDirs {
+            if d.hasSuffix("/themes") { out.append(String(d.dropLast("themes".count)) + "fonts") }
+            out.append("\(d)/\(theme)/fonts")
+        }
+        return out.filter { access($0, F_OK) == 0 }
+    }
+
     /// One line on stderr saying what is being drawn with — a silent fallback
     /// is invisible to every test downstream (§2.45).
     public static func announce(_ o: Outcome) {
@@ -391,6 +406,7 @@ public enum ThemeLoader {
             line = "Theme: \(name) REFUSED (\(path)): \(e) — drawing with the compiled Jaguar"
         }
         (line + "\n").withCString { _ = write(2, $0, strlen($0)) }
+        Text.announceRoles()
     }
 
     // MARK: small things
