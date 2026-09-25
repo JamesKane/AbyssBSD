@@ -1,9 +1,12 @@
-// GtkMenuBridge — GTK's menus, served as MenuWire (PHASE10.md P10.6).
+// GtkMenuBridge — foreign applications' menus, served as MenuWire (PHASE10.md
+// P10.6 for GTK, P10.7 for Qt/KDE).
 //
 // The bar speaks one protocol. When the compositor says the frontmost window is
-// a GTK application's (focus kind `gtk`), the bar sends its ordinary MenuWire
-// requests to **one** service, `menus-gtk`, with the GTK address as `target`;
-// this answers them by asking GTK over the session bus. `abyss-dbus` is where
+// a GTK application's (focus kind `gtk`) or a Qt one's (`dbusmenu`), the bar
+// sends its ordinary MenuWire requests to **one** service, `menus-dbus`, with
+// the address as `target`; this answers them by asking the application over
+// the session bus — `org.gtk.Menus`/`org.gtk.Actions` for GTK,
+// `com.canonical.dbusmenu` for Qt. `abyss-dbus` is where
 // PLAN.md put the translation, and it is the only process that touches D-Bus.
 //
 // **A process of its own** (`abyss-dbus --menus`), not a second job for the
@@ -27,7 +30,7 @@ import Darwin
 #endif
 
 public final class GtkMenuBridge {
-    public static let serviceName = "menus-gtk"
+    public static let serviceName = "menus-dbus"
 
     private let conn: DBusConnection
     private let server: Current.Server
@@ -62,8 +65,11 @@ public final class GtkMenuBridge {
     }
 
     func handle(_ request: Msg) -> Msg {
+        if let t = request.string("target"), let q = DBusMenuAddress(encoded: t) {
+            return handleQt(request, q)
+        }
         guard let t = request.string("target"), let a = GtkMenuAddress(encoded: t) else {
-            return MenuWire.errorReply("menus-gtk needs a target: the GTK address the compositor reported")
+            return MenuWire.errorReply("menus-dbus needs a target: the address the compositor reported")
         }
         do {
             switch request.string("method") {
@@ -152,5 +158,77 @@ public final class GtkMenuBridge {
             member: "Activate",
             body: [.string(name), .array("v", []), .array("{sv}", [])]), timeoutMs: 1000)
         return .ok(nil)
+    }
+
+    // MARK: - Qt / KDE (P10.7)
+
+    func handleQt(_ request: Msg, _ a: DBusMenuAddress) -> Msg {
+        do {
+            let r = try readQt(a)
+            let enablement: (Command) -> Enablement = { c in
+                guard let on = r.enabled[c.verb] else {
+                    return .disabled("the application has no item \(c.verb)")
+                }
+                return on ? .enabled : .disabled("the application has disabled it")
+            }
+            switch request.string("method") {
+            case "describe": return MenuWire.describeReply(r.model, enablement: enablement)
+            case "validate": return MenuWire.validateReply(r.model, enablement: enablement)
+            case "activate":
+                guard let verb = request.string("verb") else {
+                    return MenuWire.errorReply("activate needs a verb")
+                }
+                // The id is looked up NOW, from a fresh layout: Qt renumbers
+                // its items when it rebuilds a menu (§4.5).
+                guard let id = r.ids[verb] else {
+                    return MenuWire.resultReply(.refused("\(r.model.appName) has no item \(verb)"))
+                }
+                if case .disabled(let why) = enablement(Command(verb, verb, summary: "")) {
+                    return MenuWire.resultReply(.refused(why))
+                }
+                _ = try conn.call(.methodCall(
+                    destination: a.service, path: a.path, interface: "com.canonical.dbusmenu",
+                    member: "Event",
+                    body: [.int32(id), .string("clicked"), .variant(.int32(0)), .uint32(0)]),
+                    timeoutMs: 1000)
+                return MenuWire.resultReply(.ok(nil))
+            default:
+                return MenuWire.errorReply("unknown method \(request.string("method") ?? "(none)")")
+            }
+        } catch {
+            return MenuWire.errorReply("\(a.applicationID): \(error)")
+        }
+    }
+
+    /// The whole layout, with every lazy submenu asked to fill itself first.
+    func readQt(_ a: DBusMenuAddress) throws
+        -> (model: MenuBarModel, ids: [String: Int32], enabled: [String: Bool]) {
+        func layout() throws -> DBusMenuNode {
+            let reply = try conn.call(.methodCall(
+                destination: a.service, path: a.path, interface: "com.canonical.dbusmenu",
+                member: "GetLayout", body: [.int32(0), .int32(-1), .array("s", [])]),
+                timeoutMs: 1000)
+            guard let root = QtMenus.root(fromGetLayout: reply.body) else {
+                throw DBusError("GetLayout returned no layout")
+            }
+            return root
+        }
+        var root = try layout()
+        // A lazy submenu fills in after AboutToShow. Two rounds cover a lazy
+        // menu inside a lazy menu; more would be an application that never
+        // fills them, and the bar shows what there is.
+        var asked: Set<Int32> = []
+        for _ in 0..<2 {
+            let lazy = QtMenus.lazySubmenus(root).filter { !asked.contains($0) }
+            guard !lazy.isEmpty else { break }
+            for id in lazy.prefix(32) {
+                asked.insert(id)
+                _ = try? conn.call(.methodCall(
+                    destination: a.service, path: a.path, interface: "com.canonical.dbusmenu",
+                    member: "AboutToShow", body: [.int32(id)]), timeoutMs: 1000)
+            }
+            root = try layout()
+        }
+        return QtMenus.model(appName: QtMenus.appName(a.applicationID), root: root)
     }
 }

@@ -452,7 +452,8 @@ actions resolve on the application path, `win.*` on the window path, which only
   parties that carry it: undertow, the bar and the bridge.
 - **`DBusMenus`**, run as `abyss-dbus --menus`, is a process of its own because
   the portal half blocks behind a file dialog (PHASE8 §6.7). It serves one
-  MenuWire service, `menus-gtk`, whose requests carry the GTK address as
+  MenuWire service, `menus-gtk` (renamed `menus-dbus` in P10.7, when it began
+  serving Qt too), whose requests carry the GTK address as
   `target`:
   - `describe` follows `org.gtk.Menus.Start` link by link until no group is
     missing, then `End`s the subscription;
@@ -507,12 +508,76 @@ the real session), `live-menus.sh`, `live-vocabulary.sh`, `live-undo.sh` and
 **Not run:** `run.sh --live` and `run.sh --vm --live`, so neither P10.5 nor
 P10.6 has run on FreeBSD yet. `--full` is owed at the end of the phase.
 
-**P10.7 — Qt's, if the spike says so.**
+**P10.7 — Qt's, if the spike says so. ✅ done — the spike said so (§4.5).**
 `org_kde_kwin_appmenu_manager` in undertow, `abyss-dbus` owning
 `com.canonical.AppMenu.Registrar`, and a `com.canonical.dbusmenu` translation.
 **Gated on its own spike** (§4.2): Qt's side is read out of the library's
 symbols, not run, because this box has no Qt headers. The pass does not start
 until a Qt application has been seen exporting a menu on both platforms.
+
+**What P10.7 landed.**
+
+- **`org_kde_kwin_appmenu` in undertow.** `protocols/kde-appmenu.xml` is
+  vendored from the copy Qt installs (LGPL-2.1+). `set_address(service, path)`
+  becomes a `dbusmenu`-kind address against the surface, the same shape as our
+  own `abyss_menu_v1`, which was modelled on it. `release` does not withdraw
+  the address. Qt releases and re-creates the object when it rebuilds its
+  menubar, and the next `set_address` replaces the old one.
+- **`com.canonical.AppMenu.Registrar`**, owned by `abyss-dbus --menus`
+  (`de/dbusmenus/Registrar.swift`). Without it Qt exports nothing, and the
+  injected fault that removed it failed the test at the first step.
+- **`QtMenus`** turns `GetLayout` into our model, calling `AboutToShow` first
+  on lazy submenus. The bridge serves it through the same MenuWire service,
+  renamed `menus-dbus`. A target tagged `dbusmenu` tells it this is a Qt
+  address, and a test asserts the bridge can never read one as GTK's.
+  `activate` is `Event(id, "clicked", …)`.
+- **The bar treats a `dbusmenu` focus like the other kinds**, with the app_id
+  supplying the name.
+
+**Two decisions the spike forced:**
+
+- **Verbs are menu paths (`edit.undo`, `settings.science-mode`), not dbusmenu
+  ids.** Qt renumbers its items when it rebuilds, and kcalc did so under a live
+  window in the spike. A verb built from an id would change between a script
+  reading the vocabulary and running it. The id is looked up again, by verb,
+  from a fresh layout at activation.
+- **Shortcuts are drawn as the keys that work.** kcalc's Undo is Ctrl+Z, so
+  the bar shows ⌃Z, not ⌘Z. Qt listens for Ctrl, and ⌘Z would be a key that
+  does nothing. (⌘Q, for its part, is the compositor's, P9.5.) A Mac-style
+  remapping of Primary to Command, for Qt as for GTK, would be a keyboard
+  policy, not a menu one, and it belongs with the keybind table.
+
+**What it did not find, and what it leaves.** Nothing already broken; the
+spike had mapped it. Left:
+- **Toggle state is read and not drawn.** Radio and checkmark items appear as
+  plain commands, so "Science Mode" carries no ✓.
+- **`LayoutUpdated` and `ItemsPropertiesUpdated` are not watched**, the same
+  as GTK's `Changed`.
+- **The build VM now has `kcalc` and `qt6-wayland` installed** (58 packages,
+  2026-09-25), which is the environment `live-menus-qt.sh` needs. On a box
+  without kcalc the test skips, and says so.
+
+**Verified (short checks only):** `live-menus-qt.sh` (3 s) against stock
+kcalc:
+- undertow recorded its dbusmenu address;
+- the bar shows kcalc, File, Edit and Settings;
+- Undo shows ⌃Z;
+- Settings ▸ Science Mode, chosen with a real pointer, switched kcalc's mode,
+  **asserted on kcalc's own layout through `gdbus`**, not on the bar's log.
+
+Both of its injected faults failed it:
+- no registrar, so kcalc never gave an address;
+- `activate` that says ok without sending the event, so the bar logged ok and
+  kcalc's mode stayed off. That is the lie only the other end can catch.
+
+Also: unit tests on kcalc's layout (verbs, ids, enablement, invisible items,
+separators, shortcuts, a lazy submenu, duplicate labels, the address never
+read as GTK's); `swift test` on Linux, 463 tests, green; `live-menus-gtk.sh`,
+`live-menus.sh`, `live-session-gtk.sh`, `live-undo.sh`, `live-vocabulary.sh`
+and `live-menu-focus.sh` re-run green. **On FreeBSD:** the spike itself, and
+`live-menus-qt.sh` green in the guest — all four steps, against the guest's
+own kcalc. **Not run:** `run.sh --live`, `run.sh --vm --live` (the whole
+FreeBSD suite has not run since P10.4), and `--full`, owed at phase end.
 
 **P10.8 — the menus the desktop owns.**
 The Apple menu's items that something can already do — **Log Out** (`anchor`),
@@ -603,6 +668,39 @@ so the held connection is new — folded into the bar's run loop the way
 `NotifyCenter` folds its server (§2.18), not a thread.
 
 ---
+
+### 4.5 P10.7's own spike: does a stock Qt application export its menus? — **Yes, on both platforms, and richer than GTK.**
+
+Run 2026-09-25 against **stock `kcalc`** (KDE Gear, Qt 6.11), on our own
+compositor with `QT_QPA_PLATFORM=wayland` and a private bus. Nothing is a
+fixture of ours.
+
+- **Qt exports nothing until `com.canonical.AppMenu.Registrar` is owned.**
+  With `abyss-dbus --menus` owning it (a stub: on Wayland Qt checks that the
+  name exists, then reports through the compositor), kcalc exports
+  `com.canonical.dbusmenu` at `/MenuBar/N` on its unique name.
+- **It reports the address through `org_kde_kwin_appmenu`** once undertow
+  offers the manager: `create(surface)`, then `set_address(":1.1",
+  "/MenuBar/1")`. It later rebuilt its menubar and **re-pointed the same
+  surface at `/MenuBar/2`**, which undertow tracked. So an address can change
+  under a live window, and the bar has to follow it.
+- **`GetLayout` carries what GTK's export does not.** It has labels (with `_`
+  mnemonics), `enabled`, separators (`type: separator`) and submenus
+  (`children-display: submenu`). It also has **real shortcuts** —
+  `shortcut: [['Control','Z']]` — and **toggle state** (`toggle-type: radio` /
+  `checkmark`, `toggle-state`). Unlike GTK (§4.1), a Qt application's key
+  equivalents will reach our bar.
+- **One lazy submenu.** kcalc's "Constants" has no children until opened, which
+  is dbusmenu's `AboutToShow(id)`. The bridge has to ask before it describes.
+- Activation is `com.canonical.dbusmenu.Event(id, "clicked", v, timestamp)`.
+  **Not yet exercised.**
+
+**FreeBSD: the same, run the same day.** `kcalc` 26.04.3 on Qt 6.11.1 was
+installed in the build VM for this spike (`pkg install kcalc qt6-wayland`; 58
+packages). The run matched Linux message for message: `create`, then
+`set_address(":1.1", "/MenuBar/1")`, a rebuild re-pointing the surface at
+`/MenuBar/2`, and a `GetLayout` with the same top level (File, Edit, Settings,
+Help). **P10.7's gate — seen on both platforms — is open.**
 
 ## 5. Verification
 

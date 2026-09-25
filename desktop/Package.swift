@@ -38,7 +38,8 @@ let package = Package(
             name: "CAbyssProtocols",
             dependencies: ["CWaylandClient"],
             path: "de/cabyssprotocols",
-            sources: ["abyss-menu-v1-protocol.c", "gtk-shell-protocol.c"],
+            sources: ["abyss-menu-v1-protocol.c", "gtk-shell-protocol.c",
+                      "kde-appmenu-protocol.c"],
             publicHeadersPath: "include"
         ),
         .target(

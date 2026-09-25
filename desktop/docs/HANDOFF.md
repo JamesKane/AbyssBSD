@@ -15,7 +15,7 @@ boots a desktop where an unmodified GTK 3 application, which has never heard of
 this desktop, opens a file through the Finder**; and since Phase 9 it is a
 desktop you can *use*: clipboard, drag and drop, window management, keybinds,
 and an Aqua frame around foreign windows.
-**458 unit tests, 35 live modes and 29 live scripts, green on Linux and FreeBSD.**
+**463 unit tests, 35 live modes and 30 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -30,7 +30,8 @@ on every run, nested twice over, with no hardware and no human.
    application's own menus, drawn by our compositor, which had never drawn a
    popup before (§2.62), and undo is decided (per window, a verb, never a
    delete), and a stock GTK application's menus appear in our bar
-   (P10.6). P10.7, Qt's — gated on its own spike — is next.
+   (P10.6), and so do a stock Qt/KDE application's — kcalc's — (P10.7).
+   P10.8, the menus the desktop owns, is the last pass.
    It needs no hardware.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
@@ -87,7 +88,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 458 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 463 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -2298,7 +2299,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **458 unit tests** are
+standalone ones `run.sh` invokes, listed below; **463 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2366,7 +2367,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 458 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 463 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2399,7 +2400,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 458 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 463 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2463,7 +2464,7 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **458 unit tests, 35 live modes and 29 live scripts, green on Linux
+heard of it. **463 unit tests, 35 live modes and 30 live scripts, green on Linux
 and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
@@ -2501,7 +2502,7 @@ the installer, the medium, the distribution sets or the boot path.**
 
 ### 1. Phase 10 — the menu protocol
 
-Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.6 are done and P10.7 (Qt, gated on a spike) is next. The spikes moved work into
+Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.7 are done and P10.8 (the desktop's own menus) is the last pass. The spikes moved work into
 the compositor: under `undertow` a GTK application exports its menus on the bus
 and tells nobody where, so undertow has to speak `gtk_shell1` — the first
 protocol it implements itself. The phase ([PLAN.md](PLAN.md)): the menu bar stops being a picture

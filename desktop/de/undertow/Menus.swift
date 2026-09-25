@@ -81,6 +81,14 @@ public final class Menus {
             // something to read is worth pointing the bar at.
             m.setAddress(a.hasMenus ? a.encoded : "", for: surface, kind: .gtk)
         }
+        hooks.set_dbusmenu_address = { ctx, surface, service, path in
+            guard let ctx, let surface else { return }
+            let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
+            let svc = service.map { String(cString: $0) } ?? ""
+            let p = path.map { String(cString: $0) } ?? ""
+            // "service\npath" — the dbusmenu kind's address (P10.7).
+            m.setAddress(svc.isEmpty || p.isEmpty ? "" : svc + "\n" + p, for: surface, kind: .dbusmenu)
+        }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
     }
@@ -134,7 +142,7 @@ public final class Menus {
         }
         Menus.log(address.isEmpty ? "a surface withdrew its menus"
                   : "a surface published its menus at "
-                    + (kind == .gtk ? "\(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [gtk]"
+                    + (kind != .abyss ? "\(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [\(kind)]"
                                     : address))
         focusChanged()
     }
@@ -184,7 +192,7 @@ extension Menus.Focus {
     var describe: String {
         switch kind {
         case .none: return appID.isEmpty ? "nothing" : "\(appID), which publishes no menus"
-        case .gtk:  return "\(appID) at \(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [gtk]"
+        case .gtk, .dbusmenu:  return "\(appID) at \(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [\(kind)]"
         default:    return "\(appID) at \(address) [\(kind)]"
         }
     }

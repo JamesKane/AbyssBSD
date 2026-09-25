@@ -76,10 +76,17 @@ if menus {
     do { bridge = try GtkMenuBridge(connection: conn) } catch {
         die("cannot serve \(GtkMenuBridge.serviceName): \(error)")
     }
+    // Qt exports its menus only if this name is owned (P10.7).
+    let registrar: AppMenuRegistrar
+    do { registrar = try AppMenuRegistrar(connection: conn) } catch {
+        die("cannot own \(AppMenuRegistrar.busName): \(error)")
+    }
     emit(1, "ready (menus: \(GtkMenuBridge.serviceName))")
-    while true {
-        do { try bridge.step(timeoutMs: 1000) } catch {
-            die("the bus connection failed: \(error)")
+    withExtendedLifetime(registrar) {
+        while true {
+            do { try bridge.step(timeoutMs: 1000) } catch {
+                die("the bus connection failed: \(error)")
+            }
         }
     }
 }

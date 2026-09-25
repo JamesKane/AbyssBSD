@@ -273,3 +273,33 @@ public struct GtkMenuAddress: Equatable, Sendable {
     /// Whether there is anything to read: a bus to ask and a menu to ask for.
     public var hasMenus: Bool { !busName.isEmpty && !(menubarPath.isEmpty && appMenuPath.isEmpty) }
 }
+
+/// Where a Qt application's menu is, and what to call the application.
+/// Encoded as the bar's `target` for the `menus-dbus` bridge (PHASE10.md P10.7), tagged so the
+/// bridge can tell it from a GTK address.
+public struct DBusMenuAddress: Equatable, Sendable {
+    public static let tag = "dbusmenu"
+    public var applicationID: String
+    public var service: String
+    public var path: String
+
+    public init(applicationID: String, service: String, path: String) {
+        self.applicationID = applicationID; self.service = service; self.path = path
+    }
+
+    /// From the compositor's `dbusmenu` focus: "service\npath", plus the
+    /// focused window's app_id.
+    public init?(focusAddress: String, applicationID: String) {
+        let f = focusAddress.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 2, !f[0].isEmpty, !f[1].isEmpty else { return nil }
+        self.init(applicationID: applicationID, service: f[0], path: f[1])
+    }
+
+    public var encoded: String { [DBusMenuAddress.tag, applicationID, service, path].joined(separator: "\n") }
+
+    public init?(encoded s: String) {
+        let f = s.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 4, f[0] == DBusMenuAddress.tag, !f[2].isEmpty, !f[3].isEmpty else { return nil }
+        self.init(applicationID: f[1], service: f[2], path: f[3])
+    }
+}

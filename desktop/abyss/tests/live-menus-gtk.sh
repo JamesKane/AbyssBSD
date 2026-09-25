@@ -93,7 +93,7 @@ wd=$(grep -m1 '^WAYLAND_DISPLAY=' "$work/ut.out" | cut -d= -f2-)
 
 "$bridge" --menus > "$work/bridge.log" 2>&1 &
 br_pid=$!
-after "$work/bridge.log" "ready (menus: menus-gtk)" 0 "the menu bridge never came up"
+after "$work/bridge.log" "ready (menus: menus-dbus)" 0 "the menu bridge never came up"
 
 env WAYLAND_DISPLAY="$priv" ABYSS_CONFIG_DIR="$work/cfg" AQUA_SCENE=menubar \
     "$aqua" > "$work/bar.log" 2>&1 &
@@ -124,7 +124,7 @@ after "$work/ut.err" "/org/abyss/MenuSpike/menus/menubar" 0 \
 echo "ok: undertow recorded GTK's menu address against its surface"
 
 # 3. The bar shows the GTK application's menus.
-after "$work/bar.log" "showing MenuSpike's menus from menus-gtk (GTK)" 0 \
+after "$work/bar.log" "showing MenuSpike's menus from menus-dbus (GTK)" 0 \
   "the bar never showed the GTK application's menus"
 titles=$(grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1)
 case "$titles" in

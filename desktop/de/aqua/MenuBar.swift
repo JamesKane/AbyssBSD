@@ -313,12 +313,25 @@ public final class MenuBar: LayerSurfaceDelegate {
         unsubscribe()
         enablement = [:]
         switch f.kind {
-        case .abyss, .gtk:
-            // Our own applications serve their menus themselves; a GTK
-            // application's are served by the bridge, told which one by target.
-            let (svc, tgt): (String, String?) = f.kind == .gtk
-                ? ("menus-gtk", f.address) : (f.address, nil)
-            let from = f.kind == .gtk ? "menus-gtk (GTK)" : f.address
+        case .abyss, .gtk, .dbusmenu:
+            // Our own applications serve their menus themselves; a GTK or Qt
+            // application's are served by the bridge, told which by target.
+            let svc: String, tgt: String?, from: String
+            switch f.kind {
+            case .gtk:
+                (svc, tgt, from) = ("menus-dbus", f.address, "menus-dbus (GTK)")
+            case .dbusmenu:
+                guard let q = DBusMenuAddress(focusAddress: f.address, applicationID: f.appID) else {
+                    MenuBar.log("an unreadable dbusmenu address: \(f.address)")
+                    show(nameOnly: f.appID)
+                    titlesDirty = true
+                    layer?.setNeedsDisplay()
+                    return
+                }
+                (svc, tgt, from) = ("menus-dbus", q.encoded, "menus-dbus (Qt)")
+            default:
+                (svc, tgt, from) = (f.address, nil, f.address)
+            }
             let t0 = MenuBar.nowUs()
             do {
                 let d = try MenuClient.describe(svc, target: tgt)
@@ -336,7 +349,7 @@ public final class MenuBar: LayerSurfaceDelegate {
                 MenuBar.log("could not describe \(from): \(error)")
                 show(nameOnly: f.appID)
             }
-        case .none, .dbusmenu:
+        case .none:
             // A window with no menus we can read still has a name, and the
             // application menu is where Jaguar put it.
             show(nameOnly: f.appID)
@@ -567,7 +580,8 @@ public final class MenuBar: LayerSurfaceDelegate {
         // popup where it was asked to — under its title, flush left.
         for (row, geo) in zip(rows, aquaMenuRows(rows)) where !row.isSeparator {
             let state = row.enabled ? "enabled" : "disabled"
-            MenuBar.log("item '\(row.title)' at \(Int(r.x) + 30),\(Int(r.h + geo.y + geo.h / 2)) "
+            let key = row.keyText.isEmpty ? "" : "\(row.keyText) "
+            MenuBar.log("item '\(row.title)' \(key)at \(Int(r.x) + 30),\(Int(r.h + geo.y + geo.h / 2)) "
                         + "\(state)\(row.verb.map { " \($0)" } ?? "")")
         }
         layer?.setNeedsDisplay()

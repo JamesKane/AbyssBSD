@@ -203,6 +203,11 @@ if [ "$live" -eq 1 ]; then
   # in abyss-dbus --menus, and the other end a stock GtkApplication (P10.6).
   echo "== GTK's menus in our bar =="
   sh "$root/abyss/tests/live-menus-gtk.sh" >/dev/null
+  # And a Qt/KDE application's: stock kcalc, org_kde_kwin_appmenu in
+  # undertow, com.canonical.dbusmenu through the same bridge (P10.7). Skips,
+  # loudly, on a box without kcalc.
+  echo "== Qt's menus in our bar =="
+  sh "$root/abyss/tests/live-menus-qt.sh"
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"
