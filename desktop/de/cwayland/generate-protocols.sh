@@ -43,4 +43,20 @@ gen wlr-screencopy-unstable-v1
 gen_server xdg-shell
 gen_server wlr-layer-shell-unstable-v1
 
+# Protocols this project defines (PHASE10.md P10.3). Nobody links an
+# implementation for us, so the interface tables are generated too — ONCE, into
+# CAbyssProtocols, because a client copy and a server copy would be the same
+# symbol twice in any binary with both halves (every `swift test` build). The
+# client header goes where clients look, the server header where undertow does.
+gen_ours() {
+    name=$1
+    xml="$proto/$name.xml"
+    echo "scanner: $name (ours: tables, client and server headers)"
+    wayland-scanner private-code  "$xml" "$root/de/cabyssprotocols/$name-protocol.c"
+    wayland-scanner client-header "$xml" "$here/include/$name-client-protocol.h"
+    wayland-scanner server-header "$xml" "$root/de/cwlroots/include/$name-protocol.h"
+}
+
+gen_ours abyss-menu-v1
+
 echo "done."

@@ -395,3 +395,23 @@ void *aw_seat_get_pointer(void *seat) {
 void *aw_seat_get_keyboard(void *seat) {
     return wl_seat_get_keyboard((struct wl_seat *)seat);
 }
+
+/* abyss-menu-v1 (PHASE10.md P10.3) */
+void *aw_bind_menu_manager(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &abyss_menu_manager_v1_interface, version);
+}
+
+void aw_menu_manager_set_address(void *manager, void *surface, const char *address) {
+    abyss_menu_manager_v1_set_address((struct abyss_menu_manager_v1 *)manager,
+                                      (struct wl_surface *)surface, address);
+}
+
+void *aw_bind_menubar(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &abyss_menubar_v1_interface, version);
+}
+
+void aw_menubar_destroy(void *menubar) {
+    abyss_menubar_v1_destroy((struct abyss_menubar_v1 *)menubar);
+}

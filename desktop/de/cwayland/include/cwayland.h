@@ -19,6 +19,7 @@
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "wlr-screencopy-unstable-v1-client-protocol.h"
+#include "abyss-menu-v1-client-protocol.h"
 
 /*
  * Create an anonymous, writable shared-memory fd of `size` bytes, suitable for
@@ -144,6 +145,13 @@ void aw_foreign_toplevel_handle_destroy(void *handle);
  * to a real input serial), then activates a surface with it — the sanctioned way
  * to raise/focus one of your own windows. The Finder uses it in spatial mode to
  * bring an already-open folder's window forward. */
+/* abyss-menu-v1 (PHASE10.md P10.3): an application says where a surface's
+ * menus are published; the menu bar — on undertow's privileged socket — is told
+ * where the focused surface's are. Requests are static inline, hence these. */
+void *aw_bind_menu_manager(void *registry, uint32_t name, uint32_t version);
+void aw_menu_manager_set_address(void *manager, void *surface, const char *address);
+void *aw_bind_menubar(void *registry, uint32_t name, uint32_t version);
+void aw_menubar_destroy(void *menubar);
 void *aw_bind_xdg_activation(void *registry, uint32_t name, uint32_t version);
 void *aw_xdg_activation_get_token(void *activation);
 void aw_xdg_activation_token_set_serial(void *token, uint32_t serial, void *seat);

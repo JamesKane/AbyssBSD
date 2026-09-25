@@ -32,9 +32,18 @@ let package = Package(
             providers: [.apt(["libwayland-dev"]), .brew(["wayland"])]
         ),
         // C interop: generated protocol clients + the aw_* shim + shm helper.
+        // The interface tables of protocols this project defines, compiled once
+        // for both halves (see its header, and PHASE10.md P10.3).
+        .target(
+            name: "CAbyssProtocols",
+            dependencies: ["CWaylandClient"],
+            path: "de/cabyssprotocols",
+            sources: ["abyss-menu-v1-protocol.c"],
+            publicHeadersPath: "include"
+        ),
         .target(
             name: "CWayland",
-            dependencies: ["CWaylandClient"],
+            dependencies: ["CWaylandClient", "CAbyssProtocols"],
             path: "de/cwayland",
             exclude: ["generate-protocols.sh"],
             sources: ["xdg-shell-protocol.c",
@@ -376,9 +385,9 @@ let package = Package(
         // macro, so every wlroots event arrives through one C trampoline.
         .target(
             name: "CWlroots",
-            dependencies: ["CWlrootsSys", "CWaylandServer"],
+            dependencies: ["CWlrootsSys", "CWaylandServer", "CAbyssProtocols"],
             path: "de/cwlroots",
-            sources: ["cwlroots.c"],
+            sources: ["cwlroots.c", "menus.c"],
             publicHeadersPath: "include"
         ),
         // `undertow` — the compositor (PHASE6.md). P6.1 is the frame scheduler

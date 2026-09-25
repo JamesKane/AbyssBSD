@@ -40,7 +40,7 @@ func usage() -> Never {
                                     [--assert-windows N] [--assert-surfaces N]
                                     [--assert-layers N] [--assert-usable X,Y,WxH]
                                     [--assert-missed N] [--config-dir DIR] [--verbose]
-                                    [--socket NAME]
+                                    [--socket NAME] [--privileged-socket NAME]
     """)
     exit(2)
 }
@@ -66,6 +66,7 @@ var assertLayers: Int? = nil
 var assertUsable: String? = nil
 var configDir: String? = nil
 var socketName: String?
+var privilegedSocket: String?
 /// nil means headless (the default everywhere but metal).
 var backendKind: WlrootsSession.Kind? = nil
 
@@ -104,6 +105,7 @@ while i < args.count {
     case "--assert-usable": assertUsable = value("--assert-usable")
     case "--config-dir": configDir = value("--config-dir")
     case "--socket": socketName = value("--socket")
+    case "--privileged-socket": privilegedSocket = value("--privileged-socket")
     case "--backend":
         let b = value("--backend")
         switch b {
@@ -369,7 +371,8 @@ case "run":
         }
         compositor = try Compositor(session: session, outputWidth: width,
                                     outputHeight: height, configDir: configDir,
-                                    socketName: socketName)
+                                    socketName: socketName,
+                                    privilegedSocket: privilegedSocket)
     } catch {
         die("\(error)")
     }
@@ -391,6 +394,8 @@ case "run":
     // read one line and know where to point a client. Anything else means
     // racing a sleep against a compositor's startup.
     out("WAYLAND_DISPLAY=\(compositor.socketName)")
+    // The menu bar's door (PHASE10 P10.3): same announcement, same reason.
+    if let p = compositor.privilegedSocketName { out("WAYLAND_PRIVILEGED=\(p)") }
     // The rate comes from the output, not from the flag — see above. Said in the
     // one line a person reads off a screen they cannot copy and paste from.
     emit(2, "undertow: \(output.name) \(output.width)x\(output.height) @ \(hz)Hz"

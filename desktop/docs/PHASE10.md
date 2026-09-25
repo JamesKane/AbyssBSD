@@ -212,7 +212,7 @@ suite only in the guest, and P10.1's commit claimed both platforms off a single
 `--vm` run. That Linux gate had not been run; this one, which includes P10.1's
 code, is it.
 
-**P10.3 — the compositor learns whose menu is whose.**
+**P10.3 — the compositor learns whose menu is whose. ✅ done.**
 Two protocols of our own, in `protocols/`, server-side in undertow (§4.3):
 
 - **`abyss_menu_v1`** — any client: `set_address(wl_surface, service)`. Our
@@ -227,6 +227,67 @@ Two protocols of our own, in `protocols/`, server-side in undertow (§4.3):
 "The bar only" is decided (§6.1): the global is offered only on undertow's
 privileged socket. A global that tells any client which
 application is focused and where its menus live is a keylogger's index.
+
+**What P10.3 landed.** `protocols/abyss-menu-v1.xml` — both interfaces, with
+`set_address` on the manager itself rather than a per-surface object, since an
+address is one string and is forgotten with its surface. undertow implements it
+(`de/undertow/Menus.swift` for the policy, `de/cwlroots/menus.c` for the
+plumbing) and grows `--privileged-socket NAME`, announced as
+`WAYLAND_PRIVILEGED=` beside `WAYLAND_DISPLAY=`. A client reaches it with
+nothing but `WAYLAND_DISPLAY=<name>`. `Surface` gains `Window.publishMenus(at:)`
+and `MenuBarFocus`; every Finder window publishes `menus.finder.<pid>`; the menu
+bar binds `MenuBarFocus` and, for now, logs what it is told — drawing it is
+P10.4, and so is threading the privileged socket through `abyss-session` and
+`anchor` to the real bar.
+
+**Three pieces of it are C, and why is worth one line each.** The generated
+`abyss_menubar_v1_send_focused` is a `static inline` over the *variadic*
+`wl_resource_post_event` — §2.1 from the server side. Knowing which socket a
+client came through means accepting it ourselves and calling `wl_client_create`,
+because libwayland does not record it for sockets it accepted. And the
+interface tables live in a target of their own, `CAbyssProtocols`, because a
+client copy and a server copy would be one symbol twice in every `swift test`
+binary, which links both halves.
+
+**What it found:**
+
+- **Closing the focused window left focus on nothing.** `Seat.focused` is
+  `weak`, so when the window went the reference went quietly nil: no other
+  window was activated and the keyboard went nowhere until a click. P9.4 fixed
+  exactly this for *minimize* and the close path had the same hole. The bar is
+  the first thing that has to be told who is frontmost after a close, so it is
+  what noticed. `forget` now focuses the topmost window, and
+  `live-menu-focus.sh` **failed** with that line removed.
+- **The C state has to be per display.** `UndertowTests` builds several
+  compositors in one process; module-level statics would have given the second
+  one no menu globals and every later test a compositor that silently lacked
+  them. `tw_menus` is allocated per display, and its teardown detaches every
+  resource and client entry that may outlive it. `Compositor.deinit` calls it
+  explicitly, while the `wl_display` is certainly alive — left to Swift's
+  release order it would have been a use-after-free waiting for a slow day.
+- **A wait that the past can satisfy is not a wait.** The live test's last step
+  waited for "frontmost: nothing" — which the bar had already logged once, on
+  bind — and so checked the count before the new event had arrived. The
+  compositor was right and the test failed; it now waits for a *second*
+  occurrence. The same shape as §2.37, in a harness: polling for a line proves
+  nothing if the line was there before you started.
+
+**What the privileged socket does and does not protect, stated plainly.** It is
+0600 in a 0700 directory, so any process of the same user can connect to it —
+which that user's unconfined processes could anyway, since they can read each
+other's memory. What it keeps out is a **confined** client (Phase 17), which is
+handed the ordinary socket or a security context and never this one. That is
+the real threat model, and it arrives with Phase 17; until then the global is
+hidden from the wrong connection rather than from the wrong person.
+
+**Verified:** `live-menu-focus.sh` — a bar on the ordinary socket is told
+nothing (the control), the same binary on the privileged one is told on bind;
+the Finder's address and app_id reach the bar when it is focused; an app with
+no menus says so; closing it hands focus back to the Finder; closing the Finder
+leaves nothing frontmost; the socket is 0600. Both of its fault injections
+(the global filter disabled, the close fix removed) failed it. Unit tests: two
+compositors each get their own globals; the socket is 0600 and removed with its
+compositor; an impossible path is an error that names it.
 
 **P10.4 — the bar is real.**
 `MenuBar` binds `abyss_menubar_v1`, connects to the focused application's

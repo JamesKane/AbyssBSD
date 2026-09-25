@@ -47,9 +47,13 @@ public enum BackendError: Error, CustomStringConvertible {
     /// A socket name was asked for and is already in use — someone else's
     /// session, or ours, still holding it.
     case socketTaken(String)
+    /// The privileged socket (PHASE10 P10.3) could not be made: path, errno.
+    case privilegedSocket(String, Int32)
 
     public var description: String {
         switch self {
+        case .privilegedSocket(let path, let e):
+            return "could not listen on the privileged socket \(path): \(String(cString: strerror(e)))"
         case .noDisplay: return "could not create a wl_display"
         case .noBackend: return "could not create a wlroots backend"
         case .noRenderer: return "could not create a wlroots renderer"

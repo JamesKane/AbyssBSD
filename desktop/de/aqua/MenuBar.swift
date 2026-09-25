@@ -187,6 +187,10 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// nil on a machine with no sound card, which is how the item stays hidden.
     private var mixer: Vents.Mixer?
     private var status = MenuBarStatus()
+    /// Who is frontmost and where their menus are, from the compositor
+    /// (P10.3). Nil unless this bar connected through undertow's privileged
+    /// socket — the only connection offered it. P10.4 draws what it says.
+    private var focus: MenuBarFocus?
 
     /// The system menu — the bar's own, whoever is frontmost. Nothing here can
     /// run yet (P10.8 gives the items that can a verb to call), so every item
@@ -258,6 +262,21 @@ public final class MenuBar: LayerSurfaceDelegate {
         status = MenuBarStatus.read(mixer: mixer)
         MenuBar.log("status \(status.volume.map { "volume \($0)%" } ?? "no mixer"), "
                     + "\(status.batteryPercent.map { "battery \($0)%" } ?? "no battery")")
+
+        if let f = MenuBarFocus(display: display) {
+            f.onFocus = { f in
+                switch f.kind {
+                case .none:
+                    MenuBar.log("frontmost: " + (f.appID.isEmpty ? "nothing"
+                                                 : "\(f.appID) (no menus)"))
+                default:
+                    MenuBar.log("frontmost: \(f.appID) at \(f.address) [\(f.kind)]")
+                }
+            }
+            focus = f
+        } else {
+            MenuBar.log("not on the compositor's privileged socket: no view of focus")
+        }
 
         // Tick the clock once a second via a timerfd in the run loop.
         let fd = aw_create_interval_timer(1000)

@@ -94,6 +94,44 @@ struct tw_listener *tw_listen(struct wl_signal *signal, tw_notify_fn fn, void *c
 void tw_listener_free(struct tw_listener *l);
 
 /*
+ * Menus (PHASE10.md P10.3) — the first protocols undertow implements itself.
+ *
+ * C for the same reason as the listener above, one layer over: the generated
+ * `abyss_menubar_v1_send_focused` is a `static inline` around the *variadic*
+ * `wl_resource_post_event`, and Swift can call neither. The rest lives here
+ * because it is libwayland plumbing — implementation tables, `wl_list`s,
+ * destroy listeners — and the policy (which surface has which address, what to
+ * tell the bar when focus moves) is Swift's, through two hooks.
+ *
+ * The privileged socket is how a client earns `abyss_menubar_v1`: undertow
+ * accepts its connections itself and calls `wl_client_create`, because
+ * libwayland does not record which socket a client it accepted came through.
+ * A global filter hides the menubar global from everyone else, and its bind
+ * refuses a client that asks by name anyway.
+ */
+struct tw_menus;
+
+struct tw_menu_hooks {
+    void *ctx;
+    /* A client set (or, with "", cleared) the menu address of one of its own
+     * surfaces. */
+    void (*set_address)(void *ctx, struct wlr_surface *surface, const char *address);
+    /* A privileged client bound abyss_menubar_v1: send it the current state. */
+    void (*menubar_bound)(void *ctx, struct wl_resource *menubar);
+};
+
+struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);
+void tw_menus_destroy(struct tw_menus *m);
+/* Listen on `path` (absolute) for privileged clients. 0, or -errno. */
+int tw_privileged_socket_add(struct tw_menus *m, const char *path);
+bool tw_client_is_privileged(struct tw_menus *m, struct wl_client *client);
+void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
+                             const char *address, const char *app_id);
+void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
+                                 const char *address, const char *app_id);
+int tw_menubar_count(struct tw_menus *m);
+
+/*
  * Silence wlroots' own logging, or route it at a level. Not a macro problem —
  * a convenience, because wlr_log_init takes a callback we never want to set.
  */

@@ -590,6 +590,8 @@ public final class Seat {
         focused = t
         _ = wlr_xdg_toplevel_set_activated(t.xdgToplevel, true)
         t.setForeignActivated(true)
+        // And the menu bar, which shows whoever is frontmost (P10.3).
+        compositor.menus?.focusChanged()
         guard let kbd = wlr_seat_get_keyboard(seat) else {
             // No keyboard on the seat yet: focus is still ours to record, and
             // the client will be told when one arrives.
@@ -758,6 +760,7 @@ public final class Seat {
             focused?.setForeignActivated(false)
             focused = nil
             wlr_seat_keyboard_notify_clear_focus(seat)
+            compositor.menus?.focusChanged()
             return
         }
         focus(t)

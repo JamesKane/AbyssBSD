@@ -158,7 +158,10 @@ public final class Toplevel {
         }, me))
         listeners.append(tw_listen(&toplevel.pointee.events.set_app_id, { ctx, _ in
             guard let ctx else { return }
-            Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue().describe()
+            let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            t.describe()
+            // The bar names the frontmost application by it (P10.3).
+            if t.compositor.seat?.focused === t { t.compositor.menus?.focusChanged() }
         }, me))
     }
 
@@ -333,8 +336,14 @@ public final class Compositor {
     ///   a name that is taken is an error rather than a silent fallback to
     ///   another one: the fallback would hand every component a display nothing
     ///   is listening on.
+    /// Whose menus are whose (PHASE10.md P10.3).
+    public private(set) var menus: Menus?
+    /// The socket privileged clients connect to, if one was asked for.
+    public private(set) var privilegedSocketName: String?
+
     public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32,
-                configDir: String? = nil, socketName: String? = nil) throws {
+                configDir: String? = nil, socketName: String? = nil,
+                privilegedSocket: String? = nil) throws {
         self.places = WindowPlaces(configDir: configDir)
         self.configDir = configDir
         self.session = session
@@ -424,6 +433,21 @@ public final class Compositor {
             }, me)
         }
 
+        // Menus (P10.3): the manager for everyone, the bar's global only for
+        // clients that came in through the privileged socket (PHASE10 §6.1).
+        guard let m = Menus(compositor: self, display: session.display) else {
+            throw BackendError.noGlobals("abyss_menu_manager_v1")
+        }
+        menus = m
+        if let name = privilegedSocket {
+            // Named like WAYLAND_DISPLAY and in the same directory, so a client
+            // reaches it with nothing but `WAYLAND_DISPLAY=<name>`.
+            guard let dir = getenv("XDG_RUNTIME_DIR").map({ String(cString: $0) }),
+                  !dir.isEmpty else { throw BackendError.noSocket }
+            try m.addPrivilegedSocket(name.hasPrefix("/") ? name : dir + "/" + name)
+            privilegedSocketName = name
+        }
+
         if let wanted = socketName {
             guard wanted.withCString({ wl_display_add_socket(session.display, $0) }) == 0 else {
                 throw BackendError.socketTaken(wanted)
@@ -444,6 +468,10 @@ public final class Compositor {
         tw_listener_free(activationListener)
         for t in toplevels { t.teardown() }
         for l in layers { l.teardown() }
+        // Here, while `session` — and so the wl_display the menu globals live
+        // on — is certainly still alive. Left to `Menus.deinit` it would run
+        // whenever Swift released the property, which is not specified.
+        menus?.teardown()
     }
 
     // MARK: - Layer shell
@@ -792,6 +820,13 @@ public final class Compositor {
         decorations?.forget(t)
         t.teardown()
         toplevels.removeAll { $0 === t }
+        // **Closing the focused window used to leave focus on nothing** — the
+        // same deaf desktop P9.4 fixed for minimize, by the other door: `focused`
+        // is weak, so it went quietly nil and no window was told it was now
+        // active. Found in P10.3, because the menu bar is the first thing that
+        // has to be told who is frontmost after a close.
+        if seat?.focused === t { seat?.focusTopmost() }
+        menus?.focusChanged()
     }
 
     /// Move a window to the top of the stack.

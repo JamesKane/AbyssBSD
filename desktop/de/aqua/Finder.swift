@@ -782,6 +782,9 @@ public final class FinderApp {
 
     func windowBecameKey(_ w: FinderWindow) { keyWindow = w }
 
+    /// Where this Finder's menus are published, or nil when it publishes none.
+    var menuServiceName: String? { menuService?.name }
+
     private var targetWindow: FinderWindow? { keyWindow ?? windows.last }
 
     /// Verbs that need no window: the Finder can do them with none open, which
@@ -968,6 +971,12 @@ public final class FinderWindow: WindowDelegate {
                                scale: scale, autoScale: auto, delegate: self)
         else { return nil }
         window = win
+        // Tell the compositor where this window's menus are (P10.3), so the
+        // bar shows them when it is focused — bound to the surface, not the
+        // app_id, which any client could claim.
+        if let name = app.menuServiceName, win.publishMenus(at: name) {
+            FinderWindow.log("window publishes its menus at \(name)")
+        }
         reload()
     }
 

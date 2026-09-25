@@ -15,7 +15,7 @@ boots a desktop where an unmodified GTK 3 application, which has never heard of
 this desktop, opens a file through the Finder**; and since Phase 9 it is a
 desktop you can *use*: clipboard, drag and drop, window management, keybinds,
 and an Aqua frame around foreign windows.
-**438 unit tests, 35 live modes and 25 live scripts, green on Linux and FreeBSD.**
+**441 unit tests, 35 live modes and 26 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -26,8 +26,9 @@ on every run, nested twice over, with no hardware and no human.
 **Picking this up cold?**
 
 1. **The phase in progress is 10, the menu protocol** — scoped in
-   [PHASE10.md](PHASE10.md). **P10.1–P10.2 are done** (one definition per command;
-   the menu service and `abyssmenu`); P10.3, undertow's own protocols, is next.
+   [PHASE10.md](PHASE10.md). **P10.1–P10.3 are done** (one definition per command;
+   the menu service and `abyssmenu`; undertow's own menu protocols and a
+   privileged socket). P10.4, the bar made real, is next.
    It needs no hardware.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
@@ -84,7 +85,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 438 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 441 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -356,6 +357,13 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.52 | `ldd` is not your closure either, when something in it `dlopen`s — Mesa's driver is a plugin, and headless never asks for it |
 | 2.53 | Take **every** fact from the display, not just the ones that broke first — we fixed size in P4.1 and reported a 60 Hz panel as 240 Hz for a phase |
 | 2.54 | A plugin chain fails at whichever link you did not carry, and names none of them — `test -s` proves presence, only the loader proves resolution |
+| 2.55 | A drag that ends where it started is one process asking itself |
+| 2.56 | A surface the pointer cannot reach is not a drop target |
+| 2.57 | `wl_proxy_destroy` tells the compositor nothing |
+| 2.58 | A global with nothing behind it is the same defect twice |
+| 2.59 | Routing a key is not telling a window it has focus |
+| 2.60 | A `weak` focus goes nil without telling anyone — closing the focused window left the desktop deaf, the close-side twin of P9.4's minimize fix |
+| 2.61 | A wait the past can satisfy is not a wait — polling for a log line proves nothing if the line was there before you started |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -622,6 +630,41 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.61 A wait the past can satisfy is not a wait
+(P10.3. The compositor was right; the test said it was wrong.)
+
+`live-menu-focus.sh` closes the last window and waits for the bar to log
+`frontmost: nothing`. The bar had already logged exactly that line once — when it
+bound, before any window existed — so the wait returned at once, the count was
+checked before the new event had arrived, and the test failed a compositor that
+had done its job. It now waits for a **second** occurrence.
+
+The failure mode is general and it is quiet in the other direction too: had the
+assertion been "the line is present" rather than "the count went up", the test
+would have *passed* with the compositor sending nothing at all. **When a harness
+polls for evidence, check the evidence could not have been there before the
+thing under test ran** — count it before and after, or clear the log, or wait
+for something only the new event can produce. §2.37's positive control, applied
+to the harness's own clock.
+
+### 2.60 A `weak` focus goes nil without telling anyone
+(P10.3. The menu bar is the first thing that has to be told who is frontmost
+after a close.)
+
+`Seat.focused` is `weak`, which is right — a seat must not keep a dead window
+alive — and it means closing the focused window made the reference go quietly
+nil. No other window was activated, no keyboard focus moved, and the desktop was
+deaf until somebody clicked. P9.4 had fixed precisely this for **minimize**
+(`focusTopmost` when the focused window is put away); the close path is the same
+hole through a different door, and nothing looked at it because nothing
+downstream of focus cared about the *next* window until the bar did.
+
+`Compositor.forget` now focuses the topmost window when the one going was
+focused, and tells the bar. `live-menu-focus.sh` fails with that line removed.
+The rule: **wherever a weak reference can become nil, find the code that should
+have been told** — a weak reference makes the lifetime correct and the
+notification disappear, and the second is the one that shows up as a bug.
 
 ### 2.59 Routing a key is not telling a window it has focus
 (P9.5. Six phases of windows drawing themselves active whether they were or not.)
@@ -2197,7 +2240,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **438 unit tests** are
+standalone ones `run.sh` invokes, listed below; **441 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2265,7 +2308,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 438 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 441 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2298,7 +2341,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 438 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 441 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2362,7 +2405,7 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **438 unit tests, 35 live modes and 25 live scripts, green on Linux
+heard of it. **441 unit tests, 35 live modes and 26 live scripts, green on Linux
 and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
@@ -2400,7 +2443,7 @@ the installer, the medium, the distribution sets or the boot path.**
 
 ### 1. Phase 10 — the menu protocol
 
-Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.2 are done and P10.3 is next. The spikes moved work into
+Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.3 are done and P10.4 is next. The spikes moved work into
 the compositor: under `undertow` a GTK application exports its menus on the bus
 and tells nobody where, so undertow has to speak `gtk_shell1` — the first
 protocol it implements itself. The phase ([PLAN.md](PLAN.md)): the menu bar stops being a picture

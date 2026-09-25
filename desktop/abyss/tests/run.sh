@@ -186,6 +186,10 @@ if [ "$live" -eq 1 ]; then
   # whose results are checked on disk; a picker publishes nothing (P10.2).
   echo "== the vocabulary =="
   sh "$root/abyss/tests/live-vocabulary.sh" >/dev/null
+  # And the compositor's half: a window publishes where its menus are, and
+  # only a client on the privileged socket is told who is frontmost (P10.3).
+  echo "== whose menus are whose =="
+  sh "$root/abyss/tests/live-menu-focus.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

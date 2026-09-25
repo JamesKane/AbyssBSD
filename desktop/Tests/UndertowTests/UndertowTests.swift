@@ -409,6 +409,54 @@ final class UndertowTests: XCTestCase {
         XCTAssertEqual(compositor.mappedToplevels.count, 0)
     }
 
+    // MARK: P10.3 — whose menus are whose
+
+    /// Two compositors in one process, each with its own menu globals. The C
+    /// side keeps its state per display for exactly this — static state would
+    /// make the second compositor's globals fail, and every test after the
+    /// first would run a compositor with no menus.
+    func testEveryCompositorHasItsOwnMenuGlobalsAndStartsWithNothingFocused() throws {
+        let s1 = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
+        let c1 = try Compositor(session: s1, outputWidth: 64, outputHeight: 48)
+        let s2 = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
+        let c2 = try Compositor(session: s2, outputWidth: 64, outputHeight: 48)
+        XCTAssertNotNil(c1.menus)
+        XCTAssertNotNil(c2.menus)
+        XCTAssertEqual(c2.menus?.current, .nothing)
+        XCTAssertEqual(c2.menus?.menubarCount, 0)
+        XCTAssertNil(c1.privilegedSocketName, "no privileged socket unless asked for")
+    }
+
+    /// Asked for, the socket exists, is 0600, and goes away with the compositor.
+    func testThePrivilegedSocketIsTheUsersAloneAndIsRemovedAfter() throws {
+        guard let dir = getenv("XDG_RUNTIME_DIR").map({ String(cString: $0) }), !dir.isEmpty
+        else { throw XCTSkip("no XDG_RUNTIME_DIR") }
+        let name = "undertow-priv-test-\(getpid())"
+        let path = dir + "/" + name
+        do {
+            let s = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
+            let c = try Compositor(session: s, outputWidth: 64, outputHeight: 48,
+                                   privilegedSocket: name)
+            XCTAssertEqual(c.privilegedSocketName, name)
+            var st = stat()
+            XCTAssertEqual(stat(path, &st), 0, "no socket at \(path)")
+            XCTAssertEqual(UInt32(st.st_mode) & 0o777, 0o600)
+            withExtendedLifetime(c) {}
+        }
+        var st = stat()
+        XCTAssertNotEqual(stat(path, &st), 0, "the privileged socket outlived its compositor")
+    }
+
+    /// A path that cannot be a socket is an error with the path in it, not a
+    /// compositor that quietly has no bar.
+    func testAnImpossiblePrivilegedSocketIsAnError() throws {
+        let s = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
+        XCTAssertThrowsError(try Compositor(session: s, outputWidth: 64, outputHeight: 48,
+                                            privilegedSocket: "/nonexistent-dir/priv")) { e in
+            XCTAssertTrue("\(e)".contains("/nonexistent-dir/priv"), "\(e)")
+        }
+    }
+
     /// An empty scene still composites: background only, nothing painted.
     func testAnEmptySceneCompositesTheDesktopAndNothingElse() throws {
         let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,

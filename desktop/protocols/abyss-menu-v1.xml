@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="abyss_menu_v1">
+  <copyright>
+    AbyssBSD Swift DE. PHASE10.md P10.3.
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the next
+    paragraph) shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  </copyright>
+
+  <description summary="whose menus belong to which window">
+    A global menu bar has to show the menus of the application whose window is
+    focused, and only the compositor knows which surface that is. An
+    application therefore tells the compositor, per surface, where its menus
+    are published; the compositor tells the menu bar — and nobody else — where
+    the focused surface's menus are whenever focus moves.
+
+    The address is bound to a surface, by the client that owns the surface, on
+    the connection that proves it. Nothing here trusts an app_id.
+  </description>
+
+  <interface name="abyss_menu_manager_v1" version="1">
+    <description summary="publish where a surface's menus live">
+      Offered to every client.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager; addresses already set remain"/>
+    </request>
+
+    <request name="set_address">
+      <description summary="this surface's menus are published at this address">
+        Set or replace the menu address of a surface this client owns. An
+        empty address withdraws it. The address is a CurrentIPC service name
+        (MenuWire, PHASE10 P10.2). It is forgotten when the surface is
+        destroyed.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="address" type="string"/>
+    </request>
+  </interface>
+
+  <interface name="abyss_menubar_v1" version="1">
+    <description summary="the menu bar's view of focus">
+      Offered only to clients that connected to the compositor's privileged
+      socket (PHASE10 §6.1). It says which application is frontmost and where
+      its menus are, which is exactly what an ordinary client must not learn.
+    </description>
+
+    <enum name="kind">
+      <entry name="none" value="0" summary="the focused window publishes no menus, or nothing is focused"/>
+      <entry name="abyss" value="1" summary="a MenuWire service name"/>
+      <entry name="gtk" value="2" summary="a GTK application's bus name and menu paths (P10.6)"/>
+      <entry name="dbusmenu" value="3" summary="a com.canonical.dbusmenu service and path (P10.7)"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="stop being told"/>
+    </request>
+
+    <event name="focused">
+      <description summary="focus moved; here is where its menus are">
+        Sent once on bind, and again whenever keyboard focus moves to a
+        different toplevel, or the focused toplevel's address changes. With
+        kind none, address is empty.
+      </description>
+      <arg name="kind" type="uint" enum="kind"/>
+      <arg name="address" type="string"/>
+      <arg name="app_id" type="string"/>
+    </event>
+  </interface>
+</protocol>

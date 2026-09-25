@@ -59,6 +59,15 @@ public final class Display {
     // step via ForeignToplevels, so no `toplevel` event hits a NULL listener.
     public internal(set) var foreignToplevelManager: (name: UInt32, version: UInt32)?
 
+    /// `abyss_menu_manager_v1` (PHASE10.md P10.3): how a window says where its
+    /// menus are published. No events, so bound on sight.
+    var menuManager: OpaquePointer?
+    public var hasMenuManager: Bool { menuManager != nil }
+    /// `abyss_menubar_v1`, by name — offered only on undertow's privileged
+    /// socket, so its presence is itself the answer to "am I the menu bar's
+    /// connection". Bound with its listener by `MenuBarFocus`.
+    public internal(set) var menubarGlobal: (name: UInt32, version: UInt32)?
+
     // Every wl_output we've bound, with its current scale. The window consults
     // these (via outputScale) for the surfaces it's shown on.
     private var outputs: [OutputInfo] = []
@@ -287,6 +296,10 @@ public final class Display {
             layerShell = opt(aw_bind_layer_shell(raw(registry), name, min(version, 4)))
         case "zwlr_foreign_toplevel_manager_v1":
             foreignToplevelManager = (name, min(version, 3))
+        case "abyss_menu_manager_v1":
+            menuManager = opt(aw_bind_menu_manager(raw(registry), name, 1))
+        case "abyss_menubar_v1":
+            menubarGlobal = (name, 1)
         case "xdg_activation_v1":
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.

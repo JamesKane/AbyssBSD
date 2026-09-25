@@ -485,6 +485,18 @@ public final class Window {
     /// Minimize. There is no `unset_minimized` in the protocol: a minimized
     /// window is restored by the compositor (a Dock tile, a switcher), never by
     /// the client, because a client that could un-minimize itself would.
+    /// Tell the compositor this window's menus are published at `address` (a
+    /// MenuWire service name), or withdraw them with "" (PHASE10.md P10.3).
+    /// False when the compositor does not speak the protocol — under anything
+    /// but undertow, which is a real case and not an error.
+    @discardableResult
+    public func publishMenus(at address: String) -> Bool {
+        guard let m = display.menuManager else { return false }
+        aw_menu_manager_set_address(raw(m), raw(surface), address)
+        display.flush()
+        return true
+    }
+
     public func minimize() {
         guard !tornDown else { return }
         aw_xdg_toplevel_set_minimized(raw(xdgToplevel))
