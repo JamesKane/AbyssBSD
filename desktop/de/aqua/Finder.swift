@@ -780,12 +780,20 @@ public final class FinderApp {
         }
     }
 
-    func windowBecameKey(_ w: FinderWindow) { keyWindow = w }
+    func windowBecameKey(_ w: FinderWindow) {
+        guard keyWindow !== w else { return }
+        keyWindow = w
+        // Another window is key, so Undo may be called something else.
+        menusChanged()
+    }
+
+    /// What the menus say may have changed — Undo's title, most often.
+    func menusChanged() { menuService?.changed() }
 
     /// Where this Finder's menus are published, or nil when it publishes none.
     var menuServiceName: String? { menuService?.name }
 
-    private var targetWindow: FinderWindow? { keyWindow ?? windows.last }
+    fileprivate var targetWindow: FinderWindow? { keyWindow ?? windows.last }
 
     /// Verbs that need no window: the Finder can do them with none open, which
     /// on the desktop — where the Finder outlives its windows — is often.
@@ -873,7 +881,7 @@ public final class FinderApp {
     /// Close one window; the last one out ends the process.
     func close(_ w: FinderWindow) {
         windows.removeAll { $0 === w }
-        if keyWindow === w { keyWindow = nil }
+        if keyWindow === w { keyWindow = nil; menusChanged() }
         w.tearDown()
         FinderWindow.log("closed \(w.directory) (\(windows.count) open)")
         if windows.isEmpty, quitsWithLastWindow { display.stop() }
@@ -894,7 +902,13 @@ public final class FinderApp {
 }
 
 extension FinderApp: MenuProvider {
-    public var menuModel: MenuBarModel { FinderWindow.menuBar }
+    /// The Finder's menus, with Undo and Redo named for what the key window
+    /// would undo — one definition, one piece of state, derived (§6.3).
+    public var menuModel: MenuBarModel {
+        guard let w = targetWindow else { return FinderWindow.menuBar }
+        return FinderWindow.menuBar.retitled([FinderVerb.undo.rawValue: w.undo.undoTitle,
+                                              FinderVerb.redo.rawValue: w.undo.redoTitle])
+    }
 
     public func menuValidate(_ command: Command) -> Enablement {
         guard let v = FinderVerb(rawValue: command.verb) else {
@@ -940,6 +954,9 @@ public final class FinderWindow: WindowDelegate {
     private var lastClickMs: Int64 = 0
     // Non-nil while renaming an item in place.
     private var edit: FinderEdit?
+    /// This window's undo (P10.5): per window, held rather than owned, so a
+    /// document model can take it over later without changing a command.
+    let undo = UndoStack()
 
     /// Where a Finder window opens: $ABYSS_FINDER_DIR, else $HOME, else "/".
     public static func startDirectory() -> String {
@@ -971,6 +988,9 @@ public final class FinderWindow: WindowDelegate {
                                scale: scale, autoScale: auto, delegate: self)
         else { return nil }
         window = win
+        // What Undo is called changes as this stack does, and the bar must be
+        // told — the first real customer of `subscribe` (P10.2).
+        undo.onChange = { [weak app] in app?.menusChanged() }
         // Tell the compositor where this window's menus are (P10.3), so the
         // bar shows them when it is focused — bound to the surface, not the
         // app_id, which any client could claim.
@@ -1161,6 +1181,63 @@ public final class FinderWindow: WindowDelegate {
         return entries[s]
     }
 
+    // MARK: undo (P10.5)
+
+    /// Move `src` to `dst`, as an undo or redo — refused, with the reason, if
+    /// the world has moved since (§6.3).
+    private func undoMove(_ src: String, to dst: String) -> CommandResult {
+        guard finderExists(src) else {
+            return .refused("\(finderDisplayName(src)) is not where it was any more")
+        }
+        guard !finderExists(dst) else {
+            return .refused("something called \(finderDisplayName(dst)) is in the way")
+        }
+        guard finderRenameEntry(from: src, to: dst) else {
+            return .refused("could not move \(finderDisplayName(src)) back")
+        }
+        FinderWindow.log("moved \(src) -> \(dst)")
+        refreshAround(src, dst, selecting: finderDisplayName(dst))
+        return .ok(dst)
+    }
+
+    private func refreshAround(_ a: String, _ b: String, selecting name: String? = nil) {
+        for dir in Set([finderParent(a), finderParent(b)].compactMap { $0 }) {
+            if let app { app.refreshWindows(showing: dir, selecting: dir == finderParent(b) ? name : nil) }
+            else if dir == path { refresh(selecting: name) }
+        }
+    }
+
+    /// Something moved from `a` to `b`: undo moves it back.
+    private func pushMove(_ name: String, from a: String, to b: String) {
+        undo.push(UndoEntry(name,
+            undo: { [weak self] in self?.undoMove(b, to: a) ?? .refused("the window has closed") },
+            redo: { [weak self] in self?.undoMove(a, to: b) ?? .refused("the window has closed") }))
+    }
+
+    /// Something was made at `made`: undo puts it in the Trash, never deletes
+    /// it, as the Finder does; redo takes it back out.
+    private func pushCreation(_ name: String, made: String) {
+        var trashed: String?
+        undo.push(UndoEntry(name,
+            undo: { [weak self] in
+                guard let self else { return .refused("the window has closed") }
+                guard finderExists(made) else {
+                    return .refused("\(finderDisplayName(made)) is not there any more")
+                }
+                guard let t = finderMoveToTrash(made) else {
+                    return .refused("could not move \(finderDisplayName(made)) to the Trash")
+                }
+                trashed = t
+                FinderWindow.log("undid \(name): \(made) -> \(t)")
+                self.refreshAround(made, made)
+                return .ok(t)
+            },
+            redo: { [weak self] in
+                guard let self, let t = trashed else { return .refused("the window has closed") }
+                return self.undoMove(t, to: made)
+            }))
+    }
+
     /// ⌘⇧N: make "untitled folder" and go straight into renaming it, as the
     /// Finder does.
     private func newFolder() -> CommandResult {
@@ -1171,6 +1248,7 @@ public final class FinderWindow: WindowDelegate {
             return .refused("could not create \(name) in \(path)")
         }
         FinderWindow.log("new folder \(full)")
+        pushCreation("New Folder", made: full)
         app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
         beginRename()
         return .ok(full)
@@ -1207,6 +1285,7 @@ public final class FinderWindow: WindowDelegate {
             return
         }
         FinderWindow.log("renamed \(old) -> \(new) in \(path)")
+        pushMove("Rename", from: finderJoin(path, old), to: finderJoin(path, new))
         app?.refreshWindows(showing: path, selecting: new) ?? refresh(selecting: new)
     }
 
@@ -1220,6 +1299,7 @@ public final class FinderWindow: WindowDelegate {
             return .refused("could not duplicate \(entry.name)")
         }
         FinderWindow.log("duplicated \(entry.name) -> \(name) in \(path)")
+        pushCreation("Duplicate", made: finderJoin(path, name))
         app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
         return .ok(finderJoin(path, name))
     }
@@ -1251,6 +1331,8 @@ public final class FinderWindow: WindowDelegate {
             return .refused("could not paste \(source) into \(path)")
         }
         FinderWindow.log("pasted \(source) -> \(dest)")
+        if clip.cut { pushMove("Move", from: source, to: dest) }
+        else { pushCreation("Paste", made: dest) }
         if clip.cut {
             app?.clearClipboard()
             // A move empties the source folder's view too.
@@ -1269,6 +1351,7 @@ public final class FinderWindow: WindowDelegate {
             return .refused("could not move \(source) to the Trash")
         }
         FinderWindow.log("trashed \(source) -> \(dest)")
+        pushMove("Move to Trash", from: source, to: dest)
         app?.refreshWindows(showing: path) ?? refresh()
         return .ok(dest)
     }
@@ -1523,6 +1606,8 @@ public final class FinderWindow: WindowDelegate {
             return .disabled("nothing is selected")
         }
         switch verb {
+        case .undo: return undo.undoEnablement
+        case .redo: return undo.redoEnablement
         case .emptyTrash:
             return finderTrashContents().isEmpty ? .disabled("the Trash is empty") : .enabled
         case .saveHere:
@@ -1585,10 +1670,12 @@ public final class FinderWindow: WindowDelegate {
         case .computer:      go(to: "/")
         case .home:          go(to: FinderWindow.homeDirectory)
         case .applications:  go(to: FinderWindow.applicationsDirectory)
+        case .undo:          return undo.undo()
+        case .redo:          return undo.redo()
         case .minimize:      window?.minimize()
         case .zoom:          window?.setMaximized(!(window?.isMaximized ?? false))
         case .about, .preferences, .hide, .hideOthers, .showAll, .getInfo,
-             .makeAlias, .find, .undo, .redo, .selectAll, .asColumns, .help:
+             .makeAlias, .find, .selectAll, .asColumns, .help:
             // Unreachable: `validate` refuses what is not implemented. Listed
             // rather than defaulted so implementing one is a visible edit here.
             return .refused("the Finder cannot do this yet")

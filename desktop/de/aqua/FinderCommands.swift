@@ -64,12 +64,12 @@ public enum FinderVerb: String, CaseIterable, Sendable {
         switch self {
         case .about, .preferences, .hide, .hideOthers, .showAll,
              .getInfo, .makeAlias, .find,
-             .undo, .redo,              // P10.5 decides undo
              .selectAll,                // the Finder selects one item at a time
              .asColumns, .help:
             return false
         case .emptyTrash, .newWindow, .newFolder, .open, .closeWindow,
              .duplicate, .moveToTrash, .saveHere,
+             .undo, .redo,              // P10.5: per window, see Undo.swift
              .cut, .copy, .paste,
              .asIcons, .asList, .toggleToolbar,
              .back, .enclosingFolder, .goToFolder, .computer, .home, .applications,

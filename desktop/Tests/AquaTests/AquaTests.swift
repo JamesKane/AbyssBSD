@@ -457,6 +457,78 @@ final class AquaTests: XCTestCase {
                        "an unassigned codepoint is covered by nothing — the check can fail")
     }
 
+    // MARK: P10.5 — undo
+
+    private func counter(_ name: String, _ n: UnsafeMutablePointer<Int>,
+                         failUndo: @escaping () -> Bool = { false }) -> UndoEntry {
+        UndoEntry(name,
+                  undo: { if failUndo() { return .refused("moved") }; n.pointee -= 1; return .ok(nil) },
+                  redo: { n.pointee += 1; return .ok(nil) })
+    }
+
+    func testUndoTitlesAndEnablementAreDerivedFromTheStack() {
+        let s = UndoStack()
+        XCTAssertEqual(s.undoTitle, "Undo")
+        XCTAssertEqual(s.undoEnablement, .disabled("there is nothing to undo"))
+        XCTAssertEqual(s.redoEnablement, .disabled("there is nothing to redo"))
+        let n = UnsafeMutablePointer<Int>.allocate(capacity: 1); defer { n.deallocate() }
+        n.pointee = 1
+        s.push(counter("New Folder", n))
+        XCTAssertEqual(s.undoTitle, "Undo New Folder")
+        XCTAssertEqual(s.undo(), .ok(nil)); XCTAssertEqual(n.pointee, 0)
+        XCTAssertEqual(s.undoTitle, "Undo")
+        XCTAssertEqual(s.redoTitle, "Redo New Folder")
+        XCTAssertEqual(s.redo(), .ok(nil)); XCTAssertEqual(n.pointee, 1)
+        XCTAssertEqual(s.undoTitle, "Undo New Folder")
+    }
+
+    func testANewChangeForgetsWhatWasUndone() {
+        let s = UndoStack()
+        let n = UnsafeMutablePointer<Int>.allocate(capacity: 1); defer { n.deallocate() }
+        n.pointee = 0
+        s.push(counter("A", n)); s.undo()
+        XCTAssertTrue(s.canRedo)
+        s.push(counter("B", n))
+        XCTAssertFalse(s.canRedo, "a new change starts a new future")
+        XCTAssertEqual(s.redo(), .refused("there is nothing to redo"))
+    }
+
+    func testAnUndoThatFailsIsRefusedAndStaysOnTheStack() {
+        let s = UndoStack()
+        let n = UnsafeMutablePointer<Int>.allocate(capacity: 1); defer { n.deallocate() }
+        n.pointee = 1
+        var worldMoved = true
+        s.push(counter("Move to Trash", n, failUndo: { worldMoved }))
+        XCTAssertEqual(s.undo(), .refused("moved"))
+        XCTAssertEqual(s.undoTitle, "Undo Move to Trash", "still there to try again")
+        worldMoved = false
+        XCTAssertEqual(s.undo(), .ok(nil))
+    }
+
+    func testTheStackIsBoundedAndSaysWhenItChanged() {
+        let s = UndoStack(limit: 3)
+        var changes = 0
+        s.onChange = { changes += 1 }
+        let n = UnsafeMutablePointer<Int>.allocate(capacity: 1); defer { n.deallocate() }
+        n.pointee = 0
+        for i in 0..<5 { s.push(counter("\(i)", n)) }
+        XCTAssertEqual(changes, 5)
+        XCTAssertEqual(s.undoTitle, "Undo 4")
+        s.undo(); s.undo(); s.undo()
+        XCTAssertFalse(s.canUndo, "only the last three were remembered")
+        XCTAssertEqual(changes, 8)
+    }
+
+    func testRetitlingChangesTheTitleAndNothingElse() {
+        let m = finderMenuBar()
+        let r = m.retitled(["edit.undo": "Undo Move to Trash"])
+        XCTAssertEqual(r.command("edit.undo")?.title, "Undo Move to Trash")
+        XCTAssertEqual(r.command("edit.undo")?.key, m.command("edit.undo")?.key)
+        XCTAssertEqual(r.command("edit.undo")?.summary, m.command("edit.undo")?.summary)
+        XCTAssertEqual(r.commands.map(\.verb), m.commands.map(\.verb))
+        XCTAssertEqual(m.retitled([:]), m)
+    }
+
     func testMenuRowsAndHitTestAgreeAcrossSeparators() {
         let items = [AquaMenuItem("A"), .separator, AquaMenuItem("B"),
                      AquaMenuItem("C", enabled: false), AquaMenuItem("D")]

@@ -370,7 +370,7 @@ how `abyss-session` starts undertow and the bar on the medium, which is the
 case HANDOFF asks `--full` for; it was stopped partway (nothing had failed) and
 is owed.
 
-**P10.5 — undo, decided.**
+**P10.5 — undo, decided. ✅ done.**
 Decided (§6.3): an undo stack per **window** in `Aqua`, of named,
 inverse-carrying entries (`Undo Move to Trash`); Edit ▸ Undo and Redo are
 *derived* from the top of the stack — title and enablement — and are ordinary
@@ -378,6 +378,52 @@ inverse-carrying entries (`Undo Move to Trash`); Edit ▸ Undo and Redo are
 that mutates either pushes its inverse or declares itself not undoable, in its
 definition, where a reviewer can see it. The Finder's rename, move to Trash, new
 folder, duplicate and paste become undoable.
+
+**What P10.5 landed.** `UndoStack` (`de/aqua/Undo.swift`), held by each
+`FinderWindow`. `edit.undo` and `edit.redo` are implemented verbs, so ⌘Z,
+⇧⌘Z, the Edit menu and `abyssmenu run finder edit.undo` are one command; their
+titles come from the stack through `MenuBarModel.retitled` — the model has one
+definition, and "Undo Move to Trash" is state applied to it, not a second
+menu. When the stack changes, or another window becomes key, the Finder calls
+`MenuService.changed()`, and the bar — subscribed since P10.4 — redescribes:
+**`subscribe`'s first customer**, and the injected fault that removed the call
+failed the test. Undoable today: New Folder, Rename, Duplicate, Paste (copy),
+Move (paste after cut), Move to Trash.
+
+**Two rules the Finder follows, both in the code rather than in each verb:**
+
+- **Undoing a creation puts it in the Trash; it never deletes.** That is the
+  Finder's own behaviour, and it means no undo in this tree can destroy data —
+  an undone New Folder with a week's work in it is in the Trash, not gone.
+  Redo takes it back out.
+- **An undo the world has moved under is refused, with the reason, and stays on
+  the stack.** Something now has the old name; the reply says so, the Edit menu
+  still offers the same undo, and once the way is clear it works.
+
+**What it did not find.** Unlike every pass before it in this phase, P10.5 found
+nothing already broken — it is the first pass here that was purely additive, and
+worth saying so rather than inventing a finding. What it leaves:
+
+- **A drop is not undoable** (`FinderWindow.receiveDrop` copies without pushing).
+  A drag is not a menu command, so nothing in this phase reaches it; it is one
+  `pushCreation` when something wants it.
+- **Rename's undo is not exercised live** — renaming is an inline edit driven
+  by keys, and `live-undo.sh` drives the vocabulary; the unit tests cover the
+  stack, and the rename's push is the same `pushMove` Move to Trash uses.
+- **Foreign applications' undo is theirs.** GTK's Edit ▸ Undo is its own action
+  and arrives through P10.6 like any other; nothing here reaches into it.
+
+**Verified (short checks only — see below):** `live-undo.sh` (under a second):
+nothing to undo is disabled with a reason; New Folder retitles Undo and the bar
+is told; undo is the Trash and redo brings it back; Move to Trash undone; an
+undo into an occupied name refused, kept, and successful once clear. Its
+injected fault (no change pushed) failed it. Unit: titles and enablement
+derived from the stack, a new change forgetting redo, a failed undo kept, the
+bound, and retitling touching nothing but the title. `swift test` on Linux:
+449 tests, green; `live-vocabulary.sh`, `live-menus.sh`, `live-menu-focus.sh`
+re-run green. **Not run in this pass:** `run.sh --live`, `run.sh --vm --live` —
+so nothing in P10.5 has been run on FreeBSD yet — and `--full`, owed at the end
+of the phase.
 
 **P10.6 — GTK's menus in our bar.**
 undertow advertises **`gtk_shell1`** with the `GLOBAL_MENU_BAR` capability (so

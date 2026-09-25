@@ -195,6 +195,10 @@ if [ "$live" -eq 1 ]; then
   # opens, chosen by pointer and by keyboard, checked on disk (P10.4).
   echo "== the menu bar =="
   sh "$root/abyss/tests/live-menus.sh" >/dev/null
+  # Undo, decided: per window, a verb like any other, titled from the stack,
+  # pushed to the bar, and never a delete (P10.5).
+  echo "== undo =="
+  sh "$root/abyss/tests/live-undo.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

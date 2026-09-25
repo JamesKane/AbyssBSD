@@ -188,6 +188,37 @@ public struct MenuBarModel: Equatable, Sendable {
     }
 }
 
+extension Command {
+    /// The same command under another title — Undo becomes "Undo Move to
+    /// Trash" and back. Verb, keys, arguments and summary are unchanged: a
+    /// title is what a person reads, and a script says the verb.
+    public func retitled(_ title: String) -> Command {
+        Command(verb, title, key: key, alternateKeys: alternateKeys,
+                arguments: arguments, summary: summary)
+    }
+}
+
+extension Menu {
+    public func retitled(_ titles: [String: String]) -> Menu {
+        Menu(title, items.map { item in
+            switch item {
+            case .command(let c): return .command(titles[c.verb].map(c.retitled) ?? c)
+            case .separator:      return .separator
+            case .submenu(let m): return .submenu(m.retitled(titles))
+            }
+        })
+    }
+}
+
+extension MenuBarModel {
+    /// The model with some commands' titles replaced, by verb. How a title that
+    /// depends on state (Undo's) reaches the bar without a second definition.
+    public func retitled(_ titles: [String: String]) -> MenuBarModel {
+        titles.isEmpty ? self
+            : MenuBarModel(appName: appName, menus: menus.map { $0.retitled(titles) })
+    }
+}
+
 /// Whether a command can run now, and if not, why — the reason is for a script,
 /// which cannot see a greyed-out item.
 public enum Enablement: Equatable, Sendable {
