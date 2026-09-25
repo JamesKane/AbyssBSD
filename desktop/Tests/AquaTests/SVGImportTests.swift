@@ -68,8 +68,8 @@ final class SVGImportTests: XCTestCase {
                        "<text> is not in the subset svg2dl imports (svg g path rect circle ellipse line polyline polygon linearGradient)")
         XCTAssertEqual(err("<svg viewBox=\"0 0 1 1\"><path d=\"M0 0 L1 1\" fill-rule=\"evenodd\"/></svg>"),
                        "<path> fill-rule=evenodd: the draw-list format fills nonzero only")
-        XCTAssertEqual(err("<svg viewBox=\"0 0 1 1\"><g transform=\"rotate(45)\"/></svg>"),
-                       "transform rotate() is not in the subset (translate, scale)")
+        XCTAssertEqual(err("<svg viewBox=\"0 0 1 1\"><g transform=\"perspective(45)\"/></svg>"),
+                       "transform perspective() is not in the subset (translate, scale, rotate, skewX, skewY, matrix)")
         XCTAssertEqual(err("<svg viewBox=\"0 0 1 1\"><rect width=\"1\" height=\"1\" fill=\"hsl(1,2,3)\"/></svg>"),
                        "hsl(1,2,3) is not a colour svg2dl reads (#rgb #rrggbb rgb() none url(#id))")
         XCTAssertEqual(err("<svg><rect/></svg>"), "<svg> has neither a viewBox nor a width and height")

@@ -1,0 +1,254 @@
+# Trench — the Dock's tiles: a raised key holding the icon (PHASE11 P11.9). BeOS lineage: three-quarter perspective, a
+# heavy dark outline, lit from the top left, on a soft cast shadow. Imported
+# at build time from themes/trench/art/*.svg (the Plan Neo study's own icons)
+# by abyss/tools/svg2dl — do not edit by hand; edit the SVG and re-import.
+
+list dock.icon.finder
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.88636 h*0.89773 curve w*0.88636 h*0.93287 w*0.72356 h*0.96136 w*0.52273 h*0.96136 curve w*0.3219 h*0.96136 w*0.15909 h*0.93287 w*0.15909 h*0.89773 curve w*0.15909 h*0.86258 w*0.3219 h*0.83409 w*0.52273 h*0.83409 curve w*0.72356 h*0.83409 w*0.88636 h*0.86258 w*0.88636 h*0.89773 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.15909 h*0.27273 w*0.5 h*0.13636 w*0.84091 h*0.27273 w*0.5 h*0.40909 close
+  fill rgba(0.63922, 0.60392, 0.79608, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.15909 h*0.27273 w*0.5 h*0.40909 w*0.5 h*0.86364 w*0.15909 h*0.72727 close
+  fill linear w*0.15909 h*0.27273 w*0.15909 h*0.86364 stops 0 rgba(0.2902, 0.2549, 0.47059, 1) 1 rgba(0.12941, 0.10196, 0.25098, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.5 h*0.40909 w*0.84091 h*0.27273 w*0.84091 h*0.72727 w*0.5 h*0.86364 close
+  fill rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.21591 h*0.36818 w*0.44318 h*0.45909 w*0.44318 h*0.55682 w*0.21591 h*0.46591 close
+  and path w*0.21591 h*0.51591 w*0.44318 h*0.60682 w*0.44318 h*0.70455 w*0.21591 h*0.61364 close
+  and path w*0.21591 h*0.66364 w*0.44318 h*0.75455 w*0.44318 h*0.79091 w*0.21591 h*0.7 close
+  fill rgba(0.07843, 0.05882, 0.16471, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.01818
+  path w*0.29545 h*0.45 w*0.36364 h*0.47727
+  and path w*0.29545 h*0.59773 w*0.36364 h*0.625
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(0, 0.89804, 1, 1) w*0.04091 round
+  path w*0.18636 h*0.27955 w*0.49545 h*0.15682
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(1, 1, 1, 0.5) w*0.02273 round
+  pop
+end
+
+list dock.icon.browser
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.89063 h*0.89375 curve w*0.89063 h*0.92999 w*0.72973 h*0.95938 w*0.53125 h*0.95938 curve w*0.33277 h*0.95938 w*0.17188 h*0.92999 w*0.17188 h*0.89375 curve w*0.17188 h*0.85751 w*0.33277 h*0.82813 w*0.53125 h*0.82813 curve w*0.72973 h*0.82813 w*0.89063 h*0.85751 w*0.89063 h*0.89375 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.84375 h*0.46875 curve w*0.84375 h*0.6586 w*0.68985 h*0.8125 w*0.5 h*0.8125 curve w*0.31015 h*0.8125 w*0.15625 h*0.6586 w*0.15625 h*0.46875 curve w*0.15625 h*0.2789 w*0.31015 h*0.125 w*0.5 h*0.125 curve w*0.68985 h*0.125 w*0.84375 h*0.2789 w*0.84375 h*0.46875 close
+  fill radial w*0.39688 h*0.33125 w*0.55 stops 0 rgba(0.62353, 0.95686, 1, 1) 0.5 rgba(0.16471, 0.56078, 0.83922, 1) 1 rgba(0.1098, 0.14118, 0.4, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.1625 h*0.48438 curve w*0.2875 h*0.55313 w*0.7125 h*0.55313 w*0.8375 h*0.48438
+  and path w*0.5 h*0.125 curve w*0.35625 h*0.28125 w*0.35625 h*0.65625 w*0.5 h*0.8125
+  and path w*0.5 h*0.125 curve w*0.64375 h*0.28125 w*0.64375 h*0.65625 w*0.5 h*0.8125
+  and path w*0.22813 h*0.28125 curve w*0.36563 h*0.3375 w*0.63438 h*0.3375 w*0.77188 h*0.28125
+  stroke rgba(0.90196, 0.98431, 1, 0.75) w*0.02813
+  path w*0.4568 h*0.24063 curve w*0.47579 h*0.27351 w*0.44756 h*0.32535 w*0.39375 h*0.35641 curve w*0.33994 h*0.38748 w*0.28093 h*0.38601 w*0.26195 h*0.35313 curve w*0.24296 h*0.32024 w*0.27119 h*0.2684 w*0.325 h*0.23734 curve w*0.37881 h*0.20627 w*0.43782 h*0.20774 w*0.4568 h*0.24063 close
+  fill rgba(1, 1, 1, 0.45)
+  pop
+end
+
+list dock.icon.mail
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.88636 h*0.89773 curve w*0.88636 h*0.93287 w*0.72356 h*0.96136 w*0.52273 h*0.96136 curve w*0.3219 h*0.96136 w*0.15909 h*0.93287 w*0.15909 h*0.89773 curve w*0.15909 h*0.86258 w*0.3219 h*0.83409 w*0.52273 h*0.83409 curve w*0.72356 h*0.83409 w*0.88636 h*0.86258 w*0.88636 h*0.89773 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.13636 h*0.19318 w*0.81818 h*0.11364 w*0.875 h*0.78409 w*0.20455 h*0.875 close
+  fill rgba(0.9451, 0.93725, 0.86275, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.13636 h*0.19318 w*0.81818 h*0.11364 w*0.82955 h*0.23636 w*0.14773 h*0.31591 close
+  fill rgba(0.78824, 0.87451, 0.95294, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.02273
+  path w*0.48864 h*0.27273 w*0.52955 h*0.82727
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.02273
+  path w*0.22727 h*0.42045 w*0.43182 h*0.39773
+  and path w*0.23409 h*0.5 w*0.46136 h*0.47273
+  and path w*0.24091 h*0.57955 w*0.4 h*0.56136
+  and path w*0.24773 h*0.65909 w*0.46364 h*0.63409
+  and path w*0.57955 h*0.375 w*0.77273 h*0.35227
+  and path w*0.58636 h*0.45455 w*0.72273 h*0.43864
+  and path w*0.59318 h*0.53409 w*0.78636 h*0.51136
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(0.35294, 0.32941, 0.43922, 1) w*0.025 round
+  path w*0.13636 h*0.19318 w*0.20455 h*0.18523 w*0.21591 h*0.30795 w*0.14773 h*0.31591 close
+  fill rgba(0.53333, 0.53333, 0.8, 1)
+  pop
+end
+
+list dock.icon.music
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.89063 h*0.89375 curve w*0.89063 h*0.92999 w*0.72973 h*0.95938 w*0.53125 h*0.95938 curve w*0.33277 h*0.95938 w*0.17188 h*0.92999 w*0.17188 h*0.89375 curve w*0.17188 h*0.85751 w*0.33277 h*0.82813 w*0.53125 h*0.82813 curve w*0.72973 h*0.82813 w*0.89063 h*0.85751 w*0.89063 h*0.89375 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.21875 h*0.23438 w*0.60938 h*0.14063 w*0.78125 h*0.26563 w*0.79688 h*0.78125 w*0.26563 h*0.89063 close
+  fill linear w*0.21875 h*0.14063 w*0.79688 h*0.89063 stops 0 rgba(0.94902, 0.94118, 1, 1) 1 rgba(0.72549, 0.69804, 0.86275, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.60938 h*0.14063 w*0.625 h*0.30625 w*0.78125 h*0.26563 close
+  fill rgba(0.61176, 0.57647, 0.78431, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.46875 h*0.4375 curve w*0.46875 h*0.48065 w*0.43377 h*0.51563 w*0.39063 h*0.51563 curve w*0.34748 h*0.51563 w*0.3125 h*0.48065 w*0.3125 h*0.4375 curve w*0.3125 h*0.39435 w*0.34748 h*0.35938 w*0.39063 h*0.35938 curve w*0.43377 h*0.35938 w*0.46875 h*0.39435 w*0.46875 h*0.4375 close
+  fill rgba(1, 0.16863, 0.83922, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.65625 h*0.39375 curve w*0.65625 h*0.4369 w*0.62127 h*0.47188 w*0.57813 h*0.47188 curve w*0.53498 h*0.47188 w*0.5 h*0.4369 w*0.5 h*0.39375 curve w*0.5 h*0.3506 w*0.53498 h*0.31563 w*0.57813 h*0.31563 curve w*0.62127 h*0.31563 w*0.65625 h*0.3506 w*0.65625 h*0.39375 close
+  fill rgba(0, 0.89804, 1, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.48438 h*0.64063 curve w*0.48438 h*0.68377 w*0.4494 h*0.71875 w*0.40625 h*0.71875 curve w*0.3631 h*0.71875 w*0.32813 h*0.68377 w*0.32813 h*0.64063 curve w*0.32813 h*0.59748 w*0.3631 h*0.5625 w*0.40625 h*0.5625 curve w*0.4494 h*0.5625 w*0.48438 h*0.59748 w*0.48438 h*0.64063 close
+  fill rgba(1, 0.6902, 0, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.67188 h*0.59375 curve w*0.67188 h*0.6369 w*0.6369 h*0.67188 w*0.59375 h*0.67188 curve w*0.5506 h*0.67188 w*0.51563 h*0.6369 w*0.51563 h*0.59375 curve w*0.51563 h*0.5506 w*0.5506 h*0.51563 w*0.59375 h*0.51563 curve w*0.6369 h*0.51563 w*0.67188 h*0.5506 w*0.67188 h*0.59375 close
+  fill rgba(0.22353, 1, 0.07843, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  pop
+end
+
+list dock.icon.prefs
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.88636 h*0.89773 curve w*0.88636 h*0.93287 w*0.72356 h*0.96136 w*0.52273 h*0.96136 curve w*0.3219 h*0.96136 w*0.15909 h*0.93287 w*0.15909 h*0.89773 curve w*0.15909 h*0.86258 w*0.3219 h*0.83409 w*0.52273 h*0.83409 curve w*0.72356 h*0.83409 w*0.88636 h*0.86258 w*0.88636 h*0.89773 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.75 h*0.13636 w*0.82955 h*0.18636 w*0.90909 h*0.77273 w*0.82955 h*0.73636 close
+  fill rgba(0.08235, 0.05882, 0.17255, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.14773 h*0.22727 w*0.75 h*0.13636 w*0.82955 h*0.73636 w*0.21591 h*0.84091 close
+  fill linear w*0.14773 h*0.13636 w*0.14773 h*0.84091 stops 0 rgba(0.2902, 0.2549, 0.47059, 1) 1 rgba(0.12941, 0.10196, 0.25098, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.52727 h*0.43182 curve w*0.52727 h*0.50964 w*0.46419 h*0.57273 w*0.38636 h*0.57273 curve w*0.30854 h*0.57273 w*0.24545 h*0.50964 w*0.24545 h*0.43182 curve w*0.24545 h*0.354 w*0.30854 h*0.29091 w*0.38636 h*0.29091 curve w*0.46419 h*0.29091 w*0.52727 h*0.354 w*0.52727 h*0.43182 close
+  fill radial w*0.35255 h*0.38109 w*0.21136 stops 0 rgba(0.54118, 0.50196, 0.74118, 1) 1 rgba(0.12941, 0.10196, 0.25098, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.38636 h*0.43182 w*0.30455 h*0.34545
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(0, 0.89804, 1, 1) w*0.04545 round
+  path w*0.62045 h*0.26136 w*0.67045 h*0.25455 w*0.725 h*0.67273 w*0.675 h*0.67955 close
+  fill rgba(0.06667, 0.05098, 0.14118, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.01818
+  path w*0.59545 h*0.36818 w*0.72273 h*0.35 w*0.73864 h*0.45 w*0.61136 h*0.46818 close
+  fill linear w*0.59545 h*0.35 w*0.59545 h*0.46818 stops 0 rgba(1, 0.70196, 0.9451, 1) 0.5 rgba(1, 0.16863, 0.83922, 1) 1 rgba(0.62745, 0, 0.49804, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.02273
+  path w*0.25 h*0.67045 w*0.52273 h*0.62955 w*0.53636 h*0.72727 w*0.26364 h*0.76818 close
+  fill rgba(0.11373, 0.07843, 0.01961, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.02273
+  path w*0.29545 h*0.7 w*0.43182 h*0.67955
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(1, 0.6902, 0, 1) w*0.02955
+  pop
+end
+
+list dock.icon.genericApp
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.88636 h*0.89773 curve w*0.88636 h*0.93287 w*0.72356 h*0.96136 w*0.52273 h*0.96136 curve w*0.3219 h*0.96136 w*0.15909 h*0.93287 w*0.15909 h*0.89773 curve w*0.15909 h*0.86258 w*0.3219 h*0.83409 w*0.52273 h*0.83409 curve w*0.72356 h*0.83409 w*0.88636 h*0.86258 w*0.88636 h*0.89773 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.38636 h*0.72727 w*0.59091 h*0.70455 w*0.67045 h*0.84545 w*0.325 h*0.88636 close
+  fill rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.125 h*0.19318 w*0.79545 h*0.11364 w*0.84091 h*0.67045 w*0.18182 h*0.75682 close
+  fill linear w*0.125 h*0.11364 w*0.125 h*0.75682 stops 0 rgba(0.2902, 0.2549, 0.47059, 1) 1 rgba(0.12941, 0.10196, 0.25098, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.20455 h*0.26818 w*0.72273 h*0.20455 w*0.75682 h*0.60455 w*0.25 h*0.67045 close
+  fill rgba(0.01961, 0.01961, 0.03137, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.02273
+  path w*0.56818 h*0.33024 w*0.65 h*0.32019 w*0.65 h*0.46564 w*0.56818 h*0.47569 close
+  fill rgba(0.22353, 1, 0.07843, 1)
+  path w*0.21591 h*0.27955 w*0.71136 h*0.21818
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(1, 1, 1, 0.15) w*0.02273
+  pop
+end
+
+list dock.icon.trash
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.89063 h*0.89375 curve w*0.89063 h*0.92999 w*0.72973 h*0.95938 w*0.53125 h*0.95938 curve w*0.33277 h*0.95938 w*0.17188 h*0.92999 w*0.17188 h*0.89375 curve w*0.17188 h*0.85751 w*0.33277 h*0.82813 w*0.53125 h*0.82813 curve w*0.72973 h*0.82813 w*0.89063 h*0.85751 w*0.89063 h*0.89375 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.23438 h*0.28125 w*0.76563 h*0.28125 w*0.70313 h*0.8375 curve w*0.59375 h*0.8875 w*0.40625 h*0.8875 w*0.29688 h*0.8375 close
+  fill linear w*0.23438 h*0.28125 w*0.76563 h*0.28125 stops 0 rgba(0.16471, 0.12941, 0.31373, 1) 0.35 rgba(0.54118, 0.50196, 0.74118, 1) 1 rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.76563 h*0.28125 curve w*0.76563 h*0.32957 w*0.6467 h*0.36875 w*0.5 h*0.36875 curve w*0.3533 h*0.36875 w*0.23438 h*0.32957 w*0.23438 h*0.28125 curve w*0.23438 h*0.23293 w*0.3533 h*0.19375 w*0.5 h*0.19375 curve w*0.6467 h*0.19375 w*0.76563 h*0.23293 w*0.76563 h*0.28125 close
+  fill rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.34375 h*0.39063 w*0.37188 h*0.78438
+  and path w*0.5 h*0.40625 w*0.5 h*0.8125
+  and path w*0.65625 h*0.39063 w*0.62813 h*0.78438
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 0.35) w*0.03125
+  path w*0.6125 h*0.57813 curve w*0.6125 h*0.64026 w*0.56213 h*0.69063 w*0.5 h*0.69063 curve w*0.43787 h*0.69063 w*0.3875 h*0.64026 w*0.3875 h*0.57813 curve w*0.3875 h*0.51599 w*0.43787 h*0.46563 w*0.5 h*0.46563 curve w*0.56213 h*0.46563 w*0.6125 h*0.51599 w*0.6125 h*0.57813 close
+  stroke rgba(0.22353, 1, 0.07843, 1) w*0.05625 dash=6.5,2.4
+  path w*0.6 h*0.47813 w*0.64063 h*0.55938 w*0.55 h*0.56563 close
+  fill rgba(0.22353, 1, 0.07843, 1)
+  pop
+end
+
+list dock.icon.trashFull
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.89063 h*0.89375 curve w*0.89063 h*0.92999 w*0.72973 h*0.95938 w*0.53125 h*0.95938 curve w*0.33277 h*0.95938 w*0.17188 h*0.92999 w*0.17188 h*0.89375 curve w*0.17188 h*0.85751 w*0.33277 h*0.82813 w*0.53125 h*0.82813 curve w*0.72973 h*0.82813 w*0.89063 h*0.85751 w*0.89063 h*0.89375 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.23438 h*0.28125 w*0.76563 h*0.28125 w*0.70313 h*0.8375 curve w*0.59375 h*0.8875 w*0.40625 h*0.8875 w*0.29688 h*0.8375 close
+  fill linear w*0.23438 h*0.28125 w*0.76563 h*0.28125 stops 0 rgba(0.16471, 0.12941, 0.31373, 1) 0.35 rgba(0.54118, 0.50196, 0.74118, 1) 1 rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.76563 h*0.28125 curve w*0.76563 h*0.32957 w*0.6467 h*0.36875 w*0.5 h*0.36875 curve w*0.3533 h*0.36875 w*0.23438 h*0.32957 w*0.23438 h*0.28125 curve w*0.23438 h*0.23293 w*0.3533 h*0.19375 w*0.5 h*0.19375 curve w*0.6467 h*0.19375 w*0.76563 h*0.23293 w*0.76563 h*0.28125 close
+  fill rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.0375 round
+  path w*0.34375 h*0.39063 w*0.37188 h*0.78438
+  and path w*0.5 h*0.40625 w*0.5 h*0.8125
+  and path w*0.65625 h*0.39063 w*0.62813 h*0.78438
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 0.35) w*0.03125
+  path w*0.6125 h*0.57813 curve w*0.6125 h*0.64026 w*0.56213 h*0.69063 w*0.5 h*0.69063 curve w*0.43787 h*0.69063 w*0.3875 h*0.64026 w*0.3875 h*0.57813 curve w*0.3875 h*0.51599 w*0.43787 h*0.46563 w*0.5 h*0.46563 curve w*0.56213 h*0.46563 w*0.6125 h*0.51599 w*0.6125 h*0.57813 close
+  stroke rgba(0.22353, 1, 0.07843, 1) w*0.05625 dash=6.5,2.4
+  path w*0.6 h*0.47813 w*0.64063 h*0.55938 w*0.55 h*0.56563 close
+  fill rgba(0.22353, 1, 0.07843, 1)
+  pop
+end
+

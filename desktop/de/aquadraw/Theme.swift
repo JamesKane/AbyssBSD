@@ -73,6 +73,8 @@ public struct ThemeTokens: Sendable, Equatable {
     public var chromePillWidth: Double = 22
     public var chromePillHeight: Double = 13
     public var chromePillInset: Double = 8
+    /// The window title's size — measured and drawn at it (P11.9).
+    public var chromeTitleSize: Double = 13
     /// Below this many points an icon draws its `.small` variant when it has
     /// one (P11.8) — detail that is only legible at full size.
     public var iconSmallBelow: Double = 24
@@ -253,6 +255,18 @@ public struct ThemeTokens: Sendable, Equatable {
     // The compositor's frames.
     public var inactiveFrameWash: Color = Color(1, 1, 1, 0.35)
 
+    // Accents and materials a look beyond Jaguar's needs (P11.9): Aqua's own
+    // lists never read them; its values here are only sensible, not Jaguar's.
+    public var glowFocus: Color = Color(hex: 0x74a6ee)   // focus: a ring, a glow, an active window's edge
+    public var glowSelect: Color = Color(hex: 0x3f6fdf)   // selection's glow
+    public var bevelLight: Color = Color(1, 1, 1, 0.6)   // a bevel's lit edge
+    public var bevelShade: Color = Color(0, 0, 0, 0.35)   // a bevel's shaded edge
+    public var readoutBackground: Color = Color(hex: 0x2b2b2b)   // an LCD's glass
+    public var readoutText: Color = Color(hex: 0x9ee06b)   // an LCD's lit segments
+    public var ledOn: Color = Color(hex: 0x3cc43c)   // a running LED
+    public var ledWarn: Color = Color(hex: 0xe8a33a)   // a degraded LED
+    public var alert: Color = Color(hex: 0xd6453b)   // an alert's colour
+
     public var fontFamily: String = "Lucida Grande"
     // Type by role (P11.7): a family per role, found by name. Jaguar's are
     // Lucida Grande and Monaco — neither ships free, so on this desktop each
@@ -261,6 +275,11 @@ public struct ThemeTokens: Sendable, Equatable {
     public var fontChrome: String = "Lucida Grande"
     public var fontReadout: String = "Lucida Grande"
     public var fontMono: String = "Monaco"
+    /// A role's case and tracking (P11.9): `chrome.upper = true`,
+    /// `chrome.tracking = 0.14` (em) in `[fonts]`. Applied where the role is
+    /// shaped, so what is measured is what is drawn. Jaguar has none.
+    public var roleUpper: Set<String> = []
+    public var roleTracking: [String: Double] = [:]
 
     // The window frame's shape (P11.6): which gadgets, on which side, in what
     // order; where the title sits and how heavy it is. `[chrome]` in theme.ini.
@@ -389,6 +408,15 @@ public struct ThemeTokens: Sendable, Equatable {
         ("dockLabelBackground", \.dockLabelBackground),
         ("dockLabelText", \.dockLabelText),
         ("inactiveFrameWash", \.inactiveFrameWash),
+        ("glowFocus", \.glowFocus),
+        ("glowSelect", \.glowSelect),
+        ("bevelLight", \.bevelLight),
+        ("bevelShade", \.bevelShade),
+        ("readoutBackground", \.readoutBackground),
+        ("readoutText", \.readoutText),
+        ("ledOn", \.ledOn),
+        ("ledWarn", \.ledWarn),
+        ("alert", \.alert),
     ]
     nonisolated(unsafe) static let metricKeys: [(String, WritableKeyPath<ThemeTokens, Double>)] = [
         ("titleBarHeight", \.titleBarHeight),
@@ -402,6 +430,7 @@ public struct ThemeTokens: Sendable, Equatable {
         ("chrome.pillWidth", \.chromePillWidth),
         ("chrome.pillHeight", \.chromePillHeight),
         ("chrome.pillInset", \.chromePillInset),
+        ("chrome.titleSize", \.chromeTitleSize),
         ("icon.smallBelow", \.iconSmallBelow),
         ("toast.width", \.toastWidth),
         ("toast.topInset", \.toastTopInset),
@@ -487,8 +516,15 @@ public enum Theme {
 
     /// Replace the current theme. Lists a theme does not ship stay Jaguar's,
     /// as tokens it does not set do.
-    public static func use(_ tokens: ThemeTokens, lists theirs: DrawListFile? = nil) {
+    /// The loaded theme's parameters (a person's settings, within the theme's
+    /// bounds): what a list reads as `$name` when the widget does not pass one.
+    nonisolated(unsafe) public private(set) static var parameters: [String: Double] = [:]
+
+    public static func use(_ tokens: ThemeTokens, lists theirs: DrawListFile? = nil,
+                           parameters p: [String: Double] = [:]) {
         current = tokens
+        parameters = p
+        Text.useRoleStyle(upper: tokens.roleUpper, tracking: tokens.roleTracking)
         Text.useRoles([.interface: tokens.fontInterface, .chrome: tokens.fontChrome,
                        .readout: tokens.fontReadout, .mono: tokens.fontMono])
         colorTable = ThemeTokens.colorKeys.map { tokens[keyPath: $0.1] }

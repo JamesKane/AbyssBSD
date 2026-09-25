@@ -153,7 +153,10 @@ public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
 
     // A small folder proxy icon to the left of the centred title, as the Finder
     // shows for the folder a window represents.
-    let titleW = Draw.textWidth(cr, finderDisplayName(state.path), size: Theme.fontSize)
+    // Measured as the title is drawn — the chrome role, in the title's weight
+    // — or a theme whose chrome type is wider puts the proxy on the title.
+    let titleW = Draw.textWidth(cr, finderDisplayName(state.path), size: Theme.current.chromeTitleSize,
+                                style: Theme.current.titleBold ? .bold : .regular, role: .chrome)
     drawFinderIcon(cr, .folder,
                    Rect(w / 2 - titleW / 2 - 19, (Theme.titleBarHeight - 14) / 2, 14, 14))
 

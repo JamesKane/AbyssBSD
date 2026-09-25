@@ -96,6 +96,15 @@ public enum Text {
         for d in dirs { at_font_add_dir(d) }
     }
 
+    /// Each role's case and tracking (em), from the theme (P11.9).
+    nonisolated(unsafe) private static var upperRoles: Set<String> = []
+    nonisolated(unsafe) private static var trackingRoles: [String: Double] = [:]
+    public static func useRoleStyle(upper: Set<String>, tracking: [String: Double]) {
+        guard upper != upperRoles || tracking != trackingRoles else { return }
+        upperRoles = upper; trackingRoles = tracking
+        shapeCache.removeAll(keepingCapacity: true)
+    }
+
     /// What each role got: its family when found, and what it asked for.
     nonisolated(unsafe) public private(set) static var roleRequest: [Role: String] = [:]
     nonisolated(unsafe) private static var roleApplied: [Role: String] = [:]
@@ -190,8 +199,12 @@ public enum Text {
         guard available, !s.isEmpty, px > 0 else { return [] }
         let key = ShapeKey(s: s, px: px, style: style.rawValue, role: role.rawValue)
         if let g = shapeCache[key] { return g }
-        let glyphs: [at_glyph] = s.withCString { cstr in
-            var cap = Int32(s.utf8.count + 16)
+        // The role's case and tracking, applied here, so a measurement and
+        // the drawing it lays out agree (§2.9).
+        let text = upperRoles.contains(role.name) ? s.uppercased() : s
+        let track = (trackingRoles[role.name] ?? 0) * Double(px)
+        var glyphs: [at_glyph] = text.withCString { cstr in
+            var cap = Int32(text.utf8.count + 16)
             while true {
                 var buf = [at_glyph](repeating: at_glyph(), count: Int(cap))
                 let n = buf.withUnsafeMutableBufferPointer {
@@ -202,6 +215,7 @@ public enum Text {
                 cap = n // buffer was too small (rare: a decomposition overran) — retry
             }
         }
+        if track != 0 { for i in glyphs.indices { glyphs[i].x_advance += track } }
         if shapeCache.count >= shapeCacheCap { shapeCache.removeAll(keepingCapacity: true) }
         shapeCache[key] = glyphs
         return glyphs

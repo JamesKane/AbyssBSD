@@ -19,7 +19,10 @@
 //              opacity (attributes or style="…"), #rgb, #rrggbb, rgb(), none,
 //              url(#gradient) for a linearGradient (userSpaceOnUse or the
 //              object's bounding box)
-//   transform  translate() and scale() on g and shapes
+//   transform  translate() scale() rotate() skewX() skewY() matrix() — all
+//              affine, applied to the points (curves transform exactly)
+//   gradients  linearGradient and radialGradient (centre and radius; a focal
+//              point is not read)
 //
 // Coordinates come out as fractions of the list's rect — `w*0.25 h*0.5` — so
 // the icon draws at any size.
@@ -166,6 +169,8 @@ struct Style {
     var stroke: PaintSpec = .none
     var strokeWidth = 1.0
     var fillOpacity = 1.0, strokeOpacity = 1.0, opacity = 1.0
+    var round = false                // stroke-linejoin / -linecap round
+    var dash: [Double] = []
 }
 
 /// A 2-D affine transform, as SVG writes it: x' = a x + c y + e, y' = b x + d y + f.
@@ -181,6 +186,8 @@ struct Affine {
 
 struct Gradient {
     var x1 = 0.0, y1 = 0.0, x2 = 1.0, y2 = 0.0
+    var radial = false
+    var cx = 0.5, cy = 0.5, r = 0.5
     var userSpace = false
     var stops: [(Double, RGBA)] = []
 }
@@ -210,14 +217,16 @@ struct Converter {
 
     mutating func collectGradients(_ e: Element) {
         for c in e.children {
-            if c.name == "linearGradient", let id = c.attrs["id"] {
+            if c.name == "linearGradient" || c.name == "radialGradient", let id = c.attrs["id"] {
                 var g = Gradient()
+                g.radial = c.name == "radialGradient"
                 g.userSpace = c.attrs["gradientUnits"] == "userSpaceOnUse"
                 func coord(_ k: String, _ d: Double) -> Double {
                     guard let v = c.attrs[k] else { return d }
                     return v.hasSuffix("%") ? (Double(v.dropLast()) ?? d * 100) / 100 : (Double(v) ?? d)
                 }
                 g.x1 = coord("x1", 0); g.y1 = coord("y1", 0); g.x2 = coord("x2", 1); g.y2 = coord("y2", 0)
+                g.cx = coord("cx", 0.5); g.cy = coord("cy", 0.5); g.r = coord("r", 0.5)
                 for s in c.children where s.name == "stop" {
                     var st = styleAttrs(s)
                     let off = s.attrs["offset"].map { $0.hasSuffix("%") ? (Double($0.dropLast()) ?? 0) / 100 : (Double($0) ?? 0) } ?? 0
@@ -246,7 +255,7 @@ struct Converter {
     mutating func walk(_ els: [Element], style parent: Style, m parentM: Affine) throws {
         for e in els {
             switch e.name {
-            case "title", "desc", "metadata", "defs", "linearGradient": continue
+            case "title", "desc", "metadata", "defs", "linearGradient", "radialGradient": continue
             default: break
             }
             var st = parent
@@ -260,6 +269,9 @@ struct Converter {
             if let v = a["fill-opacity"].flatMap(Double.init) { st.fillOpacity = v }
             if let v = a["stroke-opacity"].flatMap(Double.init) { st.strokeOpacity = v }
             if let v = a["opacity"].flatMap(Double.init) { st.opacity *= v }
+            if let v = a["stroke-linejoin"] { st.round = v == "round" || st.round }
+            if let v = a["stroke-linecap"] { st.round = v == "round" || st.round }
+            if let v = a["stroke-dasharray"] { st.dash = numbers(v) }
             var m = parentM
             if let t = e.attrs["transform"] { m = try transform(t).then(parentM) }
             switch e.name {
@@ -374,7 +386,15 @@ struct Converter {
         let bbox = (x: xs.min()!, y: ys.min()!, w: xs.max()! - xs.min()!, h: ys.max()! - ys.min()!)
         if fill, let f = try paintWords(st.fill, st.fillOpacity * st.opacity, bbox, m) { lines.append("fill " + f) }
         if let s = try paintWords(st.stroke, st.strokeOpacity * st.opacity, bbox, m) {
-            lines.append("stroke \(s) w*\(fmt(st.strokeWidth * m.scale / vb.w))")
+            var line = "stroke \(s) w*\(fmt(st.strokeWidth * m.scale / vb.w))"
+            if st.round { line += " round" }
+            if !st.dash.isEmpty {
+                // Dashes are in the SVG's units; the list's are points at the
+                // drawn size, which svg2dl cannot know — so they are written at
+                // the viewBox's own scale (a 64-unit icon drawn at 64 pt).
+                line += " dash=" + st.dash.map { fmt($0 * m.scale) }.joined(separator: ",")
+            }
+            lines.append(line)
         }
     }
 
@@ -386,6 +406,13 @@ struct Converter {
         case .gradient(let id):
             guard let g = gradients[id] else { throw fail("url(#\(id)): no linearGradient with that id") }
             guard g.stops.count >= 2 else { throw fail("url(#\(id)): a gradient wants two stops") }
+            let stopsText = g.stops.map { "\(fmt($0.0)) \(colour($0.1, alpha))" }.joined(separator: " ")
+            if g.radial {
+                var (cx, cy, r) = (g.cx, g.cy, g.r)
+                if g.userSpace { (cx, cy) = m.apply(cx, cy); r *= m.scale }
+                else { cx = bbox.x + cx * bbox.w; cy = bbox.y + cy * bbox.h; r *= max(bbox.w, bbox.h) }
+                return "radial \(px(cx)) \(py(cy)) w*\(fmt(r / vb.w)) stops \(stopsText)"
+            }
             var (x1, y1, x2, y2) = (g.x1, g.y1, g.x2, g.y2)
             if g.userSpace {
                 (x1, y1) = m.apply(x1, y1); (x2, y2) = m.apply(x2, y2)
@@ -441,7 +468,18 @@ struct Converter {
             switch fnName {
             case "translate": step = Affine(e: n.first ?? 0, f: n.count > 1 ? n[1] : 0)
             case "scale": step = Affine(a: n.first ?? 1, d: n.count > 1 ? n[1] : (n.first ?? 1))
-            default: throw fail("transform \(fnName)() is not in the subset (translate, scale)")
+            case "rotate":
+                let a = (n.first ?? 0) * .pi / 180, c = cos(a), sn = sin(a)
+                let r = Affine(a: c, b: sn, c: -sn, d: c)
+                if n.count == 3 {   // about (cx, cy)
+                    step = Affine(e: -n[1], f: -n[2]).then(r).then(Affine(e: n[1], f: n[2]))
+                } else { step = r }
+            case "skewX": step = Affine(c: tan((n.first ?? 0) * .pi / 180))
+            case "skewY": step = Affine(b: tan((n.first ?? 0) * .pi / 180))
+            case "matrix":
+                guard n.count == 6 else { throw fail("matrix() wants six numbers") }
+                step = Affine(a: n[0], b: n[1], c: n[2], d: n[3], e: n[4], f: n[5])
+            default: throw fail("transform \(fnName)() is not in the subset (translate, scale, rotate, skewX, skewY, matrix)")
             }
             m = step.then(m)            // listed left to right, applied right to left
             rest = rest[rest.index(after: close)...].drop { $0 == " " || $0 == "," }

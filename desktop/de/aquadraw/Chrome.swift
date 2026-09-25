@@ -132,7 +132,7 @@ public func chromeHit(_ l: ChromeLayout, x: Double, y: Double) -> ChromeHit {
 /// `gadget.<name>`, `window.frame`). Returns the body rect below the title bar.
 @discardableResult
 public func paintWindowChrome(_ cr: OpaquePointer, w: Double, h: Double,
-                              title: String, foreign: Bool = false) -> Rect {
+                              title: String, foreign: Bool = false, active: Bool = true) -> Rect {
     let l = windowChrome(w: w, h: h, foreign: foreign)
     let whole = Rect(0, 0, w, h)
     // The gadgets and the title are drawn inside the frame's rounded clip, as
@@ -140,7 +140,7 @@ public func paintWindowChrome(_ cr: OpaquePointer, w: Double, h: Double,
     // text composited without one (one pixel of the window@2x title, by 12).
     cairo_save(cr)
     Draw.clip("window.shape", cr, whole)
-    Draw.paint("window", cr, whole)
+    Draw.paint("window", cr, whole, active ? .active : [])
     // The lights are always drawn lit: an inactive frame is washed over
     // afterwards (undertow's `window.inactive`), as P9.6 did it. Left side,
     // title, right side — the order Jaguar's frame was painted in.
@@ -150,19 +150,15 @@ public func paintWindowChrome(_ cr: OpaquePointer, w: Double, h: Double,
     }
     let split = min(Theme.current.chromeLeft.filter { !(foreign && $0 == .pill) }.count, l.gadgets.count)
     l.gadgets[..<split].forEach(gadget)
-    let cy = l.titleBar.h / 2
+    // The title: `window.title` (or `.bold`), centred on $x — the layout's
+    // anchor, or, for a left title, its measured centre.
     let style: Text.Style = l.titleBold ? .bold : .regular
-    switch l.titleAlign {
-    case .center:
-        Draw.text(cr, title, centerX: l.titleX, centerY: cy, color: Theme.titleText,
-                  size: Theme.fontSize, style: style, role: .chrome)
-    case .left:
-        let tw = Draw.textWidth(cr, title, size: Theme.fontSize, style: style, role: .chrome)
-        Draw.text(cr, title, centerX: l.titleX + tw / 2, centerY: cy, color: Theme.titleText,
-                  size: Theme.fontSize, style: style, role: .chrome)
-    }
+    let cx = l.titleAlign == .center ? l.titleX
+        : l.titleX + Draw.textWidth(cr, title, size: Theme.current.chromeTitleSize, style: style, role: .chrome) / 2
+    Draw.paint(l.titleBold ? "window.title.bold" : "window.title", cr, l.titleBar,
+               active ? .active : [], label: title, parameters: ["x": cx])
     l.gadgets[split...].forEach(gadget)
     cairo_restore(cr)
-    Draw.paint("window.frame", cr, whole)
+    Draw.paint("window.frame", cr, whole, active ? .active : [])
     return l.body
 }

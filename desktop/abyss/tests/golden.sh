@@ -90,6 +90,29 @@ drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2
 icons|icons|
 icons@2x|icons|AQUA_SCALE=2
 svg-beacon@2x|icons|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl AQUA_SCALE=2
+trench-window|window|ABYSS_THEME=trench
+trench-window@2x|window|ABYSS_THEME=trench AQUA_SCALE=2
+trench-widgets|widgets|ABYSS_THEME=trench
+trench-sysprefs|sysprefs|ABYSS_THEME=trench
+trench-finder|finder|ABYSS_THEME=trench
+trench-finder-list|finder|ABYSS_THEME=trench AQUA_FINDER_VIEW=list
+trench-finder-rename|finder|ABYSS_THEME=trench AQUA_FINDER_STATE=rename
+trench-menubar|menubar|ABYSS_THEME=trench ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2
+trench-dock|dock|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1
+trench-menu|menu|ABYSS_THEME=trench AQUA_MENU_MARKS=1
+trench-frame|frame|ABYSS_THEME=trench
+trench-sheet|sheet|ABYSS_THEME=trench
+trench-tabs|tabs|ABYSS_THEME=trench
+trench-scroll|scroll|ABYSS_THEME=trench
+trench-notify|notify|ABYSS_THEME=trench
+trench-wallpaper|wallpaper|ABYSS_THEME=trench
+trench-installer-disk|installer|ABYSS_THEME=trench AQUA_INSTALLER_PAGE=disk
+trench-icons|icons|ABYSS_THEME=trench
+trench-hc-widgets|widgets|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc
+trench-hc-finder|finder|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc
+trench-day-widgets|widgets|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
+trench-day-window|window|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
+trench-day-finder|finder|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
 drawlist-roles@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes AQUA_SCALE=2'
 
 render() {  # render NAME SCENE EXTRA OUT
@@ -102,6 +125,14 @@ render() {  # render NAME SCENE EXTRA OUT
       "$aqua") > "$work/$1.log" 2>&1 \
     || { echo "FAIL: $1 did not render: $(tail -2 "$work/$1.log")"; return 1; }
 }
+
+# **No Swift knows a theme's name** but the default's (PHASE11 P11.9, PRODUCT
+# §8.3): a second look that the code names is a back door, not a theme.
+if git -C "$root" grep -qi trench -- 'de/*.swift' 'de/*.c' 'de/*.h' 2>/dev/null \
+   || grep -rqi trench "$root/de" 2>/dev/null; then
+  echo "FAIL: code under de/ names the trench theme: $(grep -rli trench "$root/de" | head -3)"
+  exit 1
+fi
 
 # How many lists themes/aqua/draw/ defines — what every scene must say it read.
 lists=$(cat "$root"/themes/aqua/draw/*.dl "$root"/themes/aqua/icons/*.dl 2>/dev/null | grep -c '^list ' || true)
@@ -126,10 +157,17 @@ EOF
   # themes, P11.6): then it must have drawn from THAT file — which ships no
   # lists, so every one is Jaguar's.
   case "$extra" in
-    *ABYSS_THEME=*)
+    *ABYSS_THEME_DIR=*)
       t=$(printf '%s\n' "$extra" | tr ' ' '\n' | sed -n 's/^ABYSS_THEME=//p')
       grep -q "^Theme: .* from .*abyss/tests/themes/$t/theme.ini, 0 draw lists from draw/ and icons/" "$work/$name.log" \
         || { echo "FAIL: $name was not drawn from abyss/tests/themes/$t: $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;
+    *ABYSS_THEME=*)
+      # A theme in the repository's themes/ (Trench, P11.9): drawn from its own
+      # file and every list it ships.
+      t=$(printf '%s\n' "$extra" | tr ' ' '\n' | sed -n 's/^ABYSS_THEME=//p')
+      n=$(cat "$root/themes/$t"/draw/*.dl "$root/themes/$t"/icons/*.dl 2>/dev/null | grep -c '^list ' || true)
+      grep -q "^Theme: .* from .*/themes/$t/theme.ini, $n draw lists from draw/ and icons/" "$work/$name.log" \
+        || { echo "FAIL: $name was not drawn from themes/$t ($n lists): $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;
     *)
       grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini, $lists draw lists from draw/ and icons/" "$work/$name.log" \
         || { echo "FAIL: $name was not drawn from themes/aqua/ (theme.ini and $lists lists in draw/): $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;

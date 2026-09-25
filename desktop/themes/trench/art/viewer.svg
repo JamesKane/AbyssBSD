@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench icon "viewer" (PHASE11 P11.9): from the Plan Neo chrome study
+     (claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E), the "neon" scheme's values
+     written in for its CSS variables, and imported with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+  </defs>
+  <ellipse cx="23" cy="39.5" rx="16" ry="2.8" fill="#000" opacity=".38"/><path d="M7 12l15-6 15 6-15 6z" fill="#a39acb" stroke="#170c2c" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 12l15 6v20L7 32z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1.5" stroke-linejoin="round"/><path d="M22 18l15-6v20l-15 6z" fill="#2a2150" stroke="#170c2c" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.5 16.2l10 4v4.3l-10-4zM9.5 22.7l10 4V31l-10-4zM9.5 29.2l10 4v1.6l-10-4z" fill="#140f2a" stroke="#170c2c" stroke-width=".8"/><path d="M13 19.8l3 1.2M13 26.3l3 1.2" style="stroke:#00e5ff" stroke-width="1.8" stroke-linecap="round"/><path d="M8.2 12.3l13.6-5.4" stroke="#fff" stroke-opacity=".5" stroke-linecap="round"/>
+</svg>

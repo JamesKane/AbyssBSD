@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench icon "srv" (PHASE11 P11.9): from the Plan Neo chrome study
+     (claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E), the "neon" scheme's values
+     written in for its CSS variables, and imported with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/><path d="M5 12l11-4.5 11 4.5-11 4.5z" fill="#a39acb" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M5 12l11 4.5v10L5 22z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M16 16.5l11-4.5v10l-11 4.5z" fill="#2a2150" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M8.5 16.3l2.2.9v4l-2.2-.9zM11.8 17.6l2.2.9v4l-2.2-.9z" fill="#050508"/><circle cx="22.5" cy="16.8" r="1.7" style="fill:#39ff14" stroke="#170c2c" stroke-width=".8"/>
+</svg>

@@ -437,6 +437,16 @@ list window
   stroke separator 1
 end
 
+# The title, centred on $x in the title bar (the layout says where); active is
+# the frontmost window. `.bold` when [chrome] titleWeight = bold.
+list window.title
+  text $label $x h/2 center size=@chrome.titleSize role=chrome color=titleText
+end
+
+list window.title.bold
+  text $label $x h/2 center bold size=@chrome.titleSize role=chrome color=titleText
+end
+
 # The border, drawn last, over everything.
 list window.frame
   rect 0 0 w h @windowCornerRadius top
@@ -668,6 +678,11 @@ list menubar
   rules across 5.5 4 menuBarBottom/0.5 1
   path 0 h-0.5 w h-0.5
   stroke menuBarBorder 1
+end
+
+# The clock: a readout, in its slot at the bar's right ($size the bar's type).
+list menubar.clock
+  text $label 2 h-6.5 left baseline size=$size role=readout color=menuBarText
 end
 
 # An open title's highlight; the rect is the title's slot, full height.

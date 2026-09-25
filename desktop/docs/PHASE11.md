@@ -780,6 +780,108 @@ visual:** `git grep -i trench -- 'de/*.swift'` finds nothing but the default
 theme's name, and any other hit is a back door (PRODUCT §8.3). Trench also gets
 golden images of its own, so it cannot rot silently.
 
+**Done.** What landed:
+
+- **`themes/trench/`**, the second theme. It has the most data of any theme
+  in the tree, and **no Swift names it**; `golden.sh` refuses to run if code
+  under `de/` does.
+  - `theme.ini`: every token mapped onto the study's variables. `neon` is
+    the default, and `neon-hc` and `daylight` are schemes, all verbatim. The
+    study's `--gk`, `--bloom` and `--bevel` are parameters, and the metrics
+    give a 24 px bar, square corners and 18 px gadgets.
+  - Roles: Chakra Petch (chrome, uppercase, tracked 0.14 em), Plex Sans
+    Condensed, VT323, Plex Mono.
+  - `[chrome]`: close on the left, zoom and depth on the right, a bold
+    centred title.
+- **79 draw lists** in the study's materials: raised keys, sunken wells,
+  brushed metal, anodized noise, a bevel of `$bevel` px, and glow of `$gk`
+  on focus and selection:
+  - the frame, with a cyan underline and title halo on the active window;
+  - Amiga gadgets, MUI controls (a grooved metal slider thumb, a cycle
+    gadget, legends set into group frames);
+  - a menu of bevelled keys on black with a magenta selection key;
+  - a screen bar of brushed metal, with the clock a backlit VT323 LCD
+    showing ghost segments and bloom;
+  - the desk's glows and 24 px dot grid.
+- **13 icons from the study's own art**, imported by `svg2dl` from
+  `themes/trench/art/*.svg` (the study's symbols, the `neon` values written
+  in):
+  - BeOS-style: three-quarter perspective, heavy outline, cast shadow;
+  - the Finder's four kinds, and the Dock's tiles as raised keys holding
+    the icon.
+- **What the format gained, all generic:**
+  - theme parameters readable by any list (`$gk`), and glow strength as an
+    operand;
+  - **a role's case and tracking** (`chrome.upper`, `chrome.tracking`),
+    applied where the role is shaped, so measurement and drawing agree;
+  - the window title (`window.title`) and the menu-bar clock
+    (`menubar.clock`, the readout role) as lists, with `chrome.titleSize`
+    read by both painter and measurer;
+  - text `halo=` (a cached blurred glow under a run), `ghost=eights`, a
+    `dots` paint, and `textw(size, role)`;
+  - nine tokens Aqua never read (`glowFocus`, `glowSelect`, `bevelLight`,
+    `bevelShade`, `readoutBackground`, `readoutText`, `ledOn`, `ledWarn`,
+    `alert`), and `ABYSS_THEME_SCHEME`;
+  - in `svg2dl`: radial gradients, rotate, skew and matrix, round joins,
+    dashes.
+- **23 Trench goldens, 69 scenes in all**, looked at before they were
+  written, on both platforms:
+  - neon: every AquaDemo scene;
+  - neon-hc and daylight: the controls, a window and the Finder.
+
+  Every Aqua scene is still pixel-identical.
+
+![Trench: an AquaDemo window in the Plan Neo look — brushed-metal bar, cyan
+underline, Amiga gadgets, anodized body](screenshots/trench-window.png)
+
+**The test the format can fail: where it did.** Most of Plan Neo is said.
+What is not is this, and each item says whose it is:
+
+- **Outside the window.** The active window's outer cyan glow, the drop
+  shadow, scanlines and glass blur are layer 4, the compositor's, with a
+  declared cost (PRODUCT §8.5). A toolkit surface cannot paint beyond its
+  own edge.
+- **Structure, not paint (layer 5).** NeXT's docked, popped-up and torn-off
+  menus, the screen bar's workspace and output status, the Dock on the
+  right, and the column viewer are layout and behaviour. Trench wears the Mac
+  layout in Plan Neo's materials. That is layer 5's job (PLAN), not this
+  phase's.
+- **A menu of per-item keys.** The study's items are each their own bevelled
+  key, but a menu is drawn as one list with no per-row role. So Trench's
+  menu is a raised panel with the selected row as a key. A `menu.item` role
+  would say it.
+- **A glowing focus ring over its control.** A glow is a filled shape,
+  blurred, so over a control it washes it (seen on the OK key). Where the
+  ring is drawn first, as in the text field, it glows. A stroke-glow
+  primitive would say the rest.
+- **System Preferences' 26 pane icons** are Aqua's under Trench's chrome.
+  The study draws 14 icons, none of them panes. That is artwork to draw, not
+  a format gap.
+- Smaller: the study's 20×18 gadgets are 18×18, because a gadget's size is
+  one radius. Chakra Petch 600 is its vendored Bold.
+
+**What it found (bugs Aqua could never show, because its roles are one face):**
+
+- **The Finder placed its title proxy by measuring in the wrong role.** It
+  measured in interface; the title is drawn in chrome. Under Trench the icon
+  sat on the title. It is §2.9 again, now for type.
+- **The title's size, and the clock's, were not one number.** The list drew
+  at one size while Swift measured at another, and the LCD overflowed its
+  slot. `chrome.titleSize`, and the clock drawn at the measured size.
+- **`fade(c, $p)` did not see theme parameters**, only a widget's. Found by
+  the test written for them.
+
+**Verified (short checks only):**
+- the golden gate, **69 scenes**, on Linux and in the FreeBSD guest, including
+  the structural check that no code names the theme;
+- `swift test` on Linux, 531, green (`ThemeSetTests`: every shipped theme
+  loads in every scheme with no refusal or warning, and ships no list the
+  toolkit never draws); the draw-list, icon, importer, theme, chrome, role and
+  theme-set suites green in the guest.
+
+**Not run:** `live-medium.sh`, `run.sh --live`, `run.sh --vm --live`,
+`--full`, each over a minute. They are owed with the phase gates.
+
 **P11.10 — the floor, and the foreign applications.**
 - **The legibility floor.** Contrast is checked per foreground/surface pair
   that the theme actually uses, with WCAG AA 4.5:1 for body text, plus a

@@ -1,0 +1,101 @@
+# Trench — the desktop shell (PHASE11 P11.9). Plan Neo's materials: raised keys,
+# sunken wells, brushed metal, anodized panels, glow on focus and selection
+# ($gk). No Swift knows this theme; these lists are all it is.
+
+# The study's desk: two soft glows over the void, and a dot grid every 24 px.
+list wallpaper
+  rect 0 0 w h
+  fill desktopTop
+  fill radial w*0.28 h*0.18 max(w,h)*0.45 stops 0 desktopGlow 1 desktopGlow/0
+  fill radial w*0.92 h h*0.5 stops 0 menuHighlight/0.12 1 menuHighlight/0
+  fill dots 24 1.3 #a096ff/0.13
+end
+
+# The screen bar: brushed metal, a black edge.
+list menubar
+  rect 0 0 w h
+  fill vertical stops 0 titleBarTop 1 titleBarBottom
+  fill stripes 0 1 #ffffff/0.035 2 #ffffff/0
+  fill stripes 0 2 #000000/0.06 5 #000000/0
+  path 0 h-0.5 w h-0.5
+  stroke windowBorder 1
+end
+
+list menubar.highlight
+  rect 0 0 w h
+  glow glowSelect/0.7 16 $gk
+  fill vertical stops 0 mix(menuHighlight, #ffffff, 0.15) 1 menuHighlight
+  bevel $bevel #ffffff/0.45 #000000/0.45
+end
+
+# A magenta diamond, glowing.
+list menubar.system
+  path w/2 h*0.1 w*0.9 h/2 w/2 h*0.9 w*0.1 h/2 close
+  unless selected glow systemMark/0.7 6 $gk
+  unless selected fill systemMark
+  when selected fill menuTextOnHighlight
+end
+
+# A backlit LCD: VT323, ghost segments at 13%, bloom ($bloom) — at the size the
+# bar measured the clock at, so it fits the slot it was given.
+list menubar.clock
+  rect 1 4 w-2 h-8 2
+  fill readoutBackground
+  innershadow #000000/0.75 4
+  stroke #000000/0.85 1
+  text $label w/2 h/2 center size=$size role=readout color=readoutText ghost=eights ghostalpha=0.13 halo=readoutText/0.6 halor=9*$gk*$bloom
+end
+
+list toast
+  rect 2 3 w h
+  fill toastShadow
+  rect 0 0 w h
+  fill vertical stops 0 mix(contentBackground, #ffffff, 0.08) 1 contentBackground
+  fill noise 7 0.07
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+list toast.mark
+  path w/2 0 w h/2 w/2 h 0 h/2 close
+  glow systemMark/0.7 5 $gk
+  fill systemMark
+end
+
+list desktop.selection
+  rect -3 -3 w+6 h+6
+  glow glowSelect/0.5 12 $gk
+  fill glowSelect/0.25
+end
+
+list dock.shelf
+  rect 0 0 w h
+  fill vertical stops 0 mix(contentBackground, #ffffff, 0.08) 1 contentBackground
+  fill noise 7 0.07
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+list dock.separator
+  path $x 6 $x h-6
+  stroke bevelShade 1
+  path $x+1 6 $x+1 h-6
+  stroke bevelLight 1
+end
+
+# A running tile's LED.
+list dock.running
+  circle w/2 h/2 2.5
+  glow ledOn 6 $gk
+  fill ledOn
+end
+
+list dock.label
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end

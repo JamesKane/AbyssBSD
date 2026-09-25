@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench icon "recycle" (PHASE11 P11.9): from the Plan Neo chrome study
+     (claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E), the "neon" scheme's values
+     written in for its CSS variables, and imported with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gMetalH" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2a2150"/><stop offset=".35" stop-color="#8a80bd"/><stop offset="1" stop-color="#2a2150"/></linearGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/><path d="M7.5 9h17l-2 17.8c-3.5 1.6-9.5 1.6-13 0z" fill="url(#gMetalH)" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><ellipse cx="16" cy="9" rx="8.5" ry="2.8" fill="#2a2150" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M11 12.5l.9 12.6M16 13v13M21 12.5l-.9 12.6" stroke="#170c2c" stroke-opacity=".35"/><circle cx="16" cy="18.5" r="3.6" fill="none" style="stroke:#39ff14" stroke-width="1.8" stroke-dasharray="6.5 2.4"/><path d="M19.2 15.3l1.3 2.6-2.9.2z" style="fill:#39ff14"/>
+</svg>

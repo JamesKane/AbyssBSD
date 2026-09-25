@@ -20,6 +20,11 @@ list menubar
   stroke menuBarBorder 1
 end
 
+# The clock: a readout, in its slot at the bar's right ($size the bar's type).
+list menubar.clock
+  text $label 2 h-6.5 left baseline size=$size role=readout color=menuBarText
+end
+
 # An open title's highlight; the rect is the title's slot, full height.
 list menubar.highlight
   rect 0 0 w h

@@ -155,6 +155,21 @@ public enum ThemeLoader {
         }
         let fontKey = Dictionary(uniqueKeysWithValues: ThemeTokens.fontKeys)
         for (k, v) in c.pairs("fonts") {
+            // role.upper / role.tracking (P11.9)
+            let parts = k.split(separator: ".").map(String.init)
+            if parts.count == 2, ["interface", "chrome", "readout", "mono"].contains(parts[0]) {
+                switch parts[1] {
+                case "upper":
+                    guard v == "true" || v == "false" else { problems.append("[fonts] \(k) = \(v): want true or false"); continue }
+                    if v == "true" { t.roleUpper.insert(parts[0]) } else { t.roleUpper.remove(parts[0]) }
+                case "tracking":
+                    guard let n = Double(v), n >= -0.2, n <= 1 else { problems.append("[fonts] \(k) = \(v): want a tracking in em, -0.2…1"); continue }
+                    t.roleTracking[parts[0]] = n
+                default:
+                    problems.append("[fonts] \(k) is not a token")
+                }
+                continue
+            }
             if let kp = fontKey[k] { t[keyPath: kp] = v }
             else if let kp = metricKey[k] {   // fontSize is a metric that lives with the fonts
                 guard let n = metric(v, params: paramValue) else {
@@ -304,8 +319,9 @@ public enum ThemeLoader {
         let a = (try? Pool.load("appearance")) ?? Config()
         var o: [String: Double] = [:]
         for (k, v) in a.pairs("parameters") { if let d = Double(v) { o[k] = d } }
-        let forced = getenv("ABYSS_THEME").map { String(cString: $0) }.flatMap { $0.isEmpty ? nil : $0 }
-        return (forced ?? a.string("appearance", "theme") ?? "aqua", a.string("appearance", "scheme"), o)
+        func env(_ n: String) -> String? { getenv(n).map { String(cString: $0) }.flatMap { $0.isEmpty ? nil : $0 } }
+        return (env("ABYSS_THEME") ?? a.string("appearance", "theme") ?? "aqua",
+                env("ABYSS_THEME_SCHEME") ?? a.string("appearance", "scheme"), o)
     }
 
     public enum Outcome: Equatable, Sendable {
@@ -370,7 +386,8 @@ public enum ThemeLoader {
                 let (lists, w) = try loadLists("\(d)/\(ch.name)")
                 t.drawLists = lists.map { $0.lists.keys.sorted() } ?? []
                 t.warnings += w
-                Theme.use(t.tokens, lists: lists)
+                Theme.use(t.tokens, lists: lists,
+                          parameters: Dictionary(uniqueKeysWithValues: t.parameters.map { ($0.name, $0.value) }))
                 return .loaded(t, path: path)
             } catch let e as ThemeError {
                 Theme.use(.jaguar)

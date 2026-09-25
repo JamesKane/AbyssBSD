@@ -29,6 +29,16 @@ list window
   stroke separator 1
 end
 
+# The title, centred on $x in the title bar (the layout says where); active is
+# the frontmost window. `.bold` when [chrome] titleWeight = bold.
+list window.title
+  text $label $x h/2 center size=@chrome.titleSize role=chrome color=titleText
+end
+
+list window.title.bold
+  text $label $x h/2 center bold size=@chrome.titleSize role=chrome color=titleText
+end
+
 # The border, drawn last, over everything.
 list window.frame
   rect 0 0 w h @windowCornerRadius top

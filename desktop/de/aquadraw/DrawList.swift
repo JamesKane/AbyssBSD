@@ -44,7 +44,7 @@
 // shape); `linear x0 y0 x1 y1 stops …`; `radial cx cy r stops …` or `radial
 // x0 y0 r0 x1 y1 r1 stops …`; `conic cx cy r stops …` (cairo mesh patches,
 // PHASE11 §4.1); `stripes angle w1 c1 w2 c2`; `noise seed alpha`. `stops` is
-// followed by offset/colour pairs.
+// followed by offset/colour pairs. `dots SPACING RADIUS COLOUR` is a dot grid.
 //
 // **Ops:** `fill PAINT`; `stroke PAINT WIDTH [round] [dash=on,off…]`; `bevel W LIGHT SHADE`;
 // `innershadow COLOUR SIZE [EXTENT]`; `glow COLOUR RADIUS [STRENGTH]`;
@@ -54,7 +54,8 @@
 // WIDTH` (45° lines rising left to right — a progress bar's candy stripe);
 // `text "…"|$label X Y [left|center|right] [baseline] [bold] [upper]
 // [tracking=N] [size=S] [color=C] [placeholder=C] [ghost="…"] [ghostalpha=A]
-// [role=interface|chrome|readout|mono]`;
+// [role=interface|chrome|readout|mono] [halo=C] [halor=R]` (halo: a glow under
+// the run, R its radius — a title's, an LCD's bloom);
 // `push`, `pop`, `clip`; `move dx dy`, `rotate radians`, `scale sx sy` (for
 // what follows, until the `pop` of an enclosing `push`). `pi` is an operand.
 //
@@ -104,7 +105,7 @@ indirect enum Operand: Equatable, Sendable {
     case width, height
     case metric(Int)                 // index into ThemeTokens.metricKeys
     case parameter(String)
-    case textWidth(Operand)
+    case textWidth(Operand, Int32)   // size, role
     case negate(Operand)
     case binary(Operand, Character, Operand)
     case minimum(Operand, Operand)
@@ -130,6 +131,7 @@ enum Paint: Sendable {
     case conic(Operand, Operand, Operand, [(Double, ColorRef)])
     case stripes(Double, Operand, ColorRef, Operand, ColorRef)
     case noise(UInt32, Double)
+    case dots(Operand, Operand, ColorRef)   // spacing, radius, colour — a dot grid
 }
 
 enum Shape: Equatable, Sendable {
@@ -164,6 +166,8 @@ struct TextOp: Sendable {
     var ghost: String?
     var ghostAlpha = 0.13
     var role = Text.Role.interface
+    var halo: ColorRef?              // a blurred glow under the run (P11.9)
+    var haloRadius: Operand = .number(6)
 }
 
 enum Op: Sendable {
@@ -173,7 +177,7 @@ enum Op: Sendable {
     case stroke(Paint, Operand, round: Bool, dash: [Double])
     case bevel(Operand, ColorRef, ColorRef)
     case innerShadow(ColorRef, Operand, Operand?)
-    case glow(ColorRef, Operand, Double)
+    case glow(ColorRef, Operand, Operand)
     case shadow(ColorRef, Operand, Operand, Operand)   // colour dx dy blur
     case rules(RuleKind, Operand, Operand, Operand?, Paint, Operand)
     case text(TextOp)
@@ -372,9 +376,20 @@ enum DrawListParser {
                 i += 1
                 let a = try expression()
                 if name == "textw" {
-                    guard peek == ")" else { throw fail("textw wants one size") }
+                    // textw(size) or textw(size, role): measured as it is drawn.
+                    var role: Int32 = 0
+                    if peek == "," {
+                        i += 1
+                        while peek == " " { i += 1 }
+                        let rn = identifier()
+                        guard let r = Text.Role.allCases.first(where: { $0.name == rn }) else {
+                            throw fail("\(rn) is not a role (interface chrome readout mono)")
+                        }
+                        role = r.rawValue
+                    }
+                    guard peek == ")" else { throw fail("want textw(size) or textw(size, role)") }
                     i += 1
-                    return .textWidth(a)
+                    return .textWidth(a, role)
                 }
                 guard peek == "," else { throw fail("\(name) wants two operands") }
                 i += 1
@@ -504,6 +519,9 @@ enum DrawListParser {
             guard let ang = Double(a[1]) else { throw DrawListError(line: line, message: "stripes wants an angle in degrees") }
             return (.stripes(ang, try operand(a[2], line: line), try color(a[3], line: line),
                              try operand(a[4], line: line), try color(a[5], line: line)), 6)
+        case "dots":
+            try need(4)
+            return (.dots(try operand(a[1], line: line), try operand(a[2], line: line), try color(a[3], line: line)), 4)
         case "noise":
             try need(3)
             guard let seed = UInt32(a[1]), let al = Double(a[2]), al >= 0, al <= 1 else {
@@ -602,12 +620,10 @@ enum DrawListParser {
             return .innerShadow(try color(args[0], line: line), try o(1), args.count == 3 ? try o(2) : nil)
         case "glow":
             guard args.count == 2 || args.count == 3 else { throw DrawListError(line: line, message: "want: glow <colour> <radius> [strength]") }
-            var strength = 1.0
-            if args.count == 3 {
-                guard let s = Double(args[2]), s >= 0, s <= 4 else { throw DrawListError(line: line, message: "glow strength wants 0…4") }
-                strength = s
+            if args.count == 3, let s = Double(args[2]), s < 0 || s > 4 {
+                throw DrawListError(line: line, message: "glow strength wants 0…4")
             }
-            return .glow(try color(args[0], line: line), try o(1), strength)
+            return .glow(try color(args[0], line: line), try o(1), args.count == 3 ? try o(2) : .number(1))
         case "shadow":
             guard args.count == 4 else { throw DrawListError(line: line, message: "want: shadow <colour> <dx> <dy> <blur>") }
             return .shadow(try color(args[0], line: line), try o(1), try o(2), try o(3))
@@ -649,9 +665,12 @@ enum DrawListParser {
                     case "color": t.color = try color(v, line: line)
                     case "placeholder": t.placeholder = try color(v, line: line)
                     case "ghost":
-                        guard v.hasPrefix("\""), v.hasSuffix("\""), v.count >= 2 else { throw DrawListError(line: line, message: "ghost wants a \"quoted string\"") }
+                        if v == "eights" { t.ghost = "\u{0}eights"; break }
+                        guard v.hasPrefix("\""), v.hasSuffix("\""), v.count >= 2 else { throw DrawListError(line: line, message: "ghost wants a \"quoted string\" or eights") }
                         t.ghost = String(v.dropFirst().dropLast())
                     case "ghostalpha": guard let a = Double(v), a >= 0, a <= 1 else { throw DrawListError(line: line, message: "ghostalpha wants 0…1") }; t.ghostAlpha = a
+                    case "halo": t.halo = try color(v, line: line)
+                    case "halor": t.haloRadius = try operand(v, line: line)
                     case "role":
                         guard let r = Text.Role.allCases.first(where: { $0.name == v }) else {
                             throw DrawListError(line: line, message: "\(v) is not a role (interface chrome readout mono)")
@@ -752,7 +771,7 @@ public enum DrawListRunner {
                 cairo_pattern_destroy(g); cairo_restore(cr)
             case .glow(let c, let radius, let strength):
                 guard let s = shape else { continue }
-                glow(s, cr, ctx, resolve(c, ctx), eval(radius, ctx), strength)
+                glow(s, cr, ctx, resolve(c, ctx), eval(radius, ctx), max(0, min(4, eval(strength, ctx))))
             case .shadow(let c, let dx, let dy, let blur):
                 guard let s = shape else { continue }
                 glow(s, cr, ctx, resolve(c, ctx), eval(blur, ctx), 1, dx: eval(dx, ctx), dy: eval(dy, ctx))
@@ -805,10 +824,10 @@ public enum DrawListRunner {
         case .width: return ctx.rect.w
         case .height: return ctx.rect.h
         case .metric(let k): return Theme.metricTable[k]
-        case .parameter(let p): return ctx.parameters[p] ?? 0
-        case .textWidth(let size):
+        case .parameter(let p): return ctx.parameters[p] ?? Theme.parameters[p] ?? 0
+        case .textWidth(let size, let role):
             guard let cr = measuring else { return 0 }
-            return Draw.textWidth(cr, ctx.label, size: eval(size, ctx))
+            return Draw.textWidth(cr, ctx.label, size: eval(size, ctx), role: Text.Role(rawValue: role) ?? .interface)
         case .negate(let a): return -eval(a, ctx)
         case .minimum(let a, let b): return min(eval(a, ctx), eval(b, ctx))
         case .maximum(let a, let b): return max(eval(a, ctx), eval(b, ctx))
@@ -845,7 +864,7 @@ public enum DrawListRunner {
                 : Color(min(1, b.r + d), min(1, b.g + d), min(1, b.b + d), b.a)
         case .fade(let base, let p):
             let b = resolve(base, ctx)
-            return b.with(a: b.a * (ctx.parameters[p] ?? 0))
+            return b.with(a: b.a * (ctx.parameters[p] ?? Theme.parameters[p] ?? 0))
         case .mix(let a, let b, let t): return ThemeLoader.mixOKLCH(resolve(a, ctx), resolve(b, ctx), t)
         }
     }
@@ -976,6 +995,24 @@ public enum DrawListRunner {
         case .noise(let seed, let alpha):
             let pat = noisePattern(seed, alpha)
             cairo_set_source(cr, pat); cairo_pattern_destroy(pat)
+        case .dots(let spacing, let radius, let c):
+            // One dot in the middle of a spacing×spacing tile, made at device
+            // resolution so the grid is crisp at 2× (a desktop's dot grid, P11.9).
+            let sc = Double(Text.renderScale), sp = max(2, eval(spacing, ctx)), r = eval(radius, ctx)
+            let n = Int32((sp * sc).rounded())
+            guard let tile = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, n, n),
+                  let tc = cairo_create(tile) else { return }
+            Draw.setColor(tc, resolve(c, ctx))
+            cairo_arc(tc, Double(n) / 2, Double(n) / 2, r * sc, 0, 2 * .pi)
+            cairo_fill(tc)
+            cairo_destroy(tc)
+            let pat = cairo_pattern_create_for_surface(tile)
+            cairo_pattern_set_extend(pat, CAIRO_EXTEND_REPEAT)
+            var m = cairo_matrix_t()
+            cairo_matrix_init_scale(&m, sc, sc)
+            cairo_pattern_set_matrix(pat, &m)
+            cairo_set_source(cr, pat)
+            cairo_pattern_destroy(pat); cairo_surface_destroy(tile)
         }
     }
 
@@ -1135,6 +1172,53 @@ public enum DrawListRunner {
         cairo_restore(cr)
     }
 
+    struct HaloKey: Hashable { let s: String, px: Int32, style: Int32, role: Int32, radius: Int32, scale: Int32, tracking: Double }
+    nonisolated(unsafe) static var haloCache: [HaloKey: (OpaquePointer, Double, Double)] = [:]
+
+    /// A glow under a run of text — a title's, an LCD's bloom: the glyphs'
+    /// mask, blurred (the glow's C blur) and tinted, cached by string and size.
+    static func textHalo(_ s: String, _ t: TextOp, _ x: Double, _ y: Double, _ size: Double,
+                         _ style: Text.Style, _ c: Color, _ radius: Double, _ cr: OpaquePointer) {
+        guard radius > 0, Text.available, !s.isEmpty else { return }
+        let sc = Double(Text.renderScale), px = Text.px(size)
+        var glyphs = Text.shape(s, px: px, style: style, role: t.role)
+        if t.tracking != 0 { for i in glyphs.indices { glyphs[i].x_advance += t.tracking * sc } }
+        let width = Text.width(glyphs) / sc
+        let m = Text.metrics(px: px, role: t.role)
+        let asc = m.ascent / sc, desc = m.descent / sc
+        let baseline = t.baseline ? y : y + (asc - desc) / 2
+        let left = t.align == .left ? x : t.align == .center ? x - width / 2 : x - width
+        let pad = radius * 2
+        let key = HaloKey(s: s, px: px, style: style.rawValue, role: t.role.rawValue,
+                          radius: Int32(radius * 4), scale: Int32(sc), tracking: t.tracking)
+        if haloCache[key] == nil {
+            let sw = Int32(((width + 2 * pad) * sc).rounded(.up)), sh = Int32(((asc + desc + 2 * pad) * sc).rounded(.up))
+            guard let mask = cairo_image_surface_create(CAIRO_FORMAT_A8, sw, sh), let mc = cairo_create(mask) else { return }
+            cairo_scale(mc, sc, sc)
+            cairo_set_source_rgba(mc, 0, 0, 0, 1)
+            Text.drawShaped(mc, glyphs, x: pad, baselineY: pad + asc, px: px)
+            cairo_destroy(mc)
+            cairo_surface_flush(mask)
+            let scratch = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(sw) * Int(sh))
+            cd_blur_a8(cairo_image_surface_get_data(mask), scratch, sw, sh,
+                       cairo_image_surface_get_stride(mask), Int32(radius * sc))
+            scratch.deallocate()
+            cairo_surface_mark_dirty(mask)
+            haloCache[key] = (mask, pad, asc)
+        }
+        guard let (mask, p, a) = haloCache[key] else { return }
+        cairo_save(cr)
+        let pat = cairo_pattern_create_for_surface(mask)
+        var mt = cairo_matrix_t()
+        cairo_matrix_init_scale(&mt, sc, sc)
+        cairo_matrix_translate(&mt, p - left, p + a - baseline)
+        cairo_pattern_set_matrix(pat, &mt)
+        Draw.setColor(cr, c)
+        cairo_mask(cr, pat)
+        cairo_pattern_destroy(pat)
+        cairo_restore(cr)
+    }
+
     static func text(_ t: TextOp, _ cr: OpaquePointer, _ ctx: DrawContext) {
         var str = t.content == "\u{0}label" ? ctx.label : t.content
         var col = resolve(t.color, ctx)
@@ -1145,7 +1229,13 @@ public enum DrawListRunner {
         let size = t.size.map { eval($0, ctx) } ?? Theme.fontSize
         let x = eval(t.x, ctx), y = eval(t.y, ctx)
         let style: Text.Style = t.bold ? .bold : .regular
-        if let ghost = t.ghost {
+        if let halo = t.halo {
+            textHalo(str, t, x, y, size, style, resolve(halo, ctx), eval(t.haloRadius, ctx), cr)
+        }
+        if let g = t.ghost {
+            // `ghost=eights`: the run itself with every digit lit — an LCD's
+            // unlit segments under a readout whose text changes (a clock).
+            let ghost = g == "\u{0}eights" ? String(str.map { $0.isNumber ? "8" : $0 }) : g
             run(t.upper ? ghost.uppercased() : ghost, col.with(a: col.a * t.ghostAlpha))
         }
         run(str, col)
