@@ -200,6 +200,14 @@ public final class Wallpaper: LayerSurfaceDelegate {
             // The Finder hosted by the desktop: it must NOT quit the process
             // when its last window closes — the desktop is still there.
             finder = FinderApp(display: display, quitsWithLastWindow: false)
+            // **The desktop is the Finder** (PHASE10 P10.4): with no window
+            // focused, Jaguar's menu bar shows the Finder's menus, because the
+            // Finder is what draws the desktop. So the desktop's own surface
+            // publishes this Finder's address, and the compositor falls back to
+            // it when nothing else is frontmost.
+            if let name = finder?.menuServiceName, layer?.publishMenus(at: name) == true {
+                Wallpaper.log("the desktop publishes the Finder's menus at \(name)")
+            }
             reloadIcons()
             // Same trick as the config watch, on the Desktop folder: drop a file
             // in ~/Desktop and it appears, with no polling.

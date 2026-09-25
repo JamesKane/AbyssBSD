@@ -445,6 +445,18 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(items.first { $0.verb == "finder.empty-trash" }?.enabled, true)
     }
 
+    /// The key column is made of ⌘ ⇧ ⌫ and friends. Without a face that has
+    /// them they draw as empty boxes — which is what they did on a box without
+    /// DejaVu until P10.4, and which no pixel test that asks "was something
+    /// drawn" can see.
+    func testTheLoadedFontsCanDrawEveryMenuGlyph() throws {
+        guard Text.available else { throw XCTSkip("no fonts on this box") }
+        XCTAssertEqual(Text.missing(Text.menuGlyphs), "",
+                       "key equivalents would draw as boxes")
+        XCTAssertEqual(Text.missing("\u{0378}"), "\u{0378}",
+                       "an unassigned codepoint is covered by nothing — the check can fail")
+    }
+
     func testMenuRowsAndHitTestAgreeAcrossSeparators() {
         let items = [AquaMenuItem("A"), .separator, AquaMenuItem("B"),
                      AquaMenuItem("C", enabled: false), AquaMenuItem("D")]

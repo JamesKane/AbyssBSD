@@ -59,6 +59,7 @@ func selfDirectory() -> String? {
 
 var compositorCmd: String?
 var display = ProcessInfoEnv("WAYLAND_DISPLAY")
+var menubarDisplay: String? = nil
 var explicitComponents: [(String, String)] = []
 var mode: SessionMode = .desktop
 var without: Set<String> = []
@@ -84,6 +85,7 @@ while i < args.count {
     switch a {
     case "--compositor":  compositorCmd = next("a command")
     case "--display":     display = next("a socket name")
+    case "--menubar-display": menubarDisplay = next("a socket name")
     case "--binary":      binary = next("a path")
     case "--runtime-dir": runtimeDir = next("a directory")
     case "--dbus-config": dbusConfig = next("a path")
@@ -106,7 +108,8 @@ while i < args.count {
                                    String(spec[spec.index(after: eq)...])))
     case "-h", "--help":
         let usage = """
-        usage: anchor [--compositor CMD] [--display NAME] [--component NAME=CMD]
+        usage: anchor [--compositor CMD] [--display NAME] [--menubar-display NAME]
+                      [--component NAME=CMD]
                       [--without NAME] [--binary PATH] [--runtime-dir DIR]
                       [--dbus-config PATH] [--max-restarts N]
         the default session: bus, portal, bridge, desktop, menubar, dock
@@ -161,11 +164,12 @@ if explicitComponents.isEmpty {
     // the path itself. Unknowable (no display, or no runtime dir on a FreeBSD
     // box where nothing sets one — HANDOFF §2.31) means no gate rather than a
     // guess.
-    let compositorSocket: String? = display.flatMap { d in
+    func socketPath(_ d: String) -> String? {
         if d.hasPrefix("/") { return d }
         guard let x = ProcessInfoEnv("XDG_RUNTIME_DIR"), !x.isEmpty else { return nil }
         return x + "/" + d
     }
+    let compositorSocket: String? = display.flatMap(socketPath)
 
     let plan = defaultSession(shellBinary: shellBinary,
                               serviceDirectory: serviceDir,
@@ -174,6 +178,8 @@ if explicitComponents.isEmpty {
                               runtimeDir: dir,
                               display: display,
                               compositorSocket: compositorSocket,
+                              menubarDisplay: menubarDisplay,
+                              menubarSocket: menubarDisplay.flatMap(socketPath),
                               mode: mode,
                               without: without)
     // Exported before anything is spawned, so **every** child inherits it —

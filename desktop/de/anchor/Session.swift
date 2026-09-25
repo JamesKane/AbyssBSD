@@ -110,6 +110,10 @@ public func unixSocketPath(ofBusAddress address: String) -> String? {
 ///     connect, and spend their restart budget waiting for a display to exist:
 ///     a slow compositor start would tear the session down as if the shell were
 ///     broken.
+///   - menubarDisplay: the compositor's **privileged** socket (undertow
+///     `--privileged-socket`, PHASE10 P10.3), if it has one. The menu bar alone
+///     connects there — it is the one connection offered who is frontmost — and
+///     waits for it the way the shell waits for the ordinary socket.
 ///   - without: names to leave out (`bus`, `portal`, `bridge`, `desktop`,
 ///     `menubar`, `dock`).
 public func defaultSession(shellBinary: String,
@@ -119,6 +123,8 @@ public func defaultSession(shellBinary: String,
                            runtimeDir: String,
                            display: String?,
                            compositorSocket: String? = nil,
+                           menubarDisplay: String? = nil,
+                           menubarSocket: String? = nil,
                            mode: SessionMode = .desktop,
                            without: Set<String> = []) -> SessionPlan {
     var components: [ComponentSpec] = []
@@ -204,8 +210,13 @@ public func defaultSession(shellBinary: String,
         var env = shared
         env["AQUA_SCENE"] = scene
         env["ABYSS_APP_BINARY"] = shellBinary
+        var needs = compositorSocket.map { [$0] } ?? []
+        if name == "menubar", let bar = menubarDisplay {
+            env["WAYLAND_DISPLAY"] = bar
+            if let s = menubarSocket { needs.append(s) }
+        }
         components.append(ComponentSpec(name: name, argv: [shellBinary], env: env,
-                                        requires: compositorSocket.map { [$0] } ?? []))
+                                        requires: needs))
     }
 
     return SessionPlan(components: components, busAddress: busAddress, notes: notes)

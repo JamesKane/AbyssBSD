@@ -102,6 +102,18 @@ public final class LayerSurface {
     /// `margin` insets the surface from the edges it is anchored to
     /// (top, right, bottom, left) — the notification stack uses it to sit clear
     /// of the screen corner.
+    /// Tell the compositor this surface's menus are published at `address`
+    /// (PHASE10.md P10.3). A layer surface is never *focused* as a window is,
+    /// so this means something only where the compositor gives it a meaning:
+    /// the desktop's, which is frontmost when no window is (P10.4).
+    @discardableResult
+    public func publishMenus(at address: String) -> Bool {
+        guard let m = display.menuManager else { return false }
+        aw_menu_manager_set_address(raw(m), raw(surface), address)
+        display.flush()
+        return true
+    }
+
     public init?(display: Display, layer: Layer, namespace: String,
                  width: Int32, height: Int32,
                  anchor: Anchor, exclusiveZone: Int32 = 0,

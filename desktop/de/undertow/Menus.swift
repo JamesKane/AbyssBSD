@@ -121,12 +121,26 @@ public final class Menus {
 
     /// What the bar should be showing now.
     public var current: Focus {
-        guard let t = compositor.seat?.focused else { return .nothing }
+        guard let t = compositor.seat?.focused else { return desktop }
         let app = t.appID ?? ""
         guard let a = addresses[t.surface]?.address else {
             return Focus(kind: .none, address: "", appID: app)
         }
         return Focus(kind: .abyss, address: a, appID: app)
+    }
+
+    /// With no window focused, the desktop is frontmost — and in Jaguar the
+    /// desktop *is* the Finder, whose menus the bar shows (PHASE10 P10.4). So
+    /// the fallback is whatever a BACKGROUND layer surface published, and
+    /// nothing only when no desktop has published anything.
+    private var desktop: Focus {
+        for l in compositor.layers
+        where l.layer == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND.rawValue {
+            if let a = addresses[l.surface]?.address {
+                return Focus(kind: .abyss, address: a, appID: l.namespace)
+            }
+        }
+        return .nothing
     }
 
     /// Focus moved, or the focused surface's address changed: tell the bars,

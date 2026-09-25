@@ -620,8 +620,16 @@ public final class Display {
             wl_display_flush(display)
 
             // Poll the Wayland fd (slot 0) plus any registered extra fds.
+            // **The set is snapshotted HERE, where it is polled** — not after
+            // the Wayland dispatch below. A handler run by that dispatch may
+            // register a descriptor (the menu bar subscribes to an application
+            // when a focus event arrives, P10.4), and a snapshot taken after it
+            // is one entry longer than `pfds`: an index out of range, and a
+            // crash, the first time anything registered from inside a Wayland
+            // event rather than from a descriptor handler.
+            let polled = extraFds
             var pfds = [pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0)]
-            for e in extraFds {
+            for e in polled {
                 pfds.append(pollfd(fd: e.fd, events: Int16(POLLIN), revents: 0))
             }
             let timeout = repeatTimeoutMs() ?? -1
@@ -644,8 +652,7 @@ public final class Display {
                 // descriptor it already closed, and close it a second time. In
                 // a process that opens sockets, a double close can shut
                 // somebody else's connection that inherited the number.
-                let snapshot = extraFds
-                for (i, e) in snapshot.enumerated() {
+                for (i, e) in polled.enumerated() {
                     let revents = pfds[i + 1].revents
                     guard revents != 0 else { continue }
                     guard extraFds.contains(where: { $0.fd == e.fd }) else { continue }

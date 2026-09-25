@@ -531,8 +531,9 @@ exec /usr/local/bin/anchor \
   --mode "$mode" \
   --compositor "/usr/local/bin/undertow run --hz 60 $limit --backend $backend \
                 --width ${ABYSS_WIDTH:-1024} --height ${ABYSS_HEIGHT:-768} \
-                --socket $sock ${ABYSS_CAPTURE:+--capture $ABYSS_CAPTURE}" \
-  --display "$sock"
+                --socket $sock --privileged-socket $sock-bar \
+                ${ABYSS_CAPTURE:+--capture $ABYSS_CAPTURE}" \
+  --display "$sock" --menubar-display "$sock-bar"
 SESSION
 sudo chmod 755 "$de/usr/local/libexec/abyss-session"
 

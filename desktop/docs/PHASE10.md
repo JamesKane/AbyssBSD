@@ -289,13 +289,86 @@ leaves nothing frontmost; the socket is 0600. Both of its fault injections
 compositors each get their own globals; the socket is 0600 and removed with its
 compositor; an impossible path is an error that names it.
 
-**P10.4 — the bar is real.**
+**P10.4 — the bar is real. ✅ done.**
 `MenuBar` binds `abyss_menubar_v1`, connects to the focused application's
 service, `describe`s it, and draws *that*. The system menu stays the bar's own;
 everything to its right belongs to the application, with its name bold. Opening
 a menu `validate`s it; choosing an item `activate`s it and logs the **result**,
 not the title. When nothing is focused — the desktop was clicked — the Finder is
 frontmost, as it was in Jaguar, because the desktop *is* the Finder's process.
+
+**What P10.4 landed.** The bar follows `MenuBarFocus`: on every focus event it
+`describe`s the frontmost application (about 2 ms), subscribes to its changes,
+and draws *its* menus; opening a menu `validate`s it (**777–853 µs measured**,
+so the §6.4 round trip is about 5% of a 16.7 ms frame and the menu opens on the
+next one); choosing an item `activate`s it and logs the result the application
+returned. A window whose menus the bar cannot read still shows its name,
+bold. With no window focused undertow reports the address the **desktop's**
+background surface published, which is the desktop-hosted Finder's — Jaguar's
+rule ("the desktop is the Finder"), through the compositor rather than a
+special case in the bar. `anchor --menubar-display` hands the bar, and only the
+bar, the privileged socket, and `abyss-session` and `live-session-gtk.sh` use
+it. Under a compositor with no view of focus (sway, in `live-sway.sh`) the bar
+keeps its P10.1 behaviour: the Finder's definition, static enablement.
+
+**What it found — the pass was mostly this:**
+
+- **undertow had never drawn, hit-tested or paced an `xdg_popup`** (HANDOFF
+  §2.62). wlroots speaks the protocol and configures popups itself, so every
+  menu in this tree *mapped* under our compositor and was then invisible and
+  unclickable — the bar's dropdowns, the Dock's Trash menu, pop-up buttons.
+  Every test that opened one ran on sway. `Popups.swift` gives them an
+  unconstrained box, a position (a pure, tested function of the parent's window
+  geometry), the top of the paint order and the hit-test, and frame callbacks.
+  *The first draft said the missing piece was the initial configure. Removing
+  that call changed nothing — wlroots sends it — so the claim was withdrawn;
+  removing the hit-test is what breaks the menus, and removing them from the
+  scene is what fails the pixel check.*
+- **undertow ignored `keyboard_interactivity`** (§2.63). Only windows ever got
+  the keyboard, so under our compositor the bar's arrow keys went to the window
+  behind the menu. Now a click on an `on_demand` layer hands it the keyboard
+  *without* changing who is frontmost, and the keyboard goes back to the active
+  window when the last menu closes — after 100 ms, because walking the bar with
+  ← → closes one menu and opens the next with a moment of no popups between
+  them. An idle callback was tried first and lost that race.
+- **`Display.run` crashed when a handler registered a descriptor from inside a
+  Wayland event** (§2.64). The poll set was built from `extraFds`, the Wayland
+  events were dispatched, and *then* the list was snapshotted to match against
+  the poll results — one entry longer if the dispatch had added one. The bar
+  subscribing to an application on a focus event was the first thing ever to
+  do that. The snapshot is taken where the set is polled.
+- **The key column drew as empty boxes on a box without DejaVu.** Noto Sans has
+  no ⌘ ⇧ ⌫; the fallback list named DejaVu and Noto Symbols, neither installed
+  on the dev box. Adwaita Sans joins the list, and — §2.45 — `Text.announce`
+  now says `NO GLYPHS for …` when a menu glyph has no face, a unit test asserts
+  coverage (with an unassigned codepoint as the control that must fail), and
+  `live-menus.sh` fails if the bar ever announced a gap. Seen only by looking
+  at a screenshot: every functional check passed with boxes in the menu.
+  **And the FreeBSD guest then failed the new test on one glyph, ⎋** (Force
+  Quit's ⌥⌘⎋): DejaVu Sans lacks it and Adwaita is not installed there. DejaVu
+  Sans Mono has it, and the medium already carries the whole DejaVu directory,
+  so it joins the end of the list. The check paid for itself on its first run
+  on the second platform.
+
+**Verified:** `live-menus.sh`, on undertow with a real pointer and keyboard —
+the bar shows the Finder's menus; **the open menu is on screen** (a pixel in
+its margin is the menu's white, not the desktop's blue); Paste is disabled with
+an empty clipboard and enabled after Edit ▸ Copy chosen from the bar; File ▸
+New Folder makes a folder on disk and the bar logs the path the Finder
+returned; Down + Return chooses from the keyboard; → walks to the next menu and
+Escape still reaches the bar; with the menu closed a key reaches the Finder
+again (the rename New Folder left open is completed, checked on disk); and with
+no window left, the desktop's Finder is frontmost. **Five injected faults each
+failed it:** popups out of the hit-test, popups out of the scene, no keyboard
+hand-off to the bar, no hand-back to the window — and, as the control that
+disproved a claim, no explicit initial configure, which did *not*. Plus
+`live-session-gtk.sh`: the real session's bar is on the privileged socket and
+shows the desktop's Finder. Screenshot: `docs/screenshots/live-menubar-undertow.png`.
+Gates: `run.sh --live` (Linux) and `run.sh --vm --live` (FreeBSD) green at 444
+unit tests. **The `--full` lane was not run to completion** — this pass changed
+how `abyss-session` starts undertow and the bar on the medium, which is the
+case HANDOFF asks `--full` for; it was stopped partway (nothing had failed) and
+is owed.
 
 **P10.5 — undo, decided.**
 Decided (§6.3): an undo stack per **window** in `Aqua`, of named,

@@ -390,6 +390,9 @@ public final class Seat {
     public enum PointerTarget {
         case toplevel(Toplevel, Double, Double)
         case layer(LayerSurface, Double, Double)
+        /// A menu (P10.4). Topmost: a popup is drawn over everything, so it
+        /// is hit before everything.
+        case popup(PopupSurface, Double, Double)
         /// The compositor's own frame around a window (P9.6), in frame-local
         /// coordinates. **No client owns these pixels**, which is why it is a
         /// separate case rather than a toplevel hit with odd coordinates: a
@@ -400,6 +403,7 @@ public final class Seat {
             switch self {
             case .toplevel(let t, _, _): return t.surface
             case .layer(let l, _, _): return l.surface
+            case .popup(let p, _, _): return p.surface
             case .frame: return nil
             }
         }
@@ -407,6 +411,7 @@ public final class Seat {
             switch self {
             case .toplevel(_, let x, let y): return (x, y)
             case .layer(_, let x, let y): return (x, y)
+            case .popup(_, let x, let y): return (x, y)
             case .frame(_, let x, let y): return (x, y)
             }
         }
@@ -426,6 +431,13 @@ public final class Seat {
     /// The order is the layer-shell protocol's own: overlay and top sit above
     /// the windows, bottom and background below them.
     public func target(at x: Double, _ y: Double) -> PointerTarget? {
+        for p in compositor.mappedPopups.reversed() {
+            guard let o = p.origin else { continue }
+            let lx = x - Double(o.x), ly = y - Double(o.y)
+            if lx >= 0, ly >= 0, lx < Double(p.width), ly < Double(p.height) {
+                return .popup(p, lx, ly)
+            }
+        }
         let layers = compositor.mappedLayers            // bottom-to-top
         if let h = hitLayer(layers.filter { $0.layer >= 2 }, x, y) { return h }
         // Windows top to bottom, and **each window's frame belongs to it**: the
@@ -550,6 +562,17 @@ public final class Seat {
         if state == WL_POINTER_BUTTON_STATE_PRESSED, case .toplevel(let t, _, _)? = hit {
             focus(t)
         }
+        // **A layer surface that asked for the keyboard gets it on a click**
+        // (`on_demand`) — the menu bar, so its menus can be driven with the
+        // arrow keys once a title is clicked (HANDOFF §2.27). undertow honoured
+        // `keyboard_interactivity` for nobody, so under our own compositor the
+        // keys went to the window behind the menu; every test of it ran on
+        // sway. Found in P10.4. The window stays *active* — the bar is not an
+        // application, and clicking it must not change who is frontmost.
+        if state == WL_POINTER_BUTTON_STATE_PRESSED, case .layer(let l, _, _)? = hit,
+           l.takesKeyboardOnClick {
+            giveKeyboard(to: l)
+        }
         // A press on the compositor's own frame is answered here and forwarded
         // to nobody — there is no client on the other side of those pixels.
         if state == WL_POINTER_BUTTON_STATE_PRESSED, case .frame(let t, let fx, let fy)? = hit {
@@ -569,10 +592,38 @@ public final class Seat {
         wlr_seat_pointer_notify_frame(seat)
     }
 
+    /// The layer surface holding the keyboard, if one does (P10.4).
+    public private(set) weak var keyboardLayer: LayerSurface?
+
+    func giveKeyboard(to l: LayerSurface) {
+        guard keyboardLayer !== l, let kbd = wlr_seat_get_keyboard(seat) else { return }
+        keyboardLayer = l
+        wlr_seat_keyboard_notify_enter(seat, l.surface, &kbd.pointee.keycodes.0,
+                                       kbd.pointee.num_keycodes, &kbd.pointee.modifiers)
+    }
+
+    /// Hand the keyboard back to the active window — when the bar's menu
+    /// closes, or the layer that had it goes away. Mac-like: the keys go back
+    /// to the application you were in, which never stopped being frontmost.
+    func restoreKeyboard() {
+        guard keyboardLayer != nil else { return }
+        keyboardLayer = nil
+        guard let t = focused, let kbd = wlr_seat_get_keyboard(seat) else {
+            wlr_seat_keyboard_notify_clear_focus(seat)
+            return
+        }
+        wlr_seat_keyboard_notify_enter(seat, t.surface, &kbd.pointee.keycodes.0,
+                                       kbd.pointee.num_keycodes, &kbd.pointee.modifiers)
+    }
+
     /// Give a window keyboard focus and raise it to the top of the stack.
     public func focus(_ t: Toplevel) {
         compositor.raise(t)
+        // Clicking the active window while the bar held the keyboard gives it
+        // back, even though focus as such did not move.
+        if focused === t, keyboardLayer != nil { restoreKeyboard(); return }
         guard focused !== t else { return }
+        keyboardLayer = nil
         // The shell is told which window is active the same way it is told one
         // exists — through its foreign-toplevel handle. Without this the Dock
         // can list running applications and never say which one you are in.

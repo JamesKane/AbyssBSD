@@ -409,6 +409,27 @@ final class UndertowTests: XCTestCase {
         XCTAssertEqual(compositor.mappedToplevels.count, 0)
     }
 
+    // MARK: P10.4 — popups
+
+    /// A popup is positioned relative to its parent's WINDOW GEOMETRY, and its
+    /// own surface may be offset from its geometry (a shadow). Both offsets
+    /// have to be in the sum or a menu lands beside its title.
+    func testAPopupLandsWhereItsParentsGeometrySays() {
+        // A layer surface: no geometry offset. The bar's File menu under its
+        // title at x=94, 22 down.
+        let bar = PopupGeometry.surfaceOrigin(parentSurfaceX: 0, parentSurfaceY: 0,
+                                              parentGeometry: (0, 0),
+                                              popupPosition: (94, 22), popupGeometry: (0, 0))
+        XCTAssertEqual(bar.x, 94); XCTAssertEqual(bar.y, 22)
+        // A window at (140,100) whose geometry starts 10px into its surface
+        // (a client-side shadow), and a popup with a 4px shadow of its own.
+        let win = PopupGeometry.surfaceOrigin(parentSurfaceX: 140, parentSurfaceY: 100,
+                                              parentGeometry: (10, 10),
+                                              popupPosition: (30, 40), popupGeometry: (4, 4))
+        XCTAssertEqual(win.x, 140 + 10 + 30 - 4)
+        XCTAssertEqual(win.y, 100 + 10 + 40 - 4)
+    }
+
     // MARK: P10.3 — whose menus are whose
 
     /// Two compositors in one process, each with its own menu globals. The C

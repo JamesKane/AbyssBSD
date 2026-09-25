@@ -132,8 +132,8 @@ env -u DBUS_SESSION_BUS_ADDRESS -u WAYLAND_DISPLAY \
     ABYSS_RUNTIME_DIR="$rundir" ABYSS_CONFIG_DIR="$cfgdir" \
     "$anchor" \
       --compositor "$undertow run --hz 60 --frames 5400 --width $W --height $H \
-                    --socket $sock --config-dir $cfgdir" \
-      --display "$sock" \
+                    --socket $sock --privileged-socket $sock-bar --config-dir $cfgdir" \
+      --display "$sock" --menubar-display "$sock-bar" \
       > "$work/session.log" 2>&1 &
 anchor_pid=$!
 export ABYSS_RUNTIME_DIR="$rundir"
@@ -153,6 +153,21 @@ for c in bus portal bridge desktop menubar dock; do
     || { echo "FAIL: $c is not up"; cat "$work/status" "$work/session.log"; exit 1; }
 done
 echo "ok: one command brought up bus, portal, bridge, desktop, menubar and dock"
+
+# The bar came up on the privileged socket and — with no window yet — shows the
+# desktop's Finder (PHASE10 P10.4). On the ordinary socket it would say it has
+# no view of focus, and every menu would be the Finder's for ever.
+i=0
+while [ $i -lt 40 ]; do
+  grep -q "MenuBar: showing Finder's menus from menus.finder." "$work/session.log" && break
+  sleep 0.25; i=$((i + 1))
+done
+grep -q "not on the compositor's privileged socket" "$work/session.log" \
+  && { echo "FAIL: the session's menu bar is on the ordinary socket"; exit 1; }
+grep -q "MenuBar: showing Finder's menus from menus.finder." "$work/session.log" \
+  || { echo "FAIL: the session's menu bar never showed the desktop's Finder"
+       grep 'MenuBar\|menus' "$work/session.log" | tail -5; exit 1; }
+echo "ok: the menu bar is on the privileged socket, showing the desktop's Finder"
 
 # **Nothing restarted.** This is the assertion that tells a gate from a race,
 # and it is the only one here that could not be satisfied by getting the order

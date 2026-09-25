@@ -38,12 +38,28 @@ public enum Text {
             if styleAvailable(.bold) { styles.append("bold") }
             if styleAvailable(.italic) { styles.append("italic") }
             if styleAvailable(.boldItalic) { styles.append("bold-italic") }
+            let gaps = missing(menuGlyphs)
             line = "Text: \(at_font_face_count()) face(s)"
-                + (styles.isEmpty ? "" : " (\(styles.joined(separator: ", ")))") + "\n"
+                + (styles.isEmpty ? "" : " (\(styles.joined(separator: ", ")))")
+                // Said, not silent (§2.45): a menu whose key column is boxes
+                // looks like it works in every test that does not read it.
+                + (gaps.isEmpty ? "" : "; NO GLYPHS for \(gaps) — menu key equivalents will be boxes")
+                + "\n"
         } else {
             line = "Text: NO FONTS — falling back to toy text; install DejaVu\n"
         }
         line.withCString { _ = write(2, $0, strlen($0)) }
+    }
+
+    /// The glyphs a menu's key column is made of (P10.4). Missing, they draw as
+    /// empty boxes — legible to nobody, and invisible to every pixel test that
+    /// asks only whether *something* was drawn.
+    public static let menuGlyphs = "⌘⇧⌥⌃⌫⌦↑↓←→↩⎋⇥"
+
+    /// Which characters of `s` no loaded face can draw.
+    public static func missing(_ s: String) -> String {
+        guard available else { return s }
+        return String(String.UnicodeScalarView(s.unicodeScalars.filter { at_font_covers($0.value) == 0 }))
     }
 
     /// A weight/slant. Maps to the AT_* face groups in the CText shim; a style

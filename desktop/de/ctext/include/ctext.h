@@ -45,6 +45,8 @@ int at_font_init(void);
 
 /* Number of loaded faces (0 if none). */
 int at_font_face_count(void);
+/* Whether any loaded face has a glyph for the Unicode codepoint `cp`. */
+int at_font_covers(unsigned int cp);
 
 /* Whether `style` (AT_*) loaded its OWN face (not just the regular fallback).
  * AT_REGULAR is available whenever a font is loaded at all. */

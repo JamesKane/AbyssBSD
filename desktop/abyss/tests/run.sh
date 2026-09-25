@@ -190,6 +190,11 @@ if [ "$live" -eq 1 ]; then
   # only a client on the privileged socket is told who is frontmost (P10.3).
   echo "== whose menus are whose =="
   sh "$root/abyss/tests/live-menu-focus.sh" >/dev/null
+  # And the bar made real: the frontmost application's menus, drawn by our
+  # own compositor (popups, at last), enabled as the app says as each menu
+  # opens, chosen by pointer and by keyboard, checked on disk (P10.4).
+  echo "== the menu bar =="
+  sh "$root/abyss/tests/live-menus.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

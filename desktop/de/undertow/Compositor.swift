@@ -263,6 +263,13 @@ public final class Compositor {
     private var newToplevelListener: UnsafeMutablePointer<tw_listener>?
     private var newSurfaceListener: UnsafeMutablePointer<tw_listener>?
     private var newLayerListener: UnsafeMutablePointer<tw_listener>?
+    private var newPopupListener: UnsafeMutablePointer<tw_listener>?
+    /// Every popup any client has made, in creation order (P10.4).
+    public internal(set) var popups: [PopupSurface] = []
+    /// How many popups have ever mapped — the witness a test asserts on, since
+    /// a popup that opened and closed leaves no other trace.
+    public internal(set) var popupsMapped = 0
+    private var restoreTimer: OpaquePointer?
     private var activationListener: UnsafeMutablePointer<tw_listener>?
     fileprivate var foreignManager: UnsafeMutablePointer<wlr_foreign_toplevel_manager_v1>?
     /// Shell surfaces (wallpaper, menu bar, Dock, toasts), in creation order.
@@ -279,8 +286,8 @@ public final class Compositor {
     /// The `WAYLAND_DISPLAY` value a client should connect to.
     public private(set) var socketName: String = ""
 
-    private let outputWidth: Int32
-    private let outputHeight: Int32
+    let outputWidth: Int32
+    let outputHeight: Int32
     private var cascade: Int32 = 0
     /// Remembered window positions, persisted through PoolConfig.
     public let places: WindowPlaces
@@ -382,6 +389,13 @@ public final class Compositor {
             guard let ctx else { return }
             Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue().surfacesCreated += 1
         }, me)
+        // Menus (P10.4): see Popups.swift for why this had never existed.
+        newPopupListener = tw_listen(&shell.pointee.events.new_popup, { ctx, data in
+            guard let ctx, let data else { return }
+            let c = Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue()
+            let p = data.assumingMemoryBound(to: wlr_xdg_popup.self)
+            c.popups.append(PopupSurface(p, compositor: c))
+        }, me)
         newToplevelListener = tw_listen(&shell.pointee.events.new_toplevel, { ctx, data in
             guard let ctx, let data else { return }
             let c = Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue()
@@ -465,7 +479,10 @@ public final class Compositor {
         tw_listener_free(newSurfaceListener)
         tw_listener_free(newToplevelListener)
         tw_listener_free(newLayerListener)
+        tw_listener_free(newPopupListener)
         tw_listener_free(activationListener)
+        for p in popups { p.teardown() }
+        if let t = restoreTimer { wl_event_source_remove(t) }
         for t in toplevels { t.teardown() }
         for l in layers { l.teardown() }
         // Here, while `session` — and so the wl_display the menu globals live
@@ -477,6 +494,7 @@ public final class Compositor {
     // MARK: - Layer shell
 
     internal func forgetLayer(_ l: LayerSurface) {
+        if seat?.keyboardLayer === l { seat?.restoreKeyboard() }
         l.teardown()
         layers.removeAll { $0 === l }
         arrangeLayers()
@@ -816,6 +834,31 @@ public final class Compositor {
     /// The seat, once one exists — set by `Seat.init`.
     weak var seat: Seat?
 
+    func forgetPopup(_ p: PopupSurface) {
+        p.teardown()
+        popups.removeAll { $0 === p }
+        // The last menu closed: the keys go back to the window you were in —
+        // **after a moment, not now.** Walking the bar with ←/→ closes one
+        // menu and opens the next, and the bar may flush between the two; so
+        // "no popups" is briefly true, and restoring then takes the keyboard
+        // from the bar mid-walk. An idle callback was tried first and lost that
+        // race (the destroy and the create arrived in separate dispatches).
+        // 100 ms is long enough for a client to open its next menu and short
+        // enough that nobody types into the gap after an Escape.
+        if popups.isEmpty {
+            let loop = wl_display_get_event_loop(session.display)
+            if restoreTimer == nil {
+                restoreTimer = wl_event_loop_add_timer(loop, { data in
+                    guard let data else { return 0 }
+                    let c = Unmanaged<Compositor>.fromOpaque(data).takeUnretainedValue()
+                    if c.popups.isEmpty { c.seat?.restoreKeyboard() }
+                    return 0
+                }, Unmanaged.passUnretained(self).toOpaque())
+            }
+            _ = wl_event_source_timer_update(restoreTimer, 100)
+        }
+    }
+
     fileprivate func forget(_ t: Toplevel) {
         decorations?.forget(t)
         t.teardown()
@@ -861,6 +904,10 @@ public final class Compositor {
         }
         for l in mappedLayers {
             wlr_surface_send_frame_done(l.surface, &now)
+        }
+        // Or a menu draws once and never shows its hover.
+        for p in mappedPopups {
+            wlr_surface_send_frame_done(p.surface, &now)
         }
     }
 

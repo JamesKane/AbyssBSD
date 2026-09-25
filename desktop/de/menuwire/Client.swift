@@ -30,6 +30,25 @@ public enum MenuClient {
             Current.call(service, MenuWire.activateRequest(verb: verb, arguments: arguments)))
     }
 
+    /// Ask to be told when `service`'s vocabulary changes. Returns the held
+    /// connection: it becomes readable with a `changed` message each time, and
+    /// with EOF when the application goes. The caller owns and closes it.
+    public static func subscribe(_ service: String) throws -> Int32 {
+        let s = try Current.connect(service)
+        do {
+            var m = Msg(); m.set("method", "subscribe")
+            try Current.send(m, on: s)
+            let reply = try Current.receive(on: s)
+            guard reply.bool("ok") == true else {
+                throw MenuWireError.service(reply.string("error") ?? "subscribe refused")
+            }
+            return s
+        } catch {
+            close(s)
+            throw error
+        }
+    }
+
     /// Every menu service in the runtime directory that answers a connection —
     /// a socket left behind by a crash is not an application.
     public static func services() -> [String] {

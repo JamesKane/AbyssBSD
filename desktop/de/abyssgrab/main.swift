@@ -1,6 +1,6 @@
 // abyssgrab — capture an output to a PNG (PHASE7.md P7.5).
 //
-//     abyssgrab <out.png> [--output N] [--cursor]
+//     abyssgrab <out.png|out.ppm> [--output N] [--cursor]
 //
 // The screenshot portal's capture step, as its own process — for the same
 // reason the file chooser's picker is (PHASE7.md §6.1): it keeps the portal a
@@ -86,6 +86,30 @@ for y in 0..<capture.height {
     let src = y * capture.stride, dst = y * cairoStride
     image.replaceSubrange(dst..<(dst + capture.stride),
                           with: capture.pixels[src..<(src + capture.stride)])
+}
+
+// **`.ppm` writes a PPM instead** (PHASE10 P10.4): a header and RGB triples,
+// which a shell script can probe with `dd` and `od` and no image library —
+// the same format undertow's `--capture` writes (HANDOFF §2.26). The PNG path
+// is for people; this one is for assertions on a live desktop.
+if outPath.hasSuffix(".ppm") {
+    var out = Array("P6\n\(capture.width) \(capture.height)\n255\n".utf8)
+    out.reserveCapacity(out.count + capture.width * capture.height * 3)
+    for y in 0..<capture.height {
+        for x in 0..<capture.width {
+            // RGB24 in memory is B, G, R, X on the little-endian hosts we run.
+            let i = y * cairoStride + x * 4
+            out.append(image[i + 2]); out.append(image[i + 1]); out.append(image[i])
+        }
+    }
+    let fd = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+    guard fd >= 0 else { die("could not write \(outPath)") }
+    let n = out.withUnsafeBufferPointer { write(fd, $0.baseAddress, out.count) }
+    close(fd)
+    guard n == out.count else { die("short write to \(outPath)") }
+    emit(2, "abyssgrab: captured output \(outputIndex) — "
+         + "\(capture.width)x\(capture.height) → \(outPath)")
+    exit(0)
 }
 
 // RGB24 rather than ARGB32: a screenshot is opaque, and cairo would otherwise

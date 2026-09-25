@@ -154,6 +154,29 @@ final class AnchorTests: XCTestCase {
         }
     }
 
+    /// The menu bar, and only the menu bar, goes to the compositor's
+    /// privileged socket (PHASE10 P10.4) — and waits for it as the shell waits
+    /// for the ordinary one, or a slow compositor start would spend its
+    /// restart budget.
+    func testOnlyTheMenuBarIsPointedAtThePrivilegedSocket() {
+        let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss",
+                               dbusDaemon: nil, runtimeDir: "/run/abyss", display: "abyss-0",
+                               compositorSocket: "/run/x/abyss-0",
+                               menubarDisplay: "abyss-0-bar", menubarSocket: "/run/x/abyss-0-bar")
+        for c in p.components {
+            if c.name == "menubar" {
+                XCTAssertEqual(c.env["WAYLAND_DISPLAY"], "abyss-0-bar")
+                XCTAssertEqual(c.requires, ["/run/x/abyss-0", "/run/x/abyss-0-bar"])
+            } else if c.env["WAYLAND_DISPLAY"] != nil {
+                XCTAssertEqual(c.env["WAYLAND_DISPLAY"], "abyss-0",
+                               "\(c.name) must not be handed the privileged socket")
+            }
+        }
+        // Without one, the bar is an ordinary client, as before.
+        let q = plan()
+        XCTAssertEqual(q.components.first { $0.name == "menubar" }?.env["WAYLAND_DISPLAY"], "abyss-0")
+    }
+
     func testTheDesktopSessionIsUnchangedByTheNewMode() {
         // The default is still what it was: a regression here is a desktop that
         // boots without its Dock.

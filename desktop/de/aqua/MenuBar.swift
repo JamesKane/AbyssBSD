@@ -16,6 +16,8 @@ import PoolConfig
 import Vents
 import CCairo
 import CWayland
+import MenuWire
+import CurrentIPC
 
 #if canImport(Glibc)
 import Glibc
@@ -173,7 +175,7 @@ private func drawSystemGlyph(_ cr: OpaquePointer, _ r: Rect, color: Color) {
 
 public final class MenuBar: LayerSurfaceDelegate {
     private var layer: LayerSurface?
-    private let menus: [MenuBarMenu]
+    private var menus: [MenuBarMenu]
     private let showClock: Bool
     private var clock = ""
     private var layoutCache = MenuBarLayout()
@@ -189,8 +191,19 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var status = MenuBarStatus()
     /// Who is frontmost and where their menus are, from the compositor
     /// (P10.3). Nil unless this bar connected through undertow's privileged
-    /// socket — the only connection offered it. P10.4 draws what it says.
+    /// socket — the only connection offered it.
     private var focus: MenuBarFocus?
+    /// The frontmost application's menu service, when it has one (P10.4).
+    /// Nil means the bar is drawing a definition it cannot ask about: the
+    /// Finder's, under a compositor that has no view of focus to give.
+    private var service: String?
+    /// Enablement pulled when the open menu opened (PHASE10 §6.4).
+    private var enablement: [String: Enablement] = [:]
+    /// The held `subscribe` connection to `service`, folded into the run loop.
+    private var changesFd: Int32 = -1
+    /// The titles moved; say where, once they have been laid out.
+    private var titlesDirty = true
+    private let display: Display
 
     /// The system menu — the bar's own, whoever is frontmost. Nothing here can
     /// run yet (P10.8 gives the items that can a verb to call), so every item
@@ -237,11 +250,13 @@ public final class MenuBar: LayerSurfaceDelegate {
     }
 
     public init?(display: Display) {
+        self.display = display
         let config = (try? Pool.load("panel")) ?? Config()
         showClock = config.bool("panel", "show_clock") ?? true
         let height = Int32(config.uint64("panel", "menubar_height") ?? 22)
-        // The Finder's own definition, not a copy of it (P10.1). Which
-        // application is frontmost arrives with P10.4.
+        // Until the compositor says who is frontmost, the Finder's own
+        // definition (P10.1) — which is also all a bar under a compositor with
+        // no view of focus will ever have.
         menus = MenuBar.menus(for: finderMenuBar())
 
         guard let ls = LayerSurface(
@@ -264,7 +279,7 @@ public final class MenuBar: LayerSurfaceDelegate {
                     + "\(status.batteryPercent.map { "battery \($0)%" } ?? "no battery")")
 
         if let f = MenuBarFocus(display: display) {
-            f.onFocus = { f in
+            f.onFocus = { [weak self] f in
                 switch f.kind {
                 case .none:
                     MenuBar.log("frontmost: " + (f.appID.isEmpty ? "nothing"
@@ -272,6 +287,7 @@ public final class MenuBar: LayerSurfaceDelegate {
                 default:
                     MenuBar.log("frontmost: \(f.appID) at \(f.address) [\(f.kind)]")
                 }
+                self?.follow(f)
             }
             focus = f
         } else {
@@ -284,6 +300,121 @@ public final class MenuBar: LayerSurfaceDelegate {
             timerFd = fd
             display.addFileDescriptor(fd) { [weak self] in self?.clockTick() }
         }
+    }
+
+    // MARK: the frontmost application (P10.4)
+
+    /// Show whoever the compositor says is frontmost.
+    private func follow(_ f: MenuBarFocus.Focus) {
+        closeMenu()
+        unsubscribe()
+        enablement = [:]
+        switch f.kind {
+        case .abyss:
+            let t0 = MenuBar.nowUs()
+            do {
+                let d = try MenuClient.describe(f.address)
+                service = f.address
+                menus = MenuBar.menus(for: d.model)
+                MenuBar.log("showing \(d.model.appName)'s menus from \(f.address) "
+                            + "(\(d.model.commands.count) commands, described in "
+                            + "\(MenuBar.nowUs() - t0) us)")
+                subscribe(f.address)
+            } catch {
+                // An address nobody answers — the application is going, or
+                // stuck. The bar must still be a bar.
+                MenuBar.log("could not describe \(f.address): \(error)")
+                show(nameOnly: f.appID)
+            }
+        case .none, .gtk, .dbusmenu:
+            // A window with no menus we can read still has a name, and the
+            // application menu is where Jaguar put it.
+            show(nameOnly: f.appID)
+        }
+        titlesDirty = true
+        layer?.setNeedsDisplay()
+    }
+
+    /// The system menu, and the frontmost application's name with nothing
+    /// under it — or just the system menu when nothing is frontmost.
+    private func show(nameOnly appID: String) {
+        service = nil
+        let name = appID.split(separator: ".").last.map(String.init) ?? ""
+        menus = [MenuBarMenu(MenuBar.systemMenu, isSystem: true)]
+            + (name.isEmpty ? [] : [MenuBarMenu(Menu(name, []), bold: true)])
+    }
+
+    private func subscribe(_ address: String) {
+        guard let fd = try? MenuClient.subscribe(address) else { return }
+        changesFd = fd
+        display.addFileDescriptor(fd) { [weak self] in self?.vocabularyChanged() }
+    }
+
+    private func unsubscribe() {
+        guard changesFd >= 0 else { return }
+        display.removeFileDescriptor(changesFd)
+        close(changesFd)
+        changesFd = -1
+    }
+
+    /// The application said its vocabulary changed — or went away, which reads
+    /// the same way on this connection until the read says which.
+    private func vocabularyChanged() {
+        guard changesFd >= 0, let address = service else { return }
+        guard (try? Current.receive(on: changesFd))?.string("method") == "changed" else {
+            MenuBar.log("\(address) went away")
+            unsubscribe()
+            return
+        }
+        if let d = try? MenuClient.describe(address) {
+            menus = MenuBar.menus(for: d.model)
+            MenuBar.log("\(d.model.appName)'s vocabulary changed; redescribed")
+            titlesDirty = true
+            layer?.setNeedsDisplay()
+        }
+    }
+
+    /// Whether `command` can be chosen, as the frontmost application answered
+    /// when its menu opened — or, with no application to ask, from the
+    /// definition alone. The system menu is the bar's own (P10.8).
+    private func enabled(_ command: Command) -> Enablement {
+        if command.verb.hasPrefix("system.") { return .disabled("not available yet") }
+        if service == nil { return MenuBar.staticEnablement(command) }
+        return enablement[command.verb] ?? .disabled("the application did not say")
+    }
+
+    /// Run a command the person chose, and say what came of it.
+    private func choose(_ command: Command, in menuName: String) {
+        let what = "\(menuName) > \(command.title) (\(command.verb))"
+        guard let address = service else {
+            MenuBar.log("chose \(what)")
+            return
+        }
+        do {
+            switch try MenuClient.activate(address, verb: command.verb) {
+            case .ok(let v):       MenuBar.log("chose \(what) → ok" + (v.map { " \($0)" } ?? ""))
+            case .refused(let w):  MenuBar.log("chose \(what) → refused: \(w)")
+            }
+        } catch {
+            MenuBar.log("chose \(what) → \(address) did not answer: \(error)")
+        }
+    }
+
+    /// Where every title is, in output coordinates — so a test can click one
+    /// without a coordinate in the script (§2.46). Logged when the titles
+    /// change, which is rarely.
+    private func logTitles() {
+        guard !layoutCache.titleRects.isEmpty else { return }
+        let parts = zip(menus, layoutCache.titleRects).map { m, r in
+            "\(m.isSystem ? "System" : m.title)@\(Int(r.x + r.w / 2)),\(Int(r.h / 2))"
+        }
+        MenuBar.log("titles " + parts.joined(separator: " "))
+    }
+
+    private static func nowUs() -> Int64 {
+        var ts = timespec()
+        clock_gettime(CLOCK_MONOTONIC, &ts)
+        return Int64(ts.tv_sec) * 1_000_000 + Int64(ts.tv_nsec) / 1000
     }
 
     private static func currentClock() -> String {
@@ -329,6 +460,7 @@ public final class MenuBar: LayerSurfaceDelegate {
         layoutCache = paintMenuBar(cr, w: w, h: h, menus: menus, clock: clock,
                                    openIndex: openIndex, showClock: showClock,
                                    status: status)
+        if titlesDirty { titlesDirty = false; logTitles() }
         cairo_surface_flush(cs)
         cairo_destroy(cr)
         cairo_surface_destroy(cs)
@@ -384,12 +516,27 @@ public final class MenuBar: LayerSurfaceDelegate {
         closeMenu()
         let m = menus[i]
         let name = m.isSystem ? "System" : m.title
-        let rows = aquaMenuItems(m.menu, enablement: MenuBar.staticEnablement)
+        // **Pulled, as it opens** (PHASE10 §6.4): what can run is asked of the
+        // application now, not pushed to the bar every time it changes.
+        if let address = service, !m.isSystem {
+            let t0 = MenuBar.nowUs()
+            if let v = try? MenuClient.validate(address) {
+                enablement = v
+                MenuBar.log("validated \(v.count) commands in \(MenuBar.nowUs() - t0) us")
+            } else {
+                enablement = [:]
+                MenuBar.log("\(address) did not answer validate")
+            }
+        }
+        let rows = aquaMenuItems(m.menu, enablement: enabled)
+        let commands = Dictionary(m.menu.commands.map { ($0.verb, $0) },
+                                  uniquingKeysWith: { a, _ in a })
         let am = AquaMenu(items: rows)
         am.onChoose = { [weak self] idx in
-            let row = rows[idx]
-            MenuBar.log("chose \(name) > \(row.title) (\(row.verb ?? "no verb"))")
             self?.closeMenu()
+            if let verb = rows[idx].verb, let c = commands[verb] {
+                self?.choose(c, in: name)
+            }
         }
         am.onDismiss = { [weak self] in self?.menuDismissed() }
 
@@ -405,6 +552,13 @@ public final class MenuBar: LayerSurfaceDelegate {
         popup = pop
         openIndex = i
         MenuBar.log("opened \(name)")
+        // Every row, where it will be on screen if the compositor places the
+        // popup where it was asked to — under its title, flush left.
+        for (row, geo) in zip(rows, aquaMenuRows(rows)) where !row.isSeparator {
+            let state = row.enabled ? "enabled" : "disabled"
+            MenuBar.log("item '\(row.title)' at \(Int(r.x) + 30),\(Int(r.h + geo.y + geo.h / 2)) "
+                        + "\(state)\(row.verb.map { " \($0)" } ?? "")")
+        }
         layer?.setNeedsDisplay()
     }
 

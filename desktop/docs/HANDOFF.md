@@ -15,7 +15,7 @@ boots a desktop where an unmodified GTK 3 application, which has never heard of
 this desktop, opens a file through the Finder**; and since Phase 9 it is a
 desktop you can *use*: clipboard, drag and drop, window management, keybinds,
 and an Aqua frame around foreign windows.
-**441 unit tests, 35 live modes and 26 live scripts, green on Linux and FreeBSD.**
+**444 unit tests, 35 live modes and 27 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -26,9 +26,9 @@ on every run, nested twice over, with no hardware and no human.
 **Picking this up cold?**
 
 1. **The phase in progress is 10, the menu protocol** — scoped in
-   [PHASE10.md](PHASE10.md). **P10.1–P10.3 are done** (one definition per command;
-   the menu service and `abyssmenu`; undertow's own menu protocols and a
-   privileged socket). P10.4, the bar made real, is next.
+   [PHASE10.md](PHASE10.md). **P10.1–P10.4 are done** — the menu bar shows the frontmost
+   application's own menus, drawn by our compositor, which had never drawn a
+   popup before (§2.62). P10.5, undo, is next.
    It needs no hardware.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
@@ -85,7 +85,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 441 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 444 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -364,6 +364,9 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.59 | Routing a key is not telling a window it has focus |
 | 2.60 | A `weak` focus goes nil without telling anyone — closing the focused window left the desktop deaf, the close-side twin of P9.4's minimize fix |
 | 2.61 | A wait the past can satisfy is not a wait — polling for a log line proves nothing if the line was there before you started |
+| 2.62 | undertow never drew, hit-tested or paced an `xdg_popup` — every menu mapped and was invisible; and an injected fault withdrew the first explanation |
+| 2.63 | A compositor that ignores `keyboard_interactivity` sends the menu bar's arrow keys to the window behind the menu |
+| 2.64 | Snapshot a set where you poll it, not after dispatching — a handler that registers from inside a Wayland event made them disagree |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -630,6 +633,59 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.64 Snapshot a set where you poll it, not after dispatching
+(P10.4. The first handler in the project's history to register a descriptor
+from inside a Wayland event.)
+
+`Display.run` built its `pollfd` array from `extraFds`, polled, dispatched the
+Wayland events, and *then* took a snapshot of `extraFds` to walk alongside the
+poll results. If anything in that dispatch registered a descriptor, the snapshot
+was one longer than the array: `pfds[i + 1]` out of range, and the process gone.
+The menu bar subscribing to an application when a focus event arrives was the
+first code to do that; everything before registered from descriptor handlers,
+after the walk. **Take the snapshot at the moment the set is polled** — the list
+that produced the results is the only one that can be indexed by them.
+
+### 2.63 A compositor that ignores `keyboard_interactivity` sends the bar's keys elsewhere
+(P10.4. Every keyboard test of the menu bar ran on sway.)
+
+The bar is a layer surface with `keyboard_interactivity: on_demand`, so that a
+click on a title gives it the keyboard and the arrow keys walk the menus
+(§2.27). undertow gave the keyboard to windows and nothing else, so under our
+compositor Down and Return in an open menu went to the Finder window behind it.
+Now a click on such a layer hands it the keyboard **without** changing who is
+frontmost — the bar is not an application — and the keyboard returns to the
+active window when the last menu closes.
+
+The return has a race worth knowing: walking the bar with ← → closes one popup
+and opens the next, and the client may flush between the two, so "no popups" is
+briefly true. Restoring at once, or on the next idle, takes the keyboard from
+the bar mid-walk (the idle version was tried and failed the test). A 100 ms
+timer lets the next menu arrive. The test that caught it walks → and then
+presses Escape, which only the bar would answer.
+
+### 2.62 undertow never drew, hit-tested or paced an `xdg_popup`
+(P10.4. Found when the bar became real and "New Folder" was clicked.)
+
+wlroots implements xdg-shell's popups at the protocol level — including their
+initial configure and the grab that dismisses them — so a client's menu *mapped*
+under undertow. And then nothing: undertow had no `new_popup` listener, so no
+popup was in the paint order, the hit-test or the frame callbacks. The menu
+bar's dropdowns, the Dock's Trash menu and every pop-up button were mapped,
+invisible and unclickable on our own compositor; every test that opened one ran
+on sway, and the client's log line — "opened File" — was true of the client.
+§2.56 (layer surfaces not hit-tested) and §2.58 (a global with no objects) are
+the same shape; this is the third time, and the lesson is the same: **list the
+surface roles a client can create and check each is in the scene, the hit-test
+and the frame callbacks.** Subsurfaces have not been checked yet.
+
+**And the first explanation was wrong.** The first draft of `Popups.swift` said
+the missing piece was the initial configure, and scheduled one. Removing that
+call left the test green: wlroots sends it. The injected faults that do break
+menus are removing the popup hit-test (a click lands on nothing) and removing
+popups from the scene (a pixel in the open menu is the desktop's blue). A cause
+stated before it has been falsified is a guess wearing a comment.
 
 ### 2.61 A wait the past can satisfy is not a wait
 (P10.3. The compositor was right; the test said it was wrong.)
@@ -2240,7 +2296,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **441 unit tests** are
+standalone ones `run.sh` invokes, listed below; **444 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2308,7 +2364,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 441 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 444 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2341,7 +2397,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 441 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 444 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2405,7 +2461,7 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **441 unit tests, 35 live modes and 26 live scripts, green on Linux
+heard of it. **444 unit tests, 35 live modes and 27 live scripts, green on Linux
 and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
@@ -2443,7 +2499,7 @@ the installer, the medium, the distribution sets or the boot path.**
 
 ### 1. Phase 10 — the menu protocol
 
-Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.3 are done and P10.4 is next. The spikes moved work into
+Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.4 are done and P10.5 (undo) is next. The spikes moved work into
 the compositor: under `undertow` a GTK application exports its menus on the bus
 and tells nobody where, so undertow has to speak `gtk_shell1` — the first
 protocol it implements itself. The phase ([PLAN.md](PLAN.md)): the menu bar stops being a picture

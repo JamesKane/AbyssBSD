@@ -118,6 +118,15 @@ int at_font_init(void) {
         "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
         "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",          /* FreeBSD */
         "/usr/share/fonts/google-noto/NotoSansSymbols-Regular.ttf",
+        /* Fedora's default UI font, which covers the menu glyphs (⌘ ⇧ ⌥ ⌃ ⌫)
+         * that Noto Sans does not — on a box without DejaVu, key equivalents
+         * drew as empty boxes (PHASE10 P10.4). */
+        "/usr/share/fonts/adwaita-sans-fonts/AdwaitaSans-Regular.ttf",
+        /* DejaVu Sans has no ⎋ (Force Quit's ⌥⌘⎋); its Mono sibling does, and
+         * the medium already carries the whole DejaVu directory. Found by the
+         * FreeBSD guest, where Adwaita is not installed (PHASE10 P10.4). */
+        "/usr/local/share/fonts/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf",
         NULL,
     };
     for (int i = 0; fallback[i] != NULL && nfb < MAX_FACES; i++) {
@@ -162,6 +171,15 @@ int at_font_init(void) {
 }
 
 int at_font_face_count(void) { return g_nfaces; }
+
+/* Whether any loaded face has a glyph for `cp`. Read-only on the shaping
+ * faces' charmaps — no size is set, nothing is rendered. */
+int at_font_covers(unsigned int cp) {
+    for (int i = 0; i < g_nfaces; i++) {
+        if (g_shape[i] && FT_Get_Char_Index(g_shape[i], cp) != 0) return 1;
+    }
+    return 0;
+}
 
 int at_font_style_available(int style) {
     if (!at_font_init() || style < 0 || style >= AT_NSTYLES) return 0;

@@ -103,6 +103,15 @@ public final class SurfaceScene: FrameSink {
             count += 1
         }
         for l in layers where l.layer >= 2 { add(layer: l) }
+        // Menus above everything, parent before child (P10.4).
+        for p in compositor.mappedPopups {
+            guard count < capacity, let o = p.origin,
+                  let tex = wlr_surface_get_texture(p.surface) else { continue }
+            texture[count] = tex
+            x[count] = o.x; y[count] = o.y
+            w[count] = p.width; h[count] = p.height
+            count += 1
+        }
 
         var painted: Int32 = 0
         var area: Int64 = 0

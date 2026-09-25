@@ -148,6 +148,12 @@ public final class LayerSurface {
     }
     /// 0 background, 1 bottom, 2 top, 3 overlay — the paint order.
     public var layer: UInt32 { handle.pointee.current.layer.rawValue }
+    /// Whether a click should hand this surface the keyboard: `on_demand`
+    /// (the menu bar) or `exclusive` (P10.4 — undertow ignored both).
+    public var takesKeyboardOnClick: Bool {
+        handle.pointee.current.keyboard_interactive
+            != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE
+    }
 
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
