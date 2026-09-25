@@ -752,6 +752,25 @@ public final class Compositor {
         }
     }
 
+    /// Force Quit (P10.8): kill every process with a toplevel of `appID`.
+    ///
+    /// Only the compositor can do this — it alone knows which client, and so
+    /// which pid, is behind a window — and only the menu bar can ask, on the
+    /// privileged socket. SIGKILL, because a *force* quit is for an application
+    /// that has stopped answering; a polite one is Cmd-Q. Never ourselves.
+    @discardableResult
+    func forceQuit(appID: String) -> [Int32] {
+        var pids: Set<Int32> = []
+        for t in toplevels where t.appID == appID {
+            let pid = Int32(tw_client_pid_of(t.xdgToplevel.pointee.resource))
+            if pid > 0, pid != getpid() { pids.insert(pid) }
+        }
+        for pid in pids.sorted() { kill(pid, SIGKILL) }
+        Menus.log("force quit \(appID): " + (pids.isEmpty ? "no such application"
+                                              : "killed \(pids.sorted().map(String.init).joined(separator: " "))"))
+        return pids.sorted()
+    }
+
     public static let minimumWindowWidth: Int32 = 120
     public static let minimumWindowHeight: Int32 = 40
 

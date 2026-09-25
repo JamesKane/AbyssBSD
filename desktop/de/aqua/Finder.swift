@@ -47,6 +47,7 @@ import Darwin
 #endif
 
 private let kBtnLeft: UInt32 = 0x110
+private let kBtnRight: UInt32 = 0x111
 private let kDoubleClickMs: Int64 = 450
 
 /// Everything the painter needs — a value, so the PNG preview can render a
@@ -954,6 +955,8 @@ public final class FinderWindow: WindowDelegate {
     private var lastClickMs: Int64 = 0
     // Non-nil while renaming an item in place.
     private var edit: FinderEdit?
+    /// The open contextual menu, if any (P10.8).
+    private var context: ContextMenu?
     /// This window's undo (P10.5): per window, held rather than owned, so a
     /// document model can take it over later without changing a command.
     let undo = UndoStack()
@@ -1444,6 +1447,7 @@ public final class FinderWindow: WindowDelegate {
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if button == kBtnRight, pressed { openContextMenu(); return }
         guard button == kBtnLeft else { return }
         if pressed, edit != nil { commitRename() }
         guard pressed else {
@@ -1545,6 +1549,40 @@ public final class FinderWindow: WindowDelegate {
         }
         FinderWindow.log("dropped \(path) -> \(dest)")
         app?.refreshWindows(showing: directory, selecting: name) ?? refresh(selecting: name)
+    }
+
+    /// Right-click: select what is under the pointer — as the Finder does, so
+    /// the menu's commands mean *that* item — and open the item's menu, or the
+    /// folder's when the click was on nothing (P10.8).
+    private func openContextMenu() {
+        context?.close(); context = nil
+        if edit != nil { commitRename() }
+        let hit = finderIndex(atX: pointerX, y: pointerY, count: entries.count, view: view,
+                              viewport: viewport, scroll: scroll)
+        guard viewport.contains(pointerX, pointerY) else { return }
+        select(hit)
+        let verbs = hit == nil ? FinderContext.background : FinderContext.item
+        let menu = FinderContext.menu(verbs, in: FinderWindow.menuBar)
+        let (ax, ay) = (Int32(pointerX), Int32(pointerY))
+        context = ContextMenu.open(
+            menu, name: hit == nil ? "folder" : "item",
+            enablement: { [weak self] c in
+                guard let self, let v = FinderVerb(rawValue: c.verb) else { return .disabled("?") }
+                return self.validate(v)
+            },
+            log: { FinderWindow.log($0) },
+            open: { [weak self] w, h, am in
+                self?.window?.openPopup(anchorX: ax, anchorY: ay, anchorW: 1, anchorH: 1,
+                                        width: w, height: h, delegate: am)
+            },
+            choose: { [weak self] c in
+                guard let self, let v = FinderVerb(rawValue: c.verb) else { return }
+                switch self.perform(v) {
+                case .ok(let x):      FinderWindow.log("context chose \(c.title) (\(c.verb)) → ok" + (x.map { " \($0)" } ?? ""))
+                case .refused(let w): FinderWindow.log("context chose \(c.title) (\(c.verb)) → refused: \(w)")
+                }
+            },
+            onClose: { [weak self] in self?.context = nil })
     }
 
     /// The compositor says which window is active; a command from outside the

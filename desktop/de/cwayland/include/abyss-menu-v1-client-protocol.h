@@ -204,6 +204,7 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
 }
 
 #define ABYSS_MENUBAR_V1_DESTROY 0
+#define ABYSS_MENUBAR_V1_FORCE_QUIT 1
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -214,6 +215,10 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_DESTROY_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_FORCE_QUIT_SINCE_VERSION 2
 
 /** @ingroup iface_abyss_menubar_v1 */
 static inline void
@@ -243,6 +248,21 @@ abyss_menubar_v1_destroy(struct abyss_menubar_v1 *abyss_menubar_v1)
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
 			 ABYSS_MENUBAR_V1_DESTROY, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), WL_MARSHAL_FLAG_DESTROY);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ *
+ * Kill every client with a toplevel of this app_id. Only the compositor
+ * knows which processes those are, and only the menu bar — on the
+ * privileged socket — may ask (PHASE10 P10.8). The compositor never kills
+ * itself.
+ */
+static inline void
+abyss_menubar_v1_force_quit(struct abyss_menubar_v1 *abyss_menubar_v1, const char *app_id)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
+			 ABYSS_MENUBAR_V1_FORCE_QUIT, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0, app_id);
 }
 
 #ifdef  __cplusplus

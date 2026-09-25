@@ -69,6 +69,17 @@ public final class ForeignToplevels {
         return true
     }
 
+    /// Ask every window of `appID` to close — Quit from a Dock tile (P10.8).
+    /// A polite request each application may refuse; Force Quit is the
+    /// compositor's, not this. Returns how many windows were asked.
+    @discardableResult
+    public func close(appID: String) -> Int {
+        let mine = toplevels.filter { $0.appID == appID }
+        for info in mine { aw_foreign_toplevel_handle_close(raw(info.handle)) }
+        display.flush()
+        return mine.count
+    }
+
     /// Activate a specific tracked toplevel.
     public func activate(_ info: ToplevelInfo) {
         guard let seat = display.seat else { return }

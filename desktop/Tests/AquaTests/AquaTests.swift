@@ -529,6 +529,37 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(m.retitled([:]), m)
     }
 
+    // MARK: P10.8 — contextual menus
+
+    /// A right-click shows the menu bar's own commands: same verb, same title,
+    /// same key. If a contextual command were defined separately it could
+    /// drift; this is the check that it is not.
+    func testFinderContextMenusAreTheMenuBarsCommands() {
+        let model = finderMenuBar()
+        for verbs in [FinderContext.item, FinderContext.background] {
+            let menu = FinderContext.menu(verbs, in: model)
+            XCTAssertEqual(menu.commands.count, verbs.compactMap { $0 }.count,
+                           "every verb in a contextual menu is in the model")
+            for c in menu.commands { XCTAssertEqual(c, model.command(c.verb)) }
+        }
+        XCTAssertEqual(FinderContext.menu(FinderContext.item, in: model).commands.first?.verb,
+                       "file.open", "Open first, as the Finder has it")
+    }
+
+    func testADockTilesMenuSaysOpenOrQuitByWhetherItRuns() {
+        XCTAssertEqual(Dock.tileMenu(isTrash: false, running: false).commands.first?.verb, "dock.open")
+        XCTAssertEqual(Dock.tileMenu(isTrash: false, running: true).commands.first?.verb, "dock.quit")
+        // The Trash keeps its order — Open, then Empty Trash — because the
+        // sway test clicks those rows by position (live-sway.sh --trash).
+        XCTAssertEqual(Dock.tileMenu(isTrash: true, running: false).commands.map(\.title),
+                       ["Open", "Empty Trash"])
+    }
+
+    func testTheDesktopsMenuIsItsOwnFewCommands() {
+        XCTAssertEqual(Wallpaper.contextMenu.commands.map(\.verb),
+                       ["desktop.new-folder", "desktop.change-background"])
+    }
+
     func testMenuRowsAndHitTestAgreeAcrossSeparators() {
         let items = [AquaMenuItem("A"), .separator, AquaMenuItem("B"),
                      AquaMenuItem("C", enabled: false), AquaMenuItem("D")]

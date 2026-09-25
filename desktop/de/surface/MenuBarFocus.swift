@@ -34,6 +34,7 @@ public final class MenuBarFocus {
         else { return nil }
         self.display = display
         proxy = p
+        version = g.version
         var l = abyss_menubar_v1_listener()
         l.focused = { data, _, kind, address, appID in
             guard let data else { return }
@@ -46,6 +47,18 @@ public final class MenuBarFocus {
         }
         display.addListener(to: p, listener: l, data: Unmanaged.passUnretained(self).toOpaque())
         display.flush()
+    }
+
+    private var version: UInt32 = 1
+
+    /// Ask the compositor to kill `appID` (P10.8). False when the compositor
+    /// is too old to be asked.
+    @discardableResult
+    public func forceQuit(appID: String) -> Bool {
+        guard version >= 2, let p = proxy else { return false }
+        aw_menubar_force_quit(raw(p), appID)
+        display.flush()
+        return true
     }
 
     deinit {

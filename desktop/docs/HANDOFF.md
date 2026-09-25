@@ -7,15 +7,15 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 [PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-09-25. **Phases 0–3, 5–8 and 9 are complete; Phase 4 is in
-flight on metal and Phase 12 is mostly done.** The Jaguar shell runs on FreeBSD,
+Last updated: 2026-09-25. **Phases 0–3, 5–8, 9 and 10 are complete; Phase 4 is
+in flight on metal and Phase 12 is mostly done.** The Jaguar shell runs on FreeBSD,
 on **our own compositor** (`undertow`), over a Swift control plane, session
 supervisor and hardware bridges; the portals hand out descriptors; **one command
 boots a desktop where an unmodified GTK 3 application, which has never heard of
 this desktop, opens a file through the Finder**; and since Phase 9 it is a
 desktop you can *use*: clipboard, drag and drop, window management, keybinds,
 and an Aqua frame around foreign windows.
-**463 unit tests, 35 live modes and 30 live scripts, green on Linux and FreeBSD.**
+**466 unit tests, 35 live modes and 31 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -30,8 +30,9 @@ on every run, nested twice over, with no hardware and no human.
    application's own menus, drawn by our compositor, which had never drawn a
    popup before (§2.62), and undo is decided (per window, a verb, never a
    delete), and a stock GTK application's menus appear in our bar
-   (P10.6), and so do a stock Qt/KDE application's — kcalc's — (P10.7).
-   P10.8, the menus the desktop owns, is the last pass.
+   (P10.6), and so do a stock Qt/KDE application's — kcalc's — (P10.7), and the desktop's own menus do what they say (P10.8).
+   **Phase 10 is COMPLETE**, its gates green on both platforms, `--full`
+   included. The next phase is 11, the theme system.
    It needs no hardware.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
@@ -88,7 +89,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 463 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 466 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -370,6 +371,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.62 | undertow never drew, hit-tested or paced an `xdg_popup` — every menu mapped and was invisible; and an injected fault withdrew the first explanation |
 | 2.63 | A compositor that ignores `keyboard_interactivity` sends the menu bar's arrow keys to the window behind the menu |
 | 2.64 | Snapshot a set where you poll it, not after dispatching — a handler that registers from inside a Wayland event made them disagree |
+| 2.65 | A privileged process hands its privilege to every child by default — the bar's first launched app inherited its privileged `WAYLAND_DISPLAY` |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -636,6 +638,25 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.65 A privileged process hands its privilege to every child by default
+(P10.8. Found by the test that launched System Preferences from the bar.)
+
+The menu bar connects to undertow's privileged socket (§6.1 of PHASE10), and
+that is what lets it watch focus and force-quit applications. The first thing
+it launched — System Preferences — inherited `WAYLAND_DISPLAY` like any child,
+and so connected to the *privileged* socket too: an ordinary application with
+the bar's powers, by accident, with nothing on screen to say so.
+
+Nothing about the launch was wrong in isolation. `launchDetached` passes the
+environment through because that is what a launcher is for. The mistake is the
+default: **a privileged process's environment is part of its privilege**, and a
+child that inherits it inherits the privilege. The bar now launches on the
+ordinary display, which `anchor` hands it as `ABYSS_APP_WAYLAND_DISPLAY`; not
+knowing it is a refusal, never a fallback to its own. `live-context.sh` reads
+the display the child actually received, and failed with the fix removed. The
+same question belongs to every privileged component that can start one:
+`abyss-install` (root), the portal, and whatever Phase 17 confines.
 
 ### 2.64 Snapshot a set where you poll it, not after dispatching
 (P10.4. The first handler in the project's history to register a descriptor
@@ -2299,7 +2320,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **463 unit tests** are
+standalone ones `run.sh` invokes, listed below; **466 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2367,7 +2388,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 463 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 466 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2400,7 +2421,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 463 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 466 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2464,7 +2485,7 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **463 unit tests, 35 live modes and 30 live scripts, green on Linux
+heard of it. **466 unit tests, 35 live modes and 31 live scripts, green on Linux
 and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
@@ -2502,7 +2523,9 @@ the installer, the medium, the distribution sets or the boot path.**
 
 ### 1. Phase 10 — the menu protocol
 
-Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.7 are done and P10.8 (the desktop's own menus) is the last pass. The spikes moved work into
+Scoped in **[PHASE10.md](PHASE10.md)**; **Phase 10 is COMPLETE**: all eight passes, and `run.sh --live` plus
+`run.sh --vm --live --full` green. The next phase is 11, the theme system. **What Phase 10 leaves:
+submenus draw their ▸ and have never opened** (PHASE10 P10.8). The spikes moved work into
 the compositor: under `undertow` a GTK application exports its menus on the bus
 and tells nobody where, so undertow has to speak `gtk_shell1` — the first
 protocol it implements itself. The phase ([PLAN.md](PLAN.md)): the menu bar stops being a picture

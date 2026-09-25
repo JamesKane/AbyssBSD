@@ -208,6 +208,10 @@ if [ "$live" -eq 1 ]; then
   # loudly, on a box without kcalc.
   echo "== Qt's menus in our bar =="
   sh "$root/abyss/tests/live-menus-qt.sh"
+  # The menus the desktop owns: right-click menus built from the menu bar's
+  # commands, and a system menu whose items do what they say (P10.8).
+  echo "== the desktop's own menus =="
+  sh "$root/abyss/tests/live-context.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

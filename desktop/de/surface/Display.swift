@@ -299,7 +299,7 @@ public final class Display {
         case "abyss_menu_manager_v1":
             menuManager = opt(aw_bind_menu_manager(raw(registry), name, 1))
         case "abyss_menubar_v1":
-            menubarGlobal = (name, 1)
+            menubarGlobal = (name, min(version, 2))
         case "xdg_activation_v1":
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.

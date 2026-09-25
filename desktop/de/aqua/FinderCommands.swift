@@ -169,3 +169,23 @@ public func finderMenuBar() -> MenuBarModel {
         ]),
     ])
 }
+
+/// The Finder's contextual menus (P10.8) — commands from `finderMenuBar()`,
+/// picked by verb, so they are the same commands the menu bar shows.
+public enum FinderContext {
+    /// Right-clicking an item.
+    public static let item: [FinderVerb?] = [.open, .getInfo, nil, .duplicate, .makeAlias,
+                                             .moveToTrash, nil, .copy]
+    /// Right-clicking the folder's background.
+    public static let background: [FinderVerb?] = [.newFolder, nil, .paste, nil,
+                                                   .asIcons, .asList]
+
+    /// `nil` is a separator. A verb the model does not have is a bug, and is
+    /// left out rather than drawn from nothing.
+    public static func menu(_ verbs: [FinderVerb?], in model: MenuBarModel) -> Menu {
+        Menu("", verbs.compactMap { v -> MenuItem? in
+            guard let v else { return .separator }
+            return model.command(v.rawValue).map { .command($0) }
+        })
+    }
+}

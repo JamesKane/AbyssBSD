@@ -57,6 +57,7 @@ WL_PRIVATE const struct wl_interface abyss_menu_manager_v1_interface = {
 
 static const struct wl_message abyss_menubar_v1_requests[] = {
 	{ "destroy", "", abyss_menu_v1_types + 0 },
+	{ "force_quit", "2s", abyss_menu_v1_types + 0 },
 };
 
 static const struct wl_message abyss_menubar_v1_events[] = {
@@ -64,8 +65,8 @@ static const struct wl_message abyss_menubar_v1_events[] = {
 };
 
 WL_PRIVATE const struct wl_interface abyss_menubar_v1_interface = {
-	"abyss_menubar_v1", 1,
-	1, abyss_menubar_v1_requests,
+	"abyss_menubar_v1", 2,
+	2, abyss_menubar_v1_requests,
 	1, abyss_menubar_v1_events,
 };
 

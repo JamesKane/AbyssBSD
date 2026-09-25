@@ -415,3 +415,7 @@ void *aw_bind_menubar(void *registry, uint32_t name, uint32_t version) {
 void aw_menubar_destroy(void *menubar) {
     abyss_menubar_v1_destroy((struct abyss_menubar_v1 *)menubar);
 }
+
+void aw_menubar_force_quit(void *menubar, const char *app_id) {
+    abyss_menubar_v1_force_quit((struct abyss_menubar_v1 *)menubar, app_id);
+}

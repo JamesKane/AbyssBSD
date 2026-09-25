@@ -138,6 +138,7 @@ private func paintImageCover(_ cr: OpaquePointer, w: Double, h: Double, path: St
 }
 
 private let kBtnLeft: UInt32 = 0x110
+private let kBtnRight: UInt32 = 0x111
 private let kDoubleClickMs: Int64 = 450
 
 public final class Wallpaper: LayerSurfaceDelegate {
@@ -150,6 +151,16 @@ public final class Wallpaper: LayerSurfaceDelegate {
     private let desktopFolder: String?
     private var entries: [FinderEntry] = []
     private var selection: Int?
+    /// The desktop's open contextual menu (P10.8).
+    private var context: ContextMenu?
+
+    /// The desktop's own commands (P10.8).
+    static let newFolder = Command("desktop.new-folder", "New Folder",
+                                   summary: "Make an untitled folder on the desktop.")
+    static let changeBackground = Command("desktop.change-background", "Change Desktop Background…",
+                                          summary: "Choose the desktop picture or colour.")
+    static let contextMenu = Menu("Desktop", [.command(newFolder), .separator,
+                                              .command(changeBackground)])
     private var iconWatcher: Pool.Watcher?
     private var finder: FinderApp?
     private var pointerX = 0.0
@@ -269,12 +280,51 @@ public final class Wallpaper: LayerSurfaceDelegate {
         finder?.openFolder(path)
     }
 
+    /// Right-click on bare desktop (P10.8). On an icon it is the Finder's item
+    /// menu in Jaguar; here the icons have no menu yet, so a right-click on one
+    /// selects it and opens nothing, rather than offering the desktop's.
+    private func openContextMenu() {
+        context?.close(); context = nil
+        let size = layer?.size ?? (width: 0, height: 0)
+        let bounds = iconBounds(w: Double(size.width), h: Double(size.height))
+        if let hit = desktopIndex(atX: pointerX, y: pointerY, count: entries.count, bounds: bounds) {
+            selection = hit
+            layer?.setNeedsDisplay()
+            return
+        }
+        let (ax, ay) = (Int32(pointerX), Int32(pointerY))
+        let folder = desktopFolder
+        context = ContextMenu.open(
+            Wallpaper.contextMenu, name: "desktop",
+            enablement: { c in
+                switch c.verb {
+                case "desktop.new-folder":
+                    return folder == nil ? .disabled("there is no Desktop folder") : .enabled
+                default: return .disabled("not available yet")
+                }
+            },
+            log: { Wallpaper.log($0) },
+            open: { [weak self] w, h, am in
+                self?.layer?.openPopup(anchorX: ax, anchorY: ay, anchorW: 1, anchorH: 1,
+                                       width: w, height: h, delegate: am)
+            },
+            choose: { c in
+                guard c.verb == "desktop.new-folder", let dir = folder else { return }
+                let name = finderNewFolderName { finderExists(finderJoin(dir, $0)) }
+                let ok = finderCreateDirectory(finderJoin(dir, name))
+                // The Desktop folder's watcher redraws the icons (P2.x).
+                Wallpaper.log(ok ? "new folder \(finderJoin(dir, name))" : "could not create \(name)")
+            },
+            onClose: { [weak self] in self?.context = nil })
+    }
+
     public func pointerMoved(x: Double, y: Double) {
         pointerX = x
         pointerY = y
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if showIcons, button == kBtnRight, pressed { openContextMenu(); return }
         guard showIcons, button == kBtnLeft, pressed else { return }
         let size = layer?.size ?? (width: 0, height: 0)
         let bounds = iconBounds(w: Double(size.width), h: Double(size.height))

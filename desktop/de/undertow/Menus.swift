@@ -89,6 +89,11 @@ public final class Menus {
             // "service\npath" — the dbusmenu kind's address (P10.7).
             m.setAddress(svc.isEmpty || p.isEmpty ? "" : svc + "\n" + p, for: surface, kind: .dbusmenu)
         }
+        hooks.force_quit = { ctx, appID in
+            guard let ctx, let appID else { return }
+            let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
+            m.compositor.forceQuit(appID: String(cString: appID))
+        }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
     }

@@ -224,6 +224,8 @@ public func defaultSession(shellBinary: String,
         env["ABYSS_APP_BINARY"] = shellBinary
         var needs = compositorSocket.map { [$0] } ?? []
         if name == "menubar", let bar = menubarDisplay {
+            // The bar is privileged; what it launches must not be (P10.8).
+            if let d = env["WAYLAND_DISPLAY"] { env["ABYSS_APP_WAYLAND_DISPLAY"] = d }
             env["WAYLAND_DISPLAY"] = bar
             if let s = menubarSocket { needs.append(s) }
         }

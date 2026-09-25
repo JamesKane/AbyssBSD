@@ -51,7 +51,7 @@
     </request>
   </interface>
 
-  <interface name="abyss_menubar_v1" version="1">
+  <interface name="abyss_menubar_v1" version="2">
     <description summary="the menu bar's view of focus">
       Offered only to clients that connected to the compositor's privileged
       socket (PHASE10 §6.1). It says which application is frontmost and where
@@ -79,5 +79,15 @@
       <arg name="address" type="string"/>
       <arg name="app_id" type="string"/>
     </event>
+
+    <request name="force_quit" since="2">
+      <description summary="end an application that has stopped responding">
+        Kill every client with a toplevel of this app_id. Only the compositor
+        knows which processes those are, and only the menu bar — on the
+        privileged socket — may ask (PHASE10 P10.8). The compositor never kills
+        itself.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
   </interface>
 </protocol>

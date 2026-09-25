@@ -68,6 +68,12 @@ public final class PopupSurface {
             let p = Unmanaged<PopupSurface>.fromOpaque(ctx).takeUnretainedValue()
             p.mapped = true
             p.compositor.popupsMapped += 1
+            // Where it actually landed — after unconstraining — so a test can
+            // click a row without computing placement itself (§2.46).
+            if let o = p.origin {
+                let line = "undertow: popup mapped at \(o.x),\(o.y) \(p.width)x\(p.height)\n"
+                line.withCString { _ = write(2, $0, strlen($0)) }
+            }
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.unmap, { ctx, _ in
             guard let ctx else { return }

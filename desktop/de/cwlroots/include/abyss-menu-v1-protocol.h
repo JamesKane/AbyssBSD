@@ -192,6 +192,18 @@ struct abyss_menubar_v1_interface {
 	 */
 	void (*destroy)(struct wl_client *client,
 			struct wl_resource *resource);
+	/**
+	 * end an application that has stopped responding
+	 *
+	 * Kill every client with a toplevel of this app_id. Only the
+	 * compositor knows which processes those are, and only the menu
+	 * bar — on the privileged socket — may ask (PHASE10 P10.8).
+	 * The compositor never kills itself.
+	 * @since 2
+	 */
+	void (*force_quit)(struct wl_client *client,
+			   struct wl_resource *resource,
+			   const char *app_id);
 };
 
 #define ABYSS_MENUBAR_V1_FOCUSED 0
@@ -205,6 +217,10 @@ struct abyss_menubar_v1_interface {
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_DESTROY_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_FORCE_QUIT_SINCE_VERSION 2
 
 /**
  * @ingroup iface_abyss_menubar_v1

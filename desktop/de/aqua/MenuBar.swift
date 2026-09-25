@@ -208,9 +208,9 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var titlesDirty = true
     private let display: Display
 
-    /// The system menu — the bar's own, whoever is frontmost. Nothing here can
-    /// run yet (P10.8 gives the items that can a verb to call), so every item
-    /// is drawn disabled rather than logging a title and pretending.
+    /// The system menu — the bar's own, whoever is frontmost (P10.8). The items
+    /// something on this desktop can do are real; the rest are drawn disabled
+    /// with the reason (`systemEnablement`), not removed and not pretending.
     public static let systemMenu = Menu("System", [
         .command(Command("system.about", "About This Computer",
                          summary: "Describe this machine.")),
@@ -230,7 +230,9 @@ public final class MenuBar: LayerSurfaceDelegate {
         .command(Command("system.restart", "Restart…", summary: "Restart the computer.")),
         .command(Command("system.shut-down", "Shut Down…", summary: "Turn the computer off.")),
         .separator,
-        .command(Command("system.log-out", "Log Out…", key: .cmd("q", .shift),
+        // No "…": there is no confirmation sheet yet, so this is Jaguar's
+        // Option variant — Log Out now — and says so by its title.
+        .command(Command("system.log-out", "Log Out", key: .cmd("q", .shift),
                          summary: "End this session.")),
     ])
 
@@ -402,14 +404,98 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// when its menu opened — or, with no application to ask, from the
     /// definition alone. The system menu is the bar's own (P10.8).
     private func enabled(_ command: Command) -> Enablement {
-        if command.verb.hasPrefix("system.") { return .disabled("not available yet") }
+        if command.verb.hasPrefix("system.") { return systemEnablement(command.verb) }
         if service == nil { return MenuBar.staticEnablement(command) }
         return enablement[command.verb] ?? .disabled("the application did not say")
+    }
+
+    // MARK: the system menu's own commands (P10.8)
+
+    /// The frontmost application, if it is one Force Quit can mean — not the
+    /// desktop, which is the Finder only by courtesy.
+    private var forceQuitTarget: String? {
+        guard let f = focus?.current, !f.appID.isEmpty, !f.appID.hasPrefix("abyss.") else { return nil }
+        return f.appID
+    }
+
+    private func systemEnablement(_ verb: String) -> Enablement {
+        switch verb {
+        case "system.about", "system.preferences", "system.log-out":
+            return .enabled
+        case "system.force-quit":
+            guard focus != nil else { return .disabled("the bar cannot see which application is frontmost") }
+            return forceQuitTarget == nil ? .disabled("no application is frontmost") : .enabled
+        case "system.sleep", "system.restart", "system.shut-down":
+            return .disabled("needs a privileged helper this desktop does not have yet")
+        default:
+            return .disabled("not available yet")
+        }
+    }
+
+    /// Carry out one of the bar's own commands.
+    private func performSystem(_ verb: String) -> CommandResult {
+        switch verb {
+        case "system.about":
+            var u = utsname(); uname(&u)
+            func field<T>(_ t: T) -> String {
+                withUnsafeBytes(of: t) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            }
+            let cpus = sysconf(Int32(_SC_NPROCESSORS_ONLN))
+            let bytes = Double(sysconf(Int32(_SC_PHYS_PAGES))) * Double(sysconf(Int32(_SC_PAGESIZE)))
+            let body = "\(field(u.sysname)) \(field(u.release)) (\(field(u.machine))) on "
+                + "\(field(u.nodename)) — \(cpus) CPUs, "
+                + "\(Int((bytes / 1_073_741_824).rounded())) GB memory"
+            var m = Msg()
+            m.set("method", "notify")
+            m.set("summary", "About This Computer")
+            m.set("body", body)
+            guard (try? Current.call("notify", m))?.bool("ok") == true else {
+                return .refused("the notification centre did not answer")
+            }
+            return .ok(body)
+        case "system.preferences":
+            // **Never launch on our own connection's socket.** The bar is on
+            // the compositor's privileged socket, and a child that inherited
+            // WAYLAND_DISPLAY would be privileged too — able to watch focus and
+            // force-quit anything. Found by P10.8's own test. An application
+            // goes on the ordinary display, which anchor tells us; not knowing
+            // it is a refusal, never a fallback to ours.
+            guard let display = getenv("ABYSS_APP_WAYLAND_DISPLAY").map({ String(cString: $0) }),
+                  !display.isEmpty else {
+                return .refused("the bar does not know the ordinary display to launch on")
+            }
+            let exe = getenv("ABYSS_APP_BINARY").map { String(cString: $0) }
+                ?? Launcher.selfExecutable() ?? "AquaDemo"
+            return Launcher.launchDetached([exe], extraEnv: ["AQUA_SCENE": "sysprefs",
+                                                             "WAYLAND_DISPLAY": display])
+                ? .ok(nil) : .refused("could not start System Preferences")
+        case "system.force-quit":
+            guard let app = forceQuitTarget else { return .refused("no application is frontmost") }
+            guard focus?.forceQuit(appID: app) == true else {
+                return .refused("the compositor cannot be asked to force quit")
+            }
+            return .ok(app)
+        case "system.log-out":
+            var m = Msg(); m.set("method", "quit")
+            guard (try? Current.call("anchor", m))?.bool("ok") == true else {
+                return .refused("no session supervisor answered")
+            }
+            return .ok(nil)
+        default:
+            return .refused("not available yet")
+        }
     }
 
     /// Run a command the person chose, and say what came of it.
     private func choose(_ command: Command, in menuName: String) {
         let what = "\(menuName) > \(command.title) (\(command.verb))"
+        if command.verb.hasPrefix("system.") {
+            switch performSystem(command.verb) {
+            case .ok(let v):      MenuBar.log("chose \(what) → ok" + (v.map { " \($0)" } ?? ""))
+            case .refused(let w): MenuBar.log("chose \(what) → refused: \(w)")
+            }
+            return
+        }
         guard let address = service else {
             MenuBar.log("chose \(what)")
             return
@@ -552,8 +638,15 @@ public final class MenuBar: LayerSurfaceDelegate {
                 MenuBar.log("\(address) did not answer validate")
             }
         }
-        let rows = aquaMenuItems(m.menu, enablement: enabled)
-        let commands = Dictionary(m.menu.commands.map { ($0.verb, $0) },
+        // Force Quit names what it would quit — the frontmost application,
+        // which Jaguar's dialog would have preselected.
+        let shown = m.isSystem
+            ? m.menu.retitled(["system.force-quit":
+                forceQuitTarget.map { "Force Quit \($0.split(separator: ".").last.map(String.init) ?? $0)" }
+                    ?? "Force Quit"])
+            : m.menu
+        let rows = aquaMenuItems(shown, enablement: enabled)
+        let commands = Dictionary(shown.commands.map { ($0.verb, $0) },
                                   uniquingKeysWith: { a, _ in a })
         let am = AquaMenu(items: rows)
         am.onChoose = { [weak self] idx in

@@ -152,6 +152,7 @@ void *aw_bind_menu_manager(void *registry, uint32_t name, uint32_t version);
 void aw_menu_manager_set_address(void *manager, void *surface, const char *address);
 void *aw_bind_menubar(void *registry, uint32_t name, uint32_t version);
 void aw_menubar_destroy(void *menubar);
+void aw_menubar_force_quit(void *menubar, const char *app_id);
 void *aw_bind_xdg_activation(void *registry, uint32_t name, uint32_t version);
 void *aw_xdg_activation_get_token(void *activation);
 void aw_xdg_activation_token_set_serial(void *token, uint32_t serial, void *seat);

@@ -79,8 +79,16 @@ static void menubar_destroy_request(struct wl_client *client, struct wl_resource
     wl_resource_destroy(resource);
 }
 
+static void menubar_force_quit(struct wl_client *client, struct wl_resource *resource,
+                               const char *app_id) {
+    (void)client;
+    struct tw_menus *m = wl_resource_get_user_data(resource);
+    if (m && app_id && m->hooks.force_quit) m->hooks.force_quit(m->hooks.ctx, app_id);
+}
+
 static const struct abyss_menubar_v1_interface menubar_impl = {
     .destroy = menubar_destroy_request,
+    .force_quit = menubar_force_quit,
 };
 
 static void menubar_resource_destroyed(struct wl_resource *resource) {
@@ -330,7 +338,7 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
     wl_list_init(&m->privileged);
     m->manager_global = wl_global_create(display, &abyss_menu_manager_v1_interface, 1,
                                          m, manager_bind);
-    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 1,
+    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 2,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
     m->kde_appmenu_global = wl_global_create(display, &org_kde_kwin_appmenu_manager_interface,
@@ -362,4 +370,12 @@ void tw_menus_destroy(struct tw_menus *m) {
     struct privileged_client *p, *pt;
     wl_list_for_each_safe(p, pt, &m->privileged, link) wl_list_init(&p->link);
     free(m);
+}
+
+/* Who is on the other end of a toplevel: its client's process (P10.8). */
+int tw_client_pid_of(struct wl_resource *resource) {
+    if (!resource) return -1;
+    pid_t pid = -1; uid_t uid; gid_t gid;
+    wl_client_get_credentials(wl_resource_get_client(resource), &pid, &uid, &gid);
+    return (int)pid;
 }

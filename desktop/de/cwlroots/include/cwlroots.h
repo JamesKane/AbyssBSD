@@ -129,6 +129,9 @@ struct tw_menu_hooks {
      * (org_kde_kwin_appmenu.set_address, P10.7). */
     void (*set_dbusmenu_address)(void *ctx, struct wlr_surface *surface,
                                  const char *service_name, const char *object_path);
+    /* The menu bar asked to force-quit an application (abyss_menubar_v1 v2,
+     * P10.8). Only a privileged client can have sent it. */
+    void (*force_quit)(void *ctx, const char *app_id);
 };
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);
@@ -141,6 +144,8 @@ void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
                                  const char *address, const char *app_id);
 int tw_menubar_count(struct tw_menus *m);
+/* The pid of the client owning `resource`, or -1. */
+int tw_client_pid_of(struct wl_resource *resource);
 /* Tell GTK (gtk_shell1.capabilities, on bind) that the desktop shows a global
  * menu bar, so it stops drawing its own. Only when a bar will (PHASE10 §6.5). */
 void tw_gtk_set_global_menus(struct tw_menus *m, bool on);

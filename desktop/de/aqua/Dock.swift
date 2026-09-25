@@ -326,6 +326,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
 
     private var displayItems: [DockItem] = []
     private var running: [Bool] = []
+    /// A tile's open contextual menu (P10.8).
+    private var context: ContextMenu?
     private var extras: [ToplevelInfo] = []   // running apps not matching a pinned tile
     private var frames: [DockTileFrame] = []
     private var pointerX: Double?
@@ -559,39 +561,77 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         }
     }
 
-    /// A tile's contextual menu. Only the Trash has one so far — "Empty Trash"
-    /// has to live *somewhere*, and on Mac that somewhere is here.
-    private func openTileMenu(_ item: DockItem, frame f: DockTileFrame, iconBottom: Double) {
-        guard item.isTrash else { return }
-        closeMenu()
-        let items = trashFull ? ["Open", "Empty Trash"] : ["Open"]
-        let am = AquaMenu(items: items, selected: -1)
-        am.onChoose = { [weak self] idx in
-            guard let self else { return }
-            if items[idx] == "Empty Trash" { self.emptyTrash() } else { self.openTrash() }
-            self.closeMenu()
-        }
-        am.onDismiss = { [weak self] in self?.menuDismissed() }
+    /// The Dock's own commands (P10.8) — defined once, like every other menu
+    /// on this desktop, and drawn as a tile's contextual menu.
+    static let trashOpen = Command("dock.open-trash", "Open", summary: "Open the Trash in a Finder window.")
+    static let trashEmpty = Command("dock.empty-trash", "Empty Trash",
+                                    summary: "Permanently delete everything in the Trash.")
+    static let appOpen = Command("dock.open", "Open", summary: "Start this application.")
+    static let appQuit = Command("dock.quit", "Quit", summary: "Ask this application to quit.")
+    static let showInFinder = Command("dock.show-in-finder", "Show In Finder",
+                                      summary: "Show where this application lives.")
 
-        // Anchor to the tile. The positioner's flip-Y constraint puts the menu
-        // *above* the anchor, since the Dock leaves no room below it.
-        let popupW = Int32(max(150, menuWidth(items) + 40))
-        let popupH = Int32(am.preferredHeight.rounded(.up))
-        guard let pop = layer?.openPopup(
-            anchorX: Int32(f.centerX - f.size / 2), anchorY: Int32(iconBottom - f.size),
-            anchorW: Int32(f.size), anchorH: Int32(f.size),
-            width: popupW, height: popupH, delegate: am)
-        else { return }
-        am.popup = pop
-        menu = am
-        popup = pop
-        Dock.log("opened Trash menu")
+    /// A tile's menu: the Trash's two commands, or an application's — Open when
+    /// it is not running, Quit when it is (P10.8).
+    static func tileMenu(isTrash: Bool, running: Bool) -> Menu {
+        isTrash ? Menu("Trash", [.command(trashOpen), .command(trashEmpty)])
+                : Menu("", [.command(running ? appQuit : appOpen), .separator,
+                            .command(showInFinder)])
+    }
+
+    private func isRunning(_ item: DockItem) -> Bool {
+        guard let id = item.appID else { return false }
+        return toplevels?.current.contains { $0.appID == id } ?? false
+    }
+
+    /// A tile's contextual menu. The Trash's was the only one until P10.8 —
+    /// "Empty Trash" had to live somewhere, and on Mac that somewhere is here.
+    private func openTileMenu(_ item: DockItem, frame f: DockTileFrame, iconBottom: Double) {
+        closeMenu()
+        let running = isRunning(item)
+        let menu = Dock.tileMenu(isTrash: item.isTrash, running: running)
+        let full = trashFull
+        context = ContextMenu.open(
+            menu, name: item.isTrash ? "Trash" : item.label,
+            enablement: { c in
+                switch c.verb {
+                case "dock.empty-trash": return full ? .enabled : .disabled("the Trash is empty")
+                case "dock.show-in-finder": return .disabled("not available yet")
+                default: return .enabled
+                }
+            },
+            log: { Dock.log($0) },
+            // Anchor to the tile. The positioner's flip-Y constraint puts the
+            // menu *above* the anchor, since the Dock leaves no room below it.
+            open: { [weak self] w, h, am in
+                self?.layer?.openPopup(
+                    anchorX: Int32(f.centerX - f.size / 2), anchorY: Int32(iconBottom - f.size),
+                    anchorW: Int32(f.size), anchorH: Int32(f.size),
+                    width: w, height: h, delegate: am)
+            },
+            choose: { [weak self] c in
+                guard let self else { return }
+                switch c.verb {
+                case "dock.open-trash":  self.openTrash()
+                case "dock.empty-trash": self.emptyTrash()
+                case "dock.open":        self.activate(item)
+                case "dock.quit":
+                    let n = self.toplevels?.close(appID: item.appID ?? "") ?? 0
+                    Dock.log("asked \(item.label) to quit (\(n) window\(n == 1 ? "" : "s"))")
+                default: break
+                }
+            },
+            onClose: { [weak self] in self?.context = nil })
+        if item.isTrash { Dock.log("opened Trash menu") }
+        else { Dock.log("opened \(item.label) menu (\(running ? "running" : "not running"))") }
     }
 
     private func closeMenu() {
         popup?.close()   // programmatic close does not fire onDismiss
         popup = nil
         menu = nil
+        context?.close()
+        context = nil
     }
 
     private func menuDismissed() {   // outside click (compositor popup_done)

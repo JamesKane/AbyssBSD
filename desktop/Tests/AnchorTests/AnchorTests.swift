@@ -166,6 +166,8 @@ final class AnchorTests: XCTestCase {
         for c in p.components {
             if c.name == "menubar" {
                 XCTAssertEqual(c.env["WAYLAND_DISPLAY"], "abyss-0-bar")
+                XCTAssertEqual(c.env["ABYSS_APP_WAYLAND_DISPLAY"], "abyss-0",
+                               "what the bar launches goes on the ordinary display (P10.8)")
                 XCTAssertEqual(c.requires, ["/run/x/abyss-0", "/run/x/abyss-0-bar"])
             } else if c.env["WAYLAND_DISPLAY"] != nil {
                 XCTAssertEqual(c.env["WAYLAND_DISPLAY"], "abyss-0",

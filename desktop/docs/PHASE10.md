@@ -14,6 +14,13 @@ compositor** (§4.2): a GTK application under `undertow` publishes its menus on
 the bus and **tells nobody where they are**. The only thing that can learn the
 address is the compositor, through a protocol GTK already speaks and we do not.
 **§6.1, §6.3, §6.4 and §6.5 are decided** (2026-09-25), each as recommended.
+**Phase 10 is COMPLETE (2026-09-25): all eight passes, and its gates green.**
+`run.sh --live` on Linux and `run.sh --vm --live --full` on FreeBSD, with 466
+unit tests each and 35 of 35 live modes each. The `--full` lane passed both
+nested installs: the installer's own (193 s) and **empty disk to Jaguar
+desktop** (428 s), in which an installed machine booted to wallpaper, menu bar
+and Dock through the session P10.4 changed (the privileged socket, the bar on
+it, and the `menus` bridge). That clears the `--full` P10.4 had owed.
 
 ---
 
@@ -579,13 +586,95 @@ and `live-menu-focus.sh` re-run green. **On FreeBSD:** the spike itself, and
 own kcalc. **Not run:** `run.sh --live`, `run.sh --vm --live` (the whole
 FreeBSD suite has not run since P10.4), and `--full`, owed at phase end.
 
-**P10.8 — the menus the desktop owns.**
+**P10.8 — the menus the desktop owns. ✅ done.**
 The Apple menu's items that something can already do — **Log Out** (`anchor`),
 **Force Quit…** (the foreign-toplevel list and `close`), **About This
 Computer** (the `Fathom` report, rendered), **System Preferences…** (launch) —
 and the rest *disabled*, not removed and not logging. Contextual menus on the
 desktop, in Finder windows and on every Dock tile, built from the same
 `Command`s the bar shows, so a right-click and the menu bar can never disagree.
+
+**What P10.8 landed.**
+
+**The system menu does what its items say:**
+- **About This Computer** posts a notification naming the OS, the host, the
+  CPUs and the memory.
+- **System Preferences…** opens it.
+- **Force Quit <frontmost>** is a privileged request to the compositor
+  (`abyss_menubar_v1` version 2, `force_quit`). Only undertow knows which
+  process is behind a window. It sends `SIGKILL` to the pids found through the
+  clients' credentials, never its own. Jaguar's Force Quit is a dialog that
+  preselects the frontmost application, and the bar can host neither a dialog
+  nor a submenu, so the item names what it would quit.
+- **Log Out** acts at once. That is Jaguar's ⌥ variant, and it carries no
+  "…" because there is no confirmation sheet yet.
+- **Sleep, Restart and Shut Down** are disabled, with "needs a privileged
+  helper this desktop does not have yet".
+
+**The contextual menus:**
+- **Finder windows:** right-clicking selects what is under the pointer and
+  offers `FinderContext.item` or `FinderContext.background`, verbs picked from
+  `finderMenuBar()`. They are the menu bar's own commands, with the same
+  titles, keys and enablement, and a test asserts it.
+- **Dock tiles:** Open or Quit, depending on whether the application runs.
+  Quit is the polite request, through `ForeignToplevels.close(appID:)`.
+- **The desktop:** New Folder in `~/Desktop`.
+
+`ContextMenu` is the one helper all three use. Every row is logged with its
+offset inside the popup, and **undertow logs where each popup actually landed**
+(`popup mapped at X,Y WxH`), so a test clicks a row without computing
+placement.
+
+**What it found:**
+
+- **A child of the bar inherited the bar's privilege.** The bar runs on the
+  privileged socket (P10.3), and the first System Preferences it launched
+  inherited `WAYLAND_DISPLAY`. It was therefore privileged too: it could watch
+  focus and force-quit any application. `anchor` now gives the bar the ordinary
+  display as `ABYSS_APP_WAYLAND_DISPLAY`, and the bar launches on it. If it
+  doesn't know that display it refuses to launch; it does not fall back to its
+  own socket. `live-context.sh` checks the display the child actually got,
+  and it failed with the fix removed. The rule: **a privileged process must
+  not hand its privilege to its children by default; what it launches is
+  launched on purpose, with the environment chosen.**
+- **Submenus have never opened.** P10.1 taught `AquaMenu` to draw a submenu's
+  ▸, and nothing opens a child popup. That was invisible while no menu here
+  had a submenu. A GTK or Qt application's menus can have them (§4.5's lazy
+  "Constants"), and there they are drawn and cannot be entered. It is the
+  largest thing Phase 10 leaves, and the reason Force Quit is a single item
+  and not a list.
+- *(My own test, twice: `gdbus` reading `-1` as an option in P10.7, and here a
+  shell variable reused by a helper — both harness, both caught by a test
+  failing a compositor that was right.)*
+
+**Verified (short checks only):** `live-context.sh` (7 s), on undertow with a
+real pointer:
+- an item's menu is the Finder's commands, and Duplicate made a copy on disk;
+- the background's menu made a New Folder on disk;
+- About reached the notification centre, naming this machine;
+- Force Quit killed the frontmost application's process, and only that one;
+- System Preferences opened a window the compositor made frontmost, **on the
+  ordinary display**.
+
+Its two injected faults both failed it:
+- the child inheriting the bar's display;
+- a `force_quit` that killed nothing, which the compositor still logged as a
+  kill and the test caught by asking the process.
+
+Unit tests: the contextual menus are the menu bar's own `Command`s; a Dock
+tile's menu is Open or Quit by whether the application runs; the Trash's
+order is kept; the desktop's menu. `run-live.sh trash menubar dock` under
+sway: green. `swift test` on Linux: 466. All the short menu and session
+scripts re-run green.
+
+**Not verified live:** the Dock's and the desktop's menus on undertow (unit
+tests plus the Trash under sway), and Log Out (it would end the session
+driving the test).
+
+**Phase gates, run at the end as agreed:** `run.sh --live` (Linux, 280 s) and
+`run.sh --vm --live --full` (FreeBSD, 1046 s), both green. These are the first
+full FreeBSD runs since P10.4, so P10.5–P10.8 are now covered by the whole
+guest suite, not only by the short scripts.
 
 ---
 
