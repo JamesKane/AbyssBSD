@@ -48,6 +48,7 @@ public enum FinderVerb: String, CaseIterable, Sendable {
     // Go
     case back = "go.back"
     case enclosingFolder = "go.enclosing-folder"
+    case goToFolder = "go.to-folder"
     case computer = "go.computer"
     case home = "go.home"
     case applications = "go.applications"
@@ -71,7 +72,7 @@ public enum FinderVerb: String, CaseIterable, Sendable {
              .duplicate, .moveToTrash, .saveHere,
              .cut, .copy, .paste,
              .asIcons, .asList, .toggleToolbar,
-             .back, .enclosingFolder, .computer, .home, .applications,
+             .back, .enclosingFolder, .goToFolder, .computer, .home, .applications,
              .minimize, .zoom:
             return true
         }
@@ -81,9 +82,9 @@ public enum FinderVerb: String, CaseIterable, Sendable {
 /// The Finder's menus, as Jaguar laid them out. Pure, so a test can walk it.
 public func finderMenuBar() -> MenuBarModel {
     func c(_ v: FinderVerb, _ title: String, _ key: KeyEquivalent,
-           also: [KeyEquivalent] = [], _ summary: String) -> MenuItem {
+           also: [KeyEquivalent] = [], args: [Argument] = [], _ summary: String) -> MenuItem {
         .command(Command(v.rawValue, title, key: key, alternateKeys: also,
-                         summary: summary))
+                         arguments: args, summary: summary))
     }
     func c(_ v: FinderVerb, _ title: String, _ summary: String) -> MenuItem {
         .command(Command(v.rawValue, title, summary: summary))
@@ -146,6 +147,9 @@ public func finderMenuBar() -> MenuBarModel {
             c(.back, "Back", .cmd("["), "Go to the previous folder."),
             c(.enclosingFolder, "Enclosing Folder", .cmd(.up),
               "Go to the folder that contains this one."),
+            c(.goToFolder, "Go to Folder…", .cmd("g", .shift),
+              args: [Argument("path", .path, "The folder to go to.")],
+              "Go to the folder at a path."),
             .separator,
             c(.computer, "Computer", .cmd("c", .shift), "Go to the top of the disk."),
             c(.home, "Home", .cmd("h", .shift), "Go to your home folder."),

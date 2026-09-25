@@ -169,10 +169,24 @@ let package = Package(
             name: "MenuModel",
             path: "de/menumodel"
         ),
+        // An application's vocabulary on the control plane: describe, validate,
+        // activate, subscribe (PHASE10.md P10.2). No toolkit, so `abyssmenu`
+        // and the menu bar link it without linking an application.
+        .target(
+            name: "MenuWire",
+            dependencies: ["MenuModel", "CurrentIPC"],
+            path: "de/menuwire"
+        ),
+        // Ask an application what it can do, and have it do it.
+        .executableTarget(
+            name: "abyssmenu",
+            dependencies: ["MenuWire", "MenuModel", "CurrentIPC"],
+            path: "de/abyssmenu"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["AquaDraw", "MenuModel", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
+            dependencies: ["AquaDraw", "MenuModel", "MenuWire", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
                            "Vents", "CurrentIPC",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
@@ -420,7 +434,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MenuModelTests",
-            dependencies: ["MenuModel"],
+            dependencies: ["MenuModel", "MenuWire", "CurrentIPC"],
             path: "Tests/MenuModelTests"
         ),
         .testTarget(

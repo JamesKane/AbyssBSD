@@ -136,7 +136,7 @@ never chosen, and that Return chose `Empty Trash… (finder.empty-trash)` **by
 verb**. What the bar does with a choice is still only a log line; P10.4 routes
 it.
 
-**P10.2 — the menu service, and the consumer that is not the bar.**
+**P10.2 — the menu service, and the consumer that is not the bar. ✅ done.**
 The wire (`de/menuwire`, a target the way `InstallWire` is, so the bar links it
 without linking an application). Three requests and one push:
 
@@ -159,6 +159,58 @@ describe SERVICE` prints the vocabulary; `abyssmenu run SERVICE VERB` invokes on
 and prints the result. That is PLAN.md's non-bar consumer, and it exists in this
 pass — before the bar is wired — so the first client of the vocabulary is
 something that cannot draw it.
+
+**What P10.2 landed.** `MenuWire` (`de/menuwire`, on `MenuModel` and
+`CurrentIPC` only) carries the four methods; `MenuService` folds into an
+application's run loop and does the checking no application should repeat —
+the verb exists, the arguments are exactly the declared ones and parse as their
+types, and the command is enabled — so a refusal arrives in the same words the
+menu would have greyed out with. `MenuClient` resolves `finder` to a live
+`menus.finder.<pid>` and skips sockets left by a crash. `abyssmenu` exits 0 on
+`ok`, 1 on `refused` with the reason on stderr, and 2 when nothing answered —
+a script can tell "no" from "nobody". The Finder serves as
+`menus.finder.<pid>`; a command from outside goes to the window the compositor
+last said was **activated** (P9.5's §2.59 fix is what makes that knowable),
+else the newest, and `file.new-window` and `finder.empty-trash` work with no
+window open at all, which on the desktop is the common case. Verbs now return
+what they made: `file.new-folder` answers with the path.
+
+**Go to Folder… (⇧⌘G) is the verb with an argument,** `path: path`, because
+it is the Jaguar command whose whole content *is* an argument. From a script it
+is complete; from the key or the menu it would open a sheet to type the path
+into, there is no sheet, and it says so rather than doing nothing.
+
+**What it found:**
+
+- **A picker must not publish a vocabulary.** A Finder running as a portal's
+  file chooser acts for the application that asked, and its only output is the
+  file a *person* chose. Published, `abyssmenu run finder file.open` would choose
+  for them — a confused deputy with a command line. `publishMenus` refuses when
+  `FinderPicker.isPicking`; `live-vocabulary.sh` asserts the picker is absent
+  from `list`, and **failed** with the guard removed.
+- **There are two kinds of refusal, and the first draft of the test could not
+  tell them apart.** The service refuses what is malformed or disabled, and the
+  application is never called; the application refuses what is well-formed and
+  impossible (`go.to-folder` on a file), which only it can know. The test
+  asserted that no refusal reached the Finder's `perform` and failed on the
+  second kind, correctly. It now asserts each kind separately.
+- **`subscribe` has no customer yet.** The mechanism is in and tested (a push
+  arrives; a subscriber that went away is dropped on the next push), but nothing
+  in the Finder's vocabulary changes at runtime until P10.5 gives Undo a title
+  that does. Stated so nobody assumes the bar is kept current by it.
+- **A client that connects and says nothing stalls the application for up to
+  two seconds** — `Current.Server.requestTimeout`, inherited, and the same for
+  every service on the plane. For a notification centre that was harmless; for
+  an application whose run loop draws frames it is not, and P10.4, which puts
+  a round trip in front of every menu opening, is where it gets measured.
+
+**Verified:** `run.sh --live` on Linux and `run.sh --vm --live` on FreeBSD, both
+green — 438 unit tests each, 35 live modes, and `live-vocabulary.sh` (eight
+refusals by reason, a folder checked on disk, a window checked by the Finder's
+own log, a picker absent from the list). **Two runs, not one:** `--vm` runs the
+suite only in the guest, and P10.1's commit claimed both platforms off a single
+`--vm` run. That Linux gate had not been run; this one, which includes P10.1's
+code, is it.
 
 **P10.3 — the compositor learns whose menu is whose.**
 Two protocols of our own, in `protocols/`, server-side in undertow (§4.3):

@@ -38,6 +38,7 @@
 import Surface
 import PoolConfig
 import CCairo
+import MenuWire
 
 #if canImport(Glibc)
 import Glibc
@@ -747,6 +748,68 @@ public final class FinderApp {
         self.quitsWithLastWindow = quitsWithLastWindow
         let config = (try? Pool.load("finder")) ?? Config()
         toolbarVisible = config.bool("finder", "toolbar") ?? true
+        publishMenus()
+    }
+
+    // MARK: the vocabulary (PHASE10.md P10.2)
+
+    private var menuService: MenuService?
+    /// The window a command from outside means: the one the compositor last
+    /// said was active, else the newest.
+    private weak var keyWindow: FinderWindow?
+
+    /// Serve the Finder's menus on the control plane, as `menus.finder.<pid>`.
+    ///
+    /// **Not when this Finder is a portal's picker.** A picker acts for the
+    /// application that asked, and its only output is the file the *person*
+    /// chose; a vocabulary would let any process on the plane choose for them —
+    /// `abyssmenu run … file.open` on a picker is a confused deputy with a
+    /// command line. The picker's commands still work from its own keys.
+    private func publishMenus() {
+        guard !FinderPicker.isPicking else { return }
+        let name = MenuWire.serviceName(app: "Finder", pid: getpid())
+        do {
+            let service = try MenuService(name: name, provider: self)
+            display.addFileDescriptor(service.fd) { [weak service] in
+                service?.serviceReadable()
+            }
+            menuService = service
+            FinderWindow.log("menus on \(name)")
+        } catch {
+            FinderWindow.log("no menu service (\(error))")
+        }
+    }
+
+    func windowBecameKey(_ w: FinderWindow) { keyWindow = w }
+
+    private var targetWindow: FinderWindow? { keyWindow ?? windows.last }
+
+    /// Verbs that need no window: the Finder can do them with none open, which
+    /// on the desktop — where the Finder outlives its windows — is often.
+    private static let windowless: Set<FinderVerb> = [.emptyTrash, .newWindow]
+
+    func validate(_ verb: FinderVerb) -> Enablement {
+        if let w = targetWindow { return w.validate(verb) }
+        guard verb.isImplemented else { return .disabled("the Finder cannot do this yet") }
+        guard FinderApp.windowless.contains(verb) else {
+            return .disabled("no Finder window is open")
+        }
+        if verb == .emptyTrash, finderTrashContents().isEmpty {
+            return .disabled("the Trash is empty")
+        }
+        return .enabled
+    }
+
+    func perform(_ verb: FinderVerb, arguments: [String: String]) -> CommandResult {
+        if let w = targetWindow { return w.perform(verb, arguments: arguments) }
+        if case .disabled(let why) = validate(verb) { return .refused(why) }
+        switch verb {
+        case .emptyTrash: return FinderWindow.emptyTrash()
+        case .newWindow:
+            openFolder(FinderWindow.startDirectory())
+            return .ok(FinderWindow.startDirectory())
+        default: return .refused("no Finder window is open")
+        }
     }
 
     /// Open the window the app starts with. Returns false if the window can't be
@@ -807,6 +870,7 @@ public final class FinderApp {
     /// Close one window; the last one out ends the process.
     func close(_ w: FinderWindow) {
         windows.removeAll { $0 === w }
+        if keyWindow === w { keyWindow = nil }
         w.tearDown()
         FinderWindow.log("closed \(w.directory) (\(windows.count) open)")
         if windows.isEmpty, quitsWithLastWindow { display.stop() }
@@ -824,6 +888,24 @@ public final class FinderApp {
     }
 
     public var windowCount: Int { windows.count }
+}
+
+extension FinderApp: MenuProvider {
+    public var menuModel: MenuBarModel { FinderWindow.menuBar }
+
+    public func menuValidate(_ command: Command) -> Enablement {
+        guard let v = FinderVerb(rawValue: command.verb) else {
+            return .disabled("the Finder has no verb \(command.verb)")
+        }
+        return validate(v)
+    }
+
+    public func menuPerform(_ command: Command, arguments: [String: String]) -> CommandResult {
+        guard let v = FinderVerb(rawValue: command.verb) else {
+            return .refused("the Finder has no verb \(command.verb)")
+        }
+        return perform(v, arguments: arguments)
+    }
 }
 
 // MARK: - The live window
@@ -1072,15 +1154,17 @@ public final class FinderWindow: WindowDelegate {
 
     /// ⌘⇧N: make "untitled folder" and go straight into renaming it, as the
     /// Finder does.
-    private func newFolder() {
+    private func newFolder() -> CommandResult {
         let name = finderNewFolderName(exists: exists)
-        guard finderCreateDirectory(finderJoin(path, name)) else {
+        let full = finderJoin(path, name)
+        guard finderCreateDirectory(full) else {
             FinderWindow.log("could not create \(name) in \(path)")
-            return
+            return .refused("could not create \(name) in \(path)")
         }
-        FinderWindow.log("new folder \(finderJoin(path, name))")
+        FinderWindow.log("new folder \(full)")
         app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
         beginRename()
+        return .ok(full)
     }
 
     /// Return: edit the selected item's name in place.
@@ -1118,32 +1202,35 @@ public final class FinderWindow: WindowDelegate {
     }
 
     /// ⌘D: copy the selection beside itself ("Read Me copy.txt").
-    private func duplicateSelection() {
-        guard let entry = selectedEntry else { return }
+    private func duplicateSelection() -> CommandResult {
+        guard let entry = selectedEntry else { return .refused("nothing is selected") }
         let name = finderCopyName(entry.name, exists: exists)
         guard finderCopyPath(from: finderJoin(path, entry.name),
                              to: finderJoin(path, name)) else {
             FinderWindow.log("duplicate failed: \(entry.name)")
-            return
+            return .refused("could not duplicate \(entry.name)")
         }
         FinderWindow.log("duplicated \(entry.name) -> \(name) in \(path)")
         app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+        return .ok(finderJoin(path, name))
     }
 
     /// ⌘C / ⌘X.
-    private func clipSelection(cut: Bool) {
-        guard let entry = selectedEntry else { return }
-        app?.setClipboard(path: finderJoin(path, entry.name), cut: cut)
+    private func clipSelection(cut: Bool) -> CommandResult {
+        guard let entry = selectedEntry else { return .refused("nothing is selected") }
+        let full = finderJoin(path, entry.name)
+        app?.setClipboard(path: full, cut: cut)
+        return .ok(full)
     }
 
     /// ⌘V: copy (or move, after a cut) the clipboard item into this folder.
-    private func paste() {
-        guard let clip = app?.clipboardPath() else { return }
+    private func paste() -> CommandResult {
+        guard let clip = app?.clipboardPath() else { return .refused("the clipboard is empty") }
         let source = clip.path
         guard finderExists(source) else {
             FinderWindow.log("paste failed: \(source) is gone")
             app?.clearClipboard()
-            return
+            return .refused("\(source) is gone")
         }
         let sourceDir = finderParent(source) ?? ""
         let name = finderPasteName(finderDisplayName(source), exists: exists)
@@ -1152,7 +1239,7 @@ public final class FinderWindow: WindowDelegate {
                           : finderCopyPath(from: source, to: dest)
         guard ok else {
             FinderWindow.log("paste failed: \(source) -> \(dest)")
-            return
+            return .refused("could not paste \(source) into \(path)")
         }
         FinderWindow.log("pasted \(source) -> \(dest)")
         if clip.cut {
@@ -1161,18 +1248,20 @@ public final class FinderWindow: WindowDelegate {
             if sourceDir != path { app?.refreshWindows(showing: sourceDir) }
         }
         app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+        return .ok(dest)
     }
 
     /// ⌘⌫: move the selection to ~/.Trash (never an unlink).
-    private func trashSelection() {
-        guard let entry = selectedEntry else { return }
+    private func trashSelection() -> CommandResult {
+        guard let entry = selectedEntry else { return .refused("nothing is selected") }
         let source = finderJoin(path, entry.name)
         guard let dest = finderMoveToTrash(source) else {
             FinderWindow.log("could not move \(source) to the Trash")
-            return
+            return .refused("could not move \(source) to the Trash")
         }
         FinderWindow.log("trashed \(source) -> \(dest)")
         app?.refreshWindows(showing: path) ?? refresh()
+        return .ok(dest)
     }
 
     private func nowMs() -> Int64 {
@@ -1366,6 +1455,13 @@ public final class FinderWindow: WindowDelegate {
         app?.refreshWindows(showing: directory, selecting: name) ?? refresh(selecting: name)
     }
 
+    /// The compositor says which window is active; a command from outside the
+    /// process (P10.2) goes to that one.
+    public func windowStateChanged(_ window: Window) {
+        if window.isActivated { app?.windowBecameKey(self) }
+        self.window?.setNeedsDisplay()
+    }
+
     public func windowShouldClose(_ window: Window) {
         // Closing a picker is declining it: exit non-zero so the portal can tell
         // "the user cancelled" from "the picker chose something".
@@ -1442,32 +1538,41 @@ public final class FinderWindow: WindowDelegate {
     /// **No `default:`**, so a verb added to `FinderVerb` does not compile until
     /// this says what it does (§2.51's rule, applied to commands).
     @discardableResult
-    func perform(_ verb: FinderVerb) -> CommandResult {
+    func perform(_ verb: FinderVerb, arguments: [String: String] = [:]) -> CommandResult {
         if case .disabled(let why) = validate(verb) {
             FinderWindow.log("refused \(verb.rawValue): \(why)")
             return .refused(why)
         }
         FinderWindow.log("command \(verb.rawValue)")
         switch verb {
-        case .emptyTrash:
-            let r = finderEmptyTrash()
-            FinderWindow.log("emptied the Trash (\(r.removed) removed, \(r.failed) failed)")
-            return r.failed == 0 ? .ok(nil) : .refused("\(r.failed) items could not be removed")
-        case .newWindow:     app?.openFolder(FinderWindow.startDirectory())
-        case .newFolder:     newFolder()
+        case .emptyTrash:    return FinderWindow.emptyTrash()
+        case .newWindow:
+            app?.openFolder(FinderWindow.startDirectory())
+            return .ok(FinderWindow.startDirectory())
+        case .newFolder:     return newFolder()
         case .open:          if let s = selection { activate(s) }
         case .closeWindow:   closeWindow()
-        case .duplicate:     duplicateSelection()
-        case .moveToTrash:   trashSelection()
+        case .duplicate:     return duplicateSelection()
+        case .moveToTrash:   return trashSelection()
         case .saveHere:      saveHere()
-        case .cut:           clipSelection(cut: true)
-        case .copy:          clipSelection(cut: false)
-        case .paste:         paste()
+        case .cut:           return clipSelection(cut: true)
+        case .copy:          return clipSelection(cut: false)
+        case .paste:         return paste()
         case .asIcons:       setView(.icon)
         case .asList:        setView(.list)
         case .toggleToolbar: toggleToolbar()
         case .back:          goBack()
         case .enclosingFolder: goUp()
+        case .goToFolder:
+            // From a script this is the whole command; from a key or the menu
+            // it would open a sheet to type the path into, and there is no
+            // sheet yet — so it says what it needs rather than doing nothing.
+            guard let dest = arguments["path"] else {
+                return .refused("Go to Folder needs a path, and there is no dialog to type one into yet")
+            }
+            guard finderIsDirectory(dest) else { return .refused("\(dest) is not a folder") }
+            go(to: dest)
+            return .ok(dest)
         case .computer:      go(to: "/")
         case .home:          go(to: FinderWindow.homeDirectory)
         case .applications:  go(to: FinderWindow.applicationsDirectory)
@@ -1480,6 +1585,15 @@ public final class FinderWindow: WindowDelegate {
             return .refused("the Finder cannot do this yet")
         }
         return .ok(nil)
+    }
+
+    /// Empty the Trash: the one command that is the same from any window, or
+    /// from none.
+    static func emptyTrash() -> CommandResult {
+        let r = finderEmptyTrash()
+        FinderWindow.log("emptied the Trash (\(r.removed) removed, \(r.failed) failed)")
+        return r.failed == 0 ? .ok("\(r.removed) removed")
+                             : .refused("\(r.failed) items could not be removed")
     }
 
     /// Go somewhere from the Go menu: in place when browsing, a window of its

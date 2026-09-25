@@ -15,7 +15,7 @@ boots a desktop where an unmodified GTK 3 application, which has never heard of
 this desktop, opens a file through the Finder**; and since Phase 9 it is a
 desktop you can *use*: clipboard, drag and drop, window management, keybinds,
 and an Aqua frame around foreign windows.
-**430 unit tests, 35 live modes and 24 live scripts, green on Linux and FreeBSD.**
+**438 unit tests, 35 live modes and 25 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -26,8 +26,8 @@ on every run, nested twice over, with no hardware and no human.
 **Picking this up cold?**
 
 1. **The phase in progress is 10, the menu protocol** — scoped in
-   [PHASE10.md](PHASE10.md). **P10.1 is done** (one definition per command);
-   P10.2, the menu service, is next.
+   [PHASE10.md](PHASE10.md). **P10.1–P10.2 are done** (one definition per command;
+   the menu service and `abyssmenu`); P10.3, undertow's own protocols, is next.
    It needs no hardware.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
@@ -84,7 +84,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 430 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 438 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -2197,7 +2197,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **430 unit tests** are
+standalone ones `run.sh` invokes, listed below; **438 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2265,11 +2265,13 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 430 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 438 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
-abyss/tests/run.sh --vm --live     # the gate before calling a pass done  (~273s)
+abyss/tests/run.sh --vm --live     # the FreeBSD half of the gate  (~280s)
+                                   # — it runs ONLY in the guest; Linux is
+                                   # `run.sh --live`, a separate run
 abyss/tests/run.sh --vm --live --full   # ... and the two nested installs (~1000s)
 ```
 
@@ -2296,7 +2298,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 430 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 438 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2360,7 +2362,7 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **430 unit tests, 35 live modes and 24 live scripts, green on Linux
+heard of it. **438 unit tests, 35 live modes and 25 live scripts, green on Linux
 and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
@@ -2398,7 +2400,7 @@ the installer, the medium, the distribution sets or the boot path.**
 
 ### 1. Phase 10 — the menu protocol
 
-Scoped in **[PHASE10.md](PHASE10.md)**; P10.1 is done and P10.2 is next. The spikes moved work into
+Scoped in **[PHASE10.md](PHASE10.md)**; P10.1–P10.2 are done and P10.3 is next. The spikes moved work into
 the compositor: under `undertow` a GTK application exports its menus on the bus
 and tells nobody where, so undertow has to speak `gtk_shell1` — the first
 protocol it implements itself. The phase ([PLAN.md](PLAN.md)): the menu bar stops being a picture
@@ -2472,7 +2474,11 @@ before it is finished. **The volume status item** has a mixer to read at last
 
 ### Three rules that earned their place
 
-**A pass is not done until `abyss/tests/run.sh --vm --live` is green.** Two
+**A pass is not done until `abyss/tests/run.sh --live` and `run.sh --vm --live`
+are both green** — two runs, because `--vm` runs the suite *only* in the guest.
+(P10.1's commit claimed both platforms off one `--vm` run, whose log prints
+"Executed 430 tests" twice: that is XCTest's suite line and its total, not two
+platforms. The Linux gate was run afterwards, with P10.2, and is green.) Two
 Phase-3 bugs were invisible on Linux and failed only on FreeBSD (§2.33, §2.34).
 Add `--full` when the pass touched the installer, the medium, the distribution
 sets or the boot path — that lane is the only one that puts an operating system

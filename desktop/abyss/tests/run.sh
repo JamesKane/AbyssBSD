@@ -181,6 +181,11 @@ if [ "$live" -eq 1 ]; then
   # around somebody else's surface (P9.6).
   echo "== server-side decorations =="
   sh "$root/abyss/tests/live-decorations.sh" >/dev/null
+  # An application's vocabulary, asked by something that cannot draw a menu:
+  # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
+  # whose results are checked on disk; a picker publishes nothing (P10.2).
+  echo "== the vocabulary =="
+  sh "$root/abyss/tests/live-vocabulary.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"
