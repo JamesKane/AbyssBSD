@@ -343,6 +343,99 @@ interpreted by P11.3. **The gate must stay pixel-identical.** This is the pass
 that proves the format can say Jaguar. It is necessary and not sufficient
 (PRODUCT §8.3), which is why P11.9 exists.
 
+**Done.** What landed:
+
+- **`themes/aqua/draw/aqua.dl`: 26 lists, the 17 control recipes `Draw` had.**
+  focus ring, pinstripe, traffic light, pill, both gel buttons, text field,
+  checkbox, radio, slider, pop-up, progress bar, scroll track/thumb/arrows (4),
+  segmented control (5 passes), tab pane, tab, group box. `Draw.gelButton` and
+  the rest keep their signatures and now run a list: which list, which state,
+  and the geometry a *value* decides (the slider's thumb, the progress bar's
+  run) stay in Swift; everything that is *look* is in the file. The drawing
+  primitives the recipes were made of (`fillVerticalGradient`, the rounded
+  rects, text) stay Swift; the paint that calls them from outside `Draw` is
+  P11.5.
+- **The theme loads its lists.** `ThemeLoader.loadLists` reads every
+  `draw/*.dl`, as strict as `theme.ini`: a list that does not parse, or a name
+  two files both define, refuses the theme, naming file and line. A list the
+  toolkit never asks for is a warning. What a theme does not ship stays
+  Jaguar's, per list, as tokens do. The announce line counts them:
+  `Theme: Aqua from …/theme.ini, 26 draw lists from draw/`.
+- **The compiled Jaguar lists** (`de/aquadraw/JaguarLists.swift`) are generated
+  from the file by `abyss/tools/gen-jaguar-lists.sh`, and `ThemeTests` fails,
+  naming the script, when they differ. They are what a refused or missing
+  theme draws with.
+- **The format grew what Jaguar needed** (§6.5, revised there):
+  - calc()-style operands, `textw(size)`, `@fontSize`;
+  - `circle`, `path … [close]`, `and SHAPE` (a second subpath in one fill);
+  - `vertical` gradients (over the shape), two-circle `radial`;
+  - `stroke … round`, `innershadow … EXTENT`;
+  - `rules across|slant`;
+  - `shift()`, `token/alpha`, and colour parameters (`$base`);
+  - text `baseline` and `placeholder=`, drawn with `Draw`'s own text calls
+    so a list puts a label exactly where the Swift did.
+- **`DrawParityTests`**, the pass's real gate: every list against the Swift
+  recipe it replaced, **frozen verbatim in `Tests/AquaTests/JaguarReference.swift`**.
+  Every state, integer and fractional origins, odd sizes, 1× and 2×, on a
+  coloured background: **byte-identical, on Linux and in the FreeBSD guest**.
+  The goldens see the states the scenes happen to show; this sees them all.
+  Seen to fail: one gloss alpha 0.75 → 0.74 fails exactly its 16 cases.
+
+**Proved the file draws, not the copy.** The compiled lists are the same text,
+so green goldens alone would prove nothing about `draw/` (§2.45 again).
+`golden.sh` now requires every scene to say it read as many lists as
+`themes/aqua/draw/` defines. With the loader pointed at the wrong directory,
+it failed with `0 draw lists from draw/`; with `draw/` gone, it refused before
+rendering. An edited list, the same one-step alpha, moved exactly the
+scenes with white buttons (widgets, sheet and the installer pages).
+`live-medium.sh` asserts the medium's lists the same way (not run: it boots
+the medium).
+
+**The bench** (release, per widget, list against the Swift it replaced):
+
+| Widget | List µs | Swift µs |
+|---|---|---|
+| gel button | 21 | 22 |
+| text field | 19 | 16 |
+| traffic light | 23 | 18 |
+| pop-up | 33 | 29 |
+| segmented (3, 11 list runs) | 29 | 22 |
+| progress bar | 49 | 46 |
+| pinstripe | 2.0 | 1.4 |
+
+A few µs per widget, on redraw, not per frame. Resolving tokens through a
+table set when the theme is (not a key path into the 116-field struct per
+colour) took a third off the overhead; what is left is parameters looked up
+by name and one save/restore per list. `DrawParityTests` prints the numbers
+and bounds them loosely.
+
+**What it found:**
+
+- **Four controls have always drawn their gloss over the whole body**
+  (HANDOFF §2.67). `fillVerticalGradient` fills with `fill_preserve`, and the
+  capsule built next was *added* to the kept path, so the gloss gradient
+  covered body and capsule: the checked checkbox, the pop-up's cap, the
+  scrollbar thumb, and the scroll track, whose "inset shadow" is a 10% wash of
+  the whole channel. Nobody could see it by reading. **One byte** of
+  antialiasing between "body" and "body plus capsule", in one case of about
+  a thousand, is how it showed. The lists draw what the Swift drew, with
+  `and`, and say so; making each gloss the capsule it was meant to be is a
+  look change for later, with goldens updated on purpose.
+- **The grammar could not say Jaguar.** Four recipes needed arithmetic beyond
+  one operator, and two needed repetition. §6.5 is revised above, and the
+  line it keeps is stated there.
+
+**Verified (short checks only):**
+- the golden gate, 28 scenes pixel for pixel, on Linux **and in the FreeBSD
+  guest**, every scene drawn from `theme.ini` and all 26 lists;
+- `DrawParityTests`, `DrawListTests` and `ThemeTests` green **in the FreeBSD
+  guest**;
+- `swift test` on Linux, 504, green.
+
+**Not run:** `live-medium.sh` (its new assertion that the medium drew from its
+own lists), `run.sh --live`, `run.sh --vm --live` and `--full`, each over a
+minute. They are owed with the phase gates.
+
 **P11.5 — the paint that goes around `Draw`.** The 710 raw cairo calls in
 `de/aqua` move behind `Draw` roles, largest first: Finder, Dock, Wallpaper,
 Scene, menus, status items. The eight metrics enums become layer-3 data. This
@@ -541,6 +634,23 @@ already names (PRODUCT §8.6). The guards:
 - the only conditional is picking a widget state;
 - derived colours are one `mix()`;
 - anything else a theme wants is a port, trusted like a package.
+
+**Revised in P11.4 — for confirmation with the rest of §6.** Jaguar could not
+be said within the first guard. The pop-up's chevrons sit at `w-h/2±3`, the
+scroll arrow's size is `min(w,h)*0.26`, and the text field's caret follows its
+text's width. So operands became **`calc()`-style arithmetic**: `+ - * /`,
+parentheses, `min`, `max`, and `textw(size)` (the label's width). Colours
+gained `shift(c, d)` (Aqua's pressed darkening) and `token/alpha`. What still
+holds, and is the line:
+- **nothing a list can name**: no variables, no definitions, no calls into
+  anything but the fixed functions above, so a list is a formula;
+- **no loops**: repeated lines, the pinstripe and the progress bar's candy
+  stripe, are a primitive (`rules`), bounded at 10 000;
+- **the only conditional is still the widget's state.**
+
+The alternative was to keep the one-operator rule and have Swift pass every
+derived position as a parameter (`$capX`, `$chevronY`, …). That moves the look
+back into code one number at a time, which is what this phase exists to stop.
 
 **6.6 Fidelity and performance.** The golden gate makes fidelity a test. For
 performance there is the interpreter bench, plus the glow cache (§4.2). The

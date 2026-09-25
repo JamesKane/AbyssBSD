@@ -343,8 +343,24 @@ public enum Theme {
     /// unsynchronised global honest here rather than hopeful.
     nonisolated(unsafe) public private(set) static var current = ThemeTokens.jaguar
 
-    /// Replace the current theme.
-    public static func use(_ tokens: ThemeTokens) { current = tokens }
+    /// The loaded theme's draw lists (layer 2): Jaguar's, with any the theme
+    /// ships replacing theirs by name. Set with `current`.
+    nonisolated(unsafe) public private(set) static var lists = JaguarLists.file
+
+    /// The tokens by their index in `colorKeys`/`metricKeys`, for the draw-list
+    /// runner: a key-path read into a 116-field struct is what a list spent
+    /// most of its overhead on (the P11.4 bench).
+    nonisolated(unsafe) static var colorTable = ThemeTokens.colorKeys.map { ThemeTokens.jaguar[keyPath: $0.1] }
+    nonisolated(unsafe) static var metricTable = ThemeTokens.metricKeys.map { ThemeTokens.jaguar[keyPath: $0.1] }
+
+    /// Replace the current theme. Lists a theme does not ship stay Jaguar's,
+    /// as tokens it does not set do.
+    public static func use(_ tokens: ThemeTokens, lists theirs: DrawListFile? = nil) {
+        current = tokens
+        colorTable = ThemeTokens.colorKeys.map { tokens[keyPath: $0.1] }
+        metricTable = ThemeTokens.metricKeys.map { tokens[keyPath: $0.1] }
+        lists = theirs.map { JaguarLists.file.merging($0) } ?? JaguarLists.file
+    }
 
     public static var titleBarTop: Color { current.titleBarTop }
     public static var titleBarBottom: Color { current.titleBarBottom }

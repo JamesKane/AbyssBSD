@@ -375,6 +375,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.64 | Snapshot a set where you poll it, not after dispatching — a handler that registers from inside a Wayland event made them disagree |
 | 2.65 | A privileged process hands its privilege to every child by default — the bar's first launched app inherited its privileged `WAYLAND_DISPLAY` |
 | 2.66 | SwiftPM does not recompile across an `@_exported` re-export — a type's layout changed and three targets ran the old one (a crash at exit, a crashed test bundle, a failed link) |
+| 2.67 | `cairo_fill_preserve` keeps the path, and the next shape is *added* to it — four Aqua controls filled their whole body with a gloss meant for a capsule, and one byte of coverage told the two apart |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -641,6 +642,31 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.67 `cairo_fill_preserve` keeps the path, and the next shape is added to it
+(P11.4. Found by making the draw lists byte-identical to the Swift.)
+
+`Draw.fillVerticalGradient` fills with `cairo_fill_preserve`, so the path it
+filled is still there afterwards. A recipe that then built its gloss capsule
+with `roundedRect` and filled it *added* the capsule to the kept body: the fill
+covered body and capsule, so **the gloss gradient washed the whole control**,
+not the top 42% it was drawn for. Four controls did it: the checked checkbox,
+the pop-up button's cap, the scrollbar thumb, and the scroll track, whose
+"inset shadow" on one edge is in fact a 10% darkening of the whole channel.
+It has looked like that since the recipes were written, and every golden
+pictures it.
+
+It could not be seen by reading the code, which reads as if the capsule is
+filled alone. It was found because P11.4 had to be pixel-identical: drawing
+the body alone with the gloss's gradient matched in every case but one, and
+there **one byte** of antialiasing differed between "body" and "body plus a
+capsule inside it". The draw-list format gained `and SHAPE`, a second subpath
+in one fill, to say what the Swift really did. **The rule: after a
+`_preserve`, start the next shape with `cairo_new_path` unless adding to the
+path is the point**, and say so where it is. The lists keep the look on
+purpose (the gate for P11.4 is that nothing moves); making each gloss the
+capsule it was meant to be is a look change for later, with the goldens
+updated.
 
 ### 2.66 SwiftPM does not recompile across an `@_exported` re-export
 (P11.2. `ThemeTokens` grew by 41 fields, and three targets kept the old size.)

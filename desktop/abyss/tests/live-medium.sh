@@ -171,9 +171,11 @@ echo "ok: $(grep -o 'Text: .*' "$work/boot.log" | head -1) — it can be read, n
 # would look identical and prove the medium lacks its themes (PHASE11 P11.2).
 grep -q "Theme: NO THEME\|Theme: .* REFUSED" "$work/boot.log" \
   && fail "the medium drew with the compiled fallback: $(grep -o 'Theme: .*' "$work/boot.log" | head -1)"
-grep -q "Theme: Aqua from /usr/local/share/abyss/themes/aqua/theme.ini" "$work/boot.log" \
-  || fail "the desktop never said it drew from the medium's theme: $(grep -o 'Theme: .*' "$work/boot.log" | head -1)"
-echo "ok: the medium's desktop drew from its own theme file"
+# Its draw lists too (P11.4): the compiled copy is the same text, so a medium
+# without themes/aqua/draw/ would draw identically.
+grep -qE "Theme: Aqua from /usr/local/share/abyss/themes/aqua/theme.ini, [1-9][0-9]* draw lists from draw/" "$work/boot.log" \
+  || fail "the desktop never said it drew from the medium's theme and its draw lists: $(grep -o 'Theme: .*' "$work/boot.log" | head -1)"
+echo "ok: the medium's desktop drew from its own theme file and draw lists"
 
 # No bus on the medium, and the session says so rather than silently lacking a
 # file chooser (P8.4's design, exercised here for real).

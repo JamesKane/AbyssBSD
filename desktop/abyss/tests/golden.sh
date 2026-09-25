@@ -85,6 +85,9 @@ render() {  # render NAME SCENE EXTRA OUT
     || { echo "FAIL: $1 did not render: $(tail -2 "$work/$1.log")"; return 1; }
 }
 
+# How many lists themes/aqua/draw/ defines — what every scene must say it read.
+lists=$(cat "$root"/themes/aqua/draw/*.dl 2>/dev/null | grep -c '^list ' || true)
+[ "$lists" -gt 0 ] || { echo "FAIL: themes/aqua/draw/ has no draw lists"; exit 1; }
 moved=""; missing=""; checked=0
 IFS='
 '
@@ -99,8 +102,10 @@ EOF
   render "$name" "$scene" "$extra" "$out" || exit 1
   # The goldens prove the theme FILE draws Jaguar — so a render that fell back
   # to the compiled defaults proves nothing about it, and is refused (§2.45).
-  grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini" "$work/$name.log" \
-    || { echo "FAIL: $name was not drawn from themes/aqua/theme.ini: $(grep '^Theme:' "$work/$name.log")"; exit 1; }
+  # So do the draw lists (P11.4): the compiled copy is the same text, so a
+  # theme whose draw/ went missing would still be green without this.
+  grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini, $lists draw lists from draw/" "$work/$name.log" \
+    || { echo "FAIL: $name was not drawn from themes/aqua/ (theme.ini and $lists lists in draw/): $(grep '^Theme:' "$work/$name.log")"; exit 1; }
   # A scene must render the same twice, or it cannot be a golden at all.
   render "$name" "$scene" "$extra" "$work/$name.again.png" || exit 1
   "$work/pngdiff" "$out" "$work/$name.again.png" > /dev/null \

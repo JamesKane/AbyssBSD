@@ -1,38 +1,56 @@
-// DrawList — a widget's drawing as data (PHASE11.md P11.3).
+// DrawList — a widget's drawing as data (PHASE11.md P11.3, P11.4).
 //
 // PRODUCT §8.3: a theme is data, not code. Layer 2 — *how* a control is painted
 // — is a **draw list**: a short sequence of declarative ops over a widget's
 // rectangle, parameterised by the theme's tokens, its bounded parameters and
 // the widget's state. The interpreter here is the only thing that turns one
-// into pixels, and it cannot execute anything: no loops, no calls, no
-// conditions beyond picking a state.
+// into pixels, and it cannot execute anything: no variables, no loops, no
+// calls, no conditions beyond picking a state.
 //
 // A file holds any number of lists:
 //
 //   list button
-//     rect 0 0 w h 4                       the current shape: x y w h [radius [top|bottom]]
+//     rect 0 0 w h h/2                     the current shape: x y w h [radius [top|bottom]]
 //     glow menuHighlight 8                  a blurred halo of the shape (cached)
-//     fill linear 0 0 0 h stops 0 buttonWhiteTop 1 buttonWhiteBottom
+//     fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
 //     when pressed fill #000000/0.1         an op for some states only
 //     bevel 1 #ffffff/0.4 #000000/0.6       top-left light, bottom-right shade
 //     stroke controlBorder 1
-//     text $label w/2 h/2 center bold upper tracking=1.5 color=buttonTextOnWhite
+//     text $label w/2 h/2 center color=buttonTextOnWhite
 //   end
 //
-// **Operands** are a number, `w` or `h` (the widget's size), `@metric` (a theme
-// metric), `$param` (a theme parameter), or one of those combined once with
-// + - * / — `w-1`, `h/2`, `4*$bevel`. That is the whole arithmetic, on purpose
-// (PHASE11 §6.5).
+// Coordinates are the widget's own: 0 0 is its top-left, `w` and `h` its size.
 //
-// **Colours** are anything `theme.ini` accepts: a token name, `#rrggbb[/a]`,
-// `r g b a` is NOT accepted here (spaces separate operands) — use `#rrggbb/a` or
-// `mix(a, b, t)`.
+// **Operands** are arithmetic in the manner of CSS `calc()`: numbers, `w`, `h`,
+// `@metric` (a theme metric), `$param` (a theme parameter, or one the widget
+// passes — a slider's thumb position), `textw(size)` (the label's width at a
+// size), `min(a, b)`, `max(a, b)`, + - * / and parentheses — `w-h/2-3`,
+// `(w-h)/2`, `min(w,h)*0.26`. That is the whole of it: there are no names a
+// list can define, so a list is a formula, never a program (PHASE11 §6.5).
 //
-// **Paints:** a colour; `linear x0 y0 x1 y1 stops …`; `radial cx cy r stops …`;
-// `conic cx cy r stops …` (cairo mesh patches, PHASE11 §4.1); `stripes angle w1
-// c1 w2 c2` (a repeating two-colour pattern — brushed metal is two of these
-// over a gradient); `noise seed alpha` (a deterministic white-noise tile —
-// anodized panels). `stops` is followed by offset/colour pairs.
+// **Colours** are a token name, `#rrggbb[/a]`, `$param` (a colour the widget
+// passes — a traffic light's base), any of those with `/a` (alpha replaced),
+// `mix(a, b, t)` (OKLCH, as theme.ini's), or `shift(c, d)` (d added to each of
+// r g b, clamped — Aqua's "a touch darker when pressed").
+//
+// **Shapes:** `rect x y w h [radius [top|bottom|all]]`, `ellipse x y w h`,
+// `circle cx cy r`, `path x y x y … [close]`; `and SHAPE` adds a subpath to
+// the current shape, so one fill or stroke covers both.
+//
+// **Paints:** a colour; `vertical stops …` (top to bottom of the current
+// shape); `linear x0 y0 x1 y1 stops …`; `radial cx cy r stops …` or `radial
+// x0 y0 r0 x1 y1 r1 stops …`; `conic cx cy r stops …` (cairo mesh patches,
+// PHASE11 §4.1); `stripes angle w1 c1 w2 c2`; `noise seed alpha`. `stops` is
+// followed by offset/colour pairs.
+//
+// **Ops:** `fill PAINT`; `stroke PAINT WIDTH [round]`; `bevel W LIGHT SHADE`;
+// `innershadow COLOUR SIZE [EXTENT]`; `glow COLOUR RADIUS [STRENGTH]`;
+// `rules across FROM EVERY PAINT WIDTH` (hairlines across the shape, FROM
+// its top, EVERY apart — a pinstripe); `rules slant FROM EVERY UNTIL PAINT
+// WIDTH` (45° lines rising left to right — a progress bar's candy stripe);
+// `text "…"|$label X Y [left|center|right] [baseline] [bold] [upper]
+// [tracking=N] [size=S] [color=C] [placeholder=C] [ghost="…"] [ghostalpha=A]`;
+// `push`, `pop`, `clip`.
 //
 // **States:** `when a,b op…` runs the op when the widget has any of those
 // states; `unless a op…` when it has none. The states are normal, hover,
@@ -73,27 +91,35 @@ public struct DrawState: OptionSet, Hashable, Sendable {
     ]
 }
 
-/// One operand: a number, the widget's size, a metric or a parameter — once
-/// combined, at most.
+/// An operand: arithmetic over numbers, the widget's size, metrics,
+/// parameters and the label's width.
 indirect enum Operand: Equatable, Sendable {
     case number(Double)
     case width, height
-    case metric(String)
+    case metric(Int)                 // index into ThemeTokens.metricKeys
     case parameter(String)
+    case textWidth(Operand)
+    case negate(Operand)
     case binary(Operand, Character, Operand)
+    case minimum(Operand, Operand)
+    case maximum(Operand, Operand)
 }
 
 /// A colour, resolved when the list runs so a theme reload reaches it.
 indirect enum ColorRef: Equatable, Sendable {
     case literal(Color)
-    case token(String)
+    case token(Int)                  // index into ThemeTokens.colorKeys
+    case parameter(String)
+    case alpha(ColorRef, Double)
+    case shift(ColorRef, Double)
     case mix(ColorRef, ColorRef, Double)
 }
 
 enum Paint: Sendable {
     case solid(ColorRef)
+    case vertical([(Double, ColorRef)])
     case linear(Operand, Operand, Operand, Operand, [(Double, ColorRef)])
-    case radial(Operand, Operand, Operand, [(Double, ColorRef)])
+    case radial(Operand, Operand, Operand, Operand, Operand, Operand, [(Double, ColorRef)])
     case conic(Operand, Operand, Operand, [(Double, ColorRef)])
     case stripes(Double, Operand, ColorRef, Operand, ColorRef)
     case noise(UInt32, Double)
@@ -103,20 +129,37 @@ enum Shape: Equatable, Sendable {
     enum Corners: Equatable, Sendable { case all, top, bottom }
     case rect(Operand, Operand, Operand, Operand, Operand?, Corners)
     case ellipse(Operand, Operand, Operand, Operand)
+    case circle(Operand, Operand, Operand)
+    case path([Operand], closed: Bool)
 }
 
 enum TextAlign: Equatable, Sendable { case left, center, right }
+enum RuleKind: Equatable, Sendable { case across, slant }
+
+struct TextOp: Sendable {
+    var content: String              // "\u{0}label" for $label
+    var x: Operand, y: Operand
+    var align = TextAlign.left
+    var baseline = false
+    var bold = false, upper = false
+    var tracking = 0.0
+    var size: Operand?
+    var color = ColorRef.token(ThemeTokens.colorKeys.firstIndex { $0.0 == "bodyText" } ?? 0)
+    var placeholder: ColorRef?
+    var ghost: String?
+    var ghostAlpha = 0.13
+}
 
 enum Op: Sendable {
     case shape(Shape)
+    case andShape(Shape)             // one more subpath in the current shape
     case fill(Paint)
-    case stroke(Paint, Operand)
+    case stroke(Paint, Operand, round: Bool)
     case bevel(Operand, ColorRef, ColorRef)
-    case innerShadow(ColorRef, Operand)
+    case innerShadow(ColorRef, Operand, Operand?)
     case glow(ColorRef, Operand, Double)
-    case text(content: String, x: Operand, y: Operand, align: TextAlign, bold: Bool,
-              upper: Bool, tracking: Double, size: Operand?, color: ColorRef, ghost: String?,
-              ghostAlpha: Double)
+    case rules(RuleKind, Operand, Operand, Operand?, Paint, Operand)
+    case text(TextOp)
     case push, pop, clip
 }
 
@@ -134,13 +177,19 @@ public struct DrawList: Sendable {
 
 /// A parsed draw-list file.
 public struct DrawListFile: Sendable {
-    public let lists: [String: DrawList]
+    public private(set) var lists: [String: DrawList]
 
     public init(parsing text: String) throws {
         lists = try DrawListParser.parse(text)
     }
+    init(lists: [String: DrawList]) { self.lists = lists }
 
     public subscript(_ name: String) -> DrawList? { lists[name] }
+
+    /// These lists, with `other`'s replacing any of the same name.
+    public func merging(_ other: DrawListFile) -> DrawListFile {
+        DrawListFile(lists: lists.merging(other.lists) { _, new in new })
+    }
 }
 
 // MARK: - Parsing
@@ -189,6 +238,11 @@ enum DrawListParser {
             let n = i + 1
             var w = words(raw)
             if w.isEmpty { continue }
+            // words() keeps a (…) group whole, so an unclosed one has swallowed
+            // the rest of the line — say that, not whatever it looks like now.
+            if let open = w.first(where: { $0.filter { $0 == "(" }.count != $0.filter { $0 == ")" }.count }) {
+                throw DrawListError(line: n, message: "\(open): a ( is not closed")
+            }
             if w[0] == "list" {
                 guard current == nil else { throw DrawListError(line: n, message: "list inside list \(current!.name) (missing end?)") }
                 guard w.count == 2 else { throw DrawListError(line: n, message: "want: list <name>") }
@@ -228,36 +282,115 @@ enum DrawListParser {
         return out
     }
 
+    // MARK: operands
+
+    /// `calc()`-style arithmetic, recursive descent: + - bind looser than * /,
+    /// both left to right — the order Swift evaluates the same expression in,
+    /// which is what lets a list reproduce a Swift recipe to the bit.
     static func operand(_ s: String, line: Int) throws -> Operand {
-        func term(_ t: Substring) throws -> Operand {
-            if t == "w" { return .width }
-            if t == "h" { return .height }
-            if t.hasPrefix("@"), t.count > 1 { return .metric(String(t.dropFirst())) }
-            if t.hasPrefix("$"), t.count > 1 { return .parameter(String(t.dropFirst())) }
-            if let d = Double(t) { return .number(d) }
-            throw DrawListError(line: line, message: "\(t) is not an operand (a number, w, h, @metric or $parameter)")
-        }
-        if let d = Double(s) { return .number(d) }
-        // One binary operator at most, not at position 0 (a leading minus is a
-        // number) and not straight after another (`w*-2` is w times -2).
-        let ops = "+-*/"
-        let chars = Array(s)
-        let at = chars.indices.dropFirst().filter { ops.contains(chars[$0]) && !ops.contains(chars[$0 - 1]) }
-        if at.count > 1 { throw DrawListError(line: line, message: "\(s): one operator at most") }
-        if let i = at.first {
-            let idx = s.index(s.startIndex, offsetBy: i)
-            return .binary(try term(s[..<idx]), chars[i], try term(s[s.index(after: idx)...]))
-        }
-        return try term(Substring(s))
+        var p = ExprParser(chars: Array(s), line: line, source: s)
+        let e = try p.expression()
+        guard p.i == p.chars.count else { throw p.fail("unexpected \(String(p.chars[p.i...]))") }
+        return e
     }
 
+    struct ExprParser {
+        let chars: [Character]
+        var i = 0
+        let line: Int
+        let source: String
+        init(chars: [Character], line: Int, source: String) { self.chars = chars; self.line = line; self.source = source }
+
+        func fail(_ why: String) -> DrawListError {
+            DrawListError(line: line, message: "\(source): \(why)")
+        }
+        var peek: Character? { i < chars.count ? chars[i] : nil }
+
+        mutating func expression() throws -> Operand {
+            var l = try term()
+            while let c = peek, c == "+" || c == "-" { i += 1; l = .binary(l, c, try term()) }
+            return l
+        }
+        mutating func term() throws -> Operand {
+            var l = try factor()
+            while let c = peek, c == "*" || c == "/" { i += 1; l = .binary(l, c, try factor()) }
+            return l
+        }
+        mutating func factor() throws -> Operand {
+            guard let c = peek else { throw fail("an operand is missing") }
+            if c == "-" { i += 1; return .negate(try factor()) }
+            if c == "(" {
+                i += 1
+                let e = try expression()
+                guard peek == ")" else { throw fail("a ( is not closed") }
+                i += 1
+                return e
+            }
+            if c.isNumber || c == "." {
+                let start = i
+                while let d = peek, d.isNumber || d == "." { i += 1 }
+                guard let v = Double(String(chars[start..<i])) else { throw fail("\(String(chars[start..<i])) is not a number") }
+                return .number(v)
+            }
+            if c == "@" || c == "$" {
+                i += 1
+                let name = identifier()
+                guard !name.isEmpty else { throw fail("\(c) wants a name") }
+                if c == "$" { return .parameter(name) }
+                guard let k = ThemeTokens.metricKeys.firstIndex(where: { $0.0 == name }) else {
+                    throw fail("@\(name) is not a metric (\(ThemeTokens.metricKeys.map { $0.0 }.joined(separator: " ")))")
+                }
+                return .metric(k)
+            }
+            let name = identifier()
+            switch name {
+            case "w": return .width
+            case "h": return .height
+            case "min", "max", "textw":
+                guard peek == "(" else { throw fail("\(name) wants (…)") }
+                i += 1
+                let a = try expression()
+                if name == "textw" {
+                    guard peek == ")" else { throw fail("textw wants one size") }
+                    i += 1
+                    return .textWidth(a)
+                }
+                guard peek == "," else { throw fail("\(name) wants two operands") }
+                i += 1
+                while peek == " " { i += 1 }
+                let b = try expression()
+                guard peek == ")" else { throw fail("\(name) wants two operands") }
+                i += 1
+                return name == "min" ? .minimum(a, b) : .maximum(a, b)
+            case "": throw fail("\(c) is not an operand (a number, w, h, @metric, $parameter, textw, min or max)")
+            default: throw fail("\(name) is not an operand (a number, w, h, @metric, $parameter, textw, min or max)")
+            }
+        }
+        mutating func identifier() -> String {
+            let start = i
+            while let d = peek, d.isLetter || d.isNumber || d == "_" { i += 1 }
+            return String(chars[start..<i])
+        }
+    }
+
+    // MARK: colours
+
     static func color(_ s: String, line: Int) throws -> ColorRef {
-        if s.hasPrefix("mix("), s.hasSuffix(")") {
-            let args = s.dropFirst(4).dropLast().split(separator: ",").map { String($0).trimmingSpaces }
+        func fn(_ name: String) -> [String]? {
+            guard s.hasPrefix(name + "("), s.hasSuffix(")") else { return nil }
+            return s.dropFirst(name.count + 1).dropLast().split(separator: ",").map { String($0).trimmingSpaces }
+        }
+        if let args = fn("mix") {
             guard args.count == 3, let t = Double(args[2]), t >= 0, t <= 1 else {
                 throw DrawListError(line: line, message: "\(s): want mix(colour, colour, 0…1)")
             }
             return .mix(try color(args[0], line: line), try color(args[1], line: line), t)
+        }
+        if let args = fn("shift") {
+            guard args.count == 2, let d = Double(args[1]), d >= -1, d <= 1 else {
+                throw DrawListError(line: line, message: "\(s): want shift(colour, -1…1)")
+            }
+            return .shift(try color(args[0], line: line), d)
         }
         if s.hasPrefix("#") {
             guard let c = ThemeLoader.color(s, lookup: { _ in nil }) else {
@@ -265,10 +398,24 @@ enum DrawListParser {
             }
             return .literal(c)
         }
-        guard ThemeTokens.colorKeys.contains(where: { $0.0 == s }) else {
-            throw DrawListError(line: line, message: "\(s) is not a colour token")
+        // name or $name, optionally /alpha
+        var name = Substring(s), alpha: Double?
+        if let slash = s.firstIndex(of: "/") {
+            name = s[..<slash]
+            guard let a = Double(s[s.index(after: slash)...]), a >= 0, a <= 1 else {
+                throw DrawListError(line: line, message: "\(s): the alpha after / wants 0…1")
+            }
+            alpha = a
         }
-        return .token(s)
+        let base: ColorRef
+        if name.hasPrefix("$"), name.count > 1 {
+            base = .parameter(String(name.dropFirst()))
+        } else if let k = ThemeTokens.colorKeys.firstIndex(where: { $0.0 == name }) {
+            base = .token(k)
+        } else {
+            throw DrawListError(line: line, message: "\(name) is not a colour token")
+        }
+        return alpha.map { .alpha(base, $0) } ?? base
     }
 
     static func stops(_ w: ArraySlice<String>, line: Int) throws -> [(Double, ColorRef)] {
@@ -285,21 +432,38 @@ enum DrawListParser {
         }
     }
 
+    // MARK: paints
+
+    /// A paint at the head of `w`, and how many words it took. A gradient's
+    /// stops run to the end of `w`, so a caller with words after a paint hands
+    /// over only the paint's.
     static func paint(_ w: ArraySlice<String>, line: Int) throws -> (Paint, Int) {
         guard let head = w.first else { throw DrawListError(line: line, message: "want a paint") }
         let a = Array(w)
         func need(_ k: Int) throws { if a.count < k { throw DrawListError(line: line, message: "\(head) wants \(k - 1) arguments") } }
+        let stopsAt = a.firstIndex(of: "stops")
         switch head {
+        case "vertical":
+            guard stopsAt == 1 else { throw DrawListError(line: line, message: "want: vertical stops …") }
+            return (.vertical(try stops(w.dropFirst(1), line: line)), a.count)
         case "linear":
-            try need(6)
+            guard stopsAt == 5 else { throw DrawListError(line: line, message: "want: linear x0 y0 x1 y1 stops …") }
             let st = try stops(w.dropFirst(5), line: line)
             return (.linear(try operand(a[1], line: line), try operand(a[2], line: line),
                             try operand(a[3], line: line), try operand(a[4], line: line), st), a.count)
-        case "radial", "conic":
-            try need(5)
+        case "radial":
+            if stopsAt == 4 {
+                let st = try stops(w.dropFirst(4), line: line)
+                let cx = try operand(a[1], line: line), cy = try operand(a[2], line: line)
+                return (.radial(cx, cy, .number(0), cx, cy, try operand(a[3], line: line), st), a.count)
+            }
+            guard stopsAt == 7 else { throw DrawListError(line: line, message: "want: radial cx cy r stops … or radial x0 y0 r0 x1 y1 r1 stops …") }
+            let o = try (1...6).map { try operand(a[$0], line: line) }
+            return (.radial(o[0], o[1], o[2], o[3], o[4], o[5], try stops(w.dropFirst(7), line: line)), a.count)
+        case "conic":
+            guard stopsAt == 4 else { throw DrawListError(line: line, message: "want: conic cx cy r stops …") }
             let st = try stops(w.dropFirst(4), line: line)
-            let args = (try operand(a[1], line: line), try operand(a[2], line: line), try operand(a[3], line: line))
-            return (head == "radial" ? .radial(args.0, args.1, args.2, st) : .conic(args.0, args.1, args.2, st), a.count)
+            return (.conic(try operand(a[1], line: line), try operand(a[2], line: line), try operand(a[3], line: line), st), a.count)
         case "stripes":
             try need(6)
             guard let ang = Double(a[1]) else { throw DrawListError(line: line, message: "stripes wants an angle in degrees") }
@@ -316,9 +480,18 @@ enum DrawListParser {
         }
     }
 
+    // MARK: ops
+
     static func parseOp(_ w: [String], line: Int) throws -> Op {
+        if w[0] == "and" {
+            guard w.count >= 2, case .shape(let sh) = try parseOp(Array(w.dropFirst()), line: line) else {
+                throw DrawListError(line: line, message: "and wants a shape (rect ellipse circle path)")
+            }
+            return .andShape(sh)
+        }
         let name = w[0]
         let args = Array(w.dropFirst())
+        func o(_ i: Int) throws -> Operand { try operand(args[i], line: line) }
         switch name {
         case "rect":
             guard args.count >= 4, args.count <= 6 else { throw DrawListError(line: line, message: "want: rect x y w h [radius [top|bottom]]") }
@@ -331,28 +504,35 @@ enum DrawListParser {
                 default: throw DrawListError(line: line, message: "\(args[5]) is not top, bottom or all")
                 }
             }
-            return .shape(.rect(try operand(args[0], line: line), try operand(args[1], line: line),
-                                try operand(args[2], line: line), try operand(args[3], line: line),
-                                args.count >= 5 ? try operand(args[4], line: line) : nil, corners))
+            return .shape(.rect(try o(0), try o(1), try o(2), try o(3), args.count >= 5 ? try o(4) : nil, corners))
         case "ellipse":
             guard args.count == 4 else { throw DrawListError(line: line, message: "want: ellipse x y w h") }
-            return .shape(.ellipse(try operand(args[0], line: line), try operand(args[1], line: line),
-                                   try operand(args[2], line: line), try operand(args[3], line: line)))
+            return .shape(.ellipse(try o(0), try o(1), try o(2), try o(3)))
+        case "circle":
+            guard args.count == 3 else { throw DrawListError(line: line, message: "want: circle cx cy r") }
+            return .shape(.circle(try o(0), try o(1), try o(2)))
+        case "path":
+            let closed = args.last == "close"
+            let pts = closed ? Array(args.dropLast()) : args
+            guard pts.count >= 4, pts.count % 2 == 0 else { throw DrawListError(line: line, message: "want: path x y x y … [close]") }
+            return .shape(.path(try pts.map { try operand($0, line: line) }, closed: closed))
         case "fill":
             let (p, used) = try paint(args[...], line: line)
             guard used == args.count else { throw DrawListError(line: line, message: "fill: unexpected \(args[used...].joined(separator: " "))") }
             return .fill(p)
         case "stroke":
-            guard args.count >= 2 else { throw DrawListError(line: line, message: "want: stroke <paint> <width>") }
-            let (p, used) = try paint(args.dropLast(), line: line)
-            guard used == args.count - 1 else { throw DrawListError(line: line, message: "stroke: unexpected arguments") }
-            return .stroke(p, try operand(args.last!, line: line))
+            let round = args.last == "round"
+            let a = round ? Array(args.dropLast()) : args
+            guard a.count >= 2 else { throw DrawListError(line: line, message: "want: stroke <paint> <width> [round]") }
+            let (p, used) = try paint(a.dropLast(), line: line)
+            guard used == a.count - 1 else { throw DrawListError(line: line, message: "stroke: unexpected arguments") }
+            return .stroke(p, try operand(a.last!, line: line), round: round)
         case "bevel":
             guard args.count == 3 else { throw DrawListError(line: line, message: "want: bevel <width> <light> <shade>") }
-            return .bevel(try operand(args[0], line: line), try color(args[1], line: line), try color(args[2], line: line))
+            return .bevel(try o(0), try color(args[1], line: line), try color(args[2], line: line))
         case "innershadow":
-            guard args.count == 2 else { throw DrawListError(line: line, message: "want: innershadow <colour> <size>") }
-            return .innerShadow(try color(args[0], line: line), try operand(args[1], line: line))
+            guard args.count == 2 || args.count == 3 else { throw DrawListError(line: line, message: "want: innershadow <colour> <size> [extent]") }
+            return .innerShadow(try color(args[0], line: line), try o(1), args.count == 3 ? try o(2) : nil)
         case "glow":
             guard args.count == 2 || args.count == 3 else { throw DrawListError(line: line, message: "want: glow <colour> <radius> [strength]") }
             var strength = 1.0
@@ -360,7 +540,17 @@ enum DrawListParser {
                 guard let s = Double(args[2]), s >= 0, s <= 4 else { throw DrawListError(line: line, message: "glow strength wants 0…4") }
                 strength = s
             }
-            return .glow(try color(args[0], line: line), try operand(args[1], line: line), strength)
+            return .glow(try color(args[0], line: line), try o(1), strength)
+        case "rules":
+            guard let kind = args.first, kind == "across" || kind == "slant" else {
+                throw DrawListError(line: line, message: "want: rules across FROM EVERY PAINT WIDTH, or rules slant FROM EVERY UNTIL PAINT WIDTH")
+            }
+            let fixed = kind == "across" ? 3 : 4       // kind + operands before the paint
+            guard args.count >= fixed + 2 else { throw DrawListError(line: line, message: "rules \(kind) wants a paint and a width") }
+            let (p, used) = try paint(args[fixed..<(args.count - 1)], line: line)
+            guard fixed + used == args.count - 1 else { throw DrawListError(line: line, message: "rules: unexpected arguments") }
+            return .rules(kind == "across" ? .across : .slant, try o(1), try o(2),
+                          kind == "slant" ? try o(3) : nil, p, try operand(args.last!, line: line))
         case "text":
             guard args.count >= 3 else { throw DrawListError(line: line, message: "want: text <\"string\"|$label> x y [options]") }
             let content: String
@@ -371,38 +561,37 @@ enum DrawListParser {
             } else {
                 throw DrawListError(line: line, message: "text wants a \"quoted string\" or $label")
             }
-            var align = TextAlign.left, bold = false, upper = false, tracking = 0.0
-            var size: Operand?, color = ColorRef.token("bodyText"), ghost: String?, ghostAlpha = 0.13
+            var t = TextOp(content: content, x: try o(1), y: try o(2))
             for opt in args.dropFirst(3) {
                 switch opt {
-                case "left": align = .left
-                case "center": align = .center
-                case "right": align = .right
-                case "bold": bold = true
-                case "upper": upper = true
+                case "left": t.align = .left
+                case "center": t.align = .center
+                case "right": t.align = .right
+                case "baseline": t.baseline = true
+                case "bold": t.bold = true
+                case "upper": t.upper = true
                 default:
                     guard let eq = opt.firstIndex(of: "=") else { throw DrawListError(line: line, message: "\(opt) is not a text option") }
                     let k = String(opt[..<eq]), v = String(opt[opt.index(after: eq)...])
                     switch k {
-                    case "tracking": guard let t = Double(v) else { throw DrawListError(line: line, message: "tracking wants a number") }; tracking = t
-                    case "size": size = try operand(v, line: line)
-                    case "color": color = try self.color(v, line: line)
+                    case "tracking": guard let n = Double(v) else { throw DrawListError(line: line, message: "tracking wants a number") }; t.tracking = n
+                    case "size": t.size = try operand(v, line: line)
+                    case "color": t.color = try color(v, line: line)
+                    case "placeholder": t.placeholder = try color(v, line: line)
                     case "ghost":
                         guard v.hasPrefix("\""), v.hasSuffix("\""), v.count >= 2 else { throw DrawListError(line: line, message: "ghost wants a \"quoted string\"") }
-                        ghost = String(v.dropFirst().dropLast())
-                    case "ghostalpha": guard let a = Double(v), a >= 0, a <= 1 else { throw DrawListError(line: line, message: "ghostalpha wants 0…1") }; ghostAlpha = a
+                        t.ghost = String(v.dropFirst().dropLast())
+                    case "ghostalpha": guard let a = Double(v), a >= 0, a <= 1 else { throw DrawListError(line: line, message: "ghostalpha wants 0…1") }; t.ghostAlpha = a
                     default: throw DrawListError(line: line, message: "\(k) is not a text option")
                     }
                 }
             }
-            return .text(content: content, x: try operand(args[1], line: line), y: try operand(args[2], line: line),
-                         align: align, bold: bold, upper: upper, tracking: tracking, size: size,
-                         color: color, ghost: ghost, ghostAlpha: ghostAlpha)
+            return .text(t)
         case "push": return .push
         case "pop": return .pop
         case "clip": return .clip
         default:
-            throw DrawListError(line: line, message: "\(name) is not an op (rect ellipse fill stroke bevel innershadow glow text push pop clip)")
+            throw DrawListError(line: line, message: "\(name) is not an op (rect ellipse circle path fill stroke bevel innershadow glow rules text push pop clip)")
         }
     }
 }
@@ -413,19 +602,25 @@ public struct DrawContext {
     public var rect: Rect
     public var state: DrawState
     public var label: String
+    /// Shown by a `text … placeholder=` op when the label is empty.
+    public var placeholder: String
     public var parameters: [String: Double]
+    public var colors: [String: Color]
     public init(rect: Rect, state: DrawState = .normal, label: String = "",
-                parameters: [String: Double] = [:]) {
-        self.rect = rect; self.state = state; self.label = label; self.parameters = parameters
+                placeholder: String = "", parameters: [String: Double] = [:],
+                colors: [String: Color] = [:]) {
+        self.rect = rect; self.state = state; self.label = label
+        self.placeholder = placeholder; self.parameters = parameters; self.colors = colors
     }
 }
 
 public enum DrawListRunner {
-    /// Run `list` into `cr` for one widget. A missing token or parameter at run
-    /// time draws nothing for that op and is reported once — the loader will
-    /// have checked the names already, so this is a backstop, not a path.
+    /// Run `list` into `cr` for one widget. A missing parameter at run time
+    /// reads as 0 (or a clear colour): the loader has checked the names that
+    /// can be checked, so this is a backstop, not a path.
     public static func run(_ list: DrawList, _ cr: OpaquePointer, _ ctx: DrawContext) {
-        var shape: Shape?
+        var shape: Shape?            // the first subpath: what bounds, bevels and glows use
+        var more: [Shape] = []       // `and` subpaths, filled and stroked with it
         var depth = 0
         cairo_save(cr)
         cairo_translate(cr, ctx.rect.x, ctx.rect.y)
@@ -437,47 +632,52 @@ public enum DrawListRunner {
             }
             if let u = step.unless, !u.intersection(ctx.state).isEmpty { continue }
             switch step.op {
-            case .shape(let s): shape = s
+            case .shape(let s): shape = s; more = []
+            case .andShape(let s): if shape == nil { shape = s } else { more.append(s) }
             case .fill(let p):
                 guard let s = shape else { continue }
-                path(s, cr, ctx); setPaint(p, cr, ctx); cairo_fill(cr); clearPaint(cr)
-            case .stroke(let p, let width):
+                path(s, cr, ctx, more); setPaint(p, s, cr, ctx); cairo_fill(cr); clearPaint(cr)
+            case .stroke(let p, let width, let round):
                 guard let s = shape else { continue }
-                path(s, cr, ctx); setPaint(p, cr, ctx)
-                cairo_set_line_width(cr, eval(width, ctx)); cairo_stroke(cr); clearPaint(cr)
+                path(s, cr, ctx, more); setPaint(p, s, cr, ctx)
+                cairo_set_line_width(cr, eval(width, ctx))
+                if round {
+                    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND); cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND)
+                }
+                cairo_stroke(cr); clearPaint(cr)
+                if round {
+                    cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT); cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER)
+                }
             case .bevel(let width, let hi, let lo):
                 guard case .rect(let x, let y, let w, let h, _, _)? = shape else { continue }
                 bevel(cr, Rect(eval(x, ctx), eval(y, ctx), eval(w, ctx), eval(h, ctx)),
-                      eval(width, ctx), resolve(hi), resolve(lo))
-            case .innerShadow(let c, let size):
-                guard let s = shape, case .rect(let x, let y, let w, _, _, _) = s else { continue }
+                      eval(width, ctx), resolve(hi, ctx), resolve(lo, ctx))
+            case .innerShadow(let c, let size, let extent):
+                guard let s = shape else { continue }
+                let b = bounds(s, ctx)
                 cairo_save(cr); path(s, cr, ctx); cairo_clip(cr)
-                let col = resolve(c), sz = eval(size, ctx), top = eval(y, ctx)
-                let g = cairo_pattern_create_linear(0, top, 0, top + sz)
+                let col = resolve(c, ctx), sz = eval(size, ctx)
+                let g = cairo_pattern_create_linear(0, b.y, 0, b.y + sz)
                 cairo_pattern_add_color_stop_rgba(g, 0, col.r, col.g, col.b, col.a)
                 cairo_pattern_add_color_stop_rgba(g, 1, col.r, col.g, col.b, 0)
+                cairo_rectangle(cr, b.x, b.y, b.w, extent.map { eval($0, ctx) } ?? sz)
                 cairo_set_source(cr, g)
-                cairo_rectangle(cr, eval(x, ctx), top, eval(w, ctx), sz); cairo_fill(cr)
+                cairo_fill(cr)
                 cairo_pattern_destroy(g); cairo_restore(cr)
             case .glow(let c, let radius, let strength):
                 guard let s = shape else { continue }
-                glow(s, cr, ctx, resolve(c), eval(radius, ctx), strength)
-            case .text(let content, let x, let y, let align, let bold, let upper, let tracking,
-                       let size, let color, let ghost, let ghostAlpha):
-                var str = content == "\u{0}label" ? ctx.label : content
-                if upper { str = str.uppercased() }
-                let sz = size.map { eval($0, ctx) } ?? Theme.fontSize
-                let col = resolve(color)
-                if let ghost {
-                    let gs = upper ? ghost.uppercased() : ghost
-                    text(cr, gs, eval(x, ctx), eval(y, ctx), align, bold, tracking, sz, col.with(a: col.a * ghostAlpha))
-                }
-                text(cr, str, eval(x, ctx), eval(y, ctx), align, bold, tracking, sz, col)
+                glow(s, cr, ctx, resolve(c, ctx), eval(radius, ctx), strength)
+            case .rules(let kind, let from, let every, let until, let p, let width):
+                guard let s = shape else { continue }
+                rules(kind, bounds(s, ctx), eval(from, ctx), eval(every, ctx),
+                      until.map { eval($0, ctx) }, p, s, eval(width, ctx), cr, ctx)
+            case .text(let t):
+                text(t, cr, ctx)
             case .push: cairo_save(cr); depth += 1
             case .pop: if depth > 0 { cairo_restore(cr); depth -= 1 }
             case .clip:
                 guard let s = shape else { continue }
-                path(s, cr, ctx); cairo_clip(cr)
+                path(s, cr, ctx, more); cairo_clip(cr)
             }
         }
         while depth > 0 { cairo_restore(cr); depth -= 1 }
@@ -491,9 +691,14 @@ public enum DrawListRunner {
         case .number(let d): return d
         case .width: return ctx.rect.w
         case .height: return ctx.rect.h
-        case .metric(let m):
-            return ThemeTokens.metricKeys.first(where: { $0.0 == m }).map { Theme.current[keyPath: $0.1] } ?? 0
+        case .metric(let k): return Theme.metricTable[k]
         case .parameter(let p): return ctx.parameters[p] ?? 0
+        case .textWidth(let size):
+            guard let cr = measuring else { return 0 }
+            return Draw.textWidth(cr, ctx.label, size: eval(size, ctx))
+        case .negate(let a): return -eval(a, ctx)
+        case .minimum(let a, let b): return min(eval(a, ctx), eval(b, ctx))
+        case .maximum(let a, let b): return max(eval(a, ctx), eval(b, ctx))
         case .binary(let a, let op, let b):
             let l = eval(a, ctx), r = eval(b, ctx)
             switch op {
@@ -505,19 +710,39 @@ public enum DrawListRunner {
         }
     }
 
-    static func resolve(_ c: ColorRef) -> Color {
+    /// A context `textw` measures with (only the toy-text fallback needs one).
+    nonisolated(unsafe) static var measuring: OpaquePointer? = {
+        guard let s = cairo_image_surface_create(CAIRO_FORMAT_A8, 1, 1) else { return nil }
+        defer { cairo_surface_destroy(s) }
+        return cairo_create(s)
+    }()
+
+    static func resolve(_ c: ColorRef, _ ctx: DrawContext) -> Color {
         switch c {
         case .literal(let col): return col
-        case .token(let t):
-            return ThemeTokens.colorKeys.first(where: { $0.0 == t }).map { Theme.current[keyPath: $0.1] } ?? Color(0, 0, 0, 0)
-        case .mix(let a, let b, let t): return ThemeLoader.mixOKLCH(resolve(a), resolve(b), t)
+        case .token(let k): return Theme.colorTable[k]
+        case .parameter(let p): return ctx.colors[p] ?? Color(0, 0, 0, 0)
+        case .alpha(let base, let a): return resolve(base, ctx).with(a: a)
+        case .shift(let base, let d):
+            // Clamped per channel, alpha kept — Aqua's pressed and lit-from-
+            // above arithmetic, exactly as the Swift recipes did it.
+            let b = resolve(base, ctx)
+            return d < 0
+                ? Color(max(0, b.r + d), max(0, b.g + d), max(0, b.b + d), b.a)
+                : Color(min(1, b.r + d), min(1, b.g + d), min(1, b.b + d), b.a)
+        case .mix(let a, let b, let t): return ThemeLoader.mixOKLCH(resolve(a, ctx), resolve(b, ctx), t)
         }
     }
 
     // MARK: shapes and paints
 
-    static func path(_ s: Shape, _ cr: OpaquePointer, _ ctx: DrawContext) {
+    static func path(_ s: Shape, _ cr: OpaquePointer, _ ctx: DrawContext, _ more: [Shape] = []) {
         cairo_new_path(cr)
+        for sub in [s] + more { subpath(sub, cr, ctx) }
+    }
+
+    static func subpath(_ s: Shape, _ cr: OpaquePointer, _ ctx: DrawContext) {
+        cairo_new_sub_path(cr)
         switch s {
         case .rect(let x, let y, let w, let h, let r, let corners):
             let rect = Rect(eval(x, ctx), eval(y, ctx), eval(w, ctx), eval(h, ctx))
@@ -538,26 +763,54 @@ public enum DrawListRunner {
             cairo_scale(cr, ew / 2, eh / 2)
             cairo_arc(cr, 0, 0, 1, 0, 2 * .pi)
             cairo_restore(cr)
+        case .circle(let cx, let cy, let r):
+            cairo_arc(cr, eval(cx, ctx), eval(cy, ctx), eval(r, ctx), 0, 2 * .pi)
+        case .path(let pts, let closed):
+            cairo_move_to(cr, eval(pts[0], ctx), eval(pts[1], ctx))
+            for i in stride(from: 2, to: pts.count, by: 2) {
+                cairo_line_to(cr, eval(pts[i], ctx), eval(pts[i + 1], ctx))
+            }
+            if closed { cairo_close_path(cr) }
         }
     }
 
-    /// Set the source for `p`. Patterns are owned by the cairo context after
-    /// this, and released by `clearPaint`.
-    static func setPaint(_ p: Paint, _ cr: OpaquePointer, _ ctx: DrawContext) {
+    /// A shape's bounding box, computed the way the Swift recipes computed the
+    /// band a vertical gradient spans (a circle's is `cy - r` for `r * 2`).
+    static func bounds(_ s: Shape, _ ctx: DrawContext) -> Rect {
+        switch s {
+        case .rect(let x, let y, let w, let h, _, _), .ellipse(let x, let y, let w, let h):
+            return Rect(eval(x, ctx), eval(y, ctx), eval(w, ctx), eval(h, ctx))
+        case .circle(let cx, let cy, let r):
+            let rr = eval(r, ctx)
+            return Rect(eval(cx, ctx) - rr, eval(cy, ctx) - rr, rr * 2, rr * 2)
+        case .path(let pts, _):
+            let xs = stride(from: 0, to: pts.count, by: 2).map { eval(pts[$0], ctx) }
+            let ys = stride(from: 1, to: pts.count, by: 2).map { eval(pts[$0], ctx) }
+            let x0 = xs.min() ?? 0, y0 = ys.min() ?? 0
+            return Rect(x0, y0, (xs.max() ?? 0) - x0, (ys.max() ?? 0) - y0)
+        }
+    }
+
+    /// Set the source for `p`, for filling or stroking `s`.
+    static func setPaint(_ p: Paint, _ s: Shape, _ cr: OpaquePointer, _ ctx: DrawContext) {
         func addStops(_ pat: OpaquePointer?, _ st: [(Double, ColorRef)]) {
-            for (o, c) in st { let col = resolve(c); cairo_pattern_add_color_stop_rgba(pat, o, col.r, col.g, col.b, col.a) }
+            for (o, c) in st { let col = resolve(c, ctx); cairo_pattern_add_color_stop_rgba(pat, o, col.r, col.g, col.b, col.a) }
         }
         switch p {
-        case .solid(let c): Draw.setColor(cr, resolve(c))
+        case .solid(let c): Draw.setColor(cr, resolve(c, ctx))
+        case .vertical(let st):
+            let b = bounds(s, ctx)
+            let pat = cairo_pattern_create_linear(0, b.y, 0, b.y + b.h)
+            addStops(pat, st); cairo_set_source(cr, pat); cairo_pattern_destroy(pat)
         case .linear(let x0, let y0, let x1, let y1, let st):
             let pat = cairo_pattern_create_linear(eval(x0, ctx), eval(y0, ctx), eval(x1, ctx), eval(y1, ctx))
             addStops(pat, st); cairo_set_source(cr, pat); cairo_pattern_destroy(pat)
-        case .radial(let cx, let cy, let r, let st):
-            let x = eval(cx, ctx), y = eval(cy, ctx)
-            let pat = cairo_pattern_create_radial(x, y, 0, x, y, eval(r, ctx))
+        case .radial(let x0, let y0, let r0, let x1, let y1, let r1, let st):
+            let pat = cairo_pattern_create_radial(eval(x0, ctx), eval(y0, ctx), eval(r0, ctx),
+                                                  eval(x1, ctx), eval(y1, ctx), eval(r1, ctx))
             addStops(pat, st); cairo_set_source(cr, pat); cairo_pattern_destroy(pat)
         case .conic(let cx, let cy, let r, let st):
-            let pat = conicMesh(eval(cx, ctx), eval(cy, ctx), eval(r, ctx), st.map { ($0.0, resolve($0.1)) })
+            let pat = conicMesh(eval(cx, ctx), eval(cy, ctx), eval(r, ctx), st.map { ($0.0, resolve($0.1, ctx)) })
             cairo_set_source(cr, pat); cairo_pattern_destroy(pat)
         case .stripes(let angle, let w1, let c1, let w2, let c2):
             let a = max(1, eval(w1, ctx)), b = max(1, eval(w2, ctx))
@@ -569,10 +822,10 @@ public enum DrawListRunner {
             let n = Int32((a + b).rounded(.up))
             guard let tile = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, across ? 1 : n, across ? n : 1),
                   let tc = cairo_create(tile) else { return }
-            Draw.setColor(tc, resolve(c1))
+            Draw.setColor(tc, resolve(c1, ctx))
             if across { cairo_rectangle(tc, 0, 0, 1, a) } else { cairo_rectangle(tc, 0, 0, a, 1) }
             cairo_fill(tc)
-            Draw.setColor(tc, resolve(c2))
+            Draw.setColor(tc, resolve(c2, ctx))
             if across { cairo_rectangle(tc, 0, a, 1, b) } else { cairo_rectangle(tc, a, 0, b, 1) }
             cairo_fill(tc)
             cairo_destroy(tc)
@@ -592,6 +845,33 @@ public enum DrawListRunner {
     }
 
     static func clearPaint(_ cr: OpaquePointer) { cairo_set_source_rgba(cr, 0, 0, 0, 1) }
+
+    /// Parallel hairlines over `b`, each stroked on its own (so where two
+    /// overlap they composite twice, as a hand-drawn set would). Bounded: a
+    /// step that is not positive draws nothing, and no set passes 10 000.
+    static func rules(_ kind: RuleKind, _ b: Rect, _ from: Double, _ every: Double, _ until: Double?,
+                      _ p: Paint, _ s: Shape, _ width: Double, _ cr: OpaquePointer, _ ctx: DrawContext) {
+        guard every > 0 else { return }
+        setPaint(p, s, cr, ctx)
+        cairo_set_line_width(cr, width)
+        var n = 0
+        switch kind {
+        case .across:
+            var y = b.y + from
+            while y < b.y + b.h, n < 10_000 {
+                cairo_move_to(cr, b.x, y); cairo_line_to(cr, b.x + b.w, y); cairo_stroke(cr)
+                y += every; n += 1
+            }
+        case .slant:
+            var x = from
+            let limit = until ?? (b.x + b.w)
+            while x < limit, n < 10_000 {
+                cairo_move_to(cr, x, b.y + b.h); cairo_line_to(cr, x + b.h, b.y); cairo_stroke(cr)
+                x += every; n += 1
+            }
+        }
+        clearPaint(cr)
+    }
 
     /// A conic sweep as quarter-or-smaller Coons patches around the centre
     /// (PHASE11 §4.1: cairo has no conic pattern, and this is how to have one).
@@ -681,21 +961,17 @@ public enum DrawListRunner {
     static func glow(_ s: Shape, _ cr: OpaquePointer, _ ctx: DrawContext, _ c: Color,
                      _ radius: Double, _ strength: Double) {
         guard radius > 0 else { return }
-        var bx = 0.0, by = 0.0, bw = 0.0, bh = 0.0
-        switch s {
-        case .rect(let x, let y, let w, let h, _, _), .ellipse(let x, let y, let w, let h):
-            bx = eval(x, ctx); by = eval(y, ctx); bw = eval(w, ctx); bh = eval(h, ctx)
-        }
+        let b = bounds(s, ctx)
         let scale = Int32(Text.renderScale)
         let pad = radius * 2
-        let key = GlowKey(shape: "\(s)", w: Int32(bw), h: Int32(bh), radius: Int32(radius), scale: scale)
+        let key = GlowKey(shape: "\(s)", w: Int32(b.w), h: Int32(b.h), radius: Int32(radius), scale: scale)
         if glowCache[key] == nil {
-            let sw = Int32(((bw + 2 * pad) * Double(scale)).rounded(.up))
-            let sh = Int32(((bh + 2 * pad) * Double(scale)).rounded(.up))
+            let sw = Int32(((b.w + 2 * pad) * Double(scale)).rounded(.up))
+            let sh = Int32(((b.h + 2 * pad) * Double(scale)).rounded(.up))
             guard let mask = cairo_image_surface_create(CAIRO_FORMAT_A8, sw, sh),
                   let mc = cairo_create(mask) else { return }
             cairo_scale(mc, Double(scale), Double(scale))
-            cairo_translate(mc, pad - bx, pad - by)
+            cairo_translate(mc, pad - b.x, pad - b.y)
             path(s, mc, ctx)
             cairo_set_source_rgba(mc, 0, 0, 0, 1)
             cairo_fill(mc)
@@ -715,7 +991,7 @@ public enum DrawListRunner {
         let pat = cairo_pattern_create_for_surface(mask)
         var m = cairo_matrix_t()
         cairo_matrix_init_scale(&m, Double(scale), Double(scale))
-        cairo_matrix_translate(&m, pad - bx, pad - by)
+        cairo_matrix_translate(&m, pad - b.x, pad - b.y)
         cairo_pattern_set_matrix(pat, &m)
         Draw.setColor(cr, c.with(a: min(1, c.a * strength)))
         cairo_mask(cr, pat)
@@ -723,24 +999,50 @@ public enum DrawListRunner {
         cairo_restore(cr)
     }
 
-    static func text(_ cr: OpaquePointer, _ s: String, _ x: Double, _ y: Double,
-                     _ align: TextAlign, _ bold: Bool, _ tracking: Double, _ size: Double, _ c: Color) {
-        let px = Text.px(size)
-        var glyphs = Text.shape(s, px: px, style: bold ? .bold : .regular)
-        if tracking != 0 {
-            let t = tracking * Double(Text.renderScale)
-            for i in glyphs.indices { glyphs[i].x_advance += t }
+    static func text(_ t: TextOp, _ cr: OpaquePointer, _ ctx: DrawContext) {
+        var str = t.content == "\u{0}label" ? ctx.label : t.content
+        var col = resolve(t.color, ctx)
+        if str.isEmpty, let ph = t.placeholder, !ctx.placeholder.isEmpty {
+            str = ctx.placeholder; col = resolve(ph, ctx)
         }
-        let width = Text.width(glyphs) / Double(Text.renderScale)
-        let m = Text.metrics(px: px)
-        let baseline = y + (m.ascent - m.descent) / 2 / Double(Text.renderScale)
-        let left: Double
-        switch align {
-        case .left: left = x
-        case .center: left = x - width / 2
-        case .right: left = x - width
+        if t.upper { str = str.uppercased() }
+        let size = t.size.map { eval($0, ctx) } ?? Theme.fontSize
+        let x = eval(t.x, ctx), y = eval(t.y, ctx)
+        let style: Text.Style = t.bold ? .bold : .regular
+        if let ghost = t.ghost {
+            run(t.upper ? ghost.uppercased() : ghost, col.with(a: col.a * t.ghostAlpha))
         }
-        Draw.setColor(cr, c)
-        Text.drawShaped(cr, glyphs, x: left, baselineY: baseline, px: px)
+        run(str, col)
+
+        func run(_ s: String, _ c: Color) {
+            // The plain cases are Draw's own text calls, so a list draws a label
+            // exactly where the Swift recipe it replaced did (P11.4's gate).
+            if t.tracking == 0 && t.align == .center && !t.baseline {
+                Draw.text(cr, s, centerX: x, centerY: y, color: c, size: size, style: style); return
+            }
+            if t.tracking == 0 && t.align == .left && t.baseline {
+                Draw.textLeft(cr, s, x: x, baselineY: y, color: c, size: size, style: style); return
+            }
+            let px = Text.px(size)
+            var glyphs = Text.shape(s, px: px, style: style)
+            if t.tracking != 0 {
+                let tr = t.tracking * Double(Text.renderScale)
+                for i in glyphs.indices { glyphs[i].x_advance += tr }
+            }
+            let width = Text.width(glyphs) / Double(Text.renderScale)
+            let baseline: Double
+            if t.baseline { baseline = y } else {
+                let m = Text.metrics(px: px)
+                baseline = y + (m.ascent - m.descent) / 2 / Double(Text.renderScale)
+            }
+            let left: Double
+            switch t.align {
+            case .left: left = x
+            case .center: left = x - width / 2
+            case .right: left = x - width
+            }
+            Draw.setColor(cr, c)
+            Text.drawShaped(cr, glyphs, x: left, baselineY: baseline, px: px)
+        }
     }
 }

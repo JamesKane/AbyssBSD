@@ -55,7 +55,10 @@ public struct LoadedTheme: Equatable, Sendable {
     public let tokens: ThemeTokens
     /// Things that were not wrong enough to refuse the theme: a parameter
     /// clamped to its bounds, say. Shown, never swallowed.
-    public let warnings: [String]
+    public internal(set) var warnings: [String]
+    /// The draw lists the theme's own `draw/*.dl` files define (P11.4), sorted.
+    /// Empty when it ships none — then every widget draws Jaguar's.
+    public internal(set) var drawLists: [String] = []
 }
 
 public enum ThemeLoader {
@@ -281,6 +284,39 @@ public enum ThemeLoader {
         case refused(name: String, path: String, ThemeError)
     }
 
+    /// A theme's draw lists: every `draw/*.dl` in `dir`, in name order. Strict
+    /// as `parse` is — a list that does not parse, or a name two files both
+    /// define, refuses the theme, naming the file and line. A list the toolkit
+    /// never asks for is only a warning: a theme may carry lists for a later
+    /// toolkit.
+    public static func loadLists(_ dir: String) throws -> (DrawListFile?, warnings: [String]) {
+        guard let d = opendir(dir + "/draw") else { return (nil, []) }
+        var names: [String] = []
+        while let e = readdir(d) {
+            let n = withUnsafeBytes(of: e.pointee.d_name) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            if n.hasSuffix(".dl") && !n.hasPrefix(".") { names.append(n) }
+        }
+        closedir(d)
+        var merged = DrawListFile(lists: [:]), problems: [String] = [], seen: [String: String] = [:]
+        for n in names.sorted() {
+            guard let text = readFile("\(dir)/draw/\(n)") else { problems.append("draw/\(n): cannot be read"); continue }
+            do {
+                let f = try DrawListFile(parsing: text)
+                for k in f.lists.keys.sorted() {
+                    if let other = seen[k] { problems.append("draw/\(n): list \(k) is also in draw/\(other)") }
+                    seen[k] = n
+                }
+                merged = merged.merging(f)
+            } catch let e as DrawListError {
+                problems.append("draw/\(n) line \(e.line): \(e.message)")
+            }
+        }
+        if !problems.isEmpty { throw ThemeError(problems: problems) }
+        let warnings = merged.lists.keys.sorted().filter { JaguarLists.file[$0] == nil }
+            .map { "list \($0) (draw/\(seen[$0]!)) is not one the toolkit draws" }
+        return (merged, warnings)
+    }
+
     /// Find, read and **use** the chosen theme; fall back to the compiled
     /// Jaguar when it cannot be — and return which, so it can be said.
     @discardableResult
@@ -291,8 +327,11 @@ public enum ThemeLoader {
             let path = "\(d)/\(ch.name)/theme.ini"
             guard let text = readFile(path) else { continue }
             do {
-                let t = try parse(text, scheme: ch.scheme, overrides: ch.overrides)
-                Theme.use(t.tokens)
+                var t = try parse(text, scheme: ch.scheme, overrides: ch.overrides)
+                let (lists, w) = try loadLists("\(d)/\(ch.name)")
+                t.drawLists = lists.map { $0.lists.keys.sorted() } ?? []
+                t.warnings += w
+                Theme.use(t.tokens, lists: lists)
                 return .loaded(t, path: path)
             } catch let e as ThemeError {
                 Theme.use(.jaguar)
@@ -313,6 +352,7 @@ public enum ThemeLoader {
         switch o {
         case .loaded(let t, let path):
             line = "Theme: \(t.name)" + (t.scheme.map { " (\($0))" } ?? "") + " from \(path)"
+                + ", \(t.drawLists.count) draw lists from draw/"
                 + (t.warnings.isEmpty ? "" : " — " + t.warnings.joined(separator: "; "))
         case .notFound(let name, let looked):
             line = "Theme: NO THEME \(name) — drawing with the compiled Jaguar (looked in "

@@ -45,8 +45,11 @@ final class DrawListTests: XCTestCase {
         XCTAssertEqual(error("list a\n  rect 0 0 w h\n  fill notAToken\nend")?.message,
                        "notAToken is not a colour token")
         XCTAssertEqual(error("list a\n  when sleepy fill #ffffff\nend")?.line, 2)
-        XCTAssertEqual(error("list a\n  rect 0 0 w/2-1 h\nend")?.message,
-                       "w/2-1: one operator at most", "the arithmetic stays small (§6.5)")
+        XCTAssertEqual(error("list a\n  rect 0 0 (w-2 h\nend")?.message, "(w-2 h: a ( is not closed")
+        XCTAssertEqual(error("list a\n  rect 0 0 w*z h\nend")?.message,
+                       "w*z: z is not an operand (a number, w, h, @metric, $parameter, textw, min or max)")
+        XCTAssertEqual(error("list a\n  rect 0 0 @tall h\nend")?.line, 2, "an unknown metric is refused when parsed")
+        XCTAssertEqual(error("list a\n  fill shift(menuText, 3)\nend")?.message, "shift(menuText, 3): want shift(colour, -1…1)")
         XCTAssertEqual(error("list a\n  rect 0 0 w h\n")?.message, "list a has no end")
         XCTAssertEqual(error("fill #ffffff")?.message, "fill outside a list")
         XCTAssertEqual(error("list a\nend\nlist a\nend")?.message, "a second list called a")
@@ -103,6 +106,18 @@ final class DrawListTests: XCTestCase {
         XCTAssertEqual(px(20, 5).0, 255); XCTAssertEqual(px(19, 5).0, 0)
         XCTAssertEqual(px(6, 5).1, 255)
         XCTAssertEqual(px(0, 22).2, 255, "@titleBarHeight is Jaguar's 22")
+    }
+
+    func testArithmeticIsCalcNotALanguage() throws {
+        let ctx = DrawContext(rect: Rect(0, 0, 40, 30), parameters: ["v": 0.5])
+        func v(_ s: String) throws -> Double { DrawListRunner.eval(try DrawListParser.operand(s, line: 1), ctx) }
+        XCTAssertEqual(try v("w-h/2-3"), 22, "* before -, left to right")
+        XCTAssertEqual(try v("(w-h)/2"), 5)
+        XCTAssertEqual(try v("min(w,h)*0.5"), 15)
+        XCTAssertEqual(try v("max(h, $v*w)"), 30)
+        XCTAssertEqual(try v("-h+1"), -29)
+        XCTAssertEqual(try v("@fontSize*0.35"), 13 * 0.35)
+        XCTAssertEqual(try v("w/0"), 0, "a division by zero is 0, not a trap")
     }
 
     func testALinearGradientRunsEndToEnd() throws {

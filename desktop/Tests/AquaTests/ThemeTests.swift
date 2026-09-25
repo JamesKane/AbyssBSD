@@ -141,6 +141,48 @@ final class ThemeTests: XCTestCase {
         XCTAssertEqual(Theme.current, .jaguar, "refused means Jaguar, not half a theme")
     }
 
+    /// The compiled Jaguar lists are the shipped file, byte for byte — as the
+    /// compiled tokens are the shipped theme.ini — so whichever draws, it is
+    /// the same Jaguar.
+    func testTheCompiledJaguarListsAreTheShippedFile() throws {
+        let here = URLlessPath(#filePath)
+        let file = try XCTUnwrap(ThemeLoader.readFile(here + "/../../themes/aqua/draw/aqua.dl"))
+        XCTAssertEqual(JaguarLists.source + "\n", file,
+                       "themes/aqua/draw/aqua.dl changed: run abyss/tools/gen-jaguar-lists.sh")
+        XCTAssertGreaterThan(JaguarLists.file.lists.count, 20)
+    }
+
+    /// A theme's draw/ is strict as its theme.ini is, and what it does not ship
+    /// stays Jaguar's.
+    func testDrawListsLoadStrictlyAndFallBackPerList() throws {
+        let dir = NSTemporaryDirectoryPath() + "/abyss-lists-\(getpid())"
+        mkdir(dir, 0o700); mkdir(dir + "/draw", 0o700)
+        func write(_ name: String, _ text: String) {
+            let f = fopen(dir + "/draw/" + name, "w")!; fputs(text, f); fclose(f)
+        }
+        defer {
+            for n in ["a.dl", "b.dl", "c.dl"] { unlink(dir + "/draw/" + n) }
+            rmdir(dir + "/draw"); rmdir(dir); Theme.use(.jaguar)
+        }
+        XCTAssertNil(try ThemeLoader.loadLists(dir + "/nowhere").0, "no draw/ is not an error: all Jaguar")
+
+        write("a.dl", "list pill\n  rect 0 0 w h\n  fill #ff0000\nend\nlist sparkle\n  rect 0 0 w h\nend\n")
+        let (lists, warnings) = try ThemeLoader.loadLists(dir)
+        XCTAssertEqual(warnings, ["list sparkle (draw/a.dl) is not one the toolkit draws"])
+        Theme.use(.jaguar, lists: lists)
+        XCTAssertEqual(Theme.lists["pill"]?.steps.count, 2, "the theme's pill replaces Jaguar's")
+        XCTAssertNotNil(Theme.lists["button"], "and the button it does not ship stays Jaguar's")
+
+        write("b.dl", "list tab\n  frobnicate\nend\n")
+        write("c.dl", "list pill\nend\n")
+        XCTAssertThrowsError(try ThemeLoader.loadLists(dir)) { e in
+            XCTAssertEqual((e as? ThemeError)?.problems, [
+                "draw/b.dl line 2: frobnicate is not an op (rect ellipse circle path fill stroke bevel innershadow glow rules text push pop clip)",
+                "draw/c.dl: list pill is also in draw/a.dl",
+            ])
+        }
+    }
+
     private func NSTemporaryDirectoryPath() -> String {
         getenv("TMPDIR").map { String(cString: $0) } ?? "/tmp"
     }
