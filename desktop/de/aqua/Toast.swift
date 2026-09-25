@@ -118,7 +118,7 @@ public func paintToast(_ cr: OpaquePointer, _ r: Rect, toast: Toast, bodyLines: 
     // A soft shadow so the panel reads over any wallpaper, then the panel.
     cairo_save(cr)
     Draw.roundedRect(cr, Rect(r.x + 1, r.y + 2, r.w, r.h), radius: ToastMetrics.corner)
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.18)
+    Draw.setColor(cr, Theme.toastShadow)
     cairo_fill(cr)
     cairo_restore(cr)
 
@@ -126,11 +126,11 @@ public func paintToast(_ cr: OpaquePointer, _ r: Rect, toast: Toast, bodyLines: 
     cairo_save(cr)
     cairo_clip_preserve(cr)
     Draw.fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
-        (0, Color(hex: 0xfdfdfd, a: 0.96)), (1, Color(hex: 0xe6e8ec, a: 0.96)),
+        (0, Theme.toastTop), (1, Theme.toastBottom),
     ])
-    Draw.pinstripe(cr, r, Color(hex: 0xd8dbe0, a: 0.45))
+    Draw.pinstripe(cr, r, Theme.toastPinstripe)
     cairo_restore(cr)
-    Draw.setColor(cr, Color(hex: 0x8a8f96, a: 0.9))
+    Draw.setColor(cr, Theme.toastBorder)
     cairo_set_line_width(cr, 1)
     cairo_stroke(cr)
 
@@ -152,7 +152,7 @@ public func paintToast(_ cr: OpaquePointer, _ r: Rect, toast: Toast, bodyLines: 
 
 /// The same water-drop mark the menu bar uses, small.
 private func drawToastMark(_ cr: OpaquePointer, _ r: Rect) {
-    Draw.setColor(cr, Color(hex: 0x4a6fa5))
+    Draw.setColor(cr, Theme.systemMark)
     let cx = r.x + r.w / 2
     cairo_move_to(cr, cx, r.y)
     cairo_curve_to(cr, cx + r.w * 0.55, r.y + r.h * 0.45,

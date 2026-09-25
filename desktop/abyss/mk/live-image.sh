@@ -269,6 +269,11 @@ fingerprint() {
     for b in $BINARIES; do
       [ -f "$builddir/$b" ] && { sha256 -q "$builddir/$b" 2>/dev/null || sha256sum "$builddir/$b"; }
     done
+    # The themes are data the medium carries (PHASE11 P11.2) — a theme edit
+    # must rebuild the image, not hit a cache built before it.
+    find "$root/themes" -type f | sort | while read -r f; do
+      sha256 -q "$f" 2>/dev/null || sha256sum "$f"
+    done
     pkg query '%n-%v' 2>/dev/null | sort
   } | { sha256 -q 2>/dev/null || sha256sum | cut -d' ' -f1; }
 }
@@ -422,6 +427,12 @@ for d in $DATA; do
   sudo mkdir -p "$de$(dirname "$d")"
   sudo cp -R "$d" "$de$(dirname "$d")/"
 done
+# The look (PHASE11 P11.2). The binaries live in /usr/local/bin and look for
+# themes in ../share/abyss/themes; without them the desktop draws with the
+# compiled Jaguar and says so — right as a fallback, wrong as a medium.
+[ -f "$root/themes/aqua/theme.ini" ] || die "no themes/aqua/theme.ini to put on the medium"
+sudo mkdir -p "$de/usr/local/share/abyss"
+sudo cp -R "$root/themes" "$de/usr/local/share/abyss/"
 # libxkbcommon looks in /usr/local/share/X11/xkb, which on FreeBSD is a symlink
 # into the versioned xkeyboard-config directory. Copying the target without the
 # link leaves a compositor that cannot compile a keymap.

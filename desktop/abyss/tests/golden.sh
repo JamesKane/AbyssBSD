@@ -92,6 +92,10 @@ EOF
   fi
   out="$work/$name.png"
   render "$name" "$scene" "$extra" "$out" || exit 1
+  # The goldens prove the theme FILE draws Jaguar — so a render that fell back
+  # to the compiled defaults proves nothing about it, and is refused (§2.45).
+  grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini" "$work/$name.log" \
+    || { echo "FAIL: $name was not drawn from themes/aqua/theme.ini: $(grep '^Theme:' "$work/$name.log")"; exit 1; }
   # A scene must render the same twice, or it cannot be a golden at all.
   render "$name" "$scene" "$extra" "$work/$name.again.png" || exit 1
   "$work/pngdiff" "$out" "$work/$name.again.png" > /dev/null \

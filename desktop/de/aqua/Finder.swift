@@ -166,7 +166,7 @@ public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
     let scroll = max(0, min(state.scroll, maxScroll))
 
     // The item well: white, clipped, scrolled.
-    Draw.setColor(cr, Color(hex: 0xffffff))
+    Draw.setColor(cr, Theme.listBackground)
     cairo_rectangle(cr, L.content.x, L.content.y, L.content.w, L.content.h)
     cairo_fill(cr)
 
@@ -215,7 +215,7 @@ private func paintFinderToolbar(_ cr: OpaquePointer, _ L: FinderLayout,
     guard bar.h > 0 else { return }
     cairo_rectangle(cr, bar.x, bar.y, bar.w, bar.h)
     Draw.fillVerticalGradient(cr, y: bar.y, h: bar.h, stops: [
-        (0, Color(hex: 0xf0f0f0)), (1, Color(hex: 0xdcdcdc)),
+        (0, Theme.toolbarTop), (1, Theme.toolbarBottom),
     ])
     cairo_new_path(cr)
     Draw.setColor(cr, Theme.separator)
@@ -236,7 +236,7 @@ private func drawBackButton(_ cr: OpaquePointer, _ r: Rect, enabled: Bool,
     Draw.roundedRect(cr, r, radius: 5)
     if pressed && enabled {
         Draw.fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
-            (0, Color(hex: 0xc8c8c8)), (1, Color(hex: 0xe4e4e4))])
+            (0, Theme.controlPressedTop), (1, Theme.controlPressedBottom)])
     } else {
         Draw.fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
             (0, Theme.controlWhiteTop), (1, Theme.controlWhiteBottom)])
@@ -253,7 +253,7 @@ private func drawBackButton(_ cr: OpaquePointer, _ r: Rect, enabled: Bool,
     cairo_line_to(cr, cx + 3, cy - 5)
     cairo_line_to(cr, cx + 3, cy + 5)
     cairo_close_path(cr)
-    Draw.setColor(cr, Color(hex: 0x3a3a3a, a: enabled ? 1 : 0.35))
+    Draw.setColor(cr, enabled ? Theme.toolbarGlyph : Theme.toolbarGlyph.with(a: 0.35))
     cairo_fill(cr)
 }
 
@@ -267,7 +267,7 @@ private func drawViewSwitch(_ cr: OpaquePointer, _ r: Rect, view: FinderView) {
 
     // Icon-view glyph: four small tiles.
     let a = segs[0]
-    let onBlue = Color(hex: 0xffffff), onWhite = Color(hex: 0x4a4a4a)
+    let onBlue = Theme.controlGlyph, onWhite = Theme.segmentGlyph
     Draw.setColor(cr, selected == 0 ? onBlue : onWhite)
     let s = 4.0, gap = 2.0
     let gx = a.x + a.w / 2 - s - gap / 2, gy = a.y + a.h / 2 - s - gap / 2
@@ -296,7 +296,7 @@ private func paintFinderListHeader(_ cr: OpaquePointer, _ L: FinderLayout) {
     let hdr = Rect(L.content.x, L.content.y, L.content.w, finderListHeaderHeight)
     cairo_rectangle(cr, hdr.x, hdr.y, hdr.w, hdr.h)
     Draw.fillVerticalGradient(cr, y: hdr.y, h: hdr.h, stops: [
-        (0, Color(hex: 0xf6f6f6)), (1, Color(hex: 0xdedede)),
+        (0, Theme.listHeaderTop), (1, Theme.listHeaderBottom),
     ])
     cairo_new_path(cr)
     Draw.setColor(cr, Theme.separator)
@@ -462,7 +462,7 @@ private func paintFinderStatusBar(_ cr: OpaquePointer, _ L: FinderLayout,
     let bar = L.status
     cairo_rectangle(cr, bar.x, bar.y, bar.w, bar.h)
     Draw.fillVerticalGradient(cr, y: bar.y, h: bar.h, stops: [
-        (0, Color(hex: 0xeaeaea)), (1, Color(hex: 0xd8d8d8)),
+        (0, Theme.statusBarTop), (1, Theme.statusBarBottom),
     ])
     cairo_new_path(cr)
     Draw.setColor(cr, Theme.separator)

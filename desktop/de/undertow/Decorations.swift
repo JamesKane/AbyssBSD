@@ -87,7 +87,7 @@ private final class FrameTexture {
         if !active {
             // Inactive windows are lighter on 10.2. One wash over the finished
             // frame is enough to read as "not this one" without a second theme.
-            cairo_set_source_rgba(cr, 1, 1, 1, 0.35)
+            Draw.setColor(cr, Theme.inactiveFrameWash)
             cairo_rectangle(cr, 0, 0, Double(width), FrameMetrics.titleHeight)
             cairo_fill(cr)
         }

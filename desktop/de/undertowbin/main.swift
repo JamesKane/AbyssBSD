@@ -12,6 +12,7 @@
 
 import CAllocProbe
 import Undertow
+import AquaDraw
 
 #if canImport(Glibc)
 import Glibc
@@ -47,6 +48,9 @@ func usage() -> Never {
 
 var args = Array(CommandLine.arguments.dropFirst())
 guard let mode = args.first else { usage() }
+// The compositor paints server-side frames from the same theme the toolkit
+// draws with (PHASE11 §6.7), so it loads it too — and says which.
+ThemeLoader.announce(ThemeLoader.loadCurrent())
 args.removeFirst()
 
 var hz: UInt64 = 240

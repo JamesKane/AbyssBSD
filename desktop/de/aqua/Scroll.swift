@@ -75,7 +75,7 @@ public func paintScroll(_ cr: OpaquePointer, w: Double, h: Double,
     cairo_save(cr)
     cairo_rectangle(cr, L.list.x, L.list.y, L.list.w, L.list.h)
     cairo_clip(cr)
-    Draw.setColor(cr, Color(hex: 0xffffff))
+    Draw.setColor(cr, Theme.listBackground)
     cairo_rectangle(cr, L.list.x, L.list.y, L.list.w, L.list.h)
     cairo_fill(cr)
     let first = max(0, Int(off / scrollRowHeight))
@@ -85,7 +85,7 @@ public func paintScroll(_ cr: OpaquePointer, w: Double, h: Double,
         for i in first...last {
             let ry = L.list.y + Double(i) * scrollRowHeight - off
             if i % 2 == 1 {
-                Draw.setColor(cr, Color(hex: 0xedf0f7))  // Finder list stripe
+                Draw.setColor(cr, Theme.listStripe)
                 cairo_rectangle(cr, L.list.x, ry, L.list.w, scrollRowHeight)
                 cairo_fill(cr)
             }

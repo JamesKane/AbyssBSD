@@ -12,6 +12,7 @@ import XCTest
 @testable import DBusPortal
 import CurrentIPC
 import Aqua
+import AquaDraw
 
 final class DBusPortalTests: XCTestCase {
 

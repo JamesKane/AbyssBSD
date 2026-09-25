@@ -176,7 +176,7 @@ let package = Package(
         // `Surface`, which is what made it separable.
         .target(
             name: "AquaDraw",
-            dependencies: ["CCairo", "CText"],
+            dependencies: ["CCairo", "CText", "PoolConfig"],
             path: "de/aquadraw"
         ),
         // What an application can do, as a value: commands, key equivalents,
@@ -215,7 +215,11 @@ let package = Package(
         // Demo: a single faithful Aqua window with live controls.
         .executableTarget(
             name: "AquaDemo",
-            dependencies: ["Aqua"],
+            // AquaDraw directly, not only through Aqua's re-export: SwiftPM
+            // recompiles across a layout change in a type (ThemeTokens grows
+            // through Phase 11) only along a declared dependency, and a stale
+            // object destroying the old layout crashed at exit (PHASE11 P11.2).
+            dependencies: ["Aqua", "AquaDraw"],
             path: "de/aquademo"
         ),
         // Two-process control-plane probe: hands a real descriptor from one
@@ -415,7 +419,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "undertow",
-            dependencies: ["Undertow", "CAllocProbe"],
+            dependencies: ["Undertow", "CAllocProbe", "AquaDraw"],
             path: "de/undertowbin"
         ),
         // Drive the DBus library against a real bus — the client on the other
@@ -446,7 +450,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AquaTests",
-            dependencies: ["Aqua", "PoolConfig"],
+            dependencies: ["Aqua", "AquaDraw", "PoolConfig"],
             path: "Tests/AquaTests"
         ),
         .testTarget(
@@ -518,7 +522,7 @@ let package = Package(
             // `Aqua` is here for one assertion: the accent colour the Settings
             // portal publishes is a literal, and this is what stops it drifting
             // away from the theme token it was copied from.
-            dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua"],
+            dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua", "AquaDraw"],
             path: "Tests/DBusPortalTests"
         ),
         .testTarget(

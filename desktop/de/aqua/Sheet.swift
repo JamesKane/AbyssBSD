@@ -76,7 +76,7 @@ public func paintSheetScene(_ cr: OpaquePointer, w: Double, h: Double,
 private func drawSheetPanel(_ cr: OpaquePointer, _ panel: Rect,
                             cancel: Rect, ok: Rect) {
     // Soft drop shadow under the leading edge.
-    Draw.setColor(cr, Color(0, 0, 0, 0.18))
+    Draw.setColor(cr, Theme.sheetShadow)
     Draw.roundedRectBottom(cr, Rect(panel.x, panel.y + 2, panel.w, panel.h),
                            radius: 8)
     cairo_fill(cr)

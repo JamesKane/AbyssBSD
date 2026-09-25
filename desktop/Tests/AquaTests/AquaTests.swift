@@ -3,6 +3,7 @@ import CCairo
 import Surface
 import PoolConfig
 @testable import Aqua
+import AquaDraw
 
 #if canImport(Glibc)
 import Glibc

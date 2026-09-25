@@ -363,7 +363,7 @@ private func paintConfirm(_ cr: OpaquePointer, w: Double, h: Double,
 /// Grey out a control that is present but cannot be used.
 private func veil(_ cr: OpaquePointer, _ r: Rect) {
     Draw.roundedRect(cr, r, radius: r.h / 2)
-    cairo_set_source_rgba(cr, 0.93, 0.93, 0.93, 0.62)
+    Draw.setColor(cr, Theme.disabledVeil)
     cairo_fill(cr)
 }
 

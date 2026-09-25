@@ -9,6 +9,7 @@
 
 import Surface
 import Aqua
+import AquaDraw
 
 #if canImport(Glibc)
 import Glibc
@@ -30,6 +31,9 @@ func envString(_ name: String) -> String? {
 // is one dull line; on a live medium it is the difference between "the desktop
 // came up" and "the desktop came up and you can read it" (PHASE5 P5.3).
 Aqua.Text.announce()
+// The look is a file now (PHASE11 P11.2): load the chosen theme before a
+// single pixel is painted, and say which — or that it fell back.
+ThemeLoader.announce(ThemeLoader.loadCurrent())
 
 let sceneName = envString("AQUA_SCENE")
 let scene: SceneKind

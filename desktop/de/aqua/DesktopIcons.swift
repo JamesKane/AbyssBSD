@@ -116,9 +116,9 @@ public func paintDesktopIcons(_ cr: OpaquePointer, bounds: Rect,
         } else {
             // White on a dark shadow, so the label reads over any wallpaper.
             Draw.text(cr, label, centerX: cx + 1, centerY: labelY + 8,
-                      color: Color(0, 0, 0, 0.55), size: 11)
+                      color: Theme.desktopLabelShadow, size: 11)
             Draw.text(cr, label, centerX: cx, centerY: labelY + 7,
-                      color: Color(1, 1, 1), size: 11)
+                      color: Theme.desktopLabelText, size: 11)
         }
     }
 }

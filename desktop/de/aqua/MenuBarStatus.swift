@@ -172,7 +172,7 @@ private func drawBattery(_ cr: OpaquePointer, _ r: Rect,
         cairo_line_to(cr, r.x + r.w * 0.64, r.y + r.h * 0.45)
         cairo_line_to(cr, r.x + r.w * 0.50, r.y + r.h * 0.45)
         cairo_close_path(cr)
-        Draw.setColor(cr, Color(1, 1, 1, 0.9))
+        Draw.setColor(cr, Theme.statusGlyphCutout)
         cairo_fill(cr)
         Draw.setColor(cr, color)
     }

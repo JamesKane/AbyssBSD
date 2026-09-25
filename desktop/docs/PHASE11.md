@@ -144,12 +144,100 @@ fix updates the golden, on purpose.
 fault above caught; `swift build` and the gate itself. (No long gates run,
 since this is a sub-phase.)
 
-**P11.2 — tokens become a theme.** `Theme` becomes an instance, loaded from
+**P11.2 — tokens become a theme. ✅ done.** `Theme` becomes an instance, loaded from
 `themes/<name>/theme.ini` through `PoolConfig`. It holds tokens, schemes,
 derived colours and parameters, and is reached through an **ambient current
 theme**. It is not threaded through 253 call sites, and `undertow` reads the
 same file for its frames. The 83 hard-coded colours become tokens. Aqua's
 tokens are the first file, and the gate stays green, pixel for pixel.
+
+**What P11.2 landed.**
+
+- **`ThemeTokens`** is a struct holding every token, with Jaguar's exact values
+  as its defaults. **`Theme.x` keeps its spelling at all 253 call sites.** Each
+  one is now a computed read of `Theme.current`, the ambient loaded theme.
+  That meant no call-site churn, and the first build after the change was
+  already pixel-identical.
+- **`ThemeLoader`** (`de/aquadraw/ThemeLoader.swift`) reads
+  `themes/<name>/theme.ini` through `PoolConfig`'s parser, and is strict where
+  that parser is lenient. It handles:
+  - colours as `#rrggbb`, `#rrggbb/alpha`, `r g b [a]`, or `mix(a, b, t)` in
+    **OKLCH**, lightness and chroma linear and hue the short way round, as CSS
+    `color-mix(in oklch)`, which is what the Plan Neo study uses;
+  - metrics as a number or `number * parameter`;
+  - bounded `[parameters]`, clamped with a warning;
+  - `[colors.<scheme>]` and `[metrics.<scheme>]` overriding the base.
+
+  An unknown section or key, a malformed value, an undeclared parameter, an
+  unknown scheme or a self-referential mix **refuses the whole theme**, naming
+  the section, key and reason, and draws the compiled Jaguar instead.
+- **Choosing a theme:** `appearance.ini` (`[appearance] theme`, `scheme`,
+  `[parameters]`), Aqua by default.
+- **The search path:** `$ABYSS_THEME_DIR`, then `<config>/themes`, then
+  `<exe>/../share/abyss/themes`, then — in a build tree — the repo's `themes/`,
+  found by walking up to `Package.swift`.
+- **Every process says what it drew with.** Both `AquaDemo` and `undertow` load
+  at startup and announce one line: `Theme: Aqua from …`, `NO THEME …` or
+  `… REFUSED …`.
+- **`themes/aqua/theme.ini`** is the first theme file: **116 tokens**, the
+  original 75 plus 41 chrome colours that were literals in application code:
+  - the Finder's toolbar, back button, list header and status bar;
+  - the sysprefs toolbar and text, list stripes, sheet and toast colours;
+  - the desktop gradient and its label colours;
+  - the Dock shelf, separator, running mark and label;
+  - the installer's veil, and the compositor's inactive-frame wash.
+- **The medium carries `themes/`** in `/usr/local/share/abyss/themes`, and its
+  cache fingerprint now covers the theme files.
+
+**Where the boundary between tokens and recipes was drawn.** A token is a value
+a theme sets. The gloss alphas *inside* `Draw`, such as a gel button's white
+highlight stops, are the recipe for a widget, and become draw-list data in
+P11.4, not tokens now. Icon artwork is P11.8: the Finder's file icons, the
+Dock's glyphs and tile gradients, and `Icons.swift`. Moving those to tokens now
+would only move them twice.
+
+**What it found:**
+
+- **The goldens would have passed on the compiled fallback.** The first run of
+  the new check in `golden.sh`, "was this scene drawn from
+  `themes/aqua/theme.ini`?", failed. The real binary is
+  `.build/<triple>/debug/`, one level deeper than the `.build/debug` symlink,
+  so the build-tree lookup missed the repo. The theme loaded from nowhere, and
+  Jaguar drew identically from the fallback. **26 green goldens would have
+  proved nothing about the file.** The lookup now walks up to `Package.swift`.
+  The check stays, and the fault that proves it is an edited `theme.ini`,
+  which moves the same 8 scenes an edited Swift token did.
+- **SwiftPM does not recompile across a re-export** (HANDOFF §2.66).
+  `ThemeTokens` grew by 41 fields. Targets that saw `AquaDraw` only through
+  `Aqua`'s `@_exported import` were not recompiled, and ran with the old
+  layout:
+  - `AquaDemo` crashed on exit destroying a `ThemeLoader.Outcome` (signal 11);
+  - the test bundle crashed;
+  - earlier, a link failed on a symbol that had changed from stored to
+    computed.
+
+  They now depend on and import `AquaDraw` directly. That was proved by
+  growing the struct by two fields and back again with no forced rebuild, and
+  it ran both times. Every later pass in this phase changes that struct, so
+  this would have recurred on each.
+- **The medium's cache did not look at repository data.** Its fingerprint
+  covered binaries, dist sets and packages. A theme edit would have booted an
+  image built before it, green.
+
+**Verified (short checks only):**
+- the golden gate, pixel-identical on Linux **and in the FreeBSD guest**, with
+  every scene confirmed drawn from the file;
+- an edited `theme.ini` moves the expected 8 scenes;
+- `swift test` on Linux, 474, green;
+- `ThemeTests`: the shipped file equals the compiled Jaguar and sets every
+  token; every colour form; OKLCH against known values (the black/white
+  midpoint is sRGB 0.389, not 0.5); cross-token mixes and scheme overrides; a
+  metric times a parameter; parameter bounds; every refusal by name; and a
+  refused theme leaving `Theme.current` exactly Jaguar.
+
+**Not run:** `live-medium.sh`'s new assertion that the booted medium drew from
+`/usr/local/share/abyss/themes`, because it boots the medium (over a minute).
+It is owed with the phase gates.
 
 **P11.3 — the draw-list format and its interpreter.** A small line-oriented
 declarative format (§6.4) with the §2 primitives, parameterised by tokens,

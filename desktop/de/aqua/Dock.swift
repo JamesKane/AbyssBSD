@@ -116,12 +116,13 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
     // The translucent shelf.
     Draw.roundedRect(cr, panel, radius: panelH / 4)
     let g = cairo_pattern_create_linear(0, panelTop, 0, panelBottom)
-    cairo_pattern_add_color_stop_rgba(g, 0, 1, 1, 1, 0.55)
-    cairo_pattern_add_color_stop_rgba(g, 1, 0.86, 0.88, 0.92, 0.5)
+    let st = Theme.dockShelfTop, sb = Theme.dockShelfBottom
+    cairo_pattern_add_color_stop_rgba(g, 0, st.r, st.g, st.b, st.a)
+    cairo_pattern_add_color_stop_rgba(g, 1, sb.r, sb.g, sb.b, sb.a)
     cairo_set_source(cr, g)
     cairo_fill_preserve(cr)
     cairo_pattern_destroy(g)
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.28)
+    Draw.setColor(cr, Theme.dockShelfBorder)
     cairo_set_line_width(cr, 1)
     cairo_stroke(cr)
 
@@ -129,7 +130,7 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
     if let ti = items.firstIndex(where: { $0.isTrash }), ti > 0 {
         let sx = (frames[ti - 1].centerX + frames[ti - 1].size / 2
                   + frames[ti].centerX - frames[ti].size / 2) / 2
-        cairo_set_source_rgba(cr, 0, 0, 0, 0.22)
+        Draw.setColor(cr, Theme.dockSeparator)
         cairo_move_to(cr, sx, panelTop + 6); cairo_line_to(cr, sx, panelBottom - 6)
         cairo_stroke(cr)
     }
@@ -146,7 +147,7 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
             cairo_line_to(cr, cx + 3, ty)
             cairo_line_to(cr, cx, ty - 4)
             cairo_close_path(cr)
-            cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.85)
+            Draw.setColor(cr, Theme.dockRunningMark)
             cairo_fill(cr)
         }
     }
@@ -167,10 +168,10 @@ private func drawDockLabel(_ cr: OpaquePointer, _ text: String,
     let padX = 8.0, hgt = 20.0
     let box = Rect(centerX - tw / 2 - padX, bottomY - hgt, tw + 2 * padX, hgt)
     Draw.roundedRect(cr, box, radius: 5)
-    cairo_set_source_rgba(cr, 0.12, 0.12, 0.14, 0.9)
+    Draw.setColor(cr, Theme.dockLabelBackground)
     cairo_fill(cr)
     Draw.text(cr, text, centerX: centerX, centerY: box.y + hgt / 2,
-              color: Color(1, 1, 1), size: 12)
+              color: Theme.dockLabelText, size: 12)
 }
 
 // MARK: procedural Dock icons (original glyphs, not Apple artwork)

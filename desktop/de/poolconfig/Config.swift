@@ -67,6 +67,10 @@ public struct Config: Sendable, Equatable {
     /// The schema version from the default section (0 if unset), for migrations.
     public var schemaVersion: UInt64 { uint64("", "schema_version") ?? 0 }
 
+    /// Every section present, sorted — for a reader that must refuse the ones
+    /// it does not know rather than skip them (a theme, PHASE11 P11.2).
+    public var sectionNames: [String] { sections.keys.sorted() }
+
     // MARK: Typed writes (chainable)
 
     @discardableResult

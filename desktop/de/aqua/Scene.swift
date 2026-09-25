@@ -157,7 +157,7 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
     let tbH = 58.0
     cairo_rectangle(cr, 0, tbY, w, tbH)
     Draw.fillVerticalGradient(cr, y: tbY, h: tbH, stops: [
-        (0, Color(hex: 0xededed)), (1, Color(hex: 0xd8d8d8)),
+        (0, Theme.prefsToolbarTop), (1, Theme.prefsToolbarBottom),
     ])
     Draw.setColor(cr, Theme.separator)
     cairo_set_line_width(cr, 1)
@@ -168,7 +168,7 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
     let tbItemTop = tbY + 6
     toolbarItem(cr, .showAll, "Show All", centerX: 44, top: tbItemTop)
     // Dotted vertical separator after Show All.
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.25)
+    Draw.setColor(cr, Theme.toolbarSeparator)
     cairo_set_line_width(cr, 1)
     cairo_set_dash(cr, [1, 2], 2, 0)
     cairo_move_to(cr, 86, tbY + 10); cairo_line_to(cr, 86, tbY + tbH - 10)
@@ -189,7 +189,7 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
 
     for (title, items) in prefSections {
         Draw.textLeft(cr, title, x: margin, baselineY: y + 12,
-                      color: Color(hex: 0x1a1a1a), size: 13)
+                      color: Theme.sectionTitleText, size: 13)
         y += 24
         let rows = (items.count + cols - 1) / cols
         for (i, item) in items.enumerated() {
@@ -216,7 +216,7 @@ private func toolbarItem(_ cr: OpaquePointer, _ icon: PrefIcon, _ label: String,
                          centerX: Double, top: Double) {
     Icons.draw(cr, icon, in: Rect(centerX - 16, top, 32, 32))
     Draw.text(cr, label, centerX: centerX, centerY: top + 42,
-              color: Color(hex: 0x303030), size: 10)
+              color: Theme.toolbarLabelText, size: 10)
 }
 
 /// Centred icon label, wrapped to two lines when it doesn't fit `maxWidth`.
@@ -225,7 +225,7 @@ private func centeredLabel(_ cr: OpaquePointer, _ s: String, centerX: Double,
     let size = 11.0
     if Draw.textWidth(cr, s, size: size) <= maxWidth {
         Draw.text(cr, s, centerX: centerX, centerY: top + size / 2,
-                  color: Color(hex: 0x202020), size: size)
+                  color: Theme.iconLabelText, size: size)
         return
     }
     // Split into two balanced lines at a space.
@@ -239,10 +239,10 @@ private func centeredLabel(_ cr: OpaquePointer, _ s: String, centerX: Double,
         second = words[mid...].joined(separator: " ")
     }
     Draw.text(cr, first, centerX: centerX, centerY: top + size / 2,
-              color: Color(hex: 0x202020), size: size)
+              color: Theme.iconLabelText, size: size)
     if !second.isEmpty {
         Draw.text(cr, second, centerX: centerX, centerY: top + size * 1.5 + 1,
-                  color: Color(hex: 0x202020), size: size)
+                  color: Theme.iconLabelText, size: size)
     }
 }
 

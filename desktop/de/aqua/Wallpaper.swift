@@ -72,9 +72,9 @@ public struct DesktopStyle: Equatable, Sendable {
 /// desktop.ini specifies nothing (and the fallback for a broken image path).
 public func paintWallpaper(_ cr: OpaquePointer, w: Double, h: Double) {
     let g = cairo_pattern_create_linear(0, 0, 0, h)
-    cairo_pattern_add_color_stop_rgba(g, 0.0, 0.36, 0.52, 0.75, 1)
-    cairo_pattern_add_color_stop_rgba(g, 0.55, 0.20, 0.34, 0.58, 1)
-    cairo_pattern_add_color_stop_rgba(g, 1.0, 0.11, 0.21, 0.42, 1)
+    for (at, c) in [(0.0, Theme.desktopTop), (0.55, Theme.desktopMiddle), (1.0, Theme.desktopBottom)] {
+        cairo_pattern_add_color_stop_rgba(g, at, c.r, c.g, c.b, c.a)
+    }
     cairo_set_source(cr, g)
     cairo_paint(cr)
     cairo_pattern_destroy(g)
@@ -82,8 +82,9 @@ public func paintWallpaper(_ cr: OpaquePointer, w: Double, h: Double) {
     let cx = w * 0.42, cy = h * 0.30
     let radius = max(w, h) * 0.75
     let glow = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius)
-    cairo_pattern_add_color_stop_rgba(glow, 0.0, 0.68, 0.80, 0.96, 0.55)
-    cairo_pattern_add_color_stop_rgba(glow, 1.0, 0.68, 0.80, 0.96, 0.0)
+    let gc = Theme.desktopGlow
+    cairo_pattern_add_color_stop_rgba(glow, 0.0, gc.r, gc.g, gc.b, gc.a)
+    cairo_pattern_add_color_stop_rgba(glow, 1.0, gc.r, gc.g, gc.b, 0.0)
     cairo_set_source(cr, glow)
     cairo_paint(cr)
     cairo_pattern_destroy(glow)

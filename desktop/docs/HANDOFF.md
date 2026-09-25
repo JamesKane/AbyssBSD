@@ -15,7 +15,7 @@ boots a desktop where an unmodified GTK 3 application, which has never heard of
 this desktop, opens a file through the Finder**; and since Phase 9 it is a
 desktop you can *use*: clipboard, drag and drop, window management, keybinds,
 and an Aqua frame around foreign windows.
-**466 unit tests, 35 live modes and 31 live scripts, green on Linux and FreeBSD.**
+**474 unit tests, 35 live modes and 31 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -91,7 +91,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 466 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 474 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -374,6 +374,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.63 | A compositor that ignores `keyboard_interactivity` sends the menu bar's arrow keys to the window behind the menu |
 | 2.64 | Snapshot a set where you poll it, not after dispatching — a handler that registers from inside a Wayland event made them disagree |
 | 2.65 | A privileged process hands its privilege to every child by default — the bar's first launched app inherited its privileged `WAYLAND_DISPLAY` |
+| 2.66 | SwiftPM does not recompile across an `@_exported` re-export — a type's layout changed and three targets ran the old one (a crash at exit, a crashed test bundle, a failed link) |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -640,6 +641,28 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.66 SwiftPM does not recompile across an `@_exported` re-export
+(P11.2. `ThemeTokens` grew by 41 fields, and three targets kept the old size.)
+
+`Aqua` re-exports `AquaDraw` (`@_exported import`, since P9.6), so a target that
+depends on `Aqua` can use `Theme` without naming `AquaDraw` at all. It compiles.
+And when `AquaDraw` changes a type's **layout**, SwiftPM's incremental build
+does not always recompile it. Three failures in one pass, each looking unlike
+the others:
+- a **link error** on a symbol that had changed from a stored `static let` to
+  a computed property;
+- **`AquaDemo` crashing on exit**, destroying a `ThemeLoader.Outcome` with the
+  old struct size (signal 11, `swift_release` of garbage);
+- **the whole test bundle** dying with signal 11.
+
+A forced rebuild fixed each, which is exactly what makes it dangerous: it looks
+like flakiness. **The rule: a target that uses a module's types depends on that
+module and imports it directly**, rather than reaching it through a re-export.
+`AquaDemo`, `AquaTests` and `DBusPortalTests` now do. It was proved by growing
+the struct by two fields and back with no forced rebuild, and it ran both
+times. When a crash appears right after a struct change, suspect the build
+before the code.
 
 ### 2.65 A privileged process hands its privilege to every child by default
 (P10.8. Found by the test that launched System Preferences from the bar.)
@@ -2322,7 +2345,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **466 unit tests** are
+standalone ones `run.sh` invokes, listed below; **474 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2390,7 +2413,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 466 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 474 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2423,7 +2446,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 466 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 474 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2487,7 +2510,7 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **466 unit tests, 35 live modes and 31 live scripts, green on Linux
+heard of it. **474 unit tests, 35 live modes and 31 live scripts, green on Linux
 and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
