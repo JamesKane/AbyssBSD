@@ -32,10 +32,12 @@ on every run, nested twice over, with no hardware and no human.
    delete), and a stock GTK application's menus appear in our bar
    (P10.6), and so do a stock Qt/KDE application's — kcalc's — (P10.7), and the desktop's own menus do what they say (P10.8).
    **Phase 10 is COMPLETE**, its gates green on both platforms, `--full`
-   included. **Phase 11, the theme system, is scoped** in
-   [PHASE11.md](PHASE11.md): Jaguar re-expressed as data, and a second theme —
-   Trench, specified by the Plan Neo chrome study — from the same interpreter.
-   It needs no hardware.
+   included. **Phase 11, the theme system, is COMPLETE** too
+   ([PHASE11.md](PHASE11.md)): Jaguar re-expressed as data, pixel for pixel;
+   Trench, the Plan Neo chrome study, as a second theme no Swift names; type by
+   role; a legibility floor; and the portal telling foreign toolkits the real
+   theme. **Phase 14** (preferences that write) needed 9, 10 and 11 and is now
+   unblocked. The PHASE11 §6 decisions still wait for confirmation.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
    12 µs (PHASE4 §5.7). Run mode now reports the margin's four terms separately,
@@ -2632,7 +2634,29 @@ the suite has lanes: `run.sh --vm --live` is ~280s, while **`--full` adds the tw
 nested-bhyve install tests (~1000s total) and is the rule for anything touching
 the installer, the medium, the distribution sets or the boot path.**
 
-### 1. Phase 10 — the menu protocol
+### 1. Phase 11 — the theme system
+
+**COMPLETE** ([PHASE11.md](PHASE11.md)): ten passes, and `run.sh --live` plus
+`run.sh --vm --live --full` green (after one fix: the theme loader announced
+`bin/../share`, and the medium's check read the path literally). What it built:
+- **a theme is a directory**: `theme.ini` (tokens, schemes, bounded
+  parameters, metrics, `[fonts]` roles, `[chrome]`), `draw/*.dl` and
+  `icons/*.dl`, loaded strictly, with the compiled Jaguar (`JaguarLists`,
+  `ThemeTokens.jaguar`) behind it;
+- **Jaguar as data**, proved byte-identical to the Swift it replaced
+  (`DrawParityTests`, `IconParityTests`);
+- **one chrome layout function** feeding both sides' paint and hit-test, with
+  a depth gadget over `abyss-window-v1`;
+- **Trench** (`themes/trench`), Plan Neo, which `golden.sh` refuses to let code
+  name;
+- **`svg2dl`**, build-time SVG import; **`abyss-theme`** (`palette`, `check`);
+- **the golden gate**: 69 scenes on each platform.
+
+The traps it added are §2.66–§2.69. **What it leaves** is in PHASE11 ("What
+Phase 11 leaves"): the §6 decisions, the format gaps P11.9 recorded, and
+layers 4 and 5.
+
+### 1a. Phase 10 — the menu protocol
 
 Scoped in **[PHASE10.md](PHASE10.md)**; **Phase 10 is COMPLETE**: all eight passes, and `run.sh --live` plus
 `run.sh --vm --live --full` green. The next phase is 11, the theme system. **What Phase 10 leaves:

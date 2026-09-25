@@ -305,7 +305,13 @@ public enum ThemeLoader {
         if let d = getenv("ABYSS_THEME_DIR").map({ String(cString: $0) }), !d.isEmpty { dirs.append(d) }
         if let c = try? Pool.configDir() { dirs.append(c + "/themes") }
         if let exe = executableDirectory() {
-            dirs.append(exe + "/../share/abyss/themes")
+            // <prefix>/bin → <prefix>/share/abyss/themes, said without a `..`:
+            // the path a process announces is the path a test and a person read.
+            if let slash = exe.lastIndex(of: "/"), slash != exe.startIndex {
+                dirs.append(String(exe[..<slash]) + "/share/abyss/themes")
+            } else {
+                dirs.append(exe + "/../share/abyss/themes")
+            }
             // A build tree: the binary is under .build/<triple>/debug — how
             // deep depends on the toolchain — so walk up to the directory that
             // holds Package.swift rather than guessing a number of `..`s.

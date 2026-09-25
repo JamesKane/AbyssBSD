@@ -8,8 +8,11 @@ the traps: §2.9 (one layout function feeds paint and hit-test), §2.37 (a probe
 with no positive control) and §2.45 (a silent fallback is invisible) are this
 phase's whole discipline.
 
-Last updated: 2026-09-25. **Scoped. The plan was re-measured and four risks
-were spiked before this was written** (§4). The main change is that the second
+Last updated: 2026-09-25. **Phase 11 is COMPLETE**: all ten passes, and
+`run.sh --live` plus `run.sh --vm --live --full` green on both platforms
+(P11.10, "The phase gates"). The §6 decisions remain recommendations pending
+confirmation. **Before any of it was built, the plan was re-measured and four
+risks were spiked** (§4). The main change is that the second
 theme now has a real specification. The **Plan Neo chrome study**
 ([artifact](https://claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E)) is Trench (PLAN
 §11.1) drawn in full, and it shows the plan as written would not have reached
@@ -956,9 +959,43 @@ What is not is this, and each item says whose it is:
   contrast. Seen to fail: with `abyss-theme` unavailable, it failed naming the
   fallback.
 
-**Phase 11's passes are all done.** The phase gates are owed: `run.sh --live`,
-`run.sh --vm --live`, `--full`, and `live-medium.sh` (its theme, draw-list and
-role assertions). Each is over a minute, and none has been run in this phase.
+**The phase gates: green, after one fix.**
+
+- **`run.sh --live` (Linux): all green, 308 s.** The nested installs are
+  `--full`'s, and ran in the guest.
+- **`run.sh --vm --live --full` (FreeBSD): failed at `live-medium.sh`, the
+  first time its P11.2 assertion ever ran.** Everything before it was green,
+  the nested installs included (193 s). The medium *had* drawn from its own
+  theme and all 123 lists. It announced the path as
+  `/usr/local/bin/../share/abyss/themes/aqua/theme.ini`, and the check read
+  the literal `/usr/local/share/…`.
+
+  The fix is in the product, not the test: `ThemeLoader.searchPath` builds
+  `<prefix>/share/abyss/themes` from the executable's parent, so the path a
+  process announces is the one a person reads. Linux stayed green (69 scenes,
+  538 tests).
+- **Re-run in the guest, what failed or never ran:**
+  - `live-medium.sh`, all green. The medium booted nested, and its desktop
+    drew from the medium's own theme file and draw lists, announced every
+    role's fallback (DejaVu Sans), and composited the wallpaper and the
+    installer, checked pixel by pixel.
+  - `live-installer.sh`, all green.
+
+  The rest of the FreeBSD lane ran on the binary before that fix, which
+  changes only the announced path.
+
+**What Phase 11 leaves:**
+- **the §6 decisions**, recommendations still pending confirmation: the
+  menu-bar rule restated, layer 5, the refuse/warn floor, and §6.5's `calc()`
+  operands;
+- the format's gaps P11.9 found: per-item menu keys, a stroke glow, and
+  System Preferences' pane icons for Trench;
+- a menu row with both a key equivalent and a submenu draws the key over the
+  ▸ (P11.5);
+- the four controls whose gloss has always washed the whole body are kept as
+  they are (§2.67), a look change for later;
+- and what was never this phase's: layer 4 (outer glow, blur, scanlines) and
+  layer 5 (Plan Neo's NeXT menus, screen bar, side Dock).
 
 ---
 

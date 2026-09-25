@@ -695,6 +695,13 @@ files when this was written, and there are 253 across 16 now** (2026-09-25):
 the count grew by a third in two phases, which is the argument for doing it
 early, made by the tree itself.
 
+> **COMPLETE 2026-09-25** ([PHASE11.md](PHASE11.md)): Jaguar is data (tokens,
+> 124 draw lists, an icon set) byte-identical to the Swift it replaced;
+> Trench — the Plan Neo study — is a second theme no Swift names; type by
+> role, the legibility floor, and the portal's palette. Gates green on both
+> platforms, `--full` included. Phase 14 (which needs 9, 10 and 11) is now
+> unblocked.
+>
 > **Amended 2026-09-25 — scoped in [PHASE11.md](PHASE11.md).** Re-measuring
 > before scoping changed the job:
 >
