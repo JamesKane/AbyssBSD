@@ -901,6 +901,15 @@ load; an Ebb drawn over the eleven adversary clients C2 already survives.
 
 ## Phase 14 — preferences that write
 
+> **Scoped 2026-09-25 in [PHASE14.md](PHASE14.md)** (P14.1–P14.9). Spiked on the
+> FreeBSD guest first: all the network tooling is in base (`sysrc` included);
+> **sound and Wi-Fi can be tested with no hardware** (`snd_dummy`, `wtap`); the
+> output-management protocol is in wlroots 0.19 on both platforms. Two things
+> are open: whether `wtap` can associate a station, and **whether OSS allows
+> per-application volume at all** — PLAN's promise below waits on that spike.
+> An Appearance pane that switches the theme live (P14.2) comes first: it
+> needs no root, and it makes Phase 11 something a person can use.
+
 **Needs:** 9, 10, 11. **Unblocks:** 15 (a browser wants a network), 16, 17
 (updates want a network), 18 (a remote model wants a network, and the agent's
 panes and requesters live here).

@@ -3,13 +3,16 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-09-25. **Phases 0–3, 5–8, 9 and 10 are complete.** The Jaguar desktop
+Last updated: 2026-09-25. **Phases 0–3 and 5–11 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract (headless) under eleven hostile
-processes; the portals hand out descriptors; and **one command boots a desktop
-where an unmodified GTK 3 application opens a file through the Finder** — which
-is the claim the D-Bus phase existed to make.
-**474 unit tests, 35 live modes and 31 live scripts, green on Linux *and*
-FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
+processes; the portals hand out descriptors; **one command boots a desktop
+where an unmodified GTK 3 application opens a file through the Finder**;
+applications publish their menus to our bar (Phase 10); and **the look is data**
+— Jaguar re-expressed pixel for pixel, and a second theme, Trench, from the same
+interpreter (Phase 11).
+**538 unit tests, 33 live modes and 33 live scripts, green on Linux *and*
+FreeBSD**, and a golden gate of 69 scenes on each. (Different denominators — see
+[HANDOFF §3](HANDOFF.md).)
 The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
 two nested-bhyve install tests (~1000s)** — the rule for anything touching the
 installer, the medium, the distribution sets or the boot path.
@@ -22,8 +25,8 @@ on every run of the harness, nested twice over, with no hardware and no human.
 the stick boots, `amdgpu` binds, and **the Aqua installer is on screen**. Its one
 open result is a failure — **the frame contract does not hold on real hardware**
 (PHASE4 §5.7). **Phase 12 (`Fathom`) was pulled forward** and P12.1–P12.5 are in.
-[PLAN.md](PLAN.md) runs to **Phase 18, ordered by dependency**; **Phase 10, the menu protocol, is
-scoped** ([PHASE10.md](PHASE10.md)). See [What's next](#whats-next).
+[PLAN.md](PLAN.md) runs to **Phase 18, ordered by dependency**; **Phase 14, preferences that
+write, is next** (it needed 9, 10 and 11). See [What's next](#whats-next).
 
 ## What this is
 
@@ -371,7 +374,7 @@ abyss/tests/run-live.sh -o /tmp/shots dock trash   # ... or just some of them
 # (Swift lives off PATH in the guest, so use the scripts rather than ssh by hand.)
 abyss/vm/check.sh          # is the guest usable? packages, pkg-config, tools
 abyss/tests/run.sh --vm    # build + unit tests + smoke render, in the VM
-abyss/tests/run.sh --vm --live   # ... and all 35 live modes + the portals there
+abyss/tests/run.sh --vm --live   # ... and all 33 live modes + the portals there
 abyss/vm/build.sh          # quicker: just sync + swift build + swift test
 abyss/vm/build.sh --no-test -- -c release
 
@@ -439,15 +442,22 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3, 5–8 and 9 are complete. Phase 4 is in flight on metal; Phase 12 is
-done but for P12.3's Aqua view. The next unbuilt phase is 10.**
+**Phases 0–3 and 5–11 are complete. Phase 4 is in flight on metal; Phase 12 is
+done but for P12.3's Aqua view. The next unbuilt phase is 14.**
 
-1. **Phase 10 — the menu protocol** — scoped in [PHASE10.md](PHASE10.md) (P10.1–P10.8); **P10.1 is done** — the Finder's commands are one model that the key handler and the menu bar both read — and **P10.2 is done** — the Finder publishes its vocabulary as `menus.finder.<pid>`, and `abyssmenu` describes it and runs its verbs. **P10.3 is done** — undertow implements `abyss-menu-v1`, its first protocol of its own: windows publish where their menus are, and only a client on its new privileged socket is told who is frontmost. **P10.4 is done** — the bar shows the frontmost application's own menus, validated as each opens and run when chosen, by pointer and keyboard; and it found that **undertow had never drawn or hit-tested a popup**, so no menu had ever appeared on our own compositor (HANDOFF §2.62). **P10.5 is done** — undo is per window, a verb like any other, titled from the stack and pushed to the bar, and undoing a creation puts it in the Trash rather than deleting it. **P10.6 is done** — undertow answers GTK's `gtk_shell1`, so a stock GTK application hides its own menubar and says where its menus are, and `abyss-dbus --menus` serves them to our bar, whose choices run in GTK's own process. **P10.7 is done** — the spike ran on both platforms against stock kcalc, and a Qt/KDE application's menus now reach our bar through `org_kde_kwin_appmenu` and `com.canonical.dbusmenu`, with its real shortcuts. **P10.8 is done, and with it the phase's eight passes** — the system menu's items do what they say (Force Quit through the compositor), and right-click menus in the Finder, on Dock tiles and on the desktop are the menu bar's own commands. It found that **a child launched by the bar inherited the bar's privileged socket**; fixed and tested. **Phase 10 is COMPLETE** — `run.sh --live` (Linux) and `run.sh --vm --live --full` (FreeBSD) green, 474 unit tests each, both nested installs booting to the Jaguar desktop. Next: **Phase 11, the theme system — scoped in [PHASE11.md](PHASE11.md)**, with the Plan Neo chrome study as the second theme's specification and a proposed layer 5 (shell layout) for the half of that study that is not theming. The menu bar stops
-   being a picture of a menu bar: applications publish a menu tree over
-   `CurrentIPC`, `abyss-dbus` translates GTK's `org.gtk.Menus` and Qt's
-   `dbusmenu` into the same thing, undo gets decided, and what travels is a
-   *vocabulary* — typed verbs, results, and a "what can you do" query — because
-   Phase 18 consumes it. Needs no hardware.
+1. **Phase 14 — preferences that write** ([PLAN.md](PLAN.md)): System Preferences
+   stops being a painting. Network first (`ifconfig`, `wpa_supplicant`,
+   `dhclient`, `rc.conf` written for you), then sound, displays and energy, all
+   through the installer's split — an unprivileged pane sends a plan over
+   `CurrentIPC` to a root helper that owns the writing. It unblocks 15–18.
+   **Scoped in [PHASE14.md](PHASE14.md)** (P14.1–P14.9, spiked on the guest);
+   its §6 recommendations adopted, all but §6.5 (does the bring-up machine have
+   Wi-Fi?). Before it,
+   **the PHASE11 §6 decisions want confirming** (the menu-bar rule and the
+   proposed layer 5, refuse/warn, icons as data, `calc()` operands).
+   *Done just before it:* **Phase 11, the theme system** ([PHASE11.md](PHASE11.md))
+   and **Phase 10, the menu protocol** ([PHASE10.md](PHASE10.md)), each closed
+   with both platforms' `--live` lanes and `--full` green.
 2. **P4.5 — the frame contract on metal.** 58 of 300 frames missed while
    compositing in 12 µs, margin pinned at its 8 ms ceiling (PHASE4 §5.7). Run
    mode now reports the margin's four terms; that breakdown has not been run on

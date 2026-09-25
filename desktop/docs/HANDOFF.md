@@ -4,18 +4,20 @@ What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md),
 [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md),
-[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE11.md](PHASE11.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE11.md](PHASE11.md), [PHASE12.md](PHASE12.md), [PHASE14.md](PHASE14.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-09-25. **Phases 0–3, 5–8, 9 and 10 are complete; Phase 4 is
-in flight on metal and Phase 12 is mostly done.** The Jaguar shell runs on FreeBSD,
+Last updated: 2026-09-25. **Phases 0–3, 5–11 are complete; Phase 4 is in flight
+on metal and Phase 12 is mostly done.** The Jaguar shell runs on FreeBSD,
 on **our own compositor** (`undertow`), over a Swift control plane, session
 supervisor and hardware bridges; the portals hand out descriptors; **one command
 boots a desktop where an unmodified GTK 3 application, which has never heard of
-this desktop, opens a file through the Finder**; and since Phase 9 it is a
-desktop you can *use*: clipboard, drag and drop, window management, keybinds,
-and an Aqua frame around foreign windows.
-**474 unit tests, 35 live modes and 31 live scripts, green on Linux and FreeBSD.**
+this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
+you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
+and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
+pixel for pixel, and a second theme, Trench, that no code names.
+**538 unit tests, 33 live modes and 33 live scripts, green on Linux and FreeBSD,
+and a golden gate of 69 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -25,19 +27,18 @@ on every run, nested twice over, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **The phase in progress is 10, the menu protocol** — scoped in
-   [PHASE10.md](PHASE10.md). **P10.1–P10.5 are done** — the menu bar shows the frontmost
-   application's own menus, drawn by our compositor, which had never drawn a
-   popup before (§2.62), and undo is decided (per window, a verb, never a
-   delete), and a stock GTK application's menus appear in our bar
-   (P10.6), and so do a stock Qt/KDE application's — kcalc's — (P10.7), and the desktop's own menus do what they say (P10.8).
-   **Phase 10 is COMPLETE**, its gates green on both platforms, `--full`
-   included. **Phase 11, the theme system, is COMPLETE** too
-   ([PHASE11.md](PHASE11.md)): Jaguar re-expressed as data, pixel for pixel;
-   Trench, the Plan Neo chrome study, as a second theme no Swift names; type by
-   role; a legibility floor; and the portal telling foreign toolkits the real
-   theme. **Phase 14** (preferences that write) needed 9, 10 and 11 and is now
-   unblocked. The PHASE11 §6 decisions still wait for confirmation.
+1. **No phase is in progress.** **Phase 11, the theme system, is COMPLETE**
+   ([PHASE11.md](PHASE11.md)): a theme is a directory of data (tokens, draw lists,
+   an icon set), Jaguar is proved byte-identical to the Swift it replaced,
+   Trench — the Plan Neo chrome study — is the second theme, and there is a
+   legibility floor and a portal that tells foreign toolkits the real theme.
+   **Phase 10, the menu protocol, is COMPLETE** ([PHASE10.md](PHASE10.md)). Both
+   closed with `run.sh --live` and `run.sh --vm --live --full` green.
+   **Next in the dependency order: Phase 14, preferences that write** — it
+   needed 9, 10 and 11, and is now **scoped in [PHASE14.md](PHASE14.md)**
+   (P14.1–P14.9; its §6 recommendations adopted, all but §6.5). **The PHASE11 §6
+   decisions still wait for confirmation** (the menu-bar rule and layer 5,
+   refuse/warn, icons as data, `calc()` operands).
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
    12 µs (PHASE4 §5.7). Run mode now reports the margin's four terms separately,
@@ -50,8 +51,8 @@ on every run, nested twice over, with no hardware and no human.
    onto the bring-up machine is deferred** until the desktop is mature (its only
    disk is the positive control), which retired P4.6's install half and P12.6.
    `Fathom` (Phase 12) was pulled forward instead and P12.1–P12.5 are in.
-4. Read §1 for what exists. It is long; the newest parts are **Phase 9** and
-   **Phase 4 so far**. **Read §2.43–§2.59 before writing anything** — almost
+4. Read §1 for what exists. It is long; the newest parts are **Phase 11**,
+   **Phase 10** and **Phase 4 so far**. **Read §2.43–§2.59 before writing anything** — almost
    every one of them was found by *running* something rather than reading it,
    and together they are why the recent phases are verified the way they are.
 5. Skim the §2 index for the trap nearest what you're about to touch. **The
@@ -93,7 +94,7 @@ on every run, nested twice over, with no hardware and no human.
 6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 474 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 538 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -172,7 +173,7 @@ with a native substrate underneath it (PHASE3.md):
   **off PATH** at `/usr/local/swift6/bin`.
 - **It runs there** (§2.30) — `docs/screenshots/freebsd-desktop.png`. Every
   portability debt is paid; `CPlatform` holds what Swift can't reach.
-- **The whole harness passes there** (§2.31): 35 live modes, not just the build.
+- **The whole harness passes there** (§2.31): all the live modes, not just the build.
 - **`CurrentIPC`** — the brokerless control plane: typed messages over unix
   sockets with **SCM_RIGHTS fd passing**, our own codec rather than libnv, and
   therefore no platform fork at all (§2.32).
@@ -2431,15 +2432,16 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 | `--pick` / `--cancel` | the Finder as a **portal picker**: choose → path + exit 0, Escape → exit 1, nothing launched |
 
 **What the numbers mean**, because they are three different things and the docs
-once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
-`undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **474 unit tests** are
-`swift test`. A count that is incremented without checking its denominator is a
+once drifted on it: **33 live modes** are `run-live.sh`'s scenes (the sway- and
+`undertow`-driven ones in the two tables above it); **33 live scripts** are the
+standalone `live-*.sh` ones `run.sh` invokes, listed below; **538 unit tests**
+are `swift test`; **69 golden scenes** are `golden.sh`'s, per platform.
+(Recounted 2026-09-25: the docs had said 35 modes and 31 scripts.) A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
 **Run them all:** `abyss/tests/run-live.sh` drives every mode in order with a
 per-mode timeout and prints a pass/fail table (`-o DIR` keeps the PNGs and logs,
-or name a subset: `run-live.sh dock trash`). 35 modes today. These are the
+or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 *sway-hosted* modes; `undertow`'s own tests are separate scripts, listed below.
 
 **Tests that need no compositor** (all in `run.sh`'s default lane):
@@ -2501,7 +2503,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 474 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 538 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2534,7 +2536,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 474 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 538 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2598,8 +2600,8 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **474 unit tests, 35 live modes and 31 live scripts, green on Linux
-and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
+heard of it. **538 unit tests, 33 live modes and 33 live scripts, green on Linux
+and FreeBSD** (and 69 golden scenes on each, since Phase 11). On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
 Per-pass detail lives in the phase docs; this section is what to do next, not a
@@ -2821,7 +2823,7 @@ some other machine will show, it is not finished until something has done it.
 | `de/ipcprobe` | `ipcprobe serve|send` — two processes, one descriptor; driven by `abyss/tests/live-ipc.sh` |
 | `de/aquademo` | the runnable demo; `AQUA_SCENE` picks a scene/component |
 | `abyss/session.sh` | the dev session launcher — one command boots the desktop (§2.26) |
-| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 35 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`**/**`live-gtk.sh`**/**`live-session-gtk.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, `gtkpick.c` (a stock GTK client, `dlopen`ed so nothing here links GTK), the virtual input helpers |
+| `abyss/tests` | `run.sh` (build+test+smoke; `--live`, `--vm`), **`run-live.sh`** (all 33 live modes, pass/fail table), `live-sway.sh`, `live-session.sh`, `live-portal.sh`/`live-sandbox.sh`/`live-notify.sh`/`live-screenshot.sh`/**`live-portal-dbus.sh`**/**`live-gtk.sh`**/**`live-session-gtk.sh`** (the portals, driven from `run.sh --live`), `live-dbus.sh`, `gtkpick.c` (a stock GTK client, `dlopen`ed so nothing here links GTK), the virtual input helpers |
 | `abyss/tests/adversary.c` | hostile Wayland clients for C2: `hard` (flood, never waits for a reply), `zombie`, `deaf`, `churn` (§2.38) |
 | `abyss/common.sh` | shared sh helpers — `abyss_ensure_runtime_dir` (§2.31) |
 | `abyss/vm` | the FreeBSD build VM: `config.sh` (incl. `ABYSS_GUEST_SWIFT_BIN`), `fetch-image.sh`, `make-seed.sh`, `run.sh`, **`check.sh`** (is the guest usable?), `ssh.sh`, `sync.sh` |
