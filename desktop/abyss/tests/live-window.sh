@@ -215,7 +215,7 @@ sleep 0.5
 # one minimize, though each was also reversed — and the assertion is the whole
 # line so a count that grows for the wrong reason cannot hide in it.
 last=$(grep '^resizes-started=' "$work/ut.out" | tail -1)
-[ "$last" = "resizes-started=1 maximizes=1 minimizes=1 snaps=1" ] \
+[ "$last" = "resizes-started=1 maximizes=1 minimizes=1 snaps=1 lowers=0" ] \
   || fail "undertow's counters disagree with what this test just did: '$last'"
 echo "ok: undertow's own counters agree — the requests were answered, not ignored"
 

@@ -94,6 +94,15 @@ public final class Menus {
             let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
             m.compositor.forceQuit(appID: String(cString: appID))
         }
+        hooks.lower = { ctx, surface in
+            // abyss_window_manager_v1.lower (P11.6): a toolkit window's own
+            // depth gadget. Served here because this C already holds the
+            // project's globals; the operation is the compositor's.
+            guard let ctx, let surface else { return }
+            let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
+            guard let t = m.compositor.toplevels.first(where: { $0.surface == surface }) else { return }
+            m.compositor.lower(t)
+        }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
     }

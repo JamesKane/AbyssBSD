@@ -83,6 +83,8 @@ menu@2x|menu|AQUA_SCALE=2
 menu-marks|menu|AQUA_MENU_MARKS=1
 menu-marks@2x|menu|AQUA_MENU_MARKS=1 AQUA_SCALE=2
 frame|frame|
+frame-depth|frame|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes
+window-depth@2x|window|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes AQUA_SCALE=2
 drawlist|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl
 drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2'
 
@@ -116,8 +118,18 @@ EOF
   # to the compiled defaults proves nothing about it, and is refused (§2.45).
   # So do the draw lists (P11.4): the compiled copy is the same text, so a
   # theme whose draw/ went missing would still be green without this.
-  grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini, $lists draw lists from draw/" "$work/$name.log" \
-    || { echo "FAIL: $name was not drawn from themes/aqua/ (theme.ini and $lists lists in draw/): $(grep '^Theme:' "$work/$name.log")"; exit 1; }
+  # A scene may ask for a test theme (ABYSS_THEME=x ABYSS_THEME_DIR=abyss/tests/
+  # themes, P11.6): then it must have drawn from THAT file — which ships no
+  # lists, so every one is Jaguar's.
+  case "$extra" in
+    *ABYSS_THEME=*)
+      t=$(printf '%s\n' "$extra" | tr ' ' '\n' | sed -n 's/^ABYSS_THEME=//p')
+      grep -q "^Theme: .* from .*abyss/tests/themes/$t/theme.ini, 0 draw lists from draw/" "$work/$name.log" \
+        || { echo "FAIL: $name was not drawn from abyss/tests/themes/$t: $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;
+    *)
+      grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini, $lists draw lists from draw/" "$work/$name.log" \
+        || { echo "FAIL: $name was not drawn from themes/aqua/ (theme.ini and $lists lists in draw/): $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;
+  esac
   # A scene must render the same twice, or it cannot be a golden at all.
   render "$name" "$scene" "$extra" "$work/$name.again.png" || exit 1
   "$work/pngdiff" "$out" "$work/$name.again.png" > /dev/null \

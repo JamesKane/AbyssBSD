@@ -20,6 +20,7 @@
 #include "xdg-activation-v1-client-protocol.h"
 #include "wlr-screencopy-unstable-v1-client-protocol.h"
 #include "abyss-menu-v1-client-protocol.h"
+#include "abyss-window-v1-client-protocol.h"
 
 /*
  * Create an anonymous, writable shared-memory fd of `size` bytes, suitable for
@@ -150,6 +151,9 @@ void aw_foreign_toplevel_handle_destroy(void *handle);
  * where the focused surface's are. Requests are static inline, hence these. */
 void *aw_bind_menu_manager(void *registry, uint32_t name, uint32_t version);
 void aw_menu_manager_set_address(void *manager, void *surface, const char *address);
+/* abyss-window-v1 (P11.6): the depth gadget. */
+void *aw_bind_window_manager(void *registry, uint32_t name, uint32_t version);
+void aw_window_manager_lower(void *manager, void *toplevel);
 void *aw_bind_menubar(void *registry, uint32_t name, uint32_t version);
 void aw_menubar_destroy(void *menubar);
 void aw_menubar_force_quit(void *menubar, const char *app_id);

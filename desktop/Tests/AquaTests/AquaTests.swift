@@ -1265,10 +1265,10 @@ final class AquaTests: XCTestCase {
     func testChromeLightsBeatTheTitleBar() {
         // The three lights sit in the title bar, so the title (drag-to-move)
         // must be what is left over rather than the whole strip.
-        let lights = windowTrafficRects()
-        XCTAssertEqual(windowChromeHit(x: lights.close.x + 3, y: 11, w: 400, h: 300), .close)
-        XCTAssertEqual(windowChromeHit(x: lights.minimize.x + 3, y: 11, w: 400, h: 300), .minimize)
-        XCTAssertEqual(windowChromeHit(x: lights.zoom.x + 3, y: 11, w: 400, h: 300), .zoom)
+        let l = windowChrome(w: 400, h: 300)
+        XCTAssertEqual(windowChromeHit(x: l.rect(.close)!.x + 3, y: 11, w: 400, h: 300), .close)
+        XCTAssertEqual(windowChromeHit(x: l.rect(.minimize)!.x + 3, y: 11, w: 400, h: 300), .minimize)
+        XCTAssertEqual(windowChromeHit(x: l.rect(.zoom)!.x + 3, y: 11, w: 400, h: 300), .zoom)
         XCTAssertEqual(windowChromeHit(x: 200, y: 11, w: 400, h: 300), .title)
         XCTAssertEqual(windowChromeHit(x: 400 - 20, y: 11, w: 400, h: 300), .pill)
     }

@@ -38,7 +38,7 @@ let package = Package(
             name: "CAbyssProtocols",
             dependencies: ["CWaylandClient"],
             path: "de/cabyssprotocols",
-            sources: ["abyss-menu-v1-protocol.c", "gtk-shell-protocol.c",
+            sources: ["abyss-menu-v1-protocol.c", "abyss-window-v1-protocol.c", "xdg-shell-protocol.c", "gtk-shell-protocol.c",
                       "kde-appmenu-protocol.c"],
             publicHeadersPath: "include"
         ),
@@ -47,7 +47,7 @@ let package = Package(
             dependencies: ["CWaylandClient", "CAbyssProtocols"],
             path: "de/cwayland",
             exclude: ["generate-protocols.sh"],
-            sources: ["xdg-shell-protocol.c",
+            sources: [
                       "wlr-layer-shell-unstable-v1-protocol.c",
                       "wlr-foreign-toplevel-management-unstable-v1-protocol.c",
                       "xdg-activation-v1-protocol.c",

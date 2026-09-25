@@ -1367,6 +1367,7 @@ public final class FinderWindow: WindowDelegate {
         case .close: closeWindow(); return
         case .minimize: window?.minimize(); return
         case .zoom: window?.setMaximized(!(window?.isMaximized ?? false)); return
+        case .depth: window?.lower(); return
         case .title: window?.beginMove(); return
         case .resize(let edge): window?.beginResize(edge); return
         case .content: break

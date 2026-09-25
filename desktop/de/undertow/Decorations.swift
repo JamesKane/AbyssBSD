@@ -36,9 +36,9 @@ public enum FrameMetrics {
     /// compositor draws and the one an Aqua window draws for itself are the
     /// same height, and Phase 11 re-skins both from one place.
     public static var titleHeight: Double { Theme.titleBarHeight }
-    /// A one-pixel border on the other three sides. 10.2's windows have a hard
-    /// edge, not a shadow; the shadow is Phase 13's, with the alpha it needs.
-    public static let border: Double = 1
+    /// The border on the other three sides (`chrome.border`, one pixel for
+    /// 10.2's hard edge; the shadow is Phase 13's, with the alpha it needs).
+    public static var border: Double { Theme.current.chromeBorder }
 
     /// The frame's rectangle, given where the client's surface sits.
     public static func frame(forSurfaceAt x: Int32, _ y: Int32,
@@ -83,13 +83,11 @@ private final class FrameTexture {
         // what shows is the title bar, the border and — for the one frame
         // between a resize and the client catching up — a Jaguar-grey body
         // rather than a hole.
-        paintWindowChrome(cr, w: Double(width), h: Double(height), title: title)
+        paintWindowChrome(cr, w: Double(width), h: Double(height), title: title, foreign: true)
         if !active {
-            // Inactive windows are lighter on 10.2. One wash over the finished
-            // frame is enough to read as "not this one" without a second theme.
-            Draw.setColor(cr, Theme.inactiveFrameWash)
-            cairo_rectangle(cr, 0, 0, Double(width), FrameMetrics.titleHeight)
-            cairo_fill(cr)
+            // Inactive windows are lighter on 10.2: one wash over the finished
+            // frame (chrome.dl's window.inactive).
+            Draw.paint("window.inactive", cr, AquaDraw.Rect(0, 0, Double(width), Double(height)))
         }
         cairo_surface_flush(surface)
 

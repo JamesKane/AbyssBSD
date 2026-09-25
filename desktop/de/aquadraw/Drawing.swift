@@ -88,6 +88,13 @@ public enum Draw {
                                                  colors: colors))
     }
 
+    /// Clip to the current theme's shape `name` and leave it set (the caller
+    /// saves and restores): what a window's gadgets and title are drawn in.
+    public static func clip(_ name: String, _ cr: OpaquePointer, _ r: Rect) {
+        guard let list = Theme.lists[name] else { return }
+        DrawListRunner.clip(list, cr, DrawContext(rect: r))
+    }
+
     /// The Aqua keyboard-focus halo: a soft blue ring hugging `r`. Drawn just
     /// outside the control (round-rect or, with `radius: r.h/2`, a pill), so it
     /// reads as the focused element without disturbing the control's own paint.
@@ -110,18 +117,6 @@ public enum Draw {
     /// Faint horizontal Aqua pinstripe across a rect (every 4 logical px).
     public static func pinstripe(_ cr: OpaquePointer, _ r: Rect, _ c: Color) {
         paint("pinstripe", cr, r, colors: ["color": c])
-    }
-
-    /// A glassy Aqua traffic-light "water drop" centred at (cx, cy).
-    public static func trafficLight(_ cr: OpaquePointer, cx: Double, cy: Double,
-                                    radius: Double, base: Color, active: Bool) {
-        paint("traffic", cr, Rect(cx - radius, cy - radius, radius * 2, radius * 2),
-              active ? .active : [], parameters: ["r": radius], colors: ["base": base])
-    }
-
-    /// An outlined Aqua "pill" (the title-bar toolbar toggle, far right).
-    public static func pill(_ cr: OpaquePointer, _ r: Rect) {
-        paint("pill", cr, r)
     }
 
     /// A lickable gel button. `blue` = default/aqua button, else white gel.

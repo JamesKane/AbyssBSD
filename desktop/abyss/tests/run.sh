@@ -186,6 +186,11 @@ if [ "$live" -eq 1 ]; then
   # around somebody else's surface (P9.6).
   echo "== server-side decorations =="
   sh "$root/abyss/tests/live-decorations.sh" >/dev/null
+  # The depth gadget, the one window operation Phase 11 adds: lowered from a
+  # frame undertow drew, and from an Aqua window's own chrome over
+  # abyss_window_manager_v1 — both laid out by one function (P11.6).
+  echo "== depth =="
+  sh "$root/abyss/tests/live-depth.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

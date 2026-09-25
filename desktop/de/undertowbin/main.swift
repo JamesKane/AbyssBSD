@@ -453,11 +453,15 @@ case "run":
     // is stopped with a signal and never reaches the summary below, so a counter
     // printed only there cannot be asserted on by the tests that need it most.
     var reportedWindowOps = ""
+    // **The stacking order, as it changes** (P11.6): the depth gadget's only
+    // effect is where a window sits in it, and nothing else says.
+    var reportedStack = ""
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
                   "minimizes=\(compositor.minimizeCount) " +
-                  "snaps=\(compositor.snapCount)"
+                  "snaps=\(compositor.snapCount) " +
+                  "lowers=\(compositor.lowerCount)"
         if ops != reportedWindowOps {
             reportedWindowOps = ops
             out(ops)
@@ -471,6 +475,12 @@ case "run":
                 reportedGeometry[key] = line
                 out("window \(key) \(line)")
             }
+        }
+        let stack = compositor.toplevels.filter { $0.mapped }.map { $0.placeKey ?? "?" }
+            .joined(separator: " ")
+        if stack != reportedStack {
+            reportedStack = stack
+            out("stack=\(stack)")        // bottom to top
         }
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted

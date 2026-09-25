@@ -907,6 +907,20 @@ public final class Compositor {
         toplevels.append(t)
     }
 
+    /// Send a window to the back of the stack — the depth gadget (P11.6), the
+    /// one window operation Phase 11 adds. The keyboard goes with the front:
+    /// a window put behind the others is not the one you are typing into.
+    public private(set) var lowerCount = 0
+    public func lower(_ t: Toplevel) {
+        guard let i = toplevels.firstIndex(where: { $0 === t }) else { return }
+        lowerCount += 1
+        if i != 0 {
+            toplevels.remove(at: i)
+            toplevels.insert(t, at: 0)
+        }
+        if seat?.focused === t { seat?.focusTopmost() }
+    }
+
     /// Windows that currently have something to show, bottom to top.
     public var mappedToplevels: [Toplevel] {
         toplevels.filter { $0.mapped && !$0.minimized && wlr_surface_has_buffer($0.surface) }

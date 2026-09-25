@@ -2,6 +2,8 @@
  * See the "menus" section of include/cwlroots.h for why this is C. */
 #include "cwlroots.h"
 #include "abyss-menu-v1-protocol.h"
+#include "abyss-window-v1-protocol.h"
+#include <wlr/types/wlr_xdg_shell.h>
 #include "gtk-shell-protocol.h"
 #include "kde-appmenu-protocol.h"
 
@@ -17,6 +19,7 @@ struct tw_menus {
     struct wl_display *display;
     struct tw_menu_hooks hooks;
     struct wl_global *manager_global;
+    struct wl_global *window_global;      /* P11.6 */
     struct wl_global *menubar_global;
     struct wl_global *gtk_shell_global;   /* P10.6 */
     struct wl_global *kde_appmenu_global; /* P10.7 */
@@ -70,6 +73,36 @@ static void manager_bind(struct wl_client *client, void *data, uint32_t version,
                                                (int)version, id);
     if (!r) { wl_client_post_no_memory(client); return; }
     wl_resource_set_implementation(r, &manager_impl, data, NULL);
+}
+
+/* ------------------------------------------------------- abyss_window_manager_v1 */
+
+static void window_manager_destroy(struct wl_client *client, struct wl_resource *resource) {
+    (void)client;
+    wl_resource_destroy(resource);
+}
+
+static void window_manager_lower(struct wl_client *client, struct wl_resource *resource,
+                                 struct wl_resource *toplevel) {
+    (void)client;
+    struct tw_menus *m = wl_resource_get_user_data(resource);
+    /* As with set_address: the id resolves in the sender's own namespace, so a
+     * client can only ever lower its own windows. */
+    struct wlr_xdg_toplevel *t = wlr_xdg_toplevel_from_resource(toplevel);
+    if (m && t && t->base && t->base->surface && m->hooks.lower)
+        m->hooks.lower(m->hooks.ctx, t->base->surface);
+}
+
+static const struct abyss_window_manager_v1_interface window_manager_impl = {
+    .destroy = window_manager_destroy,
+    .lower = window_manager_lower,
+};
+
+static void window_manager_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(client, &abyss_window_manager_v1_interface,
+                                               (int)version, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &window_manager_impl, data, NULL);
 }
 
 /* ----------------------------------------------------------------- abyss_menubar_v1 */
@@ -338,12 +371,14 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
     wl_list_init(&m->privileged);
     m->manager_global = wl_global_create(display, &abyss_menu_manager_v1_interface, 1,
                                          m, manager_bind);
+    m->window_global = wl_global_create(display, &abyss_window_manager_v1_interface, 1,
+                                        m, window_manager_bind);
     m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 2,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
     m->kde_appmenu_global = wl_global_create(display, &org_kde_kwin_appmenu_manager_interface,
                                              1, m, kde_appmenu_bind);
-    if (!m->manager_global || !m->menubar_global || !m->gtk_shell_global
+    if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global
         || !m->kde_appmenu_global) {
         tw_menus_destroy(m); return NULL;
     }
@@ -355,6 +390,7 @@ void tw_menus_destroy(struct tw_menus *m) {
     if (!m) return;
     wl_display_set_global_filter(m->display, NULL, NULL);
     if (m->manager_global) wl_global_destroy(m->manager_global);
+    if (m->window_global) wl_global_destroy(m->window_global);
     if (m->menubar_global) wl_global_destroy(m->menubar_global);
     if (m->gtk_shell_global) wl_global_destroy(m->gtk_shell_global);
     if (m->kde_appmenu_global) wl_global_destroy(m->kde_appmenu_global);

@@ -21,29 +21,6 @@ list pinstripe
   rules across 1.5 4 $color 1
 end
 
-# A traffic light: the rect is the drop's bounding square, $r its radius, $base
-# its colour when the window is active.
-list traffic
-  circle $r $r $r
-  when active fill linear 0 0 0 h stops 0 shift($base, 0.3) 0.5 $base 1 shift($base, -0.12)
-  unless active fill linear 0 0 0 h stops 0 shift(trafficInactive, 0.3) 0.5 trafficInactive 1 shift(trafficInactive, -0.12)
-  stroke trafficRim 0.75
-  push
-  circle $r $r $r-0.5
-  clip
-  circle $r $r-$r*0.18 $r*0.78
-  fill radial $r $r-$r*0.45 0 $r $r-$r*0.35 $r*0.95 stops 0 #ffffff/0.85 0.6 #ffffff/0.25 1 #ffffff/0
-  pop
-  circle $r-$r*0.28 $r-$r*0.42 $r*0.16
-  fill #ffffff/0.95
-end
-
-# The title bar's toolbar toggle.
-list pill
-  rect 0 0 w h h/2
-  stroke #000000/0.3 1
-end
-
 # The white gel push button.
 list button
   rect 0 0 w h h/2

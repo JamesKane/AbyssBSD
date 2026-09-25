@@ -54,7 +54,7 @@ pidfile="$work/pids"
 # Build the move oracle and the virtual pointer the way the harness always does.
 bin_dir=$(mktemp -d)
 cc -I "$root/de/cwayland/include" "$root/abyss/tests/adversary.c" \
-   "$root/de/cwayland/xdg-shell-protocol.c" \
+   "$root/de/cabyssprotocols/xdg-shell-protocol.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$bin_dir/adversary" \
   || { echo "FAIL: could not build the move oracle"; exit 1; }
 xml="$root/abyss/tests/wlr-virtual-pointer-unstable-v1.xml"

@@ -729,6 +729,27 @@ public enum DrawListRunner {
         cairo_restore(cr)
     }
 
+    /// Clip `cr` to the shape `list` describes (its shapes, the `and`s
+    /// included) and **leave the clip set** — for a caller that draws more
+    /// inside it (a window's gadgets and title inside its frame). The caller
+    /// saves and restores around it.
+    public static func clip(_ list: DrawList, _ cr: OpaquePointer, _ ctx: DrawContext) {
+        var shape: Shape?, more: [Shape] = []
+        for step in list.steps {
+            switch step.op {
+            case .shape(let s): shape = s; more = []
+            case .andShape(let s): if shape == nil { shape = s } else { more.append(s) }
+            default: continue
+            }
+        }
+        guard let s = shape else { return }
+        cairo_save(cr)
+        cairo_translate(cr, ctx.rect.x, ctx.rect.y)
+        path(s, cr, ctx, more)      // the path is in device space: it outlives the restore
+        cairo_restore(cr)
+        cairo_clip(cr)
+    }
+
     // MARK: operands and colours
 
     static func eval(_ o: Operand, _ ctx: DrawContext) -> Double {

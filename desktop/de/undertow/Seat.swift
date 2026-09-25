@@ -462,33 +462,27 @@ public final class Seat {
 
     /// What a press on the compositor's own frame means.
     ///
-    /// The geometry is `AquaDraw`'s — the same `windowTrafficRects` the painter
-    /// used, so the lights are exactly where they were drawn. The *rules* are
-    /// this side's: there is no toolbar pill on a foreign window's frame, and
-    /// the resize band is the bottom and its corners, as P9.4 settled.
-    enum FrameHit { case close, minimize, zoom, title, resize(UInt32), body }
+    /// **The same answer the painter drew from** (P11.6): `chromeHit` over
+    /// `windowChrome(foreign: true)` — the one layout both sides use, so the
+    /// gadgets are exactly where they were drawn, and a foreign frame has no
+    /// pill in either (P11.1 found one painted where this said "title").
+    enum FrameHit: Equatable { case close, minimize, zoom, depth, title, resize(UInt32), body }
 
     func frameHit(_ t: Toplevel, x: Double, y: Double) -> FrameHit {
         let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
                                      width: t.width, height: t.height)
-        let w = Double(box.w), h = Double(box.h)
-        let corner = 14.0, band = 6.0
-        let bottom = y >= h - band, cornerB = y >= h - corner
-        if cornerB, x >= w - corner {
-            return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue | WLR_EDGE_RIGHT.rawValue))
+        switch chromeHit(windowChrome(w: Double(box.w), h: Double(box.h), foreign: true), x: x, y: y) {
+        case .gadget(.close): return .close
+        case .gadget(.minimize): return .minimize
+        case .gadget(.zoom): return .zoom
+        case .gadget(.depth): return .depth
+        case .gadget(.pill): return .title        // never laid out on a foreign frame
+        case .title: return .title
+        case .resize(.bottom): return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue))
+        case .resize(.bottomLeft): return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue | WLR_EDGE_LEFT.rawValue))
+        case .resize(.bottomRight): return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue | WLR_EDGE_RIGHT.rawValue))
+        case .content: return .body
         }
-        if cornerB, x <= corner {
-            return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue | WLR_EDGE_LEFT.rawValue))
-        }
-        if bottom { return .resize(UInt32(WLR_EDGE_BOTTOM.rawValue)) }
-        if y < FrameMetrics.titleHeight {
-            let lights = windowTrafficRects()
-            if lights.close.contains(x, y) { return .close }
-            if lights.minimize.contains(x, y) { return .minimize }
-            if lights.zoom.contains(x, y) { return .zoom }
-            return .title
-        }
-        return .body
     }
 
     private func hitLayer(_ layers: [LayerSurface], _ x: Double, _ y: Double)
@@ -581,6 +575,7 @@ public final class Seat {
             case .close:    wlr_xdg_toplevel_send_close(t.xdgToplevel)
             case .minimize: compositor.setMinimized(t, true)
             case .zoom:     compositor.setMaximized(t, !t.maximized)
+            case .depth:    compositor.lower(t)
             case .title:    compositor.beginMove(t)
             case .resize(let edges): compositor.beginResize(t, edges: edges)
             case .body:     break

@@ -28,29 +28,6 @@ list pinstripe
   rules across 1.5 4 $color 1
 end
 
-# A traffic light: the rect is the drop's bounding square, $r its radius, $base
-# its colour when the window is active.
-list traffic
-  circle $r $r $r
-  when active fill linear 0 0 0 h stops 0 shift($base, 0.3) 0.5 $base 1 shift($base, -0.12)
-  unless active fill linear 0 0 0 h stops 0 shift(trafficInactive, 0.3) 0.5 trafficInactive 1 shift(trafficInactive, -0.12)
-  stroke trafficRim 0.75
-  push
-  circle $r $r $r-0.5
-  clip
-  circle $r $r-$r*0.18 $r*0.78
-  fill radial $r $r-$r*0.45 0 $r $r-$r*0.35 $r*0.95 stops 0 #ffffff/0.85 0.6 #ffffff/0.25 1 #ffffff/0
-  pop
-  circle $r-$r*0.28 $r-$r*0.42 $r*0.16
-  fill #ffffff/0.95
-end
-
-# The title bar's toolbar toggle.
-list pill
-  rect 0 0 w h h/2
-  stroke #000000/0.3 1
-end
-
 # The white gel push button.
 list button
   rect 0 0 w h h/2
@@ -420,6 +397,116 @@ end
 list listview.selection
   rect 0 0 w h
   fill menuHighlight
+end
+# Aqua — the window frame (PHASE11 P11.6). Laid out by `windowChrome` from
+# theme.ini's [chrome] and chrome metrics; these lists are how each part looks.
+# The same lists draw the toolkit's own windows and the frames undertow puts
+# around foreign ones.
+
+# The frame's shape: everything below — body, title bar, gadgets, title — is
+# drawn inside it, and the border follows it.
+list window.shape
+  rect 0 0 w h @windowCornerRadius top
+end
+
+# The frame's body and title bar (inside window.shape).
+#
+# The pinstripe's first hairline is stroked together with the title bar's
+# outline: the gradient was filled with fill_preserve, so the bar's rectangle
+# was still the path (HANDOFF §2.67). `and` below keeps that look.
+list window
+  rect 0 0 w h
+  fill contentBackground
+  rect 0 0 w @titleBarHeight
+  fill vertical stops 0 titleBarTop 1 titleBarBottom
+  and path 0 1.5 w 1.5
+  stroke titleBarPinstripe 1
+  rect 0 0 w @titleBarHeight
+  rules across 5.5 4 titleBarPinstripe 1
+  path 0 0.5 w 0.5
+  stroke titleBarHighlight 1
+  path 0 @titleBarHeight-0.5 w @titleBarHeight-0.5
+  stroke separator 1
+end
+
+# The border, drawn last, over everything.
+list window.frame
+  rect 0 0 w h @windowCornerRadius top
+  stroke windowBorder 1
+end
+
+# An inactive window's frame is lighter on 10.2: one wash over the title bar.
+list window.inactive
+  rect 0 0 w @titleBarHeight
+  fill inactiveFrameWash
+end
+
+# The traffic lights: glassy water drops. The rect is the drop's bounding
+# square, $r its radius; active is the window being frontmost (the frame is
+# drawn lit, and washed when it is not).
+list gadget.close
+  circle $r $r $r
+  when active fill linear 0 0 0 h stops 0 shift(close, 0.3) 0.5 close 1 shift(close, -0.12)
+  unless active fill linear 0 0 0 h stops 0 shift(trafficInactive, 0.3) 0.5 trafficInactive 1 shift(trafficInactive, -0.12)
+  stroke trafficRim 0.75
+  push
+  circle $r $r $r-0.5
+  clip
+  circle $r $r-$r*0.18 $r*0.78
+  fill radial $r $r-$r*0.45 0 $r $r-$r*0.35 $r*0.95 stops 0 #ffffff/0.85 0.6 #ffffff/0.25 1 #ffffff/0
+  pop
+  circle $r-$r*0.28 $r-$r*0.42 $r*0.16
+  fill #ffffff/0.95
+end
+
+list gadget.minimize
+  circle $r $r $r
+  when active fill linear 0 0 0 h stops 0 shift(minimize, 0.3) 0.5 minimize 1 shift(minimize, -0.12)
+  unless active fill linear 0 0 0 h stops 0 shift(trafficInactive, 0.3) 0.5 trafficInactive 1 shift(trafficInactive, -0.12)
+  stroke trafficRim 0.75
+  push
+  circle $r $r $r-0.5
+  clip
+  circle $r $r-$r*0.18 $r*0.78
+  fill radial $r $r-$r*0.45 0 $r $r-$r*0.35 $r*0.95 stops 0 #ffffff/0.85 0.6 #ffffff/0.25 1 #ffffff/0
+  pop
+  circle $r-$r*0.28 $r-$r*0.42 $r*0.16
+  fill #ffffff/0.95
+end
+
+list gadget.zoom
+  circle $r $r $r
+  when active fill linear 0 0 0 h stops 0 shift(zoom, 0.3) 0.5 zoom 1 shift(zoom, -0.12)
+  unless active fill linear 0 0 0 h stops 0 shift(trafficInactive, 0.3) 0.5 trafficInactive 1 shift(trafficInactive, -0.12)
+  stroke trafficRim 0.75
+  push
+  circle $r $r $r-0.5
+  clip
+  circle $r $r-$r*0.18 $r*0.78
+  fill radial $r $r-$r*0.45 0 $r $r-$r*0.35 $r*0.95 stops 0 #ffffff/0.85 0.6 #ffffff/0.25 1 #ffffff/0
+  pop
+  circle $r-$r*0.28 $r-$r*0.42 $r*0.16
+  fill #ffffff/0.95
+end
+
+# Send to back. Jaguar has none — this is the Aqua look for a theme (or a
+# person) that asks for one in [chrome]: a graphite drop bearing two
+# overlapping frames, the back one hollow.
+list gadget.depth
+  circle $r $r $r
+  fill linear 0 0 0 h stops 0 shift(trafficInactive, 0.3) 0.5 trafficInactive 1 shift(trafficInactive, -0.12)
+  stroke trafficRim 0.75
+  rect $r*0.45 $r*0.45 $r*0.8 $r*0.8
+  stroke #3c3c3c/0.8 1
+  rect $r*0.75 $r*0.75 $r*0.8 $r*0.8
+  fill #ffffff/0.9
+  stroke #3c3c3c/0.8 1
+end
+
+# The toolbar toggle at the title bar's right (the toolkit's own windows).
+list gadget.pill
+  rect 0 0 w h h/2
+  stroke #000000/0.3 1
 end
 # Aqua — the Finder's window paint (PHASE11 P11.5): toolbar, list header,
 # status bar, selection, the rename field. Its item icons are P11.8's, its

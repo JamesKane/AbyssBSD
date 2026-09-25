@@ -407,6 +407,17 @@ void aw_menu_manager_set_address(void *manager, void *surface, const char *addre
                                       (struct wl_surface *)surface, address);
 }
 
+/* abyss-window-v1 (P11.6) */
+void *aw_bind_window_manager(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &abyss_window_manager_v1_interface, version);
+}
+
+void aw_window_manager_lower(void *manager, void *toplevel) {
+    abyss_window_manager_v1_lower((struct abyss_window_manager_v1 *)manager,
+                                  (struct xdg_toplevel *)toplevel);
+}
+
 void *aw_bind_menubar(void *registry, uint32_t name, uint32_t version) {
     return wl_registry_bind((struct wl_registry *)registry, name,
                             &abyss_menubar_v1_interface, version);

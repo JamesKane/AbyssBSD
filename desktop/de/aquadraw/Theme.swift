@@ -65,6 +65,14 @@ public struct ThemeTokens: Sendable, Equatable {
     public var trafficRadius: Double = 6.5
     public var trafficSpacing: Double = 20
     public var trafficInset: Double = 10
+    // The frame around a foreign window, the resize band along a window's
+    // bottom and its corners (P9.4), and the toolbar pill (P11.6).
+    public var chromeBorder: Double = 1
+    public var chromeResizeBand: Double = 6
+    public var chromeResizeCorner: Double = 14
+    public var chromePillWidth: Double = 22
+    public var chromePillHeight: Double = 13
+    public var chromePillInset: Double = 8
 
     // Layer 3: the toolkit's layout metrics (P11.5), once enums in de/aqua.
     public var toastWidth: Double = 300
@@ -243,6 +251,13 @@ public struct ThemeTokens: Sendable, Equatable {
     public var inactiveFrameWash: Color = Color(1, 1, 1, 0.35)
 
     public var fontFamily: String = "Lucida Grande"
+
+    // The window frame's shape (P11.6): which gadgets, on which side, in what
+    // order; where the title sits and how heavy it is. `[chrome]` in theme.ini.
+    public var chromeLeft: [Gadget] = [.close, .minimize, .zoom]
+    public var chromeRight: [Gadget] = [.pill]
+    public var titleAlign: TitleAlign = .center
+    public var titleBold = false
     public var fontSize: Double = 13
 
     public init() {}
@@ -371,6 +386,12 @@ public struct ThemeTokens: Sendable, Equatable {
         ("trafficRadius", \.trafficRadius),
         ("trafficSpacing", \.trafficSpacing),
         ("trafficInset", \.trafficInset),
+        ("chrome.border", \.chromeBorder),
+        ("chrome.resizeBand", \.chromeResizeBand),
+        ("chrome.resizeCorner", \.chromeResizeCorner),
+        ("chrome.pillWidth", \.chromePillWidth),
+        ("chrome.pillHeight", \.chromePillHeight),
+        ("chrome.pillInset", \.chromePillInset),
         ("toast.width", \.toastWidth),
         ("toast.topInset", \.toastTopInset),
         ("toast.rightInset", \.toastRightInset),

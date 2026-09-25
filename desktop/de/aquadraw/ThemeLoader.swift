@@ -11,6 +11,8 @@
 //                   raisedTop = mix(raised, #ffffff, 0.14)
 //   [metrics]       titleBarHeight = 22    a number, or "number * parameter"
 //   [fonts]         fontFamily = Lucida Grande
+//   [chrome]        left = close minimize zoom    the frame's gadgets, per side
+//                   right = pill  title = center  titleWeight = regular
 //   [parameters]    glow = 0.6 0 1         default, min, max — a person may
 //                                          change these, within the bounds
 //   [colors.<scheme>], [metrics.<scheme>]  a scheme overrides the base
@@ -72,7 +74,7 @@ public enum ThemeLoader {
         var problems: [String] = []
         var warnings: [String] = []
 
-        let known: Set<String> = ["", "theme", "colors", "metrics", "fonts", "parameters"]
+        let known: Set<String> = ["", "theme", "colors", "metrics", "fonts", "parameters", "chrome"]
         let sectionNames = c.sectionNames
         let schemes = sectionNames.compactMap { s -> String? in
             for base in ["colors.", "metrics."] where s.hasPrefix(base) { return String(s.dropFirst(base.count)) }
@@ -161,6 +163,31 @@ public enum ThemeLoader {
                 t[keyPath: kp] = n
             } else {
                 problems.append("[fonts] \(k) is not a token")
+            }
+        }
+
+        // The frame's shape: named gadgets, each on one side at most once.
+        var placed: [Gadget: String] = [:]
+        for (k, v) in c.pairs("chrome") {
+            switch k {
+            case "left", "right":
+                var gs: [Gadget] = []
+                for w in v.split(separator: " ") {
+                    guard let g = Gadget(rawValue: String(w)) else {
+                        problems.append("[chrome] \(k) = \(v): \(w) is not a gadget (close minimize zoom depth pill)"); continue
+                    }
+                    if let other = placed[g] { problems.append("[chrome] \(w) is on the \(other) already"); continue }
+                    placed[g] = k; gs.append(g)
+                }
+                if k == "left" { t.chromeLeft = gs } else { t.chromeRight = gs }
+            case "title":
+                guard let a = TitleAlign(rawValue: v) else { problems.append("[chrome] title = \(v): want left or center"); continue }
+                t.titleAlign = a
+            case "titleWeight":
+                guard v == "regular" || v == "bold" else { problems.append("[chrome] titleWeight = \(v): want regular or bold"); continue }
+                t.titleBold = v == "bold"
+            default:
+                problems.append("[chrome] \(k) is not a token")
             }
         }
 
@@ -271,11 +298,14 @@ public enum ThemeLoader {
 
     /// The theme a person chose: `appearance.ini` `[appearance] theme` and
     /// `scheme`, and `[parameters]`. Aqua when nothing says otherwise.
+    /// `$ABYSS_THEME` overrides the file's choice, for one process — a test, or
+    /// a person trying a theme without committing to it (as `GTK_THEME` does).
     public static func choice() -> (name: String, scheme: String?, overrides: [String: Double]) {
         let a = (try? Pool.load("appearance")) ?? Config()
         var o: [String: Double] = [:]
         for (k, v) in a.pairs("parameters") { if let d = Double(v) { o[k] = d } }
-        return (a.string("appearance", "theme") ?? "aqua", a.string("appearance", "scheme"), o)
+        let forced = getenv("ABYSS_THEME").map { String(cString: $0) }.flatMap { $0.isEmpty ? nil : $0 }
+        return (forced ?? a.string("appearance", "theme") ?? "aqua", a.string("appearance", "scheme"), o)
     }
 
     public enum Outcome: Equatable, Sendable {

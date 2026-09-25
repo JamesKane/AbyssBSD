@@ -533,6 +533,81 @@ toolbar pill, which its hit-test treats as title bar. That pill goes, and the
 to the back, is a new window operation in undertow, the one piece of
 compositor work in the phase.
 
+**Done.** What landed:
+
+- **The frame is theme data.** `[chrome]` in `theme.ini` says which gadgets
+  sit on each side and in what order (`left = close minimize zoom`,
+  `right = pill`), where the title goes (`title = center|left`) and how heavy
+  it is (`titleWeight`). New `chrome.*` metrics give the foreign frame's
+  border, the resize band and corner (P9.4's 6 and 14), and the pill's size.
+  Every mistake is refused by name: an unknown gadget, one placed twice, a bad
+  alignment.
+- **One layout function.** `windowChrome(w:h:foreign:)` in AquaDraw lays the
+  frame out, and `chromeHit` answers what is under a point. **Four places
+  read that one answer:** the toolkit's painter and `windowChromeHit`, and
+  undertow's frame painter and `frameHit`. Before, undertow had its own copy
+  of the resize numbers and the gadget rects. The §2.9 property is a unit
+  test: every point of every laid-out gadget is hit as that gadget, and no two
+  overlap, for four different `[chrome]` layouts, toolkit and foreign.
+- **The chrome paints from lists** in `draw/chrome.dl`: `window.shape` (the
+  clip everything is drawn inside), `window`, `window.frame`,
+  `window.inactive`, and one `gadget.<name>` per gadget. `Draw.clip` clips to
+  a list's shape and leaves the clip for the caller. The traffic-light and
+  pill recipes are gadget lists now.
+- **The pill is gone from foreign frames.** P11.1's finding: undertow painted
+  the Finder's toolbar pill on every foreign window's frame, where its own
+  hit-test said "title". `windowChrome(foreign: true)` does not lay one out,
+  so neither side has it. **`frame` is the one golden updated on purpose**
+  (108 pixels, all the pill), on both platforms.
+- **The depth gadget, and the one piece of compositor work.** `Compositor.lower`
+  sends a window to the back and hands the keyboard to the new front window.
+  A frame undertow draws lowers directly. An Aqua window's own chrome
+  **asks**, over a new protocol, `abyss-window-v1`
+  (`abyss_window_manager_v1.lower(xdg_toplevel)`), because xdg-shell has no
+  such request. Jaguar has no depth gadget, so Aqua's `[chrome]` does not list
+  it; `gadget.depth` is Aqua's look for a theme that does.
+- **`ABYSS_THEME`** chooses a theme for one process, as `GTK_THEME` does. The
+  test theme `abyss/tests/themes/chrome-test` is Aqua with `right = depth pill`
+  and a bold left-aligned title, and the golden gate accepts a scene drawn from
+  it.
+- **undertow reports `stack=`** (bottom to top) and `lowers=`: depth's only
+  effect is where a window sits, and nothing else said.
+
+**Verified (short checks only):**
+- the golden gate, **42 scenes**, on Linux and in the FreeBSD guest. Every
+  scene is pixel-identical except `frame`, which lost exactly its pill. Two new
+  scenes, `frame-depth` and `window-depth@2x`, picture the test theme's layout.
+- **`live-depth.sh`** (new, 3 s, in `run.sh`'s live lane), on Linux and in the
+  FreeBSD guest. Two windows under the test theme: depth on undertow's frame
+  lowers the foreign window, and depth on the Aqua window's own chrome asks
+  and is lowered, each checked on `stack=`. **Seen to fail:** with the
+  client's request made a no-op, the second check failed, naming the
+  protocol.
+- `live-decorations.sh` and `live-window.sh` (every toolkit gadget, the resize
+  band, snap) green against the shared hit-test. `live-window.sh` asserts
+  undertow's whole counters line, which gained `lowers=0`.
+- `swift test` on Linux, 511, green (`ChromeTests`, new); `ChromeTests`,
+  `DrawParityTests`, `DrawListTests` and `ThemeTests` green in the guest.
+
+**What it found:**
+
+- **Text under a clip is not the same bytes as text without one.** Moving the
+  title outside the frame's clip, where it touches no clipped edge, moved one
+  pixel of `window@2x` by 12. So the gadgets and title are drawn inside
+  `window.shape`, as they always were, and that is why `Draw.clip` exists.
+- **The harness's `frame` scene was calling the toolkit's chrome, not the
+  foreign one.** It never passed `foreign`, because there was no `foreign` to
+  pass. The first run with the pill removed moved nothing, which is how it
+  showed.
+- **wlroots' protocol tables are not ours to use** (HANDOFF §2.68). The new
+  protocol names `xdg_toplevel`, and undertow failed to link:
+  `undefined reference to xdg_toplevel_interface`. wlroots builds its tables
+  with hidden visibility. xdg-shell's tables now live once in
+  `CAbyssProtocols`, as our own protocols' do.
+
+**Not run:** `run.sh --live`, `run.sh --vm --live`, `--full`, and
+`live-medium.sh`, each over a minute. They are owed with the phase gates.
+
 **P11.7 — type by role.** `ctext` loads families **by name** per role, from the
 theme, with the existing fallback chain behind each. Runs gain **case
 transform**, **tracking** and **ghost text**. Plan Neo's families ship:

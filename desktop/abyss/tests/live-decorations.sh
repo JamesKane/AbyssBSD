@@ -56,7 +56,7 @@ wayland-scanner client-header "$deco_xml" "$work/xdg-decoration-unstable-v1-clie
 wayland-scanner private-code  "$deco_xml" "$work/xdg-decoration-unstable-v1-protocol.c"
 app="$work/adversary"
 cc -I"$work" -I "$root/de/cwayland/include" "$root/abyss/tests/adversary.c" \
-   "$root/de/cwayland/xdg-shell-protocol.c" "$work/xdg-decoration-unstable-v1-protocol.c" \
+   "$root/de/cabyssprotocols/xdg-shell-protocol.c" "$work/xdg-decoration-unstable-v1-protocol.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$app" \
   || fail "could not build the client that asks to be decorated"
 

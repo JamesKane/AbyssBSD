@@ -46,49 +46,34 @@ public enum WindowChromeHit: Equatable, Sendable {
     case close
     case minimize
     case zoom
+    case depth                 // send the window to the back (P11.6)
     case pill                  // the toolbar toggle; only the Finder uses it
     case title                 // drag it to move the window
     case resize(ResizeEdge)
     case content               // not chrome — the scene's own business
 }
 
-/// How deep the invisible resize band along a window's **bottom** is.
-///
-/// **Only the bottom edge and the two bottom corners resize.** Two reasons, and
-/// they agree:
-///
-///   - 10.2 resized from the corner grip and nothing else, so side bands would
-///     be a modern habit wearing a Jaguar frame;
-///   - the side bands are not free. The Finder's scrollbar is the rightmost
-///     15px of its window, so a 6px band takes the right 6px of every thumb and
-///     arrow in it — a scrollbar that resizes the window when you grab the
-///     wrong half of it. The sway suite passed with the bands in, because no
-///     test drags a thumb by its outer edge; a person would find it in a day.
-///
-/// The top is the title bar's, for the same reason: aiming at it to *move* the
-/// window and resizing it instead is the worse failure of the two.
-public let windowResizeBand: Double = 6
-public let windowResizeCorner: Double = 14
+/// How deep the resize band along a window's bottom is, and its corners — the
+/// theme's (`chrome.resizeBand`, `chrome.resizeCorner`); `chromeHit` says why
+/// only the bottom resizes.
+public var windowResizeBand: Double { Theme.current.chromeResizeBand }
+public var windowResizeCorner: Double { Theme.current.chromeResizeCorner }
 
-/// What is under (x, y) in a window of logical size (w, h).
+/// What is under (x, y) in a window of logical size (w, h): `chromeHit` over
+/// `windowChrome` — the one layout the painter used (P11.6).
 public func windowChromeHit(x: Double, y: Double, w: Double, h: Double) -> WindowChromeHit {
-    // The bottom first: it is the outermost few pixels, and a control that
-    // overlapped it would be unreachable from the other side.
-    let cornerL = x <= windowResizeCorner, cornerR = x >= w - windowResizeCorner
-    let cornerB = y >= h - windowResizeCorner
-    if cornerB && cornerR { return .resize(.bottomRight) }
-    if cornerB && cornerL { return .resize(.bottomLeft) }
-    if y >= h - windowResizeBand { return .resize(.bottom) }
-
-    if y < Theme.titleBarHeight {
-        let lights = windowTrafficRects()
-        if lights.close.contains(x, y) { return .close }
-        if lights.minimize.contains(x, y) { return .minimize }
-        if lights.zoom.contains(x, y) { return .zoom }
-        if windowPillRect(w: w).contains(x, y) { return .pill }
-        return .title
+    switch chromeHit(windowChrome(w: w, h: h), x: x, y: y) {
+    case .gadget(.close): return .close
+    case .gadget(.minimize): return .minimize
+    case .gadget(.zoom): return .zoom
+    case .gadget(.depth): return .depth
+    case .gadget(.pill): return .pill
+    case .title: return .title
+    case .resize(.bottom): return .resize(.bottom)
+    case .resize(.bottomLeft): return .resize(.bottomLeft)
+    case .resize(.bottomRight): return .resize(.bottomRight)
+    case .content: return .content
     }
-    return .content
 }
 
 
@@ -453,7 +438,8 @@ public func renderFramePNG(path: String, width: Int32 = 480, height: Int32 = 300
     cairo_scale(cr, Double(scale), Double(scale))
     Text.renderScale = scale
     defer { Text.renderScale = 1 }
-    paintWindowChrome(cr, w: Double(width), h: Double(height), title: "Untitled — gedit")
+    paintWindowChrome(cr, w: Double(width), h: Double(height), title: "Untitled — gedit",
+                      foreign: true)
     cairo_surface_flush(cs)
     return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
 }

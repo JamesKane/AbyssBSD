@@ -63,6 +63,9 @@ public final class Display {
     /// menus are published. No events, so bound on sight.
     var menuManager: OpaquePointer?
     public var hasMenuManager: Bool { menuManager != nil }
+    /// `abyss_window_manager_v1` (P11.6): window operations xdg-shell lacks —
+    /// sending a window to the back. No events, so bound on sight.
+    var windowManager: OpaquePointer?
     /// `abyss_menubar_v1`, by name — offered only on undertow's privileged
     /// socket, so its presence is itself the answer to "am I the menu bar's
     /// connection". Bound with its listener by `MenuBarFocus`.
@@ -298,6 +301,8 @@ public final class Display {
             foreignToplevelManager = (name, min(version, 3))
         case "abyss_menu_manager_v1":
             menuManager = opt(aw_bind_menu_manager(raw(registry), name, 1))
+        case "abyss_window_manager_v1":
+            windowManager = opt(aw_bind_window_manager(raw(registry), name, 1))
         case "abyss_menubar_v1":
             menubarGlobal = (name, min(version, 2))
         case "xdg_activation_v1":

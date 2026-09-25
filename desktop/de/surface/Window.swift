@@ -511,6 +511,17 @@ public final class Window {
         display.flush()
     }
 
+    /// Send this window behind the others — the depth gadget (P11.6). False
+    /// when the compositor does not speak abyss-window-v1 (anything but
+    /// undertow); xdg-shell has no such request.
+    @discardableResult
+    public func lower() -> Bool {
+        guard !tornDown, let m = display.windowManager else { return false }
+        aw_window_manager_lower(raw(m), raw(xdgToplevel))
+        display.flush()
+        return true
+    }
+
     public func setFullscreen(_ on: Bool) {
         guard !tornDown else { return }
         if on { aw_xdg_toplevel_set_fullscreen(raw(xdgToplevel), nil) }

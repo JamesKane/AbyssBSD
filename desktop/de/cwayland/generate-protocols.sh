@@ -16,7 +16,14 @@ gen() {
     xml="$proto/$name.xml"
     echo "scanner: $name"
     wayland-scanner client-header "$xml" "$here/include/$name-client-protocol.h"
-    wayland-scanner private-code  "$xml" "$here/$name-protocol.c"
+    # xdg-shell's tables live in CAbyssProtocols since P11.6: abyss-window-v1
+    # names xdg_toplevel, undertow must have the table too, and wlroots' copy
+    # is hidden — so one shared copy, like our own protocols'.
+    if [ "$name" = xdg-shell ]; then
+        wayland-scanner private-code "$xml" "$root/de/cabyssprotocols/$name-protocol.c"
+    else
+        wayland-scanner private-code "$xml" "$here/$name-protocol.c"
+    fi
 }
 
 # Server-side headers, for the compositor (PHASE6.md P6.2). wlroots' own headers
@@ -58,6 +65,7 @@ gen_ours() {
 }
 
 gen_ours abyss-menu-v1
+gen_ours abyss-window-v1   # P11.6: the depth gadget
 
 # Somebody else's protocol that undertow answers (P10.6): GTK's gtk_shell1.
 # Tables and the server header only — no client of ours speaks it.

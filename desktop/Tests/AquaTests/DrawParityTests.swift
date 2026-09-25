@@ -13,7 +13,8 @@ final class DrawParityTests: XCTestCase {
     override func setUpWithError() throws {
         let here = String(#filePath[..<#filePath.lastIndex(of: "/")!])
         let text = try XCTUnwrap(ThemeLoader.readFile(here + "/../../themes/aqua/draw/aqua.dl"))
-        lists = try DrawListFile(parsing: text)
+        lists = try DrawListFile(parsing: text).merging(DrawListFile(parsing:
+            try XCTUnwrap(ThemeLoader.readFile(here + "/../../themes/aqua/draw/chrome.dl"))))
     }
     override func tearDown() { Text.renderScale = 1 }
 
@@ -75,7 +76,7 @@ final class DrawParityTests: XCTestCase {
                 same("focusRing \(r) \(radius)", { JaguarRef.focusRing($0, r, radius: radius) },
                      { self.run("focusring", $0, r, p: ["radius": radius]) })
             }
-            same("pill \(r)", { JaguarRef.pill($0, r) }, { self.run("pill", $0, r) })
+            same("pill \(r)", { JaguarRef.pill($0, r) }, { self.run("gadget.pill", $0, r) })
         }
     }
 
@@ -88,12 +89,12 @@ final class DrawParityTests: XCTestCase {
 
     func testTrafficLights() {
         for (cx, cy, rad) in [(20.0, 11.0, 6.5), (40.5, 20.5, 7.0), (61.25, 30.75, 5.5)] {
-            for base in [Theme.close, Theme.minimize, Theme.zoom] {
+            for (name, base) in [("close", Theme.close), ("minimize", Theme.minimize), ("zoom", Theme.zoom)] {
                 for active in [true, false] {
-                    same("trafficLight \(cx),\(cy) r\(rad) active=\(active)",
+                    same("trafficLight \(name) \(cx),\(cy) r\(rad) active=\(active)",
                          { JaguarRef.trafficLight($0, cx: cx, cy: cy, radius: rad, base: base, active: active) },
-                         { self.run("traffic", $0, Rect(cx - rad, cy - rad, rad * 2, rad * 2),
-                                    active ? .active : [], p: ["r": rad], c: ["base": base]) })
+                         { self.run("gadget." + name, $0, Rect(cx - rad, cy - rad, rad * 2, rad * 2),
+                                    active ? .active : [], p: ["r": rad]) })
                 }
             }
         }
@@ -221,7 +222,7 @@ final class DrawParityTests: XCTestCase {
         let cases: [(String, () -> Void, () -> Void)] = [
             ("button", { Draw.gelButton(cr, r, label: "Save", blue: true, pressed: false) },
                        { JaguarRef.gelButton(cr, r, label: "Save", blue: true, pressed: false) }),
-            ("traffic", { Draw.trafficLight(cr, cx: 20, cy: 11, radius: 6.5, base: Theme.close, active: true) },
+            ("traffic", { Draw.paint("gadget.close", cr, Rect(13.5, 4.5, 13, 13), .active, parameters: ["r": 6.5]) },
                         { JaguarRef.trafficLight(cr, cx: 20, cy: 11, radius: 6.5, base: Theme.close, active: true) }),
             ("segmented", { Draw.segmentedControl(cr, seg, labels: ["One", "Two", "Three"], selected: 1) },
                           { JaguarRef.segmentedControl(cr, seg, labels: ["One", "Two", "Three"], selected: 1) }),

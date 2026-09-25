@@ -293,6 +293,9 @@ public final class AquaWindow: WindowDelegate {
         case .minimize:
             w.minimize()
             return true
+        case .depth:
+            w.lower()
+            return true
         case .zoom:
             // The compositor's answer is what "zoomed" means, so ask for the
             // opposite of what it last told us rather than of what we asked for.

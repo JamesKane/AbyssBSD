@@ -176,19 +176,19 @@ final class ThemeTests: XCTestCase {
         }
         XCTAssertNil(try ThemeLoader.loadLists(dir + "/nowhere").0, "no draw/ is not an error: all Jaguar")
 
-        write("a.dl", "list pill\n  rect 0 0 w h\n  fill #ff0000\nend\nlist sparkle\n  rect 0 0 w h\nend\n")
+        write("a.dl", "list gadget.pill\n  rect 0 0 w h\n  fill #ff0000\nend\nlist sparkle\n  rect 0 0 w h\nend\n")
         let (lists, warnings) = try ThemeLoader.loadLists(dir)
         XCTAssertEqual(warnings, ["list sparkle (draw/a.dl) is not one the toolkit draws"])
         Theme.use(.jaguar, lists: lists)
-        XCTAssertEqual(Theme.lists["pill"]?.steps.count, 2, "the theme's pill replaces Jaguar's")
+        XCTAssertEqual(Theme.lists["gadget.pill"]?.steps.count, 2, "the theme's pill replaces Jaguar's")
         XCTAssertNotNil(Theme.lists["button"], "and the button it does not ship stays Jaguar's")
 
         write("b.dl", "list tab\n  frobnicate\nend\n")
-        write("c.dl", "list pill\nend\n")
+        write("c.dl", "list gadget.pill\nend\n")
         XCTAssertThrowsError(try ThemeLoader.loadLists(dir)) { e in
             XCTAssertEqual((e as? ThemeError)?.problems, [
                 "draw/b.dl line 2: frobnicate is not an op (rect ellipse circle arc path fill stroke bevel innershadow glow rules text push pop clip)",
-                "draw/c.dl: list pill is also in draw/a.dl",
+                "draw/c.dl: list gadget.pill is also in draw/a.dl",
             ])
         }
     }

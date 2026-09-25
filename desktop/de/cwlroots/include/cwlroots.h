@@ -132,6 +132,9 @@ struct tw_menu_hooks {
     /* The menu bar asked to force-quit an application (abyss_menubar_v1 v2,
      * P10.8). Only a privileged client can have sent it. */
     void (*force_quit)(void *ctx, const char *app_id);
+    /* A client asked for one of its toplevels to go to the back
+     * (abyss_window_manager_v1.lower, P11.6). */
+    void (*lower)(void *ctx, struct wlr_surface *surface);
 };
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);

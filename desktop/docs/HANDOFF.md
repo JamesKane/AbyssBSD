@@ -376,6 +376,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.65 | A privileged process hands its privilege to every child by default — the bar's first launched app inherited its privileged `WAYLAND_DISPLAY` |
 | 2.66 | SwiftPM does not recompile across an `@_exported` re-export — a type's layout changed and three targets ran the old one (a crash at exit, a crashed test bundle, a failed link) |
 | 2.67 | `cairo_fill_preserve` keeps the path, and the next shape is *added* to it — four Aqua controls glossed their whole body, the menu bar, toasts and prefs toolbar were outlined by accident, the toast's border was never drawn, and an icon's leftover path got outlined by the next stroke |
+| 2.68 | wlroots' protocol tables are hidden — a protocol of ours that names `xdg_toplevel` could not link in undertow until xdg-shell's tables lived once, in `CAbyssProtocols` |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -642,6 +643,26 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.68 wlroots' protocol tables are hidden
+(P11.6. `abyss-window-v1` names an `xdg_toplevel`, and undertow stopped linking.)
+
+A wayland-scanner `private-code` file for a protocol that names another
+protocol's interface refers to that interface's table by symbol:
+`extern const struct wl_interface xdg_toplevel_interface;`. Clients had one,
+from CWayland's `xdg-shell-protocol.c`. undertow did not: wlroots generates
+and links its own xdg-shell tables, **with hidden visibility**. So they are in
+the binary and cannot be named, and the link fails with
+`undefined reference to 'xdg_toplevel_interface'`. The Phase 6 comment
+"wlroots links the protocol implementations itself" was right, and not the
+whole story: it links them *for itself*.
+
+Adding the table to undertow's own C target would put it in every binary twice
+that links both halves (every `swift test` build), which is exactly why
+`CAbyssProtocols` exists. **So xdg-shell's tables moved there**, the one copy
+for client and compositor alike, and `generate-protocols.sh` writes them there.
+The interface is matched by name at runtime, so undertow's copy and wlroots'
+hidden one agree.
 
 ### 2.67 `cairo_fill_preserve` keeps the path, and the next shape is added to it
 (P11.4. Found by making the draw lists byte-identical to the Swift.)
