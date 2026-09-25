@@ -83,6 +83,12 @@ if let out = envString("AQUA_RENDER_PNG") {
     let scale = Int32(envString("AQUA_SCALE") ?? "") ?? 1
     // Render-only scenes for the golden-image gate (PHASE11 P11.1): an open
     // menu, and the compositor's frame. Neither is a window you can open.
+    if sceneName == "drawlist" {
+        let file = envString("AQUA_DRAWLIST") ?? "abyss/tests/drawlist-sample.dl"
+        let ok = renderDrawListPNG(path: out, listFile: file, scale: max(1, scale))
+        print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
+        exit(ok ? 0 : 1)
+    }
     if sceneName == "menu" || sceneName == "frame" {
         let ok = sceneName == "menu" ? renderMenuPNG(path: out, scale: max(1, scale))
                                      : renderFramePNG(path: out, scale: max(1, scale))

@@ -247,6 +247,97 @@ strength (§4.2). Nothing in it executes, loops or branches beyond picking a
 state. **Bench the interpreter** against the straight-line cairo it replaces,
 because the toolkit is on the input-to-photon path.
 
+**Done.** What landed:
+
+- **`de/aquadraw/DrawList.swift`**, the format and its interpreter:
+  - `list NAME … end`. Every op may be prefixed by `when STATES` or
+    `unless STATES`, which is the only choice the format makes. The states
+    are normal, hover, pressed, disabled, focused, selected and active;
+    `when normal` means "no other state".
+  - **Operands:** a number, `w`, `h`, `@metric`, `$parameter`, and **one**
+    binary operator at most. `w/2-1` is refused, and says why.
+  - **Colours:** a token (read from `Theme.current` when the list *runs*, so a
+    theme change reaches lists parsed before it), `#rrggbb[/a]`, or `mix()`.
+  - **Paints:**
+    - `solid`, `linear`, `radial`;
+    - `conic`: mesh patches of a quarter turn or less (§4.1);
+    - `stripes`: a repeating tile;
+    - `noise`: a deterministic 128² tile per seed and strength, cached.
+  - **Ops:**
+    - `rect` (radius, and top/bottom/all corners), `ellipse`;
+    - `fill`, `stroke`, `bevel`, `innershadow`;
+    - `glow`: a blurred A8 mask cached by size, state and strength (§4.2);
+    - `text`: literal or `$label`, with align, bold, upper, `tracking=`,
+      `size=`, `color=`, and a `ghost=` underlay for LCD segments;
+    - `push`, `pop`, `clip`.
+  - Every refusal carries its line number.
+- **`de/cdraw`**, C for the two per-pixel loops: `cd_blur_a8`, a 3-pass box
+  blur, and `cd_noise_a8`, hash value noise that is the same on every run and
+  both platforms.
+- **`AQUA_SCENE=drawlist`**, the format's own golden: a 520×200 sheet of
+  `abyss/tests/drawlist-sample.dl`. It holds Plan Neo's MUI button (normal,
+  pressed, focused with glow), brushed metal with tracked type, anodized
+  noise, a conic knob, an LED and an LCD with ghost segments. It proves the
+  primitives, not Plan Neo, which is P11.9. Its fonts wait for P11.7. At 1×
+  and 2×, on both platforms, **28 scenes**.
+- **`DrawListTests`**, 14 tests:
+  - parse errors by line;
+  - a solid fill exact to the byte, and a token read at run time;
+  - state filters, bevel edges, and operands (sizes, metrics, parameters);
+  - linear end-to-end, conic at its quarters, stripes at 0° and 90°;
+  - noise the same per seed, different across seeds, and bounded;
+  - a glow that reaches outside its shape, fades and is cached;
+  - tracking and `upper` widening text;
+  - the sample sheet parsing, and the bench.
+
+**The bench** (debug build, per run, glows warm):
+
+| List | Size | µs |
+|---|---|---|
+| lcd | 120×40 | 9 |
+| brushed | 260×26 | 13 |
+| mui-button (focused, glow) | 90×24 | 20 |
+| led (glow) | 14×14 | 21 |
+| anodized (noise) | 200×110 | 21 |
+| knob (conic mesh) | 54×54 | 160 |
+
+**Against the straight-line cairo it replaces**, the same rounded rect,
+gradient and bevel ran at 5.8 µs as a draw list and 5.8 µs as hand-written
+calls in debug; in release, 5.3 against 5.8. **Interpreting costs nothing
+measurable; cairo's rasterising is the cost.** The knob's mesh is the one
+expensive primitive. It is drawn when a knob changes, not per frame, and it
+can be cached like glow if P11.9 shows it matters.
+
+**What it found:**
+
+- **Two goldens had never pictured what they claimed to** (§2.45). The scene
+  loop in `golden.sh` sets `IFS` to a newline, so a two-variable extra
+  environment reached `env` as *one* word. `menubar` was rendered without
+  its fake volume and battery, so the status items were never in the golden.
+  `menubar@2x` was rendered at **1×**, so it was byte-for-byte the other
+  golden. The gate would have let the status items, or the 2× bar, move
+  unseen. `render()` now splits the extras itself. Both goldens were rewritten
+  on purpose, on both platforms: the status items are in the picture, and
+  the 2× golden is 1600×1200. The FreeBSD guest showed the same two moved
+  and nothing else.
+- **A rotated repeating pattern is 60× slower** than an unrotated one.
+  `stripes 90`, brushed metal's hairlines, cost 212 µs for one 260×26 strip.
+  Changing cairo's filter did not help; pixman's transformed fetch is the
+  cost. 0° and 90° now build the tile already oriented: 3.4 µs, with every
+  golden pixel-identical. Any other angle still rotates, at ~400 µs for that
+  strip. That is fine cached, and not something to draw per frame.
+- **The grammar holds its own sample to account.** The sheet's knob first
+  said `w/2-1.5` and was refused, with the line number, for having two
+  operators. The rule works as written. The first version of the check also
+  split that operand wrongly and blamed `w/2`; it now counts operators first
+  and names the whole expression.
+
+**Verified (short checks only):**
+- the golden gate, 28 scenes pixel for pixel, on Linux **and in the FreeBSD
+  guest**;
+- `swift test` on Linux, 488, green;
+- the drawlist sheet, looked at on both platforms.
+
 **P11.4 — Aqua, in the format.** `Draw`'s 27 functions become draw lists
 interpreted by P11.3. **The gate must stay pixel-identical.** This is the pass
 that proves the format can say Jaguar. It is necessary and not sufficient

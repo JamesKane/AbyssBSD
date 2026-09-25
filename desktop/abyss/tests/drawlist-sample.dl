@@ -1,0 +1,55 @@
+# Every draw-list primitive, in Plan Neo's vocabulary (PHASE11 P11.3).
+# Rendered by `AQUA_SCENE=drawlist` and held under the golden gate, so the
+# interpreter itself cannot drift. Colours are literals here on purpose: this
+# file tests the interpreter, not a theme.
+
+list mui-button
+  rect 0 0 w h
+  when focused glow #00e5ff 8 0.7
+  fill linear 0 0 0 h stops 0 #3b3063 1 #2a2150
+  when pressed fill #110d24
+  unless pressed bevel 1 #bea9ff/0.38 #000000/0.62
+  when pressed bevel 1 #000000/0.62 #bea9ff/0.38
+  stroke #000000 1
+  text $label w/2 h/2 center bold upper tracking=1.6 size=12 color=#e8e6ff
+end
+
+list brushed
+  rect 0 0 w h
+  fill linear 0 0 0 h stops 0 #4a4178 1 #211a40
+  fill stripes 90 1 #ffffff/0.035 2 #ffffff/0
+  fill stripes 90 2 #000000/0.06 5 #000000/0
+  bevel 1 #bea9ff/0.38 #000000/0.62
+  text "PLAN NEO" w/2 h/2 center bold tracking=4 size=13 color=#1a1433
+end
+
+list anodized
+  rect 0 0 w h
+  fill linear 0 0 0 h stops 0 #221b41 1 #1b1535
+  fill noise 7 0.07
+  bevel 1 #bea9ff/0.38 #000000/0.62
+end
+
+list knob
+  ellipse 0 0 w h
+  fill radial w*0.38 h*0.32 w stops 0 #8a80bd 0.72 #211a40 1 #211a40
+  fill conic w/2 h/2 w stops 0 #ffffff/0.09 0.25 #000000/0.14 0.5 #ffffff/0.09 0.75 #000000/0.14 1 #ffffff/0.09
+  stroke #000000 1
+  rect w*0.472 h/2 3 h*0.43 1.5
+  glow #00e5ff 4
+  fill #00e5ff
+end
+
+list led
+  ellipse 0 0 w h
+  glow #39ff14 6
+  fill radial w*0.35 h*0.3 w/2 stops 0 #ffffff/0.85 0.28 #39ff14 1 #1c7a00
+  stroke #000000/0.7 1
+end
+
+list lcd
+  rect 0 0 w h 3
+  fill #1d1405
+  innershadow #000000/0.75 7
+  text "14:07" 9 h/2 size=26 color=#ffb000 ghost="88:88" ghostalpha=0.13
+end

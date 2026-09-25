@@ -439,3 +439,38 @@ public func renderFramePNG(path: String, width: Int32 = 480, height: Int32 = 300
     cairo_surface_flush(cs)
     return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
 }
+
+/// A sheet of every draw-list primitive (PHASE11 P11.3), from
+/// `abyss/tests/drawlist-sample.dl` (or `$AQUA_DRAWLIST`) — so the interpreter
+/// is under the golden gate before anything depends on it.
+public func renderDrawListPNG(path: String, listFile: String, scale: Int32 = 1) -> Bool {
+    guard let text = ThemeLoader.readFile(listFile) else { return false }
+    let file: DrawListFile
+    do { file = try DrawListFile(parsing: text) } catch {
+        let line = "AquaDemo: \(listFile): \(error)\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
+        return false
+    }
+    let w: Int32 = 520, h: Int32 = 200
+    guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w * scale, h * scale),
+          let cr = cairo_create(cs) else { return false }
+    defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+    cairo_scale(cr, Double(scale), Double(scale))
+    Text.renderScale = scale
+    defer { Text.renderScale = 1 }
+    cairo_set_source_rgb(cr, 0.04, 0.04, 0.094)   // Plan Neo's void
+    cairo_paint(cr)
+    func draw(_ name: String, _ r: Rect, _ state: DrawState = .normal, _ label: String = "") {
+        if let l = file[name] { DrawListRunner.run(l, cr, DrawContext(rect: r, state: state, label: label)) }
+    }
+    draw("mui-button", Rect(20, 20, 120, 28), .normal, "Save")
+    draw("mui-button", Rect(160, 20, 120, 28), .pressed, "Use")
+    draw("mui-button", Rect(300, 20, 120, 28), .focused, "Cancel")
+    draw("brushed", Rect(20, 70, 260, 26))
+    draw("anodized", Rect(300, 70, 200, 110))
+    draw("knob", Rect(30, 118, 54, 54))
+    draw("led", Rect(110, 138, 14, 14))
+    draw("lcd", Rect(150, 124, 120, 40))
+    cairo_surface_flush(cs)
+    return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
+}

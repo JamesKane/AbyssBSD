@@ -174,9 +174,16 @@ let package = Package(
         // title bar, and the alternative was writing Aqua twice and keeping two
         // of them in step (PHASE9 §6.1). Nothing here has ever depended on
         // `Surface`, which is what made it separable.
+        // The draw-list interpreter's two pixel loops: blur and noise (P11.3).
+        .target(
+            name: "CDraw",
+            path: "de/cdraw",
+            sources: ["cdraw.c"],
+            publicHeadersPath: "include"
+        ),
         .target(
             name: "AquaDraw",
-            dependencies: ["CCairo", "CText", "PoolConfig"],
+            dependencies: ["CCairo", "CText", "CDraw", "PoolConfig"],
             path: "de/aquadraw"
         ),
         // What an application can do, as a value: commands, key equivalents,

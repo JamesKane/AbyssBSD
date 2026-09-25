@@ -325,7 +325,7 @@ public enum ThemeLoader {
 
     // MARK: small things
 
-    static func readFile(_ path: String) -> String? {
+    public static func readFile(_ path: String) -> String? {
         guard let f = fopen(path, "rb") else { return nil }
         defer { fclose(f) }
         var out: [UInt8] = []

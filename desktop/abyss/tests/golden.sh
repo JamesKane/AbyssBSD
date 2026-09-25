@@ -70,13 +70,18 @@ dock|dock|
 notify|notify|
 menu|menu|
 menu@2x|menu|AQUA_SCALE=2
-frame|frame|'
+frame|frame|
+drawlist|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl
+drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2'
 
 render() {  # render NAME SCENE EXTRA OUT
+  # EXTRA is split on spaces HERE, not by the caller's IFS — the scene loop
+  # sets IFS to a newline, and with it a two-variable EXTRA reached `env` as ONE
+  # word: the menu bar's fake status items were never applied (P11.3 found it).
   # shellcheck disable=SC2086
-  env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" \
+  (IFS=' '; env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" \
       LANG=C.UTF-8 TZ=UTC AQUA_SCENE="$2" AQUA_RENDER_PNG="$4" $3 \
-      "$aqua" > "$work/$1.log" 2>&1 \
+      "$aqua") > "$work/$1.log" 2>&1 \
     || { echo "FAIL: $1 did not render: $(tail -2 "$work/$1.log")"; return 1; }
 }
 
