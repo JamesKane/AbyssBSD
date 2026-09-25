@@ -4,39 +4,47 @@ What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md),
 [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md),
-[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-09-06. **Phases 0–3, 5–8 and 9 are complete.** The Jaguar
-shell runs on FreeBSD, on **our own compositor** (`undertow`), over a Swift
-control plane, session supervisor and hardware bridges; the portals hand out
-descriptors; **one command boots a desktop where an unmodified GTK 3
-application, which has never heard of this desktop, opens a file through the
-Finder**; and since Phase 9 it is a desktop you can *use* — clipboard, drag and
-drop, window management, keybinds, and an Aqua frame around foreign windows.
+Last updated: 2026-09-25. **Phases 0–3, 5–8 and 9 are complete; Phase 4 is in
+flight on metal and Phase 12 is mostly done.** The Jaguar shell runs on FreeBSD,
+on **our own compositor** (`undertow`), over a Swift control plane, session
+supervisor and hardware bridges; the portals hand out descriptors; **one command
+boots a desktop where an unmodified GTK 3 application, which has never heard of
+this desktop, opens a file through the Finder**; and since Phase 9 it is a
+desktop you can *use*: clipboard, drag and drop, window management, keybinds,
+and an Aqua frame around foreign windows.
 **418 unit tests, 35 live modes and 24 live scripts, green on Linux and FreeBSD.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
 on every run, nested twice over, with no hardware and no human.
+**On metal** (an i7-12700KF with an RX 6750 XT, PHASE4 §1.1) **the stick boots,
+`amdgpu` binds, and the Aqua installer is on screen**: PHASE4 §5 steps 1–5 pass.
 
 **Picking this up cold?**
 
-1. **The next step is not code — it is booting the stick.** Everything that can
-   be verified from here has been; **Phase 4 is the only phase left**, it is
-   scoped ([PHASE4.md](PHASE4.md)), and P4.1 and P4.3 are in. There is an image
-   at `../abyss-swift-vm/abyss-live-metal.img` built with `--stay --frames 0`,
-   and **[PHASE4 §5](PHASE4.md) is an ordered checklist** in which each step's
-   failure is a different problem. The one that decides the phase is step 3:
-   whether `amdgpu` binds a Southern Islands FirePro. Nobody has run it yet.
-2. **If the answer came back**, start from what the console said. The passes
-   below step 3 are written without knowing it and should be expected to change.
-3. Read §1 for what exists. It is long; the newest parts are **Phase 5** (the
-   installer, which is how anything reaches that machine) and **Phase 4 so
-   far**. **Read §2.43–§2.48 before writing anything** — six consecutive traps,
-   five of them found by *running* something rather than reading it, and
-   together they are why the last two phases are verified the way they are.
-4. Skim the §2 index for the trap nearest what you're about to touch. **The
+1. **The phase in progress is 10, the menu protocol** — scoped in
+   [PHASE10.md](PHASE10.md), spikes run on both platforms, no pass built yet.
+   It needs no hardware.
+2. **Phase 4 has one open result, and it is a failure: the frame contract does
+   not hold on real hardware.** 58 of 300 frames missed while compositing in
+   12 µs (PHASE4 §5.7). Run mode now reports the margin's four terms separately,
+   and **that breakdown has never been run on the machine** — one
+   `abyss/mk/metal.sh report` on an `--ssh-key` medium tests the written
+   hypothesis. That is the whole diagnostic loop now; nobody photographs a
+   screen any more (PHASE4 §5.8).
+3. **What is settled, so nobody re-asks it.** The Mac Pro is the matrix's second
+   row, not the target; `si_support` is a matrix cell, not a gate. **Installing
+   onto the bring-up machine is deferred** until the desktop is mature (its only
+   disk is the positive control), which retired P4.6's install half and P12.6.
+   `Fathom` (Phase 12) was pulled forward instead and P12.1–P12.5 are in.
+4. Read §1 for what exists. It is long; the newest parts are **Phase 9** and
+   **Phase 4 so far**. **Read §2.43–§2.59 before writing anything** — almost
+   every one of them was found by *running* something rather than reading it,
+   and together they are why the recent phases are verified the way they are.
+5. Skim the §2 index for the trap nearest what you're about to touch. **The
    freshest scars all generalise, and most are about *testing* rather than
    code** — which is the pattern worth carrying into the next pass:
    - **§2.37** — a probe with no positive control measures nothing. A published
@@ -72,10 +80,10 @@ on every run, nested twice over, with no hardware and no human.
    - **§2.42** — name your sockets instead of reading back what something else
      chose, and test readiness by connecting. A discovered address is one that
      changes under you.
-4. Confirm the box still works:
+6. Confirm the box still works:
 
    ```sh
-   sh abyss/tests/run.sh            # build + 315 unit tests + the fast live tests
+   sh abyss/tests/run.sh            # build + 418 unit tests + the fast live tests
    abyss/vm/check.sh                # is the FreeBSD VM up and usable?
    sh abyss/tests/run.sh --vm       # ... and does the guest still build + test?
    ```
@@ -268,12 +276,17 @@ everyone else (PHASE8.md), and the only place in the system that touches D-Bus:
   — and the whole arc runs in the harness, nested twice over: **a blank disk
   becomes a machine running the Jaguar desktop**, as the account the installer
   created.
-- **Phase 4 has begun, and it is the first phase a test cannot finish.**
+- **Phase 4 is on metal, and it is the first phase a test cannot finish.**
   `undertow` chooses its backend (`--backend auto`: DRM on metal, nested inside
-  another compositor, headless by default), and the medium carries the drm stack,
-  the Southern Islands firmware and `seatd` — so there is an image to write to a
-  stick. What that image *does* on a Mac Pro is PHASE4 §5's checklist, and
-  nobody has run it yet.
+  another compositor, headless by default). On the i7-12700KF / RX 6750 XT the
+  stick boots, `amdgpu` binds at 2560x1440 and **the Aqua installer is on
+  screen** (PHASE4 §5.3–§5.6), after three fixes no VM could have found: the
+  dlopened Mesa driver (§2.52), libglvnd's vendor chain (§2.54), and a
+  `--frames` default that made a desktop exit like a bench. `Fathom` (Phase 12)
+  measures the machine and writes the report to the ESP; its first C1 against a
+  real vblank **fails** (PHASE4 §5.7). An `--ssh-key` medium plus
+  `abyss/mk/metal.sh` drives the machine from here. Installing onto it is
+  deferred.
 
 The screenshots in `docs/screenshots/` are the evidence trail; `first-window.png`
 and `system-preferences.png` are the Phase-1 originals, `freebsd-*.png` are the
@@ -2183,7 +2196,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 **What the numbers mean**, because they are three different things and the docs
 once drifted on it: **35 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **18 live scripts** are the
-standalone ones `run.sh` invokes, listed below; **315 unit tests** are
+standalone ones `run.sh` invokes, listed below; **418 unit tests** are
 `swift test`. A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2251,7 +2264,7 @@ order, and a killed Dock restarted by the supervisor (§2.26). Evidence:
 **The full loop.**
 
 ```sh
-abyss/tests/run.sh                 # build + 315 unit tests + smoke render + the
+abyss/tests/run.sh                 # build + 418 unit tests + smoke render + the
                                    # no-compositor live tests (incl. undertow)
 abyss/tests/run.sh --live          # ... and all 35 compositor modes
 abyss/tests/run.sh --vm            # the same, inside the FreeBSD VM
@@ -2282,7 +2295,7 @@ Two other things pay for that number, and both are measured rather than assumed
   because a `.txz` that is not xz is a trap for whoever next reaches for `xz -d`.
 
 
-The 315 unit tests are pure logic — no compositor, no network: toolkit geometry,
+The 418 unit tests are pure logic — no compositor, no network: toolkit geometry,
 the Finder's listing/naming/scroll model, desktop-icon layout, launcher
 resolution, PoolConfig's read/write/watch, the CurrentIPC codec and descriptor
 passing, the supervisor's restart policy and the shape of the session it starts,
@@ -2347,7 +2360,8 @@ machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
 heard of it. **418 unit tests, 35 live modes and 24 live scripts, green on Linux
-and FreeBSD.**
+and FreeBSD.** On metal, the Aqua installer is on screen on the bring-up machine
+and the frame contract does not yet hold there (item 2).
 
 Per-pass detail lives in the phase docs; this section is what to do next, not a
 record of what was done.
@@ -2381,44 +2395,47 @@ the suite has lanes: `run.sh --vm --live` is ~280s, while **`--full` adds the tw
 nested-bhyve install tests (~1000s total) and is the rule for anything touching
 the installer, the medium, the distribution sets or the boot path.**
 
-### 1. Boot the stick. Everything else waits on it.
+### 1. Phase 10 — the menu protocol
 
-There is nothing left that can be verified from this machine. The image is
-`../abyss-swift-vm/abyss-live-metal.img`, built `--stay --frames 0` so it stays
-up and keeps the installer on screen; **[PHASE4 §5](PHASE4.md)** is the ordered
-checklist, and each step's failure is a different problem.
-
-**Step 3 decides the phase**: whether `amdgpu` binds a Southern Islands FirePro
-(`dmesg | grep -i amdgpu`, `ls /dev/dri`). The medium asks for `si_support` in
-both spellings the module registers, and carries the Tahiti and Pitcairn firmware
-— so a failure there is the driver's answer, not a missing piece.
-
-### 2. Then rewrite the passes below it
-
-P4.2 (real input), P4.5 (C1 against a real vblank) and P4.6 (NVMe, Thunderbolt,
-audio, network) are written **without knowing what step 3 says**, and should be
-expected to change. Two things are already known to be waiting:
-
-- **Every C1–C5 number in PHASE6.md is provisional.** They came off a synthetic
-  clock in which a frame presents the instant it is committed;
-  `WLR_OUTPUT_PRESENT_HW_CLOCK` has never once been set in this project's
-  history (§2.48).
-- **The volume and battery status items have reported "absent" since P3.7**, and
-  a real machine is the first one that would give them something to read.
-
-### 2b. After metal, the roadmap resumes at Phase 10 — the menu protocol
-
-Phase 9 is done, so the next unbuilt phase is **10, the menu protocol**
-([PLAN.md](PLAN.md)): the menu bar stops being a picture of a menu bar. It is
-`Before` Phase 15 in the dependency order for a reason — every application built
-without it has to be retrofitted — and Phase 9 left it two things it needs: the
-keybind table already turns a combination into an action (P9.5), and §6.5 records
-that **undo has to be decided in the menu protocol**, before there are
-applications to retrofit.
+Scoped in **[PHASE10.md](PHASE10.md)**; P10.1 is next. The spikes moved work into
+the compositor: under `undertow` a GTK application exports its menus on the bus
+and tells nobody where, so undertow has to speak `gtk_shell1` — the first
+protocol it implements itself. The phase ([PLAN.md](PLAN.md)): the menu bar stops being a picture
+of a menu bar. It is `Before` Phase 15 in the dependency order for a reason —
+every application built without it has to be retrofitted — and it is on Phase
+18's critical path because what it publishes is a **vocabulary**, not a drawing.
+Phase 9 left it two things: the keybind table already turns a combination into
+an action (P9.5), and §6.5 records that **undo has to be decided here**, before
+there are applications to retrofit.
 
 Phase 9 also left one thing open on purpose: **`wlr-data-control`** (PHASE9 §6.7)
 — the protocol a surfaceless clipboard tool needs, in both directions. Nothing
 asks for it yet; `abyssclip` is the thing that would.
+
+### 2. Phase 4's open result: the frame contract fails on metal
+
+Where the metal work stands (PHASE4 §5.3–§5.10): **steps 1–5 of the checklist
+pass** on the i7-12700KF / RX 6750 XT; the install is **deferred** (the machine's
+only disk is the positive control), so P4.6's install half and P12.6 are
+dropped; and `Fathom`'s report comes off the stick's ESP or over ssh.
+
+The one open result is P4.5: **58 of 300 frames missed, compositing in 12 µs
+against a 16.68 ms period**, with the margin pinned at its 8 ms ceiling. PHASE6's
+C1–C5 are therefore known not to transfer, not merely provisional. Run mode now
+reports `margin-wake/cost/commit/safety-us` and `margin-pinned`, and
+**that breakdown has not yet been run on the machine**. The hypothesis written
+down to be wrong: `commitHigh` dominates. If so, the fixes are ordered — `rtprio`
+for the present thread, then the margin ceiling. The loop:
+
+```
+abyss/mk/live-image.sh --ssh-key ~/.ssh/id_ed25519.pub ...   # developer medium
+abyss/mk/metal.sh report                                      # fathom --measure
+```
+
+And a number measured only on one fast machine is measured once (PHASE4 §6.7):
+P4.5 needs a second row — the Mac Pro, or a deliberately constrained run —
+before it is finished. **The volume status item** has a mixer to read at last
+(`pcm0`…`pcm7`), which is what is left of P4.6.
 
 ### 3. Standing smaller items, none blocking
 

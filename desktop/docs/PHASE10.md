@@ -1,0 +1,361 @@
+# Phase 10 — the menu protocol (scope)
+
+The phase that makes the menu bar true. Read [PLAN.md](PLAN.md) for the
+dependency order (this phase is `Before` 15 and a hard edge into 18),
+[PRODUCT.md §5.5](PRODUCT.md) for why what travels is a *vocabulary* rather than
+a menu, [PHASE9.md](PHASE9.md) for the keybind table and §6.5's undo hand-off,
+[PHASE8.md](PHASE8.md) for `abyss-dbus`, and [HANDOFF.md](HANDOFF.md) for the
+traps — §2.39 and §2.40 are this phase's foreign half, and §2.58 is its whole
+shape.
+
+Last updated: 2026-09-25. **Scoped. Four risks were spiked first, on both
+platforms, before any of this was written — and one of them moved work into the
+compositor** (§4.2): a GTK application under `undertow` publishes its menus on
+the bus and **tells nobody where they are**. The only thing that can learn the
+address is the compositor, through a protocol GTK already speaks and we do not.
+**§6.1, §6.3, §6.4 and §6.5 are decided** (2026-09-25), each as recommended.
+
+---
+
+## 1. What this phase is
+
+> The menu bar draws **File, Edit, View, Go, Window, Help** for an application
+> named "Finder" (`MenuBar.defaultMenus`, hard-coded). No process publishes a
+> menu to it. Choosing an item logs its title and does nothing. The Finder's
+> real commands — ⌘C, ⌘X, ⌘V, ⌘D, ⌘O, ⌘⇧N, ⌘⌫ — live in a `switch` inside
+> `FinderWindow.commandKey`, and the menu bar has never heard of it. A GTK
+> application draws its own menubar inside its own window, on a desktop whose
+> whole premise is that it does not.
+
+In Jaguar the global menu bar *is* the WIMP contract: every command an
+application has is discoverable in one place, with a mouse, without memorising
+anything, and it shows the key that does the same thing. **Thesis 2 is
+undelivered until menus travel from applications to the bar** (PRODUCT.md §4.2).
+
+The claim this phase has to make:
+
+> The frontmost application's own commands are in the bar, enabled when they can
+> run and disabled when they cannot, showing their key equivalents; choosing one
+> does exactly what its key does; this is true of the Finder and of an
+> unmodified GTK application; and a program that is not the menu bar can ask any
+> of them *what can you do* and invoke a verb by name.
+
+### What is genuinely different about this phase
+
+**It is the first phase in which `undertow` implements a protocol wlroots does
+not ship.** Every global the compositor has advertised so far came from a
+`wlr_*_create` call (§4.3). This phase needs at least two it must write itself,
+because the only party that knows *which surface belongs to which menu* is the
+compositor.
+
+**And the thing it publishes has two consumers from day one.** The bar is the
+first; Phase 18's agent is the second, and the design points that serve it cost
+nothing now and a second automation surface later (PLAN.md, Phase 10). This
+phase's verify includes a consumer that is not the bar precisely so that the
+vocabulary cannot quietly degrade into a drawing routine.
+
+---
+
+## 2. What we already have vs. what's new
+
+| Need | Have | New in Phase 10 |
+|---|---|---|
+| A definition of a command | **two, unrelated:** the Finder's `commandKey` switch, and `defaultMenus`' strings | one `Command` value — verb, title, key equivalent, argument types, a sentence of description — that both the key handler and the menu are *derived* from |
+| A menu that can say no | `AquaMenu` draws items as strings — **no disabled state, no key equivalents, no separators, no submenus** | all four, because a bar that cannot grey out Paste is lying about the clipboard |
+| A channel from app to bar | `CurrentIPC` — request/response, flat fields, fds (§4.4) | a menu service: query the vocabulary, activate a verb and get a **result**, and be told when it changes |
+| Knowing whose menu to show | `ForeignToplevels` — `app_id` and `activated`, both **self-declared** by the client | the compositor binds a menu address to a **surface** and tells the bar, and only the bar, which one is focused |
+| GTK's menus | GTK **already exports** them — `org.gtk.Menus` + `org.gtk.Actions` (§4.1) | `gtk_shell1` in undertow, so GTK says where, and hides its own menubar; `abyss-dbus` translates |
+| Qt's menus | `libQt6WaylandClient` binds `org_kde_kwin_appmenu_manager` (§4.2) | that global, a `com.canonical.AppMenu.Registrar` name, and a `dbusmenu` translation — **unmeasured** (§4.2) |
+| Undo | Edit ▸ Undo and Redo, **drawn and inert** (PHASE9 §6.5) | the decision, in `Aqua`, and the Finder's file operations undoable through it |
+| The Apple menu | ten items that log their titles | the ones something can already do (Log Out, Force Quit, About, System Preferences) |
+| Contextual menus | the Trash tile's, only (`Dock.swift`) | the desktop, the Finder and every Dock tile, from the same `Command`s |
+
+---
+
+## 3. Ordered passes
+
+The order is the dependency order inside the phase: the definition before the
+things that carry it, our own application end to end before anybody else's, and
+undo after there is a channel for Undo to be enabled through.
+
+**P10.1 — one definition of a command.**
+A `Command` in `Aqua` is a value: a **verb** (`file.duplicate` — stable, never
+localised, what a script says), a **title** (`Duplicate` — what a person reads),
+a **key equivalent** (`⌘D`), **argument types** and **a sentence of description**
+(both for Phase 18; the Finder's verbs mostly take the selection, which is state,
+not an argument), and a **validator** that says whether it can run *now*. A
+`MenuModel` is titles, separators and submenus over `Command`s.
+
+The Finder's `commandKey` switch is deleted and replaced by a lookup in its own
+model: the key equivalent in the table *is* the key the handler answers. **That is
+the whole point of the pass** — a command has one definition and two routes, and
+a test proves it by walking the model and pressing every equivalent. The default
+menu set stops being strings: the Finder's menus are the Finder's model.
+
+`AquaMenu` learns disabled items, key equivalents drawn right-aligned in the
+Jaguar style, separators and submenus. All pure where it can be (the layout that
+feeds paint and hit-test, §2.9).
+
+**P10.2 — the menu service, and the consumer that is not the bar.**
+The wire (`de/menuwire`, a target the way `InstallWire` is, so the bar links it
+without linking an application). Three requests and one push:
+
+- **`describe`** → the whole vocabulary: the menu tree, each verb's title, key,
+  argument types, description and current enablement. *What can you do.*
+- **`activate verb [args]`** → a **result**, not nothing: `ok`, `refused` with a
+  reason (the validator said no between the bar drawing it and the click
+  arriving), or a value (`file.new-folder` answers with the name it chose).
+- **`validate`** → enablement only, cheap enough to ask when a menu opens.
+- **`changed`** → pushed on a held connection when the vocabulary itself changes
+  (a window closed; a document gained Undo). Enablement is *pulled* on open, as
+  Jaguar does it, so a clipboard change does not fan out to every client.
+
+Nesting: `Msg` is flat (§4.4), and a menu is a tree. A submenu travels as a
+packed `Msg` in a `.bytes` field — nesting for free, one parser, and `maxFrame`
+(1 MiB) is three orders of magnitude above a real menu bar.
+
+The Finder serves it. So does a one-screen CLI, **`abyssmenu`**: `abyssmenu
+describe SERVICE` prints the vocabulary; `abyssmenu run SERVICE VERB` invokes one
+and prints the result. That is PLAN.md's non-bar consumer, and it exists in this
+pass — before the bar is wired — so the first client of the vocabulary is
+something that cannot draw it.
+
+**P10.3 — the compositor learns whose menu is whose.**
+Two protocols of our own, in `protocols/`, server-side in undertow (§4.3):
+
+- **`abyss_menu_v1`** — any client: `set_address(wl_surface, service)`. Our
+  applications call it when a window maps. It is our `org_kde_kwin_appmenu`, and
+  it is the same shape on purpose: the menu is bound to a **surface**, by the
+  process that owns the surface, on the connection that proves it.
+- **`abyss_menubar_v1`** — **the bar only**: `focused(kind, address, app_id)`
+  whenever the keyboard focus moves to a toplevel, where `kind` is `abyss`,
+  `gtk` or `dbusmenu`. Ordered on the same connection as the foreign-toplevel
+  events, so the bar never draws one application's menus under another's name.
+
+"The bar only" is decided (§6.1): the global is offered only on undertow's
+privileged socket. A global that tells any client which
+application is focused and where its menus live is a keylogger's index.
+
+**P10.4 — the bar is real.**
+`MenuBar` binds `abyss_menubar_v1`, connects to the focused application's
+service, `describe`s it, and draws *that*. The system menu stays the bar's own;
+everything to its right belongs to the application, with its name bold. Opening
+a menu `validate`s it; choosing an item `activate`s it and logs the **result**,
+not the title. When nothing is focused — the desktop was clicked — the Finder is
+frontmost, as it was in Jaguar, because the desktop *is* the Finder's process.
+
+**P10.5 — undo, decided.**
+Decided (§6.3): an undo stack per **window** in `Aqua`, of named,
+inverse-carrying entries (`Undo Move to Trash`); Edit ▸ Undo and Redo are
+*derived* from the top of the stack — title and enablement — and are ordinary
+`Command`s with verbs `edit.undo`/`edit.redo`, so a script can undo too. A verb
+that mutates either pushes its inverse or declares itself not undoable, in its
+definition, where a reviewer can see it. The Finder's rename, move to Trash, new
+folder, duplicate and paste become undoable.
+
+**P10.6 — GTK's menus in our bar.**
+undertow advertises **`gtk_shell1`** with the `GLOBAL_MENU_BAR` capability (so
+GTK sets `gtk-shell-shows-menubar` and stops drawing its own) and records
+`gtk_surface1.set_dbus_properties` — unique bus name, application object path,
+menubar path, window object path — against the surface. `abyss_menubar_v1`
+reports it as `kind=gtk`. `abyss-dbus` subscribes with `org.gtk.Menus.Start`,
+reads enablement from `org.gtk.Actions.DescribeAll`, activates with
+`org.gtk.Actions.Activate` — and **serves the result as `menuwire`**, so the bar
+speaks one protocol and the translation lives where PLAN.md put it. `app.*`
+actions resolve on the application path, `win.*` on the window path, which only
+`set_dbus_properties` can supply (§4.2).
+
+**P10.7 — Qt's, if the spike says so.**
+`org_kde_kwin_appmenu_manager` in undertow, `abyss-dbus` owning
+`com.canonical.AppMenu.Registrar`, and a `com.canonical.dbusmenu` translation.
+**Gated on its own spike** (§4.2): Qt's side is read out of the library's
+symbols, not run, because this box has no Qt headers. The pass does not start
+until a Qt application has been seen exporting a menu on both platforms.
+
+**P10.8 — the menus the desktop owns.**
+The Apple menu's items that something can already do — **Log Out** (`anchor`),
+**Force Quit…** (the foreign-toplevel list and `close`), **About This
+Computer** (the `Fathom` report, rendered), **System Preferences…** (launch) —
+and the rest *disabled*, not removed and not logging. Contextual menus on the
+desktop, in Finder windows and on every Dock tile, built from the same
+`Command`s the bar shows, so a right-click and the menu bar can never disagree.
+
+---
+
+## 4. The spikes — four, and one of them moved the phase
+
+### 4.1 Does a stock GTK application publish its menus? — **Yes, completely, on both platforms.**
+
+An 80-line `GtkApplication` (`abyss/tests/gtkmenu.c`, dlopen'd like `gtkpick`,
+so still no GTK build dependency) with a File and Edit menu, five `app.*`
+actions, Paste disabled, and `<Primary>q` bound to Quit. Run on a private bus, under the host compositor on
+Linux and under **our own `undertow`** in the FreeBSD guest (GTK 3.24.52 on
+both):
+
+```
+org.gtk.Menus.Start([0,1,2])  →  (0,0,[File ▸ (1,0), Edit ▸ (2,0)])
+                                  (1,0,[New app.new, Open… app.open, Quit app.quit])
+                                  (2,0,[Copy app.copy, Paste app.paste])
+org.gtk.Actions.DescribeAll   →  {'paste': (false, …), 'open': (true, …), …}
+org.gtk.Actions.Activate open →  the application printed "activated=open"
+```
+
+Everything the bar needs is there: the tree, enablement, and activation that
+works from outside the process. **Two things are not:**
+
+- **Key equivalents.** `set_accels_for_action` binds ⌘Q in the application and
+  puts nothing in the exported model — no `accel` attribute. A GTK menu in our
+  bar will show equivalents only where the application wrote them into the
+  model. Stated rather than papered over: the bar draws what it is told.
+- **`win.*` actions** live at `/org/…/window/1`, a path that appears nowhere in
+  the menu model. Only the window can say which number it is.
+
+### 4.2 Can the bar find those menus? — **No. Nothing tells it where they are.**
+
+The same application under `undertow`, with `WAYLAND_DEBUG=1`:
+
+- **undertow advertises no `gtk_shell1`**, so GTK never sends
+  `gtk_surface1.set_dbus_properties` — the one message that carries the bus name
+  and the menu paths — and `gtk-shell-shows-menubar` stays `0`, so the window
+  draws its own menubar as well.
+- **The `app_id` is `gtkmenu`, not `org.abyss.MenuSpike`.** GTK 3 sets the
+  xdg-toplevel app_id from the program name, not the `GApplication` id, so the
+  obvious fallback — derive the bus name from what the foreign-toplevel protocol
+  already reports — **names a bus peer that does not exist.** And it could not
+  find `win.*` even when it guessed right (§4.1).
+
+So the address has to come from the surface, and only the compositor sees
+surfaces: **`gtk_shell1` moves into this phase, in undertow.** The host KWin, for
+comparison, advertises `org_kde_kwin_appmenu_manager` (version 2) — the Qt/KDE
+equivalent, the same idea, and the protocol P10.3's `abyss_menu_v1` is modelled
+on. `libQt6WaylandClient` on this box has the client half compiled in
+(`QtWayland::org_kde_kwin_appmenu_manager::create`), which is why P10.7 is
+plausible — and only plausible, since no Qt application was run (no `qt6-*-devel`
+here, no bindings). That is P10.7's gate.
+
+### 4.3 Can undertow host a protocol of its own? — **Nothing in the tree does yet; nothing stops it.**
+
+All fourteen globals undertow advertises today come from wlroots constructors
+(`Compositor.swift:349–413`, `Seat.swift`, `Decorations.swift`), and
+`generate-protocols.sh` generates only server *headers*, because wlroots links
+its own implementations. A protocol of ours needs the server header **and**
+`private-code` (the interface tables), `wl_global_create` with a bind callback,
+and `wl_resource_set_implementation` with a struct of C function pointers — the
+listener shape of §2.2/§2.3 from the other side, and `@convention(c)` closures
+are how Swift fills it. The trap to expect is the same one: **a NULL slot in an
+implementation struct is a crash the first time a client sends that request**,
+so every request of the bound version gets a handler, even a no-op.
+
+`gtk-shell.xml` is not installed by any package on either platform (GTK compiles
+it in); it is vendored into `protocols/` from GTK's source, LGPL-2.1+, like the
+KDE XML (installed here as `/usr/share/qt6/wayland/protocols/appmenu/appmenu.xml`).
+
+### 4.4 Can `CurrentIPC` carry a menu? — **Yes, with one idiom.**
+
+`Msg` is insertion-ordered flat fields — string, uint64, bool, bytes, fd — and
+`maxFrame` is 1 MiB. A tree does not fit flat fields and does fit a `.bytes`
+field holding a packed `Msg`, recursively; `Msg.unpack` is already the parser.
+The Finder's whole menu set is a few kilobytes at most. `Current.call` is connect–send–
+receive–close, which is right for `describe`/`activate` and wrong for `changed`,
+so the held connection is new — folded into the bar's run loop the way
+`NotifyCenter` folds its server (§2.18), not a thread.
+
+---
+
+## 5. Verification
+
+`abyss/tests/run.sh --vm --live` on both platforms, unit tests for every pure
+function, and **no existing live mode may start depending on a menu service
+being up** — a desktop whose bar cannot reach an application must still draw a
+bar.
+
+**Pure, tested with no compositor:**
+
+- Every key equivalent in the Finder's model reaches the same code as choosing
+  the item — walked over the model, not listed by hand, so a command added later
+  is covered by construction.
+- The wire round-trips a menu tree, including a submenu three deep, an empty
+  menu, and a verb whose argument types are non-trivial.
+- The undo stack: push, undo, redo, a new action clearing redo, and the derived
+  titles (`Undo Move to Trash`, disabled `Undo` on an empty stack).
+- GTK's menu groups → our tree: the `Start` reply above, as a fixture, including
+  `:section` and `:submenu` links.
+
+**Live, asserting on the thing (§2.43, §2.44, §2.46):**
+
+| Script | What it proves |
+|---|---|
+| `live-menus.sh` | a real pointer opens the Finder's File menu in the bar and chooses **New Folder**; the folder exists on disk. Then ⌘⇧N does the same. Then Edit ▸ Undo removes it. **Paste is drawn disabled** with an empty clipboard and enabled after a copy — asserted on the menu's own dumped state, with the app publishing its item rects (§2.46) rather than coordinates in the script |
+| `live-vocabulary.sh` | `abyssmenu describe` lists the Finder's verbs with descriptions; `abyssmenu run … file.new-folder` returns the name it made; a disabled verb returns `refused` **with its reason** rather than succeeding vacuously (§2.37) |
+| `live-menus-gtk.sh` | the GTK fixture's File menu appears in **our** bar (asserted on undertow's `set_dbus_properties` log *and* the bar's dump), **its own menubar is gone** (`gtk-shell-shows-menubar=1`), choosing Open prints `activated=open` in GTK's process, and Paste is disabled because GTK said so — the other end never ours (§2.39) |
+| `live-menus-focus.sh` | two applications; focus moves; the bar's application menu changes with it and never shows one application's menus under the other's name |
+
+**And every one of these must be seen to fail once** — with `set_address` not
+sent, with the bar ignoring `validate`, with GTK's capability not advertised —
+before it is believed. A menu bar is a picture first, so the false pass that
+matters most here is the one where the bar draws the right words from the wrong
+source.
+
+---
+
+## 6. Risks / open decisions
+
+**6.1 Who may learn what is focused — DECIDED: a privileged socket.**
+`abyss_menubar_v1` tells its client which application is frontmost and where its
+menus are. Offered to every client, it is a surveillance global. Options:
+
+- **A second, named undertow socket for privileged clients** —
+  `undertow --privileged-socket NAME`, 0600 in the runtime dir, and a
+  `wl_display_set_global_filter` that admits `abyss_menubar_v1` only to clients
+  that connected there. `anchor` points the bar at it. It is §2.42's rule again
+  (name your sockets) and the inverse of `security-context-v1`.
+- A pid allow-list handed from `anchor` — racy on pid reuse, and it makes the
+  compositor trust a number.
+- Filter on the layer-surface namespace — impossible: a global is bound before
+  any surface exists.
+
+**Decided (2026-09-25): the first.** It also answers the same question for whatever
+comes next that the Dock or the switcher (Phase 13) must see and an application
+must not.
+
+**6.2 Is a CurrentIPC service name a trustworthy address?**
+For the bar, yes: it gets the address from the compositor, bound to the surface
+by the process that owns it. For `abyssmenu` and Phase 18, a script names a
+service directly, and a service name in the runtime dir is whoever bound it
+first. That is the same trust as every other socket in a 0700 directory — the
+user's own processes — and it is **not** the answer for a confined application
+(Phase 17), which must never be able to impersonate another's vocabulary. Written
+down so Phase 17 inherits it as a known edge rather than discovering it.
+
+**6.3 Undo — DECIDED: per window, held rather than owned.**
+Jaguar's answer was per document (`NSUndoManager` on the document, the window
+asks its document). This desktop has no document model yet, and the Finder has
+none at all. **Decided (2026-09-25): per window now, with the stack owned by an object
+the window *holds* rather than *is***, so Phase 15's document-based applications
+move the stack to the document without changing a single `Command`. The Finder's
+operations are file-system operations, and the honest caveat is that their
+inverse can fail (the file was moved again since); an undo that cannot run is
+`refused` with a reason, through the same result path as any verb.
+
+**6.4 Enablement — DECIDED: pulled.**
+Pulled on menu open (§3, P10.2), as Jaguar's `validateMenuItem:` did. Pushed
+would keep the bar exactly current and would wake every application on every
+clipboard change to recompute a menu nobody has open. The cost of pulling is one
+round trip before a menu draws, which is the thing to measure in P10.4 against
+the frame budget — a menu that opens a frame late is a visible regression.
+
+**6.5 GTK's menubar must disappear — and only when ours will show it. DECIDED.**
+Advertising `GLOBAL_MENU_BAR` makes every GTK application hide its menubar. If
+the bar is not running, or `abyss-dbus` is not, those applications have no menus
+at all. The capability should therefore be advertised only when the session has
+a bar that can serve it — `anchor` knows; undertow is told — and `without menubar`
+sessions keep GTK's own. **Decided (2026-09-25).**
+
+**6.6 This phase can quietly become Phase 15.**
+Every pass here would be nicer with a second real application. The scope is the
+protocol and the Finder; where a test needs another application, it is the GTK
+fixture, so no application gets written to make these tests pass (PHASE9 §6.6's
+rule, unchanged).
+
+**6.7 `wlr-data-control` stays open** (PHASE9 §6.7). Nothing in this phase asks
+for it.

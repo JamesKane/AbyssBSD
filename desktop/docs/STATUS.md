@@ -3,8 +3,8 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-09-06. **Phases 0–3, 5–8 and 9 are complete.** The Jaguar desktop
-runs on our own compositor, which holds its frame contract under eleven hostile
+Last updated: 2026-09-25. **Phases 0–3, 5–8 and 9 are complete.** The Jaguar desktop
+runs on our own compositor, which holds its frame contract (headless) under eleven hostile
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
@@ -17,14 +17,13 @@ installer, the medium, the distribution sets or the boot path.
 **a machine with an empty disk boots our medium, the Aqua installer comes up on
 it, and it reboots into the Jaguar desktop as the account that was created** —
 on every run of the harness, nested twice over, with no hardware and no human.
-**Phase 4 — first metal — is the last phase that was on the original roadmap; it
-is scoped, P4.1 and P4.3 are done, and the stick boots. Retargeted 2026-09-05
-from the Mac Pro to an i7-12700KF / RX 6750 XT that already runs FreeBSD 15.0
-(PHASE4 §1.1), which retires the project's biggest risk by evidence and buys a
-positive control**
-([PHASE4.md](PHASE4.md)). **It is no longer the last phase:** [PRODUCT.md](PRODUCT.md)
-argued what a system needs beyond a desktop, and [PLAN.md](PLAN.md) now carries
-that as **Phases 9–18, ordered by dependency**. See [What's next](#whats-next).
+**Phase 4 — first metal — is in flight on an i7-12700KF / RX 6750 XT**
+([PHASE4.md](PHASE4.md), retargeted from the Mac Pro on 2026-09-05, §1.1):
+the stick boots, `amdgpu` binds, and **the Aqua installer is on screen**. Its one
+open result is a failure — **the frame contract does not hold on real hardware**
+(PHASE4 §5.7). **Phase 12 (`Fathom`) was pulled forward** and P12.1–P12.5 are in.
+[PLAN.md](PLAN.md) runs to **Phase 18, ordered by dependency**; **Phase 10, the menu protocol, is
+scoped** ([PHASE10.md](PHASE10.md)). See [What's next](#whats-next).
 
 ## What this is
 
@@ -440,173 +439,41 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3, 5–8 and 9 are complete.** Phase 4 — first metal — is in flight, and
-is the first whose verification needs a machine no test can reach.
+**Phases 0–3, 5–8 and 9 are complete. Phase 4 is in flight on metal; Phase 12 is
+done but for P12.3's Aqua view. The next unbuilt phase is 10.**
 
-> **Phase 9 — the interaction substrate — is COMPLETE**
-> ([PHASE9.md](PHASE9.md), P9.1–P9.7). The desktop is one you can *use*: the
-> clipboard crosses processes, files are dragged onto the Trash and into folders
-> and onto Dock tiles, windows move and resize and zoom and minimise and snap to
-> an edge, a keybind table decides what the desktop hears before the application
-> does, and applications that never heard of this desktop wear its window frame.
->
-> **Five of the seven passes found something already broken rather than merely
-> missing** — HANDOFF §2.55–§2.59, and §5 has the table. The headline is
-> §2.57: **`wl_proxy_destroy` sends no request**, so every window this project
-> had ever closed leaked a mapped, hit-testable surface in the compositor and
-> left a rectangle of dead screen behind it. Nothing could see it from either
-> side, and every close test asked the *client* whether it had closed the window.
->
-> **XWayland is decided: no** (PHASE9 §6.3). Nothing on the roadmap needs it —
-> the browser this project adopts is Wayland-native — so what it would buy is the
-> long tail of ports. The price is stated: an X11-only port will not run here.
-> `live-session.sh` asserts `undertow` names none of wlroots' XWayland symbols,
-> so the decision is enforced rather than remembered.
->
-> **After metal, the roadmap resumes at Phase 10 — the menu protocol.** **After it the
-roadmap continues to Phase 18** ([PLAN.md](PLAN.md) — the interaction substrate,
-the menu protocol, the theme system, `Fathom`, Islands/Shoals/Ebb, preferences
-that write, the application layer, the session, delivery, and confinement), all
-of it ordered so a phase never precedes what it needs. Everything below this box
-is the record of what got built, newest last.
+1. **Phase 10 — the menu protocol** — scoped in [PHASE10.md](PHASE10.md) (P10.1–P10.8); P10.1 is next. The menu bar stops
+   being a picture of a menu bar: applications publish a menu tree over
+   `CurrentIPC`, `abyss-dbus` translates GTK's `org.gtk.Menus` and Qt's
+   `dbusmenu` into the same thing, undo gets decided, and what travels is a
+   *vocabulary* — typed verbs, results, and a "what can you do" query — because
+   Phase 18 consumes it. Needs no hardware.
+2. **P4.5 — the frame contract on metal.** 58 of 300 frames missed while
+   compositing in 12 µs, margin pinned at its 8 ms ceiling (PHASE4 §5.7). Run
+   mode now reports the margin's four terms; that breakdown has not been run on
+   the machine yet. One `abyss/mk/metal.sh report` against an `--ssh-key` medium
+   tests the hypothesis that the display commit dominates.
+3. HANDOFF §5 has the standing smaller items (login window, read-only medium,
+   golden images, save panel, …).
 
-> **Phase 4 is scoped; P4.1 and P4.3 are done — there is a stick to boot**
-> ([PHASE4.md](PHASE4.md)). `undertow` chooses its backend, and the medium
-> carries the drm stack, `seatd`, **two families of GPU firmware** — RDNA 2 for
-> the primary target and Southern Islands for the Mac Pro — and a `loader.conf`
-> that asks `amdgpu` for `si_support` on the row that needs it. The live session
-> picks its backend from what the machine has: `/dev/dri` present means a
-> display, absent means headless, so the harness is untouched and real hardware
-> gets asked for a screen.
->
-> **Retargeted 2026-09-05.** Bring-up is an **i7-12700KF with an RX 6750 XT**
-> (Navi 22, RDNA 2 — `amdgpu` codename `navy_flounder`, read out of the module's
-> own strings rather than remembered). That machine runs **FreeBSD
-> 15.0-RELEASE-p12 with MATE on X11 today**, which does two things: it retires
-> `si_support`/GCN 1.0 — the biggest risk in the project — *by evidence rather
-> than argument*, and it gives the phase a **positive control**. Every layer
-> below ours is demonstrably working there, so a black screen means us
-> (PHASE4 §1.2). The Mac Pro keeps every accommodation P4.0 and P4.3 wrote and
-> becomes the matrix's second row: the same unanswered question now costs one row
-> instead of a phase. **Hazard worth naming: that machine's working install is
-> the control, and the installer wipes disks** (PHASE4 §6.6).
->
-> **Rebuilding the medium for the retarget found two bugs in P4.0's own
-> unexercised path**, exactly where that pass said in writing to look.
-> `makefs` parses `media_descriptor` in **decimal only**, so `0xf8` failed and
-> **the medium had not been buildable since P4.0**; and the assertion that would
-> have caught it could not run — `dd bs=1` on a raw FreeBSD device is "Invalid
-> argument", and sitting inside a command substitution under `set -e` it killed
-> `live-medium.sh` **silently**, with no FAIL line and no clue which check died.
-> Both fixed; the ESP is FAT16 / 0xf8 and `live-medium.sh` is green.
-> **A test that cannot fail out loud is worth less than no test** — this one was
-> an unrunnable check on an unbuildable artifact.
->
-> **The stick booted on the 12700KF (2026-09-05) and the checklist reached step
-> 4 on the first attempt.** Steps 1–3 pass: MSI's UEFI read the FAT16 ESP,
-> multi-user came up, and **`amdgpu` bound the RX 6750 XT** — `id=amdgpudrmfb`
-> at the panel's native `2560x1440x32`, so `navy_flounder` loaded. `igc0` came up
-> too. Then `undertow: could not create a wlroots renderer`.
->
-> **The failure was ours, which is exactly what the retarget bought.** Every layer
-> below us was demonstrably working, so there was one suspect. The cause:
-> **`ldd` is not a closure when something `dlopen`s** — `libEGL` and `libgbm` are
-> dispatch stubs, and the driver is `libgallium` reached through
-> `radeonsi_dri.so` by name, with `libLLVM` behind it. Nothing we build names any
-> of them, so none was on the stick. The build VM cannot reach that path at all:
-> with no `/dev/dri` it takes the pixman software renderer, so GLES2 had never run
-> in this project's history. Fixed by adding the dlopened objects as **roots of
-> the same `ldd` closure** (+170 MB, and `iris`/`swrast` ride along free).
-> HANDOFF §2.52, PHASE4 §5.3.
->
-> **Step 4 is still unproven** — `live-medium.sh` asserts the files are on the
-> stick, which is the half that was wrong, but a renderer cannot be *created*
-> without a render node the VM does not have. Only the machine can close it.
->
-> **Steps 1–5 pass on the 12700KF** (2026-09-05): the stick boots, `amdgpu` binds
-> the RX 6750 XT at 2560x1440, and **the Aqua installer is on screen**. P4.5's
-> first C1 against a real vblank says **58 of 300 frames missed while compositing
-> in 12us** — we do not hold the frame contract on hardware, and PHASE6's numbers
-> are now known not to transfer (PHASE4 §5.7). `docs/reports/` has the matrix's
-> first row, retrieved off the stick's ESP exactly as designed.
->
-> **The loop no longer needs a camera** (§5.8): `live-image.sh --ssh-key PUBKEY`
-> bakes a key in and starts sshd, and `abyss/mk/metal.sh report|log|fetch|ssh`
-> drives the machine from here. **Opt-in only** — root on the medium has an empty
-> password, so a default build runs no sshd and `live-medium.sh` asserts it.
->
-> **Installing is deferred until the desktop is mature** (decided 2026-09-05).
-> That retires Phase 4's install half and most of P4.6, and drops P12.6 — the
-> spoke that *gates* an install — while the report itself stands. It does **not**
-> retire P4.5's result: the frame contract does not hold on hardware, and that
-> needs no install.
->
-> **Phase 9 is the work** ([PHASE9.md](PHASE9.md)) — the interaction substrate,
-> which unblocks five later phases and is the list of things this desktop depicts
-> and does not do. **P9.1 is in**: the compositor answers `request_set_selection`
-> at last, `Surface` has a client-side clipboard, and `abyssclip` exists.
->
-> **The next step is a person: PHASE4 §5**, an ordered bring-up checklist where
-> each step's failure is a different problem. Write the image to a stick and work
-> down it — **steps 0–6 only.**
->
-> **There is no second disk, so the install is deferred and `Fathom` (Phase 12)
-> is pulled to the front** (2026-09-05). The bring-up machine's single disk holds
-> the working FreeBSD install that Phase 4's positive control is made of, so it
-> cannot be spent. That costs less than it sounds: **every question only real
-> hardware can answer is answered without writing a disk** — GPU binding, mode,
-> input, the desktop drawing, and C1–C5 against a real vblank — and the one thing
-> an install would add, "does an installed system boot", the harness already
-> proves nested on every `--vm --live` run. What the medium lacks is a way to
-> *say* what it found, which is what Fathom is. PLAN.md's ordering has the
-> reversal and why (PHASE4 §5.1), and **[PHASE12.md](PHASE12.md) scopes it** —
-> P12.1–P12.6. Its spikes: the build VM answers *no* to every probe (the positive
-> control the phase needs), machine identity is **`kenv` not sysctl** so `Vents`
-> gains one small bridge and `hw.pci.enable_pcie_hp` stops being unconditional,
-> the measurement is **already built** in `undertow bench-metronome` and only
-> needs serialising, and the report goes on the **ESP** because FAT is the one
-> filesystem every desktop OS reads.
->
-> **Checking that the medium was safe to boot found something worse.** Booting is
-> safe — the medium sets no `zfs_enable` and imports nothing. But that is exactly
-> why `DiskInventory` could not see an occupied disk: `diskHoldsRunningRoot`,
-> `diskIsMounted` and `poolNameInUse` all describe the **running** system, and on
-> a medium that is the USB stick. **A disk holding a whole FreeBSD install was
-> offered by the installer as a clean target with no objection.** Fixed with the
-> first Fathom probe in all but name — `zpool import` with no arguments *scans*
-> and imports nothing (verified both ways) — plus a `diskHoldsExistingSystem`
-> refusal that names the pool, and an `eraseExistingData` opt-in so reinstalling
-> is still possible. The GUI dropped the new refusal silently at first
-> (`objection(to:)` was a whitelist with a `default:`); its switch is now
-> exhaustive, so the next one is a compile error. HANDOFF §2.51.
->
-> **Phase 9 — the interaction substrate — is scoped** ([PHASE9.md](PHASE9.md),
-> P9.1–P9.7) and needs no hardware, so it is the work that runs in parallel with
-> a person at a Mac Pro. Its spikes found something worth knowing now: **the
-> clipboard is broken for everyone under `undertow`.** The compositor creates
-> `wlr_data_device_manager` but never answers `request_set_selection`, which
-> wlroots requires, so a copy is discarded whoever makes it — a foreign GTK app
-> included. It has gone unnoticed because no test in this tree has ever copied
-> anything. The server fix is four lines; the client half is the pass
-> (PHASE9 §4.1).
->
-> **The DRM path ships written and unproven** — this dev box holds DRM master in
-> a Wayland session, so it cannot be exercised here. Nested *can* be, and was:
-> a real output, a real mode, and input from an actual mouse.
->
-> **Phase 4 (first metal) is still there and still independent.** It is the
-> real hardware story — a real GPU, `rtprio`, the volume and battery status items
-> reading a real mixer instead of reporting absent. Its biggest single risk used
-> to be `amdgpu` `si_support` for the FirePro D-series; after the retarget that
-> is a matrix cell, and what is left is that one fast machine's C1 numbers are
-> not a contract (PHASE4 §6.7). It is also
-> where Phase 6's C1 measurements should be repeated, because every number in
-> PHASE6.md came off a headless backend with a synthetic clock. **It owns the
-> metal half of Phase 5's verify**, too: installing onto that machine first
-> requires that machine to boot. HANDOFF §5 has both, plus the standing smaller
-> items.
->
-> The rest of this section is the record of what got built, newest last.
+**Where Phase 4 stands, in one paragraph.** Retargeted 2026-09-05 to a machine
+that already runs FreeBSD 15.0 with MATE — which retired `si_support` by evidence
+and gave the phase a positive control (PHASE4 §1.2); the Mac Pro is the matrix's
+second row. PHASE4 §5's checklist steps 1–5 pass, after three fixes no VM could
+find: the Mesa driver is `dlopen`ed so `ldd` never named it (HANDOFF §2.52),
+libglvnd's vendor chain was missing its middle (§2.54), and `--frames` had no
+spelling for "forever" (PHASE4 §5.6). `Fathom` writes its report to the ESP
+(`docs/reports/` has the first row), and `live-image.sh --ssh-key` plus
+`abyss/mk/metal.sh` replace the camera (PHASE4 §5.8; opt-in, since root on the
+medium has an empty password). **Installing onto that machine is deferred** —
+its only disk is the positive control — which dropped P12.6 and P4.6's install
+half; the installer's disk model was rewritten by what the machine actually had
+(PHASE4 §5.9–§5.10, HANDOFF §2.51).
+
+The rest of this section is the record of what got built, newest last. Some of
+its older paragraphs describe plans that have since happened; the list above is
+current.
+
 
 **Phase 5 — the installer — is scoped** ([PHASE5.md](PHASE5.md), passes
 P5.1–P5.5). Four risks were spiked on the target before the plan was written, and
