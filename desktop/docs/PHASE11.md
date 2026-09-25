@@ -688,6 +688,81 @@ reproduces today's icons under the gate. An importer for a small SVG subset is
 a **build-time** tool that turns vector artwork into draw lists. There is no
 SVG renderer in every process (§6.3).
 
+**Done.** What landed:
+
+- **The icons are an icon set in the theme**, `themes/aqua/icons/`:
+  - `prefs.dl`: System Preferences' 26 pane icons;
+  - `finder.dl`: folder, document, application, volume, and a
+    `document.small`;
+  - `dock.dl`: the six app tiles with their emblems, and the Trash, empty and
+    full.
+
+  That is 39 lists. `Icons.draw`, `drawFinderIcon` and the Dock's tile painter
+  are one line each (`Draw.icon`), and `Icons.swift` has no cairo calls left.
+  A bundle's own artwork (`AppIcon`, PNG/ICNS) is untouched: it is already
+  data. The loader reads `icons/` beside `draw/`, into one namespace, as
+  strictly.
+- **Size variants.** `Draw.icon` draws `NAME.small` below `icon.smallBelow`
+  (24 pt), when the set has one. The document's ruled lines are only legible
+  at full size, and a list cannot branch on size (§6.5), so the icon set
+  carries two, as ICNS carries several.
+- **The format grew:**
+  - `rgb()` and `rgba()` in fractions (the Finder's folder is 0.62 0.78 0.94,
+    which no hex byte reproduces);
+  - `arc` as a path segment, and `pi`;
+  - `move`, `rotate` and `scale` (the Dock's gear teeth);
+  - **`shadow COLOUR DX DY BLUR`, the cast shadow** the scope asks for: the
+    glow's cached blurred mask, moved.
+- **`IconParityTests`**: every icon against its painter, **frozen verbatim in
+  `Tests/AquaTests/IconReference.swift`**, at 14, 16, 24, 32 and 48 pt (the
+  Dock's at 32, 48 and 64), at integer and fractional positions, 1× and 2×:
+  **byte-identical on Linux and in the FreeBSD guest**. Seen to fail: one key
+  of the keyboard icon 0.5 → 0.49 fails its 10 cases and nothing else.
+- **`svg2dl`**, the build-time importer (`de/svgimport`, `de/svg2dl`):
+  - `path` with every command (Q, T and A become cubics);
+  - `rect` (rx), `circle`, `ellipse`, `line`, `polyline`, `polygon`;
+  - `g`, translate and scale;
+  - fills, strokes, opacities, and linear gradients in user space or the
+    object's box.
+
+  Coordinates come out as fractions of the rect, so an imported icon draws
+  at any size. **What is outside the subset is refused by name** (`<text>`,
+  evenodd, `rotate()`, an unknown colour), because an icon that imported
+  "mostly" looks right in the file and wrong on the desktop. No process on the
+  desktop parses SVG (§6.3). The sample `abyss/tests/svg/beacon.svg` (original
+  artwork) is committed with its import, and a test holds the importer to
+  reproducing it.
+- **`AQUA_SCENE=icons`**, an icon sheet: every icon of the theme's set, or of
+  any list file, at 16, 32 and 64 pt. Three new goldens, 46 scenes:
+  - `icons` and `icons@2x`: the whole Aqua set in one picture;
+  - `svg-beacon@2x`: the imported sample.
+
+**What it found (and the one pixel change it makes on purpose):**
+
+- **The last kept-path leak is gone, and with it the Sharing folder's
+  outline.** P11.5 held one System Preferences rule back as Swift, because the
+  folder icon ended in `fill_preserve` and the rule outlined its kept path.
+  The icon is a list now, and leaks nothing. So the rule moved too, and
+  **`sysprefs` moved by exactly the 209 pixels P11.5 predicted, at the same
+  place**. It was looked at (the grey outline is gone, nothing else changed)
+  and updated on purpose, on both platforms.
+- **Four more §2.67 cases, kept faithfully with `and`:**
+  - every glossy tile's gloss fills the whole tile;
+  - **the Desktop icon's screen is entirely yellow**, because its sun joined
+    the screen's kept path; the icon sheet shows it plainly;
+  - the microphone's stem stroke outlines its capsule;
+  - the pop-up and scroll cases were P11.4's.
+
+**Verified (short checks only):**
+- the golden gate, **46 scenes**, on Linux and in the FreeBSD guest, every
+  scene pixel-identical but `sysprefs` (on purpose);
+- `swift test` on Linux, 527, green (`IconParityTests`, `SVGImportTests`, the
+  cast shadow); the draw-list, icon, importer, theme, chrome and role suites
+  green in the guest.
+
+**Not run:** `live-medium.sh`, `run.sh --live`, `run.sh --vm --live`,
+`--full`, each over a minute. They are owed with the phase gates.
+
 **P11.9 — Trench: the Plan Neo look, and the test the format can fail.** A
 second theme directory, and **no Swift that knows its name**:
 - **Schemes:** `neon`, `neon-hc` and `daylight`, tokens taken from the study

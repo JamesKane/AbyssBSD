@@ -1,0 +1,166 @@
+# Aqua — the Dock's tiles (PHASE11 P11.8): a rounded tile in the app's hue
+# with a top sheen and a white emblem, and the Trash, empty and full. The rect
+# is the tile's square. Original glyphs, not Apple's artwork.
+
+
+list dock.icon.finder
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #5a86c4 1 #2f5698
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.24 w*0.34+w*0.06 w*0.52 w*0.34 w*0.04
+  fill #ffffff/0.95
+  rect w*0.24 w*0.34 w*0.52*0.42 w*0.10 w*0.03
+  fill #ffffff/0.95
+end
+
+list dock.icon.browser
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #3fb0a6 1 #1d7d78
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  circle w/2 w/2 w*0.26
+  stroke #ffffff/0.95 w*0.05
+  circle w/2 w/2 w*0.26*0.5
+  and ellipse w/2-w*0.26*0.45 w/2-w*0.26 w*0.26*0.45*2 w*0.26*2
+  and path w/2-w*0.26 w/2 w/2+w*0.26 w/2
+  stroke #ffffff/0.95 w*0.05
+end
+
+list dock.icon.mail
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #6fa8e6 1 #3a6fc0
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.24 w*0.34 w*0.52 w*0.32 w*0.03
+  fill #ffffff/0.95
+  path w*0.24+w*0.02 w*0.34+w*0.02 w*0.24+w*0.52/2 w*0.34+w*0.32*0.55 w*0.24+w*0.52-w*0.02 w*0.34+w*0.02
+  stroke rgba(0.3, 0.45, 0.7, 0.9) w*0.045
+end
+
+list dock.icon.music
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #c06fd0 1 #8236a8
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  path w*0.42 w*0.30 w*0.42 w*0.64
+  stroke #ffffff/0.95 w*0.06
+  path w*0.62 w*0.26 w*0.62 w*0.60
+  stroke #ffffff/0.95 w*0.06
+  path w*0.42 w*0.30 w*0.62 w*0.26
+  stroke #ffffff/0.95 w*0.06
+  circle w*0.36 w*0.64 w*0.07
+  fill #ffffff/0.95
+  circle w*0.56 w*0.60 w*0.07
+  fill #ffffff/0.95
+end
+
+list dock.icon.prefs
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #9aa2ad 1 #5c636e
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  push
+  move w/2 w/2
+  rotate 0*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 1*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 2*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 3*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 4*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 5*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 6*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 7*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  circle w/2 w/2 w*0.2
+  fill #ffffff/0.95
+  circle w/2 w/2 w*0.2*0.45
+  fill rgba(0.36, 0.4, 0.45, 1)
+end
+
+list dock.icon.genericApp
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #b8beca 1 #7c8494
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.26 w*0.30 w*0.48 w*0.4 w*0.03
+  fill #ffffff/0.95
+  rect w*0.26 w*0.30 w*0.48 w*0.1
+  fill rgba(0.4, 0.45, 0.55, 0.9)
+end
+
+list dock.icon.trash
+  path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.44 w*0.36 w*0.44 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.5 w*0.36 w*0.5 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.56 w*0.36 w*0.56 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.26 w*0.30 w*0.74 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.42 w*0.30 w*0.44 w*0.24 w*0.56 w*0.24 w*0.58 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+end
+
+list dock.icon.trashFull
+  # crumpled paper heaped above the rim, under the wire mesh
+  circle w*0.4 w*0.3 w*0.09
+  fill rgba(0.94, 0.93, 0.88, 1)
+  circle w*0.56 w*0.28 w*0.1
+  fill rgba(0.94, 0.93, 0.88, 1)
+  circle w*0.48 w*0.22 w*0.07
+  fill rgba(0.94, 0.93, 0.88, 1)
+  path w*0.40 w*0.30 w*0.50 w*0.26
+  and path w*0.52 w*0.32 w*0.60 w*0.27
+  stroke rgba(0.72, 0.71, 0.66, 1) w*0.025
+  path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.44 w*0.36 w*0.44 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.5 w*0.36 w*0.5 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.56 w*0.36 w*0.56 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.26 w*0.30 w*0.74 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.42 w*0.30 w*0.44 w*0.24 w*0.56 w*0.24 w*0.58 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+end

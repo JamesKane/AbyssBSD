@@ -701,6 +701,13 @@ next stroke, whoever's it is.** The draw lists cannot leak (every shape starts
 a new path), which is why converting the rule moved the folder, and why that
 rule waits for the icon to be fixed (P11.8).
 
+**P11.8 closed it.** The icons are draw lists, which leak nothing. The held
+rule moved, and `sysprefs` moved by exactly the 209 pixels predicted, at the
+same place: the folder's accidental outline, gone on purpose. The icon set
+also keeps three more cases faithfully: every glossy tile glossed whole, the
+Desktop icon's screen filled entirely yellow by its "sun", and the
+microphone's capsule outlined by its stem.
+
 ### 2.66 SwiftPM does not recompile across an `@_exported` re-export
 (P11.2. `ThemeTokens` grew by 41 fields, and three targets kept the old size.)
 

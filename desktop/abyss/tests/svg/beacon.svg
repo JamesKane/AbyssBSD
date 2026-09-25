@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An original test icon for svg2dl (PHASE11 P11.8): a lighthouse beacon on a
+     rounded tile. Written to exercise the subset — a gradient in the object's
+     box, arcs, relative commands, a quadratic, a group transform, a polygon,
+     stroke and opacity — not to be pretty. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Beacon</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b4c8c"/>
+      <stop offset="1" stop-color="#0e1a36"/>
+    </linearGradient>
+    <linearGradient id="beam" gradientUnits="userSpaceOnUse" x1="32" y1="18" x2="60" y2="8">
+      <stop offset="0" stop-color="#ffe680" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffe680" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="url(#sky)" stroke="#000" stroke-opacity="0.4" stroke-width="1.5"/>
+  <path d="M32 18 L60 8 L60 28 Z" fill="url(#beam)"/>
+  <g transform="translate(32 0) scale(1.25 1)">
+    <path d="M-5 26 l10 0 l3 28 h-16 z" fill="#e8e8ec"/>
+    <path d="M-5.6 32 h11.2 v4 h-11.2 z M-6.6 42 h13.2 v4 h-13.2 z" fill="#c43c3c"/>
+  </g>
+  <path d="M26 20 a6 6 0 0 1 12 0 v4 h-12 z" fill="#ffd04d" stroke="#8a6d10" stroke-width="1"/>
+  <path d="M8 58 Q20 50 32 56 T56 58" fill="none" stroke="#6fa8e6" stroke-width="2" opacity="0.8"/>
+  <polygon points="30,14 34,14 32,10" fill="white"/>
+  <circle cx="50" cy="48" r="3" fill="rgb(255, 255, 255)" fill-opacity="0.6"/>
+</svg>

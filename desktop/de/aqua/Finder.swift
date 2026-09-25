@@ -373,11 +373,12 @@ private func paintFinderStatusBar(_ cr: OpaquePointer, _ L: FinderLayout,
 // MARK: - Procedural item icons (original glyphs, not Apple artwork)
 
 public func drawFinderIcon(_ cr: OpaquePointer, _ kind: FinderItemKind, _ r: Rect) {
+    // The theme's icon set (themes/aqua/icons/finder.dl, P11.8).
     switch kind {
-    case .folder:      drawFolderIcon(cr, r)
-    case .application: drawAppIcon(cr, r)
-    case .document:    drawDocumentIcon(cr, r)
-    case .disk:        drawDiskIcon(cr, r)
+    case .folder:      Draw.icon("icon.folder", cr, r)
+    case .application: Draw.icon("icon.application", cr, r)
+    case .document:    Draw.icon("icon.document", cr, r)
+    case .disk:        Draw.icon("icon.disk", cr, r)
     }
 }
 
@@ -387,138 +388,6 @@ public func drawFinderIcon(_ cr: OpaquePointer, _ kind: FinderItemKind, _ r: Rec
 public func drawFinderIcon(_ cr: OpaquePointer, _ entry: FinderEntry, _ r: Rect) {
     if let path = entry.iconPath, AppIcon.draw(cr, path: path, r) { return }
     drawFinderIcon(cr, entry.kind, r)
-}
-
-/// The Aqua folder: a steel-blue body with a raised tab on the left, a glassy
-/// top sheen and a soft rim.
-private func drawFolderIcon(_ cr: OpaquePointer, _ r: Rect) {
-    let bodyTop = r.y + r.h * 0.22
-    let body = Rect(r.x + r.w * 0.04, bodyTop, r.w * 0.92, r.h * 0.66)
-    // Back tab.
-    Draw.roundedRect(cr, Rect(body.x, r.y + r.h * 0.10, body.w * 0.44, r.h * 0.22),
-                     radius: r.w * 0.05)
-    Draw.setColor(cr, Color(hex: 0x6f9cd4))
-    cairo_fill(cr)
-    // Front body.
-    Draw.roundedRect(cr, body, radius: r.w * 0.07)
-    let g = cairo_pattern_create_linear(0, body.y, 0, body.y + body.h)
-    cairo_pattern_add_color_stop_rgba(g, 0, 0.62, 0.78, 0.94, 1)
-    cairo_pattern_add_color_stop_rgba(g, 0.5, 0.44, 0.63, 0.86, 1)
-    cairo_pattern_add_color_stop_rgba(g, 1, 0.31, 0.50, 0.76, 1)
-    cairo_set_source(cr, g)
-    cairo_fill(cr)
-    cairo_pattern_destroy(g)
-    // Top sheen.
-    Draw.roundedRect(cr, Rect(body.x + r.w * 0.05, body.y + r.h * 0.04,
-                              body.w - r.w * 0.10, body.h * 0.34),
-                     radius: r.w * 0.05)
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.28)
-    cairo_fill(cr)
-    // Rim.
-    Draw.roundedRect(cr, body, radius: r.w * 0.07)
-    cairo_set_source_rgba(cr, 0.16, 0.28, 0.45, 0.55)
-    cairo_set_line_width(cr, max(0.6, r.w * 0.02))
-    cairo_stroke(cr)
-}
-
-/// A document: a white page with a folded top-right corner and ruled lines.
-private func drawDocumentIcon(_ cr: OpaquePointer, _ r: Rect) {
-    let page = Rect(r.x + r.w * 0.16, r.y + r.h * 0.06, r.w * 0.68, r.h * 0.88)
-    let fold = page.w * 0.32
-    cairo_new_path(cr)
-    cairo_move_to(cr, page.x, page.y)
-    cairo_line_to(cr, page.x + page.w - fold, page.y)
-    cairo_line_to(cr, page.x + page.w, page.y + fold)
-    cairo_line_to(cr, page.x + page.w, page.y + page.h)
-    cairo_line_to(cr, page.x, page.y + page.h)
-    cairo_close_path(cr)
-    let g = cairo_pattern_create_linear(0, page.y, 0, page.y + page.h)
-    cairo_pattern_add_color_stop_rgba(g, 0, 1, 1, 1, 1)
-    cairo_pattern_add_color_stop_rgba(g, 1, 0.90, 0.91, 0.93, 1)
-    cairo_set_source(cr, g)
-    cairo_fill_preserve(cr)
-    cairo_pattern_destroy(g)
-    cairo_set_source_rgba(cr, 0.45, 0.47, 0.52, 0.9)
-    cairo_set_line_width(cr, max(0.6, r.w * 0.02))
-    cairo_stroke(cr)
-    // The folded corner.
-    cairo_new_path(cr)
-    cairo_move_to(cr, page.x + page.w - fold, page.y)
-    cairo_line_to(cr, page.x + page.w, page.y + fold)
-    cairo_line_to(cr, page.x + page.w - fold, page.y + fold)
-    cairo_close_path(cr)
-    cairo_set_source_rgba(cr, 0.78, 0.80, 0.85, 1)
-    cairo_fill_preserve(cr)
-    cairo_set_source_rgba(cr, 0.45, 0.47, 0.52, 0.9)
-    cairo_stroke(cr)
-    // Ruled lines (only legible at full size).
-    guard r.w >= 24 else { return }
-    cairo_set_source_rgba(cr, 0.55, 0.58, 0.64, 0.8)
-    cairo_set_line_width(cr, max(0.6, r.w * 0.018))
-    for k in 0..<4 {
-        let y = page.y + page.h * (0.46 + Double(k) * 0.12)
-        cairo_move_to(cr, page.x + page.w * 0.14, y)
-        cairo_line_to(cr, page.x + page.w * 0.86, y)
-    }
-    cairo_stroke(cr)
-}
-
-/// An application bundle: a blue gel tile with a white "A" — original artwork,
-/// standing in for a bundle's own icon (which we don't read yet).
-private func drawAppIcon(_ cr: OpaquePointer, _ r: Rect) {
-    let tile = Rect(r.x + r.w * 0.08, r.y + r.h * 0.08, r.w * 0.84, r.h * 0.84)
-    Draw.roundedRect(cr, tile, radius: tile.w * 0.22)
-    let g = cairo_pattern_create_linear(0, tile.y, 0, tile.y + tile.h)
-    cairo_pattern_add_color_stop_rgba(g, 0, 0.55, 0.72, 0.95, 1)
-    cairo_pattern_add_color_stop_rgba(g, 1, 0.18, 0.38, 0.74, 1)
-    cairo_set_source(cr, g)
-    cairo_fill(cr)
-    cairo_pattern_destroy(g)
-    Draw.roundedRect(cr, Rect(tile.x + tile.w * 0.06, tile.y + tile.h * 0.06,
-                              tile.w * 0.88, tile.h * 0.40),
-                     radius: tile.w * 0.16)
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.30)
-    cairo_fill(cr)
-    Draw.text(cr, "A", centerX: tile.x + tile.w / 2, centerY: tile.y + tile.h / 2,
-              color: Color(1, 1, 1, 0.95), size: max(7, tile.h * 0.55),
-              style: .bold)
-    Draw.roundedRect(cr, tile, radius: tile.w * 0.22)
-    cairo_set_source_rgba(cr, 0.10, 0.22, 0.45, 0.6)
-    cairo_set_line_width(cr, max(0.6, r.w * 0.02))
-    cairo_stroke(cr)
-}
-
-/// A volume: a grey drive slab with a lighter top face and a status LED.
-private func drawDiskIcon(_ cr: OpaquePointer, _ r: Rect) {
-    let body = Rect(r.x + r.w * 0.06, r.y + r.h * 0.22, r.w * 0.88, r.h * 0.58)
-    Draw.roundedRect(cr, body, radius: r.w * 0.08)
-    let g = cairo_pattern_create_linear(0, body.y, 0, body.y + body.h)
-    cairo_pattern_add_color_stop_rgba(g, 0, 0.90, 0.91, 0.94, 1)
-    cairo_pattern_add_color_stop_rgba(g, 1, 0.63, 0.65, 0.70, 1)
-    cairo_set_source(cr, g)
-    cairo_fill(cr)
-    cairo_pattern_destroy(g)
-    // A brighter top face, so the slab reads as a drive rather than a card.
-    Draw.roundedRect(cr, Rect(body.x + r.w * 0.04, body.y + r.h * 0.04,
-                              body.w - r.w * 0.08, body.h * 0.34),
-                     radius: r.w * 0.05)
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.45)
-    cairo_fill(cr)
-    Draw.roundedRect(cr, body, radius: r.w * 0.08)
-    cairo_set_source_rgba(cr, 0.35, 0.37, 0.42, 0.85)
-    cairo_set_line_width(cr, max(0.6, r.w * 0.02))
-    cairo_stroke(cr)
-    // Front slot + status LED.
-    cairo_new_path(cr)
-    cairo_rectangle(cr, body.x + body.w * 0.14, body.y + body.h * 0.70,
-                    body.w * 0.44, max(1, r.h * 0.045))
-    cairo_set_source_rgba(cr, 0.45, 0.47, 0.52, 0.75)
-    cairo_fill(cr)
-    cairo_new_path(cr)
-    cairo_arc(cr, body.x + body.w * 0.80, body.y + body.h * 0.74, max(1, r.w * 0.045),
-              0, 2 * .pi)
-    cairo_set_source_rgba(cr, 0.35, 0.62, 0.92, 1)
-    cairo_fill(cr)
 }
 
 // MARK: - Type-ahead selection

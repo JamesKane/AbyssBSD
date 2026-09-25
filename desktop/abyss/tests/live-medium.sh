@@ -173,7 +173,7 @@ grep -q "Theme: NO THEME\|Theme: .* REFUSED" "$work/boot.log" \
   && fail "the medium drew with the compiled fallback: $(grep -o 'Theme: .*' "$work/boot.log" | head -1)"
 # Its draw lists too (P11.4): the compiled copy is the same text, so a medium
 # without themes/aqua/draw/ would draw identically.
-grep -qE "Theme: Aqua from /usr/local/share/abyss/themes/aqua/theme.ini, [1-9][0-9]* draw lists from draw/" "$work/boot.log" \
+grep -qE "Theme: Aqua from /usr/local/share/abyss/themes/aqua/theme.ini, [1-9][0-9]* draw lists from draw/ and icons/" "$work/boot.log" \
   || fail "the desktop never said it drew from the medium's theme and its draw lists: $(grep -o 'Theme: .*' "$work/boot.log" | head -1)"
 echo "ok: the medium's desktop drew from its own theme file and draw lists"
 # And said what each type role got (P11.7) — Aqua's families do not ship, so

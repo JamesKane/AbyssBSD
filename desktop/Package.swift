@@ -209,6 +209,17 @@ let package = Package(
             dependencies: ["MenuModel", "CurrentIPC"],
             path: "de/menuwire"
         ),
+        // SVG artwork into draw lists, at build time (PHASE11 P11.8) — so no
+        // process on the desktop parses SVG. A library for the tests, and a tool.
+        .target(
+            name: "SVGImport",
+            path: "de/svgimport"
+        ),
+        .executableTarget(
+            name: "svg2dl",
+            dependencies: ["SVGImport"],
+            path: "de/svg2dl"
+        ),
         // Ask an application what it can do, and have it do it.
         .executableTarget(
             name: "abyssmenu",
@@ -465,7 +476,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AquaTests",
-            dependencies: ["Aqua", "AquaDraw", "PoolConfig"],
+            dependencies: ["Aqua", "AquaDraw", "PoolConfig", "SVGImport"],
             path: "Tests/AquaTests"
         ),
         .testTarget(

@@ -174,16 +174,7 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
         }
         y += Double(rows) * rowH + 6
         if title != "System" {
-            // Still Swift until P11.8, on purpose: the last icon drawn (Sharing's
-            // folder) ends in fill_preserve, and this stroke outlines its kept
-            // path in the separator's colour too (HANDOFF §2.67). A list builds
-            // its own path, so moving this line moves that folder — which is
-            // the icon's leak to fix, when icons become data.
-            Draw.setColor(cr, Theme.separator)
-            cairo_set_line_width(cr, 1)
-            cairo_move_to(cr, margin, y + 0.5)
-            cairo_line_to(cr, w - margin, y + 0.5)
-            cairo_stroke(cr)
+            Draw.paint("rule", cr, Rect(margin, y, w - 2 * margin, 1))
             y += 14
         }
     }
@@ -478,3 +469,51 @@ public func renderDrawListPNG(path: String, listFile: String, scale: Int32 = 1) 
     cairo_surface_flush(cs)
     return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
 }
+
+/// An icon sheet (PHASE11 P11.8): every icon in `listFile`, or — with none —
+/// the theme's own set (`icon.*`, `dock.icon.*`), each at 16, 32 and 64 points
+/// in a row of its own, so the whole set is under the golden gate and can be
+/// looked at in one picture. `Draw.icon`'s size variants apply.
+public func renderIconSheetPNG(path: String, listFile: String?, scale: Int32 = 1) -> Bool {
+    var lists = Theme.lists
+    if let f = listFile {
+        guard let text = ThemeLoader.readFile(f) else { return false }
+        do { lists = try DrawListFile(parsing: text) } catch {
+            let line = "AquaDemo: \(f): \(error)\n"
+            line.withCString { _ = write(2, $0, strlen($0)) }
+            return false
+        }
+    }
+    let names = lists.lists.keys.filter { $0.hasPrefix("icon.") || $0.hasPrefix("dock.icon.") }
+        .filter { !$0.hasSuffix(".small") }.sorted()
+    guard !names.isEmpty else { return false }
+    let perColumn = 20
+    let columns = (names.count + perColumn - 1) / perColumn
+    let rowH = 72.0, colW = 140.0
+    let w = Int32(colW * Double(columns)) + 8, h = Int32(rowH * Double(min(perColumn, names.count))) + 8
+    guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w * scale, h * scale),
+          let cr = cairo_create(cs) else { return false }
+    defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+    cairo_scale(cr, Double(scale), Double(scale))
+    Text.renderScale = scale
+    defer { Text.renderScale = 1 }
+    Draw.setColor(cr, Theme.contentBackground)
+    cairo_paint(cr)
+    for (i, n) in names.enumerated() {
+        let x0 = 4 + colW * Double(i / perColumn), y0 = 4 + rowH * Double(i % perColumn)
+        var x = x0
+        for size in [16.0, 32.0, 64.0] {
+            let r = Rect(x, y0 + (64 - size) / 2, size, size)
+            if listFile == nil {
+                Draw.icon(n, cr, r)
+            } else if let l = lists[r.w < Theme.current.iconSmallBelow && lists[n + ".small"] != nil ? n + ".small" : n] {
+                cairo_new_path(cr)
+                DrawListRunner.run(l, cr, DrawContext(rect: r))
+            }
+            x += size + 6
+        }
+    }
+    cairo_surface_flush(cs)
+    return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
+}
+

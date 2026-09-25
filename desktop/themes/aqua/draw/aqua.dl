@@ -391,3 +391,11 @@ list listview.selection
   rect 0 0 w h
   fill menuHighlight
 end
+
+# A horizontal rule between groups; the rect is its run, one line high. (Held
+# back in P11.5: Sharing's folder icon leaked its path, and this stroke
+# outlined it. The icons are data since P11.8 and leak nothing.)
+list rule
+  path 0 0.5 w 0.5
+  stroke separator 1
+end

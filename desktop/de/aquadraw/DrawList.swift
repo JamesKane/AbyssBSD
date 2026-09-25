@@ -28,7 +28,8 @@
 // `(w-h)/2`, `min(w,h)*0.26`. That is the whole of it: there are no names a
 // list can define, so a list is a formula, never a program (PHASE11 §6.5).
 //
-// **Colours** are a token name, `#rrggbb[/a]`, `$param` (a colour the widget
+// **Colours** are a token name, `#rrggbb[/a]`, `rgb(r, g, b)` / `rgba(r, g, b, a)`
+// in fractions, `$param` (a colour the widget
 // passes — a traffic light's base), any of those with `/a` (alpha replaced),
 // `mix(a, b, t)` (OKLCH, as theme.ini's), or `shift(c, d)` (d added to each of
 // r g b, clamped — Aqua's "a touch darker when pressed"), or `fade(c, $p)`
@@ -47,13 +48,15 @@
 //
 // **Ops:** `fill PAINT`; `stroke PAINT WIDTH [round] [dash=on,off…]`; `bevel W LIGHT SHADE`;
 // `innershadow COLOUR SIZE [EXTENT]`; `glow COLOUR RADIUS [STRENGTH]`;
+// `shadow COLOUR DX DY BLUR` (the shape's cast shadow — an icon's, P11.8);
 // `rules across FROM EVERY PAINT WIDTH` (hairlines across the shape, FROM
 // its top, EVERY apart — a pinstripe); `rules slant FROM EVERY UNTIL PAINT
 // WIDTH` (45° lines rising left to right — a progress bar's candy stripe);
 // `text "…"|$label X Y [left|center|right] [baseline] [bold] [upper]
 // [tracking=N] [size=S] [color=C] [placeholder=C] [ghost="…"] [ghostalpha=A]
 // [role=interface|chrome|readout|mono]`;
-// `push`, `pop`, `clip`.
+// `push`, `pop`, `clip`; `move dx dy`, `rotate radians`, `scale sx sy` (for
+// what follows, until the `pop` of an enclosing `push`). `pi` is an operand.
 //
 // **States:** `when a,b op…` runs the op when the widget has any of those
 // states; `unless a op…` when it has none. The states are normal, hover,
@@ -142,6 +145,7 @@ enum PathSegment: Equatable, Sendable {
     case move(Operand, Operand)
     case line(Operand, Operand)
     case curve(Operand, Operand, Operand, Operand, Operand, Operand)
+    case arc(Operand, Operand, Operand, Operand, Operand)   // cx cy r from to: a line to its start, then the arc
 }
 
 enum TextAlign: Equatable, Sendable { case left, center, right }
@@ -170,9 +174,13 @@ enum Op: Sendable {
     case bevel(Operand, ColorRef, ColorRef)
     case innerShadow(ColorRef, Operand, Operand?)
     case glow(ColorRef, Operand, Double)
+    case shadow(ColorRef, Operand, Operand, Operand)   // colour dx dy blur
     case rules(RuleKind, Operand, Operand, Operand?, Paint, Operand)
     case text(TextOp)
     case push, pop, clip
+    case move(Operand, Operand)      // translate what follows
+    case rotate(Operand)             // radians, clockwise
+    case scale(Operand, Operand)
 }
 
 struct Step: Sendable {
@@ -358,6 +366,7 @@ enum DrawListParser {
             switch name {
             case "w": return .width
             case "h": return .height
+            case "pi": return .number(Double.pi)
             case "min", "max", "textw":
                 guard peek == "(" else { throw fail("\(name) wants (…)") }
                 i += 1
@@ -403,6 +412,14 @@ enum DrawListParser {
                 throw DrawListError(line: line, message: "\(s): want shift(colour, -1…1)")
             }
             return .shift(try color(args[0], line: line), d)
+        }
+        if let args = fn("rgb") ?? fn("rgba") {
+            let f = args.compactMap { Double($0) }
+            guard f.count == args.count, f.count == (s.hasPrefix("rgba(") ? 4 : 3),
+                  f.allSatisfy({ $0 >= 0 && $0 <= 1 }) else {
+                throw DrawListError(line: line, message: "\(s): want rgb(r, g, b) or rgba(r, g, b, a), each 0…1")
+            }
+            return .literal(Color(f[0], f[1], f[2], f.count == 4 ? f[3] : 1))
         }
         if let args = fn("fade") {
             guard args.count == 2, args[1].hasPrefix("$"), args[1].count > 1 else {
@@ -535,10 +552,14 @@ enum DrawListParser {
         case "path":
             let closed = args.last == "close"
             let a = closed ? Array(args.dropLast()) : args
-            let usage = "want: path x y, then x y or curve x1 y1 x2 y2 x y …, [close]"
+            let usage = "want: path x y, then x y, curve x1 y1 x2 y2 x y or arc cx cy r from to …, [close]"
             var segs: [PathSegment] = [], i = 0
             while i < a.count {
-                if a[i] == "curve" {
+                if a[i] == "arc" {
+                    guard i + 6 <= a.count else { throw DrawListError(line: line, message: usage) }
+                    let o = try (1...5).map { try operand(a[i + $0], line: line) }
+                    segs.append(.arc(o[0], o[1], o[2], o[3], o[4])); i += 6
+                } else if a[i] == "curve" {
                     guard !segs.isEmpty, i + 7 <= a.count else {
                         throw DrawListError(line: line, message: usage)
                     }
@@ -550,7 +571,8 @@ enum DrawListParser {
                     segs.append(segs.isEmpty ? .move(x, y) : .line(x, y)); i += 2
                 }
             }
-            guard segs.count >= 2 else { throw DrawListError(line: line, message: usage) }
+            guard segs.count >= 2 || segs.contains(where: { if case .arc = $0 { return true }; return false })
+            else { throw DrawListError(line: line, message: usage) }
             return .shape(.path(segs, closed: closed))
         case "fill":
             let (p, used) = try paint(args[...], line: line)
@@ -586,6 +608,9 @@ enum DrawListParser {
                 strength = s
             }
             return .glow(try color(args[0], line: line), try o(1), strength)
+        case "shadow":
+            guard args.count == 4 else { throw DrawListError(line: line, message: "want: shadow <colour> <dx> <dy> <blur>") }
+            return .shadow(try color(args[0], line: line), try o(1), try o(2), try o(3))
         case "rules":
             guard let kind = args.first, kind == "across" || kind == "slant" else {
                 throw DrawListError(line: line, message: "want: rules across FROM EVERY PAINT WIDTH, or rules slant FROM EVERY UNTIL PAINT WIDTH")
@@ -637,11 +662,20 @@ enum DrawListParser {
                 }
             }
             return .text(t)
+        case "move":
+            guard args.count == 2 else { throw DrawListError(line: line, message: "want: move dx dy") }
+            return .move(try o(0), try o(1))
+        case "rotate":
+            guard args.count == 1 else { throw DrawListError(line: line, message: "want: rotate radians") }
+            return .rotate(try o(0))
+        case "scale":
+            guard args.count == 2 else { throw DrawListError(line: line, message: "want: scale sx sy") }
+            return .scale(try o(0), try o(1))
         case "push": return .push
         case "pop": return .pop
         case "clip": return .clip
         default:
-            throw DrawListError(line: line, message: "\(name) is not an op (rect ellipse circle arc path fill stroke bevel innershadow glow rules text push pop clip)")
+            throw DrawListError(line: line, message: "\(name) is not an op (rect ellipse circle arc path fill stroke bevel innershadow glow shadow rules text push pop clip move rotate scale)")
         }
     }
 }
@@ -719,12 +753,18 @@ public enum DrawListRunner {
             case .glow(let c, let radius, let strength):
                 guard let s = shape else { continue }
                 glow(s, cr, ctx, resolve(c, ctx), eval(radius, ctx), strength)
+            case .shadow(let c, let dx, let dy, let blur):
+                guard let s = shape else { continue }
+                glow(s, cr, ctx, resolve(c, ctx), eval(blur, ctx), 1, dx: eval(dx, ctx), dy: eval(dy, ctx))
             case .rules(let kind, let from, let every, let until, let p, let width):
                 guard let s = shape else { continue }
                 rules(kind, bounds(s, ctx), eval(from, ctx), eval(every, ctx),
                       until.map { eval($0, ctx) }, p, s, eval(width, ctx), cr, ctx)
             case .text(let t):
                 text(t, cr, ctx)
+            case .move(let dx, let dy): cairo_translate(cr, eval(dx, ctx), eval(dy, ctx))
+            case .rotate(let a): cairo_rotate(cr, eval(a, ctx))
+            case .scale(let sx, let sy): cairo_scale(cr, eval(sx, ctx), eval(sy, ctx))
             case .push: cairo_save(cr); depth += 1
             case .pop: if depth > 0 { cairo_restore(cr); depth -= 1 }
             case .clip:
@@ -851,6 +891,8 @@ public enum DrawListRunner {
                 case .curve(let x1, let y1, let x2, let y2, let x, let y):
                     cairo_curve_to(cr, eval(x1, ctx), eval(y1, ctx), eval(x2, ctx), eval(y2, ctx),
                                    eval(x, ctx), eval(y, ctx))
+                case .arc(let cx, let cy, let r, let a0, let a1):
+                    cairo_arc(cr, eval(cx, ctx), eval(cy, ctx), eval(r, ctx), eval(a0, ctx), eval(a1, ctx))
                 }
             }
             if closed { cairo_close_path(cr) }
@@ -874,6 +916,9 @@ public enum DrawListRunner {
                     xs.append(eval(x, ctx)); ys.append(eval(y, ctx))
                 case .curve(let x1, let y1, let x2, let y2, let x, let y):
                     xs += [eval(x1, ctx), eval(x2, ctx), eval(x, ctx)]; ys += [eval(y1, ctx), eval(y2, ctx), eval(y, ctx)]
+                case .arc(let cx, let cy, let r, _, _):
+                    let x = eval(cx, ctx), y = eval(cy, ctx), rr = eval(r, ctx)
+                    xs += [x - rr, x + rr]; ys += [y - rr, y + rr]
                 }
             }
             let x0 = xs.min() ?? 0, y0 = ys.min() ?? 0
@@ -1049,7 +1094,7 @@ public enum DrawListRunner {
     /// **Cached** by shape, size, radius and scale — a title bar's glow is made
     /// on resize, not per frame.
     static func glow(_ s: Shape, _ cr: OpaquePointer, _ ctx: DrawContext, _ c: Color,
-                     _ radius: Double, _ strength: Double) {
+                     _ radius: Double, _ strength: Double, dx: Double = 0, dy: Double = 0) {
         guard radius > 0 else { return }
         let b = bounds(s, ctx)
         let scale = Int32(Text.renderScale)
@@ -1081,7 +1126,8 @@ public enum DrawListRunner {
         let pat = cairo_pattern_create_for_surface(mask)
         var m = cairo_matrix_t()
         cairo_matrix_init_scale(&m, Double(scale), Double(scale))
-        cairo_matrix_translate(&m, pad - b.x, pad - b.y)
+        // A cast shadow (P11.8) is the same blurred mask, moved by (dx, dy).
+        cairo_matrix_translate(&m, pad - b.x - dx, pad - b.y - dy)
         cairo_pattern_set_matrix(pat, &m)
         Draw.setColor(cr, c.with(a: min(1, c.a * strength)))
         cairo_mask(cr, pat)

@@ -398,6 +398,14 @@ list listview.selection
   rect 0 0 w h
   fill menuHighlight
 end
+
+# A horizontal rule between groups; the rect is its run, one line high. (Held
+# back in P11.5: Sharing's folder icon leaked its path, and this stroke
+# outlined it. The icons are data since P11.8 and leak nothing.)
+list rule
+  path 0 0.5 w 0.5
+  stroke separator 1
+end
 # Aqua — the window frame (PHASE11 P11.6). Laid out by `windowChrome` from
 # theme.ini's [chrome] and chrome metrics; these lists are how each part looks.
 # The same lists draw the toolkit's own windows and the frames undertow puts
@@ -792,6 +800,646 @@ end
 list dock.label
   rect 0 0 w h 5
   fill dockLabelBackground
+end
+# Aqua — the Dock's tiles (PHASE11 P11.8): a rounded tile in the app's hue
+# with a top sheen and a white emblem, and the Trash, empty and full. The rect
+# is the tile's square. Original glyphs, not Apple's artwork.
+
+
+list dock.icon.finder
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #5a86c4 1 #2f5698
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.24 w*0.34+w*0.06 w*0.52 w*0.34 w*0.04
+  fill #ffffff/0.95
+  rect w*0.24 w*0.34 w*0.52*0.42 w*0.10 w*0.03
+  fill #ffffff/0.95
+end
+
+list dock.icon.browser
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #3fb0a6 1 #1d7d78
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  circle w/2 w/2 w*0.26
+  stroke #ffffff/0.95 w*0.05
+  circle w/2 w/2 w*0.26*0.5
+  and ellipse w/2-w*0.26*0.45 w/2-w*0.26 w*0.26*0.45*2 w*0.26*2
+  and path w/2-w*0.26 w/2 w/2+w*0.26 w/2
+  stroke #ffffff/0.95 w*0.05
+end
+
+list dock.icon.mail
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #6fa8e6 1 #3a6fc0
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.24 w*0.34 w*0.52 w*0.32 w*0.03
+  fill #ffffff/0.95
+  path w*0.24+w*0.02 w*0.34+w*0.02 w*0.24+w*0.52/2 w*0.34+w*0.32*0.55 w*0.24+w*0.52-w*0.02 w*0.34+w*0.02
+  stroke rgba(0.3, 0.45, 0.7, 0.9) w*0.045
+end
+
+list dock.icon.music
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #c06fd0 1 #8236a8
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  path w*0.42 w*0.30 w*0.42 w*0.64
+  stroke #ffffff/0.95 w*0.06
+  path w*0.62 w*0.26 w*0.62 w*0.60
+  stroke #ffffff/0.95 w*0.06
+  path w*0.42 w*0.30 w*0.62 w*0.26
+  stroke #ffffff/0.95 w*0.06
+  circle w*0.36 w*0.64 w*0.07
+  fill #ffffff/0.95
+  circle w*0.56 w*0.60 w*0.07
+  fill #ffffff/0.95
+end
+
+list dock.icon.prefs
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #9aa2ad 1 #5c636e
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  push
+  move w/2 w/2
+  rotate 0*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 1*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 2*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 3*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 4*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 5*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 6*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  push
+  move w/2 w/2
+  rotate 7*pi/4
+  rect -w*0.04 -w*0.2-w*0.09 w*0.08 w*0.1
+  fill #ffffff/0.95
+  pop
+  circle w/2 w/2 w*0.2
+  fill #ffffff/0.95
+  circle w/2 w/2 w*0.2*0.45
+  fill rgba(0.36, 0.4, 0.45, 1)
+end
+
+list dock.icon.genericApp
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #b8beca 1 #7c8494
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.26 w*0.30 w*0.48 w*0.4 w*0.03
+  fill #ffffff/0.95
+  rect w*0.26 w*0.30 w*0.48 w*0.1
+  fill rgba(0.4, 0.45, 0.55, 0.9)
+end
+
+list dock.icon.trash
+  path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.44 w*0.36 w*0.44 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.5 w*0.36 w*0.5 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.56 w*0.36 w*0.56 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.26 w*0.30 w*0.74 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.42 w*0.30 w*0.44 w*0.24 w*0.56 w*0.24 w*0.58 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+end
+
+list dock.icon.trashFull
+  # crumpled paper heaped above the rim, under the wire mesh
+  circle w*0.4 w*0.3 w*0.09
+  fill rgba(0.94, 0.93, 0.88, 1)
+  circle w*0.56 w*0.28 w*0.1
+  fill rgba(0.94, 0.93, 0.88, 1)
+  circle w*0.48 w*0.22 w*0.07
+  fill rgba(0.94, 0.93, 0.88, 1)
+  path w*0.40 w*0.30 w*0.50 w*0.26
+  and path w*0.52 w*0.32 w*0.60 w*0.27
+  stroke rgba(0.72, 0.71, 0.66, 1) w*0.025
+  path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.44 w*0.36 w*0.44 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.5 w*0.36 w*0.5 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.56 w*0.36 w*0.56 w*0.72
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.26 w*0.30 w*0.74 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+  path w*0.42 w*0.30 w*0.44 w*0.24 w*0.56 w*0.24 w*0.58 w*0.30
+  stroke rgba(0.78, 0.80, 0.85, 1) w*0.05
+end
+# Aqua — the Finder's item icons (PHASE11 P11.8): folder, document,
+# application, volume. The rect is the icon's square. A bundle's own artwork
+# (AppIcon) is drawn instead when it has some; these are the kinds' own.
+#
+# A `.small` variant is drawn below @icon.smallBelow points (24): the
+# document's ruled lines are only legible at full size.
+
+
+list icon.folder
+  rect w*0.04 h*0.10 w*0.92*0.44 h*0.22 w*0.05
+  fill #6f9cd4
+  rect w*0.04 h*0.22 w*0.92 h*0.66 w*0.07
+  fill vertical stops 0 rgb(0.62, 0.78, 0.94) 0.5 rgb(0.44, 0.63, 0.86) 1 rgb(0.31, 0.50, 0.76)
+  rect w*0.04+w*0.05 h*0.22+h*0.04 w*0.92-w*0.10 h*0.66*0.34 w*0.05
+  fill rgba(1, 1, 1, 0.28)
+  rect w*0.04 h*0.22 w*0.92 h*0.66 w*0.07
+  stroke rgba(0.16, 0.28, 0.45, 0.55) max(0.6, w*0.02)
+end
+
+list icon.document
+  path w*0.16 h*0.06 w*0.16+w*0.68-w*0.68*0.32 h*0.06 w*0.16+w*0.68 h*0.06+w*0.68*0.32 w*0.16+w*0.68 h*0.06+h*0.88 w*0.16 h*0.06+h*0.88 close
+  fill vertical stops 0 #ffffff 1 rgb(0.90, 0.91, 0.93)
+  stroke rgba(0.45, 0.47, 0.52, 0.9) max(0.6, w*0.02)
+  path w*0.16+w*0.68-w*0.68*0.32 h*0.06 w*0.16+w*0.68 h*0.06+w*0.68*0.32 w*0.16+w*0.68-w*0.68*0.32 h*0.06+w*0.68*0.32 close
+  fill rgba(0.78, 0.80, 0.85, 1)
+  stroke rgba(0.45, 0.47, 0.52, 0.9) max(0.6, w*0.02)
+  path w*0.16+w*0.68*0.14 h*0.06+h*0.88*(0.46+0*0.12) w*0.16+w*0.68*0.86 h*0.06+h*0.88*(0.46+0*0.12)
+  and path w*0.16+w*0.68*0.14 h*0.06+h*0.88*(0.46+1*0.12) w*0.16+w*0.68*0.86 h*0.06+h*0.88*(0.46+1*0.12)
+  and path w*0.16+w*0.68*0.14 h*0.06+h*0.88*(0.46+2*0.12) w*0.16+w*0.68*0.86 h*0.06+h*0.88*(0.46+2*0.12)
+  and path w*0.16+w*0.68*0.14 h*0.06+h*0.88*(0.46+3*0.12) w*0.16+w*0.68*0.86 h*0.06+h*0.88*(0.46+3*0.12)
+  stroke rgba(0.55, 0.58, 0.64, 0.8) max(0.6, w*0.018)
+end
+
+list icon.document.small
+  path w*0.16 h*0.06 w*0.16+w*0.68-w*0.68*0.32 h*0.06 w*0.16+w*0.68 h*0.06+w*0.68*0.32 w*0.16+w*0.68 h*0.06+h*0.88 w*0.16 h*0.06+h*0.88 close
+  fill vertical stops 0 #ffffff 1 rgb(0.90, 0.91, 0.93)
+  stroke rgba(0.45, 0.47, 0.52, 0.9) max(0.6, w*0.02)
+  path w*0.16+w*0.68-w*0.68*0.32 h*0.06 w*0.16+w*0.68 h*0.06+w*0.68*0.32 w*0.16+w*0.68-w*0.68*0.32 h*0.06+w*0.68*0.32 close
+  fill rgba(0.78, 0.80, 0.85, 1)
+  stroke rgba(0.45, 0.47, 0.52, 0.9) max(0.6, w*0.02)
+end
+
+list icon.application
+  rect w*0.08 h*0.08 w*0.84 h*0.84 w*0.84*0.22
+  fill vertical stops 0 rgb(0.55, 0.72, 0.95) 1 rgb(0.18, 0.38, 0.74)
+  rect w*0.08+w*0.84*0.06 h*0.08+h*0.84*0.06 w*0.84*0.88 h*0.84*0.40 w*0.84*0.16
+  fill rgba(1, 1, 1, 0.30)
+  text "A" w*0.08+w*0.84/2 h*0.08+h*0.84/2 center bold size=max(7, h*0.84*0.55) color=rgba(1, 1, 1, 0.95)
+  rect w*0.08 h*0.08 w*0.84 h*0.84 w*0.84*0.22
+  stroke rgba(0.10, 0.22, 0.45, 0.6) max(0.6, w*0.02)
+end
+
+list icon.disk
+  rect w*0.06 h*0.22 w*0.88 h*0.58 w*0.08
+  fill vertical stops 0 rgb(0.90, 0.91, 0.94) 1 rgb(0.63, 0.65, 0.70)
+  rect w*0.06+w*0.04 h*0.22+h*0.04 w*0.88-w*0.08 h*0.58*0.34 w*0.05
+  fill rgba(1, 1, 1, 0.45)
+  rect w*0.06 h*0.22 w*0.88 h*0.58 w*0.08
+  stroke rgba(0.35, 0.37, 0.42, 0.85) max(0.6, w*0.02)
+  rect w*0.06+w*0.88*0.14 h*0.22+h*0.58*0.70 w*0.88*0.44 max(1, h*0.045)
+  fill rgba(0.45, 0.47, 0.52, 0.75)
+  circle w*0.06+w*0.88*0.80 h*0.22+h*0.58*0.74 max(1, w*0.045)
+  fill rgba(0.35, 0.62, 0.92, 1)
+end
+# Aqua — System Preferences' pane icons (PHASE11 P11.8). Original, stylized
+# glyphs in the Jaguar idiom (glossy tiles, water circles, simple white
+# emblems) — not Apple's artwork. Each is self-contained, so a theme replaces
+# one icon without the rest. The rect is the icon's square.
+#
+# Each list is the Swift painter it replaced, op for op, proved byte-identical
+# (IconParityTests). Where the Swift filled a kept path (HANDOFF §2.67), the
+# list does too, with `and`, and says so.
+
+list icon.showAll
+  rect w*0.18+0*(w-2*(w*0.18))*0.36 h*0.18+0*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+1*(w-2*(w*0.18))*0.36 h*0.18+0*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+2*(w-2*(w*0.18))*0.36 h*0.18+0*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+0*(w-2*(w*0.18))*0.36 h*0.18+1*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+1*(w-2*(w*0.18))*0.36 h*0.18+1*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+2*(w-2*(w*0.18))*0.36 h*0.18+1*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+0*(w-2*(w*0.18))*0.36 h*0.18+2*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+1*(w-2*(w*0.18))*0.36 h*0.18+2*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+  rect w*0.18+2*(w-2*(w*0.18))*0.36 h*0.18+2*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #9aa0a6
+end
+
+list icon.dock
+  rect w*0.18+0*(w-2*(w*0.18))*0.36 h*0.18+0*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+1*(w-2*(w*0.18))*0.36 h*0.18+0*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+2*(w-2*(w*0.18))*0.36 h*0.18+0*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+0*(w-2*(w*0.18))*0.36 h*0.18+1*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+1*(w-2*(w*0.18))*0.36 h*0.18+1*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+2*(w-2*(w*0.18))*0.36 h*0.18+1*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+0*(w-2*(w*0.18))*0.36 h*0.18+2*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+1*(w-2*(w*0.18))*0.36 h*0.18+2*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+  rect w*0.18+2*(w-2*(w*0.18))*0.36 h*0.18+2*(h-2*(h*0.18))*0.36 (w-2*(w*0.18))*0.26 (h-2*(h*0.18))*0.26 1.5
+  fill #4e8df0
+end
+
+list icon.displays
+  rect w*0.1 h*0.1 (w-2*(w*0.1)) (h-2*(h*0.1))*0.72 3
+  fill vertical stops 0 #bfd6f5 1 #3f74c9
+  rect w*0.1 h*0.1 (w-2*(w*0.1)) (h-2*(h*0.1))*0.72 3
+  stroke rgba(0.9, 0.9, 0.95, 0.9) 1.5
+  rect w*0.1+(w-2*(w*0.1))/2-(w-2*(w*0.1))*0.06 h*0.1+(h-2*(h*0.1))*0.72 (w-2*(w*0.1))*0.12 (h-2*(h*0.1))*0.16
+  fill #c7ccd2
+  rect w*0.1+(w-2*(w*0.1))/2-(w-2*(w*0.1))*0.22 h*0.1+(h-2*(h*0.1))*0.9 (w-2*(w*0.1))*0.44 (h-2*(h*0.1))*0.1
+  fill #c7ccd2
+end
+
+list icon.desktop
+  rect w*0.1 h*0.1 (w-2*(w*0.1)) (h-2*(h*0.1))*0.72 3
+  fill vertical stops 0 #bfd6f5 1 #3f74c9
+  # the sun is added to the screen's kept path, so the whole screen fills yellow (§2.67)
+  and path w*0.1+(w-2*(w*0.1))-3 h*0.1 arc w*0.1+(w-2*(w*0.1))*0.3 h*0.1+(h-2*(h*0.1))*0.72*0.35 (w-2*(w*0.1))*0.1 0 2*pi
+  fill #ffd34d
+  path w*0.1 h*0.1+(h-2*(h*0.1))*0.72 w*0.1+(w-2*(w*0.1))*0.5 h*0.1+(h-2*(h*0.1))*0.72*0.5 w*0.1+(w-2*(w*0.1)) h*0.1+(h-2*(h*0.1))*0.72 close
+  fill #2e7d32
+  rect w*0.1 h*0.1 (w-2*(w*0.1)) (h-2*(h*0.1))*0.72 3
+  stroke rgba(0.9, 0.9, 0.95, 0.9) 1.5
+  rect w*0.1+(w-2*(w*0.1))/2-(w-2*(w*0.1))*0.06 h*0.1+(h-2*(h*0.1))*0.72 (w-2*(w*0.1))*0.12 (h-2*(h*0.1))*0.16
+  fill #c7ccd2
+  rect w*0.1+(w-2*(w*0.1))/2-(w-2*(w*0.1))*0.22 h*0.1+(h-2*(h*0.1))*0.9 (w-2*(w*0.1))*0.44 (h-2*(h*0.1))*0.1
+  fill #c7ccd2
+end
+
+list icon.sound
+  path w*0.14 h*0.14+(h-2*(h*0.14))*0.35 w*0.14+(w-2*(w*0.14))*0.32 h*0.14+(h-2*(h*0.14))*0.35 w*0.14+(w-2*(w*0.14))*0.6 h*0.14+(h-2*(h*0.14))*0.1 w*0.14+(w-2*(w*0.14))*0.6 h*0.14+(h-2*(h*0.14))*0.9 w*0.14+(w-2*(w*0.14))*0.32 h*0.14+(h-2*(h*0.14))*0.65 w*0.14 h*0.14+(h-2*(h*0.14))*0.65 close
+  fill #8c9298
+  arc w*0.14+(w-2*(w*0.14))*0.62 h*0.14+(h-2*(h*0.14))/2 (w-2*(w*0.14))*(0.12*1+0.16) -0.6 0.6
+  stroke rgba(0.27, 0.55, 0.9, 0.9) 2
+  arc w*0.14+(w-2*(w*0.14))*0.62 h*0.14+(h-2*(h*0.14))/2 (w-2*(w*0.14))*(0.12*2+0.16) -0.6 0.6
+  stroke rgba(0.27, 0.55, 0.9, 0.9) 2
+end
+
+list icon.network
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#2f6fd0, 0.3) 1 shift(#2f6fd0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-1
+  clip
+  arc w*0.08+(w-2*(w*0.08))/2+-1*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  arc w*0.08+(w-2*(w*0.08))/2+0*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  arc w*0.08+(w-2*(w*0.08))/2+1*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+-1*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+-1*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+0*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+0*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+1*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+1*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  pop
+end
+
+list icon.international
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#2f6fd0, 0.3) 1 shift(#2f6fd0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-1
+  clip
+  arc w*0.08+(w-2*(w*0.08))/2+-1*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  arc w*0.08+(w-2*(w*0.08))/2+0*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  arc w*0.08+(w-2*(w*0.08))/2+1*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+-1*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+-1*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+0*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+0*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+1*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+1*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  pop
+end
+
+list icon.internetIcon
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#2f6fd0, 0.3) 1 shift(#2f6fd0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-1
+  clip
+  arc w*0.08+(w-2*(w*0.08))/2+-1*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  arc w*0.08+(w-2*(w*0.08))/2+0*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  arc w*0.08+(w-2*(w*0.08))/2+1*(w-2*(w*0.08))/2*0.6 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2 -pi/2 pi/2
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+-1*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+-1*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+0*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+0*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  path w*0.08+(w-2*(w*0.08))/2-(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+1*(w-2*(w*0.08))/2*0.5 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2+1*(w-2*(w*0.08))/2*0.5
+  stroke #ffffff/0.6 1
+  pop
+end
+
+list icon.startupDisk
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) (w-2*(w*0.08))*0.22
+  fill vertical stops 0 #eaecee 1 #b9bdc2
+  # the gloss fills the whole tile: its capsule joins the kept path (HANDOFF §2.67)
+  and rect w*0.08+1 h*0.08+1 (w-2*(w*0.08))-2 (h-2*(h*0.08))*0.42 ((w-2*(w*0.08))-2)*0.22
+  fill linear 0 h*0.08+1 0 h*0.08+1+(h-2*(h*0.08))*0.42 stops 0 #ffffff/0.7 1 #ffffff/0.05
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) (w-2*(w*0.08))*0.22
+  stroke #000000/0.22 1
+  circle w*0.22+(w-2*(w*0.22))*0.7 h*0.22+(h-2*(h*0.22))*0.6 (w-2*(w*0.22))*0.08
+  fill #6b7176
+end
+
+list icon.general
+  path w*0.18 h*0.18 w*0.18+(w-2*(w*0.18))-(w-2*(w*0.18))*0.3 h*0.18 w*0.18+(w-2*(w*0.18)) h*0.18+(w-2*(w*0.18))*0.3 w*0.18+(w-2*(w*0.18)) h*0.18+(h-2*(h*0.18)) w*0.18 h*0.18+(h-2*(h*0.18)) close
+  fill #ffffff
+  stroke #000000/0.35 1
+end
+
+list icon.loginItems
+  path w*0.18 h*0.18 w*0.18+(w-2*(w*0.18))-(w-2*(w*0.18))*0.3 h*0.18 w*0.18+(w-2*(w*0.18)) h*0.18+(w-2*(w*0.18))*0.3 w*0.18+(w-2*(w*0.18)) h*0.18+(h-2*(h*0.18)) w*0.18 h*0.18+(h-2*(h*0.18)) close
+  fill #ffffff
+  stroke #000000/0.35 1
+  path w*0.18+(w-2*(w*0.18))*0.18 h*0.18+(h-2*(h*0.18))*(0.45+0.16*0) w*0.18+(w-2*(w*0.18))*0.82 h*0.18+(h-2*(h*0.18))*(0.45+0.16*0)
+  stroke rgba(0.3, 0.5, 0.85, 0.8) 1.5
+  path w*0.18+(w-2*(w*0.18))*0.18 h*0.18+(h-2*(h*0.18))*(0.45+0.16*1) w*0.18+(w-2*(w*0.18))*0.82 h*0.18+(h-2*(h*0.18))*(0.45+0.16*1)
+  stroke rgba(0.3, 0.5, 0.85, 0.8) 1.5
+  path w*0.18+(w-2*(w*0.18))*0.18 h*0.18+(h-2*(h*0.18))*(0.45+0.16*2) w*0.18+(w-2*(w*0.18))*0.82 h*0.18+(h-2*(h*0.18))*(0.45+0.16*2)
+  stroke rgba(0.3, 0.5, 0.85, 0.8) 1.5
+end
+
+list icon.myAccount
+  circle w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.3 (w-2*(w*0.2))*0.22
+  fill #5b6168
+  path w*0.2+(w-2*(w*0.2))*0.1 h*0.2+(h-2*(h*0.2)) arc w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.95 (w-2*(w*0.2))*0.4 pi 2*pi close
+  fill #5b6168
+end
+
+list icon.universalAccess
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#2f6fd0, 0.3) 1 shift(#2f6fd0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  circle w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.3 (w-2*(w*0.2))*0.22
+  fill #ffffff
+  path w*0.2+(w-2*(w*0.2))*0.1 h*0.2+(h-2*(h*0.2)) arc w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.95 (w-2*(w*0.2))*0.4 pi 2*pi close
+  fill #ffffff
+end
+
+list icon.accounts
+  circle -w*0.12+w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.3 (w-2*(w*0.2))*0.22
+  fill #5b6168
+  path -w*0.12+w*0.2+(w-2*(w*0.2))*0.1 h*0.2+(h-2*(h*0.2)) arc -w*0.12+w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.95 (w-2*(w*0.2))*0.4 pi 2*pi close
+  fill #5b6168
+  circle w*0.16+w*0.9*0.2+(w*0.9-2*(w*0.9*0.2))/2 h*0.05+h*0.95*0.2+(h*0.95-2*(h*0.95*0.2))*0.3 (w*0.9-2*(w*0.9*0.2))*0.22
+  fill #5b6168
+  path w*0.16+w*0.9*0.2+(w*0.9-2*(w*0.9*0.2))*0.1 h*0.05+h*0.95*0.2+(h*0.95-2*(h*0.95*0.2)) arc w*0.16+w*0.9*0.2+(w*0.9-2*(w*0.9*0.2))/2 h*0.05+h*0.95*0.2+(h*0.95-2*(h*0.95*0.2))*0.95 (w*0.9-2*(w*0.9*0.2))*0.4 pi 2*pi close
+  fill #5b6168
+end
+
+list icon.screenEffects
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#2aa8a0, 0.3) 1 shift(#2aa8a0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  arc w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))*0.22 0 1.6*pi
+  stroke #ffffff/0.85 2
+  arc w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))*0.34 pi 2.6*pi
+  stroke #ffffff/0.85 2
+end
+
+list icon.cdsDvds
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#c8ccd0, 0.3) 1 shift(#c8ccd0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))*0.12
+  fill #ffffff/0.9
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))*0.32
+  stroke rgba(0.4, 0.55, 0.85, 0.5) 4
+end
+
+list icon.colorSync
+  path w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 arc w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2 0/6*2*pi 1/6*2*pi close
+  fill #e53935
+  path w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 arc w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2 1/6*2*pi 2/6*2*pi close
+  fill #fb8c00
+  path w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 arc w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2 2/6*2*pi 3/6*2*pi close
+  fill #fdd835
+  path w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 arc w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2 3/6*2*pi 4/6*2*pi close
+  fill #43a047
+  path w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 arc w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2 4/6*2*pi 5/6*2*pi close
+  fill #1e88e5
+  path w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 arc w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2 5/6*2*pi 6/6*2*pi close
+  fill #8e24aa
+  circle w*0.1+(w-2*(w*0.1))/2 h*0.1+(h-2*(h*0.1))/2 (w-2*(w*0.1))/2*0.3
+  fill #ffffff/0.9
+end
+
+list icon.energySaver
+  circle w*0.2+(w-2*(w*0.2))/2 h*0.2+(h-2*(h*0.2))*0.4 (w-2*(w*0.2))*0.4
+  fill #ffe14d
+  stroke rgba(0.6, 0.5, 0, 0.5) 1
+  rect w*0.2+(w-2*(w*0.2))*0.36 h*0.2+(h-2*(h*0.2))*0.72 (w-2*(w*0.2))*0.28 (h-2*(h*0.2))*0.2
+  fill #9a9a9a
+end
+
+list icon.keyboard
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) (w-2*(w*0.08))*0.22
+  fill vertical stops 0 #f2f3f4 1 #c3c7cb
+  # the gloss fills the whole tile: its capsule joins the kept path (HANDOFF §2.67)
+  and rect w*0.08+1 h*0.08+1 (w-2*(w*0.08))-2 (h-2*(h*0.08))*0.42 ((w-2*(w*0.08))-2)*0.22
+  fill linear 0 h*0.08+1 0 h*0.08+1+(h-2*(h*0.08))*0.42 stops 0 #ffffff/0.7 1 #ffffff/0.05
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) (w-2*(w*0.08))*0.22
+  stroke #000000/0.22 1
+  rect w*0.22+0*(w-2*(w*0.22))*0.2 h*0.22+0*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+1*(w-2*(w*0.22))*0.2 h*0.22+0*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+2*(w-2*(w*0.22))*0.2 h*0.22+0*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+3*(w-2*(w*0.22))*0.2 h*0.22+0*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+4*(w-2*(w*0.22))*0.2 h*0.22+0*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+0*(w-2*(w*0.22))*0.2 h*0.22+1*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+1*(w-2*(w*0.22))*0.2 h*0.22+1*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+2*(w-2*(w*0.22))*0.2 h*0.22+1*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+3*(w-2*(w*0.22))*0.2 h*0.22+1*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+4*(w-2*(w*0.22))*0.2 h*0.22+1*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+0*(w-2*(w*0.22))*0.2 h*0.22+2*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+1*(w-2*(w*0.22))*0.2 h*0.22+2*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+2*(w-2*(w*0.22))*0.2 h*0.22+2*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+3*(w-2*(w*0.22))*0.2 h*0.22+2*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+  rect w*0.22+4*(w-2*(w*0.22))*0.2 h*0.22+2*(h-2*(h*0.22))*0.34 (w-2*(w*0.22))*0.15 (h-2*(h*0.22))*0.22
+  fill #000000/0.5
+end
+
+list icon.mouse
+  rect w*0.26 h*0.26 (w-2*(w*0.26)) (h-2*(h*0.26)) (w-2*(w*0.26))/2
+  fill vertical stops 0 #ffffff 1 #cfd3d7
+  stroke #000000/0.3 1
+  path w*0.26+(w-2*(w*0.26))/2 h*0.26+2 w*0.26+(w-2*(w*0.26))/2 h*0.26+(h-2*(h*0.26))*0.4
+  stroke #000000/0.3 1
+end
+
+list icon.sharing
+  path w*0.16 h*0.16+(h-2*(h*0.16))*0.2 w*0.16+(w-2*(w*0.16))*0.4 h*0.16+(h-2*(h*0.16))*0.2 w*0.16+(w-2*(w*0.16))*0.5 h*0.16+(h-2*(h*0.16))*0.34 w*0.16+(w-2*(w*0.16)) h*0.16+(h-2*(h*0.16))*0.34 w*0.16+(w-2*(w*0.16)) h*0.16+(h-2*(h*0.16))*0.85 w*0.16 h*0.16+(h-2*(h*0.16))*0.85 close
+  fill linear 0 h*0.16 0 h*0.16+(h-2*(h*0.16)) stops 0 #9cc6f4 1 #4f86d6
+end
+
+list icon.dateTime
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#f3f4f5, 0.3) 1 shift(#f3f4f5, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  path w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(h-2*(h*0.08))*0.3
+  stroke #000000/0.7 1.6
+  path w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))*0.22 h*0.08+(h-2*(h*0.08))/2
+  stroke #000000/0.7 1.6
+end
+
+list icon.softwareUpdate
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#2f6fd0, 0.3) 1 shift(#2f6fd0, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  arc w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))*0.26 -0.4*pi 1.1*pi
+  stroke #ffffff/0.95 2.4
+  path w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))*0.26 h*0.08+(h-2*(h*0.08))/2-(h-2*(h*0.08))*0.02 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))*0.16 h*0.08+(h-2*(h*0.08))/2-(h-2*(h*0.08))*0.16 w*0.08+(w-2*(w*0.08))/2+(w-2*(w*0.08))*0.36 h*0.08+(h-2*(h*0.08))/2-(h-2*(h*0.08))*0.12 close
+  fill #ffffff/0.95
+end
+
+list icon.speech
+  rect w*0.3 h*0.3 (w-2*(w*0.3)) (h-2*(h*0.3))*0.6 (w-2*(w*0.3))/2
+  fill vertical stops 0 #d9dde1 1 #8a9097
+  # the stem is stroked with the capsule's kept outline (§2.67)
+  and path w*0.3+(w-2*(w*0.3))/2 h*0.3+(h-2*(h*0.3))*0.6 w*0.3+(w-2*(w*0.3))/2 h*0.3+(h-2*(h*0.3))
+  stroke rgba(0.4, 0.45, 0.5, 1) 2
+  path w*0.3 h*0.3+(h-2*(h*0.3)) w*0.3+(w-2*(w*0.3)) h*0.3+(h-2*(h*0.3))
+  stroke rgba(0.4, 0.45, 0.5, 1) 2
+end
+
+list icon.quicktime
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2
+  fill linear 0 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2 0 h*0.08+(h-2*(h*0.08))/2+(w-2*(w*0.08))/2 stops 0 shift(#3b7fea, 0.3) 1 shift(#3b7fea, -0.12)
+  stroke #000000/0.25 1
+  push
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2 (w-2*(w*0.08))/2-0.5
+  clip
+  circle w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.2 (w-2*(w*0.08))/2*0.8
+  fill radial w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.5 0 w*0.08+(w-2*(w*0.08))/2 h*0.08+(h-2*(h*0.08))/2-(w-2*(w*0.08))/2*0.4 (w-2*(w*0.08))/2 stops 0 #ffffff/0.6 1 #ffffff/0
+  pop
+  text "Q" w/2 h/2 center size=h*0.5 color=#ffffff
+end
+
+list icon.classic
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) (w-2*(w*0.08))*0.22
+  fill vertical stops 0 shift(#e6932a, 0.2) 1 shift(#e6932a, -0.15)
+  # the gloss fills the whole tile: its capsule joins the kept path (HANDOFF §2.67)
+  and rect w*0.08+1 h*0.08+1 (w-2*(w*0.08))-2 (h-2*(h*0.08))*0.42 ((w-2*(w*0.08))-2)*0.22
+  fill linear 0 h*0.08+1 0 h*0.08+1+(h-2*(h*0.08))*0.42 stops 0 #ffffff/0.7 1 #ffffff/0.05
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) (w-2*(w*0.08))*0.22
+  stroke #000000/0.22 1
+  text "9" w/2 h/2 center size=h*0.5 color=#ffffff
 end
 """##
 

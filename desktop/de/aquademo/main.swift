@@ -89,6 +89,12 @@ if let out = envString("AQUA_RENDER_PNG") {
         print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
         exit(ok ? 0 : 1)
     }
+    if sceneName == "icons" {
+        // Every icon in a list file ($AQUA_DRAWLIST), or the theme's own set.
+        let ok = renderIconSheetPNG(path: out, listFile: envString("AQUA_DRAWLIST"), scale: max(1, scale))
+        print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
+        exit(ok ? 0 : 1)
+    }
     if sceneName == "menu" || sceneName == "frame" {
         let ok = sceneName == "menu" ? renderMenuPNG(path: out, scale: max(1, scale))
                                      : renderFramePNG(path: out, scale: max(1, scale))

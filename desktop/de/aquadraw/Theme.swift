@@ -73,6 +73,9 @@ public struct ThemeTokens: Sendable, Equatable {
     public var chromePillWidth: Double = 22
     public var chromePillHeight: Double = 13
     public var chromePillInset: Double = 8
+    /// Below this many points an icon draws its `.small` variant when it has
+    /// one (P11.8) — detail that is only legible at full size.
+    public var iconSmallBelow: Double = 24
 
     // Layer 3: the toolkit's layout metrics (P11.5), once enums in de/aqua.
     public var toastWidth: Double = 300
@@ -399,6 +402,7 @@ public struct ThemeTokens: Sendable, Equatable {
         ("chrome.pillWidth", \.chromePillWidth),
         ("chrome.pillHeight", \.chromePillHeight),
         ("chrome.pillInset", \.chromePillInset),
+        ("icon.smallBelow", \.iconSmallBelow),
         ("toast.width", \.toastWidth),
         ("toast.topInset", \.toastTopInset),
         ("toast.rightInset", \.toastRightInset),

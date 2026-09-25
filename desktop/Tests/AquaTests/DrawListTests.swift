@@ -211,6 +211,14 @@ final class DrawListTests: XCTestCase {
         XCTAssertEqual(error("list t\n  path 0 0 1 1\n  stroke #ffffff 1 dash=\nend")?.message, "dash=: want dash=on,off,… in pixels")
     }
 
+    /// A cast shadow (P11.8): the shape's blurred mask, moved — so it lands
+    /// beside the shape, on the side it was cast to, and not on the other.
+    func testACastShadowFallsWhereItIsCast() throws {
+        let px = try render("list t\n  rect 20 20 12 12\n  shadow #000000/0.8 6 6 3\nend", w: 60, h: 60)
+        XCTAssertGreaterThan(px(35, 35).3, 100, "down and right: under the moved square, outside the shape")
+        XCTAssertEqual(px(16, 16).3, 0, "nothing up and left")
+    }
+
     func testTheSampleSheetParses() throws {
         let here = String(#filePath[..<#filePath.lastIndex(of: "/")!])
         let text = try XCTUnwrap(ThemeLoader.readFile(here + "/../../abyss/tests/drawlist-sample.dl"))

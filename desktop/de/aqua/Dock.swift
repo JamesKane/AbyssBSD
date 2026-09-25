@@ -156,145 +156,19 @@ private func drawDockLabel(_ cr: OpaquePointer, _ text: String,
 // MARK: procedural Dock icons (original glyphs, not Apple artwork)
 
 private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
+    // The theme's icon set (themes/aqua/icons/dock.dl, P11.8).
+    let name: String
     switch kind {
-    case .trash:     drawTrash(cr, r, full: false); return
-    case .trashFull: drawTrash(cr, r, full: true); return
-    default: break
+    case .finder: name = "finder"
+    case .browser: name = "browser"
+    case .mail: name = "mail"
+    case .music: name = "music"
+    case .prefs: name = "prefs"
+    case .genericApp: name = "genericApp"
+    case .trash: name = "trash"
+    case .trashFull: name = "trashFull"
     }
-    // A rounded app tile with a per-app hue, a top sheen, and a white emblem.
-    let (top, bot): (Color, Color)
-    switch kind {
-    case .finder:   (top, bot) = (Color(hex: 0x5a86c4), Color(hex: 0x2f5698))
-    case .browser:  (top, bot) = (Color(hex: 0x3fb0a6), Color(hex: 0x1d7d78))
-    case .mail:     (top, bot) = (Color(hex: 0x6fa8e6), Color(hex: 0x3a6fc0))
-    case .music:    (top, bot) = (Color(hex: 0xc06fd0), Color(hex: 0x8236a8))
-    case .prefs:    (top, bot) = (Color(hex: 0x9aa2ad), Color(hex: 0x5c636e))
-    default:        (top, bot) = (Color(hex: 0xb8beca), Color(hex: 0x7c8494))
-    }
-    let radius = r.w * 0.22
-    Draw.roundedRect(cr, r, radius: radius)
-    let g = cairo_pattern_create_linear(0, r.y, 0, r.y + r.h)
-    cairo_pattern_add_color_stop_rgba(g, 0, top.r, top.g, top.b, 1)
-    cairo_pattern_add_color_stop_rgba(g, 1, bot.r, bot.g, bot.b, 1)
-    cairo_set_source(cr, g); cairo_fill(cr); cairo_pattern_destroy(g)
-    // top sheen
-    Draw.roundedRect(cr, Rect(r.x + 2, r.y + 2, r.w - 4, r.h * 0.42), radius: radius * 0.7)
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.22); cairo_fill(cr)
-
-    cairo_save(cr)
-    cairo_translate(cr, r.x, r.y)
-    let s = r.w
-    switch kind {
-    case .finder:   emblemFolder(cr, s)
-    case .browser:  emblemGlobe(cr, s)
-    case .mail:     emblemEnvelope(cr, s)
-    case .music:    emblemNote(cr, s)
-    case .prefs:    emblemGear(cr, s)
-    default:        emblemWindow(cr, s)
-    }
-    cairo_restore(cr)
-}
-
-private func emblemFolder(_ cr: OpaquePointer, _ s: Double) {
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.95)
-    let x = s * 0.24, y = s * 0.34, w = s * 0.52, h = s * 0.34
-    Draw.roundedRect(cr, Rect(x, y + s * 0.06, w, h), radius: s * 0.04); cairo_fill(cr)
-    Draw.roundedRect(cr, Rect(x, y, w * 0.42, s * 0.10), radius: s * 0.03); cairo_fill(cr)
-}
-
-private func emblemGlobe(_ cr: OpaquePointer, _ s: Double) {
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.95)
-    cairo_set_line_width(cr, s * 0.05)
-    let cx = s / 2, cy = s / 2, rad = s * 0.26
-    cairo_new_sub_path(cr); cairo_arc(cr, cx, cy, rad, 0, 2 * .pi); cairo_stroke(cr)
-    cairo_new_sub_path(cr); cairo_arc(cr, cx, cy, rad * 0.5, 0, 2 * .pi)
-    cairo_save(cr); cairo_translate(cr, cx, cy); cairo_scale(cr, 0.45, 1); cairo_translate(cr, -cx, -cy)
-    cairo_new_sub_path(cr); cairo_arc(cr, cx, cy, rad, 0, 2 * .pi); cairo_restore(cr)
-    cairo_move_to(cr, cx - rad, cy); cairo_line_to(cr, cx + rad, cy)
-    cairo_stroke(cr)
-}
-
-private func emblemEnvelope(_ cr: OpaquePointer, _ s: Double) {
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.95)
-    let x = s * 0.24, y = s * 0.34, w = s * 0.52, h = s * 0.32
-    Draw.roundedRect(cr, Rect(x, y, w, h), radius: s * 0.03); cairo_fill(cr)
-    cairo_set_source_rgba(cr, 0.3, 0.45, 0.7, 0.9)
-    cairo_set_line_width(cr, s * 0.045)
-    cairo_move_to(cr, x + s * 0.02, y + s * 0.02)
-    cairo_line_to(cr, x + w / 2, y + h * 0.55)
-    cairo_line_to(cr, x + w - s * 0.02, y + s * 0.02)
-    cairo_stroke(cr)
-}
-
-private func emblemNote(_ cr: OpaquePointer, _ s: Double) {
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.95)
-    cairo_set_line_width(cr, s * 0.06)
-    cairo_move_to(cr, s * 0.42, s * 0.30); cairo_line_to(cr, s * 0.42, s * 0.64); cairo_stroke(cr)
-    cairo_move_to(cr, s * 0.62, s * 0.26); cairo_line_to(cr, s * 0.62, s * 0.60); cairo_stroke(cr)
-    cairo_move_to(cr, s * 0.42, s * 0.30); cairo_line_to(cr, s * 0.62, s * 0.26); cairo_stroke(cr)
-    cairo_new_sub_path(cr); cairo_arc(cr, s * 0.36, s * 0.64, s * 0.07, 0, 2 * .pi); cairo_fill(cr)
-    cairo_new_sub_path(cr); cairo_arc(cr, s * 0.56, s * 0.60, s * 0.07, 0, 2 * .pi); cairo_fill(cr)
-}
-
-private func emblemGear(_ cr: OpaquePointer, _ s: Double) {
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.95)
-    let cx = s / 2, cy = s / 2, rad = s * 0.2
-    for k in 0..<8 {
-        let a = Double(k) * .pi / 4
-        cairo_save(cr); cairo_translate(cr, cx, cy); cairo_rotate(cr, a)
-        cairo_rectangle(cr, -s * 0.04, -rad - s * 0.09, s * 0.08, s * 0.1); cairo_fill(cr)
-        cairo_restore(cr)
-    }
-    cairo_new_sub_path(cr); cairo_arc(cr, cx, cy, rad, 0, 2 * .pi); cairo_fill(cr)
-    cairo_set_source_rgba(cr, 0.36, 0.4, 0.45, 1)
-    cairo_new_sub_path(cr); cairo_arc(cr, cx, cy, rad * 0.45, 0, 2 * .pi); cairo_fill(cr)
-}
-
-private func emblemWindow(_ cr: OpaquePointer, _ s: Double) {
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.95)
-    let x = s * 0.26, y = s * 0.30, w = s * 0.48, h = s * 0.4
-    Draw.roundedRect(cr, Rect(x, y, w, h), radius: s * 0.03); cairo_fill(cr)
-    cairo_set_source_rgba(cr, 0.4, 0.45, 0.55, 0.9)
-    cairo_rectangle(cr, x, y, w, s * 0.1); cairo_fill(cr)
-}
-
-private func drawTrash(_ cr: OpaquePointer, _ r: Rect, full: Bool) {
-    cairo_save(cr)
-    cairo_translate(cr, r.x, r.y)
-    let s = r.w
-    // A full Trash shows crumpled paper heaped above the rim, drawn *before* the
-    // can so the wire mesh reads over it — the same "you can tell at a glance"
-    // cue as 10.2, in our own glyph vocabulary.
-    if full {
-        cairo_set_source_rgba(cr, 0.94, 0.93, 0.88, 1)
-        for (fx, fy, fr) in [(0.40, 0.30, 0.09), (0.56, 0.28, 0.10), (0.48, 0.22, 0.07)] {
-            cairo_new_sub_path(cr)
-            cairo_arc(cr, s * fx, s * fy, s * fr, 0, 2 * .pi)
-            cairo_fill(cr)
-        }
-        cairo_set_source_rgba(cr, 0.72, 0.71, 0.66, 1)
-        cairo_set_line_width(cr, s * 0.025)
-        cairo_move_to(cr, s * 0.40, s * 0.30); cairo_line_to(cr, s * 0.50, s * 0.26)
-        cairo_move_to(cr, s * 0.52, s * 0.32); cairo_line_to(cr, s * 0.60, s * 0.27)
-        cairo_stroke(cr)
-    }
-    cairo_set_source_rgba(cr, 0.78, 0.80, 0.85, 1)
-    cairo_set_line_width(cr, s * 0.05)
-    // can body (trapezoid)
-    cairo_move_to(cr, s * 0.30, s * 0.34)
-    cairo_line_to(cr, s * 0.70, s * 0.34)
-    cairo_line_to(cr, s * 0.64, s * 0.74)
-    cairo_line_to(cr, s * 0.36, s * 0.74)
-    cairo_close_path(cr); cairo_stroke(cr)
-    // vertical mesh lines
-    for fx in [0.44, 0.5, 0.56] {
-        cairo_move_to(cr, s * fx, s * 0.36); cairo_line_to(cr, s * fx, s * 0.72); cairo_stroke(cr)
-    }
-    // lid + handle
-    cairo_move_to(cr, s * 0.26, s * 0.30); cairo_line_to(cr, s * 0.74, s * 0.30); cairo_stroke(cr)
-    cairo_move_to(cr, s * 0.42, s * 0.30); cairo_line_to(cr, s * 0.44, s * 0.24)
-    cairo_line_to(cr, s * 0.56, s * 0.24); cairo_line_to(cr, s * 0.58, s * 0.30); cairo_stroke(cr)
-    cairo_restore(cr)
+    Draw.icon("dock.icon." + name, cr, r)
 }
 
 public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {

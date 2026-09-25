@@ -87,6 +87,9 @@ frame-depth|frame|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes
 window-depth@2x|window|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes AQUA_SCALE=2
 drawlist|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl
 drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2
+icons|icons|
+icons@2x|icons|AQUA_SCALE=2
+svg-beacon@2x|icons|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl AQUA_SCALE=2
 drawlist-roles@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes AQUA_SCALE=2'
 
 render() {  # render NAME SCENE EXTRA OUT
@@ -101,7 +104,7 @@ render() {  # render NAME SCENE EXTRA OUT
 }
 
 # How many lists themes/aqua/draw/ defines — what every scene must say it read.
-lists=$(cat "$root"/themes/aqua/draw/*.dl 2>/dev/null | grep -c '^list ' || true)
+lists=$(cat "$root"/themes/aqua/draw/*.dl "$root"/themes/aqua/icons/*.dl 2>/dev/null | grep -c '^list ' || true)
 [ "$lists" -gt 0 ] || { echo "FAIL: themes/aqua/draw/ has no draw lists"; exit 1; }
 moved=""; missing=""; checked=0
 IFS='
@@ -125,10 +128,10 @@ EOF
   case "$extra" in
     *ABYSS_THEME=*)
       t=$(printf '%s\n' "$extra" | tr ' ' '\n' | sed -n 's/^ABYSS_THEME=//p')
-      grep -q "^Theme: .* from .*abyss/tests/themes/$t/theme.ini, 0 draw lists from draw/" "$work/$name.log" \
+      grep -q "^Theme: .* from .*abyss/tests/themes/$t/theme.ini, 0 draw lists from draw/ and icons/" "$work/$name.log" \
         || { echo "FAIL: $name was not drawn from abyss/tests/themes/$t: $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;
     *)
-      grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini, $lists draw lists from draw/" "$work/$name.log" \
+      grep -q "^Theme: Aqua from .*/themes/aqua/theme.ini, $lists draw lists from draw/ and icons/" "$work/$name.log" \
         || { echo "FAIL: $name was not drawn from themes/aqua/ (theme.ini and $lists lists in draw/): $(grep '^Theme:' "$work/$name.log")"; exit 1; } ;;
   esac
   # A scene must render the same twice, or it cannot be a golden at all.

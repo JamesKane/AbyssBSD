@@ -88,6 +88,17 @@ public enum Draw {
                                                  colors: colors))
     }
 
+    /// Draw the theme's icon `name` filling the square `r` (P11.8): its `.small`
+    /// variant below `icon.smallBelow` points, when the set has one.
+    public static func icon(_ name: String, _ cr: OpaquePointer, _ r: Rect) {
+        let small = name + ".small"
+        let use = r.w < Theme.current.iconSmallBelow && Theme.lists[small] != nil ? small : name
+        guard let list = Theme.lists[use] else { return }
+        // A leading arc must not join a stray point a caller's text left behind.
+        cairo_new_path(cr)
+        DrawListRunner.run(list, cr, DrawContext(rect: r))
+    }
+
     /// Clip to the current theme's shape `name` and leave it set (the caller
     /// saves and restores): what a window's gadgets and title are drawn in.
     public static func clip(_ name: String, _ cr: OpaquePointer, _ r: Rect) {

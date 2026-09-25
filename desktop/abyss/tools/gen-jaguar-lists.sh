@@ -13,7 +13,7 @@ out="$root/de/aquadraw/JaguarLists.swift"
   echo
   echo 'enum JaguarLists {'
   echo '    static let source = ##"""'
-  for f in $(ls "$root"/themes/aqua/draw/*.dl | LC_ALL=C sort); do cat "$f"; done
+  for f in $(cd "$root/themes/aqua" && ls draw/*.dl icons/*.dl | LC_ALL=C sort); do cat "$root/themes/aqua/$f"; done
   echo '"""##'
   echo
   echo '    static let file: DrawListFile = {'

@@ -146,19 +146,20 @@ final class ThemeTests: XCTestCase {
     /// the same Jaguar.
     func testTheCompiledJaguarListsAreTheShippedFile() throws {
         let here = URLlessPath(#filePath)
-        let dir = here + "/../../themes/aqua/draw"
+        let dir = here + "/../../themes/aqua"
         var names: [String] = []
-        if let d = opendir(dir) {
+        for sub in ["draw", "icons"] {
+            guard let d = opendir(dir + "/" + sub) else { continue }
             while let e = readdir(d) {
                 let n = withUnsafeBytes(of: e.pointee.d_name) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
-                if n.hasSuffix(".dl") { names.append(n) }
+                if n.hasSuffix(".dl") { names.append(sub + "/" + n) }
             }
             closedir(d)
         }
         let file = try names.sorted().map { try XCTUnwrap(ThemeLoader.readFile(dir + "/" + $0)) }.joined()
         XCTAssertFalse(names.isEmpty)
         XCTAssertEqual(JaguarLists.source + "\n", file,
-                       "themes/aqua/draw/*.dl changed: run abyss/tools/gen-jaguar-lists.sh")
+                       "themes/aqua/draw or icons changed: run abyss/tools/gen-jaguar-lists.sh")
         XCTAssertGreaterThan(JaguarLists.file.lists.count, 20)
     }
 
@@ -187,7 +188,7 @@ final class ThemeTests: XCTestCase {
         write("c.dl", "list gadget.pill\nend\n")
         XCTAssertThrowsError(try ThemeLoader.loadLists(dir)) { e in
             XCTAssertEqual((e as? ThemeError)?.problems, [
-                "draw/b.dl line 2: frobnicate is not an op (rect ellipse circle arc path fill stroke bevel innershadow glow rules text push pop clip)",
+                "draw/b.dl line 2: frobnicate is not an op (rect ellipse circle arc path fill stroke bevel innershadow glow shadow rules text push pop clip move rotate scale)",
                 "draw/c.dl: list gadget.pill is also in draw/a.dl",
             ])
         }
