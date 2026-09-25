@@ -773,7 +773,10 @@ control rather than as the start of a catalogue.
 
 - **`de/aqua/Theme.swift` — 141 lines of `public static let`.** Colours, metrics,
   two font properties. A token table already; just compile-time and
-  non-overridable. **192 call sites across 14 files.**
+  non-overridable. **192 call sites across 14 files.** *(Re-measured
+  2026-09-25: `Theme` lives in `de/aquadraw`, with 253 call sites across 16
+  files. Around it are 83 hard-coded colours, 710 cairo calls that bypass
+  `Draw`, eight metrics enums, and icons written as Swift — PHASE11 §1.)*
 - **`de/aqua/Drawing.swift` — `Draw`, 26 static functions:** rounded rects and
   their top/bottom variants, gradients, pinstripe, focus ring, traffic lights, gel
   button, text field, checkbox, radio, slider, pop-up, progress bar, scroll
@@ -791,6 +794,13 @@ grammar — we have to notice we already wrote one.
 | **2 — Widget drawing** | *how* a button is painted — gel vs. flat vs. bevelled bitmap | a declarative draw description, interpreted by `Draw` | Yes — §8.3 |
 | **3 — Chrome & layout** | title-bar height, control placement, geometry | same format, plus metrics | Yes, within §8.4 |
 | **4 — Compositor effects** | blur, transparency, shadows, transition animation | `undertow`, **not** the toolkit | Yes, but budgeted — §8.5 |
+| **5 — Shell layout** *(added 2026-09-25)* | how menus are presented (global bar, NeXT docked menu and pop-up at the pointer, tear-offs), which edge the Dock takes, what the top bar shows | the shell's components, presenting Phase 10's menu vocabulary | Yes, within §8.4 — its own phase after 13 |
+
+**Layer 5 exists because the first real second theme needed it.** The Plan Neo
+chrome study (PHASE11) has no global menu bar. Its menus are NeXT's: docked,
+popped up at the pointer, and torn off. Phase 10 made menus data, so that is a
+second *presenter* of one vocabulary, not a second menu system, and it is what
+lets the rule in §8.4 be about reachability rather than about one bar.
 
 Layer 1 alone gets "Aqua in different colours", which is not what was asked for.
 **A 90s cyberpunk theme needs layer 2** — bevelled bitmap chrome is not gel with
@@ -829,13 +839,21 @@ package, not a file you download and double-click.
 Permissiveness is safe only if the floor is explicit. A theme changes how things
 *look*; it may not change whether they are *reachable*.
 
-- **The interaction grammar (thesis 2).** No removing the menu bar, hiding a close
-  control, or deleting focus rings. Every command stays mouse-reachable, every
-  control focusable.
+- **The interaction grammar (thesis 2).** Every command stays mouse-reachable
+  **from one persistent, discoverable place**. No hiding a close control or
+  deleting focus rings. Every control stays focusable. *(Amended 2026-09-25,
+  PHASE11 §6.1: this read "no removing the menu bar", which forbids NeXT's
+  docked menus — a design that keeps every command one click from where you
+  are. The property is reachability, not one particular bar, and layer 5 may
+  present it differently. A theme that leaves some command with no menu at all
+  still fails.)*
 - **The frame contract (C1–C6).** §8.5.
 - **A legibility floor** — minimum contrast and hit-target size, checked at load,
   refused with a reason. We have **no accessibility story at all**; this is the
-  cheapest down payment on one.
+  cheapest down payment on one. *(Scoped in PHASE11 §6.2. Body text that fails
+  its surface is refused. Secondary roles are warned about in Preferences with
+  the pair and the ratio. The Plan Neo study flags two failing pairs of its own,
+  so the floor's first case is a real design.)*
 - **No code.** §8.3.
 
 ### 8.5 Effects are a budget, not a boolean

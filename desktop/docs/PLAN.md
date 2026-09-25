@@ -689,10 +689,31 @@ that the surface is a vocabulary and not a drawing routine.
 where this sits.
 
 **Goal:** ship an opinion without compiling it in. Decision 2 above and
-[PRODUCT.md §8](PRODUCT.md) are the architecture; what makes this a phase rather
-than a preference is arithmetic. **There are 192 `Theme.` call sites across 14
-files today**, and every application in Phase 15 adds more. Doing this at 192 is
-several times cheaper than doing it at six hundred.
+[PRODUCT.md §8](PRODUCT.md) are the architecture. What makes this a phase rather
+than a preference is arithmetic. **There were 192 `Theme.` call sites across 14
+files when this was written, and there are 253 across 16 now** (2026-09-25):
+the count grew by a third in two phases, which is the argument for doing it
+early, made by the tree itself.
+
+> **Amended 2026-09-25 — scoped in [PHASE11.md](PHASE11.md).** Re-measuring
+> before scoping changed the job:
+>
+> - **The migration is not the token lookups.** 83 colours are hard-coded
+>   outside `Theme`, 710 cairo calls in `de/aqua` paint around `Draw`, and
+>   eight `…Metrics` enums fix the shell's geometry.
+> - **Icons are Swift**, and fonts are one fixed chain of files. The layers
+>   below never mentioned either.
+> - **Trench has a specification:** the **Plan Neo chrome study**
+>   (<https://claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E>). It needs a wider
+>   layer 2 than the bullet below lists: bevels, stripe patterns, noise,
+>   radial and conic gradients, masks, glow, inner shadow, text by role with
+>   case and tracking. It also needs schemes and bounded parameters in layer 1,
+>   and icons as data.
+> - **About half of the study is not theming.** It has NeXT menus with no
+>   global menu bar, a right-edge Dock, a workspace top bar, and new widgets.
+>   That is proposed as **layer 5 — shell layout** (PRODUCT §8.2), its own
+>   phase after 13. PRODUCT §8.4's "no removing the menu bar" is restated as the
+>   property it protects (PHASE11 §6.1).
 
 - **Layer 1 — tokens.** `Theme`'s 141 lines of `public static let` become an
   instance loaded through `PoolConfig`, reached through an ambient current theme
@@ -730,6 +751,10 @@ interpreter.
 
 So we ship a second one — **`Trench`**, a 90s skeuomorphic cyberpunk theme drawn
 from **AmigaOS MUI**, the **SGI IRIX Interactive Desktop**, and **NeXTSTEP**.
+**Its look is specified by the Plan Neo chrome study** (PHASE11 P11.9): the
+`neon`, `neon-hc` and `daylight` schemes, and anodized, brushed-metal and
+LCD materials. It also has glow on focus, Amiga close/zoom/depth gadgets, and
+BeOS-style icons. The study's shell structure is layer 5's, not this phase's.
 Those three are chosen because each breaks a *different* Aqua assumption:
 
 | Source | What it contributes | The assumption it breaks |

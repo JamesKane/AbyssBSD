@@ -4,7 +4,7 @@ What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md),
 [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md),
-[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE11.md](PHASE11.md), [PHASE12.md](PHASE12.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
 Last updated: 2026-09-25. **Phases 0–3, 5–8, 9 and 10 are complete; Phase 4 is
@@ -32,7 +32,9 @@ on every run, nested twice over, with no hardware and no human.
    delete), and a stock GTK application's menus appear in our bar
    (P10.6), and so do a stock Qt/KDE application's — kcalc's — (P10.7), and the desktop's own menus do what they say (P10.8).
    **Phase 10 is COMPLETE**, its gates green on both platforms, `--full`
-   included. The next phase is 11, the theme system.
+   included. **Phase 11, the theme system, is scoped** in
+   [PHASE11.md](PHASE11.md): Jaguar re-expressed as data, and a second theme —
+   Trench, specified by the Plan Neo chrome study — from the same interpreter.
    It needs no hardware.
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
