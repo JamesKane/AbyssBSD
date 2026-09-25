@@ -38,7 +38,7 @@ let package = Package(
             name: "CAbyssProtocols",
             dependencies: ["CWaylandClient"],
             path: "de/cabyssprotocols",
-            sources: ["abyss-menu-v1-protocol.c"],
+            sources: ["abyss-menu-v1-protocol.c", "gtk-shell-protocol.c"],
             publicHeadersPath: "include"
         ),
         .target(
@@ -159,6 +159,13 @@ let package = Package(
             name: "DBusPortal",
             dependencies: ["DBus", "CurrentIPC"],
             path: "de/dbusportal"
+        ),
+        // GTK's menus as our vocabulary: org.gtk.Menus/Actions read over the
+        // bus and served as MenuWire (PHASE10.md P10.6).
+        .target(
+            name: "DBusMenus",
+            dependencies: ["DBus", "CurrentIPC", "MenuModel", "MenuWire"],
+            path: "de/dbusmenus"
         ),
         // The drawing grammar — Rect, Theme, Draw, Text and the window chrome
         // they compose into. Its own target because **the compositor links it
@@ -402,7 +409,7 @@ let package = Package(
             // AquaDraw + cairo because the compositor paints the window frames
             // now (P9.6): server-side decorations mean an Aqua title bar with
             // gel lights, drawn from the same grammar the toolkit uses.
-            dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo"],
+            dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo", "MenuModel"],
             path: "de/undertow"
         ),
         .executableTarget(
@@ -421,7 +428,7 @@ let package = Package(
         // that gets a stock GTK or Qt app the Finder as its file chooser.
         .executableTarget(
             name: "abyss-dbus",
-            dependencies: ["DBusPortal", "CurrentIPC"],
+            dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC"],
             path: "de/dbusbin"
         ),
         // Read the machine through the FreeBSD-native bridges.
@@ -443,7 +450,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MenuModelTests",
-            dependencies: ["MenuModel", "MenuWire", "CurrentIPC"],
+            dependencies: ["MenuModel", "MenuWire", "CurrentIPC", "DBusMenus", "DBus"],
             path: "Tests/MenuModelTests"
         ),
         .testTarget(

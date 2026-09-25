@@ -114,8 +114,8 @@ public func unixSocketPath(ofBusAddress address: String) -> String? {
 ///     `--privileged-socket`, PHASE10 P10.3), if it has one. The menu bar alone
 ///     connects there — it is the one connection offered who is frontmost — and
 ///     waits for it the way the shell waits for the ordinary socket.
-///   - without: names to leave out (`bus`, `portal`, `bridge`, `desktop`,
-///     `menubar`, `dock`).
+///   - without: names to leave out (`bus`, `portal`, `bridge`, `menus`,
+///     `desktop`, `menubar`, `dock`).
 public func defaultSession(shellBinary: String,
                            serviceDirectory: String,
                            dbusDaemon: String?,
@@ -196,6 +196,18 @@ public func defaultSession(shellBinary: String,
         }
         // The remaining case — a bus was wanted and there is no dbus-daemon —
         // is already explained by the note above; saying it twice helps nobody.
+    }
+
+    // ---------------------------------------------------------------- menus
+    // GTK's menus, bridged into the bar (PHASE10 P10.6): `abyss-dbus --menus`,
+    // its own process because the portal half blocks behind a file dialog. It
+    // needs the bus; without one there is nothing to bridge.
+    if !without.contains("menus"), let address = busAddress {
+        var env = shared
+        env["DBUS_SESSION_BUS_ADDRESS"] = address
+        components.append(ComponentSpec(name: "menus",
+                                        argv: [serviceDirectory + "/abyss-dbus", "--menus"],
+                                        env: env, requires: [busSocket]))
     }
 
     // ---------------------------------------------------------------- shell

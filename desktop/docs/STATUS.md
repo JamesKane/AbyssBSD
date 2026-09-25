@@ -8,7 +8,7 @@ runs on our own compositor, which holds its frame contract (headless) under elev
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**449 unit tests, 35 live modes and 28 live scripts, green on Linux *and*
+**458 unit tests, 35 live modes and 29 live scripts, green on Linux *and*
 FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
 The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
 two nested-bhyve install tests (~1000s)** — the rule for anything touching the
@@ -442,7 +442,7 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 **Phases 0–3, 5–8 and 9 are complete. Phase 4 is in flight on metal; Phase 12 is
 done but for P12.3's Aqua view. The next unbuilt phase is 10.**
 
-1. **Phase 10 — the menu protocol** — scoped in [PHASE10.md](PHASE10.md) (P10.1–P10.8); **P10.1 is done** — the Finder's commands are one model that the key handler and the menu bar both read — and **P10.2 is done** — the Finder publishes its vocabulary as `menus.finder.<pid>`, and `abyssmenu` describes it and runs its verbs. **P10.3 is done** — undertow implements `abyss-menu-v1`, its first protocol of its own: windows publish where their menus are, and only a client on its new privileged socket is told who is frontmost. **P10.4 is done** — the bar shows the frontmost application's own menus, validated as each opens and run when chosen, by pointer and keyboard; and it found that **undertow had never drawn or hit-tested a popup**, so no menu had ever appeared on our own compositor (HANDOFF §2.62). **P10.5 is done** — undo is per window, a verb like any other, titled from the stack and pushed to the bar, and undoing a creation puts it in the Trash rather than deleting it. P10.6, GTK's menus in our bar, is next. The menu bar stops
+1. **Phase 10 — the menu protocol** — scoped in [PHASE10.md](PHASE10.md) (P10.1–P10.8); **P10.1 is done** — the Finder's commands are one model that the key handler and the menu bar both read — and **P10.2 is done** — the Finder publishes its vocabulary as `menus.finder.<pid>`, and `abyssmenu` describes it and runs its verbs. **P10.3 is done** — undertow implements `abyss-menu-v1`, its first protocol of its own: windows publish where their menus are, and only a client on its new privileged socket is told who is frontmost. **P10.4 is done** — the bar shows the frontmost application's own menus, validated as each opens and run when chosen, by pointer and keyboard; and it found that **undertow had never drawn or hit-tested a popup**, so no menu had ever appeared on our own compositor (HANDOFF §2.62). **P10.5 is done** — undo is per window, a verb like any other, titled from the stack and pushed to the bar, and undoing a creation puts it in the Trash rather than deleting it. **P10.6 is done** — undertow answers GTK's `gtk_shell1`, so a stock GTK application hides its own menubar and says where its menus are, and `abyss-dbus --menus` serves them to our bar, whose choices run in GTK's own process. P10.7, Qt's menus, is gated on its own spike and is next. The menu bar stops
    being a picture of a menu bar: applications publish a menu tree over
    `CurrentIPC`, `abyss-dbus` translates GTK's `org.gtk.Menus` and Qt's
    `dbusmenu` into the same thing, undo gets decided, and what travels is a

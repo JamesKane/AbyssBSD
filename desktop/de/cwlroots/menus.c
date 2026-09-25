@@ -2,6 +2,7 @@
  * See the "menus" section of include/cwlroots.h for why this is C. */
 #include "cwlroots.h"
 #include "abyss-menu-v1-protocol.h"
+#include "gtk-shell-protocol.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -16,11 +17,18 @@ struct tw_menus {
     struct tw_menu_hooks hooks;
     struct wl_global *manager_global;
     struct wl_global *menubar_global;
+    struct wl_global *gtk_shell_global;   /* P10.6 */
+    uint32_t gtk_capabilities;            /* sent on bind */
     struct wl_list menubars;        /* wl_resource links */
     struct wl_list privileged;      /* struct privileged_client */
     int privileged_fd;
     struct wl_event_source *privileged_source;
     char privileged_path[108];
+};
+
+struct tw_gtk_surface {
+    struct tw_menus *menus;
+    struct wl_resource *surface;   /* the wl_surface it decorates */
 };
 
 struct privileged_client {
@@ -181,6 +189,87 @@ int tw_privileged_socket_add(struct tw_menus *m, const char *path) {
     return 0;
 }
 
+/* -------------------------------------------------------- gtk_shell1 (P10.6) */
+/* GTK's own protocol, answered so that GTK says where its menus are
+ * (set_dbus_properties) and — told the desktop shows a global menu bar — stops
+ * drawing its own. Everything else it can ask is answered with nothing, and
+ * every slot is filled: a NULL one is a crash on first use (HANDOFF §2.3). */
+
+static void gs_noop(struct wl_client *c, struct wl_resource *r) { (void)c; (void)r; }
+static void gs_noop_u(struct wl_client *c, struct wl_resource *r, uint32_t u) { (void)c; (void)r; (void)u; }
+static void gs_noop_s(struct wl_client *c, struct wl_resource *r, const char *s) { (void)c; (void)r; (void)s; }
+static void gs_noop_o(struct wl_client *c, struct wl_resource *r, struct wl_resource *o) { (void)c; (void)r; (void)o; }
+static void gs_release(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static void gs_gesture(struct wl_client *c, struct wl_resource *r, uint32_t serial,
+                       struct wl_resource *seat, uint32_t gesture) {
+    (void)c; (void)r; (void)serial; (void)seat; (void)gesture;
+}
+
+static void gs_set_dbus_properties(struct wl_client *client, struct wl_resource *resource,
+                                   const char *application_id, const char *app_menu_path,
+                                   const char *menubar_path, const char *window_object_path,
+                                   const char *application_object_path,
+                                   const char *unique_bus_name) {
+    (void)client;
+    /* The gtk_surface1's user data names its wl_surface; see gs_get_gtk_surface. */
+    struct tw_gtk_surface *g = wl_resource_get_user_data(resource);
+    if (!g || !g->menus || !g->menus->hooks.set_gtk_properties) return;
+    struct wlr_surface *s = wlr_surface_from_resource(g->surface);
+    if (!s) return;
+    g->menus->hooks.set_gtk_properties(g->menus->hooks.ctx, s,
+        application_id ? application_id : "", app_menu_path ? app_menu_path : "",
+        menubar_path ? menubar_path : "", window_object_path ? window_object_path : "",
+        application_object_path ? application_object_path : "",
+        unique_bus_name ? unique_bus_name : "");
+}
+
+static const struct gtk_surface1_interface gtk_surface_impl = {
+    .set_dbus_properties = gs_set_dbus_properties,
+    .set_modal = gs_noop,
+    .unset_modal = gs_noop,
+    .present = gs_noop_u,
+    .request_focus = gs_noop_s,
+    .release = gs_release,
+    .titlebar_gesture = gs_gesture,
+};
+
+static void gtk_surface_destroyed(struct wl_resource *resource) {
+    free(wl_resource_get_user_data(resource));
+}
+
+static void gs_get_gtk_surface(struct wl_client *client, struct wl_resource *resource,
+                               uint32_t id, struct wl_resource *surface) {
+    struct tw_gtk_surface *g = calloc(1, sizeof(*g));
+    if (!g) { wl_client_post_no_memory(client); return; }
+    g->menus = wl_resource_get_user_data(resource);
+    g->surface = surface;
+    struct wl_resource *r = wl_resource_create(client, &gtk_surface1_interface,
+                                               wl_resource_get_version(resource), id);
+    if (!r) { free(g); wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &gtk_surface_impl, g, gtk_surface_destroyed);
+}
+
+static const struct gtk_shell1_interface gtk_shell_impl = {
+    .get_gtk_surface = gs_get_gtk_surface,
+    .set_startup_id = gs_noop_s,
+    .system_bell = gs_noop_o,
+    .notify_launch = gs_noop_s,
+};
+
+static void gtk_shell_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id) {
+    struct tw_menus *m = data;
+    struct wl_resource *r = wl_resource_create(client, &gtk_shell1_interface, (int)version, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &gtk_shell_impl, m, NULL);
+    gtk_shell1_send_capabilities(r, m->gtk_capabilities);
+}
+
+void tw_gtk_set_global_menus(struct tw_menus *m, bool on) {
+    /* A bit per capability, `1 << (value - 1)` — which is how GTK reads it:
+     * global_app_menu = 1 → bit 0, global_menu_bar = 2 → bit 1. */
+    m->gtk_capabilities = on ? (1u << 0) | (1u << 1) : 0;
+}
+
 /* --------------------------------------------------------------------------- setup */
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *h) {
@@ -195,7 +284,10 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
                                          m, manager_bind);
     m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 1,
                                          m, menubar_bind);
-    if (!m->manager_global || !m->menubar_global) { tw_menus_destroy(m); return NULL; }
+    m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
+    if (!m->manager_global || !m->menubar_global || !m->gtk_shell_global) {
+        tw_menus_destroy(m); return NULL;
+    }
     wl_display_set_global_filter(display, global_filter, m);
     return m;
 }
@@ -205,6 +297,7 @@ void tw_menus_destroy(struct tw_menus *m) {
     wl_display_set_global_filter(m->display, NULL, NULL);
     if (m->manager_global) wl_global_destroy(m->manager_global);
     if (m->menubar_global) wl_global_destroy(m->menubar_global);
+    if (m->gtk_shell_global) wl_global_destroy(m->gtk_shell_global);
     if (m->privileged_source) wl_event_source_remove(m->privileged_source);
     if (m->privileged_fd >= 0) { close(m->privileged_fd); unlink(m->privileged_path); }
     /* Detach whatever outlives us: resources and clients free their own

@@ -197,6 +197,9 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// Nil means the bar is drawing a definition it cannot ask about: the
     /// Finder's, under a compositor that has no view of focus to give.
     private var service: String?
+    /// With `service`, which application it answers for — set only for the GTK
+    /// bridge, which serves them all (P10.6).
+    private var target: String?
     /// Enablement pulled when the open menu opened (PHASE10 §6.4).
     private var enablement: [String: Enablement] = [:]
     /// The held `subscribe` connection to `service`, folded into the run loop.
@@ -310,23 +313,30 @@ public final class MenuBar: LayerSurfaceDelegate {
         unsubscribe()
         enablement = [:]
         switch f.kind {
-        case .abyss:
+        case .abyss, .gtk:
+            // Our own applications serve their menus themselves; a GTK
+            // application's are served by the bridge, told which one by target.
+            let (svc, tgt): (String, String?) = f.kind == .gtk
+                ? ("menus-gtk", f.address) : (f.address, nil)
+            let from = f.kind == .gtk ? "menus-gtk (GTK)" : f.address
             let t0 = MenuBar.nowUs()
             do {
-                let d = try MenuClient.describe(f.address)
-                service = f.address
+                let d = try MenuClient.describe(svc, target: tgt)
+                service = svc
+                target = tgt
                 menus = MenuBar.menus(for: d.model)
-                MenuBar.log("showing \(d.model.appName)'s menus from \(f.address) "
+                MenuBar.log("showing \(d.model.appName)'s menus from \(from) "
                             + "(\(d.model.commands.count) commands, described in "
                             + "\(MenuBar.nowUs() - t0) us)")
-                subscribe(f.address)
+                // GTK's Changed is not bridged yet; the bar re-reads on open.
+                if tgt == nil { subscribe(svc) }
             } catch {
                 // An address nobody answers — the application is going, or
                 // stuck. The bar must still be a bar.
-                MenuBar.log("could not describe \(f.address): \(error)")
+                MenuBar.log("could not describe \(from): \(error)")
                 show(nameOnly: f.appID)
             }
-        case .none, .gtk, .dbusmenu:
+        case .none, .dbusmenu:
             // A window with no menus we can read still has a name, and the
             // application menu is where Jaguar put it.
             show(nameOnly: f.appID)
@@ -339,6 +349,7 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// under it — or just the system menu when nothing is frontmost.
     private func show(nameOnly appID: String) {
         service = nil
+        target = nil
         let name = appID.split(separator: ".").last.map(String.init) ?? ""
         menus = [MenuBarMenu(MenuBar.systemMenu, isSystem: true)]
             + (name.isEmpty ? [] : [MenuBarMenu(Menu(name, []), bold: true)])
@@ -391,7 +402,7 @@ public final class MenuBar: LayerSurfaceDelegate {
             return
         }
         do {
-            switch try MenuClient.activate(address, verb: command.verb) {
+            switch try MenuClient.activate(address, verb: command.verb, target: target) {
             case .ok(let v):       MenuBar.log("chose \(what) → ok" + (v.map { " \($0)" } ?? ""))
             case .refused(let w):  MenuBar.log("chose \(what) → refused: \(w)")
             }
@@ -520,7 +531,7 @@ public final class MenuBar: LayerSurfaceDelegate {
         // application now, not pushed to the bar every time it changes.
         if let address = service, !m.isSystem {
             let t0 = MenuBar.nowUs()
-            if let v = try? MenuClient.validate(address) {
+            if let v = try? MenuClient.validate(address, target: target) {
                 enablement = v
                 MenuBar.log("validated \(v.count) commands in \(MenuBar.nowUs() - t0) us")
             } else {

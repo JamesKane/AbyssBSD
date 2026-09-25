@@ -460,6 +460,9 @@ public final class Compositor {
                   !dir.isEmpty else { throw BackendError.noSocket }
             try m.addPrivilegedSocket(name.hasPrefix("/") ? name : dir + "/" + name)
             privilegedSocketName = name
+            // A session with a bar can show GTK's menus in it, so GTK may stop
+            // drawing its own (PHASE10 §6.5). Without one it keeps them.
+            m.advertiseGlobalMenusToGTK(true)
         }
 
         if let wanted = socketName {

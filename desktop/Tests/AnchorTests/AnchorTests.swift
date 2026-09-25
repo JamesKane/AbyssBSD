@@ -192,7 +192,18 @@ final class AnchorTests: XCTestCase {
     /// afterwards and every app launched from the desktop is on no bus at all.
     func testTheSessionStartsInTheOrderItsDependenciesRequire() {
         XCTAssertEqual(plan().components.map(\.name),
-                       ["bus", "portal", "bridge", "desktop", "menubar", "dock"])
+                       ["bus", "portal", "bridge", "menus", "desktop", "menubar", "dock"])
+    }
+
+    /// The GTK menu bridge is `abyss-dbus --menus`, on the session's bus, and
+    /// waits for it — and there is none without a bus to bridge (P10.6).
+    func testTheMenuBridgeIsItsOwnProcessOnTheBus() {
+        let p = plan()
+        let m = p.components.first { $0.name == "menus" }
+        XCTAssertEqual(m?.argv, ["/opt/abyss/abyss-dbus", "--menus"])
+        XCTAssertEqual(m?.requires, ["/run/abyss/bus"])
+        XCTAssertEqual(m?.env["DBUS_SESSION_BUS_ADDRESS"], p.busAddress)
+        XCTAssertNil(plan(dbusDaemon: nil).components.first { $0.name == "menus" })
     }
 
     /// The bridge names both things it cannot work without, as socket paths —

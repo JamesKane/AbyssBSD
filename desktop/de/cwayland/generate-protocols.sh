@@ -59,4 +59,16 @@ gen_ours() {
 
 gen_ours abyss-menu-v1
 
+# Somebody else's protocol that undertow answers (P10.6): GTK's gtk_shell1.
+# Tables and the server header only — no client of ours speaks it.
+gen_theirs() {
+    name=$1
+    xml="$proto/$name.xml"
+    echo "scanner: $name (theirs, served: tables and server header)"
+    wayland-scanner private-code  "$xml" "$root/de/cabyssprotocols/$name-protocol.c"
+    wayland-scanner server-header "$xml" "$root/de/cwlroots/include/$name-protocol.h"
+}
+
+gen_theirs gtk-shell
+
 echo "done."

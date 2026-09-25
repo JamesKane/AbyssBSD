@@ -425,7 +425,7 @@ re-run green. **Not run in this pass:** `run.sh --live`, `run.sh --vm --live` �
 so nothing in P10.5 has been run on FreeBSD yet — and `--full`, owed at the end
 of the phase.
 
-**P10.6 — GTK's menus in our bar.**
+**P10.6 — GTK's menus in our bar. ✅ done.**
 undertow advertises **`gtk_shell1`** with the `GLOBAL_MENU_BAR` capability (so
 GTK sets `gtk-shell-shows-menubar` and stops drawing its own) and records
 `gtk_surface1.set_dbus_properties` — unique bus name, application object path,
@@ -436,6 +436,76 @@ reads enablement from `org.gtk.Actions.DescribeAll`, activates with
 speaks one protocol and the translation lives where PLAN.md put it. `app.*`
 actions resolve on the application path, `win.*` on the window path, which only
 `set_dbus_properties` can supply (§4.2).
+
+**What P10.6 landed.**
+
+- **`gtk_shell1` in undertow**, all of it, version 5. `protocols/gtk-shell.xml`
+  is vendored unmodified from GTK's 3.24.52 tag (LGPL-2.1+), the version both
+  platforms run. Every request has a handler, most of them no-ops.
+  `set_dbus_properties` goes to `Menus` as a `gtk`-kind address.
+  `capabilities` is sent on bind as `global_app_menu | global_menu_bar`, but
+  only when undertow has a privileged socket, i.e. a session with a bar (§6.5).
+  GTK reads the capability as `1 << (value − 1)`, and the first live run
+  confirmed it: `gtk-shell-shows-menubar=1`, and the window's own menubar is
+  gone.
+- **`GtkMenuAddress`** in `MenuModel` is one encoding shared by the three
+  parties that carry it: undertow, the bar and the bridge.
+- **`DBusMenus`**, run as `abyss-dbus --menus`, is a process of its own because
+  the portal half blocks behind a file dialog (PHASE8 §6.7). It serves one
+  MenuWire service, `menus-gtk`, whose requests carry the GTK address as
+  `target`:
+  - `describe` follows `org.gtk.Menus.Start` link by link until no group is
+    missing, then `End`s the subscription;
+  - `validate` is `org.gtk.Actions.DescribeAll` on the application path (as
+    `app.`) and the window path (as `win.`);
+  - `activate` is `Activate` on whichever path owns the action.
+
+  `anchor` starts it as the `menus` component, on the bus and waiting for it.
+- **The bar treats a `gtk` focus like its own apps' focus**, sending the
+  service `menus-gtk` with the address as its target. It is one protocol, and
+  the bar knows no D-Bus at all.
+- **Every `MenuClient` call now has a 2 s timeout.** Until now a bar asking a
+  stuck application would have waited for ever. That was left over from P10.4,
+  and it mattered the moment one of the bar's servers could be somebody else's
+  program.
+
+**What GTK does not give us, and the bridge does not invent** (written in
+`GtkMenus.swift` so nobody hunts for it):
+- **Descriptions.** The summary is the label.
+- **Argument types.** A parameterised item (`target`) is drawn and refused as
+  "a parameterised action, which the bridge does not carry yet", rather than
+  bridged wrong.
+- **Accelerators set with `set_accels_for_action`**, as in §4.1. Only an
+  `accel` attribute in the model shows one.
+- **`Changed` is not watched.** A GTK menu rebuilt while it is on screen is
+  stale until it is opened again.
+
+**What it did not find.** Nothing already broken, for the second pass running.
+The spikes had already mapped this ground (§4.1, §4.2), and the pass went as
+they said. That is worth recording, because it is what spiking first is for.
+
+**Verified (short checks only):** `live-menus-gtk.sh` (4 s), where the other
+end is a stock GtkApplication (§2.39):
+- GTK hid its own menubar, by its own setting;
+- undertow recorded GTK's address;
+- the bar shows MenuSpike, File and Edit;
+- Paste is disabled because GTK disabled it;
+- File ▸ Open…, chosen with a real pointer, printed `activated=open` in GTK's
+  own process.
+
+Its two injected faults both failed it:
+- no capability advertised, so GTK kept its own menubar;
+- GTK's address dropped in undertow, so the bar never saw GTK's menus.
+
+Also: unit tests on the spike's real `Start` reply (links, sections,
+mnemonics, accelerators, a self-linking model that must terminate,
+`DescribeAll`, parameterised items, the address round trip); `swift test` on
+Linux, 458 tests, green; and `live-session-gtk.sh` (the `menus` component in
+the real session), `live-menus.sh`, `live-vocabulary.sh`, `live-undo.sh` and
+`live-menu-focus.sh`, all re-run green.
+
+**Not run:** `run.sh --live` and `run.sh --vm --live`, so neither P10.5 nor
+P10.6 has run on FreeBSD yet. `--full` is owed at the end of the phase.
 
 **P10.7 — Qt's, if the spike says so.**
 `org_kde_kwin_appmenu_manager` in undertow, `abyss-dbus` owning

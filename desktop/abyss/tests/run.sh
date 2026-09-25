@@ -199,6 +199,10 @@ if [ "$live" -eq 1 ]; then
   # pushed to the bar, and never a delete (P10.5).
   echo "== undo =="
   sh "$root/abyss/tests/live-undo.sh" >/dev/null
+  # A GTK application's menus in our bar: gtk_shell1 in undertow, the bridge
+  # in abyss-dbus --menus, and the other end a stock GtkApplication (P10.6).
+  echo "== GTK's menus in our bar =="
+  sh "$root/abyss/tests/live-menus-gtk.sh" >/dev/null
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

@@ -234,3 +234,42 @@ public enum CommandResult: Equatable, Sendable {
     case ok(String?)
     case refused(String)
 }
+
+/// Where a GTK application's menus are, as `gtk_surface1.set_dbus_properties`
+/// told the compositor (PHASE10.md P10.6) — carried to the bar as the address
+/// of a `gtk`-kind focus, and from the bar to the bridge that reads them.
+///
+/// One encoding for the three parties that handle it (undertow, the menu bar,
+/// `abyss-dbus --menus`), so it lives in the dependency-free model: fields in
+/// a fixed order, one per line. None of them can contain a newline — they are
+/// a D-Bus name, object paths and an application id.
+public struct GtkMenuAddress: Equatable, Sendable {
+    public var applicationID: String
+    public var busName: String
+    public var applicationPath: String
+    public var menubarPath: String
+    public var appMenuPath: String
+    public var windowPath: String
+
+    public init(applicationID: String, busName: String, applicationPath: String,
+                menubarPath: String, appMenuPath: String, windowPath: String) {
+        self.applicationID = applicationID; self.busName = busName
+        self.applicationPath = applicationPath; self.menubarPath = menubarPath
+        self.appMenuPath = appMenuPath; self.windowPath = windowPath
+    }
+
+    public var encoded: String {
+        [applicationID, busName, applicationPath, menubarPath, appMenuPath, windowPath]
+            .joined(separator: "\n")
+    }
+
+    public init?(encoded s: String) {
+        let f = s.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 6, !f[1].isEmpty else { return nil }
+        self.init(applicationID: f[0], busName: f[1], applicationPath: f[2],
+                  menubarPath: f[3], appMenuPath: f[4], windowPath: f[5])
+    }
+
+    /// Whether there is anything to read: a bus to ask and a menu to ask for.
+    public var hasMenus: Bool { !busName.isEmpty && !(menubarPath.isEmpty && appMenuPath.isEmpty) }
+}

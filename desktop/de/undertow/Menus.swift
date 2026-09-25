@@ -15,6 +15,7 @@
 // "Menus" section for why); the policy is here.
 
 import CWlroots
+import MenuModel
 
 #if canImport(Glibc)
 import Glibc
@@ -48,8 +49,9 @@ public final class Menus {
 
     private final class Entry {
         var address: String
+        var kind: Kind
         var destroyListener: UnsafeMutablePointer<tw_listener>?
-        init(address: String) { self.address = address }
+        init(address: String, kind: Kind) { self.address = address; self.kind = kind }
     }
 
     init?(compositor: Compositor, display: OpaquePointer) {
@@ -59,7 +61,7 @@ public final class Menus {
         hooks.set_address = { ctx, surface, address in
             guard let ctx, let surface else { return }
             let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
-            m.setAddress(address.map { String(cString: $0) } ?? "", for: surface)
+            m.setAddress(address.map { String(cString: $0) } ?? "", for: surface, kind: .abyss)
         }
         hooks.menubar_bound = { ctx, resource in
             guard let ctx, let resource else { return }
@@ -67,6 +69,17 @@ public final class Menus {
             let f = m.current
             tw_menubar_send_focused(resource, f.kind.rawValue, f.address, f.appID)
             Menus.log("a menu bar bound; told it \(f.describe)")
+        }
+        hooks.set_gtk_properties = { ctx, surface, appID, appMenu, menubar, window, appPath, bus in
+            guard let ctx, let surface else { return }
+            let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
+            func s(_ p: UnsafePointer<CChar>?) -> String { p.map { String(cString: $0) } ?? "" }
+            let a = GtkMenuAddress(applicationID: s(appID), busName: s(bus),
+                                   applicationPath: s(appPath), menubarPath: s(menubar),
+                                   appMenuPath: s(appMenu), windowPath: s(window))
+            // GTK says this for every window, menus or not; only one with
+            // something to read is worth pointing the bar at.
+            m.setAddress(a.hasMenus ? a.encoded : "", for: surface, kind: .gtk)
         }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
@@ -95,13 +108,18 @@ public final class Menus {
         addresses[surface]?.address
     }
 
-    private func setAddress(_ address: String, for surface: UnsafeMutablePointer<wlr_surface>) {
+    /// GTK's windows lose their own menubar only when this is on (§6.5).
+    func advertiseGlobalMenusToGTK(_ on: Bool) { tw_gtk_set_global_menus(raw, on) }
+
+    private func setAddress(_ address: String, for surface: UnsafeMutablePointer<wlr_surface>,
+                            kind: Kind) {
         if address.isEmpty {
             if let e = addresses.removeValue(forKey: surface) { tw_listener_free(e.destroyListener) }
         } else if let e = addresses[surface] {
             e.address = address
+            e.kind = kind
         } else {
-            let e = Entry(address: address)
+            let e = Entry(address: address, kind: kind)
             // Forgotten with the surface: an address outliving its window would
             // point the bar at a menu for something no longer on screen.
             let ctx = Unmanaged.passUnretained(self).toOpaque()
@@ -115,7 +133,9 @@ public final class Menus {
             addresses[surface] = e
         }
         Menus.log(address.isEmpty ? "a surface withdrew its menus"
-                                  : "a surface published its menus at \(address)")
+                  : "a surface published its menus at "
+                    + (kind == .gtk ? "\(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [gtk]"
+                                    : address))
         focusChanged()
     }
 
@@ -123,10 +143,10 @@ public final class Menus {
     public var current: Focus {
         guard let t = compositor.seat?.focused else { return desktop }
         let app = t.appID ?? ""
-        guard let a = addresses[t.surface]?.address else {
+        guard let e = addresses[t.surface] else {
             return Focus(kind: .none, address: "", appID: app)
         }
-        return Focus(kind: .abyss, address: a, appID: app)
+        return Focus(kind: e.kind, address: e.address, appID: app)
     }
 
     /// With no window focused, the desktop is frontmost — and in Jaguar the
@@ -136,8 +156,8 @@ public final class Menus {
     private var desktop: Focus {
         for l in compositor.layers
         where l.layer == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND.rawValue {
-            if let a = addresses[l.surface]?.address {
-                return Focus(kind: .abyss, address: a, appID: l.namespace)
+            if let e = addresses[l.surface] {
+                return Focus(kind: e.kind, address: e.address, appID: l.namespace)
             }
         }
         return .nothing
@@ -164,6 +184,7 @@ extension Menus.Focus {
     var describe: String {
         switch kind {
         case .none: return appID.isEmpty ? "nothing" : "\(appID), which publishes no menus"
+        case .gtk:  return "\(appID) at \(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [gtk]"
         default:    return "\(appID) at \(address) [\(kind)]"
         }
     }

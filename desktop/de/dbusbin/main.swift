@@ -15,6 +15,7 @@
 
 import CurrentIPC
 import DBusPortal
+import DBusMenus
 
 #if canImport(Glibc)
 import Glibc
@@ -31,6 +32,9 @@ func die(_ s: String) -> Never { emit(2, "abyss-dbus: \(s)"); exit(1) }
 var portal: String?
 var seconds: Double = 0            // 0 = until killed
 var once = false
+// `--menus`: be the GTK menu bridge instead (PHASE10 P10.6) — a process of its
+// own, because the portal half blocks while a file dialog is open.
+var menus = false
 let args = Array(CommandLine.arguments.dropFirst())
 var i = 0
 while i < args.count {
@@ -45,8 +49,10 @@ while i < args.count {
         seconds = n
     case "--once":
         once = true
+    case "--menus":
+        menus = true
     case "-h", "--help":
-        emit(1, "usage: abyss-dbus [--portal SERVICE] [--seconds N] [--once]")
+        emit(1, "usage: abyss-dbus [--portal SERVICE] [--seconds N] [--once] | --menus")
         exit(0)
     default:
         die("unknown option '\(args[i])'")
@@ -63,6 +69,19 @@ do {
 } catch {
     die("cannot reach the session bus: \(error)"
         + " (is DBUS_SESSION_BUS_ADDRESS set, and is dbus-daemon running?)")
+}
+
+if menus {
+    let bridge: GtkMenuBridge
+    do { bridge = try GtkMenuBridge(connection: conn) } catch {
+        die("cannot serve \(GtkMenuBridge.serviceName): \(error)")
+    }
+    emit(1, "ready (menus: \(GtkMenuBridge.serviceName))")
+    while true {
+        do { try bridge.step(timeoutMs: 1000) } catch {
+            die("the bus connection failed: \(error)")
+        }
+    }
 }
 
 let service = DBusPortalService(connection: conn, portalService: portal)

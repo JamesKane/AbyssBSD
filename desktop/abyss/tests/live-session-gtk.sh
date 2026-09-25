@@ -148,11 +148,11 @@ while [ $i -lt 200 ]; do
 done
 grep -q 'dock=up' "$work/status" 2>/dev/null \
   || { echo "FAIL: the session never came up"; cat "$work/status" "$work/session.log"; exit 1; }
-for c in bus portal bridge desktop menubar dock; do
+for c in bus portal bridge menus desktop menubar dock; do
   grep -q "$c=up" "$work/status" \
     || { echo "FAIL: $c is not up"; cat "$work/status" "$work/session.log"; exit 1; }
 done
-echo "ok: one command brought up bus, portal, bridge, desktop, menubar and dock"
+echo "ok: one command brought up bus, portal, bridge, menus, desktop, menubar and dock"
 
 # The bar came up on the privileged socket and — with no window yet — shows the
 # desktop's Finder (PHASE10 P10.4). On the ordinary socket it would say it has

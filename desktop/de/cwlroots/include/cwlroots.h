@@ -118,6 +118,13 @@ struct tw_menu_hooks {
     void (*set_address)(void *ctx, struct wlr_surface *surface, const char *address);
     /* A privileged client bound abyss_menubar_v1: send it the current state. */
     void (*menubar_bound)(void *ctx, struct wl_resource *menubar);
+    /* GTK said where a surface's menus are (gtk_surface1.set_dbus_properties,
+     * P10.6). Absent strings arrive as "". */
+    void (*set_gtk_properties)(void *ctx, struct wlr_surface *surface,
+                               const char *application_id, const char *app_menu_path,
+                               const char *menubar_path, const char *window_object_path,
+                               const char *application_object_path,
+                               const char *unique_bus_name);
 };
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);
@@ -130,6 +137,9 @@ void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
                                  const char *address, const char *app_id);
 int tw_menubar_count(struct tw_menus *m);
+/* Tell GTK (gtk_shell1.capabilities, on bind) that the desktop shows a global
+ * menu bar, so it stops drawing its own. Only when a bar will (PHASE10 §6.5). */
+void tw_gtk_set_global_menus(struct tw_menus *m, bool on);
 
 /*
  * Silence wlroots' own logging, or route it at a level. Not a macro problem —
