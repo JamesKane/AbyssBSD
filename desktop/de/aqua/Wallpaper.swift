@@ -71,23 +71,7 @@ public struct DesktopStyle: Equatable, Sendable {
 /// blue, with a broad soft sheen high and left of centre. The default when
 /// desktop.ini specifies nothing (and the fallback for a broken image path).
 public func paintWallpaper(_ cr: OpaquePointer, w: Double, h: Double) {
-    let g = cairo_pattern_create_linear(0, 0, 0, h)
-    for (at, c) in [(0.0, Theme.desktopTop), (0.55, Theme.desktopMiddle), (1.0, Theme.desktopBottom)] {
-        cairo_pattern_add_color_stop_rgba(g, at, c.r, c.g, c.b, c.a)
-    }
-    cairo_set_source(cr, g)
-    cairo_paint(cr)
-    cairo_pattern_destroy(g)
-
-    let cx = w * 0.42, cy = h * 0.30
-    let radius = max(w, h) * 0.75
-    let glow = cairo_pattern_create_radial(cx, cy, 0, cx, cy, radius)
-    let gc = Theme.desktopGlow
-    cairo_pattern_add_color_stop_rgba(glow, 0.0, gc.r, gc.g, gc.b, gc.a)
-    cairo_pattern_add_color_stop_rgba(glow, 1.0, gc.r, gc.g, gc.b, 0.0)
-    cairo_set_source(cr, glow)
-    cairo_paint(cr)
-    cairo_pattern_destroy(glow)
+    Draw.paint("wallpaper", cr, Rect(0, 0, w, h))   // shell.dl
 }
 
 /// Paint the desktop backdrop for `style` into `w`×`h` logical pixels. Pure (no

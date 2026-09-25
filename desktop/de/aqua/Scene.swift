@@ -155,25 +155,12 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
     // Toolbar.
     let tbY = Theme.titleBarHeight
     let tbH = 58.0
-    cairo_rectangle(cr, 0, tbY, w, tbH)
-    Draw.fillVerticalGradient(cr, y: tbY, h: tbH, stops: [
-        (0, Theme.prefsToolbarTop), (1, Theme.prefsToolbarBottom),
-    ])
-    Draw.setColor(cr, Theme.separator)
-    cairo_set_line_width(cr, 1)
-    cairo_move_to(cr, 0, tbY + tbH - 0.5)
-    cairo_line_to(cr, w, tbY + tbH - 0.5)
-    cairo_stroke(cr)
+    let toolbar = Rect(0, tbY, w, tbH)
+    Draw.paint("prefs.toolbar", cr, toolbar)
 
     let tbItemTop = tbY + 6
     toolbarItem(cr, .showAll, "Show All", centerX: 44, top: tbItemTop)
-    // Dotted vertical separator after Show All.
-    Draw.setColor(cr, Theme.toolbarSeparator)
-    cairo_set_line_width(cr, 1)
-    cairo_set_dash(cr, [1, 2], 2, 0)
-    cairo_move_to(cr, 86, tbY + 10); cairo_line_to(cr, 86, tbY + tbH - 10)
-    cairo_stroke(cr)
-    cairo_set_dash(cr, [], 0, 0)
+    Draw.paint("prefs.toolbar.divider", cr, toolbar, parameters: ["x": 86])
     var tx = 130.0
     for (icon, label) in prefToolbar {
         toolbarItem(cr, icon, label, centerX: tx, top: tbItemTop)
@@ -202,6 +189,11 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
         }
         y += Double(rows) * rowH + 6
         if title != "System" {
+            // Still Swift until P11.8, on purpose: the last icon drawn (Sharing's
+            // folder) ends in fill_preserve, and this stroke outlines its kept
+            // path in the separator's colour too (HANDOFF §2.67). A list builds
+            // its own path, so moving this line moves that folder — which is
+            // the icon's leak to fix, when icons become data.
             Draw.setColor(cr, Theme.separator)
             cairo_set_line_width(cr, 1)
             cairo_move_to(cr, margin, y + 0.5)
@@ -280,7 +272,10 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
             paintMenuBar(cr, w: Double(width), h: MenuBarMetrics.height,
                          menus: MenuBar.menus(for: finderMenuBar()),
                          clock: formatMenuClock(hour24: 9, minute: 41, wday: 1),
-                         openIndex: nil, showClock: true,
+                         // AQUA_MENUBAR_OPEN=i pictures title i open (the
+                         // highlight, P11.5) — 0 is the system menu's mark.
+                         openIndex: getenv("AQUA_MENUBAR_OPEN").flatMap { Int(String(cString: $0)) },
+                         showClock: true,
                          status: MenuBarStatus.read(mixer: Vents.Mixer()))
         }
         if kind == .dock {
@@ -291,7 +286,9 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
             cairo_translate(cr, 0, Double(height) - dockH)
             // Pointer near a tile to show the magnification curve in the preview.
             paintDock(cr, w: Double(width), h: dockH, items: items,
-                      running: items.map { _ in false },
+                      // AQUA_DOCK_RUNNING: every other tile running, so the
+                      // running mark is pictured (P11.5).
+                      running: items.indices.map { getenv("AQUA_DOCK_RUNNING") != nil && $0 % 2 == 0 },
                       pointerX: Double(width) * 0.42, tileSize: 48, magnify: true)
             cairo_restore(cr)
         }
@@ -335,10 +332,22 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // machine (the live FinderWindow reads the real filesystem).
         let entries = finderSampleEntries()
         let listView = getenv("AQUA_FINDER_VIEW").map { String(cString: $0) } == "list"
-        paintFinder(cr, w: cw, h: ch,
-                    state: FinderState(path: "/Users/abyss", entries: entries,
-                                       selection: 2, view: listView ? .list : .icon,
-                                       freeBytes: 39_600_000_000))
+        var fs = FinderState(path: "/Users/abyss", entries: entries,
+                             selection: 2, view: listView ? .list : .icon,
+                             freeBytes: 39_600_000_000)
+        // AQUA_FINDER_STATE pictures what the default never shows (P11.5):
+        // "rename" — item 2's name being edited, part of it selected, with
+        // Back enabled; "back" — Back held down, the rename down to its caret.
+        switch getenv("AQUA_FINDER_STATE").map({ String(cString: $0) }) {
+        case "rename":
+            fs.canGoBack = true
+            fs.edit = FinderEdit(index: 2, text: entries[2].name, selectedPrefix: 4)
+        case "back":
+            fs.canGoBack = true; fs.backPressed = true
+            fs.edit = FinderEdit(index: 2, text: entries[2].name + " copy")
+        default: break
+        }
+        paintFinder(cr, w: cw, h: ch, state: fs)
     case .installer:
         // A fixed synthetic machine, so the preview is the same on any box —
         // the live installer asks `abyss-install` what disks are really there.
@@ -405,12 +414,21 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
 /// highlight is in the picture. Transparent corners, as the popup has.
 public func renderMenuPNG(path: String, scale: Int32 = 1) -> Bool {
     guard let file = finderMenuBar().menus.first(where: { $0.title == "File" }) else { return false }
-    let rows = aquaMenuItems(file, enablement: MenuBar.staticEnablement)
-    let menu = AquaMenu(items: rows)
+    // AQUA_MENU_MARKS: the parts the File menu never shows (P11.5) — a checked
+    // row, and a submenu's ▸ plain, disabled and highlighted.
+    let marks = getenv("AQUA_MENU_MARKS") != nil
+    let rows = marks
+        ? [AquaMenuItem("as Icons"), AquaMenuItem("as List"), AquaMenuItem.separator,
+           AquaMenuItem("Arrange By", hasSubmenu: true), AquaMenuItem("Label", enabled: false, hasSubmenu: true),
+           AquaMenuItem("Show View Options", keyText: "⌘J", hasSubmenu: true)]
+        : aquaMenuItems(file, enablement: MenuBar.staticEnablement)
+    let menu = AquaMenu(items: rows, selected: marks ? 0 : -1)
     let w = Int32(max(150, menu.preferredWidth)), h = Int32(menu.preferredHeight.rounded(.up))
-    // Hover "New Folder" — the second row — so the highlight is drawn.
+    // Hover "New Folder" — the second row — so the highlight is drawn (or,
+    // with marks, the last submenu row).
     let geo = aquaMenuRows(rows)
-    menu.pointerMoved(x: 20, y: geo[1].y + geo[1].h / 2)
+    let hover = marks ? rows.count - 1 : 1
+    menu.pointerMoved(x: 20, y: geo[hover].y + geo[hover].h / 2)
     guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w * scale, h * scale)
     else { return false }
     defer { cairo_surface_destroy(cs) }

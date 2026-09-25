@@ -117,13 +117,7 @@ public func paintInstaller(_ cr: OpaquePointer, w: Double, h: Double,
 
     // The window body: Aqua's pale, with the pinstripe at the top the way a
     // Jaguar utility window wears it.
-    Draw.setColor(cr, Theme.contentBackground)
-    cairo_rectangle(cr, 0, 0, w, h)
-    cairo_fill(cr)
-    Draw.pinstripe(cr, Rect(0, 0, w, 40), Theme.pinstripe)
-    Draw.setColor(cr, Theme.separator)
-    cairo_rectangle(cr, 0, 39.5, w, 1)
-    cairo_fill(cr)
+    Draw.paint("installer", cr, Rect(0, 0, w, h))
 
     switch model.page {
     case .hub:
@@ -197,13 +191,7 @@ public func paintInstaller(_ cr: OpaquePointer, w: Double, h: Double,
 private func paintSpokeRow(_ cr: OpaquePointer, _ r: Rect,
                            spoke: Spoke, model: InstallerModel) {
     let done = model.complete(spoke)
-    Draw.setColor(cr, done ? Theme.rowBackground : Theme.attentionBackground)
-    Draw.roundedRect(cr, r, radius: 6)
-    cairo_fill(cr)
-    Draw.setColor(cr, Theme.separator)
-    Draw.roundedRect(cr, r, radius: 6)
-    cairo_set_line_width(cr, 1)
-    cairo_stroke(cr)
+    Draw.paint(done ? "installer.spoke" : "installer.spoke.attention", cr, r)
 
     Draw.textLeft(cr, spoke.title, x: r.x + 12, baselineY: r.y + 19,
                   color: Theme.bodyText, size: 12, style: .bold)
@@ -240,9 +228,7 @@ private func paintListSpoke(_ cr: OpaquePointer, l: InstallerLayout,
         case .account: break
         }
         if selected {
-            Draw.setColor(cr, refused ? Theme.trafficInactive : Theme.menuHighlight)
-            cairo_rectangle(cr, row.x, row.y, row.w, row.h)
-            cairo_fill(cr)
+            Draw.paint("installer.row", cr, row, refused ? .disabled : [])
         }
         // A disk that cannot be used is shown greyed, WITH its reason — never
         // hidden. A picker that silently omits your disk is one you argue with.
@@ -362,9 +348,7 @@ private func paintConfirm(_ cr: OpaquePointer, w: Double, h: Double,
 
 /// Grey out a control that is present but cannot be used.
 private func veil(_ cr: OpaquePointer, _ r: Rect) {
-    Draw.roundedRect(cr, r, radius: r.h / 2)
-    Draw.setColor(cr, Theme.disabledVeil)
-    cairo_fill(cr)
+    Draw.paint("installer.veil", cr, r)
 }
 
 /// How wide a button label is, without a cairo context to ask.

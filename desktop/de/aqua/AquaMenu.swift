@@ -14,8 +14,8 @@ import Surface
 import CCairo
 
 public final class AquaMenu: PopupDelegate {
-    public static let itemHeight = AquaMenuMetrics.itemHeight
-    public static let padV = AquaMenuMetrics.padV
+    public static var itemHeight: Double { AquaMenuMetrics.itemHeight }
+    public static var padV: Double { AquaMenuMetrics.padV }
 
     public let items: [AquaMenuItem]
     private let selected: Int
@@ -76,29 +76,24 @@ public final class AquaMenu: PopupDelegate {
         cairo_restore(cr)
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
 
-        let frame = Rect(0.5, 0.5, w - 1, h - 1)
-        Draw.roundedRect(cr, frame, radius: 5)
-        Draw.setColor(cr, Theme.menuBackground)
-        cairo_fill(cr)
+        let whole = Rect(0, 0, w, h)
+        Draw.paint("menu", cr, whole)
 
         for (i, (item, row)) in zip(items, aquaMenuRows(items)).enumerated() {
             if item.isSeparator {
-                Draw.setColor(cr, Theme.menuSeparator)
-                cairo_rectangle(cr, 1, (row.y + row.h / 2).rounded(.down), w - 2, 1)
-                cairo_fill(cr)
+                Draw.paint("menu.separator", cr, Rect(0, (row.y + row.h / 2).rounded(.down), w, 1))
                 continue
             }
             let textColor: Color
+            let line = Rect(0, row.y, w, row.h)
             if i == hovered {
-                Draw.roundedRect(cr, Rect(3, row.y, w - 6, row.h), radius: 3)
-                Draw.setColor(cr, Theme.menuHighlight)
-                cairo_fill(cr)
+                Draw.paint("menu.highlight", cr, line)
                 textColor = Theme.menuTextOnHighlight
             } else {
                 textColor = item.enabled ? Theme.menuText : Theme.menuTextDisabled
             }
             let baseline = row.y + row.h - 6
-            if i == selected { drawCheck(cr, x: 8, cy: row.y + row.h / 2, color: textColor) }
+            if i == selected { Draw.paint("menu.check", cr, line, colors: ["color": textColor]) }
             Draw.textLeft(cr, item.title, x: AquaMenuMetrics.titleX, baselineY: baseline,
                           color: textColor, size: Theme.fontSize)
             if !item.keyText.isEmpty {
@@ -106,44 +101,14 @@ public final class AquaMenu: PopupDelegate {
                 Draw.textLeft(cr, item.keyText, x: w - AquaMenuMetrics.rightInset - kw,
                               baselineY: baseline, color: textColor, size: Theme.fontSize)
             }
-            if item.hasSubmenu {
-                drawSubmenuArrow(cr, right: w - AquaMenuMetrics.rightInset,
-                                 cy: row.y + row.h / 2, color: textColor)
-            }
+            if item.hasSubmenu { Draw.paint("menu.submenu", cr, line, colors: ["color": textColor]) }
         }
 
-        Draw.roundedRect(cr, frame, radius: 5)
-        Draw.setColor(cr, Theme.menuBorder)
-        cairo_set_line_width(cr, 1)
-        cairo_stroke(cr)
+        Draw.paint("menu.frame", cr, whole)
 
         cairo_surface_flush(cs)
         cairo_destroy(cr)
         cairo_surface_destroy(cs)
-    }
-
-    private func drawCheck(_ cr: OpaquePointer, x: Double, cy: Double, color: Color) {
-        Draw.setColor(cr, color)
-        cairo_set_line_width(cr, 1.6)
-        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND)
-        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND)
-        cairo_move_to(cr, x, cy + 1)
-        cairo_line_to(cr, x + 3, cy + 4)
-        cairo_line_to(cr, x + 8, cy - 4)
-        cairo_stroke(cr)
-        cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT)
-        cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER)
-    }
-
-    /// A small filled triangle pointing right: a submenu opens here.
-    private func drawSubmenuArrow(_ cr: OpaquePointer, right: Double, cy: Double,
-                                  color: Color) {
-        Draw.setColor(cr, color)
-        cairo_move_to(cr, right - 5, cy - 4.5)
-        cairo_line_to(cr, right, cy)
-        cairo_line_to(cr, right - 5, cy + 4.5)
-        cairo_close_path(cr)
-        cairo_fill(cr)
     }
 
     public func pointerMoved(x: Double, y: Double) {

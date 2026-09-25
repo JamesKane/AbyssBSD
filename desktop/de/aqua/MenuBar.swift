@@ -53,12 +53,12 @@ public struct MenuBarLayout {
 }
 
 public enum MenuBarMetrics {
-    public static let height: Double = 22
-    public static let leftMargin: Double = 8
-    public static let systemSlot: Double = 26
-    public static let titlePadX: Double = 9
-    public static let clockMarginRight: Double = 14
-    public static let fontSize: Double = 13
+    public static var height: Double { Theme.current.menuBarHeight }
+    public static var leftMargin: Double { Theme.current.menuBarLeftMargin }
+    public static var systemSlot: Double { Theme.current.menuBarSystemSlot }
+    public static var titlePadX: Double { Theme.current.menuBarTitlePadX }
+    public static var clockMarginRight: Double { Theme.current.menuBarClockMarginRight }
+    public static var fontSize: Double { Theme.current.menuBarFontSize }
 }
 
 /// Format the menu-bar clock, Aqua-style ("Mon 9:41 AM", no leading zero on the
@@ -113,28 +113,18 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
                          menus: [MenuBarMenu], clock: String,
                          openIndex: Int?, showClock: Bool,
                          status: MenuBarStatus = MenuBarStatus()) -> MenuBarLayout {
-    cairo_rectangle(cr, 0, 0, w, h)
-    Draw.fillVerticalGradient(cr, y: 0, h: h, stops: [
-        (0, Theme.menuBarTop), (1, Theme.menuBarBottom),
-    ])
-    Draw.pinstripe(cr, Rect(0, 0, w, h), Theme.menuBarBottom.with(a: 0.5))
-    Draw.setColor(cr, Theme.menuBarBorder)
-    cairo_set_line_width(cr, 1)
-    cairo_move_to(cr, 0, h - 0.5); cairo_line_to(cr, w, h - 0.5); cairo_stroke(cr)
+    Draw.paint("menubar", cr, Rect(0, 0, w, h))
 
     let layout = menuBarLayout(cr, w: w, h: h, menus: menus, clock: clock,
                                showClock: showClock, status: status)
     for (i, m) in menus.enumerated() {
         let r = layout.titleRects[i]
         let open = (i == openIndex)
-        if open {
-            Draw.setColor(cr, Theme.menuHighlight)
-            cairo_rectangle(cr, r.x, 0, r.w, h)
-            cairo_fill(cr)
-        }
+        if open { Draw.paint("menubar.highlight", cr, Rect(r.x, 0, r.w, h)) }
         let color = open ? Theme.menuTextOnHighlight : Theme.menuBarText
         if m.isSystem {
-            drawSystemGlyph(cr, Rect(r.x + (r.w - 14) / 2, (h - 14) / 2, 14, 14), color: color)
+            Draw.paint("menubar.system", cr, Rect(r.x + (r.w - 14) / 2, (h - 14) / 2, 14, 14),
+                       open ? .selected : [])
         } else {
             let style: Text.Style = m.bold ? .bold : .regular
             Draw.textLeft(cr, m.title, x: r.x + MenuBarMetrics.titlePadX,
@@ -153,24 +143,6 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
                            color: Theme.menuBarText)
     }
     return layout
-}
-
-/// An original water-drop system mark (aquatic AbyssBSD motif) — a bulb topped by
-/// a point. Deliberately not Apple's apple.
-private func drawSystemGlyph(_ cr: OpaquePointer, _ r: Rect, color: Color) {
-    let cx = r.x + r.w / 2
-    let top = r.y + r.h * 0.08
-    let bulbCy = r.y + r.h * 0.62
-    let rad = r.w * 0.42
-    cairo_new_path(cr)
-    cairo_arc(cr, cx, bulbCy, rad, 0, 2 * Double.pi)
-    cairo_new_sub_path(cr)
-    cairo_move_to(cr, cx, top)
-    cairo_line_to(cr, cx + rad * 0.92, bulbCy)
-    cairo_line_to(cr, cx - rad * 0.92, bulbCy)
-    cairo_close_path(cr)
-    Draw.setColor(cr, color)
-    cairo_fill(cr)
 }
 
 public final class MenuBar: LayerSurfaceDelegate {

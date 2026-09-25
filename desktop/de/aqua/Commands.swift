@@ -95,14 +95,14 @@ public func aquaMenuItems(_ menu: Menu,
 }
 
 public enum AquaMenuMetrics {
-    public static let itemHeight = 20.0
-    public static let separatorHeight = 12.0
-    public static let padV = 4.0
-    public static let titleX = 22.0
+    public static var itemHeight: Double { Theme.current.menuItemHeight }
+    public static var separatorHeight: Double { Theme.current.menuSeparatorHeight }
+    public static var padV: Double { Theme.current.menuPadV }
+    public static var titleX: Double { Theme.current.menuTitleX }
     /// Space between the longest title and the key column, and the key column's
     /// right inset.
-    public static let keyGap = 28.0
-    public static let rightInset = 14.0
+    public static var keyGap: Double { Theme.current.menuKeyGap }
+    public static var rightInset: Double { Theme.current.menuRightInset }
 }
 
 /// Where each row sits: its top and height. One function feeds paint and

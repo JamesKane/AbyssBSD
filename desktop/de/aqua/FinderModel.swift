@@ -167,17 +167,17 @@ public func finderStatusText(count: Int, freeBytes: UInt64) -> String {
 // MARK: - Window geometry
 
 public enum FinderMetrics {
-    public static let toolbarHeight: Double = 36
-    public static let statusHeight: Double = 18
-    public static let scrollbarWidth: Double = 15
+    public static var toolbarHeight: Double { Theme.current.finderToolbarHeight }
+    public static var statusHeight: Double { Theme.current.finderStatusHeight }
+    public static var scrollbarWidth: Double { Theme.current.finderScrollbarWidth }
     // Icon view: a 48px icon over a centred label, in a fixed cell.
-    public static let iconSize: Double = 48
-    public static let cellW: Double = 88
-    public static let cellH: Double = 76
-    public static let gridPad: Double = 10
+    public static var iconSize: Double { Theme.current.finderIconSize }
+    public static var cellW: Double { Theme.current.finderCellW }
+    public static var cellH: Double { Theme.current.finderCellH }
+    public static var gridPad: Double { Theme.current.finderGridPad }
     // List view.
-    public static let rowHeight: Double = 18
-    public static let listIcon: Double = 14
+    public static var rowHeight: Double { Theme.current.finderRowHeight }
+    public static var listIcon: Double { Theme.current.finderListIcon }
 }
 
 /// Chrome rects for a Finder window at logical size (w, h). Pure: paint draws

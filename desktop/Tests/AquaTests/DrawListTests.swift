@@ -117,6 +117,7 @@ final class DrawListTests: XCTestCase {
         XCTAssertEqual(try v("max(h, $v*w)"), 30)
         XCTAssertEqual(try v("-h+1"), -29)
         XCTAssertEqual(try v("@fontSize*0.35"), 13 * 0.35)
+        XCTAssertEqual(try v("@finder.rowHeight*2"), 36, "a layer-3 metric, by its dotted name")
         XCTAssertEqual(try v("w/0"), 0, "a division by zero is 0, not a trap")
     }
 
@@ -183,6 +184,31 @@ final class DrawListTests: XCTestCase {
         let plain = try inkRight(""), tracked = try inkRight("tracking=4")
         XCTAssertGreaterThanOrEqual(tracked - plain, 7, "two gaps of 4 px (the last glyph's is outside the ink)")
         XCTAssertGreaterThan(try inkRight("upper"), plain, "ABC is wider than abc")
+    }
+
+    /// P11.5's additions: curves in a path, arcs, faded colours, dashes.
+    func testCurvesArcsFadesAndDashes() throws {
+        // A curve bulging right of the line x=10 fills pixels the straight
+        // path would not.
+        let bulge = try render("list t\n  path 10 0 curve 30 5 30 15 10 20 close\n  fill #ffffff\nend")
+        XCTAssertGreaterThan(bulge(18, 10).3, 200); XCTAssertEqual(bulge(5, 10).3, 0)
+        // An arc from 0 to π/2 is the lower-right quarter only.
+        let arc = try render("list t\n  arc 20 0 10 0 1.5707963\n  stroke #ffffff 2\nend", w: 40, h: 20)
+        XCTAssertGreaterThan(arc(27, 7).3, 100, "on the quarter")
+        XCTAssertEqual(arc(13, 7).3, 0, "not the lower-left quarter")
+        // fade(c, $p) multiplies alpha by a parameter.
+        let half = try render("list t\n  rect 0 0 w h\n  fill fade(#ffffff, $p)\nend", params: ["p": 0.5])
+        XCTAssertEqual(Double(half(5, 5).3), 128, accuracy: 1)
+        XCTAssertEqual(try render("list t\n  rect 0 0 w h\n  fill fade(#ffffff, $p)\nend")(5, 5).3, 0,
+                       "an absent parameter fades to nothing")
+        // dash=2,2 leaves gaps along the line.
+        let dash = try render("list t\n  path 0 10.5 40 10.5\n  stroke #ffffff 1 dash=2,2\nend")
+        XCTAssertEqual(dash(0, 10).3, 255); XCTAssertEqual(dash(2, 10).3, 0); XCTAssertEqual(dash(4, 10).3, 255)
+        // and the dash does not leak into the next stroke.
+        let after = try render("list t\n  path 0 5.5 40 5.5\n  stroke #ffffff 1 dash=2,2\n  path 0 10.5 40 10.5\n  stroke #ffffff 1\nend")
+        XCTAssertEqual(after(2, 10).3, 255)
+        XCTAssertEqual(error("list t\n  path 0 0 curve 1 2 3\nend")?.line, 2, "a curve wants six operands")
+        XCTAssertEqual(error("list t\n  path 0 0 1 1\n  stroke #ffffff 1 dash=\nend")?.message, "dash=: want dash=on,off,… in pixels")
     }
 
     func testTheSampleSheetParses() throws {

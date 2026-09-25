@@ -56,9 +56,8 @@ public func paintSheetScene(_ cr: OpaquePointer, w: Double, h: Double,
     guard visible else { return s }
 
     // Dim the body (below the title bar) as the sheet comes out.
-    Draw.setColor(cr, Theme.sheetDim.with(a: Theme.sheetDim.a * progress))
-    cairo_rectangle(cr, 0, Theme.titleBarHeight, w, h - Theme.titleBarHeight)
-    cairo_fill(cr)
+    Draw.paint("sheet.dim", cr, Rect(0, Theme.titleBarHeight, w, h - Theme.titleBarHeight),
+               parameters: ["progress": progress])
 
     let (panel, cancel, ok) = sheetLayout(w: w, h: h)
     s.cancel = cancel
@@ -75,19 +74,7 @@ public func paintSheetScene(_ cr: OpaquePointer, w: Double, h: Double,
 
 private func drawSheetPanel(_ cr: OpaquePointer, _ panel: Rect,
                             cancel: Rect, ok: Rect) {
-    // Soft drop shadow under the leading edge.
-    Draw.setColor(cr, Theme.sheetShadow)
-    Draw.roundedRectBottom(cr, Rect(panel.x, panel.y + 2, panel.w, panel.h),
-                           radius: 8)
-    cairo_fill(cr)
-
-    Draw.roundedRectBottom(cr, panel, radius: 8)
-    Draw.setColor(cr, Theme.sheetBackground)
-    cairo_fill(cr)
-    Draw.roundedRectBottom(cr, panel, radius: 8)
-    Draw.setColor(cr, Theme.windowBorder)
-    cairo_set_line_width(cr, 1)
-    cairo_stroke(cr)
+    Draw.paint("sheet", cr, panel)
 
     // The primary question is bold Lucida Grande in Aqua; the secondary is regular.
     Draw.textLeft(cr, "Delete this item?", x: panel.x + 24, baselineY: panel.y + 40,

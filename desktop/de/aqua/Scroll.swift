@@ -75,9 +75,7 @@ public func paintScroll(_ cr: OpaquePointer, w: Double, h: Double,
     cairo_save(cr)
     cairo_rectangle(cr, L.list.x, L.list.y, L.list.w, L.list.h)
     cairo_clip(cr)
-    Draw.setColor(cr, Theme.listBackground)
-    cairo_rectangle(cr, L.list.x, L.list.y, L.list.w, L.list.h)
-    cairo_fill(cr)
+    Draw.paint("listview", cr, L.list)
     let first = max(0, Int(off / scrollRowHeight))
     let last = min(scrollItemCount - 1,
                    Int((off + viewportH) / scrollRowHeight))
@@ -85,9 +83,7 @@ public func paintScroll(_ cr: OpaquePointer, w: Double, h: Double,
         for i in first...last {
             let ry = L.list.y + Double(i) * scrollRowHeight - off
             if i % 2 == 1 {
-                Draw.setColor(cr, Theme.listStripe)
-                cairo_rectangle(cr, L.list.x, ry, L.list.w, scrollRowHeight)
-                cairo_fill(cr)
+                Draw.paint("listview.stripe", cr, Rect(L.list.x, ry, L.list.w, scrollRowHeight))
             }
             let n = i + 1
             let label = n < 10 ? "Item 0\(n)" : "Item \(n)"
@@ -99,10 +95,7 @@ public func paintScroll(_ cr: OpaquePointer, w: Double, h: Double,
     cairo_restore(cr)
 
     // List border.
-    Draw.setColor(cr, Theme.controlBorder)
-    cairo_set_line_width(cr, 1)
-    cairo_rectangle(cr, L.list.x + 0.5, L.list.y + 0.5, L.list.w - 1, L.list.h - 1)
-    cairo_stroke(cr)
+    Draw.paint("listview.frame", cr, L.list)
 
     // Scrollbar: track, thumb, paired arrows.
     Draw.scrollTrack(cr, L.track, vertical: true)

@@ -309,3 +309,108 @@ list groupbox
   fill contentBackground
   text $label 14 4 left baseline size=11 color=controlLabel/0.75
 end
+
+# A list view's paper, its alternate-row stripe, and its frame (the scroll
+# demo's list; the Finder's list view).
+list listview
+  rect 0 0 w h
+  fill listBackground
+end
+
+list listview.stripe
+  rect 0 0 w h
+  fill listStripe
+end
+
+list listview.frame
+  rect 0.5 0.5 w-1 h-1
+  stroke controlBorder 1
+end
+
+# The selected tab merges into its pane: the pane's border under it is
+# painted out. The rect is the tab; $pane is the pane's top, from the tab's.
+list tab.merge
+  rect 1 $pane-1 w-2 2
+  fill tabPaneBackground
+end
+
+# A sheet. The window body under the title bar dims as it comes out
+# ($progress 0…1); the panel hangs from the title bar with a soft shadow.
+list sheet.dim
+  rect 0 0 w h
+  fill fade(sheetDim, $progress)
+end
+
+list sheet
+  rect 0 2 w h 8 bottom
+  fill sheetShadow
+  rect 0 0 w h 8 bottom
+  fill sheetBackground
+  stroke windowBorder 1
+end
+
+# A pop-up menu: the paper, and the frame drawn over the items last. The rect
+# is the whole menu surface.
+list menu
+  rect 0.5 0.5 w-1 h-1 5
+  fill menuBackground
+end
+
+list menu.frame
+  rect 0.5 0.5 w-1 h-1 5
+  stroke menuBorder 1
+end
+
+# A separator: the rect is one pixel-snapped line across the menu.
+list menu.separator
+  rect 1 0 w-2 h
+  fill menuSeparator
+end
+
+# An item's parts; the rect is the item's row across the menu, $color the
+# colour its text is drawn in (on the highlight, enabled, or not).
+list menu.highlight
+  rect 3 0 w-6 h 3
+  fill menuHighlight
+end
+
+list menu.check
+  path 8 h/2+1 8+3 h/2+4 8+8 h/2-4
+  stroke $color 1.6 round
+end
+
+list menu.submenu
+  path w-@menu.rightInset-5 h/2-4.5 w-@menu.rightInset h/2 w-@menu.rightInset-5 h/2+4.5 close
+  fill $color
+end
+
+# System Preferences' toolbar: its band, the separator along its foot, and the
+# dotted divider after Show All ($x its position).
+#
+# The band's rectangle is stroked in the separator's colour along with the
+# separator line, and so is outlined: the gradient was filled with
+# fill_preserve and the line added to the kept path (HANDOFF §2.67).
+list prefs.toolbar
+  rect 0 0 w h
+  fill vertical stops 0 prefsToolbarTop 1 prefsToolbarBottom
+  and path 0 h-0.5 w h-0.5
+  stroke separator 1
+end
+
+list prefs.toolbar.divider
+  path $x 10 $x h-10
+  stroke toolbarSeparator 1 dash=1,2
+end
+
+# A selected icon's name, on the highlight (the Finder's icon view, the
+# desktop); the rect is the label's, padded.
+list iconlabel.selected
+  rect 0 0 w h 3
+  fill menuHighlight
+end
+
+# A list view's selected row.
+list listview.selection
+  rect 0 0 w h
+  fill menuHighlight
+end

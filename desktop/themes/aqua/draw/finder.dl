@@ -1,0 +1,93 @@
+# Aqua — the Finder's window paint (PHASE11 P11.5): toolbar, list header,
+# status bar, selection, the rename field. Its item icons are P11.8's, its
+# text the toolkit's.
+
+# The toolbar band, with the separator along its foot.
+list finder.toolbar
+  rect 0 0 w h
+  fill vertical stops 0 toolbarTop 1 toolbarBottom
+  path 0 h-0.5 w h-0.5
+  stroke separator 1
+end
+
+# The Back control: a white gel capsule with a left-pointing glyph. Pressed
+# while held; disabled at the top of the history.
+list finder.back
+  rect 0 0 w h 5
+  when pressed fill vertical stops 0 controlPressedTop 1 controlPressedBottom
+  unless pressed fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  unless disabled stroke controlBorder/1 1
+  when disabled stroke controlBorder/0.5 1
+  path w/2-4 h/2 w/2+3 h/2-5 w/2+3 h/2+5 close
+  unless disabled fill toolbarGlyph
+  when disabled fill toolbarGlyph/0.35
+end
+
+# The glyphs on the icon/list view switch (a segmented control, drawn first):
+# four tiles on the left segment, three lines on the right. Selected is the
+# list view; each glyph is white on the chosen segment.
+list finder.viewswitch
+  rect w/2/2-4-2/2 h/2-4-2/2 4 4
+  and rect w/2/2-4-2/2+(4+2) h/2-4-2/2 4 4
+  and rect w/2/2-4-2/2 h/2-4-2/2+(4+2) 4 4
+  and rect w/2/2-4-2/2+(4+2) h/2-4-2/2+(4+2) 4 4
+  unless selected fill controlGlyph
+  when selected fill segmentGlyph
+  path w/2+w/2/2-5.5 h/2-4 w/2+w/2/2-5.5+11 h/2-4
+  and path w/2+w/2/2-5.5 h/2-4+4 w/2+w/2/2-5.5+11 h/2-4+4
+  and path w/2+w/2/2-5.5 h/2-4+8 w/2+w/2/2-5.5+11 h/2-4+8
+  when selected stroke controlGlyph 1.6
+  unless selected stroke segmentGlyph 1.6
+end
+
+# The list view's column header, its foot, and a divider at column $x.
+list finder.header
+  rect 0 0 w h
+  fill vertical stops 0 listHeaderTop 1 listHeaderBottom
+  path 0 h-0.5 w h-0.5
+  stroke separator 1
+end
+
+list finder.header.divider
+  path $x+0.5 2 $x+0.5 h-2
+  stroke separator 1
+end
+
+# The hairline along the top of the item well; the rect is one line high.
+list finder.welledge
+  path 0 0.5 w 0.5
+  stroke separator 1
+end
+
+# A selected icon's soft blue wash; the rect is the icon.
+list finder.selection
+  rect -3 -3 w+6 h+6 6
+  fill menuHighlight/0.22
+end
+
+# The inline rename field: a white well in the focus ring. Selected when part
+# of the name is selected: $sel is that run's width. Its text is drawn next,
+# then the caret, at $caret.
+list finder.namefield
+  rect 0 0 w h
+  fill fieldBackground
+  rect -1.5 -1.5 w+3 h+3 2+1.5
+  stroke fieldFocusRing 2.5
+  rect 0.5 0.5 w-1 h-1
+  stroke fieldBorder 1
+  when selected rect 4-1 2 $sel+2 h-4
+  when selected fill menuHighlight
+end
+
+list finder.namefield.caret
+  rect $caret 2 1 h-4
+  fill fieldCaret
+end
+
+# The status bar, with the separator along its top.
+list finder.status
+  rect 0 0 w h
+  fill vertical stops 0 statusBarTop 1 statusBarBottom
+  path 0 0.5 w 0.5
+  stroke separator 1
+end

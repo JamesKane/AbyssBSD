@@ -83,9 +83,7 @@ public func paintTabs(_ cr: OpaquePointer, w: Double, h: Double,
     let sel = tabs[min(max(state.tab, 0), tabs.count - 1)]
     Draw.tab(cr, sel, label: tabsTabLabels[state.tab], selected: true)
     // Merge the selected tab into the pane by erasing the border beneath it.
-    Draw.setColor(cr, Theme.tabPaneBackground)
-    cairo_rectangle(cr, sel.x + 1, L.pane.y - 1, sel.w - 2, 2)
-    cairo_fill(cr)
+    Draw.paint("tab.merge", cr, sel, parameters: ["pane": L.pane.y - sel.y])
 
     // Pane content for the selected tab.
     let (heading, lines) = tabsContent[state.tab]

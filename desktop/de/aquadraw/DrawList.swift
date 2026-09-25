@@ -31,10 +31,12 @@
 // **Colours** are a token name, `#rrggbb[/a]`, `$param` (a colour the widget
 // passes — a traffic light's base), any of those with `/a` (alpha replaced),
 // `mix(a, b, t)` (OKLCH, as theme.ini's), or `shift(c, d)` (d added to each of
-// r g b, clamped — Aqua's "a touch darker when pressed").
+// r g b, clamped — Aqua's "a touch darker when pressed"), or `fade(c, $p)`
+// (alpha times a parameter — a sheet's dimming as it slides out).
 //
 // **Shapes:** `rect x y w h [radius [top|bottom|all]]`, `ellipse x y w h`,
-// `circle cx cy r`, `path x y x y … [close]`; `and SHAPE` adds a subpath to
+// `circle cx cy r`, `arc cx cy r from to` (radians, clockwise from 3 o'clock),
+// `path x y  x y | curve x1 y1 x2 y2 x y  … [close]`; `and SHAPE` adds a subpath to
 // the current shape, so one fill or stroke covers both.
 //
 // **Paints:** a colour; `vertical stops …` (top to bottom of the current
@@ -43,7 +45,7 @@
 // PHASE11 §4.1); `stripes angle w1 c1 w2 c2`; `noise seed alpha`. `stops` is
 // followed by offset/colour pairs.
 //
-// **Ops:** `fill PAINT`; `stroke PAINT WIDTH [round]`; `bevel W LIGHT SHADE`;
+// **Ops:** `fill PAINT`; `stroke PAINT WIDTH [round] [dash=on,off…]`; `bevel W LIGHT SHADE`;
 // `innershadow COLOUR SIZE [EXTENT]`; `glow COLOUR RADIUS [STRENGTH]`;
 // `rules across FROM EVERY PAINT WIDTH` (hairlines across the shape, FROM
 // its top, EVERY apart — a pinstripe); `rules slant FROM EVERY UNTIL PAINT
@@ -112,6 +114,7 @@ indirect enum ColorRef: Equatable, Sendable {
     case parameter(String)
     case alpha(ColorRef, Double)
     case shift(ColorRef, Double)
+    case fade(ColorRef, String)      // alpha times a parameter — a sheet's dimming as it slides
     case mix(ColorRef, ColorRef, Double)
 }
 
@@ -130,7 +133,14 @@ enum Shape: Equatable, Sendable {
     case rect(Operand, Operand, Operand, Operand, Operand?, Corners)
     case ellipse(Operand, Operand, Operand, Operand)
     case circle(Operand, Operand, Operand)
-    case path([Operand], closed: Bool)
+    case arc(Operand, Operand, Operand, Operand, Operand)   // cx cy r from to (radians, clockwise)
+    case path([PathSegment], closed: Bool)
+}
+
+enum PathSegment: Equatable, Sendable {
+    case move(Operand, Operand)
+    case line(Operand, Operand)
+    case curve(Operand, Operand, Operand, Operand, Operand, Operand)
 }
 
 enum TextAlign: Equatable, Sendable { case left, center, right }
@@ -154,7 +164,7 @@ enum Op: Sendable {
     case shape(Shape)
     case andShape(Shape)             // one more subpath in the current shape
     case fill(Paint)
-    case stroke(Paint, Operand, round: Bool)
+    case stroke(Paint, Operand, round: Bool, dash: [Double])
     case bevel(Operand, ColorRef, ColorRef)
     case innerShadow(ColorRef, Operand, Operand?)
     case glow(ColorRef, Operand, Double)
@@ -334,7 +344,7 @@ enum DrawListParser {
             }
             if c == "@" || c == "$" {
                 i += 1
-                let name = identifier()
+                let name = identifier(dotted: c == "@")   // @finder.rowHeight
                 guard !name.isEmpty else { throw fail("\(c) wants a name") }
                 if c == "$" { return .parameter(name) }
                 guard let k = ThemeTokens.metricKeys.firstIndex(where: { $0.0 == name }) else {
@@ -366,9 +376,9 @@ enum DrawListParser {
             default: throw fail("\(name) is not an operand (a number, w, h, @metric, $parameter, textw, min or max)")
             }
         }
-        mutating func identifier() -> String {
+        mutating func identifier(dotted: Bool = false) -> String {
             let start = i
-            while let d = peek, d.isLetter || d.isNumber || d == "_" { i += 1 }
+            while let d = peek, d.isLetter || d.isNumber || d == "_" || (dotted && d == ".") { i += 1 }
             return String(chars[start..<i])
         }
     }
@@ -391,6 +401,12 @@ enum DrawListParser {
                 throw DrawListError(line: line, message: "\(s): want shift(colour, -1…1)")
             }
             return .shift(try color(args[0], line: line), d)
+        }
+        if let args = fn("fade") {
+            guard args.count == 2, args[1].hasPrefix("$"), args[1].count > 1 else {
+                throw DrawListError(line: line, message: "\(s): want fade(colour, $parameter)")
+            }
+            return .fade(try color(args[0], line: line), String(args[1].dropFirst()))
         }
         if s.hasPrefix("#") {
             guard let c = ThemeLoader.color(s, lookup: { _ in nil }) else {
@@ -511,22 +527,49 @@ enum DrawListParser {
         case "circle":
             guard args.count == 3 else { throw DrawListError(line: line, message: "want: circle cx cy r") }
             return .shape(.circle(try o(0), try o(1), try o(2)))
+        case "arc":
+            guard args.count == 5 else { throw DrawListError(line: line, message: "want: arc cx cy r from to") }
+            return .shape(.arc(try o(0), try o(1), try o(2), try o(3), try o(4)))
         case "path":
             let closed = args.last == "close"
-            let pts = closed ? Array(args.dropLast()) : args
-            guard pts.count >= 4, pts.count % 2 == 0 else { throw DrawListError(line: line, message: "want: path x y x y … [close]") }
-            return .shape(.path(try pts.map { try operand($0, line: line) }, closed: closed))
+            let a = closed ? Array(args.dropLast()) : args
+            let usage = "want: path x y, then x y or curve x1 y1 x2 y2 x y …, [close]"
+            var segs: [PathSegment] = [], i = 0
+            while i < a.count {
+                if a[i] == "curve" {
+                    guard !segs.isEmpty, i + 7 <= a.count else {
+                        throw DrawListError(line: line, message: usage)
+                    }
+                    let o = try (1...6).map { try operand(a[i + $0], line: line) }
+                    segs.append(.curve(o[0], o[1], o[2], o[3], o[4], o[5])); i += 7
+                } else {
+                    guard i + 1 < a.count else { throw DrawListError(line: line, message: usage) }
+                    let x = try operand(a[i], line: line), y = try operand(a[i + 1], line: line)
+                    segs.append(segs.isEmpty ? .move(x, y) : .line(x, y)); i += 2
+                }
+            }
+            guard segs.count >= 2 else { throw DrawListError(line: line, message: usage) }
+            return .shape(.path(segs, closed: closed))
         case "fill":
             let (p, used) = try paint(args[...], line: line)
             guard used == args.count else { throw DrawListError(line: line, message: "fill: unexpected \(args[used...].joined(separator: " "))") }
             return .fill(p)
         case "stroke":
-            let round = args.last == "round"
-            let a = round ? Array(args.dropLast()) : args
-            guard a.count >= 2 else { throw DrawListError(line: line, message: "want: stroke <paint> <width> [round]") }
+            var a = args, round = false, dash: [Double] = []
+            while let last = a.last, last == "round" || last.hasPrefix("dash=") {
+                if last == "round" { round = true } else {
+                    let d = last.dropFirst(5).split(separator: ",").compactMap { Double($0) }
+                    guard !d.isEmpty, d.allSatisfy({ $0 >= 0 }), d.contains(where: { $0 > 0 }) else {
+                        throw DrawListError(line: line, message: "\(last): want dash=on,off,… in pixels")
+                    }
+                    dash = d
+                }
+                a.removeLast()
+            }
+            guard a.count >= 2 else { throw DrawListError(line: line, message: "want: stroke <paint> <width> [round] [dash=on,off]") }
             let (p, used) = try paint(a.dropLast(), line: line)
             guard used == a.count - 1 else { throw DrawListError(line: line, message: "stroke: unexpected arguments") }
-            return .stroke(p, try operand(a.last!, line: line), round: round)
+            return .stroke(p, try operand(a.last!, line: line), round: round, dash: dash)
         case "bevel":
             guard args.count == 3 else { throw DrawListError(line: line, message: "want: bevel <width> <light> <shade>") }
             return .bevel(try o(0), try color(args[1], line: line), try color(args[2], line: line))
@@ -591,7 +634,7 @@ enum DrawListParser {
         case "pop": return .pop
         case "clip": return .clip
         default:
-            throw DrawListError(line: line, message: "\(name) is not an op (rect ellipse circle path fill stroke bevel innershadow glow rules text push pop clip)")
+            throw DrawListError(line: line, message: "\(name) is not an op (rect ellipse circle arc path fill stroke bevel innershadow glow rules text push pop clip)")
         }
     }
 }
@@ -637,14 +680,16 @@ public enum DrawListRunner {
             case .fill(let p):
                 guard let s = shape else { continue }
                 path(s, cr, ctx, more); setPaint(p, s, cr, ctx); cairo_fill(cr); clearPaint(cr)
-            case .stroke(let p, let width, let round):
+            case .stroke(let p, let width, let round, let dash):
                 guard let s = shape else { continue }
                 path(s, cr, ctx, more); setPaint(p, s, cr, ctx)
                 cairo_set_line_width(cr, eval(width, ctx))
+                if !dash.isEmpty { cairo_set_dash(cr, dash, Int32(dash.count), 0) }
                 if round {
                     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND); cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND)
                 }
                 cairo_stroke(cr); clearPaint(cr)
+                if !dash.isEmpty { cairo_set_dash(cr, [], 0, 0) }
                 if round {
                     cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT); cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER)
                 }
@@ -730,6 +775,9 @@ public enum DrawListRunner {
             return d < 0
                 ? Color(max(0, b.r + d), max(0, b.g + d), max(0, b.b + d), b.a)
                 : Color(min(1, b.r + d), min(1, b.g + d), min(1, b.b + d), b.a)
+        case .fade(let base, let p):
+            let b = resolve(base, ctx)
+            return b.with(a: b.a * (ctx.parameters[p] ?? 0))
         case .mix(let a, let b, let t): return ThemeLoader.mixOKLCH(resolve(a, ctx), resolve(b, ctx), t)
         }
     }
@@ -765,10 +813,17 @@ public enum DrawListRunner {
             cairo_restore(cr)
         case .circle(let cx, let cy, let r):
             cairo_arc(cr, eval(cx, ctx), eval(cy, ctx), eval(r, ctx), 0, 2 * .pi)
-        case .path(let pts, let closed):
-            cairo_move_to(cr, eval(pts[0], ctx), eval(pts[1], ctx))
-            for i in stride(from: 2, to: pts.count, by: 2) {
-                cairo_line_to(cr, eval(pts[i], ctx), eval(pts[i + 1], ctx))
+        case .arc(let cx, let cy, let r, let a0, let a1):
+            cairo_arc(cr, eval(cx, ctx), eval(cy, ctx), eval(r, ctx), eval(a0, ctx), eval(a1, ctx))
+        case .path(let segs, let closed):
+            for seg in segs {
+                switch seg {
+                case .move(let x, let y): cairo_move_to(cr, eval(x, ctx), eval(y, ctx))
+                case .line(let x, let y): cairo_line_to(cr, eval(x, ctx), eval(y, ctx))
+                case .curve(let x1, let y1, let x2, let y2, let x, let y):
+                    cairo_curve_to(cr, eval(x1, ctx), eval(y1, ctx), eval(x2, ctx), eval(y2, ctx),
+                                   eval(x, ctx), eval(y, ctx))
+                }
             }
             if closed { cairo_close_path(cr) }
         }
@@ -780,12 +835,19 @@ public enum DrawListRunner {
         switch s {
         case .rect(let x, let y, let w, let h, _, _), .ellipse(let x, let y, let w, let h):
             return Rect(eval(x, ctx), eval(y, ctx), eval(w, ctx), eval(h, ctx))
-        case .circle(let cx, let cy, let r):
+        case .circle(let cx, let cy, let r), .arc(let cx, let cy, let r, _, _):
             let rr = eval(r, ctx)
             return Rect(eval(cx, ctx) - rr, eval(cy, ctx) - rr, rr * 2, rr * 2)
-        case .path(let pts, _):
-            let xs = stride(from: 0, to: pts.count, by: 2).map { eval(pts[$0], ctx) }
-            let ys = stride(from: 1, to: pts.count, by: 2).map { eval(pts[$0], ctx) }
+        case .path(let segs, _):
+            var xs: [Double] = [], ys: [Double] = []
+            for seg in segs {
+                switch seg {
+                case .move(let x, let y), .line(let x, let y):
+                    xs.append(eval(x, ctx)); ys.append(eval(y, ctx))
+                case .curve(let x1, let y1, let x2, let y2, let x, let y):
+                    xs += [eval(x1, ctx), eval(x2, ctx), eval(x, ctx)]; ys += [eval(y1, ctx), eval(y2, ctx), eval(y, ctx)]
+                }
+            }
             let x0 = xs.min() ?? 0, y0 = ys.min() ?? 0
             return Rect(x0, y0, (xs.max() ?? 0) - x0, (ys.max() ?? 0) - y0)
         }

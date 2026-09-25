@@ -55,6 +55,10 @@ sheet|sheet|
 finder|finder|
 finder-list|finder|AQUA_FINDER_VIEW=list
 finder@2x|finder|AQUA_SCALE=2
+finder-rename|finder|AQUA_FINDER_STATE=rename
+finder-list-rename@2x|finder|AQUA_FINDER_VIEW=list AQUA_FINDER_STATE=rename AQUA_SCALE=2
+finder-back|finder|AQUA_FINDER_STATE=back
+finder-list-back|finder|AQUA_FINDER_VIEW=list AQUA_FINDER_STATE=back
 installer-hub|installer|
 installer-empty|installer|AQUA_INSTALLER_PAGE=empty
 installer-disk|installer|AQUA_INSTALLER_PAGE=disk
@@ -66,10 +70,18 @@ installer-done|installer|AQUA_INSTALLER_PAGE=done
 wallpaper|wallpaper|
 menubar|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
 menubar@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_SCALE=2
+menubar-system|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=0
+menubar-file@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2 AQUA_SCALE=2
+menubar-mute@2x|menubar|ABYSS_FAKE_VOLUME=0 ABYSS_FAKE_BATTERY=0 ABYSS_FAKE_BATTERY_CHARGING=1 AQUA_SCALE=2
+menubar-low|menubar|ABYSS_FAKE_VOLUME=20 ABYSS_FAKE_BATTERY=5
+menubar-full|menubar|ABYSS_FAKE_VOLUME=100 ABYSS_FAKE_BATTERY=100 ABYSS_FAKE_BATTERY_CHARGING=1
 dock|dock|
+dock-running@2x|dock|AQUA_DOCK_RUNNING=1 AQUA_SCALE=2
 notify|notify|
 menu|menu|
 menu@2x|menu|AQUA_SCALE=2
+menu-marks|menu|AQUA_MENU_MARKS=1
+menu-marks@2x|menu|AQUA_MENU_MARKS=1 AQUA_SCALE=2
 frame|frame|
 drawlist|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl
 drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2'

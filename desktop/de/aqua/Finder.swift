@@ -166,9 +166,7 @@ public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
     let scroll = max(0, min(state.scroll, maxScroll))
 
     // The item well: white, clipped, scrolled.
-    Draw.setColor(cr, Theme.listBackground)
-    cairo_rectangle(cr, L.content.x, L.content.y, L.content.w, L.content.h)
-    cairo_fill(cr)
+    Draw.paint("listview", cr, L.content)
 
     if state.view == .list { paintFinderListHeader(cr, L) }
 
@@ -190,11 +188,7 @@ public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
     cairo_restore(cr)
 
     // Well border (drawn over the content edge, under the scrollbar).
-    Draw.setColor(cr, Theme.separator)
-    cairo_set_line_width(cr, 1)
-    cairo_move_to(cr, L.content.x, L.content.y + 0.5)
-    cairo_line_to(cr, L.content.x + L.content.w, L.content.y + 0.5)
-    cairo_stroke(cr)
+    Draw.paint("finder.welledge", cr, Rect(L.content.x, L.content.y, L.content.w, 1))
 
     // Scrollbar: track, thumb (hidden when everything fits), paired arrows.
     Draw.scrollTrack(cr, L.track, vertical: true)
@@ -213,16 +207,7 @@ private func paintFinderToolbar(_ cr: OpaquePointer, _ L: FinderLayout,
                                 state: FinderState) {
     let bar = L.toolbar
     guard bar.h > 0 else { return }
-    cairo_rectangle(cr, bar.x, bar.y, bar.w, bar.h)
-    Draw.fillVerticalGradient(cr, y: bar.y, h: bar.h, stops: [
-        (0, Theme.toolbarTop), (1, Theme.toolbarBottom),
-    ])
-    cairo_new_path(cr)
-    Draw.setColor(cr, Theme.separator)
-    cairo_set_line_width(cr, 1)
-    cairo_move_to(cr, bar.x, bar.y + bar.h - 0.5)
-    cairo_line_to(cr, bar.x + bar.w, bar.y + bar.h - 0.5)
-    cairo_stroke(cr)
+    Draw.paint("finder.toolbar", cr, bar)   // finder.dl
 
     drawBackButton(cr, L.backButton, enabled: state.canGoBack,
                    pressed: state.backPressed)
@@ -233,28 +218,9 @@ private func paintFinderToolbar(_ cr: OpaquePointer, _ L: FinderLayout,
 /// greyed out at the top of the history.
 private func drawBackButton(_ cr: OpaquePointer, _ r: Rect, enabled: Bool,
                             pressed: Bool) {
-    Draw.roundedRect(cr, r, radius: 5)
-    if pressed && enabled {
-        Draw.fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
-            (0, Theme.controlPressedTop), (1, Theme.controlPressedBottom)])
-    } else {
-        Draw.fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
-            (0, Theme.controlWhiteTop), (1, Theme.controlWhiteBottom)])
-    }
-    cairo_new_path(cr)
-    Draw.roundedRect(cr, r, radius: 5)
-    Draw.setColor(cr, Theme.controlBorder.with(a: enabled ? 1 : 0.5))
-    cairo_set_line_width(cr, 1)
-    cairo_stroke(cr)
-
-    let cx = r.x + r.w / 2, cy = r.y + r.h / 2
-    cairo_new_path(cr)
-    cairo_move_to(cr, cx - 4, cy)
-    cairo_line_to(cr, cx + 3, cy - 5)
-    cairo_line_to(cr, cx + 3, cy + 5)
-    cairo_close_path(cr)
-    Draw.setColor(cr, enabled ? Theme.toolbarGlyph : Theme.toolbarGlyph.with(a: 0.35))
-    cairo_fill(cr)
+    var st: DrawState = pressed && enabled ? .pressed : []
+    if !enabled { st.insert(.disabled) }
+    Draw.paint("finder.back", cr, r, st)
 }
 
 /// The icon/list view switch: a two-segment Aqua control with glyphs instead of
@@ -262,54 +228,15 @@ private func drawBackButton(_ cr: OpaquePointer, _ r: Rect, enabled: Bool,
 private func drawViewSwitch(_ cr: OpaquePointer, _ r: Rect, view: FinderView) {
     let selected = view == .icon ? 0 : 1
     Draw.segmentedControl(cr, r, labels: ["", ""], selected: selected)
-    let segs = Draw.segmentRects(r, count: 2)
-    guard segs.count == 2 else { return }
-
-    // Icon-view glyph: four small tiles.
-    let a = segs[0]
-    let onBlue = Theme.controlGlyph, onWhite = Theme.segmentGlyph
-    Draw.setColor(cr, selected == 0 ? onBlue : onWhite)
-    let s = 4.0, gap = 2.0
-    let gx = a.x + a.w / 2 - s - gap / 2, gy = a.y + a.h / 2 - s - gap / 2
-    for row in 0..<2 {
-        for col in 0..<2 {
-            cairo_rectangle(cr, gx + Double(col) * (s + gap),
-                            gy + Double(row) * (s + gap), s, s)
-        }
-    }
-    cairo_fill(cr)
-
-    // List-view glyph: three lines.
-    let b = segs[1]
-    Draw.setColor(cr, selected == 1 ? onBlue : onWhite)
-    cairo_set_line_width(cr, 1.6)
-    let lx = b.x + b.w / 2 - 5.5, ly = b.y + b.h / 2 - 4
-    for k in 0..<3 {
-        let y = ly + Double(k) * 4
-        cairo_move_to(cr, lx, y)
-        cairo_line_to(cr, lx + 11, y)
-    }
-    cairo_stroke(cr)
+    Draw.paint("finder.viewswitch", cr, r, selected == 1 ? .selected : [])
 }
 
 private func paintFinderListHeader(_ cr: OpaquePointer, _ L: FinderLayout) {
     let hdr = Rect(L.content.x, L.content.y, L.content.w, finderListHeaderHeight)
-    cairo_rectangle(cr, hdr.x, hdr.y, hdr.w, hdr.h)
-    Draw.fillVerticalGradient(cr, y: hdr.y, h: hdr.h, stops: [
-        (0, Theme.listHeaderTop), (1, Theme.listHeaderBottom),
-    ])
-    cairo_new_path(cr)
-    Draw.setColor(cr, Theme.separator)
-    cairo_set_line_width(cr, 1)
-    cairo_move_to(cr, hdr.x, hdr.y + hdr.h - 0.5)
-    cairo_line_to(cr, hdr.x + hdr.w, hdr.y + hdr.h - 0.5)
-    cairo_stroke(cr)
-
+    Draw.paint("finder.header", cr, hdr)
     let cols = finderListColumns(hdr)
     for (i, c) in cols.enumerated() where i > 0 {
-        cairo_move_to(cr, c.x + 0.5, hdr.y + 2)
-        cairo_line_to(cr, c.x + 0.5, hdr.y + hdr.h - 2)
-        cairo_stroke(cr)
+        Draw.paint("finder.header.divider", cr, hdr, parameters: ["x": c.x - hdr.x])
     }
     let titles = ["Name", "Size", "Kind"]
     for (i, c) in cols.enumerated() {
@@ -336,9 +263,7 @@ private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
     let icon = Rect(cell.x + (cell.w - size) / 2, cell.y + 4, size, size)
     if selected {
         // Jaguar tints the selected icon with a soft blue wash.
-        Draw.roundedRect(cr, Rect(icon.x - 3, icon.y - 3, size + 6, size + 6), radius: 6)
-        Draw.setColor(cr, Theme.menuHighlight.with(a: 0.22))
-        cairo_fill(cr)
+        Draw.paint("finder.selection", cr, icon)
     }
     drawFinderIcon(cr, entry, icon)
 
@@ -356,10 +281,7 @@ private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
     let tw = Draw.textWidth(cr, label, size: 11)
     let labelY = icon.y + size + 4
     if selected {
-        Draw.roundedRect(cr, Rect(cell.x + cell.w / 2 - tw / 2 - 4, labelY, tw + 8, 14),
-                         radius: 3)
-        Draw.setColor(cr, Theme.menuHighlight)
-        cairo_fill(cr)
+        Draw.paint("iconlabel.selected", cr, Rect(cell.x + cell.w / 2 - tw / 2 - 4, labelY, tw + 8, 14))
     }
     Draw.text(cr, label, centerX: cell.x + cell.w / 2, centerY: labelY + 7,
               color: selected ? Theme.menuTextOnHighlight : Theme.bodyText, size: 11)
@@ -368,11 +290,7 @@ private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
 private func paintFinderListRow(_ cr: OpaquePointer, _ entry: FinderEntry,
                                 _ row: Rect, selected: Bool,
                                 editing: FinderEdit? = nil) {
-    if selected {
-        cairo_rectangle(cr, row.x, row.y, row.w, row.h)
-        Draw.setColor(cr, Theme.menuHighlight)
-        cairo_fill(cr)
-    }
+    if selected { Draw.paint("listview.selection", cr, row) }
     let fg = selected ? Theme.menuTextOnHighlight : Theme.bodyText
     let cols = finderListColumns(row)
     let iconSide = FinderMetrics.listIcon
@@ -405,24 +323,12 @@ private func paintFinderListRow(_ cr: OpaquePointer, _ entry: FinderEntry,
 private func drawFinderNameField(_ cr: OpaquePointer, _ r: Rect, edit: FinderEdit,
                                  size: Double) {
     let text = edit.text
-    Draw.setColor(cr, Theme.fieldBackground)
-    cairo_rectangle(cr, r.x, r.y, r.w, r.h)
-    cairo_fill(cr)
-    Draw.focusRing(cr, r, radius: 2)
-    Draw.setColor(cr, Theme.fieldBorder)
-    cairo_set_line_width(cr, 1)
-    cairo_rectangle(cr, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
-    cairo_stroke(cr)
-
     let inset = 4.0
     let shown = finderTruncated(cr, text, maxWidth: r.w - 2 * inset - 2, size: size)
-    if edit.selectedPrefix > 0 {
-        let selected = String(shown.prefix(edit.selectedPrefix))
-        let selW = Draw.textWidth(cr, selected, size: size)
-        Draw.setColor(cr, Theme.menuHighlight)
-        cairo_rectangle(cr, r.x + inset - 1, r.y + 2, selW + 2, r.h - 4)
-        cairo_fill(cr)
-    }
+    let selW = edit.selectedPrefix > 0
+        ? Draw.textWidth(cr, String(shown.prefix(edit.selectedPrefix)), size: size) : 0
+    Draw.paint("finder.namefield", cr, r, edit.selectedPrefix > 0 ? .selected : [],
+               parameters: ["sel": selW])
     Draw.textLeft(cr, shown, x: r.x + inset, baselineY: r.y + r.h - 4,
                   color: Theme.fieldText, size: size)
     if edit.selectedPrefix > 0 {
@@ -432,9 +338,7 @@ private func drawFinderNameField(_ cr: OpaquePointer, _ r: Rect, edit: FinderEdi
                       color: Theme.menuTextOnHighlight, size: size)
     }
     let caretX = min(r.x + r.w - 3, r.x + inset + Draw.textWidth(cr, shown, size: size) + 1)
-    Draw.setColor(cr, Theme.fieldCaret)
-    cairo_rectangle(cr, caretX, r.y + 2, 1, r.h - 4)
-    cairo_fill(cr)
+    Draw.paint("finder.namefield.caret", cr, r, parameters: ["caret": caretX - r.x])
 }
 
 public func finderKindLabel(_ kind: FinderItemKind) -> String {
@@ -460,16 +364,7 @@ private func finderTruncated(_ cr: OpaquePointer, _ s: String, maxWidth: Double,
 private func paintFinderStatusBar(_ cr: OpaquePointer, _ L: FinderLayout,
                                   count: Int, freeBytes: UInt64) {
     let bar = L.status
-    cairo_rectangle(cr, bar.x, bar.y, bar.w, bar.h)
-    Draw.fillVerticalGradient(cr, y: bar.y, h: bar.h, stops: [
-        (0, Theme.statusBarTop), (1, Theme.statusBarBottom),
-    ])
-    cairo_new_path(cr)
-    Draw.setColor(cr, Theme.separator)
-    cairo_set_line_width(cr, 1)
-    cairo_move_to(cr, bar.x, bar.y + 0.5)
-    cairo_line_to(cr, bar.x + bar.w, bar.y + 0.5)
-    cairo_stroke(cr)
+    Draw.paint("finder.status", cr, bar)
     Draw.text(cr, finderStatusText(count: count, freeBytes: freeBytes),
               centerX: bar.x + bar.w / 2, centerY: bar.y + bar.h / 2,
               color: Theme.bodyText.with(a: 0.75), size: 10)

@@ -442,6 +442,85 @@ Scene, menus, status items. The eight metrics enums become layer-3 data. This
 is the pass the plan did not count, and it is most of the diff. The gate stays
 green throughout.
 
+**Done.** What landed:
+
+- **The layout metrics are data.** The seven metrics enums in `de/aqua`
+  (Finder, Dock, menu bar, status items, menus, toasts, desktop icons: **47
+  values**) are `[metrics]` in `theme.ini` under dotted names
+  (`finder.rowHeight = 18`), and each enum member forwards to the loaded theme,
+  as the colours did in P11.2. Paint and hit-test still read the same one
+  value (§2.9). A list can name them (`@menu.rightInset`). Seen to work:
+  `finder.rowHeight` 18 → 19 moved `finder-list` and nothing else. The eighth
+  enum, `FrameMetrics`, is undertow's frame, and moves with the chrome in
+  P11.6.
+- **The paint around `Draw` is draw lists: 47 more, 73 in all**, now in four
+  files: `aqua.dl` (controls, list views, menus, sheet, tabs, the prefs
+  toolbar), `shell.dl` (menu bar, status items, toasts, wallpaper, Dock,
+  desktop icons), `finder.dl`, `installer.dl`. Each paint function is left
+  with layout, which list to run and in what state, and its text.
+- **What stays Swift, and why:**
+  - text, until type comes by role (P11.7);
+  - icon artwork (the Finder's file icons, the Dock's tiles and emblems,
+    `Icons.swift`, `AppIcon.swift`), which is P11.8;
+  - clips and translations that are layout or motion (a sheet sliding, a
+    scrolled viewport);
+  - the person's own desktop fill from `desktop.ini`;
+  - surface plumbing, and the offscreen scene harness's backdrops;
+  - **one** section rule in System Preferences, held back on purpose (below).
+
+  Of the 710 calls the plan counted, 176 are icons and most of the rest was
+  plumbing; the paint is what moved.
+- **The format grew four things:** `path … curve x1 y1 x2 y2 x y`, `arc`,
+  `fade(c, $p)`, and `stroke … dash=on,off`. Metric names may be dotted.
+- **12 new golden scenes**, for states no scene had pictured:
+  - an open system menu and an open title (`AQUA_MENUBAR_OPEN`);
+  - volume muted, low and full, and a battery charging (the fakes);
+  - a menu with a check mark and a submenu ▸, plain, disabled and
+    highlighted (`AQUA_MENU_MARKS`);
+  - the Dock with tiles running (`AQUA_DOCK_RUNNING`);
+  - the Finder renaming, with part of the name selected, and with Back
+    held, in both views (`AQUA_FINDER_STATE`).
+
+  **Each golden was rendered by the old Swift first**: on Linux by swapping
+  the file back, and in the FreeBSD guest from a worktree of the previous
+  commit plus only the scene hooks. The lists then matched them. A golden made
+  from the new code would only prove the new code equals itself. 40 scenes.
+
+**What it found:**
+
+- **§2.67 was not four controls; it is a habit.** Three more surfaces have
+  always been outlined by accident, because a gradient filled with
+  `fill_preserve` left its rectangle in the path for the next stroke:
+  - **the menu bar**: its pinstripe's first hairline strokes the bar's
+    outline;
+  - **the toast**: the same, clipped to the panel;
+  - **System Preferences' toolbar**: its separator stroke outlines the band.
+
+  The lists draw each with `and`, and say so.
+- **The toast has never had its border.** `toastBorder` was stroked along a
+  path the pinstripe had already stroked, and so consumed. Deleting the stroke
+  moved no pixel; the outline people see is the pinstripe's. The token is
+  kept, and nothing draws it.
+- **An icon's leaked path is stroked by whatever strokes next.** Sharing's
+  folder in System Preferences ends in `fill_preserve`, and the section rule
+  after it outlined it in the separator colour. That was 209 pixels, and
+  converting the rule removed them. A list cannot reproduce another
+  function's leftover path, so that one rule stays Swift, marked, until P11.8
+  makes the icons data and stops the leak.
+- **A menu row with both a key equivalent and a submenu draws the key over
+  the ▸.** `menu-marks` pictured it (`⌘J` on the arrow). No real menu has the
+  combination yet. It is recorded here and left alone, since this pass must
+  not move pixels.
+
+**Verified (short checks only):**
+- the golden gate, **40 scenes** pixel for pixel, on Linux **and in the
+  FreeBSD guest**, the 12 new ones against the old code on both;
+- `swift test` on Linux, 505, green; `DrawParityTests`, `DrawListTests` and
+  `ThemeTests` green in the guest.
+
+**Not run:** `live-medium.sh`, `run.sh --live`, `run.sh --vm --live`,
+`--full`, each over a minute. They are owed with the phase gates.
+
 **P11.6 — chrome is theme data, and one function reads it.** The window frame's
 gadgets, their side, order and size, the title's placement and weight, and the
 frame's metrics come from the theme. **One chrome layout function** feeds the

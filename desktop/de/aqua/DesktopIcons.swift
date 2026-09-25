@@ -21,12 +21,12 @@ import Darwin
 #endif
 
 public enum DesktopMetrics {
-    public static let cellW: Double = 96
-    public static let cellH: Double = 84
-    public static let iconSize: Double = 48
-    public static let margin: Double = 12
+    public static var cellW: Double { Theme.current.desktopCellW }
+    public static var cellH: Double { Theme.current.desktopCellH }
+    public static var iconSize: Double { Theme.current.desktopIconSize }
+    public static var margin: Double { Theme.current.desktopMargin }
     /// Room left at the top for the menu bar, which overlaps the wallpaper.
-    public static let topInset: Double = 26
+    public static var topInset: Double { Theme.current.desktopTopInset }
 }
 
 /// How many rows of icons fit in `bounds` (at least one).
@@ -95,10 +95,7 @@ public func paintDesktopIcons(_ cr: OpaquePointer, bounds: Rect,
         let selected = selection == i
 
         if selected {
-            Draw.roundedRect(cr, Rect(icon.x - 3, icon.y - 3, icon.w + 6, icon.h + 6),
-                             radius: 6)
-            Draw.setColor(cr, Theme.menuHighlight.with(a: 0.35))
-            cairo_fill(cr)
+            Draw.paint("desktop.selection", cr, icon)
         }
         drawFinderIcon(cr, entry, icon)
 
@@ -108,9 +105,7 @@ public func paintDesktopIcons(_ cr: OpaquePointer, bounds: Rect,
         let labelY = icon.y + icon.h + 3
 
         if selected {
-            Draw.roundedRect(cr, Rect(cx - tw / 2 - 4, labelY, tw + 8, 14), radius: 3)
-            Draw.setColor(cr, Theme.menuHighlight)
-            cairo_fill(cr)
+            Draw.paint("iconlabel.selected", cr, Rect(cx - tw / 2 - 4, labelY, tw + 8, 14))
             Draw.text(cr, label, centerX: cx, centerY: labelY + 7,
                       color: Theme.menuTextOnHighlight, size: 11)
         } else {

@@ -36,22 +36,22 @@ public struct Toast: Equatable, Sendable {
 }
 
 public enum ToastMetrics {
-    public static let width: Double = 300
+    public static var width: Double { Theme.current.toastWidth }
     /// Clear of the menu bar's exclusive zone, so a toast never sits on it.
-    public static let topInset: Double = 8
-    public static let rightInset: Double = 12
-    public static let gap: Double = 8
-    public static let padX: Double = 14
-    public static let padY: Double = 11
-    public static let summarySize: Double = 13
-    public static let bodySize: Double = 12
-    public static let lineHeight: Double = 16
-    public static let corner: Double = 10
+    public static var topInset: Double { Theme.current.toastTopInset }
+    public static var rightInset: Double { Theme.current.toastRightInset }
+    public static var gap: Double { Theme.current.toastGap }
+    public static var padX: Double { Theme.current.toastPadX }
+    public static var padY: Double { Theme.current.toastPadY }
+    public static var summarySize: Double { Theme.current.toastSummarySize }
+    public static var bodySize: Double { Theme.current.toastBodySize }
+    public static var lineHeight: Double { Theme.current.toastLineHeight }
+    public static var corner: Double { Theme.current.toastCorner }
     /// A toast with no body is this tall; a body adds line height per line.
-    public static let baseHeight: Double = 42
+    public static var baseHeight: Double { Theme.current.toastBaseHeight }
     /// Refuse to grow without bound: a "notification" that needs ten lines is a
     /// window, and a wall of text from an app must not cover the screen.
-    public static let maxBodyLines = 4
+    public static var maxBodyLines: Int { Int(Theme.current.toastMaxBodyLines) }
 }
 
 /// Wrap `text` to `width`, breaking on spaces, and cap the number of lines —
@@ -115,28 +115,9 @@ public func liveToasts(_ toasts: [Toast], now: Double) -> [Toast] {
 
 /// Paint one toast: a translucent panel, a bold summary, a lighter body.
 public func paintToast(_ cr: OpaquePointer, _ r: Rect, toast: Toast, bodyLines: [String]) {
-    // A soft shadow so the panel reads over any wallpaper, then the panel.
-    cairo_save(cr)
-    Draw.roundedRect(cr, Rect(r.x + 1, r.y + 2, r.w, r.h), radius: ToastMetrics.corner)
-    Draw.setColor(cr, Theme.toastShadow)
-    cairo_fill(cr)
-    cairo_restore(cr)
-
-    Draw.roundedRect(cr, r, radius: ToastMetrics.corner)
-    cairo_save(cr)
-    cairo_clip_preserve(cr)
-    Draw.fillVerticalGradient(cr, y: r.y, h: r.h, stops: [
-        (0, Theme.toastTop), (1, Theme.toastBottom),
-    ])
-    Draw.pinstripe(cr, r, Theme.toastPinstripe)
-    cairo_restore(cr)
-    Draw.setColor(cr, Theme.toastBorder)
-    cairo_set_line_width(cr, 1)
-    cairo_stroke(cr)
-
-    // The drop glyph marks it as coming from the system, the way the menu bar's
-    // system menu does — an original mark, not Apple's.
-    drawToastMark(cr, Rect(r.x + ToastMetrics.padX, r.y + ToastMetrics.padY + 1, 13, 13))
+    // The panel and its system mark are the theme's (shell.dl: toast, toast.mark).
+    Draw.paint("toast", cr, r)
+    Draw.paint("toast.mark", cr, Rect(r.x + ToastMetrics.padX, r.y + ToastMetrics.padY + 1, 13, 13))
 
     let textX = r.x + ToastMetrics.padX + 20
     Draw.textLeft(cr, toast.summary, x: textX,
@@ -150,15 +131,3 @@ public func paintToast(_ cr: OpaquePointer, _ r: Rect, toast: Toast, bodyLines: 
     }
 }
 
-/// The same water-drop mark the menu bar uses, small.
-private func drawToastMark(_ cr: OpaquePointer, _ r: Rect) {
-    Draw.setColor(cr, Theme.systemMark)
-    let cx = r.x + r.w / 2
-    cairo_move_to(cr, cx, r.y)
-    cairo_curve_to(cr, cx + r.w * 0.55, r.y + r.h * 0.45,
-                   cx + r.w * 0.5, r.y + r.h, cx, r.y + r.h)
-    cairo_curve_to(cr, cx - r.w * 0.5, r.y + r.h,
-                   cx - r.w * 0.55, r.y + r.h * 0.45, cx, r.y)
-    cairo_close_path(cr)
-    cairo_fill(cr)
-}

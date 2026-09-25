@@ -66,6 +66,55 @@ public struct ThemeTokens: Sendable, Equatable {
     public var trafficSpacing: Double = 20
     public var trafficInset: Double = 10
 
+    // Layer 3: the toolkit's layout metrics (P11.5), once enums in de/aqua.
+    public var toastWidth: Double = 300
+    public var toastTopInset: Double = 8
+    public var toastRightInset: Double = 12
+    public var toastGap: Double = 8
+    public var toastPadX: Double = 14
+    public var toastPadY: Double = 11
+    public var toastSummarySize: Double = 13
+    public var toastBodySize: Double = 12
+    public var toastLineHeight: Double = 16
+    public var toastCorner: Double = 10
+    public var toastBaseHeight: Double = 42
+    public var toastMaxBodyLines: Double = 4
+    public var desktopCellW: Double = 96
+    public var desktopCellH: Double = 84
+    public var desktopIconSize: Double = 48
+    public var desktopMargin: Double = 12
+    public var desktopTopInset: Double = 26
+    public var finderToolbarHeight: Double = 36
+    public var finderStatusHeight: Double = 18
+    public var finderScrollbarWidth: Double = 15
+    public var finderIconSize: Double = 48
+    public var finderCellW: Double = 88
+    public var finderCellH: Double = 76
+    public var finderGridPad: Double = 10
+    public var finderRowHeight: Double = 18
+    public var finderListIcon: Double = 14
+    public var menuBarHeight: Double = 22
+    public var menuBarLeftMargin: Double = 8
+    public var menuBarSystemSlot: Double = 26
+    public var menuBarTitlePadX: Double = 9
+    public var menuBarClockMarginRight: Double = 14
+    public var menuBarFontSize: Double = 13
+    public var dockGap: Double = 6
+    public var dockMaxScale: Double = 1.9
+    public var dockPanelPadV: Double = 6
+    public var dockPanelPadH: Double = 12
+    public var dockBottomMargin: Double = 6
+    public var menuItemHeight: Double = 20.0
+    public var menuSeparatorHeight: Double = 12.0
+    public var menuPadV: Double = 4.0
+    public var menuTitleX: Double = 22.0
+    public var menuKeyGap: Double = 28.0
+    public var menuRightInset: Double = 14.0
+    public var statusVolumeWidth: Double = 22
+    public var statusBatteryWidth: Double = 46
+    public var statusGap: Double = 6
+    public var statusClockGap: Double = 10
+
     // Default ("aqua blue") gel button.
     public var buttonBlueTop: Color = Color(hex: 0x9fc3f6)
     public var buttonBlueMid: Color = Color(hex: 0x4e8df0)
@@ -322,6 +371,53 @@ public struct ThemeTokens: Sendable, Equatable {
         ("trafficRadius", \.trafficRadius),
         ("trafficSpacing", \.trafficSpacing),
         ("trafficInset", \.trafficInset),
+        ("toast.width", \.toastWidth),
+        ("toast.topInset", \.toastTopInset),
+        ("toast.rightInset", \.toastRightInset),
+        ("toast.gap", \.toastGap),
+        ("toast.padX", \.toastPadX),
+        ("toast.padY", \.toastPadY),
+        ("toast.summarySize", \.toastSummarySize),
+        ("toast.bodySize", \.toastBodySize),
+        ("toast.lineHeight", \.toastLineHeight),
+        ("toast.corner", \.toastCorner),
+        ("toast.baseHeight", \.toastBaseHeight),
+        ("toast.maxBodyLines", \.toastMaxBodyLines),
+        ("desktop.cellW", \.desktopCellW),
+        ("desktop.cellH", \.desktopCellH),
+        ("desktop.iconSize", \.desktopIconSize),
+        ("desktop.margin", \.desktopMargin),
+        ("desktop.topInset", \.desktopTopInset),
+        ("finder.toolbarHeight", \.finderToolbarHeight),
+        ("finder.statusHeight", \.finderStatusHeight),
+        ("finder.scrollbarWidth", \.finderScrollbarWidth),
+        ("finder.iconSize", \.finderIconSize),
+        ("finder.cellW", \.finderCellW),
+        ("finder.cellH", \.finderCellH),
+        ("finder.gridPad", \.finderGridPad),
+        ("finder.rowHeight", \.finderRowHeight),
+        ("finder.listIcon", \.finderListIcon),
+        ("menuBar.height", \.menuBarHeight),
+        ("menuBar.leftMargin", \.menuBarLeftMargin),
+        ("menuBar.systemSlot", \.menuBarSystemSlot),
+        ("menuBar.titlePadX", \.menuBarTitlePadX),
+        ("menuBar.clockMarginRight", \.menuBarClockMarginRight),
+        ("menuBar.fontSize", \.menuBarFontSize),
+        ("dock.gap", \.dockGap),
+        ("dock.maxScale", \.dockMaxScale),
+        ("dock.panelPadV", \.dockPanelPadV),
+        ("dock.panelPadH", \.dockPanelPadH),
+        ("dock.bottomMargin", \.dockBottomMargin),
+        ("menu.itemHeight", \.menuItemHeight),
+        ("menu.separatorHeight", \.menuSeparatorHeight),
+        ("menu.padV", \.menuPadV),
+        ("menu.titleX", \.menuTitleX),
+        ("menu.keyGap", \.menuKeyGap),
+        ("menu.rightInset", \.menuRightInset),
+        ("status.volumeWidth", \.statusVolumeWidth),
+        ("status.batteryWidth", \.statusBatteryWidth),
+        ("status.gap", \.statusGap),
+        ("status.clockGap", \.statusClockGap),
         ("fontSize", \.fontSize),
     ]
     nonisolated(unsafe) static let fontKeys: [(String, WritableKeyPath<ThemeTokens, String>)] = [

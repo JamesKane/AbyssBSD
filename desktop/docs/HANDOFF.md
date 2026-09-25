@@ -375,7 +375,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.64 | Snapshot a set where you poll it, not after dispatching — a handler that registers from inside a Wayland event made them disagree |
 | 2.65 | A privileged process hands its privilege to every child by default — the bar's first launched app inherited its privileged `WAYLAND_DISPLAY` |
 | 2.66 | SwiftPM does not recompile across an `@_exported` re-export — a type's layout changed and three targets ran the old one (a crash at exit, a crashed test bundle, a failed link) |
-| 2.67 | `cairo_fill_preserve` keeps the path, and the next shape is *added* to it — four Aqua controls filled their whole body with a gloss meant for a capsule, and one byte of coverage told the two apart |
+| 2.67 | `cairo_fill_preserve` keeps the path, and the next shape is *added* to it — four Aqua controls glossed their whole body, the menu bar, toasts and prefs toolbar were outlined by accident, the toast's border was never drawn, and an icon's leftover path got outlined by the next stroke |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -667,6 +667,18 @@ path is the point**, and say so where it is. The lists keep the look on
 purpose (the gate for P11.4 is that nothing moves); making each gloss the
 capsule it was meant to be is a look change for later, with the goldens
 updated.
+
+**P11.5 found it everywhere the pattern was used.** The menu bar, the toast and
+System Preferences' toolbar are each outlined in the colour of whatever
+stroked next (a pinstripe's first hairline, a separator), because their
+gradient's rectangle was still the path. The toast's `toastBorder` stroke
+drew **nothing**, because that pinstripe stroke had consumed the path;
+deleting the stroke moved no pixel. And a leak crosses functions: Sharing's
+folder icon ends in `fill_preserve`, and the section rule drawn after it
+outlined the folder in the separator colour. **A leaked path belongs to the
+next stroke, whoever's it is.** The draw lists cannot leak (every shape starts
+a new path), which is why converting the rule moved the folder, and why that
+rule waits for the icon to be fixed (P11.8).
 
 ### 2.66 SwiftPM does not recompile across an `@_exported` re-export
 (P11.2. `ThemeTokens` grew by 41 fields, and three targets kept the old size.)

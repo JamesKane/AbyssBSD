@@ -68,11 +68,11 @@ public struct MenuBarStatus: Equatable, Sendable {
 
 public enum MenuBarStatusMetrics {
     /// Each item's slot. Wide enough for the battery's "100%" label.
-    public static let volumeWidth: Double = 22
-    public static let batteryWidth: Double = 46
-    public static let gap: Double = 6
+    public static var volumeWidth: Double { Theme.current.statusVolumeWidth }
+    public static var batteryWidth: Double { Theme.current.statusBatteryWidth }
+    public static var gap: Double { Theme.current.statusGap }
     /// Space between the last status item and the clock.
-    public static let clockGap: Double = 10
+    public static var clockGap: Double { Theme.current.statusClockGap }
 }
 
 /// Where the status items sit, right-aligned against `rightEdge` (the clock's
@@ -105,75 +105,18 @@ public func paintMenuBarStatus(_ cr: OpaquePointer, status: MenuBarStatus,
                                color: Color) -> (volume: Rect?, battery: Rect?) {
     let rects = menuBarStatusLayout(status: status, h: h, rightEdge: rightEdge)
     if let r = rects.volume, let level = status.volume {
-        drawSpeaker(cr, Rect(r.x + 2, (h - 12) / 2, 14, 12), level: level, color: color)
+        // shell.dl: status.volume.0…3, one arc per third of the range.
+        let arcs = level == 0 ? 0 : (Int(level) - 1) / 34 + 1
+        Draw.paint("status.volume.\(arcs)", cr, Rect(r.x + 2, (h - 12) / 2, 14, 12),
+                   colors: ["color": color])
     }
     if let r = rects.battery, let pct = status.batteryPercent {
-        drawBattery(cr, Rect(r.x, (h - 10) / 2, 22, 10),
-                    percent: pct, charging: status.batteryCharging, color: color)
+        Draw.paint("status.battery", cr, Rect(r.x, (h - 10) / 2, 22, 10),
+                   status.batteryCharging ? .active : [],
+                   parameters: ["charge": Double(max(0, min(100, pct))) / 100],
+                   colors: ["color": color])
         Draw.textLeft(cr, "\(pct)%", x: r.x + 26, baselineY: h - 6.5,
                       color: color, size: MenuBarMetrics.fontSize - 1)
     }
     return rects
-}
-
-/// A speaker cone with level arcs — the arcs show how loud, so the item reads at
-/// a glance without a number.
-private func drawSpeaker(_ cr: OpaquePointer, _ r: Rect, level: UInt8, color: Color) {
-    Draw.setColor(cr, color)
-    let bodyW = r.w * 0.32
-    let midY = r.y + r.h / 2
-    // The rectangular throat, then the flared cone.
-    cairo_move_to(cr, r.x, midY - r.h * 0.18)
-    cairo_line_to(cr, r.x + bodyW, midY - r.h * 0.18)
-    cairo_line_to(cr, r.x + bodyW * 2.1, r.y)
-    cairo_line_to(cr, r.x + bodyW * 2.1, r.y + r.h)
-    cairo_line_to(cr, r.x + bodyW, midY + r.h * 0.18)
-    cairo_line_to(cr, r.x, midY + r.h * 0.18)
-    cairo_close_path(cr)
-    cairo_fill(cr)
-
-    // One arc per third of the range; a muted speaker draws none, which is the
-    // whole point of showing arcs rather than a fixed glyph.
-    cairo_set_line_width(cr, 1.2)
-    let arcs = level == 0 ? 0 : (Int(level) - 1) / 34 + 1
-    for i in 0..<arcs {
-        let radius = r.w * (0.30 + 0.16 * Double(i))
-        cairo_new_sub_path(cr)      // arc() connects from the current point (§2.5)
-        cairo_arc(cr, r.x + bodyW * 2.1, midY, radius, -0.9, 0.9)
-        cairo_stroke(cr)
-    }
-}
-
-/// A battery outline with a fill proportional to charge, and a nub on the right.
-private func drawBattery(_ cr: OpaquePointer, _ r: Rect,
-                         percent: Int, charging: Bool, color: Color) {
-    Draw.setColor(cr, color)
-    cairo_set_line_width(cr, 1)
-    cairo_rectangle(cr, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
-    cairo_stroke(cr)
-    // The terminal nub.
-    cairo_rectangle(cr, r.x + r.w, r.y + r.h * 0.3, 1.5, r.h * 0.4)
-    cairo_fill(cr)
-
-    let inset: Double = 2
-    let full = r.w - 2 * inset
-    let frac = Double(max(0, min(100, percent))) / 100
-    if frac > 0 {
-        cairo_rectangle(cr, r.x + inset, r.y + inset, full * frac, r.h - 2 * inset)
-        cairo_fill(cr)
-    }
-    if charging {
-        // A small bolt, so "charging" reads without colour (the bar is
-        // monochrome against the pinstripe).
-        cairo_move_to(cr, r.x + r.w * 0.52, r.y + 1)
-        cairo_line_to(cr, r.x + r.w * 0.36, r.y + r.h * 0.55)
-        cairo_line_to(cr, r.x + r.w * 0.50, r.y + r.h * 0.55)
-        cairo_line_to(cr, r.x + r.w * 0.42, r.y + r.h - 1)
-        cairo_line_to(cr, r.x + r.w * 0.64, r.y + r.h * 0.45)
-        cairo_line_to(cr, r.x + r.w * 0.50, r.y + r.h * 0.45)
-        cairo_close_path(cr)
-        Draw.setColor(cr, Theme.statusGlyphCutout)
-        cairo_fill(cr)
-        Draw.setColor(cr, color)
-    }
 }

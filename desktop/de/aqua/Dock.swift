@@ -51,11 +51,11 @@ public struct DockTileFrame: Equatable, Sendable {
 }
 
 public enum DockMetrics {
-    public static let gap: Double = 6
-    public static let maxScale: Double = 1.9
-    public static let panelPadV: Double = 6
-    public static let panelPadH: Double = 12
-    public static let bottomMargin: Double = 6
+    public static var gap: Double { Theme.current.dockGap }
+    public static var maxScale: Double { Theme.current.dockMaxScale }
+    public static var panelPadV: Double { Theme.current.dockPanelPadV }
+    public static var panelPadH: Double { Theme.current.dockPanelPadH }
+    public static var bottomMargin: Double { Theme.current.dockBottomMargin }
     /// Surface height needed to fit a magnified tile of base `size`.
     public static func surfaceHeight(tileSize: Double) -> Double {
         (tileSize * maxScale + 2 * panelPadV + bottomMargin + 20).rounded(.up)
@@ -113,26 +113,13 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
     let right = frames.last!.centerX + frames.last!.size / 2 + DockMetrics.panelPadH
     let panel = Rect(left, panelTop, right - left, panelH)
 
-    // The translucent shelf.
-    Draw.roundedRect(cr, panel, radius: panelH / 4)
-    let g = cairo_pattern_create_linear(0, panelTop, 0, panelBottom)
-    let st = Theme.dockShelfTop, sb = Theme.dockShelfBottom
-    cairo_pattern_add_color_stop_rgba(g, 0, st.r, st.g, st.b, st.a)
-    cairo_pattern_add_color_stop_rgba(g, 1, sb.r, sb.g, sb.b, sb.a)
-    cairo_set_source(cr, g)
-    cairo_fill_preserve(cr)
-    cairo_pattern_destroy(g)
-    Draw.setColor(cr, Theme.dockShelfBorder)
-    cairo_set_line_width(cr, 1)
-    cairo_stroke(cr)
+    Draw.paint("dock.shelf", cr, panel)   // shell.dl
 
     // A separator just before the Trash (if present).
     if let ti = items.firstIndex(where: { $0.isTrash }), ti > 0 {
         let sx = (frames[ti - 1].centerX + frames[ti - 1].size / 2
                   + frames[ti].centerX - frames[ti].size / 2) / 2
-        Draw.setColor(cr, Theme.dockSeparator)
-        cairo_move_to(cr, sx, panelTop + 6); cairo_line_to(cr, sx, panelBottom - 6)
-        cairo_stroke(cr)
+        Draw.paint("dock.separator", cr, panel, parameters: ["x": sx - panel.x])
     }
 
     for (i, item) in items.enumerated() {
@@ -142,13 +129,7 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
         if running[i] {
             // A small dark triangle beneath the tile (Jaguar's running mark).
             let cx = frames[i].centerX, ty = panelBottom - 3
-            cairo_new_path(cr)
-            cairo_move_to(cr, cx - 3, ty)
-            cairo_line_to(cr, cx + 3, ty)
-            cairo_line_to(cr, cx, ty - 4)
-            cairo_close_path(cr)
-            Draw.setColor(cr, Theme.dockRunningMark)
-            cairo_fill(cr)
+            Draw.paint("dock.running", cr, Rect(cx - 3, ty - 4, 6, 4))
         }
     }
 
@@ -167,9 +148,7 @@ private func drawDockLabel(_ cr: OpaquePointer, _ text: String,
     let tw = Draw.textWidth(cr, text, size: 12)
     let padX = 8.0, hgt = 20.0
     let box = Rect(centerX - tw / 2 - padX, bottomY - hgt, tw + 2 * padX, hgt)
-    Draw.roundedRect(cr, box, radius: 5)
-    Draw.setColor(cr, Theme.dockLabelBackground)
-    cairo_fill(cr)
+    Draw.paint("dock.label", cr, box)
     Draw.text(cr, text, centerX: centerX, centerY: box.y + hgt / 2,
               color: Theme.dockLabelText, size: 12)
 }
