@@ -354,4 +354,28 @@ final class DBusPortalTests: XCTestCase {
         XCTAssertEqual(got, [want.r, want.g, want.b],
                        "the Settings accent colour has drifted from Theme.menuHighlight")
     }
+
+    // MARK: - The theme's palette (P11.10)
+
+    func testSettingsAreMadeFromAThemesPalette() throws {
+        let text = """
+        [theme]
+        name = T
+        [appearance]
+        color-scheme = 1
+        accent-color = 1 0.1686 0.8392
+        contrast = 1
+        [palette]
+        window-background = 0.1 0.08 0.2
+        """
+        let s = try XCTUnwrap(PortalSettings.from(palette: text))
+        XCTAssertEqual(s.value(namespace: PortalSettings.appearance, key: "color-scheme"), .uint32(1))
+        XCTAssertEqual(s.value(namespace: PortalSettings.appearance, key: "contrast"), .uint32(1))
+        XCTAssertEqual(s.value(namespace: PortalSettings.appearance, key: "accent-color"),
+                       .structure([.double(1), .double(0.1686), .double(0.8392)]))
+        XCTAssertEqual(s.value(namespace: PortalSettings.palette, key: "window-background"),
+                       .structure([.double(0.1), .double(0.08), .double(0.2)]))
+        XCTAssertNil(PortalSettings.from(palette: "[appearance]\ncolor-scheme = 7\n"), "not a palette: Aqua's answer stands")
+        XCTAssertNil(PortalSettings.from(palette: "nonsense"))
+    }
 }

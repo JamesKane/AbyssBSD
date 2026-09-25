@@ -32,6 +32,8 @@
 //     everything before the `*`; an empty array, or any empty string in it,
 //     matches everything.
 
+import PoolConfig
+
 /// `org.freedesktop.portal.Settings` — what the desktop will tell a foreign
 /// toolkit about how it looks.
 ///
@@ -73,6 +75,34 @@ public struct PortalSettings: Sendable {
             ("reduced-motion", .uint32(0)),
         ]),
     ])
+
+    /// The palette namespace (P11.10): the loaded theme's colours, for a
+    /// toolkit or a bridge that asks. Not standard — the spec leaves every
+    /// namespace but appearance to the implementation.
+    public static let palette = "org.abyssbsd.palette"
+
+    /// The answer made from a theme's palette (`abyss-theme palette`): its
+    /// color-scheme, accent and contrast in the standard namespace, and the
+    /// colours beside it. Nil when the text is not a palette.
+    public static func from(palette text: String) -> PortalSettings? {
+        let c = Config.parse(text)
+        func rgb(_ v: String?) -> DBusValue? {
+            guard let v else { return nil }
+            let n = v.split(separator: " ").compactMap { Double($0) }
+            guard n.count == 3, n.allSatisfy({ $0 >= 0 && $0 <= 1 }) else { return nil }
+            return .structure(n.map { .double($0) })
+        }
+        guard let scheme = c.string("appearance", "color-scheme").flatMap(UInt32.init), scheme <= 2,
+              let accent = rgb(c.string("appearance", "accent-color")) else { return nil }
+        let contrast = c.string("appearance", "contrast").flatMap(UInt32.init) ?? 0
+        var colours: [(String, DBusValue)] = []
+        for (k, v) in c.pairs("palette") { if let d = rgb(v) { colours.append((k, d)) } }
+        return PortalSettings(namespaces: [
+            (appearance, [("color-scheme", .uint32(scheme)), ("accent-color", accent),
+                          ("contrast", .uint32(min(1, contrast))), ("reduced-motion", .uint32(0))]),
+            (palette, colours),
+        ])
+    }
 
     public init(namespaces: [(String, [(String, DBusValue)])]) {
         self.namespaces = namespaces

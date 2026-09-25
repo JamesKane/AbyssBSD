@@ -231,6 +231,10 @@ if [ "$live" -eq 1 ]; then
   # witness that our Response decodes (PHASE8.md P8.2).
   phase "the portal on the session bus"
   sh "$root/abyss/tests/live-portal-dbus.sh"
+  # ...and what it tells a foreign toolkit is the theme that is loaded — its
+  # color-scheme, accent and contrast, with its palette beside (PHASE11 P11.10).
+  phase "the portal's palette"
+  sh "$root/abyss/tests/live-palette.sh"
   # And the caller the whole phase is for: a stock GTK 3 application, which has
   # never heard of us, getting the Finder as its file chooser (PHASE8.md P8.3).
   # Skips itself, loudly, on a box with no GTK runtime.

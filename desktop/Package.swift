@@ -166,7 +166,7 @@ let package = Package(
         // options parsing and the URI encoding are unit-tested without a bus.
         .target(
             name: "DBusPortal",
-            dependencies: ["DBus", "CurrentIPC"],
+            dependencies: ["DBus", "CurrentIPC", "PoolConfig"],
             path: "de/dbusportal"
         ),
         // GTK's menus as our vocabulary: org.gtk.Menus/Actions read over the
@@ -214,6 +214,13 @@ let package = Package(
         .target(
             name: "SVGImport",
             path: "de/svgimport"
+        ),
+        // The loaded theme for things that do not draw: the portal's palette,
+        // and a theme author's legibility check (PHASE11 P11.10).
+        .executableTarget(
+            name: "abyss-theme",
+            dependencies: ["AquaDraw"],
+            path: "de/abysstheme"
         ),
         .executableTarget(
             name: "svg2dl",

@@ -75,7 +75,7 @@ final class ThemeTests: XCTestCase {
         name = Test
         [colors]
         menuHighlight = #ff2bd6
-        menuTextOnHighlight = mix(menuHighlight, #000000, 0.9)
+        menuSeparator = mix(menuHighlight, #000000, 0.9)
         [colors.daylight]
         menuHighlight = #b0008f
         [parameters]
@@ -86,7 +86,7 @@ final class ThemeTests: XCTestCase {
         XCTAssertEqual(t.schemes, ["daylight"])
         XCTAssertEqual(t.tokens.menuHighlight, Color(hex: 0xb0008f), "the scheme overrides the base")
         XCTAssertEqual(t.tokens.titleBarHeight, 48, "a metric times a parameter")
-        XCTAssertLessThan(t.tokens.menuTextOnHighlight.r, 0.2, "mixed from the scheme's own token")
+        XCTAssertLessThan(t.tokens.menuSeparator.r, 0.2, "mixed from the scheme's own token")
         XCTAssertEqual(t.tokens.menuText, ThemeTokens.jaguar.menuText, "what a file does not set stays Jaguar's")
     }
 

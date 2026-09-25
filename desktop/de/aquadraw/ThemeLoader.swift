@@ -206,6 +206,14 @@ public enum ThemeLoader {
             }
         }
 
+        // The floor (P11.10): checked on what this theme, in this scheme, will
+        // actually show — refused when body text cannot be read.
+        if problems.isEmpty {
+            let (p, w) = Legibility.check(t)
+            problems += p
+            warnings += w
+        }
+
         guard problems.isEmpty else { throw ThemeError(problems: problems) }
         return LoadedTheme(name: c.string("theme", "name") ?? "unnamed",
                            scheme: scheme, schemes: schemeSet, parameters: params,

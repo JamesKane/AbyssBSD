@@ -377,6 +377,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.66 | SwiftPM does not recompile across an `@_exported` re-export — a type's layout changed and three targets ran the old one (a crash at exit, a crashed test bundle, a failed link) |
 | 2.67 | `cairo_fill_preserve` keeps the path, and the next shape is *added* to it — four Aqua controls glossed their whole body, the menu bar, toasts and prefs toolbar were outlined by accident, the toast's border was never drawn, and an icon's leftover path got outlined by the next stroke |
 | 2.68 | wlroots' protocol tables are hidden — a protocol of ours that names `xdg_toplevel` could not link in undertow until xdg-shell's tables lived once, in `CAbyssProtocols` |
+| 2.69 | A pipe's status is its last command's — `swift build | filter` printed "done" over a failed guest build, and the guest's tests ran the last good binaries |
 
 ### 2.1 The static-inline trap (the big one)
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
@@ -643,6 +644,25 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.69 A pipe's status is its last command's
+(P11.10. One scene moved on Linux and not on FreeBSD, and that was the clue.)
+
+`abyss/vm/build.sh` ran the guest build as `swift build 2>&1 | grep -v …`, to
+drop FreeBSD's harmless "prohibited flag" warning. The pipeline's status is the
+`grep`'s, so **a failed build printed "[build] done"**. Everything run in the
+guest after it (the golden gate, `swift test`, live scripts) ran against
+whatever binaries the last successful build left behind. It surfaced because
+a golden that depended on a changed compiled default moved on Linux and not in
+the guest, whose `AquaDemo` was older than its source. The build had failed on
+a FreeBSD-only type (`posix_spawn_file_actions_t` is a struct on Linux and a
+pointer on FreeBSD).
+
+**The rule: never pipe a command whose status you need.** Send it to a file,
+filter the file, return the command's status. `build.sh` does that now, and
+exits 1 with the compiler's error, seen on a deliberate one. When a check is
+green on one platform and "unchanged" on the other, compare the binary's
+timestamp with its source's before trusting either.
 
 ### 2.68 wlroots' protocol tables are hidden
 (P11.6. `abyss-window-v1` names an `xdg_toplevel`, and undertow stopped linking.)

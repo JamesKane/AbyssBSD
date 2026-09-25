@@ -138,7 +138,7 @@ public struct ThemeTokens: Sendable, Equatable {
     public var buttonWhiteBottom: Color = Color(hex: 0xd7d7d7)
     public var buttonWhiteBorder: Color = Color(hex: 0x9a9a9a)
     public var buttonGloss: Color = Color(1, 1, 1, 0.55)
-    public var buttonTextOnBlue: Color = Color(hex: 0xffffff)
+    public var buttonTextOnBlue: Color = Color(hex: 0x000000)   // black: white failed the floor (P11.10)
     public var buttonTextOnWhite: Color = Color(hex: 0x202020)
 
     // Text field: white well with a soft inset top-shadow; the focused variant
@@ -147,7 +147,7 @@ public struct ThemeTokens: Sendable, Equatable {
     public var fieldBorder: Color = Color(hex: 0x9a9a9a)
     public var fieldInsetShadow: Color = Color(0, 0, 0, 0.14)
     public var fieldText: Color = Color(hex: 0x141414)
-    public var fieldPlaceholder: Color = Color(hex: 0x9a9a9a)
+    public var fieldPlaceholder: Color = Color(hex: 0x949494)   // 3:1 on white (P11.10)
     public var fieldFocusRing: Color = Color(hex: 0x74a6ee, a: 0.85)
     public var fieldCaret: Color = Color(hex: 0x2061c9)
 
@@ -184,7 +184,7 @@ public struct ThemeTokens: Sendable, Equatable {
     public var menuText: Color = Color(hex: 0x1a1a1a)
     public var menuTextOnHighlight: Color = Color(hex: 0xffffff)
     /// A command that cannot run now (P10.1): Jaguar's grey, still legible.
-    public var menuTextDisabled: Color = Color(hex: 0x9c9c9c)
+    public var menuTextDisabled: Color = Color(hex: 0x949494)   // 3:1 on white (P11.10)
     public var menuSeparator: Color = Color(hex: 0xd9d9d9)
 
     // Menu bar: a light, faintly glassy strip at the top of the screen with a

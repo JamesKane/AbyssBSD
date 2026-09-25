@@ -892,6 +892,74 @@ What is not is this, and each item says whose it is:
 - **A generated GTK/Qt palette** from the same tokens, reported through
   `PortalSettings` beside `color-scheme`.
 
+**Done.** What landed:
+
+- **The floor** (`de/aquadraw/Legibility.swift`), checked when a theme loads,
+  in every scheme, and said in words (the pair, both colours, the ratio, the
+  bar). It follows §6.2's recommendation, still pending confirmation:
+  - **refuse** a theme whose *body* text is under WCAG AA's 4.5:1 on a
+    surface it is drawn on;
+  - **warn** for secondary text under 3:1;
+  - **refuse** targets a pointer cannot hit: a gadget under 12 pt, a menu
+    or list row under 16.
+
+  Which text sits on which surface is a table: the toolkit's knowledge, not a
+  guess from the lists. Translucent colours are composited before they are
+  measured. `abyss-theme check [NAME]` gives a theme author every scheme's
+  report.
+- **The palette.** `ThemePalette` makes the loaded theme's answer:
+  - `color-scheme` (dark when the window background is);
+  - `accent-color` (the selection colour);
+  - `contrast` (high only when every body pair measures WCAG AAA's 7:1);
+  - and 14 palette colours.
+
+  `abyss-theme palette` prints it. `abyss-dbus` runs it at start and answers
+  `org.freedesktop.appearance` from it, with the colours beside it in
+  `org.abyssbsd.palette`. When the tool is missing it tells toolkits Aqua's
+  answer and says so. The portal still links no toolkit, and the medium now
+  carries `abyss-theme`.
+
+**What it found:**
+
+- **The floor refused Aqua.** Our default button drew a white label on blue
+  gel: 3.29:1 where the text sits, 1.81:1 at the gel's top. The decision was
+  to draw it **black**, as I recall Jaguar's being, so the white was our
+  mistake. So the label is black, measured against the gel's middle band
+  (where a label sits), and both greys Aqua warned on (placeholder
+  and disabled item, 2.81 and 2.75:1) are nudged six levels to pass. Every
+  golden with a default button, a selected segment or a disabled item moved,
+  **on purpose, on both platforms**: 17 scenes.
+- **Trench's neon passes, with nothing to nudge in the study's tokens.** The
+  two the study flags (alert red and violet on raised surfaces) are not used
+  as text, so, correctly, they are not measured as text. The only warning was
+  a colour I derived (a disabled menu item), now mixed to pass. Its lowest
+  body contrast is 6.26:1; neon-hc's is 7.93:1, and it is the one scheme that
+  says high contrast.
+- **`build.sh` said "done" over a failed build** (HANDOFF §2.69). The guest's
+  `swift build` was piped into a filter, so its exit status was the filter's.
+  A FreeBSD-only compile error (`posix_spawn_file_actions_t` is a pointer
+  there) went unseen, and the guest's goldens ran against the last good
+  binaries. That showed as one scene, `window-depth@2x`, that moved on Linux
+  and not on FreeBSD. The script now returns swift's status, which was seen to
+  fail on a deliberate error. The earlier passes' guest results hold, because
+  each depended on that pass's new code (Trench's lists use `halo` and `dots`,
+  which an old binary refuses).
+
+**Verified (short checks only):**
+- the golden gate, **69 scenes**, on Linux and in the FreeBSD guest;
+- `swift test` on Linux, 538, green (`LegibilityTests`; the portal's palette
+  in `DBusPortalTests`); the theme, legibility, portal and draw-list suites
+  green in the guest;
+- **`live-palette.sh`** (new, under a second, in `run.sh`'s live lane), on
+  Linux and in the guest. Over a real bus: Aqua says light and its blue,
+  Trench says dark and magenta with its palette beside, and neon-hc says high
+  contrast. Seen to fail: with `abyss-theme` unavailable, it failed naming the
+  fallback.
+
+**Phase 11's passes are all done.** The phase gates are owed: `run.sh --live`,
+`run.sh --vm --live`, `--full`, and `live-medium.sh` (its theme, draw-list and
+role assertions). Each is over a minute, and none has been run in this phase.
+
 ---
 
 ## 4. The spikes

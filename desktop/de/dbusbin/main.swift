@@ -29,6 +29,47 @@ func emit(_ fd: Int32, _ s: String) {
 }
 func die(_ s: String) -> Never { emit(2, "abyss-dbus: \(s)"); exit(1) }
 
+/// Run `abyss-theme palette` (beside this binary) and return what it printed.
+func runPalette() -> String? {
+    var buf = [CChar](repeating: 0, count: 4096)
+    #if os(Linux)
+    let n = readlink("/proc/self/exe", &buf, buf.count - 1)
+    guard n > 0 else { return nil }
+    #else
+    guard let a0 = CommandLine.arguments.first, a0.contains("/"), let rp = realpath(a0, &buf), rp[0] != 0 else { return nil }
+    #endif
+    let me = String(cString: buf)
+    guard let slash = me.lastIndex(of: "/") else { return nil }
+    let tool = String(me[..<slash]) + "/abyss-theme"
+    guard access(tool, X_OK) == 0 else { return nil }
+    var fds: [Int32] = [0, 0]
+    guard pipe(&fds) == 0 else { return nil }
+    // A struct on Linux, a pointer on FreeBSD.
+    #if os(Linux)
+    var fa = posix_spawn_file_actions_t()
+    #else
+    var fa: posix_spawn_file_actions_t? = nil
+    #endif
+    posix_spawn_file_actions_init(&fa)
+    posix_spawn_file_actions_adddup2(&fa, fds[1], 1)
+    posix_spawn_file_actions_addclose(&fa, fds[0])
+    var pid: pid_t = 0
+    let argv: [UnsafeMutablePointer<CChar>?] = [strdup(tool), strdup("palette"), nil]
+    defer { for p in argv { free(p) }; posix_spawn_file_actions_destroy(&fa) }
+    guard posix_spawn(&pid, tool, &fa, nil, argv, environ) == 0 else { close(fds[0]); close(fds[1]); return nil }
+    close(fds[1])
+    var out: [UInt8] = [], chunk = [UInt8](repeating: 0, count: 4096)
+    while true {
+        let r = read(fds[0], &chunk, chunk.count)
+        if r <= 0 { break }
+        out += chunk[0..<r]
+    }
+    close(fds[0])
+    var status: Int32 = 0
+    waitpid(pid, &status, 0)
+    return out.isEmpty ? nil : String(decoding: out, as: UTF8.self)
+}
+
 var portal: String?
 var seconds: Double = 0            // 0 = until killed
 var once = false
@@ -92,6 +133,15 @@ if menus {
 }
 
 let service = DBusPortalService(connection: conn, portalService: portal)
+// What a foreign toolkit is told (P11.10): the loaded theme's palette, from
+// `abyss-theme palette` beside this binary — or Aqua's, and said so.
+if let text = runPalette(), let s = PortalSettings.from(palette: text) {
+    service.settings = s
+    let name = text.split(separator: "\n").first { $0.hasPrefix("name = ") }.map { $0.dropFirst(7) } ?? "?"
+    emit(2, "abyss-dbus: settings from the theme's palette (\(name))")
+} else {
+    emit(2, "abyss-dbus: no theme palette (abyss-theme not found or failed) — telling toolkits Aqua's")
+}
 do {
     try service.attach()
 } catch {
