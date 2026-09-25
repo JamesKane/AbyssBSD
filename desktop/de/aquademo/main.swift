@@ -77,6 +77,14 @@ default:
 
 if let out = envString("AQUA_RENDER_PNG") {
     let scale = Int32(envString("AQUA_SCALE") ?? "") ?? 1
+    // Render-only scenes for the golden-image gate (PHASE11 P11.1): an open
+    // menu, and the compositor's frame. Neither is a window you can open.
+    if sceneName == "menu" || sceneName == "frame" {
+        let ok = sceneName == "menu" ? renderMenuPNG(path: out, scale: max(1, scale))
+                                     : renderFramePNG(path: out, scale: max(1, scale))
+        print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
+        exit(ok ? 0 : 1)
+    }
     let ok = renderScenePNG(path: out, kind: scene, width: width, height: height,
                             scale: max(1, scale), title: title, clickCount: 3)
     print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")

@@ -396,3 +396,46 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     cairo_surface_destroy(cs)
     return status == CAIRO_STATUS_SUCCESS
 }
+
+// MARK: - Golden-image scenes that are not windows (PHASE11 P11.1)
+
+/// An open menu, as a popup draws it: the Finder's File menu with its real
+/// enablement (the static rule the bar uses without an application to ask),
+/// key equivalents, separators, a disabled row — and one row hovered, so the
+/// highlight is in the picture. Transparent corners, as the popup has.
+public func renderMenuPNG(path: String, scale: Int32 = 1) -> Bool {
+    guard let file = finderMenuBar().menus.first(where: { $0.title == "File" }) else { return false }
+    let rows = aquaMenuItems(file, enablement: MenuBar.staticEnablement)
+    let menu = AquaMenu(items: rows)
+    let w = Int32(max(150, menu.preferredWidth)), h = Int32(menu.preferredHeight.rounded(.up))
+    // Hover "New Folder" — the second row — so the highlight is drawn.
+    let geo = aquaMenuRows(rows)
+    menu.pointerMoved(x: 20, y: geo[1].y + geo[1].h / 2)
+    guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w * scale, h * scale)
+    else { return false }
+    defer { cairo_surface_destroy(cs) }
+    Text.renderScale = scale
+    defer { Text.renderScale = 1 }
+    guard let data = cairo_image_surface_get_data(cs) else { return false }
+    menu.render(PixelBuffer(data: UnsafeMutableRawPointer(data), width: w * scale,
+                            height: h * scale,
+                            stride: cairo_image_surface_get_stride(cs), scale: scale))
+    cairo_surface_mark_dirty(cs)
+    return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
+}
+
+/// The frame undertow paints around a foreign window (P9.6), from the same
+/// `paintWindowChrome` it calls — so the compositor's chrome is under the gate
+/// without a compositor.
+public func renderFramePNG(path: String, width: Int32 = 480, height: Int32 = 300,
+                           scale: Int32 = 1) -> Bool {
+    guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width * scale, height * scale),
+          let cr = cairo_create(cs) else { return false }
+    defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+    cairo_scale(cr, Double(scale), Double(scale))
+    Text.renderScale = scale
+    defer { Text.renderScale = 1 }
+    paintWindowChrome(cr, w: Double(width), h: Double(height), title: "Untitled — gedit")
+    cairo_surface_flush(cs)
+    return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
+}

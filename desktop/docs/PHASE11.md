@@ -80,13 +80,69 @@ The golden images come first, because everything after is "change it and prove
 nothing moved". Tokens come before draw lists, draw lists before what uses them,
 and both themes last, because they are the tests.
 
-**P11.1 — the gate before anything moves.** Render every deterministic
+**P11.1 — the gate before anything moves. ✅ done.** Render every deterministic
 `AquaDemo` scene (window, sysprefs, widgets, scroll, tabs, sheet, wallpaper,
 menubar, dock, finder, installer screens, open menus and a server-side frame)
 to PNG, commit them as golden images, and add a pixel diff to `run.sh` that
 **fails on any change** and writes the diff image. Seen to fail once: change one
 token by one step, and the diff names the scene. HANDOFF §5 has wanted this
 since P5.4, and this phase cannot be verified without it.
+
+**What P11.1 landed.**
+
+- **`abyss/tests/golden.sh`** renders **26 scenes**:
+  - every window scene, including sysprefs, widgets, scroll, tabs and sheet;
+  - the Finder in icon and list view;
+  - all eight installer pages;
+  - the wallpaper, menu bar, Dock and notification toasts;
+  - an **open menu**, and **the compositor's frame**;
+  - four of them again at **2×**.
+
+  It compares each with a committed golden **pixel for pixel** — identical,
+  not "close", because a tolerance is a place for a change to hide.
+- **Each scene renders twice first,** and a scene that differs from itself is
+  refused as a golden.
+- **The environment is pinned:** an empty config dir, `TZ=UTC`, and fake
+  status items (`ABYSS_FAKE_VOLUME`/`_BATTERY`), so the machine does not leak
+  in.
+- **The comparator is `abyss/tests/pngdiff.c`** (C over cairo, no image
+  library). It exits 0, 1 or 2, and writes a diff image with the golden dimmed
+  and every changed pixel red. Failures leave actual and diff images in
+  `.build/golden-diff/`.
+- **`--update` rewrites the goldens**, on purpose. `run.sh` runs the gate in
+  its fast section, in about a second.
+
+Two scenes are new, **render-only** entry points (`AQUA_SCENE=menu`/`frame`),
+because they were the two things the toolkit draws and nothing had pictured:
+- **an open popup menu:** the Finder's real File menu, with enablement, key
+  column, separators and one row hovered. It is rendered through a now-public
+  `PixelBuffer` init;
+- **`paintWindowChrome`:** the frame undertow paints around a foreign window.
+
+**Goldens are per platform** (`abyss/tests/golden/linux`, `…/freebsd`, 1.2 MB
+and 1.3 MB). The text is drawn in whatever fonts the box has, and the measured
+difference is not subtle. The menu is **223 px wide on Linux and 226 on
+FreeBSD** (DejaVu against Noto/Adwaita), and even the Dock differs in 426
+pixels. One shared set would have been permanently red on one platform or the
+other. The FreeBSD set was generated in the guest, with the guest's fonts.
+
+**Seen to fail:** one channel of one token moved by one level (`menuHighlight`
+`0x3f6fdf` → `0x3f6fe0`) moved pixels in **8 scenes**. They were the open menu
+and every selection highlight in the Finder, the installer and the desktop,
+each named with its pixel count and first coordinate. Restored, green.
+
+**What it found, before anything moved:** **the compositor draws the Finder's
+toolbar pill on foreign windows' frames.** `paintWindowChrome` always paints
+it; undertow calls it for every server-side frame, and undertow's own
+`frameHit` treats that spot as title bar. So what is drawn and what can be
+clicked disagree (§2.9), on every GTK window since P9.6. It is visible in the
+`frame` golden, recorded **as it is** because P11.1 is a baseline, and fixed in
+P11.6, where one chrome layout function feeds paint and both hit-tests. That
+fix updates the golden, on purpose.
+
+**Verified:** green on Linux and in the FreeBSD guest (26 scenes each); the
+fault above caught; `swift build` and the gate itself. (No long gates run,
+since this is a sub-phase.)
 
 **P11.2 — tokens become a theme.** `Theme` becomes an instance, loaded from
 `themes/<name>/theme.ini` through `PoolConfig`. It holds tokens, schemes,
@@ -119,7 +175,10 @@ gadgets, their side, order and size, the title's placement and weight, and the
 frame's metrics come from the theme. **One chrome layout function** feeds the
 Aqua client's own chrome, undertow's server-side frames, and **both hit-tests**
 (`windowChromeHit`, `frameHit`), so what is drawn is what is clickable (§2.9).
-The gadget set is **close, minimize, zoom and depth**. Depth, sending a window
+The gadget set is **close, minimize, zoom and depth**. **P11.1 found the case
+this pass exists for:** undertow's server-side frame paints the Finder's
+toolbar pill, which its hit-test treats as title bar. That pill goes, and the
+`frame` golden is updated on purpose. Depth, sending a window
 to the back, is a new window operation in undertow, the one piece of
 compositor work in the phase.
 

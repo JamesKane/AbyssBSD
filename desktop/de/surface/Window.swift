@@ -21,6 +21,14 @@ public struct PixelBuffer {
     public let height: Int32
     public let stride: Int32
     public let scale: Int32
+
+    /// Public so a delegate can be rendered offscreen — the golden-image
+    /// scenes paint a menu into a cairo image this way (PHASE11 P11.1).
+    public init(data: UnsafeMutableRawPointer, width: Int32, height: Int32,
+                stride: Int32, scale: Int32) {
+        self.data = data; self.width = width; self.height = height
+        self.stride = stride; self.scale = scale
+    }
 }
 
 public protocol WindowDelegate: AnyObject {

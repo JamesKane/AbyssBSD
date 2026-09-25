@@ -108,6 +108,11 @@ AQUA_RENDER_PNG="$out" AQUA_SCALE=2 .build/debug/AquaDemo
 test -s "$out" && echo "ok: $out" || { echo "FAIL: no PNG produced"; exit 1; }
 rm -f "$out"
 
+# Every deterministic scene, pixel for pixel against the committed goldens for
+# this platform (PHASE11 P11.1). About a second; the gate Phase 11 is proved by.
+phase "golden images"
+sh "$root/abyss/tests/golden.sh"
+
 # Two real processes handing a descriptor over the control plane. In the default
 # lane because it needs no compositor and takes about a second.
 phase "control plane, two processes"

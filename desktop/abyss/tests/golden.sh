@@ -1,0 +1,126 @@
+#!/bin/sh
+# AbyssBSD Swift DE — the golden-image gate (PHASE11 P11.1).
+#
+# Every deterministic scene the toolkit can draw, rendered offscreen and
+# compared with a committed golden image **pixel for pixel**. This is the gate
+# Phase 11 is verified with: every pass after this one re-expresses the look as
+# data, and the proof that nothing moved is that nothing here moved.
+#
+#   abyss/tests/golden.sh             # compare; fail naming every scene that moved
+#   abyss/tests/golden.sh --update    # rewrite the goldens — on purpose, never to
+#                                     # make a failure go away
+#   abyss/tests/golden.sh SCENE ...   # only these
+#
+# **Goldens are per platform** (abyss/tests/golden/<os>/): the text is rendered
+# with whatever fonts the box has — Noto and Adwaita on the dev box, DejaVu in
+# the FreeBSD guest — so the same scene is a different picture on each. A
+# rendering-stack upgrade (cairo, freetype, a font package) moves pixels too;
+# the diff image says where, and `--update` is the deliberate answer.
+#
+# Every scene runs with an empty config dir, a fixed clock (the scenes already
+# use 9:41), and fake status items, so nothing on the machine leaks in.
+set -eu
+
+root=$(cd "$(dirname "$0")/../.." && pwd)
+cd "$root"
+aqua="$root/.build/debug/AquaDemo"
+[ -x "$aqua" ] || swift build
+
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+dir="$root/abyss/tests/golden/$os"
+update=0
+only=""
+for a in "$@"; do
+  case "$a" in
+    --update) update=1 ;;
+    *) only="$only $a" ;;
+  esac
+done
+
+work=$(mktemp -d /tmp/abyss-golden.XXXXXX)
+trap 'rm -rf "$work"' EXIT INT TERM HUP
+mkdir -p "$work/cfg" "$work/home" "$dir"
+
+cc -O1 "$root/abyss/tests/pngdiff.c" $(pkg-config --cflags --libs cairo) \
+   -o "$work/pngdiff" || { echo "FAIL: could not build pngdiff"; exit 1; }
+
+# name | AQUA_SCENE | extra environment
+scenes='window|window|
+window@2x|window|AQUA_SCALE=2
+sysprefs|sysprefs|
+widgets|widgets|
+scroll|scroll|
+tabs|tabs|
+sheet|sheet|
+finder|finder|
+finder-list|finder|AQUA_FINDER_VIEW=list
+finder@2x|finder|AQUA_SCALE=2
+installer-hub|installer|
+installer-empty|installer|AQUA_INSTALLER_PAGE=empty
+installer-disk|installer|AQUA_INSTALLER_PAGE=disk
+installer-account|installer|AQUA_INSTALLER_PAGE=account
+installer-keyboard|installer|AQUA_INSTALLER_PAGE=keyboard
+installer-confirm|installer|AQUA_INSTALLER_PAGE=confirm
+installer-installing|installer|AQUA_INSTALLER_PAGE=installing
+installer-done|installer|AQUA_INSTALLER_PAGE=done
+wallpaper|wallpaper|
+menubar|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
+menubar@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_SCALE=2
+dock|dock|
+notify|notify|
+menu|menu|
+menu@2x|menu|AQUA_SCALE=2
+frame|frame|'
+
+render() {  # render NAME SCENE EXTRA OUT
+  # shellcheck disable=SC2086
+  env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" \
+      LANG=C.UTF-8 TZ=UTC AQUA_SCENE="$2" AQUA_RENDER_PNG="$4" $3 \
+      "$aqua" > "$work/$1.log" 2>&1 \
+    || { echo "FAIL: $1 did not render: $(tail -2 "$work/$1.log")"; return 1; }
+}
+
+moved=""; missing=""; checked=0
+IFS='
+'
+for line in $scenes; do
+  IFS='|' read -r name scene extra <<EOF
+$line
+EOF
+  if [ -n "$only" ]; then
+    case " $only " in *" $name "*) ;; *) continue ;; esac
+  fi
+  out="$work/$name.png"
+  render "$name" "$scene" "$extra" "$out" || exit 1
+  # A scene must render the same twice, or it cannot be a golden at all.
+  render "$name" "$scene" "$extra" "$work/$name.again.png" || exit 1
+  "$work/pngdiff" "$out" "$work/$name.again.png" > /dev/null \
+    || { echo "FAIL: $name is not deterministic — two renders differ"; exit 1; }
+  checked=$((checked + 1))
+  if [ "$update" = 1 ]; then
+    cp "$out" "$dir/$name.png"
+    echo "updated: $name"
+    continue
+  fi
+  if [ ! -f "$dir/$name.png" ]; then
+    missing="$missing $name"
+    continue
+  fi
+  if ! verdict=$("$work/pngdiff" "$dir/$name.png" "$out" "$work/$name.diff.png"); then
+    mkdir -p "$root/.build/golden-diff"
+    cp "$out" "$root/.build/golden-diff/$name.actual.png"
+    cp "$work/$name.diff.png" "$root/.build/golden-diff/$name.diff.png" 2>/dev/null || true
+    echo "moved: $name — $verdict"
+    moved="$moved $name"
+  fi
+done
+unset IFS
+
+[ "$update" = 1 ] && { echo "wrote $checked goldens to $dir"; exit 0; }
+[ -z "$missing" ] || { echo "FAIL: no golden for:$missing (run with --update, on purpose)"; exit 1; }
+if [ -n "$moved" ]; then
+  echo "FAIL: pixels moved in:$moved"
+  echo "      actual and diff images are in .build/golden-diff/"
+  exit 1
+fi
+echo "all green ($checked scenes, pixel for pixel, on $os)."
