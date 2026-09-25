@@ -162,10 +162,17 @@ let package = Package(
             dependencies: ["CCairo", "CText"],
             path: "de/aquadraw"
         ),
+        // What an application can do, as a value: commands, key equivalents,
+        // menus (PHASE10.md P10.1). Depends on nothing, so the menu wire and a
+        // command-line client can link it without linking an application.
+        .target(
+            name: "MenuModel",
+            path: "de/menumodel"
+        ),
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["AquaDraw", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
+            dependencies: ["AquaDraw", "MenuModel", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
                            "Vents", "CurrentIPC",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
@@ -410,6 +417,11 @@ let package = Package(
             name: "AquaTests",
             dependencies: ["Aqua", "PoolConfig"],
             path: "Tests/AquaTests"
+        ),
+        .testTarget(
+            name: "MenuModelTests",
+            dependencies: ["MenuModel"],
+            path: "Tests/MenuModelTests"
         ),
         .testTarget(
             name: "PoolConfigTests",

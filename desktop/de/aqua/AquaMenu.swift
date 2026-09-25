@@ -3,33 +3,59 @@
 // popup's buffer, tracks the hovered row from pointer motion, checkmarks the
 // current selection, and reports a choice back via `onChoose`. AquaWindow
 // creates one when the pop-up button is clicked and owns it until it dismisses.
+//
+// Since P10.1 a row is an `AquaMenuItem`, so a menu can say no: disabled rows
+// are drawn grey and can be neither hovered nor chosen, separators are thin
+// rules, a key equivalent sits right-aligned in its own column, and a submenu
+// row carries its ▸. Row geometry comes from `aquaMenuRows` for paint and
+// hit-test alike (§2.9).
 
 import Surface
 import CCairo
 
 public final class AquaMenu: PopupDelegate {
-    public static let itemHeight = 20.0
-    public static let padV = 4.0
+    public static let itemHeight = AquaMenuMetrics.itemHeight
+    public static let padV = AquaMenuMetrics.padV
 
-    private let items: [String]
+    public let items: [AquaMenuItem]
     private let selected: Int
     private var hovered = -1
 
     /// Set by the owner once the Popup exists, so hover can request a redraw.
     public weak var popup: Popup?
-    /// Called with the chosen index (the owner sets the value + closes).
+    /// Called with the chosen index (the owner sets the value + closes). Only
+    /// ever an enabled, non-separator row.
     public var onChoose: (Int) -> Void = { _ in }
     /// Called when the popup is dismissed without a choice (outside click).
     public var onDismiss: () -> Void = {}
 
-    public init(items: [String], selected: Int) {
+    public init(items: [AquaMenuItem], selected: Int = -1) {
         self.items = items
         self.selected = selected
     }
 
+    /// Plain titles, every one enabled — a pop-up button's choices.
+    public convenience init(items: [String], selected: Int) {
+        self.init(items: items.map { AquaMenuItem($0) }, selected: selected)
+    }
+
     /// The popup height that fits every item.
-    public var preferredHeight: Double {
-        Double(items.count) * AquaMenu.itemHeight + 2 * AquaMenu.padV
+    public var preferredHeight: Double { aquaMenuHeight(items) }
+
+    /// The popup width that fits the longest title, the key column and the
+    /// submenu arrow — measured on a scratch surface, since the owner asks
+    /// before any buffer exists.
+    public var preferredWidth: Double {
+        guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1),
+              let cr = cairo_create(cs) else { return 160 }
+        defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+        let rows = items.filter { !$0.isSeparator }
+        let title = rows.map { Draw.textWidth(cr, $0.title, size: Theme.fontSize) }.max() ?? 0
+        let key = rows.map { Draw.textWidth(cr, $0.keyText, size: Theme.fontSize) }.max() ?? 0
+        let arrow = rows.contains { $0.hasSubmenu } ? 12.0 : 0
+        let keyCol = key > 0 ? AquaMenuMetrics.keyGap + key : 0
+        return (AquaMenuMetrics.titleX + title + max(keyCol, arrow)
+                + AquaMenuMetrics.rightInset).rounded(.up)
     }
 
     // MARK: PopupDelegate
@@ -55,21 +81,35 @@ public final class AquaMenu: PopupDelegate {
         Draw.setColor(cr, Theme.menuBackground)
         cairo_fill(cr)
 
-        let ih = AquaMenu.itemHeight
-        for (i, item) in items.enumerated() {
-            let iy = AquaMenu.padV + Double(i) * ih
+        for (i, (item, row)) in zip(items, aquaMenuRows(items)).enumerated() {
+            if item.isSeparator {
+                Draw.setColor(cr, Theme.menuSeparator)
+                cairo_rectangle(cr, 1, (row.y + row.h / 2).rounded(.down), w - 2, 1)
+                cairo_fill(cr)
+                continue
+            }
             let textColor: Color
             if i == hovered {
-                Draw.roundedRect(cr, Rect(3, iy, w - 6, ih), radius: 3)
+                Draw.roundedRect(cr, Rect(3, row.y, w - 6, row.h), radius: 3)
                 Draw.setColor(cr, Theme.menuHighlight)
                 cairo_fill(cr)
                 textColor = Theme.menuTextOnHighlight
             } else {
-                textColor = Theme.menuText
+                textColor = item.enabled ? Theme.menuText : Theme.menuTextDisabled
             }
-            if i == selected { drawCheck(cr, x: 8, cy: iy + ih / 2, color: textColor) }
-            Draw.textLeft(cr, item, x: 22, baselineY: iy + ih - 6,
+            let baseline = row.y + row.h - 6
+            if i == selected { drawCheck(cr, x: 8, cy: row.y + row.h / 2, color: textColor) }
+            Draw.textLeft(cr, item.title, x: AquaMenuMetrics.titleX, baselineY: baseline,
                           color: textColor, size: Theme.fontSize)
+            if !item.keyText.isEmpty {
+                let kw = Draw.textWidth(cr, item.keyText, size: Theme.fontSize)
+                Draw.textLeft(cr, item.keyText, x: w - AquaMenuMetrics.rightInset - kw,
+                              baselineY: baseline, color: textColor, size: Theme.fontSize)
+            }
+            if item.hasSubmenu {
+                drawSubmenuArrow(cr, right: w - AquaMenuMetrics.rightInset,
+                                 cy: row.y + row.h / 2, color: textColor)
+            }
         }
 
         Draw.roundedRect(cr, frame, radius: 5)
@@ -95,14 +135,26 @@ public final class AquaMenu: PopupDelegate {
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER)
     }
 
+    /// A small filled triangle pointing right: a submenu opens here.
+    private func drawSubmenuArrow(_ cr: OpaquePointer, right: Double, cy: Double,
+                                  color: Color) {
+        Draw.setColor(cr, color)
+        cairo_move_to(cr, right - 5, cy - 4.5)
+        cairo_line_to(cr, right, cy)
+        cairo_line_to(cr, right - 5, cy + 4.5)
+        cairo_close_path(cr)
+        cairo_fill(cr)
+    }
+
     public func pointerMoved(x: Double, y: Double) {
-        let idx = itemAt(y)
+        let idx = aquaMenuRow(atY: y, items) ?? -1
         if idx != hovered { hovered = idx; popup?.setNeedsDisplay() }
     }
 
     public func pointerButton(pressed: Bool) {
         // Choose on release over an item (click-open then click-select).
-        guard !pressed, hovered >= 0, hovered < items.count else { return }
+        guard !pressed, hovered >= 0, hovered < items.count,
+              items[hovered].isChoosable else { return }
         onChoose(hovered)
     }
 
@@ -117,7 +169,9 @@ public final class AquaMenu: PopupDelegate {
         case KeySym.up:    moveHighlight(-1); return true
         case KeySym.down:  moveHighlight(1); return true
         case KeySym.enter, KeySym.space:
-            if hovered >= 0, hovered < items.count { onChoose(hovered) }
+            if hovered >= 0, hovered < items.count, items[hovered].isChoosable {
+                onChoose(hovered)
+            }
             return true
         case KeySym.escape:
             // `close()` is a *programmatic* teardown: it destroys the proxies
@@ -134,16 +188,12 @@ public final class AquaMenu: PopupDelegate {
     }
 
     private func moveHighlight(_ d: Int) {
-        let n = items.count
-        guard n > 0 else { return }
-        let start = hovered >= 0 ? hovered : selected
-        hovered = (start + d + n) % n
+        // Starting from the checked item when nothing is hovered, so a pop-up
+        // button's arrows move from its current value.
+        let start: Int? = hovered >= 0 ? hovered
+            : (selected >= 0 && selected < items.count ? selected : nil)
+        guard let next = aquaMenuStep(from: start, step: d, items) else { return }
+        hovered = next
         popup?.setNeedsDisplay()
-    }
-
-    private func itemAt(_ y: Double) -> Int {
-        guard y >= AquaMenu.padV else { return -1 }
-        let i = Int((y - AquaMenu.padV) / AquaMenu.itemHeight)
-        return i >= 0 && i < items.count ? i : -1
     }
 }

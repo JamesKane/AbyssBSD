@@ -26,12 +26,14 @@ import Darwin
 private let kBtnLeft: UInt32 = 0x110
 
 public struct MenuBarMenu: Sendable {
-    public let title: String
     public let isSystem: Bool   // the drop-glyph slot (Apple-menu position)
     public let bold: Bool       // the application-name menu is bold
-    public let items: [String]
-    public init(title: String, isSystem: Bool = false, bold: Bool = false, items: [String]) {
-        self.title = title; self.isSystem = isSystem; self.bold = bold; self.items = items
+    /// What opens under the title — a `MenuModel.Menu` since P10.1, so the bar
+    /// draws an application's own definition rather than a list of strings.
+    public let menu: Menu
+    public var title: String { isSystem ? "" : menu.title }
+    public init(_ menu: Menu, isSystem: Bool = false, bold: Bool = false) {
+        self.menu = menu; self.isSystem = isSystem; self.bold = bold
     }
 }
 
@@ -186,41 +188,57 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var mixer: Vents.Mixer?
     private var status = MenuBarStatus()
 
-    /// The default Jaguar menu set for an app named `appName`.
-    public static func defaultMenus(appName: String) -> [MenuBarMenu] {
-        [
-            MenuBarMenu(title: "", isSystem: true, items: [
-                "About This Computer", "System Preferences…", "Dock",
-                "Location", "Recent Items", "Force Quit…",
-                "Sleep", "Restart…", "Shut Down…", "Log Out…",
-            ]),
-            MenuBarMenu(title: appName, bold: true, items: [
-                "About \(appName)", "Preferences…", "Empty Trash…",
-                "Services", "Hide \(appName)", "Hide Others", "Show All",
-            ]),
-            MenuBarMenu(title: "File", items: [
-                "New Finder Window", "New Folder", "Open", "Open With",
-                "Close Window", "Get Info", "Duplicate", "Make Alias",
-            ]),
-            MenuBarMenu(title: "Edit", items: [
-                "Undo", "Redo", "Cut", "Copy", "Paste", "Select All",
-            ]),
-            MenuBarMenu(title: "View", items: [
-                "as Icons", "as List", "as Columns", "Clean Up", "Show View Options",
-            ]),
-            MenuBarMenu(title: "Go", items: [
-                "Computer", "Home", "iDisk", "Applications", "Favorites",
-            ]),
-            MenuBarMenu(title: "Window", items: ["Minimize", "Zoom", "Bring All to Front"]),
-            MenuBarMenu(title: "Help", items: ["Mac Help", "\(appName) Help"]),
-        ]
+    /// The system menu — the bar's own, whoever is frontmost. Nothing here can
+    /// run yet (P10.8 gives the items that can a verb to call), so every item
+    /// is drawn disabled rather than logging a title and pretending.
+    public static let systemMenu = Menu("System", [
+        .command(Command("system.about", "About This Computer",
+                         summary: "Describe this machine.")),
+        .separator,
+        .command(Command("system.preferences", "System Preferences…",
+                         summary: "Open System Preferences.")),
+        .command(Command("system.dock", "Dock", summary: "Change the Dock.")),
+        .command(Command("system.location", "Location", summary: "Change network location.")),
+        .separator,
+        .command(Command("system.recent", "Recent Items", summary: "Reopen something recent.")),
+        .separator,
+        .command(Command("system.force-quit", "Force Quit…",
+                         key: .cmd(.escape, .option),
+                         summary: "End an application that has stopped responding.")),
+        .separator,
+        .command(Command("system.sleep", "Sleep", summary: "Put the computer to sleep.")),
+        .command(Command("system.restart", "Restart…", summary: "Restart the computer.")),
+        .command(Command("system.shut-down", "Shut Down…", summary: "Turn the computer off.")),
+        .separator,
+        .command(Command("system.log-out", "Log Out…", key: .cmd("q", .shift),
+                         summary: "End this session.")),
+    ])
+
+    /// The bar for an application: the system menu, then the application's own
+    /// menus, the first of which is its bold application menu.
+    public static func menus(for app: MenuBarModel) -> [MenuBarMenu] {
+        [MenuBarMenu(systemMenu, isSystem: true)]
+            + app.menus.enumerated().map { MenuBarMenu($1, bold: $0 == 0) }
+    }
+
+    /// Whether the bar may offer `command`. **Until P10.4 the bar cannot ask the
+    /// application**, so this answers from the definition alone: a Finder verb
+    /// the Finder implements is offered; a system verb is not yet (P10.8). It
+    /// is the one place the bar knows the Finder by name, and P10.4 deletes it.
+    static func staticEnablement(_ command: Command) -> Enablement {
+        if let v = FinderVerb(rawValue: command.verb) {
+            return v.isImplemented ? .enabled : .disabled("the Finder cannot do this yet")
+        }
+        return .disabled("not available yet")
     }
 
     public init?(display: Display) {
         let config = (try? Pool.load("panel")) ?? Config()
         showClock = config.bool("panel", "show_clock") ?? true
         let height = Int32(config.uint64("panel", "menubar_height") ?? 22)
-        menus = MenuBar.defaultMenus(appName: "Finder")
+        // The Finder's own definition, not a copy of it (P10.1). Which
+        // application is frontmost arrives with P10.4.
+        menus = MenuBar.menus(for: finderMenuBar())
 
         guard let ls = LayerSurface(
             display: display, layer: .top, namespace: "abyss.menubar",
@@ -310,7 +328,7 @@ public final class MenuBar: LayerSurfaceDelegate {
 
     private func titleAt(_ x: Double) -> Int? {
         for (i, r) in layoutCache.titleRects.enumerated()
-        where x >= r.x && x < r.x + r.w && !menus[i].items.isEmpty {
+        where x >= r.x && x < r.x + r.w && !menus[i].menu.items.isEmpty {
             return i
         }
         return nil
@@ -338,7 +356,7 @@ public final class MenuBar: LayerSurfaceDelegate {
         var j = i
         for _ in 0..<n {
             j = (j + step + n) % n
-            if !menus[j].items.isEmpty { return j }
+            if !menus[j].menu.items.isEmpty { return j }
         }
         return i
     }
@@ -346,15 +364,18 @@ public final class MenuBar: LayerSurfaceDelegate {
     private func openMenu(_ i: Int) {
         closeMenu()
         let m = menus[i]
-        let am = AquaMenu(items: m.items, selected: -1)
+        let name = m.isSystem ? "System" : m.title
+        let rows = aquaMenuItems(m.menu, enablement: MenuBar.staticEnablement)
+        let am = AquaMenu(items: rows)
         am.onChoose = { [weak self] idx in
-            MenuBar.log("chose \(m.title.isEmpty ? "System" : m.title) > \(m.items[idx])")
+            let row = rows[idx]
+            MenuBar.log("chose \(name) > \(row.title) (\(row.verb ?? "no verb"))")
             self?.closeMenu()
         }
         am.onDismiss = { [weak self] in self?.menuDismissed() }
 
         let r = layoutCache.titleRects[i]
-        let popupW = Int32(max(150, menuWidth(m.items) + 40))
+        let popupW = Int32(max(150, am.preferredWidth))
         let popupH = Int32(am.preferredHeight.rounded(.up))
         guard let pop = layer?.openPopup(
             anchorX: Int32(r.x), anchorY: 0, anchorW: Int32(r.w),
@@ -364,7 +385,7 @@ public final class MenuBar: LayerSurfaceDelegate {
         menu = am
         popup = pop
         openIndex = i
-        MenuBar.log("opened \(m.title.isEmpty ? "System" : m.title)")
+        MenuBar.log("opened \(name)")
         layer?.setNeedsDisplay()
     }
 
@@ -383,13 +404,5 @@ public final class MenuBar: LayerSurfaceDelegate {
             MenuBar.log("closed")
             layer?.setNeedsDisplay()
         }
-    }
-
-    /// Widest item, measured on a scratch surface (pointer handlers have no cr).
-    private func menuWidth(_ items: [String]) -> Double {
-        guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1),
-              let cr = cairo_create(cs) else { return 160 }
-        defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
-        return items.map { Draw.textWidth(cr, $0, size: Theme.fontSize) }.max() ?? 120
     }
 }

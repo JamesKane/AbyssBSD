@@ -6,7 +6,10 @@
 // `AquaDraw` in P9.6 so the compositor can link them for server-side
 // decorations. Every file in this toolkit uses them unqualified and always has;
 // re-exporting keeps that true and means the extraction changed no call site.
+// `MenuModel` likewise (P10.1): an application built on Aqua defines its
+// commands with it, and should not need a second import to do so.
 @_exported import AquaDraw
+@_exported import MenuModel
 import CCairo
 import Surface
 import Vents
@@ -275,7 +278,7 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
             // does, so a status item that would appear on screen appears here
             // too (and one the machine can't feed is absent in both).
             paintMenuBar(cr, w: Double(width), h: MenuBarMetrics.height,
-                         menus: MenuBar.defaultMenus(appName: "Finder"),
+                         menus: MenuBar.menus(for: finderMenuBar()),
                          clock: formatMenuClock(hour24: 9, minute: 41, wday: 1),
                          openIndex: nil, showClock: true,
                          status: MenuBarStatus.read(mixer: Vents.Mixer()))

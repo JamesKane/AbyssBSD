@@ -8,7 +8,7 @@ runs on our own compositor, which holds its frame contract (headless) under elev
 processes; the portals hand out descriptors; and **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder** — which
 is the claim the D-Bus phase existed to make.
-**418 unit tests, 35 live modes and 24 live scripts, green on Linux *and*
+**430 unit tests, 35 live modes and 24 live scripts, green on Linux *and*
 FreeBSD.** (Three different denominators — see [HANDOFF §3](HANDOFF.md).)
 The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
 two nested-bhyve install tests (~1000s)** — the rule for anything touching the
@@ -442,7 +442,7 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 **Phases 0–3, 5–8 and 9 are complete. Phase 4 is in flight on metal; Phase 12 is
 done but for P12.3's Aqua view. The next unbuilt phase is 10.**
 
-1. **Phase 10 — the menu protocol** — scoped in [PHASE10.md](PHASE10.md) (P10.1–P10.8); P10.1 is next. The menu bar stops
+1. **Phase 10 — the menu protocol** — scoped in [PHASE10.md](PHASE10.md) (P10.1–P10.8); **P10.1 is done** — the Finder's commands are one model that the key handler and the menu bar both read — and P10.2, the menu service, is next. The menu bar stops
    being a picture of a menu bar: applications publish a menu tree over
    `CurrentIPC`, `abyss-dbus` translates GTK's `org.gtk.Menus` and Qt's
    `dbusmenu` into the same thing, undo gets decided, and what travels is a

@@ -78,7 +78,7 @@ The order is the dependency order inside the phase: the definition before the
 things that carry it, our own application end to end before anybody else's, and
 undo after there is a channel for Undo to be enabled through.
 
-**P10.1 — one definition of a command.**
+**P10.1 — one definition of a command. ✅ done.**
 A `Command` in `Aqua` is a value: a **verb** (`file.duplicate` — stable, never
 localised, what a script says), a **title** (`Duplicate` — what a person reads),
 a **key equivalent** (`⌘D`), **argument types** and **a sentence of description**
@@ -95,6 +95,46 @@ menu set stops being strings: the Finder's menus are the Finder's model.
 `AquaMenu` learns disabled items, key equivalents drawn right-aligned in the
 Jaguar style, separators and submenus. All pure where it can be (the layout that
 feeds paint and hit-test, §2.9).
+
+**What P10.1 landed.** `MenuModel` (`de/menumodel`) is a target that depends on
+nothing — `Command`, `KeyEquivalent`, `Menu`, `MenuBarModel`, `Enablement`,
+`CommandResult` — so P10.2's wire and `abyssmenu` can link it without linking an
+application. The Finder's commands are `finderMenuBar()` over an exhaustive
+`FinderVerb`; `FinderWindow.perform(_:)` switches over it with **no `default:`**,
+so a verb added to the menus does not compile until the window says what it
+does, and `validate(_:)` answers with a *reason* ("nothing is selected", "the
+Trash is empty"). `commandKey` is now three lines: look the press up in the
+model, perform the verb. The menu bar draws the same model — `defaultMenus`'
+strings are gone — and `AquaMenu` draws disabled rows, separators, a key column
+and a submenu arrow from one row layout for paint and hit-test. Things the
+Finder cannot do yet (About, Get Info, Undo, as Columns, …) are **drawn
+disabled, not left out**, and the system menu is entirely disabled until P10.8.
+
+**What it found in the switch it replaced:**
+
+- **Modifiers were ignored for every letter but N.** The old `commandKey` matched
+  `case "c"` whether Shift was held or not, so ⇧⌘C copied, ⇧⌘D duplicated,
+  ⇧⌘O opened. In Jaguar ⇧⌘C is *Go ▸ Computer*. Matching is exact now, as the
+  compositor's table already was (P9.5).
+- **An injected fault proved the walk test matters.** With Shift dropped from
+  `keyEquivalent(keysym:modifiers:)`, the test that presses every key in the
+  model failed — and named the dangerous case: ⇧⌘⌫ (Empty Trash) would have run
+  ⌘⌫ (Move to Trash), and ⇧⌘N would have opened a window instead of a folder.
+- **Up from nothing highlighted the second-to-last row** (`(start + d + n) % n`
+  from `-1`). The step is `aquaMenuStep` now, pure and tested, and it skips
+  separators and disabled rows the way Jaguar does.
+- **Shifted punctuation cannot be a key equivalent yet.** On a US layout ⌘? is
+  keysym `question` with Shift held, so a model that bound `.cmd("?")` would
+  never match. The Help item carries no key rather than a key that does
+  nothing; the fix is the compositor's two-symbol rule (P9.5), when something
+  needs it.
+
+**The live test changed with the behaviour.** `live-sway.sh --menubar --keys`
+used to press Down and choose "About Finder". About is disabled now, so the test
+asserts the *opposite* of what it used to — that Down skips it, that it was
+never chosen, and that Return chose `Empty Trash… (finder.empty-trash)` **by
+verb**. What the bar does with a choice is still only a log line; P10.4 routes
+it.
 
 **P10.2 — the menu service, and the consumer that is not the bar.**
 The wire (`de/menuwire`, a target the way `InstallWire` is, so the bar links it

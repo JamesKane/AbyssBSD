@@ -694,6 +694,12 @@ public final class FinderApp {
 
     func clearClipboard() { clipboard = nil }
 
+    /// Is there anything Paste could paste? Cheap — nothing is read.
+    var hasClipboard: Bool {
+        clipboard != nil
+            || display.clipboard?.offers([ClipboardMIME.uriList, ClipboardMIME.text]) == true
+    }
+
     /// The path to paste: **what is on the seat**, falling back to our own cache.
     ///
     /// The seat wins because somebody else may have copied since we did — that
@@ -1369,12 +1375,6 @@ public final class FinderWindow: WindowDelegate {
 
     /// The ASCII letter a keysym stands for, lowercased (X11 keysyms for ASCII
     /// *are* the ASCII values), so ⌘N and ⌘⇧N match the same case.
-    private func letter(_ event: KeyEvent) -> Character? {
-        guard event.keysym >= 0x21, event.keysym <= 0x7e,
-              let scalar = UnicodeScalar(event.keysym) else { return nil }
-        return Character(scalar).lowercased().first
-    }
-
     /// ⌘S in a save picker: choose `<the folder on screen>/<suggested name>`.
     /// A save dialog must be able to name a file that does not exist yet, which
     /// picking from a listing cannot express (see FinderPicker.saveName).
@@ -1403,24 +1403,108 @@ public final class FinderWindow: WindowDelegate {
         }
     }
 
-    /// The Finder's ⌘-shortcuts. Returns false if this isn't one of them.
+    // MARK: commands (PHASE10.md P10.1)
+
+    /// The Finder's commands, shared by every window: the key handler below and
+    /// the menu bar both read this, so they cannot disagree.
+    static let menuBar = finderMenuBar()
+
+    /// Whether `verb` can run in this window now, and why not. Asked before a
+    /// key runs a command, and (P10.4) before the bar draws a menu.
+    func validate(_ verb: FinderVerb) -> Enablement {
+        guard verb.isImplemented else { return .disabled("the Finder cannot do this yet") }
+        let needsSelection: Set<FinderVerb> = [.open, .duplicate, .moveToTrash, .cut, .copy]
+        if needsSelection.contains(verb), selectedEntry == nil {
+            return .disabled("nothing is selected")
+        }
+        switch verb {
+        case .emptyTrash:
+            return finderTrashContents().isEmpty ? .disabled("the Trash is empty") : .enabled
+        case .saveHere:
+            return FinderPicker.isSaving ? .enabled : .disabled("this is not a save dialog")
+        case .paste:
+            return app?.hasClipboard == true ? .enabled : .disabled("the clipboard is empty")
+        case .back:
+            return backStack.isEmpty ? .disabled("there is nowhere to go back to") : .enabled
+        case .enclosingFolder:
+            return finderParent(path) == nil ? .disabled("this is the top of the disk") : .enabled
+        case .applications:
+            return finderIsDirectory(FinderWindow.applicationsDirectory)
+                ? .enabled : .disabled("there is no Applications folder")
+        default:
+            return .enabled
+        }
+    }
+
+    /// Run `verb` in this window. The only place a Finder command is carried
+    /// out — a key and a menu choice both land here.
+    ///
+    /// **No `default:`**, so a verb added to `FinderVerb` does not compile until
+    /// this says what it does (§2.51's rule, applied to commands).
+    @discardableResult
+    func perform(_ verb: FinderVerb) -> CommandResult {
+        if case .disabled(let why) = validate(verb) {
+            FinderWindow.log("refused \(verb.rawValue): \(why)")
+            return .refused(why)
+        }
+        FinderWindow.log("command \(verb.rawValue)")
+        switch verb {
+        case .emptyTrash:
+            let r = finderEmptyTrash()
+            FinderWindow.log("emptied the Trash (\(r.removed) removed, \(r.failed) failed)")
+            return r.failed == 0 ? .ok(nil) : .refused("\(r.failed) items could not be removed")
+        case .newWindow:     app?.openFolder(FinderWindow.startDirectory())
+        case .newFolder:     newFolder()
+        case .open:          if let s = selection { activate(s) }
+        case .closeWindow:   closeWindow()
+        case .duplicate:     duplicateSelection()
+        case .moveToTrash:   trashSelection()
+        case .saveHere:      saveHere()
+        case .cut:           clipSelection(cut: true)
+        case .copy:          clipSelection(cut: false)
+        case .paste:         paste()
+        case .asIcons:       setView(.icon)
+        case .asList:        setView(.list)
+        case .toggleToolbar: toggleToolbar()
+        case .back:          goBack()
+        case .enclosingFolder: goUp()
+        case .computer:      go(to: "/")
+        case .home:          go(to: FinderWindow.homeDirectory)
+        case .applications:  go(to: FinderWindow.applicationsDirectory)
+        case .minimize:      window?.minimize()
+        case .zoom:          window?.setMaximized(!(window?.isMaximized ?? false))
+        case .about, .preferences, .hide, .hideOthers, .showAll, .getInfo,
+             .makeAlias, .find, .undo, .redo, .selectAll, .asColumns, .help:
+            // Unreachable: `validate` refuses what is not implemented. Listed
+            // rather than defaulted so implementing one is a visible edit here.
+            return .refused("the Finder cannot do this yet")
+        }
+        return .ok(nil)
+    }
+
+    /// Go somewhere from the Go menu: in place when browsing, a window of its
+    /// own when spatial — the same rule as opening a folder.
+    private func go(to dest: String) {
+        guard dest != path else { return }
+        if isSpatial { app?.open(path: dest, from: self) } else { navigate(to: dest) }
+    }
+
+    static var homeDirectory: String {
+        if let h = getenv("HOME") {
+            let s = String(cString: h)
+            if !s.isEmpty { return s }
+        }
+        return "/"
+    }
+
+    static var applicationsDirectory: String { finderJoin(homeDirectory, "Applications") }
+
+    /// A key that is a command. Returns false if the model binds nothing to it.
     private func commandKey(_ event: KeyEvent) -> Bool {
-        switch event.keysym {
-        case KeySym.delete, KeySym.backspace: trashSelection(); return true
-        case KeySym.down:  if let s = selection { activate(s) }; return true
-        case KeySym.up:    goUp(); return true
-        default: break
-        }
-        switch letter(event) {
-        case "n" where event.modifiers.contains(.shift): newFolder()
-        case "o": if let s = selection { activate(s) }
-        case "d": duplicateSelection()
-        case "c": clipSelection(cut: false)
-        case "x": clipSelection(cut: true)
-        case "v": paste()
-        case "s" where FinderPicker.isSaving: saveHere()
-        default: return false
-        }
+        guard let press = keyEquivalent(event),
+              let name = FinderWindow.menuBar.verb(for: press),
+              let verb = FinderVerb(rawValue: name) else { return false }
+        perform(verb)
         return true
     }
 

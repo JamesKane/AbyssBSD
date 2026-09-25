@@ -210,6 +210,16 @@ public final class Clipboard {
         ownsSelection = ownedSource != nil
     }
 
+    /// Whether the clipboard holds something in one of `types` — without
+    /// reading it. For a menu deciding whether Paste is enabled (PHASE10 P10.1),
+    /// which must not cost a pipe and a round trip to the source every time.
+    /// True for our own selection too; the caller knows what it put there.
+    public func offers(_ types: [String] = ClipboardMIME.offered) -> Bool {
+        if ownsSelection { return true }
+        guard currentOffer != nil else { return false }
+        return types.contains { offeredTypes.contains($0) }
+    }
+
     /// What the clipboard currently holds, or nil if it holds nothing we can read.
     ///
     /// **Blocking, deliberately.** The source writes when it gets round to it,

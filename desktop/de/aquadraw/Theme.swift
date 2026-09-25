@@ -116,6 +116,9 @@ public enum Theme {
     public static let menuHighlight = Color(hex: 0x3f6fdf)
     public static let menuText = Color(hex: 0x1a1a1a)
     public static let menuTextOnHighlight = Color(hex: 0xffffff)
+    /// A command that cannot run now (P10.1): Jaguar's grey, still legible.
+    public static let menuTextDisabled = Color(hex: 0x9c9c9c)
+    public static let menuSeparator = Color(hex: 0xd9d9d9)
 
     // Menu bar: a light, faintly glassy strip at the top of the screen with a
     // 1px darker bottom edge; the open/hovered title takes the menu blue.

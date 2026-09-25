@@ -753,13 +753,18 @@ if [ "$type" = "--type" ] || [ "$keys" = "--keys" ] || [ "$repeat" = "--repeat" 
         grep -q 'MenuBar: opened Finder' "$app_log" \
           || { echo "FAIL: Right didn't walk to the next menu"; cat "$app_log"; exit 1; }
         echo "menu bar: Right walked System -> Finder"
-        printf 'k 108\n' >&4     # Down: highlight "About Finder"
+        # Down: highlight the first item that can be CHOSEN. Since P10.1 the
+        # bar draws the Finder's own model, where "About Finder" is disabled
+        # (not implemented), so Down must skip it and land on "Empty Trash…".
+        printf 'k 108\n' >&4
         sleep 0.3
         printf 'k 28\n'  >&4     # Return: choose it
         sleep 0.5
         grep -q 'MenuBar: chose Finder > About Finder' "$app_log" \
+          && { echo "FAIL: a disabled item was chosen"; cat "$app_log"; exit 1; }
+        grep -q 'MenuBar: chose Finder > Empty Trash… (finder.empty-trash)' "$app_log" \
           || { echo "FAIL: Down+Return didn't choose from the keyboard"; cat "$app_log"; exit 1; }
-        echo "menu bar: Down+Return chose 'About Finder' (no pointer)"
+        echo "menu bar: Down skipped disabled 'About Finder'; Return chose 'Empty Trash…' by verb (no pointer)"
         # Escape closes the open menu (and hands the keyboard back).
         printf 'm 21 11\np\nr\n' >&3   # re-open the system menu with the pointer
         sleep 0.5

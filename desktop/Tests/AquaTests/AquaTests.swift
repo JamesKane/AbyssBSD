@@ -348,21 +348,133 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(formatMenuClock(hour24: 23, minute: 59, wday: 3), "Wed 11:59 PM")
     }
 
-    func testMenuBarDefaultMenus() {
-        let menus = MenuBar.defaultMenus(appName: "Finder")
+    func testMenuBarMenusComeFromTheFinderModel() {
+        let menus = MenuBar.menus(for: finderMenuBar())
         XCTAssertTrue(menus[0].isSystem, "the system (drop) menu is first")
         XCTAssertTrue(menus[1].bold, "the application menu is bold")
         XCTAssertEqual(menus[1].title, "Finder")
         XCTAssertEqual(menus.map(\.title), ["", "Finder", "File", "Edit", "View",
                                             "Go", "Window", "Help"])
-        for m in menus { XCTAssertFalse(m.items.isEmpty) }   // every title opens something
+        for m in menus { XCTAssertFalse(m.menu.items.isEmpty) }   // every title opens something
+        // The bar draws the Finder's definition, not a copy: same commands.
+        XCTAssertEqual(menus.dropFirst().flatMap(\.menu.commands),
+                       finderMenuBar().commands)
+    }
+
+    // MARK: Phase 10.1 — one definition of a command
+
+    /// Every verb the Finder's switch handles is in the menus exactly once, and
+    /// the menus carry nothing the switch does not handle.
+    func testFinderVerbsAndMenusAgree() {
+        let model = finderMenuBar()
+        XCTAssertEqual(model.duplicateVerbs, [])
+        XCTAssertEqual(Set(model.commands.map(\.verb)),
+                       Set(FinderVerb.allCases.map(\.rawValue)))
+    }
+
+    func testFinderKeysNeverConflict() {
+        XCTAssertEqual(finderMenuBar().conflictingKeys, [])
+        // Nor with the system menu, which is in the same bar.
+        let bar = MenuBarModel(appName: "Finder",
+                               menus: [MenuBar.systemMenu] + finderMenuBar().menus)
+        XCTAssertEqual(bar.conflictingKeys, [])
+    }
+
+    /// The keysym xkb delivers for `key`: with Shift held a letter arrives
+    /// uppercase, which is what `keyEquivalent(keysym:)` has to undo.
+    private func keysym(for key: KeyEquivalent) -> UInt32? {
+        switch key.key {
+        case .character(let c):
+            let s = key.modifiers.contains(.shift) ? c.uppercased() : String(c)
+            return s.unicodeScalars.first.map { $0.value }
+        case .backspace:     return KeySym.backspace
+        case .forwardDelete: return KeySym.delete
+        case .up:            return KeySym.up
+        case .down:          return KeySym.down
+        case .left:          return KeySym.left
+        case .right:         return KeySym.right
+        case .enter:         return KeySym.enter
+        case .escape:        return KeySym.escape
+        case .tab:           return KeySym.tab
+        }
+    }
+
+    private func modifiers(for key: KeyEquivalent) -> KeyModifiers {
+        var m: KeyModifiers = []
+        if key.modifiers.contains(.command) { m.insert(.command) }
+        if key.modifiers.contains(.shift)   { m.insert(.shift) }
+        if key.modifiers.contains(.option)  { m.insert(.alt) }
+        if key.modifiers.contains(.control) { m.insert(.control) }
+        return m
+    }
+
+    /// **Walk the model and press every key in it.** Each press, as xkb would
+    /// deliver it, must come back as the verb that owns it — so a command added
+    /// to the model is covered by construction rather than by remembering to
+    /// add a line here.
+    func testEveryFinderKeyReachesItsOwnVerb() {
+        let model = finderMenuBar()
+        var pressed = 0
+        for c in model.commands {
+            for k in c.allKeys {
+                guard let sym = keysym(for: k) else { return XCTFail("no keysym for \(k.display)") }
+                let press = keyEquivalent(keysym: sym, modifiers: modifiers(for: k))
+                XCTAssertEqual(press, k, "\(k.display) did not survive the keysym round trip")
+                XCTAssertEqual(press.flatMap(model.verb(for:)), c.verb,
+                               "\(k.display) should run \(c.verb)")
+                pressed += 1
+            }
+        }
+        XCTAssertGreaterThan(pressed, 25, "the walk pressed nothing — it is testing nothing")
+    }
+
+    func testKeyEquivalentFromKeysymIgnoresCapsLock() {
+        let withCaps = keyEquivalent(keysym: 0x64, modifiers: [.command, .capsLock])
+        XCTAssertEqual(withCaps, .cmd("d"))
+        XCTAssertNil(keyEquivalent(keysym: KeySym.home, modifiers: [.command]),
+                     "Home is not a key equivalent any model uses")
+    }
+
+    func testUnimplementedFinderVerbsAreDrawnDisabledNotHidden() {
+        let items = aquaMenuItems(finderMenuBar().menus[0],
+                                  enablement: MenuBar.staticEnablement)
+        let about = items.first { $0.verb == "finder.about" }
+        XCTAssertNotNil(about, "About Finder is in the menu")
+        XCTAssertEqual(about?.enabled, false)
+        XCTAssertEqual(items.first { $0.verb == "finder.empty-trash" }?.keyText, "⇧⌘⌫")
+        XCTAssertEqual(items.first { $0.verb == "finder.empty-trash" }?.enabled, true)
+    }
+
+    func testMenuRowsAndHitTestAgreeAcrossSeparators() {
+        let items = [AquaMenuItem("A"), .separator, AquaMenuItem("B"),
+                     AquaMenuItem("C", enabled: false), AquaMenuItem("D")]
+        let rows = aquaMenuRows(items)
+        XCTAssertEqual(rows[1].h, AquaMenuMetrics.separatorHeight)
+        XCTAssertEqual(rows[2].y, rows[1].y + rows[1].h, "rows stack with no gap")
+        XCTAssertEqual(aquaMenuHeight(items),
+                       rows.last!.y + rows.last!.h + AquaMenuMetrics.padV)
+        // The middle of B's row hits B — not the row a uniform height would say.
+        XCTAssertEqual(aquaMenuRow(atY: rows[2].y + rows[2].h / 2, items), 2)
+        XCTAssertNil(aquaMenuRow(atY: rows[1].y + 1, items), "a separator is not a choice")
+        XCTAssertNil(aquaMenuRow(atY: rows[3].y + 1, items), "a disabled row is not a choice")
+    }
+
+    func testMenuArrowKeysSkipWhatCannotBeChosen() {
+        let items = [AquaMenuItem("A", enabled: false), AquaMenuItem("B"), .separator,
+                     AquaMenuItem("C", enabled: false), AquaMenuItem("D")]
+        XCTAssertEqual(aquaMenuStep(from: nil, step: 1, items), 1, "Down starts at the first choosable")
+        XCTAssertEqual(aquaMenuStep(from: 1, step: 1, items), 4)
+        XCTAssertEqual(aquaMenuStep(from: 4, step: 1, items), 1, "and wraps")
+        XCTAssertEqual(aquaMenuStep(from: nil, step: -1, items), 4, "Up starts at the last")
+        XCTAssertNil(aquaMenuStep(from: nil, step: 1, [AquaMenuItem("x", enabled: false)]),
+                     "a menu with nothing enabled highlights nothing")
     }
 
     func testMenuBarLayoutOrderAndClock() {
         let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 800, 22)!
         let cr = cairo_create(cs)!
         defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
-        let menus = MenuBar.defaultMenus(appName: "Finder")
+        let menus = MenuBar.menus(for: finderMenuBar())
         let L = menuBarLayout(cr, w: 800, h: 22, menus: menus, clock: "Mon 9:41 AM",
                               showClock: true)
 
@@ -806,7 +918,7 @@ final class AquaTests: XCTestCase {
         defer { cairo_surface_destroy(surface) }
         guard let cr = cairo_create(surface) else { return XCTFail("no cairo context") }
         defer { cairo_destroy(cr) }
-        let menus = MenuBar.defaultMenus(appName: "Finder")
+        let menus = MenuBar.menus(for: finderMenuBar())
         let withStatus = menuBarLayout(cr, w: 800, h: 22, menus: menus,
                                        clock: "Mon 9:41 AM", showClock: true,
                                        status: MenuBarStatus(volume: 60, batteryPercent: 84))
