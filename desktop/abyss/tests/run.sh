@@ -191,6 +191,10 @@ if [ "$live" -eq 1 ]; then
   # abyss_window_manager_v1 — both laid out by one function (P11.6).
   echo "== depth =="
   sh "$root/abyss/tests/live-depth.sh" >/dev/null
+  # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
+  # and its menu vocabulary, on our own compositor.
+  echo "== System Preferences =="
+  sh "$root/abyss/tests/live-prefs.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

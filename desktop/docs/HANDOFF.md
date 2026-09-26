@@ -7,7 +7,7 @@ Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 [PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE11.md](PHASE11.md), [PHASE12.md](PHASE12.md), [PHASE14.md](PHASE14.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
 the *practical knowledge* layer.
 
-Last updated: 2026-09-25. **Phases 0–3, 5–11 are complete; Phase 4 is in flight
+Last updated: 2026-09-26. **Phases 0–3, 5–11 are complete; Phase 14 is in progress (P14.1 done); Phase 4 is in flight
 on metal and Phase 12 is mostly done.** The Jaguar shell runs on FreeBSD,
 on **our own compositor** (`undertow`), over a Swift control plane, session
 supervisor and hardware bridges; the portals hand out descriptors; **one command
@@ -16,8 +16,8 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**538 unit tests, 33 live modes and 33 live scripts, green on Linux and FreeBSD,
-and a golden gate of 69 scenes on each.**
+**543 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
+and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -27,17 +27,27 @@ on every run, nested twice over, with no hardware and no human.
 
 **Picking this up cold?**
 
-1. **No phase is in progress.** **Phase 11, the theme system, is COMPLETE**
+1. **The phase in progress is 14, preferences that write** — scoped in
+   [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
+   **P14.1 is done**: System Preferences is an application — 25 panes drawn
+   from the theme's icon set, one layout for paint and hit-test, an honest
+   page per pane ("cannot change anything yet"), pointer, keyboard and a
+   Phase 10 vocabulary (`menus.systempreferences.<pid>`), driven live by
+   `live-prefs.sh` on both platforms. **Next is P14.2**: the Appearance pane
+   writing `appearance.ini`, and every drawing process (toolkit, shell,
+   `undertow`, the portal's palette with `SettingChanged`) reloading the
+   theme live — PHASE14 §6.7 names its traps (a process that misses the
+   change; caches keyed to the old theme). **Open, for the person:** §6.5,
+   whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
+   `--vm --live`, `--full`) are run only when the phase closes.
+   **Phase 11, the theme system, is COMPLETE**
    ([PHASE11.md](PHASE11.md)): a theme is a directory of data (tokens, draw lists,
    an icon set), Jaguar is proved byte-identical to the Swift it replaced,
    Trench — the Plan Neo chrome study — is the second theme, and there is a
    legibility floor and a portal that tells foreign toolkits the real theme.
    **Phase 10, the menu protocol, is COMPLETE** ([PHASE10.md](PHASE10.md)). Both
    closed with `run.sh --live` and `run.sh --vm --live --full` green.
-   **Next in the dependency order: Phase 14, preferences that write** — it
-   needed 9, 10 and 11, and is now **scoped in [PHASE14.md](PHASE14.md)**
-   (P14.1–P14.9; its §6 recommendations adopted, all but §6.5). **The PHASE11 §6
-   decisions still wait for confirmation** (the menu-bar rule and layer 5,
+   **The PHASE11 §6 decisions still wait for confirmation** (the menu-bar rule and layer 5,
    refuse/warn, icons as data, `calc()` operands).
 2. **Phase 4 has one open result, and it is a failure: the frame contract does
    not hold on real hardware.** 58 of 300 frames missed while compositing in
@@ -2435,7 +2445,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 once drifted on it: **33 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **33 live scripts** are the
 standalone `live-*.sh` ones `run.sh` invokes, listed below; **538 unit tests**
-are `swift test`; **69 golden scenes** are `golden.sh`'s, per platform.
+are `swift test`; **70 golden scenes** are `golden.sh`'s, per platform.
 (Recounted 2026-09-25: the docs had said 35 modes and 31 scripts.) A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2600,8 +2610,8 @@ GTK 3 application opens a file through the Finder; **a blank disk becomes a
 machine running that desktop**; and since Phase 9 the desktop is one you can
 *use* — copy and paste, drag and drop, move and resize and zoom and minimise
 windows, keyboard shortcuts, and an Aqua frame around applications that never
-heard of it. **538 unit tests, 33 live modes and 33 live scripts, green on Linux
-and FreeBSD** (and 69 golden scenes on each, since Phase 11). On metal, the Aqua installer is on screen on the bring-up machine
+heard of it. **543 unit tests, 33 live modes and 34 live scripts, green on Linux
+and FreeBSD** (and 70 golden scenes on each, since Phase 11). On metal, the Aqua installer is on screen on the bring-up machine
 and the frame contract does not yet hold there (item 2).
 
 Per-pass detail lives in the phase docs; this section is what to do next, not a

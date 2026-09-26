@@ -104,115 +104,6 @@ public func paintAquaWindow(_ cr: OpaquePointer, w: Double, h: Double,
     return buttonRect
 }
 
-// MARK: System Preferences
-
-private let prefSections: [(String, [(PrefIcon, String)])] = [
-    ("Personal", [
-        (.desktop, "Desktop"), (.dock, "Dock"), (.general, "General"),
-        (.international, "International"), (.loginItems, "Login Items"),
-        (.myAccount, "My Account"), (.screenEffects, "Screen Effects"),
-    ]),
-    ("Hardware", [
-        (.cdsDvds, "CDs & DVDs"), (.colorSync, "ColorSync"),
-        (.displays, "Displays"), (.energySaver, "Energy Saver"),
-        (.keyboard, "Keyboard"), (.mouse, "Mouse"), (.sound, "Sound"),
-    ]),
-    ("Internet & Network", [
-        (.internetIcon, "Internet"), (.network, "Network"),
-        (.quicktime, "QuickTime"), (.sharing, "Sharing"),
-    ]),
-    ("System", [
-        (.accounts, "Accounts"), (.classic, "Classic"),
-        (.dateTime, "Date & Time"), (.softwareUpdate, "Software Update"),
-        (.speech, "Speech"), (.startupDisk, "Startup Disk"),
-        (.universalAccess, "Universal Access"),
-    ]),
-]
-
-private let prefToolbar: [(PrefIcon, String)] = [
-    (.displays, "Displays"), (.sound, "Sound"), (.network, "Network"),
-    (.startupDisk, "Startup Disk"),
-]
-
-public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double) {
-    paintWindowChrome(cr, w: w, h: h, title: "System Preferences")
-
-    // Toolbar.
-    let tbY = Theme.titleBarHeight
-    let tbH = 58.0
-    let toolbar = Rect(0, tbY, w, tbH)
-    Draw.paint("prefs.toolbar", cr, toolbar)
-
-    let tbItemTop = tbY + 6
-    toolbarItem(cr, .showAll, "Show All", centerX: 44, top: tbItemTop)
-    Draw.paint("prefs.toolbar.divider", cr, toolbar, parameters: ["x": 86])
-    var tx = 130.0
-    for (icon, label) in prefToolbar {
-        toolbarItem(cr, icon, label, centerX: tx, top: tbItemTop)
-        tx += 70
-    }
-
-    // Sections.
-    let margin = 24.0
-    let cols = 7
-    let cellW = (w - 2 * margin) / Double(cols)
-    let rowH = 80.0
-    var y = tbY + tbH + 16
-
-    for (title, items) in prefSections {
-        Draw.textLeft(cr, title, x: margin, baselineY: y + 12,
-                      color: Theme.sectionTitleText, size: 13)
-        y += 24
-        let rows = (items.count + cols - 1) / cols
-        for (i, item) in items.enumerated() {
-            let col = i % cols, row = i / cols
-            let cx = margin + Double(col) * cellW + cellW / 2
-            let iy = y + Double(row) * rowH
-            Icons.draw(cr, item.0, in: Rect(cx - 24, iy, 48, 48))
-            centeredLabel(cr, item.1, centerX: cx, top: iy + 54,
-                          maxWidth: cellW - 6)
-        }
-        y += Double(rows) * rowH + 6
-        if title != "System" {
-            Draw.paint("rule", cr, Rect(margin, y, w - 2 * margin, 1))
-            y += 14
-        }
-    }
-}
-
-private func toolbarItem(_ cr: OpaquePointer, _ icon: PrefIcon, _ label: String,
-                         centerX: Double, top: Double) {
-    Icons.draw(cr, icon, in: Rect(centerX - 16, top, 32, 32))
-    Draw.text(cr, label, centerX: centerX, centerY: top + 42,
-              color: Theme.toolbarLabelText, size: 10)
-}
-
-/// Centred icon label, wrapped to two lines when it doesn't fit `maxWidth`.
-private func centeredLabel(_ cr: OpaquePointer, _ s: String, centerX: Double,
-                           top: Double, maxWidth: Double) {
-    let size = 11.0
-    if Draw.textWidth(cr, s, size: size) <= maxWidth {
-        Draw.text(cr, s, centerX: centerX, centerY: top + size / 2,
-                  color: Theme.iconLabelText, size: size)
-        return
-    }
-    // Split into two balanced lines at a space.
-    let words = s.split(separator: " ").map(String.init)
-    var first = "", second = ""
-    if words.count <= 1 {
-        first = s
-    } else {
-        let mid = (words.count + 1) / 2
-        first = words[0..<mid].joined(separator: " ")
-        second = words[mid...].joined(separator: " ")
-    }
-    Draw.text(cr, first, centerX: centerX, centerY: top + size / 2,
-              color: Theme.iconLabelText, size: size)
-    if !second.isEmpty {
-        Draw.text(cr, second, centerX: centerX, centerY: top + size * 1.5 + 1,
-                  color: Theme.iconLabelText, size: size)
-    }
-}
 
 // MARK: offscreen render
 
@@ -292,7 +183,10 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         paintAquaWindow(cr, w: cw, h: ch, title: title, clickCount: clickCount,
                         buttonPressed: false)
     case .systemPreferences:
-        paintSystemPreferences(cr, w: cw, h: ch)
+        // AQUA_PREFS_PANE=<id> pictures a pane's page (P14.1); else the grid.
+        var m = PrefsModel()
+        if let p = getenv("AQUA_PREFS_PANE").map({ String(cString: $0) }) { m.view = .pane(p) }
+        paintSystemPreferences(cr, w: cw, h: ch, model: m)
     case .widgets:
         paintWidgets(cr, w: cw, h: ch, state: WidgetState(), focus: .ok)
     case .scroll:

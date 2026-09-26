@@ -1,0 +1,476 @@
+// System Preferences — an application now, not a painting (PHASE14 P14.1).
+//
+// Until Phase 14 `paintSystemPreferences` drew Jaguar's pane grid and nothing
+// was behind it. This is the application the rest of the phase fills in: the
+// grid, the toolbar's favourites and Show All, a page per pane, the menus a
+// Jaguar application publishes (Phase 10), and — for every pane — a line that
+// says what it cannot do yet, or what failed, in words (PLAN: "somewhere the
+// machine says what failed").
+//
+// **One layout, read by the painter and the hit-test** (§2.9): `prefsLayout`
+// places every icon, and a click is tested against the same rects. The grid's
+// geometry is P9's, moved here unchanged — the `sysprefs` golden is its proof.
+
+import Surface
+import CCairo
+import AquaDraw
+import MenuModel
+import MenuWire
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+// MARK: - The panes
+
+/// One preference pane.
+public struct PrefPane: Equatable, Sendable {
+    public let id: String          // stable: "displays", "network" — the icon set's name
+    public let title: String
+    public let icon: PrefIcon
+    /// What it will do, for the page and for a reader that cannot see it.
+    public let purpose: String
+}
+
+public enum PrefCatalogue {
+    static func pane(_ icon: PrefIcon, _ title: String, _ purpose: String) -> PrefPane {
+        PrefPane(id: icon.name, title: title, icon: icon, purpose: purpose)
+    }
+
+    /// Jaguar's panes, in Jaguar's sections and order.
+    public static let sections: [(title: String, panes: [PrefPane])] = [
+        ("Personal", [
+            pane(.desktop, "Desktop", "The picture on your desktop."),
+            pane(.dock, "Dock", "Where the Dock sits, and how it magnifies."),
+            pane(.general, "General", "Appearance: the theme, its colours and its settings."),
+            pane(.international, "International", "Languages, formats and input sources."),
+            pane(.loginItems, "Login Items", "What opens when you log in."),
+            pane(.myAccount, "My Account", "Your name, picture and password."),
+            pane(.screenEffects, "Screen Effects", "What the screen shows while you are away."),
+        ]),
+        ("Hardware", [
+            pane(.cdsDvds, "CDs & DVDs", "What happens when a disc is inserted."),
+            pane(.colorSync, "ColorSync", "Colour profiles for displays and printers."),
+            pane(.displays, "Displays", "Resolution, arrangement and scale of each display."),
+            pane(.energySaver, "Energy Saver", "When the display and the computer sleep."),
+            pane(.keyboard, "Keyboard", "Key repeat, layouts and shortcuts."),
+            pane(.mouse, "Mouse", "Tracking and scrolling speed."),
+            pane(.sound, "Sound", "Output device, volume and alerts."),
+        ]),
+        ("Internet & Network", [
+            pane(.internetIcon, "Internet", "Your default browser and mail."),
+            pane(.network, "Network", "Wired and wireless connections, addresses and DNS."),
+            pane(.quicktime, "QuickTime", "Media playback settings."),
+            pane(.sharing, "Sharing", "What this computer offers to others."),
+        ]),
+        ("System", [
+            pane(.accounts, "Accounts", "Who can log in to this computer."),
+            pane(.classic, "Classic", "Not on this machine: there is no Classic here."),
+            pane(.dateTime, "Date & Time", "The clock, the time zone and network time."),
+            pane(.softwareUpdate, "Software Update", "Updates to AbyssBSD."),
+            pane(.speech, "Speech", "Spoken alerts and voices."),
+            pane(.startupDisk, "Startup Disk", "The disk this computer starts from."),
+            pane(.universalAccess, "Universal Access", "Seeing, hearing and typing help."),
+        ]),
+    ]
+
+    /// The toolbar's favourites, after Show All.
+    public static let toolbar: [PrefPane] = ["displays", "sound", "network", "startupDisk"].compactMap(pane(id:))
+
+    public static var all: [PrefPane] { sections.flatMap(\.panes) }
+    public static func pane(id: String) -> PrefPane? { all.first { $0.id == id } }
+}
+
+// MARK: - The model
+
+public enum PrefsView: Equatable, Sendable {
+    case all
+    case pane(String)
+}
+
+public struct PrefsModel: Equatable, Sendable {
+    public var view: PrefsView = .all
+    /// The grid cell the keyboard is on (a pane id), if any.
+    public var focus: String?
+    /// What a pane cannot do, or what failed, said on its page (P14.1: every
+    /// pane says "not yet" until a later pass builds it).
+    public var notes: [String: String] = [:]
+
+    public init() {}
+
+    public var title: String {
+        if case .pane(let id) = view, let p = PrefCatalogue.pane(id: id) { return p.title }
+        return "System Preferences"
+    }
+
+    /// What the page says a pane does not do yet — until a pass builds it.
+    public func note(for id: String) -> String {
+        notes[id] ?? "This pane cannot change anything yet."
+    }
+
+    /// Arrow keys on the grid: across a row, then down into the next section
+    /// as if the sections were one list — the order a reader walks them.
+    public mutating func moveFocus(_ delta: Int) {
+        let ids = PrefCatalogue.all.map(\.id)
+        guard !ids.isEmpty else { return }
+        guard let f = focus, let i = ids.firstIndex(of: f) else { focus = ids[delta < 0 ? ids.count - 1 : 0]; return }
+        focus = ids[max(0, min(ids.count - 1, i + delta))]
+    }
+}
+
+// MARK: - Layout (paint and hit-test read this)
+
+public struct PrefsCell: Equatable, Sendable {
+    public let pane: String
+    public let icon: Rect
+    public let hit: Rect           // the icon and its label
+    public let labelCenterX: Double, labelTop: Double, labelMaxWidth: Double
+}
+
+public struct PrefsLayout: Equatable, Sendable {
+    public var toolbar = Rect(0, 0, 0, 0)
+    public var showAll = Rect(0, 0, 0, 0)
+    public var toolbarItems: [PrefsCell] = []
+    public var sectionTitles: [(String, Double, Double)] = []   // title, x, baseline
+    public var cells: [PrefsCell] = []
+    public var rules: [Rect] = []
+    public var body = Rect(0, 0, 0, 0)
+
+    public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
+        a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
+            && a.cells == b.cells && a.rules == b.rules && a.body == b.body
+            && a.sectionTitles.map(\.0) == b.sectionTitles.map(\.0)
+    }
+}
+
+extension PrefsLayout: @unchecked Sendable {}
+
+/// Where everything in the System Preferences window goes, at `w`×`h`.
+public func prefsLayout(w: Double, h: Double) -> PrefsLayout {
+    var l = PrefsLayout()
+    let tbY = Theme.titleBarHeight, tbH = 58.0
+    l.toolbar = Rect(0, tbY, w, tbH)
+    let top = tbY + 6
+    func item(_ id: String, _ cx: Double) -> PrefsCell {
+        PrefsCell(pane: id, icon: Rect(cx - 16, top, 32, 32), hit: Rect(cx - 32, top, 64, 50),
+                  labelCenterX: cx, labelTop: top + 42, labelMaxWidth: 64)
+    }
+    l.showAll = Rect(44 - 32, top, 64, 50)
+    var tx = 130.0
+    for p in PrefCatalogue.toolbar { l.toolbarItems.append(item(p.id, tx)); tx += 70 }
+
+    let margin = 24.0, cols = 7, rowH = 80.0
+    let cellW = (w - 2 * margin) / Double(cols)
+    var y = tbY + tbH + 16
+    l.body = Rect(0, tbY + tbH, w, h - tbY - tbH)
+    for (title, panes) in PrefCatalogue.sections {
+        l.sectionTitles.append((title, margin, y + 12))
+        y += 24
+        let rows = (panes.count + cols - 1) / cols
+        for (i, p) in panes.enumerated() {
+            let col = i % cols, row = i / cols
+            let cx = margin + Double(col) * cellW + cellW / 2
+            let iy = y + Double(row) * rowH
+            l.cells.append(PrefsCell(pane: p.id, icon: Rect(cx - 24, iy, 48, 48),
+                                     // 1 pt apart: cells that merely touched overlapped by
+                                     // a rounding error, and a click on the seam was anyone's.
+                                     hit: Rect(cx - cellW / 2 + 1, iy, cellW - 2, rowH - 8),
+                                     labelCenterX: cx, labelTop: iy + 54, labelMaxWidth: cellW - 6))
+        }
+        y += Double(rows) * rowH + 6
+        if title != "System" {
+            l.rules.append(Rect(margin, y, w - 2 * margin, 1))
+            y += 14
+        }
+    }
+    return l
+}
+
+public enum PrefsHit: Equatable, Sendable { case showAll, pane(String) }
+
+/// What a click at (x, y) means, from the same layout the painter drew.
+/// The grid's cells only answer while the grid is showing.
+public func prefsHit(_ l: PrefsLayout, _ m: PrefsModel, x: Double, y: Double) -> PrefsHit? {
+    if l.showAll.contains(x, y) { return .showAll }
+    if let t = l.toolbarItems.first(where: { $0.hit.contains(x, y) }) { return .pane(t.pane) }
+    guard m.view == .all else { return nil }
+    return l.cells.first { $0.hit.contains(x, y) }.map { .pane($0.pane) }
+}
+
+// MARK: - Paint
+
+/// The window: chrome, toolbar, then the grid or a pane's page.
+@discardableResult
+public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
+                                   model: PrefsModel = PrefsModel()) -> PrefsLayout {
+    let l = prefsLayout(w: w, h: h)
+    paintWindowChrome(cr, w: w, h: h, title: model.title)
+
+    Draw.paint("prefs.toolbar", cr, l.toolbar)
+    toolbarItem(cr, .showAll, "Show All", centerX: 44, top: l.showAll.y)
+    Draw.paint("prefs.toolbar.divider", cr, l.toolbar, parameters: ["x": 86])
+    for t in l.toolbarItems {
+        guard let p = PrefCatalogue.pane(id: t.pane) else { continue }
+        toolbarItem(cr, p.icon, p.title, centerX: t.labelCenterX, top: t.icon.y)
+    }
+
+    switch model.view {
+    case .all:
+        for (title, x, baseline) in l.sectionTitles {
+            Draw.textLeft(cr, title, x: x, baselineY: baseline, color: Theme.sectionTitleText, size: 13)
+        }
+        for c in l.cells {
+            guard let p = PrefCatalogue.pane(id: c.pane) else { continue }
+            if model.focus == c.pane {
+                Draw.focusRing(cr, Rect(c.icon.x - 4, c.icon.y - 4, c.icon.w + 8, c.icon.h + 8), radius: 8)
+            }
+            Icons.draw(cr, p.icon, in: c.icon)
+            centeredLabel(cr, p.title, centerX: c.labelCenterX, top: c.labelTop, maxWidth: c.labelMaxWidth)
+        }
+        for r in l.rules { Draw.paint("rule", cr, r) }
+    case .pane(let id):
+        paintPrefPage(cr, l, id, model)
+    }
+    return l
+}
+
+/// A pane's page. In P14.1 every page says what the pane is for and that it
+/// cannot change anything yet — honestly, rather than as a painting of
+/// controls that do nothing.
+private func paintPrefPage(_ cr: OpaquePointer, _ l: PrefsLayout, _ id: String, _ m: PrefsModel) {
+    guard let p = PrefCatalogue.pane(id: id) else { return }
+    let cx = l.body.x + l.body.w / 2, top = l.body.y + 40
+    Icons.draw(cr, p.icon, in: Rect(cx - 32, top, 64, 64))
+    Draw.text(cr, p.title, centerX: cx, centerY: top + 88, color: Theme.bodyText, size: 15, style: .bold)
+    Draw.text(cr, p.purpose, centerX: cx, centerY: top + 114, color: Theme.secondaryText, size: 12)
+    Draw.text(cr, m.note(for: id), centerX: cx, centerY: top + 144, color: Theme.bodyText, size: 13)
+}
+
+private func toolbarItem(_ cr: OpaquePointer, _ icon: PrefIcon, _ label: String,
+                         centerX: Double, top: Double) {
+    Icons.draw(cr, icon, in: Rect(centerX - 16, top, 32, 32))
+    Draw.text(cr, label, centerX: centerX, centerY: top + 42,
+              color: Theme.toolbarLabelText, size: 10)
+}
+
+/// Centred icon label, wrapped to two lines when it doesn't fit `maxWidth`.
+private func centeredLabel(_ cr: OpaquePointer, _ s: String, centerX: Double,
+                           top: Double, maxWidth: Double) {
+    let size = 11.0
+    if Draw.textWidth(cr, s, size: size) <= maxWidth {
+        Draw.text(cr, s, centerX: centerX, centerY: top + size / 2,
+                  color: Theme.iconLabelText, size: size)
+        return
+    }
+    // Split into two balanced lines at a space.
+    let words = s.split(separator: " ").map(String.init)
+    var first = "", second = ""
+    if words.count <= 1 {
+        first = s
+    } else {
+        let mid = (words.count + 1) / 2
+        first = words[0..<mid].joined(separator: " ")
+        second = words[mid...].joined(separator: " ")
+    }
+    Draw.text(cr, first, centerX: centerX, centerY: top + size / 2,
+              color: Theme.iconLabelText, size: size)
+    if !second.isEmpty {
+        Draw.text(cr, second, centerX: centerX, centerY: top + size * 1.5 + 1,
+                  color: Theme.iconLabelText, size: size)
+    }
+}
+
+// MARK: - The vocabulary (Phase 10)
+
+public enum PrefsVerb {
+    public static let about = "app.about"
+    public static let quit = "app.quit"
+    public static let showAll = "view.showAll"
+    public static let minimize = "window.minimize"
+    public static let close = "window.close"
+    /// `view.pane.<id>` — one per pane, as Jaguar's View menu lists them.
+    public static func pane(_ id: String) -> String { "view.pane." + id }
+    public static func paneID(_ verb: String) -> String? {
+        verb.hasPrefix("view.pane.") ? String(verb.dropFirst("view.pane.".count)) : nil
+    }
+}
+
+public func systemPreferencesMenuBar() -> MenuBarModel {
+    func c(_ verb: String, _ title: String, _ key: KeyEquivalent? = nil, _ summary: String) -> MenuItem {
+        .command(Command(verb, title, key: key, summary: summary))
+    }
+    var view: [MenuItem] = [c(PrefsVerb.showAll, "Show All Preferences", .cmd("l"), "Show every pane.")]
+    for (_, panes) in PrefCatalogue.sections {
+        view.append(.separator)
+        for p in panes { view.append(c(PrefsVerb.pane(p.id), p.title, nil, "Open the \(p.title) pane.")) }
+    }
+    return MenuBarModel(appName: "System Preferences", menus: [
+        Menu("System Preferences", [
+            c(PrefsVerb.about, "About System Preferences", nil, "Show System Preferences' version."),
+            .separator,
+            c(PrefsVerb.quit, "Quit System Preferences", .cmd("q"), "Close System Preferences."),
+        ]),
+        Menu("View", view),
+        Menu("Window", [
+            c(PrefsVerb.minimize, "Minimize", .cmd("m"), "Put the window in the Dock."),
+            c(PrefsVerb.close, "Close", .cmd("w"), "Close the window."),
+        ]),
+    ])
+}
+
+// MARK: - The application
+
+public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
+    private var window: Window?
+    private let display: Display
+    public private(set) var model = PrefsModel()
+    public private(set) var layout = PrefsLayout()
+    private var pointerX = 0.0, pointerY = 0.0
+    private var menuService: MenuService?
+    private let dumpLayout = getenv("ABYSS_PREFS_DUMP") != nil
+    private var dumpedView: PrefsView?
+    public var onQuit: () -> Void = { exit(0) }
+
+    public static let menuBar = systemPreferencesMenuBar()
+
+    public init?(display: Display, width: Int32 = 760, height: Int32 = 620) {
+        self.display = display
+        let scale: Int32, auto: Bool
+        if let s = getenv("AQUA_SCALE"), let v = Int32(String(cString: s)), v > 0 { (scale, auto) = (v, false) }
+        else { (scale, auto) = (1, true) }
+        guard let win = Window(display: display, title: "System Preferences",
+                               appID: "org.abyssbsd.preferences", width: width, height: height,
+                               scale: scale, autoScale: auto, delegate: self) else { return nil }
+        window = win
+        display.window = win
+        let name = MenuWire.serviceName(app: "SystemPreferences", pid: getpid())
+        if let service = try? MenuService(name: name, provider: self) {
+            display.addFileDescriptor(service.fd) { [weak service] in service?.serviceReadable() }
+            menuService = service
+            if win.publishMenus(at: name) { SystemPreferencesApp.log("menus on \(name)") }
+        }
+    }
+
+    static func log(_ s: String) {
+        ("SystemPreferences: " + s + "\n").withCString { _ = write(2, $0, strlen($0)) }
+    }
+
+    // MARK: navigation
+
+    public func show(_ v: PrefsView) {
+        guard model.view != v else { return }
+        model.view = v
+        window?.setTitle(model.title)
+        switch v {
+        case .all: SystemPreferencesApp.log("showing all")
+        case .pane(let id): SystemPreferencesApp.log("showing \(id) — \(model.note(for: id))")
+        }
+        menuService?.changed()
+        window?.setNeedsDisplay()
+    }
+
+    // MARK: WindowDelegate
+
+    public func render(_ buffer: PixelBuffer) {
+        Text.renderScale = buffer.scale
+        let w = Double(buffer.width / buffer.scale), h = Double(buffer.height / buffer.scale)
+        let cs = cairo_image_surface_create_for_data(buffer.data.assumingMemoryBound(to: UInt8.self),
+                                                     CAIRO_FORMAT_ARGB32, buffer.width, buffer.height, buffer.stride)
+        guard let cr = cairo_create(cs) else { cairo_surface_destroy(cs); return }
+        cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
+        cairo_save(cr); cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR); cairo_paint(cr); cairo_restore(cr)
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
+        layout = paintSystemPreferences(cr, w: w, h: h, model: model)
+        cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
+        // Publish what was drawn, so a test clicks it rather than coordinates
+        // copied into a script (§2.46).
+        if dumpLayout && dumpedView != model.view {
+            dumpedView = model.view
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            var line = "SystemPreferences: layout showAll=\(c(layout.showAll))"
+            for t in layout.toolbarItems { line += " tb.\(t.pane)=\(c(t.hit))" }
+            if model.view == .all { for cell in layout.cells { line += " \(cell.pane)=\(c(cell.icon))" } }
+            SystemPreferencesApp.log(String(line.dropFirst("SystemPreferences: ".count)))
+        }
+    }
+
+    public func pointerMoved(x: Double, y: Double) { pointerX = x; pointerY = y }
+
+    public func pointerButton(_ button: UInt32, pressed: Bool) {
+        guard pressed, let w = window else { return }
+        let size = w.size
+        switch windowChromeHit(x: pointerX, y: pointerY, w: Double(size.width), h: Double(size.height)) {
+        case .close: onQuit(); return
+        case .minimize: w.minimize(); return
+        case .zoom: w.setMaximized(!w.isMaximized); return
+        case .depth: w.lower(); return
+        case .title: w.beginMove(); return
+        case .resize(let e): w.beginResize(e); return
+        case .pill, .content: break
+        }
+        switch prefsHit(layout, model, x: pointerX, y: pointerY) {
+        case .showAll?: show(.all)
+        case .pane(let id)?: model.focus = id; show(.pane(id))
+        case nil: break
+        }
+    }
+
+    public func keyEvent(_ event: KeyEvent) {
+        guard event.pressed else { return }
+        if event.modifiers.contains(.command), let press = keyEquivalent(event),
+           let verb = SystemPreferencesApp.menuBar.verb(for: press) {
+            _ = menuPerform(Command(verb, verb, summary: ""), arguments: [:])
+            return
+        }
+        guard model.view == .all else {
+            if event.keysym == KeySym.escape { show(.all) }
+            return
+        }
+        switch event.keysym {
+        case KeySym.left: model.moveFocus(-1)
+        case KeySym.right, KeySym.tab: model.moveFocus(1)
+        case KeySym.up: model.moveFocus(-7)
+        case KeySym.down: model.moveFocus(7)
+        case KeySym.enter, KeySym.space:
+            if let f = model.focus { show(.pane(f)); return }
+        default: return
+        }
+        SystemPreferencesApp.log("focus \(model.focus ?? "none")")
+        window?.setNeedsDisplay()
+    }
+
+    public func windowShouldClose(_ window: Window) { onQuit() }
+
+    // MARK: MenuProvider
+
+    public var menuModel: MenuBarModel { SystemPreferencesApp.menuBar }
+
+    public func menuValidate(_ command: Command) -> Enablement {
+        switch command.verb {
+        case PrefsVerb.about: return .disabled("System Preferences has no About box yet")
+        case PrefsVerb.showAll: return model.view == .all ? .disabled("every pane is showing") : .enabled
+        case PrefsVerb.quit, PrefsVerb.minimize, PrefsVerb.close: return .enabled
+        default:
+            guard let id = PrefsVerb.paneID(command.verb), PrefCatalogue.pane(id: id) != nil else {
+                return .disabled("System Preferences has no verb \(command.verb)")
+            }
+            return model.view == .pane(id) ? .disabled("that pane is showing") : .enabled
+        }
+    }
+
+    public func menuPerform(_ command: Command, arguments: [String: String]) -> CommandResult {
+        if case .disabled(let why) = menuValidate(command) { return .refused(why) }
+        switch command.verb {
+        case PrefsVerb.quit, PrefsVerb.close: onQuit(); return .ok("")
+        case PrefsVerb.minimize: window?.minimize(); return .ok("")
+        case PrefsVerb.showAll: show(.all); return .ok("all")
+        default:
+            guard let id = PrefsVerb.paneID(command.verb) else { return .refused("no such verb") }
+            model.focus = id
+            show(.pane(id))
+            return .ok(id)
+        }
+    }
+}

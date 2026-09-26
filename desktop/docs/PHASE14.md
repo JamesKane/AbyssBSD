@@ -63,6 +63,63 @@ pane protocol every later pass fills in (a pane has a model, a view, and a
 now drawn by the application rather than a scene. **Gate:** the app opens, the
 grid is what the golden says, each pane opens and says "not yet" honestly.
 
+**Done.** What landed:
+
+- **`de/aqua/SystemPreferences.swift`**, the application:
+  - Jaguar's 25 panes in their four sections, each with an id (the icon
+    set's name, so every pane draws from the theme, P11.8) and a sentence
+    saying what it is for;
+  - a model (grid or page, keyboard focus, each pane's note);
+  - **one layout, read by the painter and the hit-test** (§2.9);
+  - a page per pane that is honest: titled with the pane's name, its
+    purpose, and *"This pane cannot change anything yet."* until a later
+    pass builds it — or what failed, when something does.
+- **Navigation:**
+  - the pointer (grid, Show All, the toolbar's favourites, which work from a
+    page too);
+  - the keyboard (arrows walk the grid in reading order, Return opens,
+    Escape and ⌘L show all);
+  - the window's title becomes the pane's, as Jaguar's did.
+- **Its vocabulary** (Phase 10), `menus.systempreferences.<pid>`:
+  - System Preferences, View (Show All ⌘L, then every pane in the grid's
+    order), and Window;
+  - each verb validated with a reason ("every pane is showing", "that pane
+    is showing").
+
+  The key handler is the model's own `verb(for:)`.
+- `AquaDemo`'s live `sysprefs` is the application; the PNG scene draws its
+  default model. The grid moved there **pixel for pixel**: the `sysprefs`
+  golden did not move. There is a new golden, `sysprefs-pane` (Network's
+  page), and 70 scenes in all.
+
+**What it found:** the grid's cells merely touched, and **touching cells
+overlapped by a rounding error**, so a click on the seam belonged to whichever
+came first. They are 1 pt apart now. The unit test that every cell's hit rect
+is disjoint from every other's caught it before any person could.
+
+**Verified (short checks only):**
+- **`live-prefs.sh`** (new, ~3 s, in `run.sh`'s live lane), on Linux **and in
+  the FreeBSD guest**, on our own compositor:
+  - a click on Network opens it, and undertow sees the window retitled;
+  - Show All goes back;
+  - → → from the pane last visited lands where a Mac's would, Return opens,
+    ⌘L shows all;
+  - `abyssmenu` lists System Preferences, opens Sound by its verb, and is
+    refused re-opening it, with the reason.
+
+  Every coordinate comes from the application's published layout (§2.46).
+  **Seen to fail:** with the hit-test sabotaged, it failed at the first click,
+  naming it.
+- `SystemPreferencesTests` (5):
+  - the catalogue is unique and fully drawable from the icon set;
+  - every cell is hit at its icon and its label, and no two overlap;
+  - the grid does not answer on a page;
+  - pages are titled and honest;
+  - the keyboard walks in reading order, clamped;
+  - the vocabulary has no conflicting keys, and its View menu is the grid.
+- The golden gate, 70 scenes, on both platforms; `swift test` on Linux, 543,
+  green.
+
 **P14.2 — Appearance, and a theme you can change while it is running.** The
 one pane that needs no root. It writes `appearance.ini` — theme, scheme, the
 theme's own parameters (Trench's glow, bevel) — and **every process that draws

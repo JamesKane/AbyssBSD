@@ -48,6 +48,7 @@ cc -O1 "$root/abyss/tests/pngdiff.c" $(pkg-config --cflags --libs cairo) \
 scenes='window|window|
 window@2x|window|AQUA_SCALE=2
 sysprefs|sysprefs|
+sysprefs-pane|sysprefs|AQUA_PREFS_PANE=network
 widgets|widgets|
 scroll|scroll|
 tabs|tabs|

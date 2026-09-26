@@ -3,15 +3,15 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-09-25. **Phases 0–3 and 5–11 are complete.** The Jaguar desktop
+Last updated: 2026-09-26. **Phases 0–3 and 5–11 are complete; Phase 14 is in progress (P14.1 done).** The Jaguar desktop
 runs on our own compositor, which holds its frame contract (headless) under eleven hostile
 processes; the portals hand out descriptors; **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder**;
 applications publish their menus to our bar (Phase 10); and **the look is data**
 — Jaguar re-expressed pixel for pixel, and a second theme, Trench, from the same
 interpreter (Phase 11).
-**538 unit tests, 33 live modes and 33 live scripts, green on Linux *and*
-FreeBSD**, and a golden gate of 69 scenes on each. (Different denominators — see
+**543 unit tests, 33 live modes and 34 live scripts, green on Linux *and*
+FreeBSD**, and a golden gate of 70 scenes on each. (Different denominators — see
 [HANDOFF §3](HANDOFF.md).)
 The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
 two nested-bhyve install tests (~1000s)** — the rule for anything touching the
@@ -452,7 +452,9 @@ done but for P12.3's Aqua view. The next unbuilt phase is 14.**
    `CurrentIPC` to a root helper that owns the writing. It unblocks 15–18.
    **Scoped in [PHASE14.md](PHASE14.md)** (P14.1–P14.9, spiked on the guest);
    its §6 recommendations adopted, all but §6.5 (does the bring-up machine have
-   Wi-Fi?). Before it,
+   Wi-Fi?). **P14.1 is done** — System Preferences is an application (panes,
+   honest pages, keyboard, its menu vocabulary; `live-prefs.sh`). **Next:
+   P14.2**, the Appearance pane and live theme switching. Still open:
    **the PHASE11 §6 decisions want confirming** (the menu-bar rule and the
    proposed layer 5, refuse/warn, icons as data, `calc()` operands).
    *Done just before it:* **Phase 11, the theme system** ([PHASE11.md](PHASE11.md))

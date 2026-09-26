@@ -153,6 +153,14 @@ if scene == .wallpaper {
     // swallow clicks meant for the desktop.
     print("AquaDemo: notification centre is up (waiting for notifications).")
     withExtendedLifetime(center) { display.run() }
+} else if scene == .systemPreferences {
+    // An application since PHASE14 P14.1: its own window, menus and panes.
+    guard let prefs = SystemPreferencesApp(display: display, width: width, height: height) else {
+        print("AquaDemo: failed to create the System Preferences window.")
+        exit(1)
+    }
+    installerSay("AquaDemo: System Preferences is up (\(PrefCatalogue.all.count) panes)")
+    withExtendedLifetime(prefs) { display.run() }
 } else if scene == .finder {
     // FinderApp owns the windows (spatial mode opens one per folder); this
     // strong reference is what keeps them — and their listeners — alive.
