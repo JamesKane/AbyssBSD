@@ -1,7 +1,8 @@
 // abyss-settings — System Preferences' privileged half (PHASE14 P14.3).
 //
 //   abyss-settings --uid N [--dry-run] [--once] [--service NAME]
-//                  [--rc-conf PATH] [--journal PATH] [--admin-group NAME]
+//                  [--rc-conf PATH] [--resolvconf PATH] [--journal PATH]
+//                  [--admin-group NAME] [--write-only]
 //
 // Root, commanded by an unprivileged pane, as `abyss-install` is — and for the
 // same reasons arranged the same way: no toolkit, no display, no event loop,
@@ -29,6 +30,7 @@ func emit(_ fd: Int32, _ s: String) {
 var allowed: UInt32?
 var dryRun = false, once = false
 var serviceName = "settings", rcConf = "/etc/rc.conf", journal = "/var/log/abyss-settings.log"
+var resolvconf = "/etc/resolvconf.conf", writeOnly = false
 var adminGroup = "wheel"
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
@@ -46,6 +48,8 @@ while i < args.count {
     case "--once": once = true
     case "--service": serviceName = value("--service")
     case "--rc-conf": rcConf = value("--rc-conf")
+    case "--resolvconf": resolvconf = value("--resolvconf")
+    case "--write-only": writeOnly = true
     case "--journal": journal = value("--journal")
     case "--admin-group": adminGroup = value("--admin-group")
     case "-h", "--help":
@@ -67,7 +71,8 @@ guard let uid = allowed else {
 
 signal(SIGPIPE, SIG_IGN)
 let service = SettingsService(authority: Authority(allowed: uid, adminGroup: adminGroup),
-                              dryRun: dryRun, rcConf: rcConf, journal: journal)
+                              dryRun: dryRun, rcConf: rcConf, resolvconf: resolvconf,
+                              journal: journal, writeOnly: writeOnly)
 let server: Current.Server
 do { server = try Current.Server(service: serviceName) } catch {
     emit(2, "abyss-settings: cannot bind the settings service: \(error)"); exit(1)
@@ -80,6 +85,7 @@ if uid != geteuid(), chown(server.path, uid_t(uid), gid_t(bitPattern: -1)) != 0 
 }
 emit(2, "settings: serving \(server.path) for uid \(uid), administrators in \(adminGroup)"
      + (dryRun ? " (dry run — nothing will be written)" : "")
+     + (writeOnly ? " (write only — files are written, the machine is left as it is)" : "")
      + (service.platformRefusal.map { " — \($0)" } ?? "")
      + (geteuid() == 0 || dryRun || rcConf != "/etc/rc.conf" ? "" : " — NOT running as root"))
 

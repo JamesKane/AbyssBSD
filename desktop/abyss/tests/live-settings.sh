@@ -12,7 +12,12 @@
 #   4. on Linux, a real read or apply is REFUSED, and says why (§6.4) — the
 #      positive control that the refusal exists;
 #   5. on FreeBSD, as root, a real apply to a scratch rc.conf writes it with
-#      sysrc — and read agrees afterwards — without touching /etc/rc.conf.
+#      sysrc — and read agrees afterwards — without touching /etc/rc.conf;
+#   6. network (P14.4): an interface this machine lacks, and a bad address, are
+#      refused in words; on FreeBSD, check and a dry run on the guest's own
+#      interface, then a WRITE-ONLY apply — rc.conf and resolvconf.conf written
+#      for real (scratch copies), netif/routing/resolvconf skipped and said to
+#      be, because this guest's network is how the test reaches it (§6.3).
 #
 # Usage: abyss/tests/live-settings.sh
 set -eu
@@ -50,7 +55,7 @@ serve() {  # serve [HELPER OPTIONS…] — start it, wait for its socket
   if [ -n "${svc_pid:-}" ]; then $sudo kill "$svc_pid" 2>/dev/null || true; wait "$svc_pid" 2>/dev/null || true; fi
   $sudo rm -f "$rundir/settings.sock"
   $sudo env ABYSS_RUNTIME_DIR="$rundir" "$helper" --rc-conf "$work/rc.conf" \
-      --journal "$work/journal" "$@" 2> "$work/svc.err" &
+      --resolvconf "$work/resolvconf.conf" --journal "$work/journal" "$@" 2> "$work/svc.err" &
   svc_pid=$!
   i=0
   while [ ! -S "$rundir/settings.sock" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
@@ -125,6 +130,48 @@ else
   [ "$(sha256 -q /etc/rc.conf)" = "$etc_before" ] || fail "the machine's own /etc/rc.conf changed"
   grep -q "apply energy for uid $me\$" "$work/journal" || fail "the journal did not record the apply"
   echo "ok: 5. as root on FreeBSD: sysrc wrote the scratch rc.conf whole, read agrees, /etc/rc.conf untouched"
+fi
+
+# ---------------------------------------------------------------- 6. network
+serve --uid "$me" --admin-group "$mygroup"
+ctlrun check network --interface em99 --dhcp
+[ "$rc" != 0 ] && case "$out" in *"there is no interface em99 on this machine"*) ;; *) false ;; esac \
+  || fail "an interface this machine lacks was not refused: $out"
+ctlrun check network --interface em0 --address 10.0.0.300 --netmask 255.255.255.0
+[ "$rc" != 0 ] && case "$out" in *"10.0.0.300 is not an IPv4 address"*) ;; *) false ;; esac \
+  || fail "a bad address was not refused: $out"
+ctlrun check network --interface lo0 --dhcp
+[ "$rc" != 0 ] && case "$out" in *"lo0 is not a wired interface's name"*) ;; *) false ;; esac \
+  || fail "the loopback was not refused: $out"
+if [ "$freebsd" = 0 ]; then
+  echo "ok: 6. network: an absent interface, a bad address and the loopback refused, in words (this box has no FreeBSD interface to go further)"
+else
+  iface=$(ifconfig -l | tr ' ' '\n' | grep -v '^lo' | head -1)
+  ctlrun check network --interface "$iface" --address 10.77.0.5 --netmask 255.255.255.0 --router 10.77.0.1 --dns "10.77.0.1 9.9.9.9"
+  [ "$rc" = 0 ] || fail "check refused a good plan for $iface: $out"
+  case "$out" in *"$ service netif restart $iface"*) ;; *) fail "check did not show the interface restart: $out" ;; esac
+  case "$out" in *"name_servers=10.77.0.1 9.9.9.9"*) ;; *) fail "check did not show the name servers: $out" ;; esac
+
+  serve --uid "$me" --admin-group "$mygroup" --dry-run
+  ctlrun apply network --interface "$iface" --address 10.77.0.5 --netmask 255.255.255.0 --router 10.77.0.1
+  [ "$rc" = 0 ] && [ "$(printf '%s\n' "$out" | grep -c '^\[')" = 6 ] || fail "a dry run of $iface did not report six steps: $out"
+  [ ! -e "$work/resolvconf.conf" ] || fail "a dry run wrote resolvconf.conf"
+
+  serve --uid "$me" --admin-group "$mygroup" --write-only
+  ctlrun apply network --interface "$iface" --address 10.77.0.5 --netmask 255.255.255.0 --router 10.77.0.1 --dns "10.77.0.1"
+  [ "$rc" = 0 ] || fail "a write-only apply failed: $out"
+  grep -q "^ifconfig_$iface=\"inet 10.77.0.5 netmask 255.255.255.0\"" "$work/rc.conf" || fail "rc.conf: $(cat "$work/rc.conf")"
+  grep -q '^defaultrouter="10.77.0.1"' "$work/rc.conf" || fail "no defaultrouter: $(cat "$work/rc.conf")"
+  grep -q '^name_servers="10.77.0.1"' "$work/resolvconf.conf" || fail "resolvconf.conf: $(cat "$work/resolvconf.conf")"
+  [ "$(printf '%s\n' "$out" | grep -c '(skipped)')" = 3 ] || fail "netif, routing and resolvconf were not said to be skipped: $out"
+  ctlrun read network --interface "$iface"
+  [ "$out" = "network $iface: 10.77.0.5/24 via 10.77.0.1, dns 10.77.0.1" ] || fail "read did not agree: $out"
+  ctlrun apply network --interface "$iface" --dhcp
+  ctlrun read network --interface "$iface"
+  [ "$out" = "network $iface: dhcp" ] || fail "back to DHCP, read says: $out"
+  grep -q '^defaultrouter' "$work/rc.conf" && fail "DHCP kept the manual router: $(cat "$work/rc.conf")"
+  grep -q '^name_servers' "$work/resolvconf.conf" && fail "DHCP kept the chosen name servers"
+  echo "ok: 6. network on $iface: check, a dry run, a write-only apply (both files, three actions skipped and said), read agrees, and back to DHCP"
 fi
 
 echo "all green (the settings helper admits an administrator, compiles, and writes rc.conf whole or not at all)."

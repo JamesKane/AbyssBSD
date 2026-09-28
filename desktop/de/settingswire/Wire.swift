@@ -14,6 +14,9 @@ public enum SettingsEvent: Equatable, Sendable {
     case starting(index: Int, total: Int, what: String)
     case ok(index: Int)
     case failed(index: Int, what: String, why: String, ignored: Bool)
+    /// Not run, on purpose: a write-only helper (a test's) leaves the machine
+    /// alone and says so, rather than calling it done.
+    case skipped(index: Int, why: String)
     case finished(ok: Bool, error: String)
 }
 
@@ -28,6 +31,18 @@ public enum SettingsWire {
             m.set("energy.powerd", e.powerd)
             m.set("energy.ac", e.onAC.rawValue)
             m.set("energy.battery", e.onBattery.rawValue)
+        case .network(let n):
+            m.set("network.interface", n.interface)
+            switch n.ipv4 {
+            case .dhcp:
+                m.set("network.mode", "dhcp")
+            case .manual(let a, let p, let r):
+                m.set("network.mode", "manual")
+                m.set("network.address", a.description)
+                m.set("network.netmask", IPv4.mask(prefix: p).description)
+                if let r { m.set("network.router", r.description) }
+            }
+            m.set("network.dns", n.dns.map(\.description).joined(separator: " "))
         }
     }
 
@@ -47,10 +62,42 @@ public enum SettingsWire {
                     + " (it has: \(PowerdMode.allCases.map(\.rawValue).joined(separator: ", ")))"))
             }
             return .success(.energy(EnergyPlan(powerd: on, onAC: a, onBattery: b)))
+        case "network":
+            let iface = m.string("network.interface") ?? ""
+            var dns: [IPv4] = []
+            for w in (m.string("network.dns") ?? "").split(separator: " ") {
+                guard let d = IPv4(String(w)) else {
+                    return .failure(SettingsRefusal("\(w) is not an IPv4 address (a name server)"))
+                }
+                dns.append(d)
+            }
+            switch m.string("network.mode") ?? "" {
+            case "dhcp":
+                return .success(.network(NetworkPlan(interface: iface, ipv4: .dhcp, dns: dns)))
+            case "manual":
+                let a = m.string("network.address") ?? "", mask = m.string("network.netmask") ?? ""
+                guard let addr = IPv4(a) else {
+                    return .failure(SettingsRefusal("\(a.isEmpty ? "no address" : a) is not an IPv4 address"))
+                }
+                guard let mk = IPv4(mask), let prefix = mk.prefixLength else {
+                    return .failure(SettingsRefusal("\(mask.isEmpty ? "no subnet mask" : mask) is not a subnet mask"))
+                }
+                var router: IPv4?
+                if let r = m.string("network.router"), !r.isEmpty {
+                    guard let rv = IPv4(r) else { return .failure(SettingsRefusal("\(r) is not a router's IPv4 address")) }
+                    router = rv
+                }
+                return .success(.network(NetworkPlan(interface: iface,
+                                                     ipv4: .manual(address: addr, prefix: prefix, router: router),
+                                                     dns: dns)))
+            case let other:
+                return .failure(SettingsRefusal(other.isEmpty ? "a network plan must say DHCP or manual"
+                                                             : "\(other) is not DHCP or manual"))
+            }
         case "":
             return .failure(SettingsRefusal("the request names no kind of plan"))
         case let other:
-            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy)"))
+            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network)"))
         }
     }
 
@@ -66,6 +113,8 @@ public enum SettingsWire {
         case .failed(let i, let what, let why, let ignored):
             m.set("event", "failed"); m.set("index", UInt64(i)); m.set("what", what)
             m.set("why", why); m.set("ignored", ignored)
+        case .skipped(let i, let why):
+            m.set("event", "skipped"); m.set("index", UInt64(i)); m.set("why", why)
         case .finished(let ok, let error):
             m.set("event", "finished"); m.set("ok", ok); m.set("error", error)
         }
@@ -79,6 +128,7 @@ public enum SettingsWire {
         case "ok": return .ok(index: i)
         case "failed": return .failed(index: i, what: m.string("what") ?? "", why: m.string("why") ?? "",
                                       ignored: m.bool("ignored") ?? false)
+        case "skipped": return .skipped(index: i, why: m.string("why") ?? "")
         case "finished": return .finished(ok: m.bool("ok") ?? false, error: m.string("error") ?? "")
         default: return nil
         }

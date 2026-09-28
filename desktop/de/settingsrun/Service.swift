@@ -83,15 +83,44 @@ public final class SettingsService {
     /// The rc.conf this helper edits — `/etc/rc.conf`, or a scratch file for a
     /// test that must not touch the machine it runs on.
     public let rcConf: String
+    /// The resolver configuration name servers go into (P14.4).
+    public let resolvconf: String
     /// Where every apply is recorded, whatever its outcome. Empty for none.
     public let journal: String
+    /// Write the files for real, but run no service and no tool: for a test
+    /// on a machine whose network is how the test reaches it (PHASE14 §6.3).
+    /// Each step it does not run is reported as skipped, never as done.
+    public let writeOnly: Bool
 
     public init(authority: Authority, dryRun: Bool = false,
-                rcConf: String = "/etc/rc.conf", journal: String = "/var/log/abyss-settings.log") {
+                rcConf: String = "/etc/rc.conf", resolvconf: String = "/etc/resolvconf.conf",
+                journal: String = "/var/log/abyss-settings.log", writeOnly: Bool = false) {
         self.authority = authority
         self.dryRun = dryRun
         self.rcConf = rcConf
+        self.resolvconf = resolvconf
         self.journal = journal
+        self.writeOnly = writeOnly
+    }
+
+    /// Where each file this helper edits is, on this machine.
+    public func path(_ f: ConfFile) -> String {
+        switch f {
+        case .rcConf: return rcConf
+        case .resolvconf: return resolvconf
+        }
+    }
+
+    /// What this machine refuses that the plan alone cannot know: an
+    /// interface that is not here.
+    public func machineProblems(_ plan: SettingsPlan) -> [SettingsRefusal] {
+        switch plan {
+        case .energy: return []
+        case .network(let n):
+            guard Settings.isInterfaceName(n.interface) else { return [] }   // said already
+            return if_nametoindex(n.interface) == 0
+                ? [SettingsRefusal("there is no interface \(n.interface) on this machine")] : []
+        }
     }
 
     /// Why this machine cannot be changed by this helper at all, or nil.
@@ -144,16 +173,21 @@ public final class SettingsService {
 
     private func handleRead(_ client: Int32, _ request: Msg) -> String {
         let kind = request.string("kind") ?? ""
-        guard let keys = Settings.keys(for: kind) else { return refuse(client, "there is no \(kind) plan") }
+        let iface = request.string("interface") ?? ""
+        guard let keys = Settings.keys(for: kind, interface: iface) else {
+            return refuse(client, kind == "network" ? "\(iface.isEmpty ? "no interface" : iface) is not a wired interface's name"
+                                                    : "there is no \(kind) plan")
+        }
         if let why = platformRefusal { return refuse(client, why) }
         var values: [String: String] = [:]
-        for k in keys {
-            // `sysrc -n` answers as rc(8) would — the defaults, then rc.conf.
-            let r = Spawn.run(["sysrc", "-f", rcConf, "-n", k], limit: 4096)
+        for (file, k) in keys {
+            // `sysrc -n` answers as rc(8) would — the defaults, then the file.
+            let r = Spawn.run(["sysrc", "-f", path(file), "-n", k], limit: 4096)
             if r.succeeded { values[k] = trimmed(r.stdoutText) }
         }
-        guard let plan = Settings.current(kind: kind, values: values) else {
-            return refuse(client, "could not read the \(kind) settings")
+        guard let plan = Settings.current(kind: kind, interface: iface, values: values) else {
+            return refuse(client, "this machine's \(kind) settings are not ones this pane can show: "
+                          + values.keys.sorted().map { "\($0)=\"\(values[$0]!)\"" }.joined(separator: " "))
         }
         var reply = Msg()
         reply.set("ok", true)
@@ -169,13 +203,13 @@ public final class SettingsService {
         case .success(let p): plan = p
         }
         var reply = Msg()
-        let refusals = Settings.problems(plan)
+        let refusals = Settings.problems(plan) + machineProblems(plan)
         reply.set("ok", refusals.isEmpty)
         reply.set("problems.count", UInt64(refusals.count))
         for (i, r) in refusals.enumerated() { reply.set("problem.\(i)", r.message) }
         if refusals.isEmpty, let steps = try? Settings.compile(plan) {
             reply.set("steps.count", UInt64(steps.count))
-            reply.set("render", Settings.render(steps, rcConf: rcConf))
+            reply.set("render", Settings.render(steps, path: path))
         }
         try? Current.send(reply, on: client)
         return refusals.isEmpty ? "check \(plan.kind): ok" : "check \(plan.kind): refused"
@@ -188,18 +222,20 @@ public final class SettingsService {
         case .success(let p): plan = p
         }
         if !dryRun, let why = platformRefusal { return refuse(client, why) }
+        if let first = machineProblems(plan).first { return refuse(client, first.message) }
         let steps: [SettingsStep]
         do { steps = try Settings.compile(plan) } catch let r as SettingsRefusal {
             return refuse(client, r.message)
         } catch { return refuse(client, "\(error)") }
 
         var record: [String] = ["apply \(plan.kind) for uid \(authority.allowed)"
-                                + (dryRun ? " (dry run)" : "")]
-        let ok = Runner.apply(steps, rcConf: rcConf, dryRun: dryRun) { e in
+                                + (dryRun ? " (dry run)" : writeOnly ? " (write only)" : "")]
+        let ok = Runner.apply(steps, path: path, dryRun: dryRun, writeOnly: writeOnly) { e in
             try? Current.send(SettingsWire.encode(e), on: client)
             switch e {
             case .starting(let i, _, let what): record.append("  \(i + 1). \(what)")
             case .failed(_, _, let why, let ignored): record.append("     \(ignored ? "failed, and that is allowed" : "FAILED"): \(why)")
+            case .skipped(_, let why): record.append("     skipped: \(why)")
             case .finished(let ok, let err): record.append(ok ? "  done" : "  NOT APPLIED: \(err)")
             case .ok: break
             }
@@ -224,19 +260,20 @@ public final class SettingsService {
 // MARK: - The runner
 
 public enum Runner {
-    /// Run the steps, reporting each. rc.conf writes go into a **staged copy**
-    /// that replaces the real file in one `rename`, and only once every write
-    /// succeeded — so a plan that fails half-way leaves rc.conf exactly as it
-    /// was, rather than half-changed with nobody knowing which half. Services
-    /// act after that, on the rc.conf that is now in place.
+    /// Run the steps, reporting each. File writes go into a **staged copy** of
+    /// each file, and the copies replace the real files only once every write
+    /// to every file succeeded — so a plan that fails half-way leaves rc.conf
+    /// and resolvconf.conf exactly as they were, rather than half-changed with
+    /// nobody knowing which half. Services and tools act after that, on the
+    /// files now in place.
     @discardableResult
-    public static func apply(_ steps: [SettingsStep], rcConf: String, dryRun: Bool,
-                             emit: (SettingsEvent) -> Void) -> Bool {
-        let staged = rcConf + ".abyss-staged"
-        let lastRc = steps.lastIndex { if case .rcConf = $0 { return true }; return false }
-        var stagedExists = false
+    public static func apply(_ steps: [SettingsStep], path: (ConfFile) -> String, dryRun: Bool,
+                             writeOnly: Bool = false, emit: (SettingsEvent) -> Void) -> Bool {
+        let lastWrite = steps.lastIndex { !$0.acts }
+        var staged: [ConfFile: String] = [:]
+        func discard() { for (_, p) in staged { unlink(p) }; staged = [:] }
         func fail(_ i: Int, _ what: String, _ why: String) -> Bool {
-            if stagedExists { unlink(staged) }
+            discard()
             emit(.failed(index: i, what: what, why: why, ignored: false))
             emit(.finished(ok: false, error: "\(what): \(why)"))
             return false
@@ -245,36 +282,50 @@ public enum Runner {
         for (i, step) in steps.enumerated() {
             emit(.starting(index: i, total: steps.count, what: step.description))
             if dryRun { emit(.ok(index: i)); continue }
-            switch step {
-            case .rcConf:
-                if !stagedExists {
-                    if let why = copyFile(rcConf, to: staged) { return fail(i, step.description, why) }
-                    stagedExists = true
+            if case .setVar(let file, _, _) = step {
+                if staged[file] == nil {
+                    let copy = path(file) + ".abyss-staged"
+                    if let why = copyFile(path(file), to: copy) { return fail(i, step.description, why) }
+                    staged[file] = copy
                 }
-                let r = Spawn.run(step.command(rcConf: staged), stderr: .merge, limit: 8192)
-                guard r.succeeded else {
-                    return fail(i, step.description, reason(r))
-                }
-                if i == lastRc {
-                    guard rename(staged, rcConf) == 0 else {
-                        return fail(i, step.description, "could not put the new rc.conf in place: "
-                                    + String(cString: strerror(errno)))
+                let r = Spawn.run(step.command { staged[$0] ?? path($0) }, stderr: .merge, limit: 8192)
+                guard r.succeeded else { return fail(i, step.description, reason(r)) }
+                if i == lastWrite {
+                    // Every write succeeded: now, and only now, the real files.
+                    for (f, copy) in staged.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+                        guard rename(copy, path(f)) == 0 else {
+                            return fail(i, step.description, "could not put the new \(f.rawValue) in place: "
+                                        + String(cString: strerror(errno)))
+                        }
+                        staged[f] = nil
                     }
-                    stagedExists = false
                 }
                 emit(.ok(index: i))
-            case .service(_, _, let mayFail):
-                let r = Spawn.run(step.command(rcConf: rcConf), stderr: .merge, limit: 8192)
-                if r.succeeded { emit(.ok(index: i)); continue }
-                if mayFail {
-                    emit(.failed(index: i, what: step.description, why: reason(r), ignored: true))
-                    continue
-                }
-                return fail(i, step.description, reason(r))
+                continue
             }
+            if writeOnly { emit(.skipped(index: i, why: "write-only: the machine is left as it is")); continue }
+            let mayFail: Bool
+            switch step {
+            case .service(_, _, let m), .tool(_, let m): mayFail = m
+            case .setVar: mayFail = false
+            }
+            let r = Spawn.run(step.command(path: path), stderr: .merge, limit: 8192)
+            if r.succeeded { emit(.ok(index: i)); continue }
+            if mayFail {
+                emit(.failed(index: i, what: step.description, why: reason(r), ignored: true))
+                continue
+            }
+            return fail(i, step.description, reason(r))
         }
         emit(.finished(ok: true, error: ""))
         return true
+    }
+
+    /// The single-file form the energy plan and its tests use.
+    @discardableResult
+    public static func apply(_ steps: [SettingsStep], rcConf: String, dryRun: Bool,
+                             emit: (SettingsEvent) -> Void) -> Bool {
+        apply(steps, path: { $0 == .rcConf ? rcConf : "/etc/" + $0.rawValue }, dryRun: dryRun, emit: emit)
     }
 
     static func reason(_ r: Spawn.Result) -> String {
