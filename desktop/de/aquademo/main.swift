@@ -113,6 +113,22 @@ guard let display = Display() else {
     exit(1)
 }
 
+// **Follow the theme a person chooses while this runs** (PHASE14 P14.2).
+// Every scene — wallpaper and desktop, menu bar, Dock, Finder, System
+// Preferences, the portal's picker — comes through here with this one display,
+// so one watch on the config directory, in the display's own loop, covers them
+// all. A change to appearance.ini reloads the theme, says so (the `Theme:`
+// line, which a test waits for), and has every surface draw again; the caches
+// that held the old theme's pixels were dropped by the reload itself.
+let appearance = ThemeLoader.Watch()
+if let watch = appearance {
+    display.addFileDescriptor(watch.fileDescriptor) {
+        guard let outcome = watch.check() else { return }
+        ThemeLoader.announce(outcome)
+        display.setEverythingNeedsDisplay()
+    }
+}
+
 // The caller owns the primary surface: Display's back-reference and the
 // delegate link are both weak (to avoid a retain cycle), so this strong
 // reference is the only thing keeping the surface — and its Wayland listeners'

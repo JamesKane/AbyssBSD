@@ -688,4 +688,14 @@ public final class Display {
     }
 
     public func stop() { running = false }
+
+    /// Ask every surface this connection draws to draw again: each window,
+    /// the shell's layer surface, the open menu. For a change that alters how
+    /// *everything* looks and nothing about what it says — the theme (P14.2).
+    /// Each redraws on its own next frame, as any other change would.
+    public func setEverythingNeedsDisplay() {
+        for w in windowRegistry { w.window?.setNeedsDisplay() }
+        layerSurface?.setNeedsDisplay()
+        activePopup?.setNeedsDisplay()
+    }
 }
