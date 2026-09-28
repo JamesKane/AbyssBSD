@@ -25,7 +25,11 @@ on every run, nested twice over, with no hardware and no human.
 **On metal** (an i7-12700KF with an RX 6750 XT, PHASE4 §1.1) **the stick boots,
 `amdgpu` binds, and the Aqua installer is on screen**: PHASE4 §5 steps 1–5 pass.
 
-**Picking this up cold?**
+**Picking this up cold?** **The ordered list of everything open is
+[BACKLOG.md](BACKLOG.md)** (2026-09-28): `undertow`'s defects first (U.1–U.4),
+then Phase 14 from P14.2, then what Phase 15 needs; metal work is batched for
+one sitting, because the bring-up machine's USB is in use elsewhere for now.
+The items below are the context for it.
 
 1. **The phase in progress is 14, preferences that write** — scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
@@ -2653,6 +2657,11 @@ Known-not-faithful, on purpose:
 ---
 
 ## 5. What I'd do next (in order)
+
+> **Superseded for ordering by [BACKLOG.md](BACKLOG.md)** (2026-09-28), which
+> merges this section with PHASE14's passes and the API-study review's
+> findings. What follows is still the context for its items; the
+> golden-image item in §3 is done (Phase 11's gate).
 
 **Where things stand.** Phases 0–3, 5–8 **and 9** are complete. The Jaguar shell
 runs on FreeBSD, on our own compositor, over a Swift control plane, session

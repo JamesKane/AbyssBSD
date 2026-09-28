@@ -195,7 +195,8 @@ with one disk cannot be installed onto, so it has to be measured instead.
 
 ### The whole roadmap, in one table
 
-*Needs* is technical, ***before*** is economic; **✅** is shipped.
+*Needs* is technical, ***before*** is economic; **✅** is shipped. The order work is actually
+taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 
 | # | Phase | Needs | Unblocks | Status |
 |---|---|---|---|---|
@@ -207,13 +208,13 @@ with one disk cannot be installed onto, so it has to be measured instead.
 | 6 | `undertow`, the Swift compositor | 2 | 4, 5, 8, 9, 13, 16 | ✅ |
 | 8 | The D-Bus bridge — portals for everyone else | 6, 7 | 10's foreign half, 15 | ✅ |
 | 5 | The installer — a machine with an empty disk | 6, 8 | 4, 12, 17 | ✅ |
-| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** |
-| 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | **in flight** |
-| 10 | The menu protocol | 3, 8; *before* 15 | 15, **18**, and thesis 2 at all | |
-| 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | |
+| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — paused while the machine's USB is elsewhere ([BACKLOG](BACKLOG.md) §3) |
+| 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | ✅ |
+| 10 | The menu protocol | 3, 8; *before* 15 | 15, **18**, and thesis 2 at all | ✅ 2026-09-25 |
+| 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | ✅ 2026-09-25 |
 | 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | P12.1–12.5 ✅ |
 | 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | |
-| 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | |
+| 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | **in flight** (P14.1 ✅) |
 | 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | |
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | |
 | 17 | Delivery — the overlay, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | |

@@ -442,8 +442,12 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 5–11 are complete. Phase 4 is in flight on metal; Phase 12 is
-done but for P12.3's Aqua view. The next unbuilt phase is 14.**
+**Phases 0–3 and 5–11 are complete. Phase 4 is in flight on metal (paused: the
+machine's USB is in use elsewhere); Phase 12 is done but for P12.3's Aqua view;
+Phase 14 is in progress.** **The working order is [BACKLOG.md](BACKLOG.md)**
+(2026-09-28): the three open `undertow` defects from the API-study review, and presentation-time, first
+([API-STUDY.md](API-STUDY.md)), then P14.2 onwards. The list below is the
+context.
 
 1. **Phase 14 — preferences that write** ([PLAN.md](PLAN.md)): System Preferences
    stops being a painting. Network first (`ifconfig`, `wpa_supplicant`,
