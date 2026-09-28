@@ -35,6 +35,9 @@ public extension Vents {
             public let command: String
             public let left: Int, right: Int
             public var isPlayback: Bool { name.contains("play") }
+            public init(name: String, pid: Int32?, command: String, left: Int, right: Int) {
+                self.name = name; self.pid = pid; self.command = command; self.left = left; self.right = right
+            }
         }
 
         public struct Device: Equatable, Sendable {
@@ -48,6 +51,12 @@ public extension Vents {
             /// A device a user-space server (virtual_oss) added.
             public let fromUser: Bool
             public let channels: [Channel]
+            public init(unit: Int, name: String, description: String, devnode: String,
+                        playback: Bool, recording: Bool, fromUser: Bool, channels: [Channel]) {
+                self.unit = unit; self.name = name; self.description = description; self.devnode = devnode
+                self.playback = playback; self.recording = recording; self.fromUser = fromUser
+                self.channels = channels
+            }
             /// Channels someone has open for playback — the applications
             /// playing, with the volume each set for itself.
             public var playing: [Channel] { channels.filter { $0.pid != nil && $0.isPlayback } }
@@ -59,6 +68,9 @@ public extension Vents {
             public let left: Int, right: Int
             public let muted: Bool
             public let recordable: Bool
+            public init(name: String, left: Int, right: Int, muted: Bool, recordable: Bool) {
+                self.name = name; self.left = left; self.right = right; self.muted = muted; self.recordable = recordable
+            }
             /// One number for a slider: the louder side.
             public var level: Int { max(left, right) }
         }

@@ -17,6 +17,7 @@ import AquaDraw
 import MenuModel
 import MenuWire
 import Vents
+import CWayland
 
 #if canImport(Glibc)
 import Glibc
@@ -113,6 +114,7 @@ public struct PrefsModel: Equatable, Sendable {
         switch id {
         case PrefsModel.appearancePane: return "Choose the theme, its scheme and its settings."
         case PrefsModel.networkPane: return "A wired interface's address, by DHCP or by hand, and the name servers."
+        case PrefsModel.soundPane: return "The output device, its levels and mute, and who is playing."
         default: return "This pane cannot change anything yet."
         }
     }
@@ -121,6 +123,8 @@ public struct PrefsModel: Equatable, Sendable {
     public static let appearancePane = "general"
     /// The wired network (P14.4c).
     public static let networkPane = "network"
+    /// Sound (P14.6c).
+    public static let soundPane = "sound"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -153,10 +157,12 @@ public struct PrefsLayout: Equatable, Sendable {
     public var appearance = AppearanceLayout()
     /// The Network pane's controls, when it is showing (P14.4c).
     public var network = NetworkLayout()
+    /// The Sound pane's controls, when it is showing (P14.6c).
+    public var sound = SoundLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
-            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network
+            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network && a.sound == b.sound
             && a.sectionTitles.map(\.0) == b.sectionTitles.map(\.0)
     }
 }
@@ -224,7 +230,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                                    themes: [InstalledTheme]? = nil,
                                    choice: AppearanceChoice? = nil,
                                    dragging: (String, Double)? = nil,
-                                   network: NetworkPaneState? = nil) -> PrefsLayout {
+                                   network: NetworkPaneState? = nil,
+                                   sound: SoundPaneState? = nil) -> PrefsLayout {
     var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
@@ -262,6 +269,10 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         let n = network ?? .sample
         l.network = networkLayout(body: l.body, interfaces: n.interfaces)
         paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy)
+    case .pane(let id) where id == PrefsModel.soundPane:
+        let s = sound ?? .sample
+        l.sound = soundLayout(body: l.body, s)
+        paintSoundPane(cr, l.sound, s)
     case .pane(let id):
         paintPrefPage(cr, l, id, model)
     }
@@ -379,6 +390,12 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var applying: Int32?
     private var skipped: [String] = []
     private var dumpedNetwork: NetworkLayout?
+    /// The Sound pane: the machine as last read, a drag in progress, an apply.
+    private var sound = SoundPaneState()
+    private var soundDrag: String?
+    private var soundApplying: Int32?
+    private var soundTimer: Int32 = -1
+    private var dumpedSound: SoundLayout?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -404,6 +421,12 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             display.addFileDescriptor(w.fileDescriptor) { [weak self] in self?.networkChanged() }
             networkWatch = w
         }
+        // Nothing tells anyone a mixer level changed, so the Sound pane reads
+        // the machine again every second while it shows (the menu bar's rate).
+        soundTimer = aw_create_interval_timer(1000)
+        if soundTimer >= 0 {
+            display.addFileDescriptor(soundTimer) { [weak self] in self?.soundTick() }
+        }
     }
 
     static func log(_ s: String) {
@@ -417,6 +440,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         model.view = v
         if v == .pane(PrefsModel.appearancePane) { installedThemes = AppearanceCatalogue.installed() }
         if v == .pane(PrefsModel.networkPane) { loadNetwork(interface: nil) }
+        if v == .pane(PrefsModel.soundPane) { loadSound(readConfigured: true) }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -439,7 +463,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         layout = paintSystemPreferences(cr, w: w, h: h, model: model,
                                         themes: installedThemes, choice: AppearanceChoice.current(),
-                                        dragging: dragging, network: network)
+                                        dragging: dragging, network: network, sound: sound)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -479,6 +503,121 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             line += " revert=\(c(n.revert)) apply=\(c(n.apply))"
             SystemPreferencesApp.log(line)
         }
+        // The Sound pane's: `output.<unit>` at the radio, `level.<control>=
+        // x0-x1,y` along the track, `mute.<control>` at the checkbox.
+        if dumpLayout, model.view == .pane(PrefsModel.soundPane), dumpedSound != layout.sound {
+            dumpedSound = layout.sound
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            var line = "sound layout"
+            for r in layout.sound.outputs { line += " output.\(r.value)=\(c(r.hit))" }
+            for r in layout.sound.levels {
+                line += " level.\(r.value)=\(Int(r.control.x))-\(Int(r.control.x + r.control.w)),\(Int(r.control.y + r.control.h / 2))"
+            }
+            for r in layout.sound.mutes { line += " mute.\(r.value)=\(c(r.hit))" }
+            SystemPreferencesApp.log(line)
+        }
+    }
+
+    // MARK: the Sound pane
+
+    private func loadSound(readConfigured: Bool) {
+        let note = sound.note, busy = sound.busy
+        sound = SoundPaneState.read()
+        sound.note = note; sound.busy = busy
+        SystemPreferencesApp.log("sound: status \(SoundWords.statusLine(sound))")
+        guard readConfigured, !sound.devices.isEmpty else { return }
+        // What the next boot will choose — which is not always what /dev/dsp
+        // means now (a device plugged in since, with default_auto).
+        switch SettingsClient.read("sound") {
+        case .success(.sound(let p)):
+            SystemPreferencesApp.log("sound: read default pcm\(p.defaultUnit)")
+            if p.defaultUnit != sound.defaultUnit {
+                sound.note = "At the next start, the output will be pcm\(p.defaultUnit)."
+            }
+        case .success: break
+        case .failure(let why):
+            sound.note = "The settings helper says: \(why.message)"
+            SystemPreferencesApp.log("sound: cannot read: \(why.message)")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func soundTick() {
+        var buf = UInt64(0)
+        _ = withUnsafeMutableBytes(of: &buf) { read(soundTimer, $0.baseAddress, MemoryLayout<UInt64>.size) }
+        guard model.view == .pane(PrefsModel.soundPane), soundDrag == nil else { return }
+        var fresh = SoundPaneState.read()
+        fresh.note = sound.note; fresh.busy = sound.busy
+        guard fresh != sound else { return }
+        sound = fresh
+        SystemPreferencesApp.log("sound: changed \(SoundWords.statusLine(sound))")
+        window?.setNeedsDisplay()
+    }
+
+    /// Set a level on the default device, and show it at once (the next tick
+    /// reads it back from the mixer).
+    private func setLevel(_ name: String, _ level: Int) {
+        guard let unit = sound.defaultUnit, let i = sound.controls.firstIndex(where: { $0.name == name }) else { return }
+        if let why = Vents.Sound.set(unit: unit, control: name, left: level, right: level) {
+            sound.note = "Could not set \(SoundWords.label(name)): \(why)"
+            SystemPreferencesApp.log("sound: \(sound.note)")
+        } else {
+            let c = sound.controls[i]
+            sound.controls[i] = .init(name: c.name, left: level, right: level, muted: c.muted, recordable: c.recordable)
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func pressSound(_ hit: SoundHit) {
+        switch hit {
+        case .level(let name, let v):
+            soundDrag = name
+            setLevel(name, v)
+        case .mute(let name):
+            guard let unit = sound.defaultUnit, let c = sound.controls.first(where: { $0.name == name }) else { return }
+            if let why = Vents.Sound.set(unit: unit, control: name, muted: !c.muted) {
+                sound.note = "Could not mute \(SoundWords.label(name)): \(why)"
+            } else {
+                SystemPreferencesApp.log("sound: \(name) \(c.muted ? "unmuted" : "muted")")
+            }
+            loadSound(readConfigured: false)
+        case .output(let unit):
+            guard unit != sound.defaultUnit, soundApplying == nil else { return }
+            SystemPreferencesApp.log("sound: apply default pcm\(unit)")
+            guard let sock = SettingsClient.begin(SettingsClient.soundRequest(defaultUnit: unit)) else {
+                sound.note = "Not changed: the settings helper is not running on this machine"
+                SystemPreferencesApp.log("sound: \(sound.note)")
+                window?.setNeedsDisplay()
+                return
+            }
+            soundApplying = sock
+            skipped = []
+            sound.busy = true
+            display.addFileDescriptor(sock) { [weak self] in self?.soundEvent() }
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func soundEvent() {
+        guard let sock = soundApplying else { return }
+        let e = SettingsClient.next(on: sock) ?? .finished(ok: false, error: "the settings helper hung up")
+        switch e {
+        case .starting(let i, let n, let what): SystemPreferencesApp.log("sound: [\(i + 1)/\(n)] \(what)")
+        case .ok: return
+        case .skipped(_, let why): skipped.append(why); SystemPreferencesApp.log("sound: skipped: \(why)")
+        case .failed(_, _, let why, let ignored):
+            SystemPreferencesApp.log("sound: \(ignored ? "failed, and that is allowed" : "FAILED"): \(why)")
+        case .finished(let ok, let error):
+            display.removeFileDescriptor(sock)
+            close(sock)
+            soundApplying = nil
+            sound.busy = false
+            let said = NetworkWords.outcome(ok: ok, error: error, skipped: skipped)
+            sound.note = said
+            SystemPreferencesApp.log("sound: \(ok ? "applied" : "not applied") — \(said)")
+            loadSound(readConfigured: false)
+        }
+        window?.setNeedsDisplay()
     }
 
     // MARK: the Network pane
@@ -599,6 +738,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
 
     public func pointerMoved(x: Double, y: Double) {
         pointerX = x; pointerY = y
+        if let name = soundDrag, let row = layout.sound.levels.first(where: { $0.value == name }) {
+            let v = soundLevel(track: row.control, x: x)
+            if sound.controls.first(where: { $0.name == name })?.level != v { setLevel(name, v) }
+        }
         if let (name, _) = dragging,
            let row = layout.appearance.parameters.first(where: { $0.value == name }),
            let p = installedThemes.first(where: { $0.id == AppearanceChoice.current().theme })?
@@ -630,6 +773,11 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if !pressed, let name = soundDrag {
+            soundDrag = nil
+            SystemPreferencesApp.log("sound: \(name) set to \(sound.controls.first { $0.name == name }?.level ?? -1)")
+            return
+        }
         if !pressed, let (name, value) = dragging {
             dragging = nil
             choose(.parameter(name, value))
@@ -648,6 +796,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         }
         if dumpLayout {
             SystemPreferencesApp.log("press at \(Int(pointerX)),\(Int(pointerY))")
+        }
+        if model.view == .pane(PrefsModel.soundPane), let hit = soundHit(layout.sound, x: pointerX, y: pointerY) {
+            pressSound(hit)
+            return
         }
         if model.view == .pane(PrefsModel.networkPane),
            let hit = networkHit(layout.network, form: network.form ?? NetworkForm(interface: ""),

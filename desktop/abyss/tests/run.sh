@@ -230,6 +230,10 @@ if [ "$live" -eq 1 ]; then
   # network is how the test reaches it.
   echo "== the Network pane =="
   sh "$root/abyss/tests/live-network-pane.sh" >/dev/null
+  # The Sound pane (P14.6c): levels and mute set on the guest's snd_dummy and
+  # read back by mixer(8), players shown, outside changes followed.
+  echo "== the Sound pane =="
+  sh "$root/abyss/tests/live-sound-pane.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

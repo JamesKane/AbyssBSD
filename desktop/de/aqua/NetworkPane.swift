@@ -181,21 +181,9 @@ public enum NetworkWords {
 // MARK: - Talking to the helper
 
 public enum NetworkClient {
-    public static var service: String {
-        getenv("ABYSS_SETTINGS_SERVICE").map { String(cString: $0) } ?? "settings"
-    }
-
     /// rc.conf's configuration for `interface`, or the helper's reason there isn't one.
     public static func read(_ interface: String) -> Result<NetworkPlan, SettingsRefusal> {
-        var request = Msg()
-        request.set("method", "read")
-        request.set("kind", "network")
-        request.set("interface", interface)
-        guard let reply = try? Current.call(service, request) else {
-            return .failure(SettingsRefusal("the settings helper is not running on this machine"))
-        }
-        guard reply.bool("ok") == true else { return .failure(SettingsRefusal(reply.string("error") ?? "refused")) }
-        switch SettingsWire.decodePlan(reply) {
+        switch SettingsClient.read("network", interface: interface) {
         case .success(.network(let n)): return .success(n)
         case .success: return .failure(SettingsRefusal("the helper answered with another kind of plan"))
         case .failure(let r): return .failure(r)
@@ -204,20 +192,9 @@ public enum NetworkClient {
 
     /// Start an apply; the socket goes into the run loop, as the installer's
     /// does — a pane that blocks while the network restarts stops painting.
-    public static func begin(_ form: NetworkForm) -> Int32? {
-        guard let sock = try? Current.connect(service) else { return nil }
-        guard (try? Current.send(form.request("apply"), on: sock)) != nil else { close(sock); return nil }
-        return sock
-    }
+    public static func begin(_ form: NetworkForm) -> Int32? { SettingsClient.begin(form.request("apply")) }
 
-    /// One event, or nil when the helper has hung up. A refusal arrives as a
-    /// plain reply, and is turned into the `finished` it amounts to.
-    public static func next(on sock: Int32) -> SettingsEvent? {
-        guard let m = try? Current.receive(on: sock) else { return nil }
-        if let e = SettingsWire.decodeEvent(m) { return e }
-        if m.bool("ok") == false { return .finished(ok: false, error: m.string("error") ?? "refused") }
-        return nil
-    }
+    public static func next(on sock: Int32) -> SettingsEvent? { SettingsClient.next(on: sock) }
 }
 
 // MARK: - Layout (paint and hit-test read this, §2.9)

@@ -49,6 +49,7 @@ scenes='window|window|
 window@2x|window|AQUA_SCALE=2
 sysprefs|sysprefs|
 sysprefs-pane|sysprefs|AQUA_PREFS_PANE=network
+sysprefs-sound|sysprefs|AQUA_PREFS_PANE=sound
 sysprefs-general|sysprefs|AQUA_PREFS_PANE=general
 widgets|widgets|
 scroll|scroll|
