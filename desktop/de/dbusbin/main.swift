@@ -16,6 +16,7 @@
 import CurrentIPC
 import DBusPortal
 import DBusMenus
+import PoolConfig
 import Spawn
 
 #if canImport(Glibc)
@@ -131,6 +132,21 @@ do {
 // sleep and hope.
 emit(1, "ready")
 
+// **Follow the theme** (P14.2): the config directory, drained on every pass of
+// the loop below — which wakes at least every 200 ms — and the palette asked
+// again when anything in it changed. `update` tells every listening toolkit
+// what differs, with SettingChanged; a change to some other file finds nothing
+// different and says nothing.
+let appearance = try? Pool.Watcher()
+@MainActor func followTheme() {
+    guard let w = appearance, w.drain() else { return }
+    guard let text = runPalette(), let s = PortalSettings.from(palette: text) else { return }
+    let n = service.update(settings: s)
+    guard n > 0 else { return }
+    let name = text.split(separator: "\n").first { $0.hasPrefix("name = ") }.map { $0.dropFirst(7) } ?? "?"
+    emit(2, "abyss-dbus: the theme changed (\(name)) — \(n) setting\(n == 1 ? "" : "s") changed")
+}
+
 var ts = timespec()
 clock_gettime(CLOCK_MONOTONIC, &ts)
 let deadline = Double(ts.tv_sec) + Double(ts.tv_nsec) / 1e9 + seconds
@@ -144,6 +160,7 @@ while true {
     } catch {
         die("the bus connection failed: \(error)")
     }
+    followTheme()
     if once && service.served > 0 { break }
 }
 emit(1, "done served=\(service.served)")

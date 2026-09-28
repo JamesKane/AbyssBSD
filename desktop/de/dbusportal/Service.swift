@@ -216,6 +216,27 @@ public final class DBusPortalService {
         respond(path, code, results)
     }
 
+    /// Change what the desktop tells toolkits — the theme changed (P14.2) —
+    /// and **say so**: `SettingChanged(namespace, key, value)` for every key
+    /// that differs, broadcast, as the spec defines it. Until P14.2 nothing
+    /// ever emitted it, because nothing ever changed after startup; a running
+    /// GTK application would have kept the old `color-scheme` for ever.
+    /// Returns how many settings changed.
+    @discardableResult
+    public func update(settings new: PortalSettings) -> Int {
+        let changed = settings.changes(to: new)
+        settings = new
+        for c in changed {
+            let signal = DBusMessage.signal(path: portalObjectPath, interface: PortalSettings.interface,
+                                            member: "SettingChanged",
+                                            body: [.string(c.namespace), .string(c.key), .variant(c.value)])
+            do { try conn.send(signal) } catch {
+                log("could not emit SettingChanged(\(c.namespace), \(c.key)): \(error)")
+            }
+        }
+        return changed.count
+    }
+
     /// Emit `Response` — unless the client closed the Request first, in which
     /// case the spec says no signal is emitted at all.
     private func respond(_ path: String, _ code: PortalResponse, _ results: DBusValue) {
@@ -377,6 +398,9 @@ public final class DBusPortalService {
             <arg type="s" name="key" direction="in"/>\
             <arg type="v" name="value" direction="out"/></method>\
             <property name="version" type="u" access="read"/>\
+            <signal name="SettingChanged">\
+            <arg type="s" name="namespace"/><arg type="s" name="key"/>\
+            <arg type="v" name="value"/></signal>\
             </interface></node>
             """
         }

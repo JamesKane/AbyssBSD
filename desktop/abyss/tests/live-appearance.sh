@@ -13,6 +13,9 @@
 #   2. every toolkit process: the desktop, the menu bar, the Dock, and an
 #      ordinary Aqua window — each process says it reloaded (its `Theme:` line),
 #      and each one's pixels change and come back
+#   3. the portal: abyss-dbus asks the palette again and emits SettingChanged,
+#      decoded by `gdbus monitor` — GLib, the D-Bus library a GTK application
+#      listens with — and ReadOne agrees (skipped without dbus-daemon/gdbus)
 #
 # Usage: abyss/tests/live-appearance.sh
 set -eu
@@ -32,8 +35,9 @@ W=800
 H=600
 work=$(mktemp -d /tmp/abyss-appearance.XXXXXX)
 cleanup() {
-  for p in ${app_pid:-} ${win_pid:-} ${shell_pids:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work"
+  for p in ${app_pid:-} ${win_pid:-} ${shell_pids:-} ${mon_pid:-} ${bridge_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  [ -s "$work/buspid" ] && kill "$(cat "$work/buspid")" 2>/dev/null || true
+  [ -n "${KEEP:-}" ] && echo "kept $work" || rm -rf "$work"
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }
@@ -72,6 +76,36 @@ ut_pid=$!
 after "$work/ut.out" '^WAYLAND_DISPLAY=' 0 "undertow never announced a socket"
 wd=$(grep -m1 '^WAYLAND_DISPLAY=' "$work/ut.out" | cut -d= -f2-)
 grep -q '^Theme: Aqua from ' "$work/ut.err" || fail "undertow did not start in Aqua: $(grep '^Theme:' "$work/ut.err")"
+
+# The portal, on a bus of its own, and GLib listening to it.
+portal=0
+if command -v dbus-daemon >/dev/null 2>&1 && command -v gdbus >/dev/null 2>&1; then
+  portal=1
+  busaddr=$(dbus-daemon --session --fork --print-address=1 --print-pid=3 3>"$work/buspid")
+  env DBUS_SESSION_BUS_ADDRESS="$busaddr" "$root/.build/debug/abyss-dbus" \
+      > "$work/bridge.out" 2> "$work/bridge.err" &
+  bridge_pid=$!
+  after "$work/bridge.out" '^ready' 0 "abyss-dbus never came up: $(cat "$work/bridge.err")"
+  env DBUS_SESSION_BUS_ADDRESS="$busaddr" gdbus monitor --session \
+      --dest org.freedesktop.portal.Desktop > "$work/monitor" 2>&1 &
+  mon_pid=$!
+  sleep 0.5
+else
+  echo "note: no dbus-daemon or gdbus — section 3 (the portal) is skipped"
+fi
+ask() {  # ask KEY — org.freedesktop.appearance, as a toolkit reads it
+  env DBUS_SESSION_BUS_ADDRESS="$busaddr" gdbus call --session --dest org.freedesktop.portal.Desktop \
+    --object-path /org/freedesktop/portal/desktop \
+    --method org.freedesktop.portal.Settings.ReadOne org.freedesktop.appearance "$1" 2>&1
+}
+# The portal told GLib, and ReadOne agrees: color-scheme is now $1.
+told() {  # told SCHEME WHY
+  [ "$portal" = 1 ] || return 0
+  after "$work/monitor" "SettingChanged ('org.freedesktop.appearance', 'color-scheme', <uint32 $1>)" \
+    "$(grep -c "SettingChanged ('org.freedesktop.appearance', 'color-scheme', <uint32 $1>)" "$work/monitor.before" 2>/dev/null || true)" \
+    "$2: no SettingChanged(color-scheme = $1) reached GLib"
+  case "$(ask color-scheme)" in *"uint32 $1"*) ;; *) fail "$2: ReadOne says $(ask color-scheme)" ;; esac
+}
 
 # The shell, and an ordinary Aqua window — every one a process of its own,
 # each told of the change by nobody but its own watch. The status items are
@@ -141,8 +175,11 @@ switch() {  # switch THEME [SCHEME]
   for scene in wallpaper menubar dock window; do
     counts="$counts $(grep -c '^Theme: ' "$work/$scene.log" || true)"
   done
+  pn=$(grep -c 'the theme changed' "$work/bridge.err" 2>/dev/null || true)
+  cp "$work/monitor" "$work/monitor.before" 2>/dev/null || true
   "$theme" set "$@" || fail "abyss-theme could not choose $*"
   after "$work/ut.out" '^theme-reloads=' "$n" "undertow never noticed the theme change to $*"
+  [ "$portal" = 1 ] && after "$work/bridge.err" 'the theme changed' "$pn" "abyss-dbus never noticed the theme change to $*"
   set -- $counts
   for scene in wallpaper menubar dock window; do
     after "$work/$scene.log" '^Theme: ' "$1" "the $scene process never followed the change"
@@ -163,6 +200,8 @@ for scene in wallpaper menubar dock window; do
 done
 echo "ok: 1. undertow followed Aqua -> Trench with no restart, and redrew the frame"
 echo "ok: 2. so did the desktop, the menu bar, the Dock and an Aqua window — each its own process"
+told 1 "Aqua -> Trench"
+[ "$portal" = 1 ] && echo "ok: 3. the portal told GLib: SettingChanged(color-scheme = 1, prefer dark), and ReadOne agrees"
 
 # **A switch that changes only colours.** Aqua -> Trench changes the title
 # bar's height too, so the frame's size changes and any cache misses by
@@ -174,11 +213,16 @@ shot daylight
 cmp -s "$work/trench.frame" "$work/daylight.frame" \
   && fail "Trench's daylight scheme drew the same frame as neon — the frame cache does not know the theme changed"
 changed trench daylight "neon -> daylight"
-echo "ok:    ...and neon -> daylight, same metrics, new colours: every one redrawn"
+told 2 "neon -> daylight"
+echo "ok:    ...and neon -> daylight, same metrics, new colours: every one redrawn (and prefer light, said)"
 
 switch aqua
 shot aqua-again
 same aqua aqua-again "back in Aqua, something from Trench survived"
+if [ "$portal" = 1 ]; then
+  case "$(ask accent-color)" in *"0.247"*"0.435"*"0.874"*) ;; *) fail "back in Aqua, the portal's accent is $(ask accent-color)" ;; esac
+  kill -0 "$bridge_pid" 2>/dev/null || fail "abyss-dbus exited during the switches"
+fi
 kill -0 "$ut_pid" 2>/dev/null || fail "undertow exited during the switches"
 for p in $shell_pids; do kill -0 "$p" 2>/dev/null || fail "a shell process exited during the switches"; done
 echo "ok:    ...and back to Aqua, byte for byte, everywhere: nothing from Trench survived"

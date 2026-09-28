@@ -108,6 +108,21 @@ public struct PortalSettings: Sendable {
         self.namespaces = namespaces
     }
 
+    /// Every key whose value in `new` differs from this one — including keys
+    /// `new` adds — in `new`'s order: exactly what `SettingChanged` must say
+    /// when the theme changes (P14.2). A key `new` drops is not reported; the
+    /// spec has no signal for a setting that went away, and a client asking
+    /// for it is answered NotFound from then on.
+    public func changes(to new: PortalSettings) -> [(namespace: String, key: String, value: DBusValue)] {
+        var out: [(namespace: String, key: String, value: DBusValue)] = []
+        for (ns, keys) in new.namespaces {
+            for (k, v) in keys where value(namespace: ns, key: k) != v {
+                out.append((ns, k, v))
+            }
+        }
+        return out
+    }
+
     // MARK: - Matching
 
     /// Does `namespace` match one of `patterns`?

@@ -378,4 +378,28 @@ final class DBusPortalTests: XCTestCase {
         XCTAssertNil(PortalSettings.from(palette: "[appearance]\ncolor-scheme = 7\n"), "not a palette: Aqua's answer stands")
         XCTAssertNil(PortalSettings.from(palette: "nonsense"))
     }
+
+    // MARK: - The theme changes while running (P14.2)
+
+    /// What `SettingChanged` must say when the theme changes: every key whose
+    /// value differs, and nothing that did not — a toolkit that is told
+    /// `color-scheme` changed when it did not re-themes for nothing.
+    func testAChangeOfThemeListsExactlyTheSettingsThatDiffer() throws {
+        let dark = try XCTUnwrap(PortalSettings.from(palette: """
+            [appearance]
+            color-scheme = 1
+            accent-color = 1 0.1686 0.8392
+            [palette]
+            window-background = 0.1 0.08 0.2
+            """))
+        let changes = PortalSettings.aqua.changes(to: dark)
+        let keys = changes.map { "\($0.namespace) \($0.key)" }
+        XCTAssertTrue(keys.contains("\(PortalSettings.appearance) color-scheme"))
+        XCTAssertTrue(keys.contains("\(PortalSettings.appearance) accent-color"))
+        XCTAssertTrue(keys.contains("\(PortalSettings.palette) window-background"), "a key the new one adds")
+        XCTAssertFalse(keys.contains("\(PortalSettings.appearance) contrast"), "0 before and after")
+        XCTAssertFalse(keys.contains("\(PortalSettings.appearance) reduced-motion"))
+        XCTAssertEqual(changes.first { $0.key == "color-scheme" }?.value, .uint32(1))
+        XCTAssertTrue(dark.changes(to: dark).isEmpty, "the same theme again changes nothing")
+    }
 }
