@@ -45,7 +45,7 @@ final class SystemPreferencesTests: XCTestCase {
         m.view = .pane("dateTime")
         XCTAssertEqual(m.title, "Date & Time")
         XCTAssertEqual(m.note(for: "dateTime"), "This pane cannot change anything yet.")
-        for built in ["network", "sound", "displays"] {
+        for built in ["network", "sound", "displays", "energySaver"] {
             XCTAssertNotEqual(m.note(for: built), "This pane cannot change anything yet.", "\(built) changes things (P14.4c, P14.6c, P14.7c)")
         }
         m.notes["dateTime"] = "the settings service is not running"

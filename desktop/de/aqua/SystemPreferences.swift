@@ -18,6 +18,10 @@ import MenuModel
 import MenuWire
 import Vents
 import CWayland
+import CurrentIPC
+import PoolConfig
+import Settings
+import SettingsWire
 
 #if canImport(Glibc)
 import Glibc
@@ -116,6 +120,7 @@ public struct PrefsModel: Equatable, Sendable {
         case PrefsModel.networkPane: return "A wired interface's address, by DHCP or by hand, and the name servers."
         case PrefsModel.soundPane: return "The output device, its levels and mute, and who is playing."
         case PrefsModel.displaysPane: return "Arrange the displays, and choose each one's resolution and scale."
+        case PrefsModel.energyPane: return "When the computer and the display sleep, and how the processor saves power."
         default: return "This pane cannot change anything yet."
         }
     }
@@ -128,6 +133,8 @@ public struct PrefsModel: Equatable, Sendable {
     public static let soundPane = "sound"
     /// Displays (P14.7c).
     public static let displaysPane = "displays"
+    /// Energy Saver (P14.8).
+    public static let energyPane = "energySaver"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -164,10 +171,12 @@ public struct PrefsLayout: Equatable, Sendable {
     public var sound = SoundLayout()
     /// The Displays pane's controls, when it is showing (P14.7c).
     public var displays = DisplaysLayout()
+    /// The Energy Saver pane's controls, when it is showing (P14.8).
+    public var energy = EnergyLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
-            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network && a.sound == b.sound && a.displays == b.displays
+            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network && a.sound == b.sound && a.displays == b.displays && a.energy == b.energy
             && a.sectionTitles.map(\.0) == b.sectionTitles.map(\.0)
     }
 }
@@ -237,7 +246,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                                    dragging: (String, Double)? = nil,
                                    network: NetworkPaneState? = nil,
                                    sound: SoundPaneState? = nil,
-                                   displays: DisplaysPaneState? = nil) -> PrefsLayout {
+                                   displays: DisplaysPaneState? = nil,
+                                   energy: EnergyPaneState? = nil) -> PrefsLayout {
     var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
@@ -275,6 +285,9 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         let n = network ?? .sample
         l.network = networkLayout(body: l.body, interfaces: n.interfaces)
         paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy)
+    case .pane(let id) where id == PrefsModel.energyPane:
+        l.energy = energyLayout(body: l.body)
+        paintEnergyPane(cr, l.energy, energy ?? .sample)
     case .pane(let id) where id == PrefsModel.displaysPane:
         let d = displays ?? .sample
         l.displays = displaysLayout(body: l.body, d)
@@ -411,6 +424,11 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var configurator: DisplayConfigurator?
     private var displaysDragFrom: (px: Double, py: Double, x: Int32, y: Int32)?
     private var dumpedDisplays: DisplaysLayout?
+    /// Energy Saver: what it shows, a slider being dragged, an apply.
+    private var energy = EnergyPaneState()
+    private var energyDrag: Bool?          // display (true) or computer (false)
+    private var energyApplying: Int32?
+    private var dumpedEnergy: EnergyLayout?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -457,6 +475,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if v == .pane(PrefsModel.networkPane) { loadNetwork(interface: nil) }
         if v == .pane(PrefsModel.soundPane) { loadSound(readConfigured: true) }
         if v == .pane(PrefsModel.displaysPane) { loadDisplays() }
+        if v == .pane(PrefsModel.energyPane) { loadEnergy() }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -480,7 +499,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         layout = paintSystemPreferences(cr, w: w, h: h, model: model,
                                         themes: installedThemes, choice: AppearanceChoice.current(),
                                         dragging: dragging, network: network, sound: sound,
-                                        displays: displays)
+                                        displays: displays, energy: energy)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -520,6 +539,18 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             line += " revert=\(c(n.revert)) apply=\(c(n.apply))"
             SystemPreferencesApp.log(line)
         }
+        // Energy Saver's: `computer` and `display` tracks as `x0-x1,y`,
+        // `powerd`, `ac.<mode>` and `battery.<mode>` at their controls.
+        if dumpLayout, model.view == .pane(PrefsModel.energyPane), dumpedEnergy != layout.energy {
+            dumpedEnergy = layout.energy
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            func t(_ r: Rect) -> String { "\(Int(r.x))-\(Int(r.x + r.w)),\(Int(r.y + r.h / 2))" }
+            let e = layout.energy
+            var line = "energy layout computer=\(t(e.computer)) display=\(t(e.display)) powerd=\(c(e.powerd.hit))"
+            for r in e.ac { line += " ac.\(r.value)=\(c(r.hit))" }
+            for r in e.battery { line += " battery.\(r.value)=\(c(r.hit))" }
+            SystemPreferencesApp.log(line)
+        }
         // The Displays pane's: `disp.<name>` at each rectangle's centre,
         // `mode.<WxH@mHz>` and `scale.<s>` at their radios.
         if dumpLayout, model.view == .pane(PrefsModel.displaysPane), dumpedDisplays != layout.displays {
@@ -545,6 +576,105 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             for r in layout.sound.mutes { line += " mute.\(r.value)=\(c(r.hit))" }
             SystemPreferencesApp.log(line)
         }
+    }
+
+    // MARK: Energy Saver
+
+    private func loadEnergy() {
+        energy.prefs = EnergyPrefs.load()
+        energy.battery = Vents.Battery.read()
+        energy.sleepStates = Vents.Sysctl.string("hw.acpi.supported_sleep_state")
+        switch SettingsClient.read("energy") {
+        case .success(.energy(let p)): energy.powerd = p; energy.note = ""
+        case .success: break
+        case .failure(let why):
+            energy.powerd = nil
+            energy.note = "The settings helper says: \(why.message)"
+            SystemPreferencesApp.log("energy: cannot read powerd: \(why.message)")
+        }
+        SystemPreferencesApp.log("energy: status \(EnergyWords.statusLine(energy))")
+        window?.setNeedsDisplay()
+    }
+
+    private func pressEnergy(_ hit: EnergyHit) {
+        switch hit {
+        case .sleep(let display, let minutes):
+            energyDrag = display
+            setSleep(display: display, minutes)
+        case .powerd:
+            guard var p = energy.powerd else { return }
+            p.powerd.toggle()
+            applyEnergy(p)
+        case .ac(let m):
+            guard var p = energy.powerd, p.onAC != m else { return }
+            p.onAC = m
+            applyEnergy(p)
+        case .battery(let m):
+            guard var p = energy.powerd, p.onBattery != m else { return }
+            p.onBattery = m
+            applyEnergy(p)
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func setSleep(display: Bool, _ minutes: Int) {
+        var p = energy.prefs
+        if display { p.displaySleepMinutes = minutes } else { p.systemSleepMinutes = minutes }
+        energy.prefs = p.consistent(changedDisplay: display)
+        window?.setNeedsDisplay()
+    }
+
+    /// The slider was let go: one write, not one per step.
+    private func dropEnergy() {
+        energyDrag = nil
+        do {
+            try energy.prefs.store()
+            SystemPreferencesApp.log("energy: stored computer \(energy.prefs.systemSleepMinutes)"
+                                     + " display \(energy.prefs.displaySleepMinutes)")
+        } catch {
+            energy.note = "Could not save: \(error)"
+            SystemPreferencesApp.log("energy: \(energy.note)")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func applyEnergy(_ plan: EnergyPlan) {
+        guard energyApplying == nil else { return }
+        var m = Msg()
+        m.set("method", "apply")
+        SettingsWire.encode(.energy(plan), into: &m)
+        SystemPreferencesApp.log("energy: apply powerd \(plan.powerd ? "on" : "off") ac \(plan.onAC.rawValue) battery \(plan.onBattery.rawValue)")
+        guard let sock = SettingsClient.begin(m) else {
+            energy.note = "Not changed: the settings helper is not running on this machine"
+            SystemPreferencesApp.log("energy: \(energy.note)")
+            return
+        }
+        energyApplying = sock
+        skipped = []
+        energy.busy = true
+        display.addFileDescriptor(sock) { [weak self] in self?.energyEvent() }
+    }
+
+    private func energyEvent() {
+        guard let sock = energyApplying else { return }
+        let e = SettingsClient.next(on: sock) ?? .finished(ok: false, error: "the settings helper hung up")
+        switch e {
+        case .starting(let i, let n, let what): SystemPreferencesApp.log("energy: [\(i + 1)/\(n)] \(what)")
+        case .ok: return
+        case .skipped(_, let why): skipped.append(why); SystemPreferencesApp.log("energy: skipped: \(why)")
+        case .failed(_, _, let why, let ignored):
+            SystemPreferencesApp.log("energy: \(ignored ? "failed, and that is allowed" : "FAILED"): \(why)")
+        case .finished(let ok, let error):
+            display.removeFileDescriptor(sock)
+            close(sock)
+            energyApplying = nil
+            energy.busy = false
+            let said = NetworkWords.outcome(ok: ok, error: error, skipped: skipped)
+            SystemPreferencesApp.log("energy: \(ok ? "applied" : "not applied") — \(said)")
+            loadEnergy()
+            energy.note = said
+        }
+        window?.setNeedsDisplay()
     }
 
     // MARK: the Displays pane
@@ -885,6 +1015,13 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
 
     public func pointerMoved(x: Double, y: Double) {
         pointerX = x; pointerY = y
+        if let display = energyDrag {
+            let track = display ? layout.energy.display : layout.energy.computer
+            let m = EnergySlider.minutes(at: (x - track.x) / max(1, track.w))
+            if m != (display ? energy.prefs.displaySleepMinutes : energy.prefs.systemSleepMinutes) {
+                setSleep(display: display, m)
+            }
+        }
         if let d = displays.dragging, let from = displaysDragFrom {
             let k = max(layout.displays.factor, 1e-6)
             displays.dragging = (d.name, from.x + Int32(((x - from.px) / k).rounded()),
@@ -926,6 +1063,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if !pressed, energyDrag != nil {
+            dropEnergy()
+            return
+        }
         if !pressed, displays.dragging != nil {
             dropDisplay()
             return
@@ -953,6 +1094,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         }
         if dumpLayout {
             SystemPreferencesApp.log("press at \(Int(pointerX)),\(Int(pointerY))")
+        }
+        if model.view == .pane(PrefsModel.energyPane), let hit = energyHit(layout.energy, x: pointerX, y: pointerY) {
+            pressEnergy(hit)
+            return
         }
         if model.view == .pane(PrefsModel.displaysPane), let hit = displaysHit(layout.displays, x: pointerX, y: pointerY) {
             pressDisplays(hit)

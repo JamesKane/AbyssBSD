@@ -200,6 +200,10 @@ extension Vents {
         /// `hw.acpi.battery.state` is a bitfield; bit 1 means discharging.
         public let isCharging: Bool
 
+        public init(percent: Int?, minutesRemaining: Int?, isCharging: Bool) {
+            self.percent = percent; self.minutesRemaining = minutesRemaining; self.isCharging = isCharging
+        }
+
         /// Read the battery, or nil on a machine that has none — a desktop, or
         /// a VM. The status item is then simply absent, which is honest.
         public static func read() -> Battery? {

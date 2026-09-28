@@ -386,6 +386,34 @@ test re-run green on both.
 16's idle will read), `powerd` on/off and its mode, and the battery where
 `Vents` finds one. Deliberately thin: suspend itself is Phase 16's.
 
+**Done** (2026-09-28). **`EnergyPrefs`** (in PoolConfig, so the toolkit and
+Phase 16's session can both read it) keeps `display_sleep_minutes` and
+`system_sleep_minutes` in a per-user `energy.ini`, 0 meaning never. The display
+never sleeps later than the computer: moving one slider past the other moves
+the other, as a Mac's do. **Energy Saver** has:
+- two sliders on Jaguar's stops (1 min to 3 hr, then Never), written once when
+  let go;
+- a line saying plainly that nothing sleeps on its own yet, and which sleep
+  states the machine reports (`hw.acpi.supported_sleep_state`);
+- powerd on or off with its AC and battery modes, through the helper's
+  `energy` plan, which is P14.3's first plan and now has a pane;
+- the battery, or "No battery".
+
+**Verified:** 645 unit tests on both (EnergyPaneTests: the display/computer
+rule both ways and with Never; words; every stop round-trips the slider;
+`energy.ini` stored and loaded; one layout). `live-energy-pane.sh` on both:
+- the page;
+- the computer's slider to 5 min pulls the display with it, and `energy.ini`
+  holds both;
+- the display to Never pushes the computer to Never;
+- in the guest, powerd turned on and then Slowest on battery, through a
+  write-only helper: the scratch rc.conf is written and the restart skipped
+  and said.
+
+Two fault injections were each seen to fail. New golden `sysprefs-energy` on
+both. **Not verified:** the battery row on a machine with a battery. The guest
+has none (§4.5); `Vents.Battery` is metal's.
+
 **P14.9 — The phase gate.** PLAN's verification, whole: a pane writes
 `rc.conf`, the machine reboots, the setting held; and each pane is driven
 live the way `live-installer.sh` drives the installer, by pointer and keyboard,

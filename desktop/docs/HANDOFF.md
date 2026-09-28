@@ -55,8 +55,10 @@ The items below are the context for it.
    bar, all driven on the guest's `snd_dummy`. **P14.7 is done** too:
    undertow drives several outputs (one metronome each, earliest deadline
    first), speaks `wlr-output-management-v1` and keeps `displays.ini`, and the
-   Displays pane arranges them by dragging. **Next is P14.8**, Energy
-   (BACKLOG §1), then P14.5 (Wi-Fi) and the phase gate. **Open, for the person:** §6.5,
+   Displays pane arranges them by dragging. **P14.8 is done**
+   (Energy Saver: `energy.ini` for Phase 16's idle, powerd through the helper).
+   **Next is P14.5**, Wi-Fi, starting from §4.2's `wtap` spike, then P14.9,
+   the phase gate. **Open, for the person:** §6.5,
    whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
    `--vm --live`, `--full`) are run only when the phase closes.
    **Phase 11, the theme system, is COMPLETE**

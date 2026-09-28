@@ -51,6 +51,7 @@ sysprefs|sysprefs|
 sysprefs-pane|sysprefs|AQUA_PREFS_PANE=network
 sysprefs-sound|sysprefs|AQUA_PREFS_PANE=sound
 sysprefs-displays|sysprefs|AQUA_PREFS_PANE=displays
+sysprefs-energy|sysprefs|AQUA_PREFS_PANE=energySaver
 sysprefs-general|sysprefs|AQUA_PREFS_PANE=general
 widgets|widgets|
 scroll|scroll|
