@@ -197,6 +197,11 @@ if [ "$live" -eq 1 ]; then
   # did none of it (U.1; API-STUDY §1.3).
   echo "== subsurfaces =="
   sh "$root/abyss/tests/live-subsurface.sh" >/dev/null
+  # A minimized window keeps a slow frame clock instead of none — a FIFO
+  # client hangs without one — and is told it is suspended, and what this
+  # compositor can do (U.2; xdg-shell v6).
+  echo "== a hidden window's clock =="
+  sh "$root/abyss/tests/live-hidden.sh" >/dev/null
   # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
   # and its menu vocabulary, on our own compositor.
   echo "== System Preferences =="

@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**556 unit tests, 33 live modes and 35 live scripts, green on Linux and FreeBSD,
+**556 unit tests, 33 live modes and 36 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -666,6 +666,37 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.72 A window nobody can see still needs a clock
+(U.2, 2026-09-28. API-STUDY §1.4.)
+
+`sendFrameDone` walked `mappedToplevels`, which leaves minimized windows out —
+correctly for the scene and the hit-test, and wrongly here. A client presenting
+in FIFO mode, which is Mesa's default, blocks inside its swap until a frame
+callback arrives; minimize it under `undertow` and it never came. The study
+found SDL, Blender and zed each hitting this on some compositor. Nothing in our
+tree waits that way, so nothing here noticed.
+
+A minimized window now gets one callback a second, and xdg-shell is created at
+**v6** so the window is also told it is `suspended` — the polite half, for a
+client that listens; the clock is for one that does not. Two traps in doing it:
+
+- **wlroots' default `wm_capabilities` claims all four**, including a window
+  menu `undertow` does not draw, so a v5 client would ask for one on a
+  right-click and get nothing. They are now set per window to what we serve
+  (maximize, fullscreen, minimize) — from the first-commit handler, since
+  scheduling a configure earlier is P9.6's assertion. Found by removing the
+  call and watching the test fail on `window_menu`; the comment first written
+  here had guessed the default was *empty*.
+- **Our own toolkit binds xdg-shell v2**, so the version bump changes nothing
+  for Aqua applications — and they do not hear `suspended` either. That is the
+  client half, BACKLOG T.3.
+
+`live-hidden.sh` asserts the four claims separately (capabilities, suspended
+both ways, the slow clock, the clock's return) and each was shown to fail
+alone: no hidden clock → the clock stops; no throttle → 210 callbacks in 3.5 s;
+no `set_suspended` → never told; default capabilities → `window_menu`. GTK and
+Qt, which do bind v6, pass their live tests unchanged on both platforms.
 
 ### 2.71 A window is a tree, not a rectangle
 (U.1, 2026-09-28. The third global with nothing behind it — §2.58, §2.62.)
@@ -2557,6 +2588,7 @@ or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 | `live-undertow-shell.sh` | the Jaguar shell — wallpaper, menu bar, Dock — composing on `undertow` |
 | `live-undertow-places.sh` | a window reopens where it was dragged, in a **new session** (§2.22's debt) |
 | `live-subsurface.sh` | a window made of **subsurfaces** — over, outside and below its parent — drawn, framed and routed to the leaf (§2.71) |
+| `live-hidden.sh` | a **minimized** window keeps a slow frame clock (not none, not 60 Hz), is told it is `suspended`, and what the compositor can do (§2.72) |
 | `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |
 
 **Tests that need a compositor** (in `run.sh --live`):

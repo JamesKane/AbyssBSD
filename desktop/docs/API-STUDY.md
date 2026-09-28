@@ -77,7 +77,7 @@ Fixed 2026-09-28: the scene, frame-done and the hit-test walk each root's tree,
 and `live-subsurface.sh` proves drawing, frame callbacks and pointer routing
 separately, on both platforms (HANDOFF §2.71).
 
-### 1.4 Open: a minimised window's frame clock stops
+### 1.4 Fixed (U.2): a minimised window's frame clock stopped
 
 `sendFrameDone` walks `mappedToplevels`, which excludes minimised windows
 (`Compositor.swift:925`). A client in Mesa's FIFO mode blocks for ever on the
@@ -86,8 +86,12 @@ and zed (F-102, F-209). The fix is a throttled clock (about 1 Hz) rather than a
 withheld one, and `xdg_toplevel.suspended` once xdg-shell is past **v3**, which is
 what we create (`Compositor.swift:378`; `suspended` is v6).
 
+Fixed 2026-09-28: one callback a second while minimised, xdg-shell v6 with
+`suspended`, and `wm_capabilities` set to what `undertow` serves
+(`live-hidden.sh`, HANDOFF §2.72).
+
 Also: the frame-done timestamp is `clock_gettime` at send, not the time the frame
-was presented. `Metronome` already has the real one.
+was presented. `Metronome` already has the real one (U.4).
 
 ### 1.5 Structural: every protocol costs twice
 

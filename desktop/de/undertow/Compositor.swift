@@ -43,8 +43,14 @@ public final class Toplevel {
     /// **Minimized windows are not on screen and not under the pointer.** The
     /// flag lives here rather than in a list because everything that asks "what
     /// is showing" — the scene, the hit-test, the frame callbacks — asks through
-    /// `mappedToplevels`, and one flag keeps them from disagreeing.
+    /// `mappedToplevels`, and one flag keeps them from disagreeing. The one
+    /// exception is on purpose: a minimized window still gets a frame callback
+    /// once a second (`sendFrameDone`, U.2), because withholding it hangs a
+    /// client that waits for one.
     public internal(set) var minimized = false
+    /// When this window, minimized, last got a frame callback — the hidden
+    /// clock's last tick (U.2), in monotonic nanoseconds.
+    var hiddenFrameAt: UInt64 = 0
     public internal(set) var maximized = false
     /// Whether the compositor draws this window's frame (P9.6). Set when a
     /// client asks through `xdg-decoration` — our own Aqua windows never ask,
@@ -95,6 +101,14 @@ public final class Toplevel {
             // wrong — a hang with no error anywhere.
             if t.xdgToplevel.pointee.base.pointee.initial_commit {
                 _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, 0, 0)  // 0,0: you choose
+                // What this compositor will do if asked — and not the window
+                // menu, which it does not draw. Here and not at creation:
+                // scheduling a configure before the first commit is an
+                // assertion inside wlroots (P9.6).
+                _ = wlr_xdg_toplevel_set_wm_capabilities(t.xdgToplevel,
+                        UInt32(WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE.rawValue
+                               | WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN.rawValue
+                               | WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE.rawValue))
                 // ...and the decoration mode, which could not be answered
                 // before this commit (P9.6).
                 t.compositor.decorations?.answer(t)
@@ -375,7 +389,16 @@ public final class Compositor {
         // needs this line.
         _ = wlr_shm_create_with_renderer(session.display, 1, session.renderer)
 
-        guard let shell = wlr_xdg_shell_create(session.display, 3) else {
+        // **v6, for `suspended`** (U.2): a minimized window is told it cannot
+        // be seen, so a client that listens can stop drawing, while its frame
+        // clock keeps ticking slowly for one that does not. v5 brings
+        // `wm_capabilities`, which is answered per window below — never left
+        // to wlroots' default, which claims all four, including a window menu
+        // undertow does not draw: a GTK window would ask for it on a
+        // right-click and nothing would appear (found by removing the call).
+        // v4's `configure_bounds` is only sent if asked for, and we do not.
+        // Our own toolkit binds v2 and hears none of it.
+        guard let shell = wlr_xdg_shell_create(session.display, 6) else {
             throw BackendError.noGlobals("xdg_wm_base")
         }
         xdgShell = shell
@@ -823,6 +846,10 @@ public final class Compositor {
     func setMinimized(_ t: Toplevel, _ on: Bool) {
         guard t.minimized != on else { return }
         t.minimized = on
+        // Say so (xdg-shell v6). A client that listens stops drawing; one
+        // that does not still has the slow clock `sendFrameDone` keeps.
+        _ = wlr_xdg_toplevel_set_suspended(t.xdgToplevel, on)
+        t.hiddenFrameAt = 0            // the first hidden tick is not delayed
         if on {
             minimizeCount += 1
             // A minimized window must not keep the keyboard: the person just
@@ -936,10 +963,25 @@ public final class Compositor {
         var now = timespec()
         clock_gettime(CLOCK_MONOTONIC, &now)
         for t in mappedToplevels { Compositor.frameDone(tree: t.surface, &now) }
+        // **A window nobody can see keeps a clock, a slow one** (U.2). It used
+        // to get none: `mappedToplevels` leaves minimized windows out, so their
+        // frame callbacks were withheld — and a client presenting in FIFO mode
+        // (Mesa's default: SDL, Blender, zed) blocks inside its swap until the
+        // callback comes, which was never. Once a second is enough to keep it
+        // alive and cheap enough to cost nothing (API-STUDY §1.4, F-102/F-209).
+        let nowNs = UInt64(now.tv_sec) &* 1_000_000_000 &+ UInt64(now.tv_nsec)
+        for t in toplevels where t.mapped && t.minimized && wlr_surface_has_buffer(t.surface) {
+            guard nowNs &- t.hiddenFrameAt >= Compositor.hiddenFramePeriodNs else { continue }
+            t.hiddenFrameAt = nowNs
+            Compositor.frameDone(tree: t.surface, &now)
+        }
         for l in mappedLayers { Compositor.frameDone(tree: l.surface, &now) }
         // Or a menu draws once and never shows its hover.
         for p in mappedPopups { Compositor.frameDone(tree: p.surface, &now) }
     }
+
+    /// How often a window nobody can see is told to draw: once a second.
+    static let hiddenFramePeriodNs: UInt64 = 1_000_000_000
 
     /// Frame-done to a surface **and every subsurface under it**.
     ///

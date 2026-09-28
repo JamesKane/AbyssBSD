@@ -26,7 +26,7 @@ or more.
 | # | Item | Size | Why here | Verified by |
 |---|---|---|---|---|
 | ~~U.1~~ | ✅ **2026-09-28. Subsurfaces drawn, framed and hit-tested** (HANDOFF §2.71, `live-subsurface.sh`) | M | | done, both platforms |
-| U.2 | **A minimised window keeps a clock.** Throttle its frame callbacks (~1 Hz) instead of withholding them; xdg-shell v3 → v6 for `suspended` and `wm_capabilities` (§1.4) | S | a FIFO client minimised today blocks for ever; small, and the same file as U.3's timestamps | a client that minimises and counts callbacks; headless |
+| ~~U.2~~ | ✅ **2026-09-28. A minimised window keeps a clock** — 1 Hz, xdg-shell v6 `suspended`, `wm_capabilities` (HANDOFF §2.72, `live-hidden.sh`) | S | | done, both platforms |
 | U.3 | **`linux-dmabuf`** (+ `linux-drm-syncobj` if the renderer offers it) (§1.2). **Spike first:** does nested `undertow` on the dev box get a GLES2 renderer? If yes, a GL client proves it here | M | no GPU client uses the GPU without it; done now, the next metal sitting tests it instead of discovering it | nested on Linux with an EGL client; headless and the guest must still fall back to shm cleanly |
 | U.4 | **presentation-time, and honest frame-done timestamps** — the time the frame was shown, which `Metronome` already has (F-101) | S–M | cheap once U.2 is in that code; gives P4.5's metal sitting a client-side view too | a client reads feedback; headless timestamps match the recorder |
 | P14.2 | **Appearance, and a live theme switch** (PHASE14) — was next | M | unchanged from PHASE14 | pixels after the switch; a GTK app sees `color-scheme` change |
@@ -57,6 +57,7 @@ means" (§1.5 there).
 | P10.8 | **Submenus open.** They draw their ▸ and have never opened (PHASE10) | S–M | every real application's menus are one level deep |
 | T.1 | **The installer shows layout names**, not file names (`us.dvorak.kbd` → "Dvorak") | S | cosmetic; moves one golden |
 | T.2 | **The live installer applies the layout it was given** — today only the installed system gets it | S | typing an account password on a non-US keyboard, on the medium |
+| T.3 | **The toolkit binds xdg-shell v6** and stops drawing while `suspended` (and handles `wm_capabilities`, `configure_bounds`) — it binds v2 today (HANDOFF §2.72) | S | a minimised Aqua window still draws at 1 Hz for nobody |
 
 Later, when something asks: xdg-output, pointer-gestures, tablet-v2,
 xdg-toplevel-icon (the Dock would use it), color-management-v1, and fifo /
