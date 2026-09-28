@@ -248,7 +248,12 @@ public final class Seat {
         case WLR_INPUT_DEVICE_POINTER:
             if let p = wlr_pointer_from_input_device(device) { attach(pointer: p) }
         case WLR_INPUT_DEVICE_KEYBOARD:
-            if let k = wlr_keyboard_from_input_device(device) { attach(keyboard: k) }
+            if let k = wlr_keyboard_from_input_device(device) {
+                // Before `attach`, because `wlr_seat_set_keyboard` there is what
+                // sends clients the keymap.
+                Seat.giveKeymap(to: k)
+                attach(keyboard: k)
+            }
         default:
             break
         }
@@ -341,7 +346,8 @@ public final class Seat {
         deviceListeners[key] = group
 
         // The seat carries one active keyboard; its keymap is what clients are
-        // told. A virtual keyboard brings its own, from the client's fd.
+        // told. A virtual keyboard brings its own, from the client's fd; a
+        // backend keyboard has had one compiled for it by `giveKeymap`.
         // wlroots drops it from the seat itself when it is destroyed.
         wlr_seat_set_keyboard(seat, keyboard)
         addCapability(UInt32(WL_SEAT_CAPABILITY_KEYBOARD.rawValue))
@@ -365,6 +371,61 @@ public final class Seat {
                                            keyboard.pointee.num_keycodes,
                                            &keyboard.pointee.modifiers)
         }
+    }
+
+    /// Compile a keymap for a keyboard the backend found, and set its repeat.
+    ///
+    /// **A wlroots backend keyboard can arrive with no keymap.** libinput's
+    /// never has one — tinywl compiles one for every keyboard for exactly this
+    /// reason — and without it the seat tells
+    /// clients nothing: keycodes arrive that no client can turn into text, and
+    /// `intercept` finds no keysyms, so no keybind fires either. Invisible for
+    /// as long as every keyboard in the harness was a virtual one, which brings
+    /// its own keymap from the client that created it; the first real keyboard
+    /// is the 12700KF's, on metal.
+    ///
+    /// The layout is xkbcommon's default, which reads `XKB_DEFAULT_LAYOUT` (and
+    /// `_RULES`, `_MODEL`, `_VARIANT`, `_OPTIONS`) from the environment. The
+    /// installer's `keymap=` in rc.conf is a `kbdmap` name, not an XKB one, and
+    /// nothing translates it yet.
+    static func giveKeymap(to keyboard: UnsafeMutablePointer<wlr_keyboard>) {
+        let name = keyboard.pointee.base.name.map { String(cString: $0) } ?? "a keyboard"
+        if let existing = keyboard.pointee.keymap {
+            // A backend that already chose one knows better than our default.
+            log("\(name) came with keymap \(layoutName(existing)); keeping it")
+            return
+        }
+        guard let keymap = compileKeymap() else {
+            log("no keymap compiled (are the xkeyboard-config layouts installed?) — "
+                + "this keyboard's keys will reach clients as codes nobody can read")
+            return
+        }
+        defer { xkb_keymap_unref(keymap) }  // the keyboard takes its own reference
+        if !wlr_keyboard_set_keymap(keyboard, keymap) {
+            log("wlroots refused the keymap")
+            return
+        }
+        // wlroots' own defaults, stated rather than assumed: a rate of 0 would
+        // tell clients not to repeat at all.
+        wlr_keyboard_set_repeat_info(keyboard, 25, 600)
+        log("\(name) had no keymap; gave it \(layoutName(keymap))")
+    }
+
+    /// xkbcommon's default keymap, or nil when its layouts cannot be found.
+    static func compileKeymap() -> OpaquePointer? {
+        guard let ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS) else { return nil }
+        defer { xkb_context_unref(ctx) }
+        return xkb_keymap_new_from_names(ctx, nil, XKB_KEYMAP_COMPILE_NO_FLAGS)
+    }
+
+    /// The name of a keymap's first layout, as the log line reports it.
+    static func layoutName(_ keymap: OpaquePointer) -> String {
+        xkb_keymap_layout_get_name(keymap, 0).map { String(cString: $0) } ?? "(unnamed)"
+    }
+
+    static func log(_ s: String) {
+        let line = "undertow: keyboard: \(s)\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
     }
 
     private func addCapability(_ cap: UInt32) {

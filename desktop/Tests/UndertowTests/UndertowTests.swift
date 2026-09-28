@@ -11,6 +11,7 @@
 import XCTest
 import AquaDraw
 import PoolConfig
+import CWlroots
 @testable import Undertow
 
 #if canImport(Glibc)
@@ -554,6 +555,61 @@ final class UndertowTests: XCTestCase {
         // The whole argument for §6.1: one grammar, so a re-skin in Phase 11
         // reaches the window frames without a second implementation.
         XCTAssertEqual(FrameMetrics.titleHeight, Theme.titleBarHeight)
+    }
+
+    // MARK: - A real keyboard's keymap
+
+    /// A keyboard made the way libinput makes one: no keymap, no repeat.
+    private func withBareKeyboard(_ body: (UnsafeMutablePointer<wlr_keyboard>) -> Void) {
+        let name = strdup("test-keyboard")
+        let impl = UnsafeMutablePointer<wlr_keyboard_impl>.allocate(capacity: 1)
+        impl.initialize(to: wlr_keyboard_impl(name: name, led_update: nil))
+        let kb = UnsafeMutablePointer<wlr_keyboard>.allocate(capacity: 1)
+        defer { kb.deallocate(); impl.deallocate(); free(name) }
+        wlr_keyboard_init(kb, impl, "test-keyboard")
+        defer { wlr_keyboard_finish(kb) }
+        body(kb)
+    }
+
+    /// **The keyboard on the metal box arrives with no keymap.** Until this was
+    /// written `undertow` passed it to the seat as it was, so every client got
+    /// keycodes and no way to read them — hidden because the harness only ever
+    /// types through virtual keyboards, which bring their own.
+    func testABackendKeyboardIsGivenAKeymapAndARepeatRate() {
+        withBareKeyboard { kb in
+            XCTAssertNil(kb.pointee.keymap, "precondition: a bare keyboard has no keymap")
+            Seat.giveKeymap(to: kb)
+            XCTAssertNotNil(kb.pointee.keymap, "the keyboard would reach the seat unreadable")
+            XCTAssertNotNil(kb.pointee.xkb_state, "no state, so no keysyms for the keybind table")
+            XCTAssertEqual(kb.pointee.repeat_info.rate, 25)
+            XCTAssertEqual(kb.pointee.repeat_info.delay, 600)
+        }
+    }
+
+    func testTheLayoutComesFromTheEnvironment() {
+        setenv("XKB_DEFAULT_LAYOUT", "de", 1)
+        defer { unsetenv("XKB_DEFAULT_LAYOUT") }
+        withBareKeyboard { kb in
+            Seat.giveKeymap(to: kb)
+            guard let km = kb.pointee.keymap else { return XCTFail("no keymap compiled") }
+            XCTAssertEqual(Seat.layoutName(km), "German")
+        }
+    }
+
+    /// A backend that did bring a keymap keeps it: ours is only a default.
+    func testAKeyboardThatAlreadyHasAKeymapKeepsIt() {
+        setenv("XKB_DEFAULT_LAYOUT", "fr", 1)
+        guard let french = Seat.compileKeymap() else {
+            unsetenv("XKB_DEFAULT_LAYOUT")
+            return XCTFail("no keymap compiled")
+        }
+        unsetenv("XKB_DEFAULT_LAYOUT")
+        defer { xkb_keymap_unref(french) }
+        withBareKeyboard { kb in
+            XCTAssertTrue(wlr_keyboard_set_keymap(kb, french))
+            Seat.giveKeymap(to: kb)
+            XCTAssertEqual(kb.pointee.keymap, french)
+        }
     }
 
     // MARK: - The keybind table (P9.5)

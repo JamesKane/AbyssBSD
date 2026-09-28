@@ -975,6 +975,15 @@ above it has to exist first, or every application pays the retrofit.
   `.txt` without a terminal; a selection rectangle, a window picker and a save
   sheet over the `abyssgrab` we already have; `kvm`/sysctl; and mount, format and
   ZFS snapshots over the `DiskInventory` the installer already carries.
+- **The protocols applications expect, which `undertow` mostly does not
+  offer.** Of the sixteen extension protocols the NeoDarwin study found real
+  applications use, we implement two (xdg-activation, xdg-decoration).
+  [API-STUDY.md](API-STUDY.md) §2 ranks the rest by what breaks without them:
+  **subsurfaces and `linux-dmabuf` first** (Firefox draws no page without the
+  one and no GPU client uses the GPU without the other — both are Phase 4 work
+  too), then presentation-time, text-input, pointer lock, cursor-shape,
+  viewporter and fractional-scale. Each costs twice here, because our scene is
+  our own rather than `wlr_scene` (§1.5 there).
 - **Deferred with a reason rather than omitted:** printing (CUPS is in ports, but
   a print sheet is a toolkit feature we lack), Bluetooth (FreeBSD's stack is
   thin — scoping it out honestly is a valid answer, silently omitting it is not),
@@ -1068,6 +1077,14 @@ Finder is a claim nobody else can make.
   GTK application runs today with the user's full authority** (PRODUCT.md §5.4),
   so this half earns its keep before any agent exists — which is the argument for
   pulling it forward if Phase 15's foreign applications become load-bearing.
+- **FreeBSD already has more of the plumbing than this phase assumed**
+  ([API-STUDY.md](API-STUDY.md) §3): jail descriptors with `EVFILT_JAILDESC`, so
+  the supervisor waits on a jail in its one `kevent`; rctl's `memorylocked` as a
+  per-jail wired-memory budget (needs `kern.racct.enable=1`); and a
+  `virtual_oss` node per jail as the audio boundary. **And two things it does
+  not have:** `mac_priority(4)` cannot grant real-time inside a jail, which is
+  why `allow.rtprio` is a kernel patch, and there is no `RLIMIT_RTTIME`, so a
+  real-time thread that spins has nothing to stop it.
 - **A class is data, not code.** What a jail contains is a declared table over
   `PoolConfig`: `edit` gets one directory and the toolkit; `debug` gets one
   process's view and the debugger and no other; `admin` gets what a person names,

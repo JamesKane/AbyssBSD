@@ -368,7 +368,7 @@ with a real security-support model.
 shown to render a page under `undertow`, which is the test that matters and which
 `abyss/tests/live-gtk.sh` is the pattern for (§2.43).
 
-### 5.2 XWayland — an unmade decision (now costed: [PHASE9 §4.4](PHASE9.md))
+### 5.2 XWayland — decided: no ([PHASE9 §6.3](PHASE9.md))
 
 There is none in the tree, and **§5.1 narrows the question: the browser does not
 force it.** Both `gtk3` and `gtk4` link `libwayland-client`, so GTK browsers run
@@ -388,8 +388,12 @@ ports, and the live medium grows by **≈6 MiB** once you subtract the packages
 `undertow`'s own `ldd` closure already pulls in — on a three-gigabyte image
 (PHASE9 §4.4). **Decide it explicitly and write the reason down**, the way the
 D-Bus bridge decision was — we took a broker we did not like, scoped it to the
-legacy path, and said so. [PHASE9 §6.3](PHASE9.md) is the recommendation: take
-it, off by default in the harness, on in the installed system.
+legacy path, and said so. **It was decided, and the other way: no XWayland**
+([PHASE9 §6.3](PHASE9.md), which keeps the reasoning, and `live-session.sh`
+asserts `undertow` names none of wlroots' XWayland symbols). PHASE9 had
+recommended taking it, off by default; this paragraph said so until 2026-09-28,
+after the decision. The long tail above is the price, and it is four of the
+study corpus's projects ([API-STUDY.md](API-STUDY.md) §2).
 
 ### 5.3 What foreign applications look like
 

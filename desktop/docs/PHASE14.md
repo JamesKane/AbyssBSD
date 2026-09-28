@@ -209,6 +209,18 @@ volume that its *own* process sets (`SNDCTL_DSP_SETPLAYVOL`); whether another
 process can read or set it — through `sndstat`'s channel list, virtual
 channels, or `sndctl` — is unproven. PLAN promised it; this spike decides it.
 
+**What the source says, before the spike runs (2026-09-28,
+[API-STUDY.md](API-STUDY.md) §3):** reading is possible — `sndstat`'s nvlist
+reports each channel's pid, command and volume — and setting is not:
+`SETPLAYVOL` acts only on the caller's own channel, and the `vpc` sysctls act on
+all of them. So the spike should confirm that, then choose between **(a)** a
+small fork patch, an ioctl that sets a channel's volume by (unit, channel) with
+an ownership check, and **(b)** one `virtual_oss` node per application (in base
+in our tree; whether 15.0 ships it is unverified), which also gives
+default-device following for free and fits Phase 18's jails. A mixing server in
+front of OSS is not recommended: vchans already mix. §6.6's fallback still
+stands if neither is worth it.
+
 ### 4.4 Can displays be arranged? — **The protocol is there on both platforms.**
 
 `wlr_output_management_v1.h` is in wlroots 0.19 on Fedora and FreeBSD, beside

@@ -44,6 +44,9 @@
  * session as an out-parameter, so the type has to be visible even though we
  * never call anything on it — we only have to keep it alive. */
 #include <wlr/backend/session.h>
+/* How a backend makes a keyboard. Nothing in undertow does; the tests do, so
+ * they can hand `Seat.giveKeymap` the same bare keyboard libinput would. */
+#include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/render/pass.h>

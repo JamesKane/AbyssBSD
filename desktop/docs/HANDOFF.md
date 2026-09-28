@@ -4,7 +4,7 @@ What has been built, what we learned building it, and where the traps are.
 Read [STATUS.md](STATUS.md) for the current build state, the phase docs
 ([PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md),
 [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md),
-[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE11.md](PHASE11.md), [PHASE12.md](PHASE12.md), [PHASE14.md](PHASE14.md)) for ordered passes, and [PLAN.md](PLAN.md) for the multi-year roadmap; this doc is
+[PHASE8.md](PHASE8.md), [PHASE9.md](PHASE9.md), [PHASE10.md](PHASE10.md), [PHASE11.md](PHASE11.md), [PHASE12.md](PHASE12.md), [PHASE14.md](PHASE14.md)) for ordered passes, [PLAN.md](PLAN.md) for the multi-year roadmap, and [API-STUDY.md](API-STUDY.md) for what an outside study of applications says about both; this doc is
 the *practical knowledge* layer.
 
 Last updated: 2026-09-26. **Phases 0–3, 5–11 are complete; Phase 14 is in progress (P14.1 done); Phase 4 is in flight
@@ -16,8 +16,9 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**543 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
-and a golden gate of 70 scenes on each.**
+**546 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
+and a golden gate of 70 scenes on each** — except §2.70's three keymap tests,
+green on Linux and not yet run in the guest.
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -56,6 +57,11 @@ on every run, nested twice over, with no hardware and no human.
    `abyss/mk/metal.sh report` on an `--ssh-key` medium tests the written
    hypothesis. That is the whole diagnostic loop now; nobody photographs a
    screen any more (PHASE4 §5.8).
+   **Also open, for metal (2026-09-28):** a review of the NeoDarwin platform API
+   study against our tree ([API-STUDY.md](API-STUDY.md)) found four `undertow`
+   defects nested runs cannot show. The keymap one is fixed (§2.70); **no
+   `linux-dmabuf`**, **subsurfaces never drawn** and **a minimised window's
+   frame clock withheld** are not (API-STUDY §1.2–1.4).
 3. **What is settled, so nobody re-asks it.** The Mac Pro is the matrix's second
    row, not the target; `si_support` is a matrix cell, not a gate. **Installing
    onto the bring-up machine is deferred** until the desktop is mature (its only
@@ -657,6 +663,35 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.70 A virtual keyboard is not a keyboard
+(2026-09-28. Found by reading, not running — the NeoDarwin API study review,
+[API-STUDY.md](API-STUDY.md) §1.1.)
+
+A client that creates a virtual keyboard must hand the compositor a keymap
+before it may send a key, so every keyboard the harness has ever typed through
+arrived with one. **A libinput keyboard arrives with none**, and wlroots does not
+make one up: tinywl compiles a keymap for every new keyboard for exactly this
+reason, and `undertow` did not. The seat would have told clients nothing, keys
+would have arrived as codes no client could read, and `intercept` would have
+found no keysyms, so no keybind would have fired either. The first keyboard
+this would have met is the 12700KF's; the install being deferred is the only
+reason nobody typed on it.
+
+`Seat.giveKeymap` now compiles xkbcommon's default (which reads
+`XKB_DEFAULT_LAYOUT` and friends) for a keyboard that has none, and sets a
+repeat rate; one that brought a keymap keeps it. The tests build a bare
+`wlr_keyboard` with `wlr_keyboard_init`, which is how a backend makes one, rather
+than a virtual keyboard, which is the thing that hid it.
+
+**The rule is §2.58's, turned from globals to devices:** when the harness drives
+something through a stand-in, ask what the real one does *not* bring that the
+stand-in does. A virtual keyboard brings a keymap; a nested output brings
+somebody else's vblank (§2.48); shm buffers bring no GPU. Each hides a defect
+that only metal can show.
+
+**Still open:** the installer writes `keymap="us.kbd"` (a `kbdmap` name, not an
+XKB one) and nothing translates it, so every installation types US.
 
 ### 2.69 A pipe's status is its last command's
 (P11.10. One scene moved on Linux and not on FreeBSD, and that was the clue.)

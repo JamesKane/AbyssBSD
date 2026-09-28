@@ -921,3 +921,23 @@ a real vblank for the first time, on 20 threads at 5 GHz driving 60 Hz. That is 
 generous machine, and a contract that only holds there is not the contract this
 project claims. The second row is either the Mac Pro or a deliberately
 constrained run on this one; **either is fine and neither is optional.**
+
+**6.8 The harness's stand-ins hide what metal needs (2026-09-28).** Reading the
+NeoDarwin platform API study against our tree ([API-STUDY.md](API-STUDY.md))
+found four `undertow` defects that nested and headless runs cannot show, because
+each is hidden by something the harness substitutes for the real thing (HANDOFF
+§2.70):
+
+- **A hardware keyboard had no keymap** — fixed (API-STUDY §1.1). The first
+  thing to check on the next boot is that typing works, and what layout
+  `undertow: keyboard:` names on the console.
+- **No `linux-dmabuf`**, so GPU clients most likely do not use the GPU (§1.2).
+  This is the "dmabuf" in PLAN's list for this phase, and it is not optional.
+- **Subsurfaces are never drawn** (§1.3) — Firefox's page lives in one.
+- **A minimised FIFO client stalls for ever** on a frame callback that is
+  withheld rather than throttled (§1.4).
+
+Two one-minute checks for the machine, while it is up: `vulkaninfo` for
+`VK_EXT_external_memory_host` (probably absent — linuxkpi's MMU notifier is
+empty), and `sysctl dev.cpu.0` to confirm the 12700KF's P/E split is invisible to
+userland (API-STUDY §3).
