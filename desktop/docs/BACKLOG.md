@@ -68,6 +68,21 @@ toolkit shim, and not before U.3–U.4.
 
 ---
 
+### Toolchain ([SWIFT-6.4.md](SWIFT-6.4.md))
+
+| # | Item | Size | Why |
+|---|---|---|---|
+| S.0 | **Swift 6.3.3 on both platforms** — Linux via `swiftly`; the guest from the 2026Q4 quarterly | S | the rehearsal for 6.4 on a version both sides can run; `--full`, since the medium ships the runtime |
+| S.1 | **Retire the `aw_*` shims** — Swift calls `static inline` C directly (HANDOFF §2.1 corrected) | M | ~95 wrappers and ~680 lines of C gone; adding a protocol stops needing hand-written wrappers |
+| S.2 | **`Seat.spawnDetached` allocates after `fork`** — a real async-signal-safety bug | S | a deadlock waiting for the allocator's lock to be held at the wrong moment |
+| S.3 | **One spawn helper** for the six hand-written fork/exec paths | S–M | one place to be async-signal-safe |
+| S.4 | `InlineArray` for the scene's columns and the flight recorder — **only with bench numbers before and after** | S | safety and less code, not speed |
+| S.5 | `Span`/`RawSpan` in the wire parsers | M | bounds safety without copies |
+| S.6 | **Swift 6.4** — blocked until FreeBSD ports has it; first fix the font/theme search paths under Swift Build and decide the guest's build system (SWIFT-6.4 §4.2, §5) | M | the bump itself |
+
+S.2 is a bug and belongs early; S.0 whenever the quarterly lands; S.1 is worth
+doing before Phase 15 adds protocols; S.4–S.5 are opportunistic.
+
 ## 3. The metal sitting — blocked while the USB is in use
 
 One developer medium (`live-image.sh --ssh-key`), one boot, all of it:

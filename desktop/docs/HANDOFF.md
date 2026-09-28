@@ -402,6 +402,15 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 | 2.69 | A pipe's status is its last command's — `swift build | filter` printed "done" over a failed guest build, and the guest's tests ran the last good binaries |
 
 ### 2.1 The static-inline trap (the big one)
+
+> **Correction, 2026-09-28: this is not true of the compilers we use.** Swift
+> 6.3.1 (Linux) and 6.3.2 (FreeBSD) both call libwayland's `static inline`
+> requests and `*_add_listener` directly — a probe compiled, linked and (on
+> Linux) ran against a live compositor with no shim. The rule was inherited and
+> never re-tested. The wrappers still work; retiring them is
+> [SWIFT-6.4.md](SWIFT-6.4.md) S.1. What follows is kept as the record of why
+> they exist.
+
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
 every `*_add_listener` is a `static inline` in the generated headers. Swift's C
 importer **cannot see `static inline` functions** — they simply don't exist from
