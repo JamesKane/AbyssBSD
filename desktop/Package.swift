@@ -276,7 +276,7 @@ let package = Package(
         // sysfs, OSS not ALSA, devd not udev.
         .target(
             name: "Vents",
-            dependencies: ["CVents"],
+            dependencies: ["CVents", "Spawn"],
             path: "de/vents"
         ),
         // Process supervision primitives: every child is a pollable descriptor

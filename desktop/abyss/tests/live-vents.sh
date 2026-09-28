@@ -35,7 +35,20 @@ if [ "$os" != "FreeBSD" ]; then
   rc=0; "$ctl" battery >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ] || { echo "FAIL: battery should be unavailable, got $rc"; exit 1; }
   echo "ok: battery reports unavailable"
-  echo "all green (stubs behave)."
+  # The network is NOT a stub (PHASE14 P14.4): getifaddrs and rtnetlink are
+  # here, so it must agree with Linux's own tools.
+  if command -v ip >/dev/null 2>&1; then
+    net=$("$ctl" network)
+    want=$(ip -4 -o addr | awk '{print $2, $4}' | sort)
+    got=$(printf '%s\n' "$net" | awk '$1 == "interface" && $7 != "none" {
+            n = split($7, a, ","); for (i = 1; i <= n; i++) print $2, a[i] }' | sort)
+    [ "$got" = "$want" ] || { echo "FAIL: ventsctl network's addresses are not ip's:"; echo "$got"; echo "vs"; echo "$want"; exit 1; }
+    r=$(ip route show default | awk '{print $3, $5; exit}')
+    [ -z "$r" ] || printf '%s\n' "$net" | grep -qx "router ${r% *} via ${r#* }" \
+      || { echo "FAIL: the router is not ip's ($r): $net"; exit 1; }
+    echo "ok: the network agrees with ip(8) — every IPv4 address, and the default router"
+  fi
+  echo "all green (stubs behave, and the network is real)."
   exit 0
 fi
 
@@ -117,5 +130,32 @@ if ! grep -q "type=DESTROY" "$log"; then
 fi
 echo "ok: devd delivered the device's arrival and departure:"
 grep -E "type=(CREATE|DESTROY)" "$log" | sed 's/^/    /' | head -4
+
+echo "== the network =="
+net=$("$ctl" network)
+for ifn in $(ifconfig -l); do
+  want=$(ifconfig "$ifn" inet 2>/dev/null | awk '/inet /{print $2}' | sort | tr '\n' ' ')
+  got=$(printf '%s\n' "$net" | awk -v i="$ifn" '$1 == "interface" && $2 == i && $7 != "none" {
+          n = split($7, a, ","); for (k = 1; k <= n; k++) { sub(/\/.*/, "", a[k]); print a[k] } }' | sort | tr '\n' ' ')
+  [ "$got" = "$want" ] || { echo "FAIL: $ifn's addresses are '$got', ifconfig says '$want'"; exit 1; }
+done
+gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2}')
+[ -z "$gw" ] || printf '%s\n' "$net" | grep -q "^router $gw via " || { echo "FAIL: the router is not route(8)'s ($gw): $net"; exit 1; }
+dns=$(awk '$1 == "nameserver" {print $2}' /etc/resolv.conf | tr '\n' ' ' | sed 's/ $//')
+printf '%s\n' "$net" | grep -qx "dns ${dns:-none}" || { echo "FAIL: the name servers are not resolv.conf's ($dns): $net"; exit 1; }
+echo "ok: the network agrees with ifconfig(8), route(8) and resolv.conf"
+
+# **Live.** A change the kernel makes must reach a listener with no privilege.
+netwait=$(mktemp)
+"$ctl" network --wait 5 > "$netwait" 2>&1 &
+waiter=$!
+sleep 1
+sudo ifconfig lo0 alias 127.0.0.77/32
+wait $waiter 2>/dev/null || true
+sudo ifconfig lo0 -alias 127.0.0.77
+grep -qx changed "$netwait" || { echo "FAIL: the routing socket did not report the new address"; cat "$netwait"; exit 1; }
+grep -q "127.0.0.77/32" "$netwait" || { echo "FAIL: the new address is not in the status read after the change"; cat "$netwait"; exit 1; }
+rm -f "$netwait"
+echo "ok: an address added by root reached an unprivileged watcher, and the status read after it shows it"
 
 echo "all green (the hardware bridges read the real machine)."

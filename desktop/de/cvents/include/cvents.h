@@ -61,4 +61,27 @@ int av_mixer_open(const char *path);
 int av_mixer_get_volume(int fd, int *level);
 int av_mixer_set_volume(int fd, int *level);
 
+/* ---- network status (PHASE14 P14.4) ----------------------------------- */
+/*
+ * Real on both platforms, not stubbed: the Network pane shows the machine's
+ * state on Linux too, where the settings it writes are refused.
+ *
+ * Whether `ifname` has a link: 1 up, 0 down, -1 unknown (or no such
+ * interface). FreeBSD: the interface's if_data link state. Linux: IFF_LOWER_UP.
+ */
+int av_if_link(const char *ifname);
+
+/* The interface's hardware address into `out` (6 bytes). 0, or -1 if none. */
+int av_if_mac(const char *ifname, unsigned char out[6]);
+
+/*
+ * A descriptor that becomes readable when an interface, an address or a
+ * route changes: a routing socket on FreeBSD, rtnetlink on Linux. Neither needs
+ * privilege to listen. Non-blocking; -1 on failure.
+ */
+int av_route_watch_open(void);
+
+/* Read everything waiting; 1 if anything was, 0 if not. */
+int av_route_watch_drain(int fd);
+
 #endif /* ABYSS_CVENTS_H */

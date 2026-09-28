@@ -32,7 +32,8 @@ func fail(_ s: String) -> Never { emit(2, "ventsctl: \(s)"); exit(1) }
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let cmd = args.first else {
-    fail("usage: ventsctl sysctl <name> | kenv [name] | volume [pct] | battery | devd [secs]")
+    fail("usage: ventsctl sysctl <name> | kenv [name] | volume [pct] | battery | devd [secs]"
+         + " | network [--wait secs]")
 }
 
 switch cmd {
@@ -100,6 +101,36 @@ case "devd":
         for e in devd.read() { out(e.summary) }
     }
     out("done")
+
+// The network, as the kernel has it now (PHASE14 P14.4) — real on Linux too,
+// unlike the rest: getifaddrs and rtnetlink are there. `--wait` blocks on the
+// routing socket until something changes, which is how the Network pane stays
+// current and how a test proves it would.
+case "network":
+    func show() {
+        let st = Vents.Network.status()
+        for i in st.interfaces {
+            out("interface \(i.name) \(i.up ? "up" : "down") link \(i.link.rawValue)"
+                + " ipv4 " + (i.ipv4.isEmpty ? "none" : i.ipv4.map { "\($0.address)/\($0.prefix)" }.joined(separator: ","))
+                + (i.mac.map { " mac \($0)" } ?? "") + (i.loopback ? " loopback" : ""))
+        }
+        out(st.router.map { "router \($0.address) via \($0.interface)" } ?? "router none")
+        out("dns " + (st.nameServers.isEmpty ? "none" : st.nameServers.joined(separator: " ")))
+    }
+    if args.count >= 3, args[1] == "--wait" {
+        guard let watch = Vents.Network.Watch() else { unavailable("no routing socket") }
+        let seconds = Double(args[2]) ?? 5
+        out("watching")
+        let deadline = Date_monotonic() + seconds
+        var changed = false
+        while !changed && Date_monotonic() < deadline {
+            var p = pollfd(fd: watch.fileDescriptor, events: Int16(POLLIN), revents: 0)
+            let remaining = Int32(max(0, (deadline - Date_monotonic()) * 1000))
+            if withUnsafeMutablePointer(to: &p, { poll($0, 1, remaining) }) > 0 { changed = watch.drain() }
+        }
+        out(changed ? "changed" : "no change")
+    }
+    show()
 
 default:
     fail("unknown command '\(cmd)'")

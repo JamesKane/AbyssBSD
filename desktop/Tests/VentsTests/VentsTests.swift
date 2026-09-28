@@ -149,4 +149,51 @@ final class VentsTests: XCTestCase {
         }
         XCTAssertNil(Vents.Devd(path: "/nonexistent/devd.pipe"))
     }
+
+    // MARK: - The network (P14.4)
+
+    /// `route -n get default` on FreeBSD 15, captured.
+    func testTheDefaultRouteIsReadFromRouteGet() {
+        let out = """
+           route to: default
+        destination: default
+               mask: default
+            gateway: 10.0.2.2
+                fib: 0
+          interface: vtnet0
+              flags: <UP,GATEWAY,DONE,STATIC>
+        """
+        XCTAssertEqual(Vents.Network.parseRouteGet(out)?.address, "10.0.2.2")
+        XCTAssertEqual(Vents.Network.parseRouteGet(out)?.interface, "vtnet0")
+        XCTAssertNil(Vents.Network.parseRouteGet("route: route has not been found\n"),
+                     "no default route is none, not an empty one")
+    }
+
+    /// `/proc/net/route` on Linux: the gateway is little-endian hex.
+    func testTheDefaultRouteIsReadFromProcNetRoute() {
+        let table = """
+        Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask
+        enp77s0\t0000A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF
+        enp77s0\t00000000\t0100A8C0\t0003\t0\t0\t100\t00000000
+        """
+        XCTAssertEqual(Vents.Network.parseProcRoute(table)?.address, "192.168.0.1")
+        XCTAssertEqual(Vents.Network.parseProcRoute(table)?.interface, "enp77s0")
+        XCTAssertNil(Vents.Network.parseProcRoute("Iface\tDestination\tGateway\n"))
+    }
+
+    func testNameServersAreReadInOrderAndNothingElse() {
+        let conf = "# generated\nsearch example.org\nnameserver 10.0.2.3\nnameserver\t9.9.9.9\noptions edns0\n"
+        XCTAssertEqual(Vents.Network.parseResolvConf(conf), ["10.0.2.3", "9.9.9.9"])
+        XCTAssertEqual(Vents.Network.parseResolvConf(""), [])
+    }
+
+    /// Real, on both platforms: every machine has a loopback holding 127.0.0.1/8.
+    func testTheLoopbackIsFoundWithItsAddress() {
+        let lo = Vents.Network.interfaces().first { $0.loopback }
+        XCTAssertNotNil(lo, "no loopback among \(Vents.Network.interfaces().map(\.name))")
+        XCTAssertTrue(lo?.up ?? false)
+        XCTAssertTrue(lo?.ipv4.contains(Vents.Network.Address(address: "127.0.0.1", prefix: 8)) ?? false,
+                      "\(lo?.ipv4 ?? [])")
+        XCTAssertNotNil(Vents.Network.Watch(), "no routing socket to watch")
+    }
 }
