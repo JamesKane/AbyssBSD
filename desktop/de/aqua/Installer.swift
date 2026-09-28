@@ -448,13 +448,10 @@ public struct InstallerModel: Sendable {
     }
 }
 
-/// The keyboard layouts the installer offers. A short, honest list rather than
-/// every layout xkeyboard-config knows: this is the live installer's first
-/// screen, not System Preferences.
-public let installerKeymaps = [
-    "us.kbd", "uk.kbd", "de.kbd", "fr.kbd", "es.kbd", "it.kbd",
-    "dvorak.kbd", "colemak.kbd",
-]
+/// The keyboard layouts the installer offers, as the `kbdmap` names rc.conf
+/// takes. The list is `Install.Keymaps.offered`, which also carries each one's
+/// XKB layout, so the desktop types what the console types (HANDOFF §2.70).
+public let installerKeymaps = Keymaps.offered.map(\.kbdmap)
 
 /// Likewise for time zones — the common ones, plus UTC.
 public let installerTimezones = [

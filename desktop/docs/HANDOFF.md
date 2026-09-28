@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**546 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
+**556 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -689,8 +689,25 @@ stand-in does. A virtual keyboard brings a keymap; a nested output brings
 somebody else's vblank (§2.48); shm buffers bring no GPU. Each hides a defect
 that only metal can show.
 
-**Still open:** the installer writes `keymap="us.kbd"` (a `kbdmap` name, not an
-XKB one) and nothing translates it, so every installation types US.
+**The layout (same day).** The installer writes rc.conf's `keymap=`, a
+`kbdmap` name (`uk.kbd`), and the seat needs an XKB layout (`gb`). rc.conf stays
+the one place the choice lives: `Install.Keymaps` translates the installer's
+eight exactly, guesses any other from its prefix (`de.acc.kbd` → `de`), and
+`giveKeymap` reads it — after `XKB_DEFAULT_LAYOUT`, which still wins, and before
+xkbcommon's US default, which is what a guess XKB refuses gets. Writing it
+turned up two more:
+
+- **Two of the eight names did not exist.** The installer offered `dvorak.kbd`
+  and `colemak.kbd`; FreeBSD ships `us.dvorak.kbd` and `colemak.acc.kbd`
+  (confirmed on 15.0-RELEASE-p11), so choosing either wrote a console keymap
+  that could not load. A test in the guest now stats every offered name in
+  `/usr/share/vt/keymaps`.
+- **The dev box exports `XKB_DEFAULT_LAYOUT=us`**, from its own desktop session,
+  and that outranks rc.conf on purpose. A test that set the variable and then
+  *unset* it cleared the box's value for every test after it, so whether the
+  rc.conf tests passed depended on which ran first. Tests now save and restore
+  it, and clear it where they mean rc.conf to decide. A test that touches the
+  environment borrows it; it does not get to keep it.
 
 ### 2.69 A pipe's status is its last command's
 (P11.10. One scene moved on Linux and not on FreeBSD, and that was the clue.)

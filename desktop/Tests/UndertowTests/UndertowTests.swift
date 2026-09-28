@@ -12,6 +12,7 @@ import XCTest
 import AquaDraw
 import PoolConfig
 import CWlroots
+import Install
 @testable import Undertow
 
 #if canImport(Glibc)
@@ -578,7 +579,7 @@ final class UndertowTests: XCTestCase {
     func testABackendKeyboardIsGivenAKeymapAndARepeatRate() {
         withBareKeyboard { kb in
             XCTAssertNil(kb.pointee.keymap, "precondition: a bare keyboard has no keymap")
-            Seat.giveKeymap(to: kb)
+            Seat.giveKeymap(to: kb, rcConf: [])
             XCTAssertNotNil(kb.pointee.keymap, "the keyboard would reach the seat unreadable")
             XCTAssertNotNil(kb.pointee.xkb_state, "no state, so no keysyms for the keybind table")
             XCTAssertEqual(kb.pointee.repeat_info.rate, 25)
@@ -586,30 +587,101 @@ final class UndertowTests: XCTestCase {
         }
     }
 
+    /// Run with `XKB_DEFAULT_LAYOUT` set to a value, or unset, and put back
+    /// whatever was there. **The dev box's own desktop session exports
+    /// `XKB_DEFAULT_LAYOUT=us`**, and it outranks rc.conf by design — so a test
+    /// that reads rc.conf must clear it, and one that sets it must not simply
+    /// unset it afterwards: an earlier draft did, and whether the rc.conf tests
+    /// passed then depended on which test happened to run first.
+    private func withXKBLayout(_ value: String?, _ body: () -> Void) {
+        let saved = getenv("XKB_DEFAULT_LAYOUT").map { String(cString: $0) }
+        if let value { setenv("XKB_DEFAULT_LAYOUT", value, 1) } else { unsetenv("XKB_DEFAULT_LAYOUT") }
+        defer {
+            if let saved { setenv("XKB_DEFAULT_LAYOUT", saved, 1) } else { unsetenv("XKB_DEFAULT_LAYOUT") }
+        }
+        body()
+    }
+
     func testTheLayoutComesFromTheEnvironment() {
-        setenv("XKB_DEFAULT_LAYOUT", "de", 1)
-        defer { unsetenv("XKB_DEFAULT_LAYOUT") }
-        withBareKeyboard { kb in
-            Seat.giveKeymap(to: kb)
-            guard let km = kb.pointee.keymap else { return XCTFail("no keymap compiled") }
-            XCTAssertEqual(Seat.layoutName(km), "German")
+        withXKBLayout("de") {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: [])
+                guard let km = kb.pointee.keymap else { return XCTFail("no keymap compiled") }
+                XCTAssertEqual(Seat.layoutName(km), "German")
+            }
         }
     }
 
     /// A backend that did bring a keymap keeps it: ours is only a default.
     func testAKeyboardThatAlreadyHasAKeymapKeepsIt() {
-        setenv("XKB_DEFAULT_LAYOUT", "fr", 1)
-        guard let french = Seat.compileKeymap() else {
-            unsetenv("XKB_DEFAULT_LAYOUT")
-            return XCTFail("no keymap compiled")
-        }
-        unsetenv("XKB_DEFAULT_LAYOUT")
+        var french: OpaquePointer?
+        withXKBLayout("fr") { french = Seat.compileKeymap(rcConf: []) }
+        guard let french else { return XCTFail("no keymap compiled") }
         defer { xkb_keymap_unref(french) }
         withBareKeyboard { kb in
             XCTAssertTrue(wlr_keyboard_set_keymap(kb, french))
-            Seat.giveKeymap(to: kb)
+            Seat.giveKeymap(to: kb, rcConf: [])
             XCTAssertEqual(kb.pointee.keymap, french)
         }
+    }
+
+    /// An rc.conf in a directory of its own, the way the installer writes it.
+    private func rcConf(_ keymap: String) -> String {
+        var template = Array("/tmp/abyss-rcconf-XXXXXX".utf8CString)
+        let dir = template.withUnsafeMutableBufferPointer { String(cString: mkdtemp($0.baseAddress!)) }
+        let path = dir + "/rc.conf"
+        let f = fopen(path, "w")!
+        fputs("# Written by the AbyssBSD installer.\nkeymap=\"\(keymap)\"\n", f)
+        fclose(f)
+        addTeardownBlock { unlink(path); rmdir(dir) }
+        return path
+    }
+
+    /// The layout a bare keyboard is given for this rc.conf, with nothing in the
+    /// environment to outrank it.
+    private func layoutGiven(rcConf: [String]) -> String? {
+        var name: String?
+        withXKBLayout(nil) {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: rcConf)
+                name = kb.pointee.keymap.map { Seat.layoutName($0) }
+            }
+        }
+        return name
+    }
+
+    /// **The desktop types what the console types.** Every layout the installer
+    /// offers, written to rc.conf as the installer writes it, compiles to the
+    /// XKB layout it names — asserted by name, because "a keymap compiled" is
+    /// also what a wrong translation produces.
+    func testEveryLayoutTheInstallerOffersReachesTheSeat() {
+        let expected = [
+            "us.kbd": "English (US)", "uk.kbd": "English (UK)", "de.kbd": "German",
+            "fr.kbd": "French", "es.kbd": "Spanish", "it.kbd": "Italian",
+            "us.dvorak.kbd": "English (Dvorak)", "colemak.acc.kbd": "English (Colemak)",
+        ]
+        XCTAssertEqual(Set(expected.keys), Set(Keymaps.offered.map(\.kbdmap)),
+                       "a layout was added to the installer without a test here")
+        for k in Keymaps.offered {
+            XCTAssertEqual(layoutGiven(rcConf: [rcConf(k.kbdmap)]), expected[k.kbdmap], k.kbdmap)
+        }
+    }
+
+    func testTheEnvironmentStillBeatsRcConf() {
+        let rc = rcConf("uk.kbd")
+        withXKBLayout("de") {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: [rc])
+                XCTAssertEqual(kb.pointee.keymap.map { Seat.layoutName($0) }, "German")
+            }
+        }
+    }
+
+    func testAGuessXKBRefusesFallsBackToTheDefault() {
+        XCTAssertEqual(layoutGiven(rcConf: [rcConf("de.acc.kbd")]), "German",
+                       "a name the installer never offered, guessed from its prefix")
+        XCTAssertEqual(layoutGiven(rcConf: [rcConf("zz.kbd")]), "English (US)",
+                       "no layout zz, so the default — not a keyboard with no keymap")
     }
 
     // MARK: - The keybind table (P9.5)

@@ -447,7 +447,11 @@ let package = Package(
             // AquaDraw + cairo because the compositor paints the window frames
             // now (P9.6): server-side decorations mean an Aqua title bar with
             // gel lights, drawn from the same grammar the toolkit uses.
-            dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo", "MenuModel"],
+            // Install for its keymap table: rc.conf's `keymap=` is a kbdmap
+            // name and the seat needs an XKB layout (HANDOFF §2.70). `Install`
+            // depends on nothing, so this links no new library.
+            dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo", "MenuModel",
+                           "Install"],
             path: "de/undertow"
         ),
         .executableTarget(
@@ -560,7 +564,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UndertowTests",
-            dependencies: ["Undertow", "PoolConfig", "AquaDraw"],
+            dependencies: ["Undertow", "PoolConfig", "AquaDraw", "Install"],
             path: "Tests/UndertowTests"
         ),
     ]

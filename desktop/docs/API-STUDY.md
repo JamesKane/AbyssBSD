@@ -44,10 +44,11 @@ environment, and a repeat rate of 25/600; one that brought a keymap keeps it.
 Three unit tests build a bare `wlr_keyboard` the way a backend does and assert on
 the keymap, the state, the repeat and the layout. HANDOFF §2.70.
 
-**Left:** the installer writes `keymap="us.kbd"` to rc.conf — a `kbdmap` name,
-not an XKB one — and nothing translates it, so a German installation still gets
-a US keymap in the desktop. The installer's list is eight names
-(`installerKeymaps`); a table of eight is the size of the fix.
+**Then the layout, the same day.** The installer writes `keymap="uk.kbd"` to
+rc.conf — a `kbdmap` name, not an XKB one — and `undertow` now reads and
+translates it (`Install.Keymaps`), so the desktop types what the console types.
+Doing so found two of the installer's eight names were files FreeBSD does not
+ship (HANDOFF §2.70).
 
 ### 1.2 Open: `undertow` offers no `linux-dmabuf`
 

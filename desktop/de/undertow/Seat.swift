@@ -22,6 +22,7 @@
 import AquaDraw
 import CWlroots
 import PoolConfig
+import Install
 
 #if canImport(Glibc)
 import Glibc
@@ -384,18 +385,16 @@ public final class Seat {
     /// its own keymap from the client that created it; the first real keyboard
     /// is the 12700KF's, on metal.
     ///
-    /// The layout is xkbcommon's default, which reads `XKB_DEFAULT_LAYOUT` (and
-    /// `_RULES`, `_MODEL`, `_VARIANT`, `_OPTIONS`) from the environment. The
-    /// installer's `keymap=` in rc.conf is a `kbdmap` name, not an XKB one, and
-    /// nothing translates it yet.
-    static func giveKeymap(to keyboard: UnsafeMutablePointer<wlr_keyboard>) {
+    /// Which layout is `compileKeymap`'s to decide.
+    static func giveKeymap(to keyboard: UnsafeMutablePointer<wlr_keyboard>,
+                           rcConf: [String] = Seat.rcConf) {
         let name = keyboard.pointee.base.name.map { String(cString: $0) } ?? "a keyboard"
         if let existing = keyboard.pointee.keymap {
             // A backend that already chose one knows better than our default.
             log("\(name) came with keymap \(layoutName(existing)); keeping it")
             return
         }
-        guard let keymap = compileKeymap() else {
+        guard let keymap = compileKeymap(rcConf: rcConf) else {
             log("no keymap compiled (are the xkeyboard-config layouts installed?) — "
                 + "this keyboard's keys will reach clients as codes nobody can read")
             return
@@ -411,11 +410,46 @@ public final class Seat {
         log("\(name) had no keymap; gave it \(layoutName(keymap))")
     }
 
-    /// xkbcommon's default keymap, or nil when its layouts cannot be found.
-    static func compileKeymap() -> OpaquePointer? {
+    /// Where the system's keyboard layout is written: the installer puts a
+    /// `kbdmap` name in rc.conf's `keymap=`, and the console reads it from there.
+    static let rcConf = ["/etc/rc.conf", "/etc/rc.conf.local"]
+
+    /// The keymap a backend keyboard gets, or nil when no layouts can be found.
+    ///
+    /// In order:
+    /// 1. **`XKB_DEFAULT_LAYOUT` in the environment** — how a person overrides
+    ///    everything for one session; xkbcommon reads it (and `_VARIANT`,
+    ///    `_OPTIONS`, …) itself.
+    /// 2. **rc.conf's `keymap=`, translated** (`Install.Keymaps`), so the
+    ///    desktop types what the console types. A name the installer never
+    ///    offered is guessed from its prefix, and a guess XKB refuses is said so.
+    /// 3. **xkbcommon's default**, which is US.
+    static func compileKeymap(rcConf: [String] = Seat.rcConf) -> OpaquePointer? {
         guard let ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS) else { return nil }
         defer { xkb_context_unref(ctx) }
+        if getenv("XKB_DEFAULT_LAYOUT") == nil, let kbdmap = Keymaps.configured(rcConf: rcConf) {
+            if let (k, exact) = Keymaps.xkb(forKbdmap: kbdmap),
+               let km = compile(ctx, layout: k.layout, variant: k.variant) {
+                log("rc.conf's keymap \(kbdmap) is XKB \(k.layout)"
+                    + (k.variant.isEmpty ? "" : "(\(k.variant))")
+                    + (exact ? "" : ", guessed from its name"))
+                return km
+            }
+            log("rc.conf's keymap \(kbdmap) has no XKB layout that compiles; using the default")
+        }
         return xkb_keymap_new_from_names(ctx, nil, XKB_KEYMAP_COMPILE_NO_FLAGS)
+    }
+
+    private static func compile(_ ctx: OpaquePointer, layout: String,
+                                variant: String) -> OpaquePointer? {
+        layout.withCString { l in
+            variant.withCString { v in
+                var names = xkb_rule_names(rules: nil, model: nil, layout: l,
+                                           variant: variant.isEmpty ? nil : v,
+                                           options: nil)
+                return xkb_keymap_new_from_names(ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS)
+            }
+        }
     }
 
     /// The name of a keymap's first layout, as the log line reports it.
