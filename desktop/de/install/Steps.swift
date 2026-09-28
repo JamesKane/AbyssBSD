@@ -353,6 +353,14 @@ public func rcConf(_ plan: InstallPlan) -> String {
                     ?? plan.accounts.first {
             out += "abyss_desktop_user=\"\(owner.name)\"\n"
         }
+        // System Preferences' privileged half (PHASE14 P14.3), for the same
+        // person — **only if they are an administrator**: the helper admits
+        // nobody else anyway (§6.1), so enabling it for a non-administrator
+        // would start a root service that refuses every caller.
+        if let admin = plan.accounts.first(where: { $0.isAdministrator }) {
+            out += "abyss_settings_enable=\"YES\"\n"
+            out += "abyss_settings_admin=\"\(admin.name)\"\n"
+        }
     }
     return out
 }

@@ -182,7 +182,7 @@ DLOPEN_LIBS="/usr/local/lib/libEGL_mesa.so.0
 # `.build/debug`, because that directory is full of SwiftPM's own intermediates.
 BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus abyss-theme
           abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl
-          fathom"
+          fathom abyss-settings abyss-settingsctl"
 
 # The graphics stack, for a medium that has to come up on a real machine
 # (PHASE4 P4.3). Packages rather than an `ldd` closure, because kernel modules
@@ -594,6 +594,66 @@ run_rc_command "$1"
 RCD
 sudo chmod 755 "$de/etc/rc.d/abyss_desktop"
 
+# System Preferences' privileged half (PHASE14 P14.3): root, for the desktop's
+# user alone, and only while that user is an administrator. Before the desktop,
+# so the Energy and Network panes find it; its socket in the same runtime
+# directory the session uses, which this makes exactly as abyss_desktop does
+# (whichever runs first creates it; both chown it to the user).
+sudo sh -c "cat > $de/etc/rc.d/abyss_settings" <<'RCD'
+#!/bin/sh
+# PROVIDE: abyss_settings
+# REQUIRE: LOGIN
+# BEFORE: abyss_desktop
+# KEYWORD: shutdown
+. /etc/rc.subr
+name="abyss_settings"
+rcvar="abyss_settings_enable"
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+start_precmd="abyss_settings_prestart"
+start_postcmd="abyss_settings_poststart"
+# **Not `abyss_settings_user`.** rc.subr reserves `${name}_user`: with
+# `command` set, it runs the command AS that user — so the root helper was
+# started as the administrator, and daemon(8) could not write its pid file or
+# log ("daemon: open: Permission denied"). abyss_desktop's `_user` is safe
+# only because that script supplies its own start_cmd. Found by running this
+# script under the real rc.subr in the build guest.
+: ${abyss_settings_admin:=""}
+abyss_settings_prestart()
+{
+	# Nobody by default: the helper exists for one person's session, and
+	# says whose or does not start.
+	if [ -z "$abyss_settings_admin" ]; then
+		echo "abyss: abyss_settings_admin is not set — whose session may change the machine?"
+		return 1
+	fi
+	uid=$(id -u "$abyss_settings_admin") || return 1
+	rundir="/var/run/abyss-$abyss_settings_admin"
+	mkdir -p "$rundir"
+	chown "$abyss_settings_admin" "$rundir"
+	chmod 700 "$rundir"
+	command_args="-f -P $pidfile -o /var/log/abyss-settings.out /usr/bin/env ABYSS_RUNTIME_DIR=$rundir /usr/local/bin/abyss-settings --uid $uid"
+	echo "abyss: starting the settings helper for $abyss_settings_admin"
+}
+abyss_settings_poststart()
+{
+	# Say it is up only when it is: its socket exists (§2.42 — test readiness
+	# by what a client needs, not by a process having started).
+	i=0
+	while [ ! -S "/var/run/abyss-$abyss_settings_admin/settings.sock" ] && [ $i -lt 50 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+	if [ -S "/var/run/abyss-$abyss_settings_admin/settings.sock" ]; then
+		echo "abyss: the settings helper is up, for uid $(id -u "$abyss_settings_admin")"
+	else
+		echo "abyss: THE SETTINGS HELPER NEVER STARTED (see /var/log/abyss-settings.out)"
+	fi
+}
+load_rc_config $name
+run_rc_command "$1"
+RCD
+sudo chmod 755 "$de/etc/rc.d/abyss_settings"
+
 say "== abyss.tzst — the desktop, as a distribution set"
 # **zstd, not xz, and the name says so.** On the build guest `tar -cJf` over
 # this tree is 48 seconds of the 92 a whole medium costs — xz at level 6,
@@ -624,6 +684,9 @@ abyss_live_enable="YES"
 # Saying so explicitly is what stops rc warning about an unset variable on every
 # boot, which is noise in the one log this machine uses to report on itself.
 abyss_desktop_enable="NO"
+# …and abyss_settings for the same reason: the live session starts the helper
+# itself, beside the installer (below).
+abyss_settings_enable="NO"
 
 # **The GPU driver, and the thing that lets an unprivileged session use it.**
 # `kld_list` rather than loader.conf, which is what FreeBSD's own drm-kmod
@@ -820,6 +883,17 @@ run() {
   [ -S "$rundir/install.sock" ] \
     && echo "abyss-live: the installer service is up, for uid $(id -u "$user")" \
     || echo "abyss-live: THE INSTALLER SERVICE NEVER STARTED"
+
+  # System Preferences' privileged half, for the same user (PHASE14 P14.3):
+  # root, beside the installer, because the live user is an administrator of
+  # the machine they are running as much as of the one they are installing.
+  env ABYSS_RUNTIME_DIR="$rundir" /usr/local/bin/abyss-settings \
+      --uid "$(id -u "$user")" 2>&1 | sed 's/^/settings| /' &
+  i=0
+  while [ ! -S "$rundir/settings.sock" ] && [ $i -lt 100 ]; do i=$((i+1)); sleep 0.1; done
+  [ -S "$rundir/settings.sock" ] \
+    && echo "abyss-live: the settings helper is up, for uid $(id -u "$user")" \
+    || echo "abyss-live: THE SETTINGS HELPER NEVER STARTED"
 
   # `$rundir` is expanded here, by root, before su — the session's own shell has
   # no reason to know where root decided to put it.

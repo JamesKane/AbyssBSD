@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**580 unit tests, 33 live modes and 39 live scripts, green on Linux and FreeBSD,
+**592 unit tests, 33 live modes and 40 live scripts, green on Linux and FreeBSD,
 and a golden gate of 72 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -41,8 +41,11 @@ The items below are the context for it.
    theme changes while the desktop runs — the General pane or `abyss-theme
    set` writes `appearance.ini`, and `undertow`, every toolkit process and the
    portal (`SettingChanged`) follow, checked in pixels and back byte for byte
-   (`live-appearance.sh`). **Next is P14.3**, `abyss-settings`, the privileged
-   half. **Open, for the person:** §6.5,
+   (`live-appearance.sh`). **P14.3 is done** too: `abyss-settings`, the
+   privileged half, in the installer's shape — typed plans, `wheel` asked at
+   every connection, `rc.conf` written with `sysrc` whole or not at all, an
+   `rc.d` service on installed systems. **Next is P14.4**, network (wired),
+   the first pane to write through it. **Open, for the person:** §6.5,
    whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
    `--vm --live`, `--full`) are run only when the phase closes.
    **Phase 11, the theme system, is COMPLETE**
@@ -676,6 +679,24 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.76 rc.subr owns `${name}_user`
+(P14.3b. Found by running the `rc.d` script under the real rc.subr.)
+
+`abyss_settings` was configured with `abyss_settings_user`, by analogy with
+`abyss_desktop_user`. Under rc.subr that name is not ours: with `command=` set,
+**rc.subr runs the command as `${name}_user`** — so the root helper was started
+as the administrator, and `daemon(8)` failed with `daemon: open: Permission
+denied` writing its pid file. `abyss_desktop_user` has never hit this only
+because that script supplies its own `start_cmd`, which rc.subr does not wrap.
+It is `abyss_settings_admin` now.
+
+rc.subr reserves more suffixes than it looks like it does — `_user`, `_group`,
+`_flags`, `_env`, `_chroot`, `_nice`, `_fib`, `_limits`, `_login_class`,
+`_umask`, `_program`, `_pidfile`, `_oomprotect` among them. **Name a
+variable of our own something rc.subr has no reason to know.** And the general
+form, again: a script written to run under a framework is not verified until
+it has run under that framework; `sh -n` said it was fine.
 
 ### 2.75 A test's own arithmetic fails quietly, and reads like the product's
 (P14.2. Three in one pass, each first reported as a product failure.)
@@ -2721,6 +2742,7 @@ or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 | `live-subsurface.sh` | a window made of **subsurfaces** — over, outside and below its parent — drawn, framed and routed to the leaf (§2.71) |
 | `live-hidden.sh` | a **minimized** window keeps a slow frame clock (not none, not 60 Hz), is told it is `suspended`, and what the compositor can do (§2.72) |
 | `live-present.sh` | **presentation-time**: every frame a client commits is reported shown, on `CLOCK_MONOTONIC`, at the display's period — 60 and 144 Hz (§2.74) |
+| `live-settings.sh` | **System Preferences' privileged half**: a non-administrator refused; check, dry run, the Linux refusal; in the guest, as root, root refused by the peer check and a real `sysrc` apply to a scratch `rc.conf` (P14.3) |
 | `live-appearance.sh` | **the theme changes while the desktop runs**: `undertow`, the desktop, bar, Dock and an Aqua window (each its own process), and the portal (`SettingChanged`, decoded by GLib) follow `abyss-theme set` and the General pane; pixels change and come back byte for byte (P14.2, §2.75) |
 | `live-gpu.sh` | **GPU clients through `linux-dmabuf`**: pixman says it offers none; on a render node, es2gears and vkcube run on it and are seen moving; a screenshot on every renderer is the right colour. GPU half skips without a render node (§2.73) |
 | `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |

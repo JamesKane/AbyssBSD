@@ -176,6 +176,10 @@ grep -q "abyss: starting the desktop for abyss" "$work/installed.log" \
   || { grep -i abyss "$work/installed.log" | tail -10 | sed 's/^/    /'
        fail "the installed machine did not start the desktop for the account created"; }
 echo "ok: and it started the desktop for the account the installer created"
+grep -q "abyss: the settings helper is up, for uid" "$work/installed.log" \
+  || { grep -i 'abyss: .*settings' "$work/installed.log" | sed 's/^/    /'
+       fail "the installed machine did not start the settings helper (PHASE14 P14.3)"; }
+echo "ok: ...and System Preferences' privileged half, as root, for that administrator"
 
 for surface in abyss.wallpaper abyss.menubar abyss.dock; do
   grep -q "mapped .*\[$surface\]" "$work/installed.log" \

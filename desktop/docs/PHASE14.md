@@ -184,6 +184,37 @@ built once more on purpose rather than generalised prematurely:
 - **on Linux it refuses, and says why** — the installer's positive control,
   not a skip.
 
+**Done** (2026-09-28, P14.3a–b). What landed:
+
+- **`Settings`** (imports nothing): typed plans, refusals, compile to steps.
+  The first plan is the Energy pane's `powerd` half (P14.8's), because it is
+  real and harmless in a build guest; the network plan (P14.4) is neither. The
+  pane never names a command, a file or a variable.
+- **`SettingsWire`**, **`SettingsRun`** (read / check / apply; the journal;
+  `rc.conf` edited with `sysrc` in a staged copy that replaces the file in one
+  `rename` once every edit succeeded), **`abyss-settings`** (root, `--uid`
+  required, socket handed to that uid alone) and **`abyss-settingsctl`**.
+- **Who** (§6.1): the uid it was started for, and only while it is in `wheel`,
+  asked at every connection. **Linux** (§6.4): a real read or apply is refused
+  in words; dry run works everywhere.
+- **Delivery:** `/etc/rc.d/abyss_settings` in the desktop set (before
+  `abyss_desktop`, the same runtime directory); the installer writes
+  `abyss_settings_enable` and **`abyss_settings_admin`** for the administrator
+  it creates, and nothing when there is none; the medium's live session starts
+  it as root beside `abyss-install`. **§6.2 said `anchor` would start it on the
+  medium** — `anchor` is not root there; the live session's root half is.
+
+**Verified:** `SettingsTests` (11) — including, on FreeBSD, a plan whose second
+`sysrc` edit fails leaving `rc.conf` untouched; `live-settings.sh` on both
+platforms (a non-administrator refused; check shows the commands; dry run
+journalled and writes nothing; Linux refuses; in the guest, as root, root
+itself refused by the peer check and a real apply to a scratch `rc.conf`); and
+**the `rc.d` script run under the real `rc.subr` in the guest** — start as
+root, the socket answering the build user, status, stop. That run found the
+`${name}_user` collision (HANDOFF §2.76). Not yet run: `live-medium.sh` and
+`live-desktop.sh`, which now assert the helper comes up on the medium and on
+an installed system — the `--full` lane.
+
 **P14.4 — Network, wired.** Interfaces (`getifaddrs`, link state from the
 routing socket), DHCP or manual IPv4 (address, mask, router), DNS. Written as
 `ifconfig_<if>`, `defaultrouter` and `resolvconf`; applied with `service netif

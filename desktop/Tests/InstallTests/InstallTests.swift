@@ -559,6 +559,25 @@ final class InstallTests: XCTestCase {
         XCTAssertFalse(rcConf(p).contains("abyss_desktop_user"))
     }
 
+    /// System Preferences' privileged half (PHASE14 P14.3) starts for the
+    /// administrator the machine was installed for — and not at all when there
+    /// is none, because it would admit nobody (§6.1), and a root service that
+    /// refuses every caller is only a root service.
+    func testTheSettingsHelperStartsForTheAdministratorAndOnlyForOne() {
+        let admin = InstallPlan(disk: "ada0", sets: ["base.txz", InstallPlan.desktopSet],
+                                accounts: [Account(name: "guest", passwordHash: "$6$g"),
+                                           Account(name: "jkane", passwordHash: "$6$j", groups: ["wheel"])])
+        let rc = rcConf(admin)
+        XCTAssertTrue(rc.contains("abyss_settings_enable=\"YES\""), rc)
+        XCTAssertTrue(rc.contains("abyss_settings_admin=\"jkane\""), rc)
+
+        let noAdmin = InstallPlan(disk: "ada0", sets: ["base.txz", InstallPlan.desktopSet],
+                                  rootPasswordHash: "$6$r",
+                                  accounts: [Account(name: "guest", passwordHash: "$6$g")])
+        XCTAssertFalse(rcConf(noAdmin).contains("abyss_settings"), rcConf(noAdmin))
+        XCTAssertFalse(rcConf(goodPlan()).contains("abyss_settings"), "no desktop, no settings helper")
+    }
+
     func testTheFilesWeWriteSayWhereTheRootIs() {
         let p = goodPlan(pool: "tank")
         XCTAssertTrue(loaderConf(p).contains("vfs.root.mountfrom=\"zfs:tank/ROOT/default\""))
