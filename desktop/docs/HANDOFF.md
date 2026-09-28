@@ -48,8 +48,12 @@ The items below are the context for it.
    green: the Network pane (wired) shows the kernel's status beside
    rc.conf's configuration and applies through the helper
    (`live-network-pane.sh`); `live-network-reboot.sh`, in `--full`, reboots
-   an installed machine and checks the address held. **Next is P14.6**,
-   Sound, starting from §4.3's spike (BACKLOG §1). **Open, for the person:** §6.5,
+   an installed machine and checks the address held. **P14.6 is done** too
+   (2026-09-28): §4.3's spike answered — per-application volume is read-only
+   now, `virtual_oss` in Phase 18 — and the Sound pane, the default device
+   through the helper (`sysctl.conf`), and a real volume item in the menu
+   bar, all driven on the guest's `snd_dummy`. **Next is P14.7**, Displays
+   (`wlr-output-management-v1`), the one pane with no FreeBSD-only half. **Open, for the person:** §6.5,
    whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
    `--vm --live`, `--full`) are run only when the phase closes.
    **Phase 11, the theme system, is COMPLETE**
@@ -683,6 +687,23 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.78 libmixer sets the *selected* control, and looking one up does not select it
+(P14.6a. Found by comparing with mixer(8), not with our own reader.)
+
+`av_mixer_set(unit, "pcm", 40, 40)` found `pcm` with `mixer_get_dev_byname`,
+called `mixer_set_vol`, and changed **`vol`**. libmixer's setters act on
+`m->dev`, the *selected* control, which `mixer_open` points at the first one;
+`mixer_get_dev_byname` returns a control and leaves the selection alone.
+`mixer(8)` itself selects it (`m->dev = dp`) before it sets anything. Ours does
+too now, for both level and mute.
+
+Our own `ventsctl sound` read back 40 for… `vol`, and would have agreed with
+itself whatever it set. Reading the result back through **mixer(8)** is what
+showed which control had moved. live-vents.sh now asserts that setting `pcm`
+leaves `vol` alone, and that assertion fails when the selection is removed.
+The rule is §2.44's, "assert on the thing": check a write with the system's
+own tool, not with the reader written beside the writer.
 
 ### 2.77 A test helper that skips what it cannot do, in silence
 (P14.4c. Found because the pane logged what it sent.)

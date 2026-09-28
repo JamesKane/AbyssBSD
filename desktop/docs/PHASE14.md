@@ -281,6 +281,36 @@ verified in the harness or only on metal (§6.5).
 guest's `snd_dummy`. Per-application volume only if §4.3's spike says OSS can
 do it from outside the application; otherwise the pane does not pretend.
 
+**Done** (2026-09-28, P14.6a–d). §4.3's spike answered the per-application
+question: OSS lets another process read a channel's volume and not set it.
+Decided: shown read-only now, with control via `virtual_oss` in Phase 18 (§4.3
+has the measurements; PLAN is amended). What landed:
+
+- **`Vents.Sound`** (P14.6a): devices and each channel's pid, command and
+  volume from `/dev/sndstat`'s nvlist; each device's controls, levels and mute
+  through libmixer; the default unit. `ventsctl sound [set|mute]`. Found
+  against `mixer(8)`: libmixer acts on the *selected* control (HANDOFF §2.78).
+- **The default device through the helper** (P14.6b): a `sound` plan writes
+  `hw.snd.default_unit` to `/etc/sysctl.conf`, the helper's third file, which
+  it edits itself because `sysrc` refuses dotted names. Then it runs `sysctl`.
+  Levels and mute stay the user's, and `rc.d/mixer` (on by default) keeps them
+  across a reboot.
+- **The pane** (P14.6c): output device, levels and mute on the default device
+  (applied as the slider moves), and "Playing now", read-only, with the page
+  saying why. It re-reads once a second while it shows.
+- **The menu bar's volume item** (P14.6d): it follows the default device's
+  `vol` each tick; a muted output is dimmed; a click drops Jaguar's vertical
+  slider, and a drag sets the level.
+
+**Verified:** 624 unit tests on both platforms. On both, `live-vents.sh`'s
+sound half, `live-settings.sh` §7, `live-sound-pane.sh` and
+`live-menubar-volume.sh`: Linux as the positive control (no devices, nothing
+to click); the guest against `snd_dummy`, every change read back by `mixer(8)`
+and the guest's levels restored. Six fault injections, each seen to fail. Two
+new goldens (`sysprefs-sound`, `menubar-muted@2x`). **Not verified:** moving
+the default to a *different* device, because the guest has one and `snd_dummy`
+loads once. That waits for metal.
+
 **P14.7 — Displays.** `wlr-output-management-v1` in `undertow` (wlroots 0.19
 has it on both platforms), and a pane that arranges outputs by dragging, and
 sets mode and scale. Saved per user (`displays.ini`), applied by `undertow` at
