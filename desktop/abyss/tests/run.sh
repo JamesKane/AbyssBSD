@@ -326,7 +326,7 @@ if [ "$live" -eq 1 ]; then
     phase "the nested installs — SKIPPED (--full runs them)"
     echo "   the installer, and what it installed   (~190s)"
     echo "   empty disk to Jaguar desktop           (~490s)"
-    echo "   a manual address survives a reboot     (~150s, not yet timed)"
+    echo "   a manual address survives a reboot     (~150s)"
     echo "   Run --full before shipping anything that touches the installer,"
     echo "   the medium, the distribution sets, or the boot path."
   fi

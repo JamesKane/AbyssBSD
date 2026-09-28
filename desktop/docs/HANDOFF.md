@@ -44,8 +44,8 @@ The items below are the context for it.
    (`live-appearance.sh`). **P14.3 is done** too: `abyss-settings`, the
    privileged half, in the installer's shape — typed plans, `wheel` asked at
    every connection, `rc.conf` written with `sysrc` whole or not at all, an
-   `rc.d` service on installed systems. **P14.4 is done** bar its gate's
-   first run: the Network pane (wired) shows the kernel's status beside
+   `rc.d` service on installed systems. **P14.4 is done**, its reboot gate
+   green: the Network pane (wired) shows the kernel's status beside
    rc.conf's configuration and applies through the helper
    (`live-network-pane.sh`); `live-network-reboot.sh`, in `--full`, reboots
    an installed machine and checks the address held. **Next is P14.6**,

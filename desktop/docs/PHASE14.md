@@ -222,7 +222,7 @@ restart <if>` and `service routing restart`; status live. **Gate** (§6.3): in a
 nested bhyve guest, a manual address is set from the pane, the guest reboots,
 and the address held.
 
-**Done** (2026-09-28, P14.4a–d; the gate written and waiting on `--full`). What
+**Done** (2026-09-28, P14.4a–d, the gate green in the guest). What
 landed:
 
 - **The plan** (P14.4a): `NetworkPlan` — an interface, DHCP or a manual address
@@ -261,12 +261,13 @@ seen to fire on an lo0 alias; `live-network-pane.sh` on both (the pane's status
 equals `ventsctl`'s; a bad address refused in the helper's words; corrected and
 applied write-only, the files read back and vtnet0 untouched; Revert; an lo0
 alias redraws the page), with fault injections each seen to fail; the golden
-`sysprefs-pane` re-pictured on both. **Not yet run:** the reboot gate itself.
-It was run against the guest's stale installed disk from 2026-09-25, and it
-failed where it should: that rc.conf names no settings administrator. That run
-exercised the pool import, the mount, the export and the cleanup. A real run
-needs `live-desktop.sh` to install a fresh disk first, which makes it the
-`--full` lane.
+`sysprefs-pane` re-pictured on both. **The gate:** `live-desktop.sh` green
+(7m10s, including its first run of the P14.3b check that the installed system
+starts the settings helper). Then, on the disk it installed,
+`live-network-reboot.sh` green (2m30s): six steps applied as `abyss`, 10.77.0.5
+on vtnet0 at once, the machine rebooted itself, and after the reboot it had
+10.77.0.5/24, router 10.77.0.1 and name server 10.77.0.1 from rc.conf alone.
+Its refusal path was seen first, against a disk installed before P14.3b.
 
 **P14.5 — Network, Wi-Fi.** Scan (`ifconfig wlan0 scan`), join (a
 `wpa_supplicant.conf` network block, `wlans_<dev>` in `rc.conf`), forget.
