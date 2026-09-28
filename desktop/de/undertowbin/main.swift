@@ -37,6 +37,7 @@ func usage() -> Never {
                                     [--assert-missed-permille N]
                                     [--assert-cost-p99-us N]
            undertow run             [--hz N] [--frames N] [--width N] [--height N]
+                                    [--output WxH[@X,Y]]...   (more headless outputs)
                                     [--capture FILE.ppm] [--capture-early FILE.ppm]
                                     [--assert-windows N] [--assert-surfaces N]
                                     [--assert-layers N] [--assert-usable X,Y,WxH]
@@ -58,6 +59,7 @@ var assertMissedPermille: Int? = nil
 var assertCostP99Us: UInt64? = nil
 var width: Int32 = 1920
 var height: Int32 = 1080
+var extraOutputs: [(width: Int32, height: Int32, at: (Int32, Int32)?)] = []
 var verbose = false
 var capturePath: String? = nil
 var captureEarlyPath: String? = nil
@@ -97,6 +99,23 @@ while i < args.count {
     case "--height":
         guard let v = Int32(value("--height")) else { die("--height wants a number") }
         height = v
+    case "--output":
+        // Another headless output (P14.7a): `1280x1024`, placed to the right of
+        // the last, or `1280x1024@-1280,0`, placed there. The first output is
+        // --width x --height at 0,0, and is the main display.
+        let v = value("--output")
+        let parts = v.split(separator: "@", maxSplits: 1)
+        let wh = parts[0].split(separator: "x")
+        guard wh.count == 2, let w = Int32(wh[0]), let h = Int32(wh[1]), w > 0, h > 0 else {
+            die("--output wants WxH or WxH@X,Y, not '\(v)'")
+        }
+        var at: (Int32, Int32)?
+        if parts.count == 2 {
+            let xy = parts[1].split(separator: ",")
+            guard xy.count == 2, let x = Int32(xy[0]), let y = Int32(xy[1]) else { die("--output wants WxH@X,Y, not '\(v)'") }
+            at = (x, y)
+        }
+        extraOutputs.append((w, h, at))
     case "--verbose": verbose = true
     case "--capture": capturePath = value("--capture")
     case "--capture-early": captureEarlyPath = value("--capture-early")
@@ -347,13 +366,15 @@ case "headless":
 case "run":
     let session: WlrootsSession
     let compositor: Compositor
+    let displayLayout: DisplayLayout
     do {
         // `--backend auto` is Phase 4: DRM on metal, a nested window inside
         // another compositor, whatever this machine actually is. Headless stays
         // the default because it is the only thing the build VM can do and the
         // only thing that makes C1–C5 reproducible.
         session = try WlrootsSession(backendKind
-                                     ?? .headless(count: 1, width: width, height: height,
+                                     ?? .headless(sizes: [.init(width, height)]
+                                                    + extraOutputs.map { .init($0.width, $0.height) },
                                                   refreshMilliHz: Int32(hz &* 1000)),
                                      verbose: verbose)
         // **On a real backend the display's size is the truth, not ours.**
@@ -376,8 +397,22 @@ case "run":
             // measurement is the worse of the two.
             hz = displayHz(refreshMilliHz: first.pointee.refresh, fallback: hz)
         }
-        compositor = try Compositor(session: session, outputWidth: width,
-                                    outputHeight: height, configDir: configDir,
+        // **Where each output sits.** Headless: the first at the origin, and
+        // each --output where it was asked, or to the right of the last. A real
+        // backend: its outputs in a row, as found, until P14.7b's displays.ini
+        // says otherwise.
+        var boxes: [DisplayBox] = []
+        var nextX: Int32 = 0
+        for (i, o) in session.outputs.enumerated() {
+            let name = String(cString: o.pointee.name)
+            let w = o.pointee.width, h = o.pointee.height
+            var x = nextX, y: Int32 = 0
+            if backendKind == nil, i > 0, i - 1 < extraOutputs.count, let at = extraOutputs[i - 1].at { (x, y) = at }
+            boxes.append(DisplayBox(name: name, x: x, y: y, width: w, height: h))
+            nextX = max(nextX, x + w)
+        }
+        displayLayout = DisplayLayout(boxes)
+        compositor = try Compositor(session: session, layout: displayLayout, configDir: configDir,
                                     socketName: socketName,
                                     privilegedSocket: privilegedSocket)
     } catch {
@@ -385,19 +420,32 @@ case "run":
     }
     // A person may change the theme while we run (P14.2).
     compositor.watchAppearance()
-    guard let wlrOutput = session.outputs.first else { die("no output") }
-    let output = WlrootsOutput(wlrOutput, session: session)
-    let scene = SurfaceScene(compositor: compositor, outputWidth: width,
-                             outputHeight: height)
-    defer { scene.release() }
-    output.scene = scene
     let seat: Seat
     do {
-        seat = try Seat(compositor: compositor, outputWidth: width, outputHeight: height)
+        seat = try Seat(compositor: compositor)
     } catch {
         die("\(error)")
     }
-    output.seat = seat
+    // **One rig per output** (P14.7a): its own scene (its rectangle of the
+    // layout), its own metronome (its own vblank) and its own recorder — so
+    // each display keeps its own frame contract, whatever the others' rates.
+    var outs: [WlrootsOutput] = []
+    var scenes: [SurfaceScene] = []
+    var recorders: [FlightRecorder] = []
+    for d in displayLayout.displays {
+        guard let w = session.output(named: d.name) else { die("no output \(d.name)") }
+        let o = WlrootsOutput(w, session: session)
+        let sc = SurfaceScene(compositor: compositor, display: d)
+        o.scene = sc
+        o.seat = seat
+        outs.append(o)
+        scenes.append(sc)
+        recorders.append(FlightRecorder(capacity: recorderCapacity(frames: frames)))
+    }
+    guard !outs.isEmpty else { die("no output") }
+    defer { for sc in scenes { sc.release() } }
+    let output = outs[0], scene = scenes[0]
+    var conductor = Conductor(outputs: outs, sinks: scenes)
 
     // Announce the socket on stdout BEFORE the loop starts, so a harness can
     // read one line and know where to point a client. Anything else means
@@ -410,15 +458,14 @@ case "run":
     emit(2, "undertow: \(output.name) \(output.width)x\(output.height) @ \(hz)Hz"
          + " (period \(us(output.periodHintNs)))"
          + " on \(compositor.socketName)")
+    // Every display and where it sits, on stdout for a harness (P14.7a).
+    out("outputs \(compositor.layout.summary)")
 
     // An unbounded session cannot size its recorder from a frame count, and must
     // not grow one without bound either — so it keeps a rolling window. Ten
     // seconds at 240Hz is enough to answer "what just happened" and small enough
     // to forget.
-    let recorder = FlightRecorder(capacity: recorderCapacity(frames: frames))
-    var metronome = Metronome<WlrootsOutput, SurfaceScene>(periodHintNs: output.periodHintNs)
-    var o = output
-    var s = scene
+    let recorder = recorders[0]
 
     // Warm up into a throwaway recorder, as bench-metronome does: the margin
     // control loop discovers the backend's commit latency by missing once or
@@ -427,9 +474,9 @@ case "run":
     // load. With this, a healthy baseline is exactly zero missed frames, which
     // is what lets the C2 gate be a flat zero rather than a tolerance.
     let warmup = unbounded ? 240 : min(max(frames / 8, 16), 240)
-    let warmupRecorder = FlightRecorder(capacity: warmup)
-    for _ in 0..<warmup {
-        metronome.step(output: &o, sink: &s, recorder: warmupRecorder)
+    let warmupRecorders = outs.map { _ in FlightRecorder(capacity: warmup) }
+    for _ in 0..<(warmup * outs.count) {
+        conductor.serveNext(recorders: warmupRecorders)
         compositor.endFrame()
     }
     // The early capture fires a few frames after the FIRST window maps, not at
@@ -515,8 +562,9 @@ case "run":
             reportedDrags = seat.dragsStarted
             out("drags-started=\(reportedDrags)")
         }
-        drawn += 1
-        metronome.step(output: &o, sink: &s, recorder: recorder)
+        // --frames counts the main display's frames; the others keep their own
+        // pace in between.
+        if conductor.serveNext(recorders: recorders) { drawn += 1 }
         // Release clients to draw the next frame, and push the events out.
         // Without this a client renders once and waits for ever.
         compositor.endFrame()
@@ -544,7 +592,15 @@ case "run":
     if let path = capturePath {
         guard output.capturePPM(path: path) else { die("could not write \(path)") }
         emit(2, "undertow: wrote \(path)")
+        // Every other display beside it: `shot.ppm` → `shot.HEADLESS-2.ppm`.
+        for o in outs.dropFirst() {
+            let base = path.hasSuffix(".ppm") ? String(path.dropLast(4)) : path
+            let p = "\(base).\(o.name).ppm"
+            guard o.capturePPM(path: p) else { die("could not write \(p)") }
+            emit(2, "undertow: wrote \(p)")
+        }
     }
+    let metronome = conductor.metronomes[0]
 
     let windows = compositor.mappedToplevels.count
     out("windows=\(windows)")
@@ -590,6 +646,10 @@ case "run":
     // workspace-rect check is the assertion that the shell composed.
     let u = compositor.usableArea
     out("usable=\(u.x),\(u.y),\(u.width)x\(u.height)")
+    for d in compositor.layout.displays.dropFirst() {
+        let a = compositor.usable[d.name] ?? d.rect
+        out("usable \(d.name)=\(a.x),\(a.y),\(a.width)x\(a.height)")
+    }
     out("wake-late-p99-us=\(recorder.percentile(99) { $0.wakeLateNs } / 1000)")
     out("composite-p99-us=\(recorder.costPercentileNs(99) / 1000)")
     out("margin-us=\(metronome.margin.marginNs / 1000)")
@@ -622,6 +682,11 @@ case "run":
     // And **whose** clock, which `vblank-source` alone cannot say: a nested
     // backend reports real timestamps from the host's vblank (§2.48).
     out("backend=\(output.backendName)")
+    // Every other display's own contract: its misses against its own vblank.
+    for (i, o) in outs.enumerated().dropFirst() {
+        out("output \(o.name) missed=\(recorders[i].missedCount) of \(recorders[i].retained)"
+            + " period-us=\(o.periodHintNs / 1000) composite-p99-us=\(recorders[i].costPercentileNs(99) / 1000)")
+    }
     var runFailed = false
     if let want = assertLayers, compositor.mappedLayers.count != want {
         emit(2, "FAIL: expected \(want) mapped layer surface(s),"

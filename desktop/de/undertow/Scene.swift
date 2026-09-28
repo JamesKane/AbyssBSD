@@ -35,15 +35,21 @@ public final class SurfaceScene: FrameSink {
     private let source: UnsafeMutableBufferPointer<UnsafeMutablePointer<wlr_surface>?>
 
     private unowned let compositor: Compositor
-    private let outputWidth: Int32
-    private let outputHeight: Int32
+    /// The rectangle of the layout this scene shows — its output's (P14.7a).
+    /// Everything latched is in layout coordinates; the cull and the draw
+    /// subtract the origin, and the draw multiplies by the scale.
+    public private(set) var originX: Int32, originY: Int32
+    public private(set) var outputWidth: Int32, outputHeight: Int32
+    public private(set) var scale: Double
 
-    public init(compositor: Compositor, outputWidth: Int32, outputHeight: Int32,
-                capacity: Int = 256) {
+    public init(compositor: Compositor, display: DisplayBox, capacity: Int = 256) {
         self.compositor = compositor
         self.capacity = capacity
-        self.outputWidth = outputWidth
-        self.outputHeight = outputHeight
+        self.originX = display.x
+        self.originY = display.y
+        self.outputWidth = display.width
+        self.outputHeight = display.height
+        self.scale = display.scale
         let t = UnsafeMutablePointer<UnsafeMutablePointer<wlr_texture>?>.allocate(capacity: capacity)
         t.initialize(repeating: nil, count: capacity)
         texture = UnsafeMutableBufferPointer(start: t, count: capacity)
@@ -56,6 +62,13 @@ public final class SurfaceScene: FrameSink {
             return UnsafeMutableBufferPointer(start: p, count: capacity)
         }
         x = ints(); y = ints(); w = ints(); h = ints()
+    }
+
+    /// The output moved, changed mode or scale (P14.7b applies these).
+    public func show(_ display: DisplayBox) {
+        originX = display.x; originY = display.y
+        outputWidth = display.width; outputHeight = display.height
+        scale = display.scale
     }
 
     public func release() {
@@ -117,10 +130,11 @@ public final class SurfaceScene: FrameSink {
         var painted: Int32 = 0
         var area: Int64 = 0
         for i in 0..<count {
-            let r = x[i] &+ w[i], b = y[i] &+ h[i]
-            if r <= 0 || b <= 0 || x[i] >= outputWidth || y[i] >= outputHeight { continue }
-            let cw = min(r, outputWidth) &- max(x[i], 0)
-            let ch = min(b, outputHeight) &- max(y[i], 0)
+            let lx = x[i] &- originX, ly = y[i] &- originY
+            let r = lx &+ w[i], b = ly &+ h[i]
+            if r <= 0 || b <= 0 || lx >= outputWidth || ly >= outputHeight { continue }
+            let cw = min(r, outputWidth) &- max(lx, 0)
+            let ch = min(b, outputHeight) &- max(ly, 0)
             if cw > 0 && ch > 0 {
                 area &+= Int64(cw) &* Int64(ch)
                 painted &+= 1
@@ -193,9 +207,30 @@ public final class SurfaceScene: FrameSink {
     /// captured to a file and presented to an output from one latch.
     /// `pass` is a `wlr_render_pass`, which wlroots keeps opaque — so Swift
     /// imports it as `OpaquePointer` and it needs no conversion at all.
+    /// A layout rectangle, in this output's buffer pixels.
+    @inline(__always)
+    public func box(_ lx: Int32, _ ly: Int32, _ lw: Int32, _ lh: Int32) -> wlr_box {
+        let r = SurfaceScene.project(Rect(x: lx, y: ly, width: lw, height: lh),
+                                     originX: originX, originY: originY, scale: scale)
+        return wlr_box(x: r.x, y: r.y, width: r.width, height: r.height)
+    }
+
+    /// A layout rectangle in an output's buffer pixels, as a pure function.
+    /// Edges are rounded, not the size, so two rectangles that touch in the
+    /// layout still touch on a scaled output.
+    @inline(__always)
+    public static func project(_ r: Rect, originX: Int32, originY: Int32, scale: Double) -> Rect {
+        if scale == 1 { return Rect(x: r.x &- originX, y: r.y &- originY, width: r.width, height: r.height) }
+        let x0 = (Double(r.x &- originX) * scale).rounded(), y0 = (Double(r.y &- originY) * scale).rounded()
+        let x1 = (Double(r.x &- originX &+ r.width) * scale).rounded()
+        let y1 = (Double(r.y &- originY &+ r.height) * scale).rounded()
+        return Rect(x: Int32(x0), y: Int32(y0), width: Int32(x1 - x0), height: Int32(y1 - y0))
+    }
+
     public func render(into pass: OpaquePointer, background: wlr_render_color) {
         var bg = wlr_render_rect_options()
-        bg.box = wlr_box(x: 0, y: 0, width: outputWidth, height: outputHeight)
+        bg.box = wlr_box(x: 0, y: 0, width: Int32((Double(outputWidth) * scale).rounded()),
+                         height: Int32((Double(outputHeight) * scale).rounded()))
         bg.color = background
         bg.blend_mode = WLR_RENDER_BLEND_MODE_NONE
         wlr_render_pass_add_rect(pass, &bg)
@@ -204,7 +239,7 @@ public final class SurfaceScene: FrameSink {
             guard let tex = texture[i] else { continue }
             var opts = wlr_render_texture_options()
             opts.texture = tex
-            opts.dst_box = wlr_box(x: x[i], y: y[i], width: w[i], height: h[i])
+            opts.dst_box = box(x[i], y[i], w[i], h[i])
             opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
             wlr_render_pass_add_texture(pass, &opts)
         }

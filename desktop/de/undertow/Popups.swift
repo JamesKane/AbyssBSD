@@ -132,8 +132,11 @@ public final class PopupSurface {
     /// hanging off the screen.
     private func unconstrain() {
         guard let f = parentFrame else { return }
-        var box = wlr_box(x: -(f.x &+ f.gx), y: -(f.y &+ f.gy),
-                          width: compositor.outputWidth, height: compositor.outputHeight)
+        // The display the parent is on, in the parent's coordinates.
+        let d = compositor.layout.display(for: Rect(x: f.x, y: f.y, width: 1, height: 1))
+            ?? DisplayBox(name: "", x: 0, y: 0, width: 0, height: 0)
+        var box = wlr_box(x: d.x &- (f.x &+ f.gx), y: d.y &- (f.y &+ f.gy),
+                          width: d.width, height: d.height)
         wlr_xdg_popup_unconstrain_from_box(popup, &box)
     }
 }

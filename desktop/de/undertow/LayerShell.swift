@@ -224,4 +224,6 @@ public final class LayerSurface {
 
     public var width: Int32 { surface.pointee.current.width }
     public var height: Int32 { surface.pointee.current.height }
+    /// The output it is on, by name ("" before one is assigned).
+    public var outputName: String { handle.pointee.output.map { String(cString: $0.pointee.name) } ?? "" }
 }

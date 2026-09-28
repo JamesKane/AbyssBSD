@@ -91,8 +91,8 @@ public final class Seat {
     public private(set) var cursorY: Double = 0
     public var cursorVisible = true
 
-    private let outputWidth: Double
-    private let outputHeight: Double
+    // The desktop is the compositor's layout (P14.7a): the pointer ranges over
+    // every display, and never into the gaps between them.
     private var capabilities: UInt32 = 0
 
     /// The toplevel with keyboard focus, if any.
@@ -111,12 +111,12 @@ public final class Seat {
     var dragIcon: UnsafeMutablePointer<wlr_drag_icon>?
     var dragIconDestroy: UnsafeMutablePointer<tw_listener>?
 
-    public init(compositor: Compositor, outputWidth: Int32, outputHeight: Int32) throws {
+    public init(compositor: Compositor) throws {
         self.compositor = compositor
-        self.outputWidth = Double(outputWidth)
-        self.outputHeight = Double(outputHeight)
-        cursorX = Double(outputWidth) / 2
-        cursorY = Double(outputHeight) / 2
+        // The middle of the main display.
+        let m = compositor.layout.main ?? DisplayBox(name: "", x: 0, y: 0, width: 2, height: 2)
+        cursorX = Double(m.x) + Double(m.width) / 2
+        cursorY = Double(m.y) + Double(m.height) / 2
 
         guard let s = wlr_seat_create(compositor.session.display, "seat0") else {
             throw BackendError.noGlobals("wl_seat")
@@ -273,7 +273,10 @@ public final class Seat {
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_motion_absolute_event.self)
             // The protocol reports 0…1 across the output.
-            s.moveCursor(to: e.pointee.x * s.outputWidth, e.pointee.y * s.outputHeight,
+            // Absolute devices (a tablet, the virtual pointer) span the whole
+            // layout, as wlr_cursor maps them.
+            let b = s.compositor.layout.bounds
+            s.moveCursor(to: Double(b.x) + e.pointee.x * Double(b.width), Double(b.y) + e.pointee.y * Double(b.height),
                          timeMsec: e.pointee.time_msec)
         }, me))
         group.append(tw_listen(&pointer.pointee.events.motion, { ctx, data in
@@ -604,8 +607,7 @@ public final class Seat {
     }
 
     private func moveCursor(to x: Double, _ y: Double, timeMsec: UInt32) {
-        (cursorX, cursorY) = PointerRouting.clamp(x, y, width: outputWidth,
-                                                  height: outputHeight)
+        (cursorX, cursorY) = compositor.layout.clamp(x, y)
 
         // A drag in progress owns the pointer: the window follows it, and no
         // client is told about the motion. That is what stops a drag from
@@ -911,20 +913,21 @@ public final class Seat {
     /// the thing being dragged follows the pointer and the pointer stays on top
     /// of it. Without this a drag is invisible — the file moves, and nothing on
     /// screen ever showed it moving, which reads as the desktop ignoring you.
-    public func renderCursor(into pass: OpaquePointer) {
+    /// Drawn by every output; one whose rectangle the cursor is not in draws
+    /// it off its own edge, which costs a clipped rect and nothing else.
+    public func renderCursor(into pass: OpaquePointer, scene: SurfaceScene) {
         if let icon = dragIcon, let surface = icon.pointee.surface,
            let tex = wlr_surface_get_texture(surface) {
             var opts = wlr_render_texture_options()
             opts.texture = tex
-            opts.dst_box = wlr_box(x: Int32(cursorX), y: Int32(cursorY),
-                                   width: surface.pointee.current.width,
-                                   height: surface.pointee.current.height)
+            opts.dst_box = scene.box(Int32(cursorX), Int32(cursorY),
+                                     surface.pointee.current.width, surface.pointee.current.height)
             opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
             wlr_render_pass_add_texture(pass, &opts)
         }
         guard cursorVisible else { return }
         var opts = wlr_render_rect_options()
-        opts.box = wlr_box(x: Int32(cursorX), y: Int32(cursorY), width: 10, height: 16)
+        opts.box = scene.box(Int32(cursorX), Int32(cursorY), 10, 16)
         opts.color = wlr_render_color(r: 1, g: 1, b: 1, a: 1)
         opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
         wlr_render_pass_add_rect(pass, &opts)

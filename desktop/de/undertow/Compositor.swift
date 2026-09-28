@@ -289,10 +289,23 @@ public final class Compositor {
     fileprivate var foreignManager: UnsafeMutablePointer<wlr_foreign_toplevel_manager_v1>?
     /// Shell surfaces (wallpaper, menu bar, Dock, toasts), in creation order.
     public private(set) var layers: [LayerSurface] = []
-    /// The area a toplevel may use — the output minus every exclusive zone.
-    /// A layer surface never appears in a window tree, so this rectangle is the
-    /// only observable proof that the menu bar reserved its strip (§2.26).
-    public private(set) var usableArea = Rect(x: 0, y: 0, width: 0, height: 0)
+    /// The area a toplevel may use on each display — the display minus every
+    /// exclusive zone on it. A layer surface never appears in a window tree, so
+    /// these rectangles are the only observable proof that the menu bar
+    /// reserved its strip (§2.26).
+    public private(set) var usable: [String: Rect] = [:]
+    /// The main display's usable area — where new windows open, and what a
+    /// desktop of one output has always reported.
+    public var usableArea: Rect {
+        guard let m = layout.main else { return Rect(x: 0, y: 0, width: 0, height: 0) }
+        return usable[m.name] ?? m.rect
+    }
+    /// The usable area of the display a point is on (or the nearest one).
+    public func usableArea(at x: Double, _ y: Double) -> Rect {
+        let (cx, cy) = layout.clamp(x, y)
+        guard let d = layout.display(at: cx, cy) else { return usableArea }
+        return usable[d.name] ?? d.rect
+    }
     /// How many surfaces clients have created since start-up.
     public private(set) var surfacesCreated = 0
     /// Every live toplevel, in creation order. Small by construction; a desktop
@@ -301,8 +314,11 @@ public final class Compositor {
     /// The `WAYLAND_DISPLAY` value a client should connect to.
     public private(set) var socketName: String = ""
 
-    let outputWidth: Int32
-    let outputHeight: Int32
+    /// Where every output sits (P14.7a). The first is the main display.
+    public private(set) var layout: DisplayLayout
+    /// wlroots' own copy of the same arrangement, which `xdg-output` reports to
+    /// clients (and, in P14.7b, output management reads).
+    public private(set) var outputLayout: UnsafeMutablePointer<wlr_output_layout>?
     private var cascade: Int32 = 0
     /// Remembered window positions, persisted through PoolConfig.
     public let places: WindowPlaces
@@ -401,16 +417,24 @@ public final class Compositor {
     /// The socket privileged clients connect to, if one was asked for.
     public private(set) var privilegedSocketName: String?
 
-    public init(session: WlrootsSession, outputWidth: Int32, outputHeight: Int32,
+    public init(session: WlrootsSession, layout: DisplayLayout,
                 configDir: String? = nil, socketName: String? = nil,
                 privilegedSocket: String? = nil) throws {
         self.places = WindowPlaces(configDir: configDir)
         self.configDir = configDir
         self.session = session
-        self.outputWidth = outputWidth
-        self.outputHeight = outputHeight
-        // Until a layer surface reserves anything, the whole output is usable.
-        self.usableArea = Rect(x: 0, y: 0, width: outputWidth, height: outputHeight)
+        self.layout = layout
+        // Until a layer surface reserves anything, each whole display is usable.
+        for d in layout.displays { usable[d.name] = d.rect }
+        // The same arrangement, told to wlroots, and through it to clients.
+        outputLayout = wlr_output_layout_create(session.display)
+        if let ol = outputLayout {
+            for d in layout.displays {
+                guard let o = session.output(named: d.name) else { continue }
+                _ = wlr_output_layout_add(ol, o, d.x, d.y)
+            }
+            _ = wlr_xdg_output_manager_v1_create(session.display, ol)
+        }
 
         // wl_compositor at version 6, plus the pieces a real client expects to
         // find. `wlr_compositor_create` with a renderer is what makes wlroots
@@ -505,9 +529,13 @@ public final class Compositor {
             guard let ctx, let data else { return }
             let c = Unmanaged<Compositor>.fromOpaque(ctx).takeUnretainedValue()
             let l = data.assumingMemoryBound(to: wlr_layer_surface_v1.self)
-            // A layer surface may name no output; it is ours to choose, and we
-            // have exactly one.
-            if l.pointee.output == nil { l.pointee.output = c.session.outputs.first }
+            // A layer surface may name no output; it is ours to choose, and the
+            // choice is the main display — where a Mac keeps its menu bar and
+            // Dock. A wallpaper that wants every display asks for each.
+            if l.pointee.output == nil {
+                l.pointee.output = c.layout.main.flatMap { c.session.output(named: $0.name) }
+                    ?? c.session.outputs.first
+            }
             c.layers.append(LayerSurface(l, compositor: c))
         }, me)
 
@@ -603,10 +631,13 @@ public final class Compositor {
     /// and why the desktop (BACKGROUND, zone -1) paints the whole output
     /// underneath regardless.
     public func arrangeLayers() {
-        let full = Rect(x: 0, y: 0, width: outputWidth, height: outputHeight)
-        var usable = full
-        for l in layers.sorted(by: { $0.layer < $1.layer }) {
-            let (rect, remaining) = LayerArrange.place(l.request, in: usable, output: full)
+        // Each display arranges its own surfaces, against its own rectangle in
+        // the layout: the menu bar's strip comes off the main display only.
+        for d in layout.displays {
+            let full = d.rect
+            var area = full
+            for l in layers.sorted(by: { $0.layer < $1.layer }) where l.outputName == d.name {
+                let (rect, remaining) = LayerArrange.place(l.request, in: area, output: full)
             // **Configure EVERY surface, reserve for MAPPED ones only.**
             //
             // An unmapped surface still needs its configure — that is how it
@@ -616,10 +647,17 @@ public final class Compositor {
             // surface that had been initialized but had not yet mapped was
             // skipped, never configured, and so could never map. The menu bar
             // came up and simply never appeared.
-            l.configure(rect)
-            if l.mapped { usable = remaining }
+                l.configure(rect)
+                if l.mapped { area = remaining }
+            }
+            usable[d.name] = area
         }
-        usableArea = usable
+        // A surface on an output that is not in the layout (it went away) is
+        // still owed a configure; it gets the main display's box, and reserves
+        // nothing.
+        for l in layers where layout.named(l.outputName) == nil {
+            if let m = layout.main { l.configure(LayerArrange.place(l.request, in: m.rect, output: m.rect).rect) }
+        }
     }
 
     /// Layer surfaces with something to show, in paint order (bottom to top).
@@ -709,12 +747,16 @@ public final class Compositor {
     /// Follow the pointer. Called from the seat on every motion.
     func updateMove(cursorX: Double, cursorY: Double) {
         guard let t = moving else { return }
-        // Clamp so a window can never be dragged entirely off the output and
+        // Clamp so a window can never be dragged entirely off the desktop and
         // become unreachable — a compositor's job, and one a client could not do
-        // for itself even if it wanted to.
-        let maxX = Double(outputWidth - 1), maxY = Double(outputHeight - 1)
-        t.x = Int32(min(max(cursorX - moveDX, Double(1 - t.width)), maxX))
-        t.y = Int32(min(max(cursorY - moveDY, Double(usableArea.y)), maxY))
+        // for itself even if it wanted to. Across the whole layout, so a window
+        // can be dragged to another display; and never above the usable top of
+        // the display the pointer is on, so a title bar cannot hide under that
+        // display's menu bar.
+        let b = layout.bounds
+        let maxX = Double(b.x + b.width - 1), maxY = Double(b.y + b.height - 1)
+        t.x = Int32(min(max(cursorX - moveDX, Double(b.x + 1 - t.width)), maxX))
+        t.y = Int32(min(max(cursorY - moveDY, Double(usableArea(at: cursorX, cursorY).y)), maxY))
     }
 
     /// End the drag: snap if it ended on an edge, then remember where it landed.
@@ -727,12 +769,12 @@ public final class Compositor {
         if let seat,
            let zone = WindowSnap.zone(cursorX: Int32(seat.cursorX),
                                       cursorY: Int32(seat.cursorY),
-                                      area: usableArea) {
+                                      area: usableArea(at: seat.cursorX, seat.cursorY)) {
             // Where it was before the snap, so unmaximizing gives it back.
             if t.restoreBox == nil {
                 t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
             }
-            let box = WindowSnap.rect(for: zone, in: usableArea)
+            let box = WindowSnap.rect(for: zone, in: usableArea(at: seat.cursorX, seat.cursorY))
             t.x = box.x
             t.y = box.y
             _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, Int32(max(0, box.width)),
@@ -882,7 +924,9 @@ public final class Compositor {
             // surface to the usable area would put the title bar we drew above
             // it off the top of the screen — a window you cannot move, close or
             // un-zoom, because every control is off-screen.
-            var box = usableArea
+            // The usable area of the display the window is on.
+            let d = layout.display(for: Rect(x: t.x, y: t.y, width: t.width, height: t.height))
+            var box = d.flatMap { usable[$0.name] } ?? usableArea
             if t.decorated {
                 let inset = FrameMetrics.surface(forFrameAt: box.x, box.y)
                 box = Rect(x: inset.x, y: inset.y,
@@ -935,9 +979,12 @@ public final class Compositor {
             if t.restoreBox == nil {
                 t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
             }
-            t.x = 0
-            t.y = 0
-            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, outputWidth, outputHeight)
+            // The whole display the window is on — not the layout.
+            let d = layout.display(for: Rect(x: t.x, y: t.y, width: t.width, height: t.height))
+                ?? DisplayBox(name: "", x: 0, y: 0, width: 0, height: 0)
+            t.x = d.x
+            t.y = d.y
+            _ = wlr_xdg_toplevel_set_size(t.xdgToplevel, d.width, d.height)
         } else if let box = t.restoreBox {
             t.x = box.x
             t.y = box.y

@@ -238,6 +238,10 @@ if [ "$live" -eq 1 ]; then
   # follows mixer(8), shows mute, and its slider sets vol; absent on Linux.
   echo "== the volume item =="
   sh "$root/abyss/tests/live-menubar-volume.sh" >/dev/null
+  # Several outputs (P14.7a): three headless displays with gaps and negative
+  # coordinates; a window dragged across and drawn there; every contract kept.
+  echo "== several displays =="
+  sh "$root/abyss/tests/live-displays.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

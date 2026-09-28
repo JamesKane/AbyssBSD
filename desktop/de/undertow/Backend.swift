@@ -137,10 +137,16 @@ public final class WlrootsSession {
     /// the build VM has no `/dev/dri`. Phase 4 is where that stops being enough
     /// — a machine somebody installs onto has a screen, and nothing above this
     /// line has ever driven one.
+    public struct HeadlessSize: Equatable, Sendable {
+        public var width, height: Int32
+        public init(_ width: Int32, _ height: Int32) { self.width = width; self.height = height }
+    }
+
     public enum Kind: Equatable, Sendable {
         /// Outputs we invent, at a size we choose. Deterministic, CPU-readable,
         /// and the only thing the build VM can do.
-        case headless(count: Int, width: Int32, height: Int32, refreshMilliHz: Int32)
+        /// One per size, in order (P14.7a: several, for Displays).
+        case headless(sizes: [HeadlessSize], refreshMilliHz: Int32)
         /// Whatever this machine actually is: **DRM/KMS on metal**, a nested
         /// Wayland window inside another compositor, X11 under one. wlroots
         /// decides, from the environment and from what it can open — which is
@@ -159,7 +165,7 @@ public final class WlrootsSession {
 
     public convenience init(headlessOutputs outputCount: Int, width: Int32, height: Int32,
                             refreshMilliHz: Int32, verbose: Bool = false) throws {
-        try self.init(.headless(count: outputCount, width: width, height: height,
+        try self.init(.headless(sizes: Array(repeating: HeadlessSize(width, height), count: outputCount),
                                 refreshMilliHz: refreshMilliHz), verbose: verbose)
     }
 
@@ -227,8 +233,8 @@ public final class WlrootsSession {
             wl_display_destroy(d)
             throw BackendError.noBackend
         }
-        if case .headless(let count, let w, let h, _) = kind {
-            for _ in 0..<count { _ = wlr_headless_add_output(b, UInt32(w), UInt32(h)) }
+        if case .headless(let sizes, _) = kind {
+            for sz in sizes { _ = wlr_headless_add_output(b, UInt32(sz.width), UInt32(sz.height)) }
         } else {
             // A real backend announces its own outputs, and may take a moment
             // about it: DRM enumerates connectors and the Wayland backend has to
@@ -246,7 +252,7 @@ public final class WlrootsSession {
 
         // Give every output a renderer and a mode. Until this commit lands, an
         // output has no buffers and `begin_render_pass` has nothing to draw to.
-        for out in outputs {
+        for (index, out) in outputs.enumerated() {
             guard wlr_output_init_render(out, allocator, renderer) else {
                 throw BackendError.renderInitFailed
             }
@@ -254,8 +260,9 @@ public final class WlrootsSession {
             wlr_output_state_init(&state)
             wlr_output_state_set_enabled(&state, true)
             switch kind {
-            case .headless(_, let w, let h, let hz):
-                wlr_output_state_set_custom_mode(&state, w, h, hz)
+            case .headless(let sizes, let hz):
+                let sz = sizes[min(index, sizes.count - 1)]
+                wlr_output_state_set_custom_mode(&state, sz.width, sz.height, hz)
             case .auto:
                 // **Take the display's own preferred mode.** A custom mode is
                 // what a headless output needs and what a real one is entitled
@@ -287,6 +294,11 @@ public final class WlrootsSession {
     deinit {
         tw_listener_free(newOutputListener)
         wl_display_destroy(display)
+    }
+
+    /// The output called `name`, if the backend has one.
+    public func output(named name: String) -> UnsafeMutablePointer<wlr_output>? {
+        outputs.first { String(cString: $0.pointee.name) == name }
     }
 
     /// Dispatch pending events without blocking.
@@ -385,7 +397,7 @@ public final class WlrootsOutput: Output {
         guard let pass = wlr_output_begin_render_pass(output, &state, nil) else { return }
         if let scene {
             scene.render(into: pass, background: background)
-            seat?.renderCursor(into: pass)
+            seat?.renderCursor(into: pass, scene: scene)
             scene.markPresented(on: output)
         } else {
             // No scene: the P6.2 test pattern, an animated rect. Enough to prove
@@ -495,8 +507,15 @@ public final class WlrootsOutput: Output {
             return false
         }
         if let scene {
+            // **Latch now, not the last frame's list.** Its textures belong to
+            // buffers a client may have replaced since — with several outputs,
+            // every other output's wait dispatches client commits in between —
+            // and rendering a freed texture aborted undertow in pixman
+            // ("wlr_texture_is_pixman"), on the second output's capture only.
+            let now = Mono.now()
+            _ = scene.latchAndComposite(now: now, target: now)
             scene.render(into: pass, background: background)
-            seat?.renderCursor(into: pass)
+            seat?.renderCursor(into: pass, scene: scene)
         }
         guard wlr_render_pass_submit(pass) else {
             fail("the render pass failed")

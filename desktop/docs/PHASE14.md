@@ -317,6 +317,33 @@ sets mode and scale. Saved per user (`displays.ini`), applied by `undertow` at
 start. Tested on both platforms against multiple headless outputs — the one
 settings pane with no FreeBSD-only half.
 
+**Re-scoped 2026-09-28 (the person chose the split).** The table above says
+`undertow` "tracks outputs and never arranges them"; in fact it drove exactly
+**one** — `session.outputs.first`, one metronome, one width and height through
+the compositor, the scene and the seat. So P14.7 grows from M to L:
+
+- **P14.7a — undertow drives N outputs.** A layout (`DisplayLayout`, and
+  `wlr_output_layout` for `xdg-output`), windows/layers/popups/pointer in layout
+  coordinates, one scene per output at its origin and scale, and **one
+  metronome per output on an earliest-deadline-first loop** (`Conductor`) so
+  each keeps its own contract at its own rate. The menu bar and Dock go on the
+  main display, as on a Mac. **Done** — see below.
+- **P14.7b — `wlr-output-management-v1`**, `displays.ini` applied at start,
+  checked with a third-party client where one installs.
+- **P14.7c — the Displays pane**: arrange by dragging, mode and scale.
+
+**P14.7a done** (2026-09-28): 632 unit tests on both (DisplaysTests: the layout's
+arithmetic, gaps and negative coordinates; the projection at an origin and a
+fractional scale; a 60 Hz and a 144 Hz synthetic output each served at its own
+rate; three equal outputs none starved). `live-displays.sh` on both, eight runs
+green in the guest: three headless outputs with a gap and negative
+coordinates; `xdg-output` tells a client the layout; a window dragged across is
+drawn on the other output (its capture) and gone from the first; the pointer is
+kept out of the gaps; the menu bar reserves only the main display; each output
+within the non-RT miss budget. Two scheduling versions starved an output and
+one capture read freed textures (HANDOFF §2.79). Every existing undertow live
+test re-run green on both.
+
 **P14.8 — Energy.** Display sleep and system sleep delays (the values Phase
 16's idle will read), `powerd` on/off and its mode, and the battery where
 `Vents` finds one. Deliberately thin: suspend itself is Phase 16's.

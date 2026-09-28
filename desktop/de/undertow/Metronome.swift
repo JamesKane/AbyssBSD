@@ -187,6 +187,11 @@ public struct Metronome<O: Output, S: FrameSink> {
     public private(set) var predictor: VblankPredictor
     public private(set) var margin: LatchMargin
     public private(set) var seq: UInt64 = 0
+    /// The vblank the last frame was fired for. A plan never aims at it again:
+    /// one frame per vblank per output. On one output the margin already
+    /// guaranteed that; with several sharing a loop it is what stops the first
+    /// output winning every tie while the others starve (P14.7a).
+    public private(set) var lastTarget: UInt64 = 0
     public let config: Config
 
     public init(periodHintNs: UInt64, config: Config = Config()) {
@@ -210,17 +215,20 @@ public struct Metronome<O: Output, S: FrameSink> {
 
     /// One frame. This is the loop body the contract is about; read it as the
     /// executable form of DESKTOP.md §3.1.
-    @inline(__always)
-    public mutating func step(output: inout O, sink: inout S, recorder: FlightRecorder) {
-        var r = FrameRecord()
-        r.seq = seq
-        seq &+= 1
+    /// The next frame this output should make: the vblank it aims at and the
+    /// moment it must wake to make it. Pure bookkeeping — no waiting — so a
+    /// loop driving several outputs can ask each and serve the earliest
+    /// (P14.7a); `step` is plan, wait, fire for one.
+    public struct Plan: Sendable {
+        public let entry: UInt64
+        public let target: UInt64
+        public let deadline: UInt64
+        public let marginNs: UInt64
+    }
 
-        // 1. Where is the next vblank, and how early must we wake for it?
-        let entry = Mono.now()
+    public func plan(now entry: UInt64) -> Plan {
         let m = margin.marginNs
         var target = predictor.predictNext(after: entry)
-
         // Aim at a vblank we can still MAKE. If the next one is closer than our
         // own margin, compositing for it is guaranteed to be late — and the
         // first version of this loop did exactly that, which is a runaway: the
@@ -230,18 +238,35 @@ public struct Metronome<O: Output, S: FrameSink> {
         // "fall to the next period" — defined and logged, never a stall.
         if !config.freeRun {
             let period = predictor.periodNs
-            while target < entry &+ m { target &+= period }
+            while target < entry &+ m || target <= lastTarget { target &+= period }
         }
-        r.predictedVblank = target
-        r.marginNs = m
+        let deadline = target > m ? target &- m : entry
+        return Plan(entry: entry, target: target, deadline: config.freeRun ? entry : deadline, marginNs: m)
+    }
 
+    @inline(__always)
+    public mutating func step(output: inout O, sink: inout S, recorder: FlightRecorder) {
+        // 1. Where is the next vblank, and how early must we wake for it?
+        let p = plan(now: Mono.now())
         // 2. Wait until the deadline. Absolute, so the wait cannot drift — and
         //    through the output, because a real backend has an event loop to
         //    service while it waits (Backend.swift).
-        let deadline = target > m ? target &- m : entry
         if !config.freeRun {
-            output.waitUntil(deadlineNs: deadline)
+            output.waitUntil(deadlineNs: p.deadline)
         }
+        fire(p, output: &output, sink: &sink, recorder: recorder)
+    }
+
+    /// Steps 3–5 of a frame planned by `plan`, once its deadline has come.
+    @inline(__always)
+    public mutating func fire(_ p: Plan, output: inout O, sink: inout S, recorder: FlightRecorder) {
+        var r = FrameRecord()
+        r.seq = seq
+        seq &+= 1
+        let m = p.marginNs, target = p.target, deadline = p.deadline
+        lastTarget = target
+        r.predictedVblank = target
+        r.marginNs = m
 
         // 3. Drain flip feedback BEFORE latching, so the prediction that
         //    produced this frame is the freshest one available.
@@ -279,5 +304,57 @@ public struct Metronome<O: Output, S: FrameSink> {
 
         margin.observe(costNs: r.costNs, wakeLateNs: wakeLate, missed: r.missed)
         recorder.record(r)
+    }
+}
+
+/// Several outputs on one loop, each with its own metronome (PHASE14 P14.7a).
+///
+/// **Earliest deadline first.** Each output holds one *pending* frame — its
+/// plan — until that frame is fired; the loop waits for the earliest pending
+/// deadline and fires every output whose deadline has come, each from its own
+/// plan, in deadline order. Only an output that has just fired plans again. So
+/// each keeps its own vblank, margin and misses, and a 144 Hz panel beside a
+/// 60 Hz one is served at 144 and 60, not both at one of them. On one output
+/// this is exactly `Metronome.step`.
+///
+/// Two versions got this wrong, and both starved an output for ever:
+/// - **Re-planning every output on every pass.** The third of three equal
+///   outputs, planned again after the first two fired, found its target a few
+///   microseconds inside its margin and aimed at the next vblank — every time.
+/// - The same, one level down: an output whose predictor has seen no flip yet
+///   aims "one period from now", and re-planned before it ever fired, that
+///   target receded as fast as time passed. A 60 Hz output beside a 144 Hz one
+///   made no frames at all. A plan that is kept until it fires cannot recede.
+public struct Conductor<O: Output, S: FrameSink> {
+    public var outputs: [O]
+    public var sinks: [S]
+    public private(set) var metronomes: [Metronome<O, S>]
+    private var pending: [Metronome<O, S>.Plan?]
+
+    public init(outputs: [O], sinks: [S], config: Metronome<O, S>.Config = .init()) {
+        precondition(!outputs.isEmpty && outputs.count == sinks.count)
+        self.outputs = outputs
+        self.sinks = sinks
+        self.metronomes = outputs.map { Metronome(periodHintNs: $0.periodHintNs, config: config) }
+        self.pending = Array(repeating: nil, count: outputs.count)
+    }
+
+    /// Wait for the earliest deadline and serve every output due. Returns
+    /// whether output 0 — the main display — was among them.
+    @discardableResult
+    public mutating func serveNext(recorders: [FlightRecorder]) -> Bool {
+        let now = Mono.now()
+        for i in pending.indices where pending[i] == nil { pending[i] = metronomes[i].plan(now: now) }
+        let order = pending.indices.sorted { pending[$0]!.deadline < pending[$1]!.deadline }
+        outputs[order[0]].waitUntil(deadlineNs: pending[order[0]]!.deadline)
+        var servedMain = false
+        for (k, i) in order.enumerated() {
+            guard let p = pending[i] else { continue }
+            if k > 0 && p.deadline > Mono.now() { break }
+            metronomes[i].fire(p, output: &outputs[i], sink: &sinks[i], recorder: recorders[i])
+            pending[i] = nil
+            if i == 0 { servedMain = true }
+        }
+        return servedMain
     }
 }

@@ -688,6 +688,24 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.79 A capture that renders the last frame's latch renders freed textures
+(P14.7a. Found only with a second output, and only in the guest, 2 runs in 6.)
+
+`capturePPM` drew the scene's *last latch*: the texture pointers gathered at
+that output's last frame. With one output nothing ran between that latch and
+the capture. With several, other outputs' waits dispatch the event loop in
+between; a client commits a new buffer, wlroots frees the old texture, and the
+capture hands pixman a dangling pointer: `Assertion failed:
+(wlr_texture_is_pixman(wlr_texture))`, exit 134, on the *second* output's
+capture. A capture now latches afresh first.
+
+The rule: **a latch is valid until the event loop next runs**, not until the
+next frame. Anything that renders a latch later — a capture, a screenshot, a
+thumbnail — latches again. The first guest failure read as a flaky test ("the
+cursor ended in a gap: " with nothing after the colon) because the test did not
+say that undertow had died; it does now (exit status and stderr), and that is
+what turned a flake into an assertion message.
+
 ### 2.78 libmixer sets the *selected* control, and looking one up does not select it
 (P14.6a. Found by comparing with mixer(8), not with our own reader.)
 

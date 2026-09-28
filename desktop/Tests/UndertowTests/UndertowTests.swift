@@ -404,7 +404,7 @@ final class UndertowTests: XCTestCase {
     func testTheCompositorOffersASocketAndTheGlobalsAClientNeeds() throws {
         let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
                                          refreshMilliHz: 60_000)
-        let compositor = try Compositor(session: session, outputWidth: 320, outputHeight: 240)
+        let compositor = try Compositor(session: session, layout: oneDisplay(session, 320, 240))
         XCTAssertFalse(compositor.socketName.isEmpty)
         XCTAssertTrue(compositor.socketName.hasPrefix("wayland-"))
         XCTAssertEqual(compositor.toplevels.count, 0)
@@ -440,9 +440,9 @@ final class UndertowTests: XCTestCase {
     /// first would run a compositor with no menus.
     func testEveryCompositorHasItsOwnMenuGlobalsAndStartsWithNothingFocused() throws {
         let s1 = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
-        let c1 = try Compositor(session: s1, outputWidth: 64, outputHeight: 48)
+        let c1 = try Compositor(session: s1, layout: oneDisplay(s1, 64, 48))
         let s2 = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
-        let c2 = try Compositor(session: s2, outputWidth: 64, outputHeight: 48)
+        let c2 = try Compositor(session: s2, layout: oneDisplay(s2, 64, 48))
         XCTAssertNotNil(c1.menus)
         XCTAssertNotNil(c2.menus)
         XCTAssertEqual(c2.menus?.current, .nothing)
@@ -458,7 +458,7 @@ final class UndertowTests: XCTestCase {
         let path = dir + "/" + name
         do {
             let s = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
-            let c = try Compositor(session: s, outputWidth: 64, outputHeight: 48,
+            let c = try Compositor(session: s, layout: oneDisplay(s, 64, 48),
                                    privilegedSocket: name)
             XCTAssertEqual(c.privilegedSocketName, name)
             var st = stat()
@@ -474,7 +474,7 @@ final class UndertowTests: XCTestCase {
     /// compositor that quietly has no bar.
     func testAnImpossiblePrivilegedSocketIsAnError() throws {
         let s = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48, refreshMilliHz: 60_000)
-        XCTAssertThrowsError(try Compositor(session: s, outputWidth: 64, outputHeight: 48,
+        XCTAssertThrowsError(try Compositor(session: s, layout: oneDisplay(s, 64, 48),
                                             privilegedSocket: "/nonexistent-dir/priv")) { e in
             XCTAssertTrue("\(e)".contains("/nonexistent-dir/priv"), "\(e)")
         }
@@ -484,8 +484,8 @@ final class UndertowTests: XCTestCase {
     func testAnEmptySceneCompositesTheDesktopAndNothingElse() throws {
         let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
                                          refreshMilliHz: 60_000)
-        let compositor = try Compositor(session: session, outputWidth: 320, outputHeight: 240)
-        let scene = SurfaceScene(compositor: compositor, outputWidth: 320, outputHeight: 240)
+        let compositor = try Compositor(session: session, layout: oneDisplay(session, 320, 240))
+        let scene = SurfaceScene(compositor: compositor, display: compositor.layout.main!)
         defer { scene.release() }
         let stats = scene.latchAndComposite(now: 0, target: 0)
         XCTAssertEqual(stats.surfaces, 0)
@@ -502,9 +502,9 @@ final class UndertowTests: XCTestCase {
     func testTheCompositorCapturesTheFrameItDrew() throws {
         let session = try WlrootsSession(headlessOutputs: 1, width: 64, height: 48,
                                          refreshMilliHz: 60_000)
-        let compositor = try Compositor(session: session, outputWidth: 64, outputHeight: 48)
+        let compositor = try Compositor(session: session, layout: oneDisplay(session, 64, 48))
         let output = WlrootsOutput(session.outputs[0], session: session)
-        let scene = SurfaceScene(compositor: compositor, outputWidth: 64, outputHeight: 48)
+        let scene = SurfaceScene(compositor: compositor, display: compositor.layout.main!)
         defer { scene.release() }
         output.scene = scene
 
@@ -900,8 +900,8 @@ final class UndertowTests: XCTestCase {
     func testTheSeatOffersTheVirtualInputGlobals() throws {
         let session = try WlrootsSession(headlessOutputs: 1, width: 320, height: 240,
                                          refreshMilliHz: 60_000)
-        let compositor = try Compositor(session: session, outputWidth: 320, outputHeight: 240)
-        let seat = try Seat(compositor: compositor, outputWidth: 320, outputHeight: 240)
+        let compositor = try Compositor(session: session, layout: oneDisplay(session, 320, 240))
+        let seat = try Seat(compositor: compositor)
         // The cursor starts centred, so a capture with no input is still sane.
         XCTAssertEqual(seat.cursorX, 160)
         XCTAssertEqual(seat.cursorY, 120)
@@ -1117,4 +1117,11 @@ final class UndertowTests: XCTestCase {
         XCTAssertEqual((flip.vblank &- t0) % period, 0,
                        "the display landed a frame off its own grid — it is echoing the target")
     }
+}
+
+
+/// One display: the session's first output, at the origin, at the size given.
+func oneDisplay(_ session: WlrootsSession, _ w: Int32, _ h: Int32) -> DisplayLayout {
+    let name = session.outputs.first.map { String(cString: $0.pointee.name) } ?? "HEADLESS-1"
+    return DisplayLayout([DisplayBox(name: name, x: 0, y: 0, width: w, height: h)])
 }
