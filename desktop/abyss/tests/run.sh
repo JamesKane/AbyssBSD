@@ -208,6 +208,10 @@ if [ "$live" -eq 1 ]; then
   # The GPU half skips, loudly, where there is no render node (U.3).
   echo "== GPU clients =="
   sh "$root/abyss/tests/live-gpu.sh" >/dev/null
+  # presentation-time: every frame a client commits is reported shown, on
+  # CLOCK_MONOTONIC, at the display's period — 60 Hz and 144 Hz (U.4).
+  echo "== presentation time =="
+  sh "$root/abyss/tests/live-present.sh" >/dev/null
   # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
   # and its menu vocabulary, on our own compositor.
   echo "== System Preferences =="

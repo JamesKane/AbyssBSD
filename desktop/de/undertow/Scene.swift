@@ -30,6 +30,9 @@ public final class SurfaceScene: FrameSink {
     // into these, never grows them.
     private let texture: UnsafeMutableBufferPointer<UnsafeMutablePointer<wlr_texture>?>
     private let x, y, w, h: UnsafeMutableBufferPointer<Int32>
+    /// The client surface each entry was drawn from — nil for the frames the
+    /// compositor draws itself. What presentation-time is told was on screen.
+    private let source: UnsafeMutableBufferPointer<UnsafeMutablePointer<wlr_surface>?>
 
     private unowned let compositor: Compositor
     private let outputWidth: Int32
@@ -44,6 +47,9 @@ public final class SurfaceScene: FrameSink {
         let t = UnsafeMutablePointer<UnsafeMutablePointer<wlr_texture>?>.allocate(capacity: capacity)
         t.initialize(repeating: nil, count: capacity)
         texture = UnsafeMutableBufferPointer(start: t, count: capacity)
+        let s = UnsafeMutablePointer<UnsafeMutablePointer<wlr_surface>?>.allocate(capacity: capacity)
+        s.initialize(repeating: nil, count: capacity)
+        source = UnsafeMutableBufferPointer(start: s, count: capacity)
         func ints() -> UnsafeMutableBufferPointer<Int32> {
             let p = UnsafeMutablePointer<Int32>.allocate(capacity: capacity)
             p.initialize(repeating: 0, count: capacity)
@@ -55,6 +61,8 @@ public final class SurfaceScene: FrameSink {
     public func release() {
         texture.baseAddress?.deinitialize(count: capacity)
         texture.baseAddress?.deallocate()
+        source.baseAddress?.deinitialize(count: capacity)
+        source.baseAddress?.deallocate()
         for b in [x, y, w, h] {
             b.baseAddress?.deinitialize(count: capacity)
             b.baseAddress?.deallocate()
@@ -91,6 +99,7 @@ public final class SurfaceScene: FrameSink {
                 let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
                                              width: t.width, height: t.height)
                 texture[count] = frame
+                source[count] = nil                 // ours: nobody to tell
                 x[count] = box.x; y[count] = box.y
                 w[count] = box.w; h[count] = box.h
                 count += 1
@@ -156,9 +165,24 @@ public final class SurfaceScene: FrameSink {
     private func addLeaf(_ s: UnsafeMutablePointer<wlr_surface>, _ sx: Int32, _ sy: Int32) {
         guard count < capacity, let tex = wlr_surface_get_texture(s) else { return }
         texture[count] = tex
+        source[count] = s
         x[count] = walkX &+ sx; y[count] = walkY &+ sy
         w[count] = s.pointee.current.width; h[count] = s.pointee.current.height
         count += 1
+    }
+
+    /// Tell presentation-time which client surfaces this frame shows (U.4).
+    ///
+    /// wlroots then answers each surface's `wp_presentation_feedback` from the
+    /// output's own present event — the real time the frame reached the
+    /// display, the refresh period, the sequence and whether the clock was the
+    /// hardware's. It cannot know which surfaces were in a frame unless the
+    /// compositor says; `wlr_scene` would, ours must. Called before the output
+    /// commit, for exactly the entries latched.
+    public func markPresented(on output: UnsafeMutablePointer<wlr_output>) {
+        for i in 0..<count {
+            if let s = source[i] { wlr_presentation_surface_textured_on_output(s, output) }
+        }
     }
 
     /// Draw the latched scene into a wlroots render pass.

@@ -386,6 +386,7 @@ public final class WlrootsOutput: Output {
         if let scene {
             scene.render(into: pass, background: background)
             seat?.renderCursor(into: pass)
+            scene.markPresented(on: output)
         } else {
             // No scene: the P6.2 test pattern, an animated rect. Enough to prove
             // buffers are allocated, rendered into, committed and presented —

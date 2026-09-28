@@ -28,7 +28,7 @@ or more.
 | ~~U.1~~ | ✅ **2026-09-28. Subsurfaces drawn, framed and hit-tested** (HANDOFF §2.71, `live-subsurface.sh`) | M | | done, both platforms |
 | ~~U.2~~ | ✅ **2026-09-28. A minimised window keeps a clock** — 1 Hz, xdg-shell v6 `suspended`, `wm_capabilities` (HANDOFF §2.72, `live-hidden.sh`) | S | | done, both platforms |
 | ~~U.3~~ | ✅ **2026-09-28. `linux-dmabuf`** — GL and Vulkan clients on the AMD iGPU under headless GLES2 `undertow`; screenshots fixed for 24-bit renderers (HANDOFF §2.73, `live-gpu.sh`) | M | | done; GPU half on Linux, pixman half both platforms |
-| U.4 | **presentation-time, and honest frame-done timestamps** — the time the frame was shown, which `Metronome` already has (F-101) | S–M | cheap once U.2 is in that code; gives P4.5's metal sitting a client-side view too | a client reads feedback; headless timestamps match the recorder |
+| ~~U.4~~ | ✅ **2026-09-28. presentation-time** — feedback from the output's present event; frame-done keeps the current time, as the protocol says (HANDOFF §2.74, `live-present.sh`) | S–M | | done, both platforms |
 | P14.2 | **Appearance, and a live theme switch** (PHASE14) — was next | M | unchanged from PHASE14 | pixels after the switch; a GTK app sees `color-scheme` change |
 | P14.3 | **`abyss-settings`**, the privileged half | M | every pane after it writes through it | `abyss-settingsctl` plans; refuses on Linux |
 | P14.4 | **Network, wired** | M | | nested bhyve: set, reboot, held |
@@ -84,7 +84,11 @@ One developer medium (`live-image.sh --ssh-key`), one boot, all of it:
    (probably absent — linuxkpi's MMU notifier is empty), and whether the
    12700KF's P/E cores are visible from userland (they should not be).
 5. **The Wi-Fi question** (PHASE14 §6.5) answers itself on that boot.
-6. **P4.5's second row** is still owed — the Mac Pro or a constrained run on
+6. **Presentation feedback on a real display**: headless reports `refresh 0`
+   and no flags, honestly; under DRM a client should see the mode's refresh and
+   `HW_CLOCK`/`VSYNC` (HANDOFF §2.74). The `present` client from
+   `live-present.sh`, run against the metal session, says which.
+7. **P4.5's second row** is still owed — the Mac Pro or a constrained run on
    this machine (PHASE4 §6.7). Not this sitting unless it is cheap.
 
 ---

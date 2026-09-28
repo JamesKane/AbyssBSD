@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**557 unit tests, 33 live modes and 37 live scripts, green on Linux and FreeBSD,
+**557 unit tests, 33 live modes and 38 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -666,6 +666,34 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.74 Only the compositor knows when a frame was shown — so say so
+(U.4, 2026-09-28. F-101; API-STUDY §2.)
+
+`undertow` measures every present for its own frame contract and told no
+client any of it, so every toolkit estimated. `wp_presentation` is now offered
+(`wlr_presentation_create`), and wlroots answers each surface's feedback from
+the output's own present event — **but only for surfaces it is told were in
+the frame.** `wlr_scene` does that telling; ours now does it too
+(`SurfaceScene.markPresented`, before the output commit, from the same latched
+entries the frame was drawn from). Remove that one call and every feedback is
+*discarded*: 0 presented of 361 in the test. The global alone would have been
+§2.58 again.
+
+What headless reports is honest and thin: the time is the commit's, `refresh`
+is 0 and no flags are set — "unknown", in the protocol's words, because there is
+no hardware clock. On DRM wlroots fills the refresh from the mode and sets
+`HW_CLOCK`/`VSYNC`; that is a metal check (BACKLOG §3).
+
+**Scope, corrected:** the backlog also promised frame-done callbacks stamped
+with the time the frame was shown. The core protocol says a frame callback
+carries the *current* time, and the time of presentation is precisely what
+`wp_presentation` is for — so frame-done stays as it is.
+
+**A portability trap in the test, not the code:** clock ids are per platform —
+`CLOCK_MONOTONIC` is 1 on Linux and 4 on FreeBSD — so the client reports
+whether the clock named *is* `CLOCK_MONOTONIC` rather than printing a number
+for the script to compare. Both platforms green.
 
 ### 2.73 The harness renders in software, and so it never met a GPU client
 (U.3, 2026-09-28. API-STUDY §1.2.)
@@ -2634,6 +2662,7 @@ or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 | `live-undertow-places.sh` | a window reopens where it was dragged, in a **new session** (§2.22's debt) |
 | `live-subsurface.sh` | a window made of **subsurfaces** — over, outside and below its parent — drawn, framed and routed to the leaf (§2.71) |
 | `live-hidden.sh` | a **minimized** window keeps a slow frame clock (not none, not 60 Hz), is told it is `suspended`, and what the compositor can do (§2.72) |
+| `live-present.sh` | **presentation-time**: every frame a client commits is reported shown, on `CLOCK_MONOTONIC`, at the display's period — 60 and 144 Hz (§2.74) |
 | `live-gpu.sh` | **GPU clients through `linux-dmabuf`**: pixman says it offers none; on a render node, es2gears and vkcube run on it and are seen moving; a screenshot on every renderer is the right colour. GPU half skips without a render node (§2.73) |
 | `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |
 

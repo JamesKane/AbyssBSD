@@ -98,7 +98,9 @@ Fixed 2026-09-28: one callback a second while minimised, xdg-shell v6 with
 (`live-hidden.sh`, HANDOFF §2.72).
 
 Also: the frame-done timestamp is `clock_gettime` at send, not the time the frame
-was presented. `Metronome` already has the real one (U.4).
+was presented. That is what the core protocol asks of a frame callback; the
+time of presentation now goes where it belongs, `wp_presentation` (U.4,
+HANDOFF §2.74).
 
 ### 1.5 Structural: every protocol costs twice
 
@@ -124,7 +126,7 @@ Wayland clients); a reader's own count agreed within ±1 for 11 of 19 and within
 | (subsurfaces) | 11 | **yes** (U.1) | Firefox's page was not drawn (§1.3) | done |
 | xdg-activation-v1 | 11 | yes | — | done |
 | xdg-decoration | 10 | yes (server-side) | — | done |
-| presentation-time | 3 | no | toolkits estimate present times (F-101); we hold the real ones | P1 |
+| presentation-time | 3 | **yes** (U.4) | toolkits estimated present times (F-101) | done |
 | text-input-v3 + input-method-v2 | 9 | no | no input method, so no CJK | P1 |
 | relative-pointer, pointer-constraints | 9, 9 | no | games and Blender cannot lock the pointer | P1 |
 | cursor-shape-v1 | 10 | no | clients draw their own cursor; ours is a rectangle (`Seat.swift:16`) | P1, with the cursor theme |

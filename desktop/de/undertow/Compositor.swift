@@ -408,6 +408,16 @@ public final class Compositor {
         // offered: it needs the scene to wait on each buffer's acquire point
         // and signal its release, which ours does not do yet (BACKLOG U.3b);
         // advertising it without that would be §2.58 again.
+        // **presentation-time** (U.4): when a client's frame actually reached
+        // the display, per surface, from the output's present event. Without
+        // it every toolkit estimates (F-101: mpv, Chromium, GTK, Zed and LÖVE
+        // each build an estimator) — while undertow already holds the answer
+        // for its own frame contract. wlroots sends the feedback; the scene
+        // says which surfaces each frame contained (`markPresented`).
+        guard wlr_presentation_create(session.display, session.backend, 1) != nil else {
+            throw BackendError.noGlobals("wp_presentation")
+        }
+
         if let _ = wlr_linux_dmabuf_v1_create_with_renderer(session.display, 5, session.renderer) {
             dmabufOffered = true
             Compositor.log("linux-dmabuf offered — GPU clients can hand us their buffers")
