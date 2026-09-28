@@ -19,6 +19,7 @@
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "wlr-screencopy-unstable-v1-client-protocol.h"
+#include "wlr-output-management-unstable-v1-client-protocol.h"
 #include "abyss-menu-v1-client-protocol.h"
 #include "abyss-window-v1-client-protocol.h"
 
@@ -176,6 +177,10 @@ void *aw_screencopy_capture_output(void *manager, int32_t overlay_cursor,
 void aw_screencopy_frame_copy(void *frame, void *buffer);
 void aw_screencopy_frame_destroy(void *frame);
 void aw_screencopy_manager_destroy(void *manager);
+
+/* wlr-output-management (P14.7b): bound here because the interface table's
+ * address is what libwayland needs, and Swift cannot take a C constant's. */
+void *aw_bind_output_manager(void *registry, uint32_t name, uint32_t version);
 
 /* Seat. */
 void *aw_seat_get_pointer(void *seat);

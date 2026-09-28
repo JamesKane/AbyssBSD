@@ -226,6 +226,14 @@ public struct Metronome<O: Output, S: FrameSink> {
         public let marginNs: UInt64
     }
 
+    /// The output's refresh rate changed (a new mode, P14.7b): start the
+    /// prediction again from the new period. The margin is kept — the cost of
+    /// a composite did not change with the mode.
+    public mutating func retune(periodHintNs: UInt64) {
+        predictor = VblankPredictor(periodHintNs: periodHintNs)
+        lastTarget = 0
+    }
+
     public func plan(now entry: UInt64) -> Plan {
         let m = margin.marginNs
         var target = predictor.predictNext(after: entry)
@@ -337,6 +345,13 @@ public struct Conductor<O: Output, S: FrameSink> {
         self.sinks = sinks
         self.metronomes = outputs.map { Metronome(periodHintNs: $0.periodHintNs, config: config) }
         self.pending = Array(repeating: nil, count: outputs.count)
+    }
+
+    /// Output `i` has a new refresh rate: its pending frame is dropped and its
+    /// metronome starts again from the new period.
+    public mutating func retune(_ i: Int, periodHintNs: UInt64) {
+        metronomes[i].retune(periodHintNs: periodHintNs)
+        pending[i] = nil
     }
 
     /// Wait for the earliest deadline and serve every output due. Returns

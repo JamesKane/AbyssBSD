@@ -278,7 +278,7 @@ public extension Display {
     /// read_events discipline as `run()` (HANDOFF §2.14) — including that a
     /// successful `prepare_read` must always be resolved, or the next iteration
     /// deadlocks — but bounded, and without touching the caller's run loop.
-    private func pump(until done: () -> Bool, timeoutMs: Int) -> Bool {
+    func pump(until done: () -> Bool, timeoutMs: Int) -> Bool {
         let wlfd = wl_display_get_fd(display)
         let deadline = nowMs() + Int64(timeoutMs)
         while !done() {

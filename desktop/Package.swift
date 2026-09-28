@@ -62,6 +62,7 @@ let package = Package(
                       "wlr-foreign-toplevel-management-unstable-v1-protocol.c",
                       "xdg-activation-v1-protocol.c",
                       "wlr-screencopy-unstable-v1-protocol.c",
+                      "wlr-output-management-unstable-v1-protocol.c",
                       "cwayland_shm.c", "cwayland_shim.c"],
             publicHeadersPath: "include"
         ),
@@ -403,6 +404,12 @@ let package = Package(
             name: "abyssgrab",
             dependencies: ["Surface", "CCairo"],
             path: "de/abyssgrab"
+        ),
+        // The displays, through wlr-output-management-v1 (PHASE14 P14.7b).
+        .executableTarget(
+            name: "abyss-displays",
+            dependencies: ["Surface"],
+            path: "de/displaysctl"
         ),
         // notify-send, brokerless: through the portal, as a jailed app would.
         .executableTarget(

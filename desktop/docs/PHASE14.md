@@ -332,6 +332,24 @@ the compositor, the scene and the seat. So P14.7 grows from M to L:
   checked with a third-party client where one installs.
 - **P14.7c — the Displays pane**: arrange by dragging, mode and scale.
 
+**P14.7b done** (2026-09-28). The protocol XML is vendored from upstream
+wlr-protocols (v4, matching wlroots 0.19). **undertow**: `OutputManagement`
+checks a configuration (`DisplaysConfig.problems`: no overlaps, a scale in 0.5
+to 4, every display named and on, since turning one off is refused, not yet
+built), test-commits every output, and only then commits. It re-aims each
+output's scene, retunes a metronome whose refresh changed, rescues windows
+left on no display, keeps the pointer on one, writes `displays.ini` and
+republishes. At start it applies `displays.ini`, or places the outputs side by
+side if the file no longer fits. **The toolkit**: `DisplayConfigurator`, the
+client, synchronous like Screencopy, and **`abyss-displays list|test|apply`**
+on top of it. Verified: 636 unit tests on both; `live-displays-config.sh` on
+both (listed; a test changes nothing; an overlap refused with the reason; an
+apply at a new mode and scale 2 on which the protocol, the layout and
+xdg-output agree, drawn at its mode to the far corner; a stranded window
+rescued; `displays.ini` kept and applied by a new undertow); and in the guest
+**`wlr-randr`**, someone else's client, lists, applies scale 1.5 and is refused
+an overlap. Four fault injections, each seen to fail.
+
 **P14.7a done** (2026-09-28): 632 unit tests on both (DisplaysTests: the layout's
 arithmetic, gaps and negative coordinates; the projection at an origin and a
 fractional scale; a 60 Hz and a 144 Hz synthetic output each served at its own

@@ -606,6 +606,11 @@ public final class Seat {
         return (s, sx, sy)
     }
 
+    /// The displays moved (P14.7b): keep the pointer on one of them.
+    func keepCursorOnDisplays() {
+        (cursorX, cursorY) = compositor.layout.clamp(cursorX, cursorY)
+    }
+
     private func moveCursor(to x: Double, _ y: Double, timeMsec: UInt32) {
         (cursorX, cursorY) = compositor.layout.clamp(x, y)
 

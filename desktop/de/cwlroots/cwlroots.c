@@ -27,3 +27,14 @@ void tw_listener_free(struct tw_listener *l) {
 
 void tw_log_silence(void) { wlr_log_init(WLR_SILENT, NULL); }
 void tw_log_verbose(void) { wlr_log_init(WLR_DEBUG, NULL); }
+
+size_t tw_output_config_heads(struct wlr_output_configuration_v1 *config,
+                              struct wlr_output_configuration_head_v1 **out, size_t max) {
+    size_t n = 0;
+    struct wlr_output_configuration_head_v1 *h;
+    wl_list_for_each(h, &config->heads, link) {
+        if (n < max) out[n] = h;
+        n++;
+    }
+    return n;
+}

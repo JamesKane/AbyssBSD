@@ -242,6 +242,10 @@ if [ "$live" -eq 1 ]; then
   # coordinates; a window dragged across and drawn there; every contract kept.
   echo "== several displays =="
   sh "$root/abyss/tests/live-displays.sh" >/dev/null
+  # And rearranged by protocol (P14.7b): wlr-output-management-v1, tested,
+  # refused, applied at a new mode and scale 2, kept in displays.ini.
+  echo "== displays, rearranged =="
+  sh "$root/abyss/tests/live-displays-config.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

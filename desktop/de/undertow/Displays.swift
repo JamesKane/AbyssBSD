@@ -117,3 +117,73 @@ public struct DisplayLayout: Equatable, Sendable {
         }.joined(separator: "; ")
     }
 }
+
+// MARK: - A configuration: what a client asks for, and what is kept (P14.7b)
+
+/// One output as a configuration names it: its mode in buffer pixels, where
+/// it sits, and its scale. The layout box follows from these: mode ÷ scale.
+public struct DisplaySetting: Equatable, Sendable {
+    public var name: String
+    public var enabled: Bool = true
+    public var modeWidth: Int32, modeHeight: Int32
+    /// mHz; 0 for "whatever the output has".
+    public var refreshMilliHz: Int32 = 0
+    public var x: Int32, y: Int32
+    public var scale: Double = 1
+
+    public init(name: String, enabled: Bool = true, modeWidth: Int32, modeHeight: Int32,
+                refreshMilliHz: Int32 = 0, x: Int32, y: Int32, scale: Double = 1) {
+        self.name = name; self.enabled = enabled; self.modeWidth = modeWidth; self.modeHeight = modeHeight
+        self.refreshMilliHz = refreshMilliHz; self.x = x; self.y = y; self.scale = scale
+    }
+
+    /// Where it sits in the layout: its mode in layout units.
+    public var box: DisplayBox {
+        DisplayBox(name: name, x: x, y: y,
+                   width: Int32((Double(modeWidth) / scale).rounded()),
+                   height: Int32((Double(modeHeight) / scale).rounded()), scale: scale)
+    }
+}
+
+public enum DisplaysConfig {
+    /// Why a requested arrangement is refused, in words; empty when it may be
+    /// applied. Checked before anything is committed: a configuration is
+    /// applied whole or not at all, as the protocol says.
+    public static func problems(_ settings: [DisplaySetting]) -> [String] {
+        var out: [String] = []
+        if settings.isEmpty { return ["a configuration must name at least one display"] }
+        for s in settings where !s.enabled {
+            // Turning a display off means taking it out of the run loop and
+            // moving everything on it; not yet.
+            out.append("\(s.name): turning a display off is not supported yet")
+        }
+        for s in settings {
+            if !(0.5...4).contains(s.scale) { out.append("\(s.name): a scale of \(s.scale) is outside 0.5 to 4") }
+            if s.modeWidth <= 0 || s.modeHeight <= 0 { out.append("\(s.name): \(s.modeWidth)x\(s.modeHeight) is not a mode") }
+        }
+        let boxes = settings.filter(\.enabled).map(\.box)
+        for (i, a) in boxes.enumerated() {
+            for b in boxes[(i + 1)...] {
+                let w = min(a.x + a.width, b.x + b.width) - max(a.x, b.x)
+                let h = min(a.y + a.height, b.y + b.height) - max(a.y, b.y)
+                if w > 0 && h > 0 { out.append("\(a.name) and \(b.name) overlap") }
+            }
+        }
+        return out
+    }
+
+    /// `x,y WxH@mHz scale` — one line per display in displays.ini.
+    public static func format(_ s: DisplaySetting) -> String {
+        "\(s.x),\(s.y) \(s.modeWidth)x\(s.modeHeight)@\(s.refreshMilliHz) \(s.scale == s.scale.rounded() ? String(Int(s.scale)) : String(s.scale))"
+    }
+
+    public static func parse(name: String, _ value: String) -> DisplaySetting? {
+        let f = value.split(separator: " ")
+        guard f.count == 3 else { return nil }
+        let xy = f[0].split(separator: ","), mr = f[1].split(separator: "@"), wh = mr.first?.split(separator: "x") ?? []
+        guard xy.count == 2, let x = Int32(xy[0]), let y = Int32(xy[1]),
+              mr.count == 2, wh.count == 2, let w = Int32(wh[0]), let h = Int32(wh[1]), let r = Int32(mr[1]),
+              let scale = Double(f[2]) else { return nil }
+        return DisplaySetting(name: name, modeWidth: w, modeHeight: h, refreshMilliHz: r, x: x, y: y, scale: scale)
+    }
+}

@@ -95,3 +95,48 @@ final class DisplaysTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(recs[2].retained, 55)
     }
 }
+
+/// What a client may ask for, and what is kept (P14.7b).
+final class DisplaysConfigTests: XCTestCase {
+    private func s(_ n: String, _ w: Int32, _ h: Int32, _ x: Int32, _ y: Int32, scale: Double = 1, on: Bool = true) -> DisplaySetting {
+        DisplaySetting(name: n, enabled: on, modeWidth: w, modeHeight: h, refreshMilliHz: 60000, x: x, y: y, scale: scale)
+    }
+
+    func testALayoutBoxIsTheModeOverTheScale() {
+        XCTAssertEqual(s("B", 1024, 768, -1024, 100, scale: 2).box, DisplayBox(name: "B", x: -1024, y: 100, width: 512, height: 384, scale: 2))
+        XCTAssertEqual(s("B", 1920, 1080, 0, 0, scale: 1.5).box.width, 1280)
+    }
+
+    func testARequestIsRefusedInWords() {
+        XCTAssertEqual(DisplaysConfig.problems([s("A", 640, 480, 0, 0), s("B", 800, 600, 640, 0)]), [], "side by side")
+        XCTAssertEqual(DisplaysConfig.problems([s("A", 640, 480, 0, 0), s("B", 800, 600, 600, 0)]), ["A and B overlap"])
+        XCTAssertEqual(DisplaysConfig.problems([s("A", 640, 480, 0, 0), s("B", 1600, 1200, 640, 0, scale: 2)]), [],
+                       "a scaled display's box is its mode over its scale")
+        XCTAssertEqual(DisplaysConfig.problems([s("A", 640, 480, 0, 0), s("B", 800, 600, 640, 0, on: false)]),
+                       ["B: turning a display off is not supported yet"])
+        XCTAssertEqual(DisplaysConfig.problems([s("A", 640, 480, 0, 0, scale: 8)]), ["A: a scale of 8.0 is outside 0.5 to 4"])
+        XCTAssertEqual(DisplaysConfig.problems([s("A", 0, 480, 0, 0)]), ["A: 0x480 is not a mode"])
+        XCTAssertEqual(DisplaysConfig.problems([]), ["a configuration must name at least one display"])
+    }
+
+    func testALineOfDisplaysIniRoundTrips() {
+        for d in [s("HEADLESS-2", 1024, 768, -1024, 100, scale: 2), s("DP-1", 2560, 1440, 0, 0, scale: 1.25)] {
+            XCTAssertEqual(DisplaysConfig.parse(name: d.name, DisplaysConfig.format(d)), d)
+        }
+        XCTAssertEqual(DisplaysConfig.format(s("A", 640, 480, 0, 0)), "0,0 640x480@60000 1")
+        XCTAssertNil(DisplaysConfig.parse(name: "A", "0,0 640x480 1"), "a line without a refresh is not one")
+        XCTAssertNil(DisplaysConfig.parse(name: "A", "garbage"))
+    }
+
+    func testDisplaysIniIsStoredAndLoaded() throws {
+        var t = Array("/tmp/abyss-displays-XXXXXX".utf8CString)
+        let dir = t.withUnsafeMutableBufferPointer { String(cString: mkdtemp($0.baseAddress!)) }
+        let a = s("HEADLESS-1", 640, 480, 0, 0), b = s("HEADLESS-2", 1024, 768, -1024, 100, scale: 2)
+        try DisplaysFile.store([a, b], configDir: dir)
+        XCTAssertEqual(DisplaysFile.load(configDir: dir), ["HEADLESS-1": a, "HEADLESS-2": b])
+        try DisplaysFile.store([s("HEADLESS-2", 800, 600, 640, 0)], configDir: dir)
+        XCTAssertEqual(DisplaysFile.load(configDir: dir)["HEADLESS-2"]?.x, 640, "a later apply replaces the line")
+        XCTAssertEqual(DisplaysFile.load(configDir: dir)["HEADLESS-1"], a, "and leaves the others")
+        XCTAssertEqual(DisplaysFile.load(configDir: dir + "/none"), [:])
+    }
+}

@@ -324,6 +324,11 @@ void aw_screencopy_frame_destroy(void *frame) {
     zwlr_screencopy_frame_v1_destroy((struct zwlr_screencopy_frame_v1 *)frame);
 }
 
+void *aw_bind_output_manager(void *registry, uint32_t name, uint32_t version) {
+    return wl_registry_bind((struct wl_registry *)registry, name,
+                            &zwlr_output_manager_v1_interface, version);
+}
+
 void aw_screencopy_manager_destroy(void *manager) {
     zwlr_screencopy_manager_v1_destroy((struct zwlr_screencopy_manager_v1 *)manager);
 }

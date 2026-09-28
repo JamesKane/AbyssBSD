@@ -319,6 +319,9 @@ public final class Compositor {
     /// wlroots' own copy of the same arrangement, which `xdg-output` reports to
     /// clients (and, in P14.7b, output management reads).
     public private(set) var outputLayout: UnsafeMutablePointer<wlr_output_layout>?
+    /// wlr-output-management-v1 (P14.7b): how the Displays pane, wlr-randr and
+    /// kanshi rearrange the outputs.
+    public private(set) var outputManagement: OutputManagement?
     private var cascade: Int32 = 0
     /// Remembered window positions, persisted through PoolConfig.
     public let places: WindowPlaces
@@ -551,6 +554,7 @@ public final class Compositor {
 
         // Who draws the frames (P9.6). Always us — see `Decorations`.
         decorations = Decorations(compositor: self, session: session)
+        outputManagement = OutputManagement(compositor: self)
 
         if let activation = wlr_xdg_activation_v1_create(session.display) {
             activationListener = tw_listen(&activation.pointee.events.request_activate,
@@ -658,6 +662,35 @@ public final class Compositor {
         for l in layers where layout.named(l.outputName) == nil {
             if let m = layout.main { l.configure(LayerArrange.place(l.request, in: m.rect, output: m.rect).rect) }
         }
+    }
+
+    /// A new arrangement of the displays (P14.7b): positions, sizes, scales.
+    ///
+    /// wlroots' layout follows (xdg-output tells clients); layers are arranged
+    /// again on each display; a window left on **no** display — its display
+    /// moved away from under it — is brought to the main one, since a window
+    /// nobody can see or reach is lost; and the pointer is kept on a display.
+    public func applyLayout(_ new: DisplayLayout) {
+        layout = new
+        if let ol = outputLayout {
+            for d in new.displays {
+                if let o = session.output(named: d.name) { _ = wlr_output_layout_add(ol, o, d.x, d.y) }
+            }
+        }
+        for d in new.displays where usable[d.name] == nil { usable[d.name] = d.rect }
+        arrangeLayers()
+        let area = usableArea
+        for t in toplevels where t.mapped {
+            let r = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
+            let onSome = new.displays.contains { d in
+                min(r.x + r.width, d.x + d.width) > max(r.x, d.x) && min(r.y + r.height, d.y + d.height) > max(r.y, d.y)
+            }
+            guard !onSome else { continue }
+            t.x = area.x + max(0, (area.width - t.width) / 2)
+            t.y = area.y + max(0, (area.height - t.height) / 2)
+            Compositor.log("window \(t.placeKey ?? "?") was on no display; brought to the main one")
+        }
+        seat?.keepCursorOnDisplays()
     }
 
     /// Layer surfaces with something to show, in paint order (bottom to top).

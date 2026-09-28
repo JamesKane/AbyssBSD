@@ -66,6 +66,7 @@
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_shm.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -99,6 +100,13 @@ struct tw_listener *tw_listen(struct wl_signal *signal, tw_notify_fn fn, void *c
 /* Detach and free. Safe on NULL. MUST be called before the context it carries
  * is released, or the compositor delivers events into freed memory. */
 void tw_listener_free(struct tw_listener *l);
+
+/* The heads of an output configuration a client sent (P14.7b), into `out`, at
+ * most `max`; returns how many there are. wl_list_for_each is a macro Swift
+ * cannot call, and walking `link` by hand from Swift is offset arithmetic on a
+ * struct wlroots may reorder. */
+size_t tw_output_config_heads(struct wlr_output_configuration_v1 *config,
+                              struct wlr_output_configuration_head_v1 **out, size_t max);
 
 /*
  * Menus (PHASE10.md P10.3) — the first protocols undertow implements itself.

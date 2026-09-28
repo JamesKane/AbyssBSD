@@ -329,7 +329,7 @@ public final class WlrootsOutput: Output {
     private var targets = [(seq: UInt32, target: UInt64)](repeating: (0, 0), count: 16)
     private var targetSlot = 0
 
-    public let periodHintNs: UInt64
+    public private(set) var periodHintNs: UInt64
     private var frameColour: Float = 0
     /// The scene to draw. A concrete type rather than an existential: the
     /// present path calls this every frame and a witness-table hop plus the ARC
@@ -381,6 +381,16 @@ public final class WlrootsOutput: Output {
         // Free the listener before dropping the context it points at. The
         // opposite order is §2.35's segfault, one layer down.
         tw_listener_free(presentListener)
+    }
+
+    /// Read the refresh rate again, after a mode change; returns whether the
+    /// period changed.
+    @discardableResult
+    public func refreshPeriod() -> Bool {
+        let mHz = output.pointee.refresh
+        let p = mHz > 0 ? UInt64(1_000_000_000_000 / Int64(mHz)) : periodHintNs
+        defer { periodHintNs = p }
+        return p != periodHintNs
     }
 
     public var name: String { String(cString: output.pointee.name) }

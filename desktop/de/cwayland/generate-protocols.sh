@@ -46,9 +46,11 @@ gen wlr-layer-shell-unstable-v1
 gen wlr-foreign-toplevel-management-unstable-v1
 gen xdg-activation-v1
 gen wlr-screencopy-unstable-v1
+gen wlr-output-management-unstable-v1
 
 gen_server xdg-shell
 gen_server wlr-layer-shell-unstable-v1
+gen_server wlr-output-management-unstable-v1
 
 # Protocols this project defines (PHASE10.md P10.3). Nobody links an
 # implementation for us, so the interface tables are generated too — ONCE, into

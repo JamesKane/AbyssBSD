@@ -401,15 +401,34 @@ case "run":
         // each --output where it was asked, or to the right of the last. A real
         // backend: its outputs in a row, as found, until P14.7b's displays.ini
         // says otherwise.
+        //
+        // **And what a person chose, which wins** (P14.7b): displays.ini, as
+        // the last applied configuration left it — its mode and scale committed
+        // now, its position taken as given. An output it does not name goes
+        // where it would have.
+        let saved = DisplaysFile.load(configDir: configDir)
         var boxes: [DisplayBox] = []
         var nextX: Int32 = 0
         for (i, o) in session.outputs.enumerated() {
             let name = String(cString: o.pointee.name)
+            if let s = saved[name], OutputManagement.commit(s, to: o) {
+                boxes.append(s.box)
+                emit(2, "undertow: displays.ini: \(name) \(DisplaysConfig.format(s))")
+                nextX = max(nextX, s.box.x + s.box.width)
+                continue
+            }
             let w = o.pointee.width, h = o.pointee.height
             var x = nextX, y: Int32 = 0
             if backendKind == nil, i > 0, i - 1 < extraOutputs.count, let at = extraOutputs[i - 1].at { (x, y) = at }
             boxes.append(DisplayBox(name: name, x: x, y: y, width: w, height: h))
             nextX = max(nextX, x + w)
+        }
+        if !DisplaysConfig.problems(boxes.map {
+            DisplaySetting(name: $0.name, modeWidth: $0.width, modeHeight: $0.height, x: $0.x, y: $0.y) }).isEmpty {
+            // A saved arrangement that no longer fits (an output renamed, one
+            // added where another sat): side by side, as found.
+            emit(2, "undertow: displays.ini does not fit these outputs; placing them side by side")
+            boxes = DisplayLayout.row(boxes.map { ($0.name, $0.width, $0.height) }).displays
         }
         displayLayout = DisplayLayout(boxes)
         compositor = try Compositor(session: session, layout: displayLayout, configDir: configDir,
@@ -446,6 +465,15 @@ case "run":
     defer { for sc in scenes { sc.release() } }
     let output = outs[0], scene = scenes[0]
     var conductor = Conductor(outputs: outs, sinks: scenes)
+    // A client rearranged the displays (P14.7b): each scene shows its new
+    // rectangle, and an output with a new refresh rate is retuned.
+    compositor.outputManagement?.onApplied = { layout in
+        for (i, o) in outs.enumerated() {
+            if let d = layout.named(o.name) { scenes[i].show(d) }
+            if o.refreshPeriod() { conductor.retune(i, periodHintNs: o.periodHintNs) }
+        }
+        out("outputs \(layout.summary)")
+    }
 
     // Announce the socket on stdout BEFORE the loop starts, so a harness can
     // read one line and know where to point a client. Anything else means
