@@ -279,29 +279,40 @@ public extension Display {
     /// successful `prepare_read` must always be resolved, or the next iteration
     /// deadlocks — but bounded, and without touching the caller's run loop.
     func pump(until done: () -> Bool, timeoutMs: Int) -> Bool {
-        let wlfd = wl_display_get_fd(display)
-        let deadline = nowMs() + Int64(timeoutMs)
-        while !done() {
-            while wl_display_prepare_read(display) != 0 {
-                if wl_display_dispatch_pending(display) == -1 { return false }
-                if done() { return true }
-            }
-            wl_display_flush(display)
-            let remaining = deadline - nowMs()
-            if remaining <= 0 { wl_display_cancel_read(display); return false }
-
-            var pfd = pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0)
-            let pr = withUnsafeMutablePointer(to: &pfd) {
-                poll($0, 1, Int32(min(remaining, Int64(Int32.max))))
-            }
-            if pr > 0 && (pfd.revents & Int16(POLLIN)) != 0 {
-                if wl_display_read_events(display) == -1 { return false }
-                if wl_display_dispatch_pending(display) == -1 { return false }
-            } else {
-                wl_display_cancel_read(display)
-                if pr == 0 { return false }      // the deadline, not a signal
-            }
-        }
-        return true
+        pumpWayland(display, until: done, timeoutMs: timeoutMs)
     }
+}
+
+/// `Display.pump`, for any connection — DisplayConfigurator has its own.
+func pumpWayland(_ display: OpaquePointer, until done: () -> Bool, timeoutMs: Int) -> Bool {
+    let wlfd = wl_display_get_fd(display)
+    let deadline = monoMs() + Int64(timeoutMs)
+    while !done() {
+        while wl_display_prepare_read(display) != 0 {
+            if wl_display_dispatch_pending(display) == -1 { return false }
+            if done() { return true }
+        }
+        wl_display_flush(display)
+        let remaining = deadline - monoMs()
+        if remaining <= 0 { wl_display_cancel_read(display); return false }
+
+        var pfd = pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0)
+        let pr = withUnsafeMutablePointer(to: &pfd) {
+            poll($0, 1, Int32(min(remaining, Int64(Int32.max))))
+        }
+        if pr > 0 && (pfd.revents & Int16(POLLIN)) != 0 {
+            if wl_display_read_events(display) == -1 { return false }
+            if wl_display_dispatch_pending(display) == -1 { return false }
+        } else {
+            wl_display_cancel_read(display)
+            if pr == 0 { return false }      // the deadline, not a signal
+        }
+    }
+    return true
+}
+
+func monoMs() -> Int64 {
+    var ts = timespec()
+    clock_gettime(CLOCK_MONOTONIC, &ts)
+    return Int64(ts.tv_sec) * 1000 + Int64(ts.tv_nsec) / 1_000_000
 }

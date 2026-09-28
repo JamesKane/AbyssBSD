@@ -13,8 +13,13 @@
 // cancelled. Every listener slot is filled: a NULL one aborts the client the
 // moment its event arrives (HANDOFF §2.3).
 //
-// Synchronous, like Screencopy: it pumps its own bounded loop, so a CLI is a
-// straight-line program and a compositor that never answers is a timeout.
+// **Its own connection.** A request pumps a bounded loop until the answer, so
+// a CLI is a straight-line program and a compositor that never answers is a
+// timeout. On an application's own connection that pump would dispatch the
+// application's other events from inside its own handlers; on a connection of
+// its own it dispatches nothing but this. An application watches
+// `fileDescriptor` in its run loop and calls `dispatch()`, and hears through
+// `onChange` when someone else — wlr-randr, kanshi — rearranged the displays.
 
 import CWayland
 
@@ -30,6 +35,9 @@ public final class DisplayConfigurator {
         /// mHz, as the protocol gives it; 0 when the output did not say.
         public var refreshMilliHz: Int32
         public var preferred: Bool
+        public init(width: Int32, height: Int32, refreshMilliHz: Int32, preferred: Bool = false) {
+            self.width = width; self.height = height; self.refreshMilliHz = refreshMilliHz; self.preferred = preferred
+        }
     }
 
     public struct Head: Equatable, Sendable {
@@ -40,6 +48,14 @@ public final class DisplayConfigurator {
         public var current: Mode?
         public var x: Int32, y: Int32
         public var scale: Double
+        public init(name: String, description: String = "", enabled: Bool = true, modes: [Mode], current: Mode?,
+                    x: Int32, y: Int32, scale: Double = 1) {
+            self.name = name; self.description = description; self.enabled = enabled; self.modes = modes
+            self.current = current; self.x = x; self.y = y; self.scale = scale
+        }
+        /// Its size in the layout: its mode over its scale.
+        public var layoutWidth: Int32 { Int32((Double(current?.width ?? 0) / scale).rounded()) }
+        public var layoutHeight: Int32 { Int32((Double(current?.height ?? 0) / scale).rounded()) }
     }
 
     /// What to ask for, per display.
@@ -71,7 +87,7 @@ public final class DisplayConfigurator {
     }
     private struct ModeState { var width: Int32 = 0, height: Int32 = 0, refresh: Int32 = 0, preferred = false }
 
-    private let display: Display
+    private let wl: OpaquePointer
     private var registry: OpaquePointer?
     private var manager: OpaquePointer?
     private var heads: [HeadState] = []
@@ -102,24 +118,56 @@ public final class DisplayConfigurator {
 
     /// Bind the manager and wait for the first complete description. Nil when
     /// the compositor does not offer the protocol, or never finishes saying.
-    public init?(display: Display, timeoutMs: Int = 2000) {
-        self.display = display
+    /// Called after each complete description (`done`) — an apply of ours,
+    /// or anyone's.
+    public var onChange: () -> Void = {}
+
+    /// Connect (to `$WAYLAND_DISPLAY`, as every client does), bind the manager
+    /// and wait for the first complete description. Nil when there is no
+    /// compositor, it does not offer the protocol, or it never finishes saying.
+    public init?(timeoutMs: Int = 2000) {
+        guard let d = wl_display_connect(nil) else { return nil }
+        wl = d
         installListeners()
-        guard let reg = wl_display_get_registry(display.display) else { return nil }
+        guard let reg = wl_display_get_registry(d) else { wl_display_disconnect(d); return nil }
         registry = reg
         _ = aw_add_listener(UnsafeMutableRawPointer(reg), UnsafeRawPointer(registryListener),
                             Unmanaged.passUnretained(self).toOpaque())
-        _ = display.pump(until: { manager != nil }, timeoutMs: timeoutMs)
+        _ = wl_display_roundtrip(d)
         guard manager != nil,
-              display.pump(until: { batches > 0 }, timeoutMs: timeoutMs) else { return nil }
+              pumpWayland(d, until: { batches > 0 }, timeoutMs: timeoutMs) else {
+            teardown()
+            return nil
+        }
     }
 
-    deinit {
+    /// For an application's run loop: readable when the compositor said something.
+    public var fileDescriptor: Int32 { wl_display_get_fd(wl) }
+
+    /// Read and dispatch what arrived (non-blocking), then flush.
+    public func dispatch() {
+        if wl_display_prepare_read(wl) == 0 {
+            var pfd = pollfd(fd: wl_display_get_fd(wl), events: Int16(POLLIN), revents: 0)
+            if withUnsafeMutablePointer(to: &pfd, { poll($0, 1, 0) }) > 0 { _ = wl_display_read_events(wl) }
+            else { wl_display_cancel_read(wl) }
+        }
+        _ = wl_display_dispatch_pending(wl)
+        wl_display_flush(wl)
+    }
+
+    deinit { teardown() }
+
+    private var tornDown = false
+    private func teardown() {
+        guard !tornDown else { return }
+        tornDown = true
         for h in heads { zwlr_output_head_v1_destroy(h.proxy) }
         for m in modes.keys { zwlr_output_mode_v1_destroy(m) }
+        heads = []; modes = [:]
         if let manager { zwlr_output_manager_v1_destroy(manager) }
         if let registry { wl_registry_destroy(registry) }
-        wl_display_flush(display.display)
+        wl_display_flush(wl)
+        wl_display_disconnect(wl)
         registryListener.deallocate(); managerListener.deallocate(); headListener.deallocate()
         modeListener.deallocate(); configListener.deallocate()
     }
@@ -129,7 +177,7 @@ public final class DisplayConfigurator {
     @discardableResult
     public func awaitUpdate(timeoutMs: Int = 2000) -> Bool {
         let before = batches
-        return display.pump(until: { batches > before }, timeoutMs: timeoutMs)
+        return pumpWayland(wl, until: { batches > before }, timeoutMs: timeoutMs)
     }
 
     /// Ask for `settings` to be tested (nothing changes) or applied. Every
@@ -137,7 +185,7 @@ public final class DisplayConfigurator {
     public func request(_ settings: [Setting], testOnly: Bool, timeoutMs: Int = 3000) -> Outcome {
         guard let manager else { return .failed }
         guard let config = zwlr_output_manager_v1_create_configuration(manager, serial) else { return .failed }
-        defer { zwlr_output_configuration_v1_destroy(config); wl_display_flush(display.display) }
+        defer { zwlr_output_configuration_v1_destroy(config); wl_display_flush(wl) }
         outcome = nil
         _ = aw_add_listener(UnsafeMutableRawPointer(config), UnsafeRawPointer(configListener),
                             Unmanaged.passUnretained(self).toOpaque())
@@ -157,7 +205,7 @@ public final class DisplayConfigurator {
             zwlr_output_configuration_head_v1_set_scale(ch, wl_fixed_from_double(s.scale))
         }
         if testOnly { zwlr_output_configuration_v1_test(config) } else { zwlr_output_configuration_v1_apply(config) }
-        guard display.pump(until: { outcome != nil }, timeoutMs: timeoutMs) else { return .timedOut }
+        guard pumpWayland(wl, until: { outcome != nil }, timeoutMs: timeoutMs) else { return .timedOut }
         return outcome ?? .timedOut
     }
 
@@ -193,6 +241,7 @@ public final class DisplayConfigurator {
                 let c = DisplayConfigurator.me(data)
                 c.serial = serial
                 c.batches += 1
+                c.onChange()
             },
             finished: { _, _ in }))
 

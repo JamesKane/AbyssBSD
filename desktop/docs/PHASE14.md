@@ -332,6 +332,26 @@ the compositor, the scene and the seat. So P14.7 grows from M to L:
   checked with a third-party client where one installs.
 - **P14.7c — the Displays pane**: arrange by dragging, mode and scale.
 
+**P14.7c done** (2026-09-28), **and with it P14.7.** The Displays pane shows
+every display as a rectangle to scale, with the main one wearing the menu bar.
+Drag one and drop it: it **snaps** to touch a neighbour along an edge,
+overlapping none, and lines up with that neighbour's edge when dropped within
+24 units of it. The main display stays at the origin; everything else moves
+instead. Below the arrangement are the selected display's resolutions and its
+scale (1, 1.25, 1.5, 2, and the current one if it is none of those). A new size
+moves the displays to its right and below by as much. Every change applies at
+once, through `DisplayConfigurator` on a connection of its own, so its bounded
+pump never dispatches the window's events inside a handler. The same connection
+brings anyone's change (`abyss-displays`, `wlr-randr`) to the page as it happens.
+Verified: 640 unit tests on both (DisplaysPaneTests: fit, snap and alignment,
+the page in words, one layout for paint and hit, no rescaling mid-drag);
+`live-displays-pane.sh` on both. It checks that the page equals `abyss-displays
+list`; that a drag to below the main display lands flush at 0,768; that scale 2
+halves the box; and that a change made elsewhere reaches the page. Three fault
+injections were each seen to fail. New golden `sysprefs-displays` on both.
+**Known limits:** the arrangement's colours are the pane's own, not the
+theme's; turning a display off, and mirroring, are not offered.
+
 **P14.7b done** (2026-09-28). The protocol XML is vendored from upstream
 wlr-protocols (v4, matching wlroots 0.19). **undertow**: `OutputManagement`
 checks a configuration (`DisplaysConfig.problems`: no overlaps, a scale in 0.5

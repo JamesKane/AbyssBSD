@@ -51,9 +51,8 @@ func parse(_ arg: String) -> DisplayConfigurator.Setting? {
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let verb = args.first, ["list", "test", "apply"].contains(verb) else { usage() }
-guard let display = Display() else { say(2, "abyss-displays: cannot connect to the compositor"); exit(1) }
-guard let c = DisplayConfigurator(display: display) else {
-    say(2, "abyss-displays: the compositor does not offer wlr-output-management-v1"); exit(1)
+guard let c = DisplayConfigurator() else {
+    say(2, "abyss-displays: no compositor, or it does not offer wlr-output-management-v1"); exit(1)
 }
 if verb == "list" { show(c); exit(0) }
 

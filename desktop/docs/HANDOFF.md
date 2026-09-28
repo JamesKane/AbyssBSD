@@ -52,8 +52,11 @@ The items below are the context for it.
    (2026-09-28): §4.3's spike answered — per-application volume is read-only
    now, `virtual_oss` in Phase 18 — and the Sound pane, the default device
    through the helper (`sysctl.conf`), and a real volume item in the menu
-   bar, all driven on the guest's `snd_dummy`. **Next is P14.7**, Displays
-   (`wlr-output-management-v1`), the one pane with no FreeBSD-only half. **Open, for the person:** §6.5,
+   bar, all driven on the guest's `snd_dummy`. **P14.7 is done** too:
+   undertow drives several outputs (one metronome each, earliest deadline
+   first), speaks `wlr-output-management-v1` and keeps `displays.ini`, and the
+   Displays pane arranges them by dragging. **Next is P14.8**, Energy
+   (BACKLOG §1), then P14.5 (Wi-Fi) and the phase gate. **Open, for the person:** §6.5,
    whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
    `--vm --live`, `--full`) are run only when the phase closes.
    **Phase 11, the theme system, is COMPLETE**

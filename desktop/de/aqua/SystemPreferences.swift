@@ -115,6 +115,7 @@ public struct PrefsModel: Equatable, Sendable {
         case PrefsModel.appearancePane: return "Choose the theme, its scheme and its settings."
         case PrefsModel.networkPane: return "A wired interface's address, by DHCP or by hand, and the name servers."
         case PrefsModel.soundPane: return "The output device, its levels and mute, and who is playing."
+        case PrefsModel.displaysPane: return "Arrange the displays, and choose each one's resolution and scale."
         default: return "This pane cannot change anything yet."
         }
     }
@@ -125,6 +126,8 @@ public struct PrefsModel: Equatable, Sendable {
     public static let networkPane = "network"
     /// Sound (P14.6c).
     public static let soundPane = "sound"
+    /// Displays (P14.7c).
+    public static let displaysPane = "displays"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -159,10 +162,12 @@ public struct PrefsLayout: Equatable, Sendable {
     public var network = NetworkLayout()
     /// The Sound pane's controls, when it is showing (P14.6c).
     public var sound = SoundLayout()
+    /// The Displays pane's controls, when it is showing (P14.7c).
+    public var displays = DisplaysLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
-            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network && a.sound == b.sound
+            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network && a.sound == b.sound && a.displays == b.displays
             && a.sectionTitles.map(\.0) == b.sectionTitles.map(\.0)
     }
 }
@@ -231,7 +236,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                                    choice: AppearanceChoice? = nil,
                                    dragging: (String, Double)? = nil,
                                    network: NetworkPaneState? = nil,
-                                   sound: SoundPaneState? = nil) -> PrefsLayout {
+                                   sound: SoundPaneState? = nil,
+                                   displays: DisplaysPaneState? = nil) -> PrefsLayout {
     var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
@@ -269,6 +275,10 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         let n = network ?? .sample
         l.network = networkLayout(body: l.body, interfaces: n.interfaces)
         paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy)
+    case .pane(let id) where id == PrefsModel.displaysPane:
+        let d = displays ?? .sample
+        l.displays = displaysLayout(body: l.body, d)
+        paintDisplaysPane(cr, l.displays, d)
     case .pane(let id) where id == PrefsModel.soundPane:
         let s = sound ?? .sample
         l.sound = soundLayout(body: l.body, s)
@@ -396,6 +406,11 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var soundApplying: Int32?
     private var soundTimer: Int32 = -1
     private var dumpedSound: SoundLayout?
+    /// The Displays pane: the compositor's description, and a drag.
+    private var displays = DisplaysPaneState()
+    private var configurator: DisplayConfigurator?
+    private var displaysDragFrom: (px: Double, py: Double, x: Int32, y: Int32)?
+    private var dumpedDisplays: DisplaysLayout?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -441,6 +456,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if v == .pane(PrefsModel.appearancePane) { installedThemes = AppearanceCatalogue.installed() }
         if v == .pane(PrefsModel.networkPane) { loadNetwork(interface: nil) }
         if v == .pane(PrefsModel.soundPane) { loadSound(readConfigured: true) }
+        if v == .pane(PrefsModel.displaysPane) { loadDisplays() }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -463,7 +479,8 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         layout = paintSystemPreferences(cr, w: w, h: h, model: model,
                                         themes: installedThemes, choice: AppearanceChoice.current(),
-                                        dragging: dragging, network: network, sound: sound)
+                                        dragging: dragging, network: network, sound: sound,
+                                        displays: displays)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -503,6 +520,18 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             line += " revert=\(c(n.revert)) apply=\(c(n.apply))"
             SystemPreferencesApp.log(line)
         }
+        // The Displays pane's: `disp.<name>` at each rectangle's centre,
+        // `mode.<WxH@mHz>` and `scale.<s>` at their radios.
+        if dumpLayout, model.view == .pane(PrefsModel.displaysPane), dumpedDisplays != layout.displays {
+            dumpedDisplays = layout.displays
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            var line = "displays layout"
+            for n in layout.displays.displays.keys.sorted() { line += " disp.\(n)=\(c(layout.displays.displays[n]!))" }
+            for r in layout.displays.modes { line += " mode.\(r.value)=\(c(r.hit))" }
+            for r in layout.displays.scales { line += " scale.\(r.value)=\(c(r.hit))" }
+            line += " factor=\(twoPlaces(layout.displays.factor * 1000))"
+            SystemPreferencesApp.log(line)
+        }
         // The Sound pane's: `output.<unit>` at the radio, `level.<control>=
         // x0-x1,y` along the track, `mute.<control>` at the checkbox.
         if dumpLayout, model.view == .pane(PrefsModel.soundPane), dumpedSound != layout.sound {
@@ -516,6 +545,124 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             for r in layout.sound.mutes { line += " mute.\(r.value)=\(c(r.hit))" }
             SystemPreferencesApp.log(line)
         }
+    }
+
+    // MARK: the Displays pane
+
+    private func loadDisplays() {
+        if configurator == nil {
+            // Its own connection: its requests pump their own loop, which on
+            // ours would dispatch this window's events from inside a handler.
+            guard let c = DisplayConfigurator() else {
+                displays = DisplaysPaneState(note: "This compositor does not let displays be arranged"
+                                             + " (it offers no wlr-output-management).")
+                SystemPreferencesApp.log("displays: \(displays.note)")
+                window?.setNeedsDisplay()
+                return
+            }
+            configurator = c
+            display.addFileDescriptor(c.fileDescriptor) { [weak c] in c?.dispatch() }
+            // Anyone's change — ours, wlr-randr's — redraws the page.
+            c.onChange = { [weak self] in self?.displaysChanged() }
+        }
+        displaysChanged()
+    }
+
+    private func displaysChanged() {
+        guard let c = configurator else { return }
+        let heads = c.displays.filter(\.enabled)
+        guard heads != displays.heads else { return }
+        let keep = displays.selected
+        displays.heads = heads
+        displays.selected = heads.contains { $0.name == keep } ? keep : heads.first?.name
+        SystemPreferencesApp.log("displays: status \(DisplaysWords.statusLine(heads))")
+        window?.setNeedsDisplay()
+    }
+
+    /// Ask for `heads` as they are given; say what came of it.
+    private func applyDisplays(_ heads: [DisplayHead], what: String) {
+        guard let c = configurator else { return }
+        let settings = heads.map { h in
+            DisplayConfigurator.Setting(name: h.name, width: h.current?.width ?? 0, height: h.current?.height ?? 0,
+                                        refreshMilliHz: h.current?.refreshMilliHz ?? 0, x: h.x, y: h.y, scale: h.scale)
+        }
+        SystemPreferencesApp.log("displays: apply \(what) — \(DisplaysWords.statusLine(heads))")
+        switch c.request(settings, testOnly: false) {
+        case .succeeded:
+            c.awaitUpdate()
+            displays.note = ""
+            SystemPreferencesApp.log("displays: applied")
+        case .failed:
+            displays.note = "The compositor refused that arrangement."
+            SystemPreferencesApp.log("displays: refused")
+        case .cancelled:
+            displays.note = "The displays changed meanwhile; nothing was applied."
+            SystemPreferencesApp.log("displays: cancelled")
+        case .timedOut:
+            displays.note = "The compositor did not answer."
+            SystemPreferencesApp.log("displays: timed out")
+        }
+        displaysChanged()
+        window?.setNeedsDisplay()
+    }
+
+    /// A new mode or scale changes a display's size in the layout; the
+    /// displays to its right and below move by as much, so none overlaps it.
+    private func resized(_ heads: [DisplayHead], _ name: String, from old: DisplayHead) -> [DisplayHead] {
+        guard let new = heads.first(where: { $0.name == name }) else { return heads }
+        let dw = new.layoutWidth - old.layoutWidth, dh = new.layoutHeight - old.layoutHeight
+        return heads.map { h in
+            guard h.name != name else { return h }
+            var m = h
+            if h.x >= old.x + old.layoutWidth { m.x += dw }
+            if h.y >= old.y + old.layoutHeight { m.y += dh }
+            return m
+        }
+    }
+
+    private func pressDisplays(_ hit: DisplaysHit) {
+        guard let sel = displays.selectedHead else { return }
+        switch hit {
+        case .display(let name):
+            displays.selected = name
+            if let h = displays.heads.first(where: { $0.name == name }) {
+                displaysDragFrom = (pointerX, pointerY, h.x, h.y)
+                displays.dragging = (name, h.x, h.y)
+            }
+            SystemPreferencesApp.log("displays: selected \(name)")
+        case .mode(let v):
+            guard let m = sel.modes.first(where: { "\($0.width)x\($0.height)@\($0.refreshMilliHz)" == v }),
+                  m != sel.current else { return }
+            var heads = displays.heads
+            if let i = heads.firstIndex(where: { $0.name == sel.name }) { heads[i].current = m }
+            applyDisplays(resized(heads, sel.name, from: sel), what: "\(sel.name) at \(m.width)x\(m.height)")
+        case .scale(let v):
+            guard let sc = Double(v), sc != sel.scale else { return }
+            var heads = displays.heads
+            if let i = heads.firstIndex(where: { $0.name == sel.name }) { heads[i].scale = sc }
+            applyDisplays(resized(heads, sel.name, from: sel), what: "\(sel.name) at scale \(v)")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func dropDisplay() {
+        guard let d = displays.dragging, let from = displaysDragFrom else { return }
+        displays.dragging = nil
+        displaysDragFrom = nil
+        guard d.x != from.x || d.y != from.y, let moving = displays.heads.first(where: { $0.name == d.name }) else {
+            window?.setNeedsDisplay(); return
+        }
+        let others = displays.heads.filter { $0.name != d.name }.map { ($0.x, $0.y, $0.layoutWidth, $0.layoutHeight) }
+        let at = DisplaysArrange.snap(name: d.name, x: d.x, y: d.y, w: moving.layoutWidth, h: moving.layoutHeight,
+                                      others: others)
+        var heads = displays.heads
+        if let i = heads.firstIndex(where: { $0.name == d.name }) { heads[i].x = at.x; heads[i].y = at.y }
+        // The main display stays at the origin: everything else moves instead.
+        if let m = heads.first, m.x != 0 || m.y != 0 {
+            let (ox, oy) = (m.x, m.y)
+            for i in heads.indices { heads[i].x -= ox; heads[i].y -= oy }
+        }
+        applyDisplays(heads, what: "\(d.name) moved")
     }
 
     // MARK: the Sound pane
@@ -738,6 +885,12 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
 
     public func pointerMoved(x: Double, y: Double) {
         pointerX = x; pointerY = y
+        if let d = displays.dragging, let from = displaysDragFrom {
+            let k = max(layout.displays.factor, 1e-6)
+            displays.dragging = (d.name, from.x + Int32(((x - from.px) / k).rounded()),
+                                 from.y + Int32(((y - from.py) / k).rounded()))
+            window?.setNeedsDisplay()
+        }
         if let name = soundDrag, let row = layout.sound.levels.first(where: { $0.value == name }) {
             let v = soundLevel(track: row.control, x: x)
             if sound.controls.first(where: { $0.name == name })?.level != v { setLevel(name, v) }
@@ -773,6 +926,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if !pressed, displays.dragging != nil {
+            dropDisplay()
+            return
+        }
         if !pressed, let name = soundDrag {
             soundDrag = nil
             SystemPreferencesApp.log("sound: \(name) set to \(sound.controls.first { $0.name == name }?.level ?? -1)")
@@ -796,6 +953,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         }
         if dumpLayout {
             SystemPreferencesApp.log("press at \(Int(pointerX)),\(Int(pointerY))")
+        }
+        if model.view == .pane(PrefsModel.displaysPane), let hit = displaysHit(layout.displays, x: pointerX, y: pointerY) {
+            pressDisplays(hit)
+            return
         }
         if model.view == .pane(PrefsModel.soundPane), let hit = soundHit(layout.sound, x: pointerX, y: pointerY) {
             pressSound(hit)
