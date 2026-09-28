@@ -16,6 +16,10 @@
 #   3. the portal: abyss-dbus asks the palette again and emits SettingChanged,
 #      decoded by `gdbus monitor` — GLib, the D-Bus library a GTK application
 #      listens with — and ReadOne agrees (skipped without dbus-daemon/gdbus)
+#   4. System Preferences' General pane drives all of it: a click on Trench, a
+#      scheme, a setting dragged and released, and Aqua again — each written to
+#      appearance.ini by the pane and followed by every process. (The window
+#      covers most of the output, so sections 1–3 are where pixels are compared.)
 #
 # Usage: abyss/tests/live-appearance.sh
 set -eu
@@ -35,7 +39,8 @@ W=800
 H=600
 work=$(mktemp -d /tmp/abyss-appearance.XXXXXX)
 cleanup() {
-  for p in ${app_pid:-} ${win_pid:-} ${shell_pids:-} ${mon_pid:-} ${bridge_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  exec 3>&- 2>/dev/null || true
+  for p in ${vp_pid:-} ${prefs_pid:-} ${app_pid:-} ${win_pid:-} ${shell_pids:-} ${mon_pid:-} ${bridge_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
   [ -s "$work/buspid" ] && kill "$(cat "$work/buspid")" 2>/dev/null || true
   [ -n "${KEEP:-}" ] && echo "kept $work" || rm -rf "$work"
 }
@@ -226,5 +231,89 @@ fi
 kill -0 "$ut_pid" 2>/dev/null || fail "undertow exited during the switches"
 for p in $shell_pids; do kill -0 "$p" 2>/dev/null || fail "a shell process exited during the switches"; done
 echo "ok:    ...and back to Aqua, byte for byte, everywhere: nothing from Trench survived"
+
+# --------------------------------------------- 4. the General pane drives it
+xml="$root/abyss/tests/wlr-virtual-pointer-unstable-v1.xml"
+wayland-scanner client-header "$xml" "$work/vpointer-proto.h"
+wayland-scanner private-code  "$xml" "$work/vpointer-proto.c"
+cc -I"$work" "$root/abyss/tests/vpointer.c" "$work/vpointer-proto.c" \
+   $(pkg-config --cflags --libs wayland-client) -o "$work/vpointer" || fail "could not build the virtual pointer"
+
+env WAYLAND_DISPLAY="$wd" ABYSS_PREFS_DUMP=1 AQUA_SCENE=sysprefs "$demo" > "$work/prefs.log" 2>&1 &
+prefs_pid=$!
+after "$work/prefs.log" 'SystemPreferences: layout ' 0 "System Preferences never drew its grid"
+after "$work/ut.out" '^window org.abyssbsd.preferences/' 0 "undertow never reported System Preferences"
+pg=$(grep '^window org.abyssbsd.preferences/' "$work/ut.out" | head -1 | awk '{print $(NF-1)}')
+px=${pg%,*}; py=${pg#*,}
+at() {  # at LINE-PREFIX NAME -> "X Y" on the output, from the app's latest line
+  p=$(grep "SystemPreferences: $1" "$work/prefs.log" | tail -1 | tr ' ' '\n' | sed -n "s/^$2=//p")
+  [ -n "$p" ] || fail "System Preferences does not say where $2 is"
+  echo "$((px + ${p%,*})) $((py + ${p#*,}))"
+}
+mkfifo "$work/vp.fifo"
+env WAYLAND_DISPLAY="$wd" "$work/vpointer" "$W" "$H" < "$work/vp.fifo" > "$work/vp.log" 2>&1 &
+vp_pid=$!
+exec 3> "$work/vp.fifo"
+after "$work/vp.log" 'ready' 0 "the virtual pointer never bound"
+sleep 0.3
+
+printf 'm %s\np\nr\n' "$(at 'layout ' general)" >&3
+after "$work/prefs.log" 'SystemPreferences: appearance theme\.' 0 "a click on General did not show the theme's controls"
+echo "ok: 4. System Preferences' General pane shows the installed themes"
+
+# A click on a control writes appearance.ini, and everybody follows — the
+# same `switch` bookkeeping as above, with the pane doing the writing.
+pane() {  # pane CONTROL EXPECT-LOG WHY
+  n=$(grep -c '^theme-reloads=' "$work/ut.out" || true)
+  w=$(grep -c "SystemPreferences: appearance -> $2" "$work/prefs.log" || true)
+  printf 'm %s\np\nr\n' "$(at 'appearance theme\.' "$1")" >&3
+  after "$work/prefs.log" "SystemPreferences: appearance -> $2" "$w" "$3: the pane did not write it"
+  after "$work/ut.out" '^theme-reloads=' "$n" "$3: undertow never followed"
+}
+
+before=""
+for scene in wallpaper menubar dock window; do
+  before="$before $(grep -c '^Theme: Trench' "$work/$scene.log" || true)"
+done
+pane theme.trench "trench" "Trench, chosen in the pane"
+set -- $before
+for scene in wallpaper menubar dock window; do
+  after "$work/$scene.log" '^Theme: Trench' "$1" "the $scene process did not follow the pane to Trench"
+  shift
+done
+grep -q '^theme = trench$' "$work/cfg/appearance.ini" || fail "appearance.ini does not say trench: $(cat "$work/cfg/appearance.ini")"
+told 1 "Trench, from the pane"
+echo "ok:    a click on Trench: written, and the desktop, the bar, the Dock, a window, undertow and the portal followed"
+
+after "$work/prefs.log" 'SystemPreferences: appearance .*scheme\.daylight=' 0 "the pane never offered Trench's schemes"
+pane scheme.daylight "trench (daylight)" "the daylight scheme, chosen in the pane"
+told 2 "daylight, from the pane"
+echo "ok:    a click on Daylight: written, and prefer light told"
+
+# A setting: pressed near the left of its track, dragged, released — written
+# once, on release, to two places.
+after "$work/prefs.log" 'SystemPreferences: appearance .*param\.gk=' 0 "the pane never offered Trench's settings"
+# The layout line, not the write log that also starts "appearance ": an empty
+# match here made shell arithmetic press at "68 + + 5" — on the title bar.
+track=$(grep 'SystemPreferences: appearance theme\.' "$work/prefs.log" | tail -1 | tr ' ' '\n' | sed -n 's/^param\.gk=//p')
+[ -n "$track" ] || fail "the pane's layout does not say where gk's track is"
+x0=${track%%-*}; rest=${track#*-}; x1=${rest%%,*}; ty=${rest#*,}
+n=$(grep -c '^theme-reloads=' "$work/ut.out" || true)
+printf 'm %s %s\np\nm %s %s\nm %s %s\nr\n' $((px + x0 + 5)) $((py + ty)) \
+  $((px + x0 + 20)) $((py + ty)) $((px + x0 + (x1 - x0) / 4)) $((py + ty)) >&3
+after "$work/prefs.log" 'SystemPreferences: appearance -> trench (daylight) gk=0\.2' 0 \
+  "dragging gk to a quarter of its track did not write gk=0.25: $(grep 'appearance ->' "$work/prefs.log" | tail -1)"
+after "$work/ut.out" '^theme-reloads=' "$n" "a setting changed and undertow never followed"
+grep -q '^gk = 0\.2' "$work/cfg/appearance.ini" || fail "appearance.ini does not carry the setting: $(cat "$work/cfg/appearance.ini")"
+echo "ok:    gk dragged to a quarter and released: written once, as $(grep '^gk' "$work/cfg/appearance.ini")"
+
+pane theme.aqua "aqua" "Aqua, chosen in the pane"
+for scene in wallpaper menubar dock window; do
+  grep '^Theme: ' "$work/$scene.log" | tail -1 | grep -q '^Theme: Aqua' || {
+    sleep 1; grep '^Theme: ' "$work/$scene.log" | tail -1 | grep -q '^Theme: Aqua' \
+      || fail "the $scene process did not follow the pane back to Aqua"; }
+done
+grep -q 'scheme\|gk' "$work/cfg/appearance.ini" && fail "back to Aqua, Trench's scheme or setting was kept: $(cat "$work/cfg/appearance.ini")"
+echo "ok:    a click on Aqua: everyone back, and Trench's scheme and setting not carried over"
 
 echo "all green (the theme changes while the desktop runs)."

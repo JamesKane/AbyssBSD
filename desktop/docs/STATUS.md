@@ -10,8 +10,8 @@ where an unmodified GTK 3 application opens a file through the Finder**;
 applications publish their menus to our bar (Phase 10); and **the look is data**
 — Jaguar re-expressed pixel for pixel, and a second theme, Trench, from the same
 interpreter (Phase 11).
-**571 unit tests, 33 live modes and 38 live scripts, green on Linux *and*
-FreeBSD**, and a golden gate of 70 scenes on each. (Different denominators — see
+**580 unit tests, 33 live modes and 39 live scripts, green on Linux *and*
+FreeBSD**, and a golden gate of 72 scenes on each. (Different denominators — see
 [HANDOFF §3](HANDOFF.md).)
 The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
 two nested-bhyve install tests (~1000s)** — the rule for anything touching the

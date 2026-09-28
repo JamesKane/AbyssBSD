@@ -129,6 +129,47 @@ Qt application follows. `PoolConfig`'s watch (P2) is the mechanism. **Gate:**
 switching Aqua → Trench in the pane restyles a live session with no restart,
 checked in pixels, and a GTK application sees `color-scheme` change.
 
+**Done** (2026-09-28, in four commits, P14.2a–d). What landed:
+
+- **The drawing layer can change its mind.** `Theme.generation` is bumped by
+  every `Theme.use`, which also drops the glow and halo masks (keyed by a
+  shape's name and shaped from a role's font — both theme-owned); noise tiles
+  stay. Fonts are added per directory, so a theme switched to later finds its
+  own. `ThemeLoader.reloadIfChanged`, `ThemeLoader.Watch` (a config-dir
+  descriptor for the caller's own loop) and `ThemeLoader.store`.
+- **`undertow`** loads its theme after `--config-dir` (it used to read the
+  environment's), watches from its own wayland event loop, and keys each frame
+  texture on the generation it was drawn in.
+- **Every toolkit process** — one watch in AquaDemo's `main`, where every
+  scene passes, and `Display.setEverythingNeedsDisplay`.
+- **The portal** asks the palette again and emits `SettingChanged` for each
+  key that differs — the first time anything here has.
+- **`abyss-theme set NAME [SCHEME]`**, refusing in words what would not load.
+- **The General pane** (Jaguar's name for it): the installed themes, the chosen
+  theme's schemes, a slider per setting within its bounds — read from
+  `appearance.ini` each time it draws, written at once on a click, a slider on
+  release. Two goldens, `sysprefs-general` and `trench-sysprefs-general`.
+
+**Verified** — `live-appearance.sh`, on Linux **and in the FreeBSD guest**:
+a decorated window, the desktop, the bar, the Dock and an Aqua window, each its
+own process, plus the portal on a private bus with `gdbus monitor` listening:
+1. `abyss-theme set` Aqua → Trench → Trench daylight → Aqua: every process
+   reloads, five pixel strips change and come back **byte for byte**;
+2. the portal's `SettingChanged` decoded by GLib (color-scheme 1, then 2), and
+   `ReadOne` agreeing;
+3. the pane: a click on Trench, on Daylight, a slider dragged and released
+   (written once, `gk = 0.25`), and Aqua again with Trench's settings dropped.
+
+Every fix was put back and the test failed where it should — including one it
+missed at first: Aqua → Trench changes the title bar's height, so a frame cache
+that ignored the theme missed by accident; the colour-only neon → daylight step
+exists because of that. The test's own bugs are HANDOFF §2.75. **Not caught
+live:** keeping the glow/halo masks (no sampled strip holds one); the unit test
+guards it. **Known limits:** the Dock's surface is sized from theme metrics once,
+at creation; parameters are labelled by their raw names (`gk`) — a theme cannot
+name them yet; a theme file edited in place is not a change until
+`appearance.ini` is touched.
+
 **P14.3 — `abyss-settings`, the privileged half.** `abyss-install`'s shape,
 built once more on purpose rather than generalised prematurely:
 - typed plans (`NetworkPlan`, `SoundPlan`, `EnergyPlan`), a wire, a peer-uid

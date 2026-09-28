@@ -107,8 +107,14 @@ public struct PrefsModel: Equatable, Sendable {
 
     /// What the page says a pane does not do yet — until a pass builds it.
     public func note(for id: String) -> String {
-        notes[id] ?? "This pane cannot change anything yet."
+        if let n = notes[id] { return n }
+        // General chooses the theme (P14.2) — the first pane that changes anything.
+        return id == PrefsModel.appearancePane ? "Choose the theme, its scheme and its settings."
+                                               : "This pane cannot change anything yet."
     }
+
+    /// Jaguar's General pane, which chose the appearance: here, the theme.
+    public static let appearancePane = "general"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -137,10 +143,12 @@ public struct PrefsLayout: Equatable, Sendable {
     public var cells: [PrefsCell] = []
     public var rules: [Rect] = []
     public var body = Rect(0, 0, 0, 0)
+    /// The General pane's controls, when it is showing (P14.2).
+    public var appearance = AppearanceLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
-            && a.cells == b.cells && a.rules == b.rules && a.body == b.body
+            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance
             && a.sectionTitles.map(\.0) == b.sectionTitles.map(\.0)
     }
 }
@@ -204,8 +212,11 @@ public func prefsHit(_ l: PrefsLayout, _ m: PrefsModel, x: Double, y: Double) ->
 /// The window: chrome, toolbar, then the grid or a pane's page.
 @discardableResult
 public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
-                                   model: PrefsModel = PrefsModel()) -> PrefsLayout {
-    let l = prefsLayout(w: w, h: h)
+                                   model: PrefsModel = PrefsModel(),
+                                   themes: [InstalledTheme]? = nil,
+                                   choice: AppearanceChoice? = nil,
+                                   dragging: (String, Double)? = nil) -> PrefsLayout {
+    var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
     Draw.paint("prefs.toolbar", cr, l.toolbar)
@@ -230,6 +241,14 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
             centeredLabel(cr, p.title, centerX: c.labelCenterX, top: c.labelTop, maxWidth: c.labelMaxWidth)
         }
         for r in l.rules { Draw.paint("rule", cr, r) }
+    case .pane(let id) where id == PrefsModel.appearancePane:
+        // Read, not remembered: what is installed, and what appearance.ini
+        // says now — so a change made elsewhere shows here too.
+        let installed = themes ?? AppearanceCatalogue.installed()
+        let chosen = choice ?? AppearanceChoice.current()
+        l.appearance = appearanceLayout(body: l.body, themes: installed, choice: chosen)
+        paintAppearancePane(cr, l.appearance, body: l.body, themes: installed, choice: chosen,
+                            dragging: dragging)
     case .pane(let id):
         paintPrefPage(cr, l, id, model)
     }
@@ -331,7 +350,14 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var menuService: MenuService?
     private let dumpLayout = getenv("ABYSS_PREFS_DUMP") != nil
     private var dumpedView: PrefsView?
+    private var dumpedAppearance: AppearanceLayout?
     public var onQuit: () -> Void = { exit(0) }
+    /// The themes installed, read when the General pane is shown.
+    private var installedThemes: [InstalledTheme] = []
+    /// A setting being dragged: its name and the value under the pointer.
+    /// Written when the button comes up, not on every step — one change,
+    /// not a stream of them for every process on the desktop to follow.
+    private var dragging: (String, Double)?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -362,6 +388,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     public func show(_ v: PrefsView) {
         guard model.view != v else { return }
         model.view = v
+        if v == .pane(PrefsModel.appearancePane) { installedThemes = AppearanceCatalogue.installed() }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -382,7 +409,9 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
         cairo_save(cr); cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR); cairo_paint(cr); cairo_restore(cr)
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
-        layout = paintSystemPreferences(cr, w: w, h: h, model: model)
+        layout = paintSystemPreferences(cr, w: w, h: h, model: model,
+                                        themes: installedThemes, choice: AppearanceChoice.current(),
+                                        dragging: dragging)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -394,11 +423,61 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             if model.view == .all { for cell in layout.cells { line += " \(cell.pane)=\(c(cell.icon))" } }
             SystemPreferencesApp.log(String(line.dropFirst("SystemPreferences: ".count)))
         }
+        // The General pane's controls move with the theme chosen (its schemes
+        // and settings are that theme's), so they are published whenever they
+        // change: `theme.<id>` and `scheme.<name>` at the radio,
+        // `param.<name>=x0-x1,y` along the track.
+        if dumpLayout, model.view == .pane(PrefsModel.appearancePane), dumpedAppearance != layout.appearance {
+            dumpedAppearance = layout.appearance
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            var line = "appearance"
+            for r in layout.appearance.themes { line += " theme.\(r.value)=\(c(r.control))" }
+            for r in layout.appearance.schemes { line += " scheme.\(r.value)=\(c(r.control))" }
+            for r in layout.appearance.parameters {
+                line += " param.\(r.value)=\(Int(r.control.x))-\(Int(r.control.x + r.control.w)),\(Int(r.control.y + r.control.h / 2))"
+            }
+            SystemPreferencesApp.log(line)
+        }
     }
 
-    public func pointerMoved(x: Double, y: Double) { pointerX = x; pointerY = y }
+    public func pointerMoved(x: Double, y: Double) {
+        pointerX = x; pointerY = y
+        if let (name, _) = dragging,
+           let row = layout.appearance.parameters.first(where: { $0.value == name }),
+           let p = installedThemes.first(where: { $0.id == AppearanceChoice.current().theme })?
+               .parameters.first(where: { $0.name == name }) {
+            dragging = (name, appearanceValue(p, track: row.control, x: x))
+            window?.setNeedsDisplay()
+        }
+    }
+
+    /// Write a choice where every process reads it, and say so. Nothing else:
+    /// this window redraws because its own watch sees the file change, the
+    /// same way every other process does.
+    private func choose(_ hit: AppearanceHit) {
+        let now = AppearanceChoice.current()
+        let next = AppearanceWrite.next(hit, from: now)
+        guard next != now else { return }
+        do {
+            try AppearanceWrite.store(next)
+            model.notes[PrefsModel.appearancePane] = nil
+            let params = next.parameters.keys.sorted().map { "\($0)=\(twoPlaces(next.parameters[$0]!))" }
+            SystemPreferencesApp.log("appearance -> \(next.theme)"
+                + (next.scheme.map { " (\($0))" } ?? "")
+                + (params.isEmpty ? "" : " " + params.joined(separator: " ")))
+        } catch {
+            model.notes[PrefsModel.appearancePane] = "Could not save the theme: \(error)"
+            SystemPreferencesApp.log("appearance: could not write appearance.ini: \(error)")
+        }
+        window?.setNeedsDisplay()
+    }
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if !pressed, let (name, value) = dragging {
+            dragging = nil
+            choose(.parameter(name, value))
+            return
+        }
         guard pressed, let w = window else { return }
         let size = w.size
         switch windowChromeHit(x: pointerX, y: pointerY, w: Double(size.width), h: Double(size.height)) {
@@ -409,6 +488,21 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         case .title: w.beginMove(); return
         case .resize(let e): w.beginResize(e); return
         case .pill, .content: break
+        }
+        if dumpLayout {
+            SystemPreferencesApp.log("press at \(Int(pointerX)),\(Int(pointerY))")
+        }
+        if model.view == .pane(PrefsModel.appearancePane),
+           let hit = appearanceHit(layout.appearance, themes: installedThemes,
+                                   choice: AppearanceChoice.current(), x: pointerX, y: pointerY) {
+            if case .parameter(let name, let v) = hit {
+                dragging = (name, v)          // written when the button comes up
+                SystemPreferencesApp.log("appearance: dragging \(name) from \(twoPlaces(v))")
+                window?.setNeedsDisplay()
+            } else {
+                choose(hit)
+            }
+            return
         }
         switch prefsHit(layout, model, x: pointerX, y: pointerY) {
         case .showAll?: show(.all)

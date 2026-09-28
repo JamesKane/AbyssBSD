@@ -49,6 +49,7 @@ scenes='window|window|
 window@2x|window|AQUA_SCALE=2
 sysprefs|sysprefs|
 sysprefs-pane|sysprefs|AQUA_PREFS_PANE=network
+sysprefs-general|sysprefs|AQUA_PREFS_PANE=general
 widgets|widgets|
 scroll|scroll|
 tabs|tabs|
@@ -108,6 +109,7 @@ trench-scroll|scroll|ABYSS_THEME=trench
 trench-notify|notify|ABYSS_THEME=trench
 trench-wallpaper|wallpaper|ABYSS_THEME=trench
 trench-installer-disk|installer|ABYSS_THEME=trench AQUA_INSTALLER_PAGE=disk
+trench-sysprefs-general|sysprefs|ABYSS_THEME=trench AQUA_PREFS_PANE=general
 trench-icons|icons|ABYSS_THEME=trench
 trench-hc-widgets|widgets|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc
 trench-hc-finder|finder|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc

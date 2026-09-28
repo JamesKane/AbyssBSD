@@ -16,8 +16,8 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**571 unit tests, 33 live modes and 38 live scripts, green on Linux and FreeBSD,
-and a golden gate of 70 scenes on each.**
+**580 unit tests, 33 live modes and 39 live scripts, green on Linux and FreeBSD,
+and a golden gate of 72 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven
@@ -37,11 +37,12 @@ The items below are the context for it.
    from the theme's icon set, one layout for paint and hit-test, an honest
    page per pane ("cannot change anything yet"), pointer, keyboard and a
    Phase 10 vocabulary (`menus.systempreferences.<pid>`), driven live by
-   `live-prefs.sh` on both platforms. **Next is P14.2**: the Appearance pane
-   writing `appearance.ini`, and every drawing process (toolkit, shell,
-   `undertow`, the portal's palette with `SettingChanged`) reloading the
-   theme live — PHASE14 §6.7 names its traps (a process that misses the
-   change; caches keyed to the old theme). **Open, for the person:** §6.5,
+   `live-prefs.sh` on both platforms. **P14.2 is done** (2026-09-28): the
+   theme changes while the desktop runs — the General pane or `abyss-theme
+   set` writes `appearance.ini`, and `undertow`, every toolkit process and the
+   portal (`SettingChanged`) follow, checked in pixels and back byte for byte
+   (`live-appearance.sh`). **Next is P14.3**, `abyss-settings`, the privileged
+   half. **Open, for the person:** §6.5,
    whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
    `--vm --live`, `--full`) are run only when the phase closes.
    **Phase 11, the theme system, is COMPLETE**
@@ -675,6 +676,30 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.75 A test's own arithmetic fails quietly, and reads like the product's
+(P14.2. Three in one pass, each first reported as a product failure.)
+
+`live-appearance.sh` failed three times with the code working:
+
+- **`grep -c … || echo 0` prints `0` twice** when nothing matches — `grep -c`
+  prints the count *and* exits 1 — so a baseline of "0\n0" made every later
+  numeric comparison false, and a wait timed out claiming the portal had sent
+  nothing. It had sent 46 signals. Use `|| true`.
+- **A baseline counted on one pattern, waited on with another.** The pane's
+  helper counted *all* earlier writes, then waited for more than that many
+  lines matching *this* write — which can only ever be one. The pane had
+  written; the test could not see it. Count what you wait for.
+- **An empty match fed to shell arithmetic is a number.** The slider's track
+  was grepped from "the last line starting `appearance `" — which by then was
+  the pane's own write log, not its layout — so `x0` was empty and
+  `$((68 + x0 + 5))` quietly became 73: a press on the title bar, which began a
+  window move. Guard every parsed coordinate with `[ -n … ] || fail`.
+
+**The rule:** a helper that turns log lines into numbers is code, and gets the
+same suspicion — the tell in all three was a failure message that named the
+product for something the product had demonstrably done (the log said so).
+Read the log before believing the verdict.
 
 ### 2.74 Only the compositor knows when a frame was shown — so say so
 (U.4, 2026-09-28. F-101; API-STUDY §2.)
@@ -2672,7 +2697,7 @@ key to prove **key repeat** (`vkeyboard`'s `d`/`u`; §2.14).
 once drifted on it: **33 live modes** are `run-live.sh`'s scenes (the sway- and
 `undertow`-driven ones in the two tables above it); **33 live scripts** are the
 standalone `live-*.sh` ones `run.sh` invokes, listed below; **538 unit tests**
-are `swift test`; **70 golden scenes** are `golden.sh`'s, per platform.
+are `swift test`; **72 golden scenes** are `golden.sh`'s, per platform.
 (Recounted 2026-09-25: the docs had said 35 modes and 31 scripts.) A count that is incremented without checking its denominator is a
 count that will be wrong, and this one was.
 
@@ -2696,6 +2721,7 @@ or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 | `live-subsurface.sh` | a window made of **subsurfaces** — over, outside and below its parent — drawn, framed and routed to the leaf (§2.71) |
 | `live-hidden.sh` | a **minimized** window keeps a slow frame clock (not none, not 60 Hz), is told it is `suspended`, and what the compositor can do (§2.72) |
 | `live-present.sh` | **presentation-time**: every frame a client commits is reported shown, on `CLOCK_MONOTONIC`, at the display's period — 60 and 144 Hz (§2.74) |
+| `live-appearance.sh` | **the theme changes while the desktop runs**: `undertow`, the desktop, bar, Dock and an Aqua window (each its own process), and the portal (`SettingChanged`, decoded by GLib) follow `abyss-theme set` and the General pane; pixels change and come back byte for byte (P14.2, §2.75) |
 | `live-gpu.sh` | **GPU clients through `linux-dmabuf`**: pixman says it offers none; on a render node, es2gears and vkcube run on it and are seen moving; a screenshot on every renderer is the right colour. GPU half skips without a render node (§2.73) |
 | `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |
 

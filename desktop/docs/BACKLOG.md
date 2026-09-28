@@ -29,7 +29,7 @@ or more.
 | ~~U.2~~ | ✅ **2026-09-28. A minimised window keeps a clock** — 1 Hz, xdg-shell v6 `suspended`, `wm_capabilities` (HANDOFF §2.72, `live-hidden.sh`) | S | | done, both platforms |
 | ~~U.3~~ | ✅ **2026-09-28. `linux-dmabuf`** — GL and Vulkan clients on the AMD iGPU under headless GLES2 `undertow`; screenshots fixed for 24-bit renderers (HANDOFF §2.73, `live-gpu.sh`) | M | | done; GPU half on Linux, pixman half both platforms |
 | ~~U.4~~ | ✅ **2026-09-28. presentation-time** — feedback from the output's present event; frame-done keeps the current time, as the protocol says (HANDOFF §2.74, `live-present.sh`) | S–M | | done, both platforms |
-| P14.2 | **Appearance, and a live theme switch** (PHASE14) — was next | M | unchanged from PHASE14 | pixels after the switch; a GTK app sees `color-scheme` change |
+| ~~P14.2~~ | ✅ **2026-09-28. The theme changes while the desktop runs** — the General pane and `abyss-theme set`; `undertow`, every toolkit process and the portal (`SettingChanged`) follow (PHASE14 P14.2, `live-appearance.sh`) | M | | done, both platforms |
 | P14.3 | **`abyss-settings`**, the privileged half | M | every pane after it writes through it | `abyss-settingsctl` plans; refuses on Linux |
 | P14.4 | **Network, wired** | M | | nested bhyve: set, reboot, held |
 | P14.6 | **Sound.** Run §4.3's spike first; it now starts from API-STUDY §3's answer (reading per-channel volume works, setting does not) and chooses a route | M | the spike decides whether the pane promises per-app volume | `snd_dummy` in the guest |
