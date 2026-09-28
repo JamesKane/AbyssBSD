@@ -88,12 +88,16 @@ public enum Text {
     }
 
     /// Where fontconfig should look besides the system (P11.7): the vendored
-    /// fonts, next to the themes. Set once, before the first role is given.
-    nonisolated(unsafe) private static var dirsAdded = false
+    /// fonts, next to the themes — and a theme's own `fonts/`. Each directory
+    /// once, but **not only the first time**: this used to add one set and
+    /// ignore every later call, so a theme switched to while running (P14.2)
+    /// could never find the fonts it ships.
+    nonisolated(unsafe) private static var dirsAdded: Set<String> = []
     public static func addFontDirs(_ dirs: [String]) {
-        guard !dirsAdded else { return }
-        dirsAdded = true
-        for d in dirs { at_font_add_dir(d) }
+        for d in dirs where !dirsAdded.contains(d) {
+            dirsAdded.insert(d)
+            at_font_add_dir(d)
+        }
     }
 
     /// Each role's case and tracking (em), from the theme (P11.9).

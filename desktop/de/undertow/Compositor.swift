@@ -14,6 +14,7 @@
 // it would hand away exactly the part the performance contract is about.
 
 import CWlroots
+import AquaDraw
 
 #if canImport(Glibc)
 import Glibc
@@ -359,6 +360,36 @@ public final class Compositor {
     ///   is listening on.
     /// Whose menus are whose (PHASE10.md P10.3).
     public private(set) var menus: Menus?
+    /// The config directory, watched for a person changing the theme (P14.2).
+    private var appearanceWatch: ThemeLoader.Watch?
+    private var appearanceSource: OpaquePointer?
+    /// How many times the theme has been changed under us, for the harness.
+    public private(set) var themeReloads = 0
+
+    /// Follow the theme a person chooses while the desktop runs.
+    ///
+    /// The watch's descriptor joins **this compositor's own wayland event
+    /// loop** — the one place undertow already waits — rather than a thread or
+    /// a poll per frame. When the appearance changes the theme is loaded again,
+    /// and nothing else has to happen here: every frame texture is keyed on
+    /// `Theme.generation`, so the next frame redraws each window's frame in
+    /// the new theme and a frame from the old one can never be reused.
+    public func watchAppearance() {
+        guard appearanceWatch == nil, let w = ThemeLoader.Watch(configDir: configDir) else { return }
+        appearanceWatch = w
+        let loop = wl_display_get_event_loop(session.display)
+        appearanceSource = wl_event_loop_add_fd(loop, w.fileDescriptor, UInt32(WL_EVENT_READABLE),
+                                                { _, _, data in
+            guard let data else { return 0 }
+            let c = Unmanaged<Compositor>.fromOpaque(data).takeUnretainedValue()
+            guard let outcome = c.appearanceWatch?.check() else { return 0 }
+            c.themeReloads += 1
+            Compositor.log("theme changed (#\(c.themeReloads))")
+            ThemeLoader.announce(outcome)
+            return 0
+        }, Unmanaged.passUnretained(self).toOpaque())
+    }
+
     /// Whether `linux-dmabuf` is on offer — whether a GPU client can present.
     public private(set) var dmabufOffered = false
 

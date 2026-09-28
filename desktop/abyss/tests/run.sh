@@ -214,6 +214,10 @@ if [ "$live" -eq 1 ]; then
   sh "$root/abyss/tests/live-present.sh" >/dev/null
   # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
   # and its menu vocabulary, on our own compositor.
+  # The theme changes while the desktop runs (PHASE14 P14.2): every process
+  # that draws follows appearance.ini, and back again byte for byte.
+  echo "== appearance, live =="
+  sh "$root/abyss/tests/live-appearance.sh" >/dev/null
   echo "== System Preferences =="
   sh "$root/abyss/tests/live-prefs.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:

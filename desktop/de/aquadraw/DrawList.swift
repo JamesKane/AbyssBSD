@@ -1175,6 +1175,17 @@ public enum DrawListRunner {
     struct HaloKey: Hashable { let s: String, px: Int32, style: Int32, role: Int32, radius: Int32, scale: Int32, tracking: Double }
     nonisolated(unsafe) static var haloCache: [HaloKey: (OpaquePointer, Double, Double)] = [:]
 
+    /// Drop the glow and halo masks — the caches whose pixels depend on the
+    /// theme: a glow's key is a shape's *name*, which a theme may redefine,
+    /// and a halo is shaped from a role's font, which a theme may change.
+    /// Called by `Theme.use`, so no mask can outlive the theme it was drawn in.
+    static func forgetThemedMasks() {
+        for (_, m) in glowCache { cairo_surface_destroy(m) }
+        glowCache.removeAll()
+        for (_, h) in haloCache { cairo_surface_destroy(h.0) }
+        haloCache.removeAll()
+    }
+
     /// A glow under a run of text — a title's, an LCD's bloom: the glyphs'
     /// mask, blurred (the glow's C blur) and tinted, cached by string and size.
     static func textHalo(_ s: String, _ t: TextOp, _ x: Double, _ y: Double, _ size: Double,

@@ -48,9 +48,6 @@ func usage() -> Never {
 
 var args = Array(CommandLine.arguments.dropFirst())
 guard let mode = args.first else { usage() }
-// The compositor paints server-side frames from the same theme the toolkit
-// draws with (PHASE11 §6.7), so it loads it too — and says which.
-ThemeLoader.announce(ThemeLoader.loadCurrent())
 args.removeFirst()
 
 var hz: UInt64 = 240
@@ -133,6 +130,12 @@ while i < args.count {
 // spelling of "no limit", and it stays opt-in so every harness invocation keeps
 // the bounded behaviour its assertions depend on.
 guard hz > 0, frames >= 0, surfaces >= 0 else { die("--hz must be positive, --frames must not be negative") }
+// The compositor paints server-side frames from the same theme the toolkit
+// draws with (PHASE11 §6.7), so it loads it too — and says which. **After
+// the options, from `--config-dir`**: this used to run before they were read,
+// so the theme came from the environment's config dir while everything else
+// came from the one the command line named (found in P14.2).
+ThemeLoader.announce(ThemeLoader.loadCurrent(configDir: configDir))
 let unbounded = runIsUnbounded(frames: frames)
 // **An assertion that never runs is worse than no assertion**, and every
 // `--assert-*` here is checked after the loop. Combined with an unbounded run
@@ -380,6 +383,8 @@ case "run":
     } catch {
         die("\(error)")
     }
+    // A person may change the theme while we run (P14.2).
+    compositor.watchAppearance()
     guard let wlrOutput = session.outputs.first else { die("no output") }
     let output = WlrootsOutput(wlrOutput, session: session)
     let scene = SurfaceScene(compositor: compositor, outputWidth: width,
@@ -453,6 +458,7 @@ case "run":
     // is stopped with a signal and never reaches the summary below, so a counter
     // printed only there cannot be asserted on by the tests that need it most.
     var reportedWindowOps = ""
+    var reportedThemeReloads = 0
     // **The stacking order, as it changes** (P11.6): the depth gadget's only
     // effect is where a window sits in it, and nothing else says.
     var reportedStack = ""
@@ -465,6 +471,10 @@ case "run":
         if ops != reportedWindowOps {
             reportedWindowOps = ops
             out(ops)
+        }
+        if compositor.themeReloads != reportedThemeReloads {
+            reportedThemeReloads = compositor.themeReloads
+            out("theme-reloads=\(compositor.themeReloads) generation=\(Theme.generation)")
         }
         for t in compositor.toplevels where t.mapped {
             let key = t.placeKey ?? "?"

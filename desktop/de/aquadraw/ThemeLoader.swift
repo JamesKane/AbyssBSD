@@ -300,10 +300,10 @@ public enum ThemeLoader {
     /// Where themes live, in order: `$ABYSS_THEME_DIR`, the person's config
     /// dir (`<config>/themes`), the install (`<exe>/../share/abyss/themes`),
     /// and — for a build tree — the repository's `themes/`.
-    public static func searchPath() -> [String] {
+    public static func searchPath(configDir: String? = nil) -> [String] {
         var dirs: [String] = []
         if let d = getenv("ABYSS_THEME_DIR").map({ String(cString: $0) }), !d.isEmpty { dirs.append(d) }
-        if let c = try? Pool.configDir() { dirs.append(c + "/themes") }
+        if let c = configDir ?? (try? Pool.configDir()) { dirs.append(c + "/themes") }
         if let exe = executableDirectory() {
             // <prefix>/bin → <prefix>/share/abyss/themes, said without a `..`:
             // the path a process announces is the path a test and a person read.
@@ -329,8 +329,9 @@ public enum ThemeLoader {
     /// `scheme`, and `[parameters]`. Aqua when nothing says otherwise.
     /// `$ABYSS_THEME` overrides the file's choice, for one process — a test, or
     /// a person trying a theme without committing to it (as `GTK_THEME` does).
-    public static func choice() -> (name: String, scheme: String?, overrides: [String: Double]) {
-        let a = (try? Pool.load("appearance")) ?? Config()
+    public static func choice(configDir: String? = nil)
+        -> (name: String, scheme: String?, overrides: [String: Double]) {
+        let a = (try? Pool.load("appearance", in: configDir)) ?? Config()
         var o: [String: Double] = [:]
         for (k, v) in a.pairs("parameters") { if let d = Double(v) { o[k] = d } }
         func env(_ n: String) -> String? { getenv(n).map { String(cString: $0) }.flatMap { $0.isEmpty ? nil : $0 } }
@@ -385,9 +386,10 @@ public enum ThemeLoader {
     /// Find, read and **use** the chosen theme; fall back to the compiled
     /// Jaguar when it cannot be — and return which, so it can be said.
     @discardableResult
-    public static func loadCurrent() -> Outcome {
-        let ch = choice()
-        let dirs = searchPath()
+    public static func loadCurrent(configDir: String? = nil) -> Outcome {
+        let ch = choice(configDir: configDir)
+        loadedChoice = Choice(ch)
+        let dirs = searchPath(configDir: configDir)
         // Fonts live beside the themes (P11.7): <config>/fonts, the install's
         // share/abyss/fonts, the repository's fonts/ — and a theme's own. Known
         // to fontconfig before any role is matched.
@@ -413,6 +415,69 @@ public enum ThemeLoader {
         }
         Theme.use(.jaguar)
         return .notFound(name: ch.name, looked: dirs)
+    }
+
+    // MARK: changing it while running (P14.2)
+
+    /// A choice, comparable: what `loadCurrent` last loaded.
+    struct Choice: Equatable {
+        let name: String, scheme: String?, overrides: [String: Double]
+        init(_ c: (name: String, scheme: String?, overrides: [String: Double])) {
+            name = c.name; scheme = c.scheme; overrides = c.overrides
+        }
+    }
+    nonisolated(unsafe) static var loadedChoice: Choice?
+
+    /// Load the theme again **if the choice changed** — `appearance.ini`'s
+    /// theme, scheme or parameters — and say what happened; nil when nothing
+    /// did. Cheap when nothing changed (one small file read), so a caller may
+    /// ask on every change in the config directory, most of which are some
+    /// other file's.
+    @discardableResult
+    public static func reloadIfChanged(configDir: String? = nil) -> Outcome? {
+        guard Choice(choice(configDir: configDir)) != loadedChoice else { return nil }
+        return loadCurrent(configDir: configDir)
+    }
+
+    /// The config directory, watched for a person changing the theme.
+    ///
+    /// A descriptor for the caller's own loop — the toolkit's `Display`, the
+    /// compositor's wayland event loop, the portal's poll — rather than a
+    /// thread or a callback of its own: every process that draws already waits
+    /// in exactly one place, and this joins it there. When the descriptor is
+    /// readable, `check()`.
+    public final class Watch {
+        private let watcher: Pool.Watcher
+        private let configDir: String?
+        public var fileDescriptor: Int32 { watcher.fileDescriptor }
+
+        public init?(configDir: String? = nil) {
+            guard let w = try? Pool.Watcher(in: configDir) else { return nil }
+            watcher = w
+            self.configDir = configDir
+        }
+
+        /// Drain the change, and reload if the appearance changed. The
+        /// outcome when it did — the caller redraws — and nil when it did not.
+        public func check() -> Outcome? {
+            _ = watcher.drain()
+            return ThemeLoader.reloadIfChanged(configDir: configDir)
+        }
+    }
+
+    /// Write a person's choice where every process will read it: the
+    /// `appearance` domain, by atomic rename, so a watcher sees one change
+    /// and never a half-written file. `nil` scheme or no parameters remove
+    /// those keys — the theme's defaults again.
+    public static func store(theme: String, scheme: String?, parameters: [String: Double] = [:],
+                             configDir: String? = nil) throws {
+        var c = Config()
+        c = c.set("appearance", "theme", theme)
+        if let s = scheme { c = c.set("appearance", "scheme", s) }
+        for (k, v) in parameters.sorted(by: { $0.key < $1.key }) {
+            c = c.set("parameters", k, String(v))
+        }
+        try c.store("appearance", in: configDir)
     }
 
     /// Where font files may be, for a theme chosen from `themeDirs`: each

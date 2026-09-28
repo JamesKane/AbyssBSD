@@ -63,6 +63,8 @@ private final class FrameTexture {
     let height: Int32
     let active: Bool
     let title: String
+    /// `Theme.generation` when it was drawn.
+    let themeGeneration = Theme.generation
 
     init?(renderer: UnsafeMutablePointer<wlr_renderer>, width: Int32, height: Int32,
           active: Bool, title: String) {
@@ -176,8 +178,12 @@ public final class Decorations {
                                      width: t.width, height: t.height)
         let title = t.title ?? ""
         let key = ObjectIdentifier(t)
+        // …and the theme it was drawn in (P14.2): a frame from the old theme
+        // matches nothing once the theme changes, so it is redrawn on the next
+        // frame without anyone having to remember to invalidate it.
         if let have = frames[key], have.width == box.w, have.height == box.h,
-           have.active == active, have.title == title {
+           have.active == active, have.title == title,
+           have.themeGeneration == Theme.generation {
             return have.texture
         }
         guard let fresh = FrameTexture(renderer: renderer, width: box.w, height: box.h,

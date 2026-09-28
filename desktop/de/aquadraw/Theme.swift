@@ -498,8 +498,8 @@ public struct ThemeTokens: Sendable, Equatable {
 /// through every paint function would touch every signature in the toolkit to
 /// carry one value that changes perhaps once a session.
 public enum Theme {
-    /// The loaded theme. Set once at startup by `ThemeLoader.loadCurrent()`
-    /// (and by tests). The toolkit draws on one thread — the compositor, too,
+    /// The loaded theme. Set at startup by `ThemeLoader.loadCurrent()`, and
+    /// again whenever a person changes it (P14.2, `ThemeLoader.Watch`). The toolkit draws on one thread — the compositor, too,
     /// dispatches and paints on one (PHASE6 P6.5) — which is what makes an
     /// unsynchronised global honest here rather than hopeful.
     nonisolated(unsafe) public private(set) static var current = ThemeTokens.jaguar
@@ -520,8 +520,18 @@ public enum Theme {
     /// bounds): what a list reads as `$name` when the widget does not pass one.
     nonisolated(unsafe) public private(set) static var parameters: [String: Double] = [:]
 
+    /// Which theme is loaded, as a number that only goes up: bumped by every
+    /// `use`. **What a cache of theme-derived pixels keys on** (PHASE14 §6.7)
+    /// — a frame, glow or halo rasterised under generation 3 is never the right
+    /// picture under generation 4, whatever else about it matches.
+    nonisolated(unsafe) public private(set) static var generation = 0
+
     public static func use(_ tokens: ThemeTokens, lists theirs: DrawListFile? = nil,
                            parameters p: [String: Double] = [:]) {
+        generation += 1
+        // Masks rasterised from the old theme's shapes and fonts. Noise tiles
+        // stay: a seed and a strength are the same picture in every theme.
+        DrawListRunner.forgetThemedMasks()
         current = tokens
         parameters = p
         Text.useRoleStyle(upper: tokens.roleUpper, tracking: tokens.roleTracking)
