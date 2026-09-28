@@ -529,9 +529,7 @@ public final class Seat {
         for p in compositor.mappedPopups.reversed() {
             guard let o = p.origin else { continue }
             let lx = x - Double(o.x), ly = y - Double(o.y)
-            if lx >= 0, ly >= 0, lx < Double(p.width), ly < Double(p.height) {
-                return .popup(p, lx, ly)
-            }
+            if Seat.leaf(of: p.surface, lx, ly) != nil { return .popup(p, lx, ly) }
         }
         let layers = compositor.mappedLayers            // bottom-to-top
         if let h = hitLayer(layers.filter { $0.layer >= 2 }, x, y) { return h }
@@ -541,9 +539,7 @@ public final class Seat {
         // window below take a click on the frame of the window above it.
         for t in compositor.mappedToplevels.reversed() {
             let lx = x - Double(t.x), ly = y - Double(t.y)
-            if lx >= 0, ly >= 0, lx < Double(t.width), ly < Double(t.height) {
-                return .toplevel(t, lx, ly)
-            }
+            if Seat.leaf(of: t.surface, lx, ly) != nil { return .toplevel(t, lx, ly) }
             guard t.decorated else { continue }
             let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
                                          width: t.width, height: t.height)
@@ -582,12 +578,28 @@ public final class Seat {
 
     private func hitLayer(_ layers: [LayerSurface], _ x: Double, _ y: Double)
         -> PointerTarget? {
-        let rects = layers.map {
-            WindowRect(x: $0.rect.x, y: $0.rect.y,
-                       width: $0.rect.width, height: $0.rect.height)
+        for l in layers.reversed() {                   // the top one wins
+            let lx = x - Double(l.rect.x), ly = y - Double(l.rect.y)
+            if Seat.leaf(of: l.surface, lx, ly) != nil { return .layer(l, lx, ly) }
         }
-        guard let h = PointerRouting.hit(x, y, rects: rects) else { return nil }
-        return .layer(layers[h.index], h.localX, h.localY)
+        return nil
+    }
+
+    /// The surface in `root`'s tree under a root-local point, and the point in
+    /// **that surface's** coordinates.
+    ///
+    /// A window is a tree, not a rectangle: a subsurface may lie over its
+    /// parent or outside it, and a pointer event belongs to the leaf, in the
+    /// leaf's own coordinates. Until U.1 undertow tested each root's rectangle
+    /// and told the root, so a click on a subsurface arrived at its parent at
+    /// the wrong place, and one outside the parent arrived nowhere. wlroots
+    /// walks the tree top-down and honours each surface's input region, which
+    /// a rectangle never did.
+    static func leaf(of root: UnsafeMutablePointer<wlr_surface>, _ lx: Double, _ ly: Double)
+        -> (surface: UnsafeMutablePointer<wlr_surface>, x: Double, y: Double)? {
+        var sx = 0.0, sy = 0.0
+        guard let s = wlr_surface_surface_at(root, lx, ly, &sx, &sy) else { return nil }
+        return (s, sx, sy)
     }
 
     private func moveCursor(to x: Double, _ y: Double, timeMsec: UInt32) {
@@ -620,11 +632,14 @@ public final class Seat {
             wlr_seat_pointer_clear_focus(seat)
             return
         }
-        let (lx, ly) = hit.local
+        let (rx, ry) = hit.local
+        // The leaf, not the root: a subsurface is told about the pointer in
+        // its own coordinates.
+        let (leaf, lx, ly) = Seat.leaf(of: surface, rx, ry) ?? (surface, rx, ry)
         // `notify_enter` is idempotent — wlroots only sends the protocol enter
         // when the surface actually changes — so this is the whole of
-        // enter/leave bookkeeping.
-        wlr_seat_pointer_notify_enter(seat, surface, lx, ly)
+        // enter/leave bookkeeping, between subsurfaces as between windows.
+        wlr_seat_pointer_notify_enter(seat, leaf, lx, ly)
         wlr_seat_pointer_notify_motion(seat, timeMsec, lx, ly)
         wlr_seat_pointer_notify_frame(seat)
     }

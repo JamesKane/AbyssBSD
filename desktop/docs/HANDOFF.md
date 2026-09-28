@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**556 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
+**556 unit tests, 33 live modes and 35 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -666,6 +666,41 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.71 A window is a tree, not a rectangle
+(U.1, 2026-09-28. The third global with nothing behind it — §2.58, §2.62.)
+
+`undertow` created `wl_subcompositor` in Phase 6 and never drew a subsurface,
+never sent one a frame callback, and hit-tested each window as its root's
+rectangle. A client could build a subsurface tree without an error; nothing in
+it past the root was ever seen, clicked or clocked. Our toolkit never makes a
+subsurface, so no test could notice; Firefox puts its page in one.
+
+The fix is wlroots' own tree, not a second one of ours: the scene, frame-done
+and the hit-test each walk `wlr_surface_for_each_surface` /
+`wlr_surface_surface_at` from every root — window, layer surface, popup. Three
+things worth knowing:
+
+- **Paint order is the tree's, not "parent then children".** A subsurface
+  placed *below* its parent is painted first; the walk gives that order, and
+  `live-subsurface.sh` has a child placed below to prove it.
+- **A pointer event belongs to the leaf, in the leaf's coordinates.** The
+  window still takes focus on a click; the *events* go to whichever surface of
+  it is under the pointer, which also means input regions are honoured now,
+  where a rectangle never did.
+- **No allocation in the present path.** The C iterators carry their context in
+  the data pointer (the scene itself; the frame time), so walking a tree costs
+  the latch nothing it did not cost before. C2 is unchanged on both platforms.
+
+**Each of the test's three claims was shown to fail alone**: with the old scene
+only the pixels fail, with the old hit-test only the routing, and with all of
+it the frame clock fails first. The general rule is §2.58's, one level down:
+for each global, name the object a client receives — and for each object, the
+*children* a client can hang off it.
+
+**Found while doing it, not fixed:** `undertow` never sends `wl_surface.enter`
+for an output, to any surface. A client never learns which output it is on,
+which is how GTK and others pick their scale. BACKLOG U.10.
 
 ### 2.70 A virtual keyboard is not a keyboard
 (2026-09-28. Found by reading, not running — the NeoDarwin API study review,
@@ -2521,6 +2556,7 @@ or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 | `live-undertow-c2.sh` | **C2**: eleven hostile processes cannot make us drop a frame, while a healthy client keeps drawing (§2.38) |
 | `live-undertow-shell.sh` | the Jaguar shell — wallpaper, menu bar, Dock — composing on `undertow` |
 | `live-undertow-places.sh` | a window reopens where it was dragged, in a **new session** (§2.22's debt) |
+| `live-subsurface.sh` | a window made of **subsurfaces** — over, outside and below its parent — drawn, framed and routed to the leaf (§2.71) |
 | `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |
 
 **Tests that need a compositor** (in `run.sh --live`):

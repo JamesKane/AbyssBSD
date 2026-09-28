@@ -935,16 +935,25 @@ public final class Compositor {
     public func sendFrameDone() {
         var now = timespec()
         clock_gettime(CLOCK_MONOTONIC, &now)
-        for t in mappedToplevels {
-            wlr_surface_send_frame_done(t.surface, &now)
-        }
-        for l in mappedLayers {
-            wlr_surface_send_frame_done(l.surface, &now)
-        }
+        for t in mappedToplevels { Compositor.frameDone(tree: t.surface, &now) }
+        for l in mappedLayers { Compositor.frameDone(tree: l.surface, &now) }
         // Or a menu draws once and never shows its hover.
-        for p in mappedPopups {
-            wlr_surface_send_frame_done(p.surface, &now)
-        }
+        for p in mappedPopups { Compositor.frameDone(tree: p.surface, &now) }
+    }
+
+    /// Frame-done to a surface **and every subsurface under it**.
+    ///
+    /// A subsurface has its own frame callbacks, and a desynchronised one
+    /// commits on its own clock: one that asks and is never answered draws once
+    /// and then waits for ever, exactly as a whole window did before this
+    /// function existed. The time travels as the iterator's data pointer, so
+    /// no closure is allocated per frame.
+    static func frameDone(tree root: UnsafeMutablePointer<wlr_surface>,
+                          _ now: UnsafeMutablePointer<timespec>) {
+        wlr_surface_for_each_surface(root, { surface, _, _, data in
+            guard let surface, let data else { return }
+            wlr_surface_send_frame_done(surface, data.assumingMemoryBound(to: timespec.self))
+        }, UnsafeMutableRawPointer(now))
     }
 
     /// Close out a frame: release clients to draw the next one, then push the

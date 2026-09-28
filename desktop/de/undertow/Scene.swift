@@ -96,21 +96,13 @@ public final class SurfaceScene: FrameSink {
                 count += 1
                 guard count < capacity else { break }
             }
-            guard let tex = wlr_surface_get_texture(t.surface) else { continue }
-            texture[count] = tex
-            x[count] = t.x; y[count] = t.y
-            w[count] = t.width; h[count] = t.height
-            count += 1
+            addTree(t.surface, at: t.x, t.y)
         }
         for l in layers where l.layer >= 2 { add(layer: l) }
         // Menus above everything, parent before child (P10.4).
         for p in compositor.mappedPopups {
-            guard count < capacity, let o = p.origin,
-                  let tex = wlr_surface_get_texture(p.surface) else { continue }
-            texture[count] = tex
-            x[count] = o.x; y[count] = o.y
-            w[count] = p.width; h[count] = p.height
-            count += 1
+            guard let o = p.origin else { continue }
+            addTree(p.surface, at: o.x, o.y)
         }
 
         var painted: Int32 = 0
@@ -130,11 +122,42 @@ public final class SurfaceScene: FrameSink {
 
     @inline(__always)
     private func add(layer l: LayerSurface) {
-        guard count < capacity else { return }
-        guard let tex = wlr_surface_get_texture(l.surface) else { return }
+        addTree(l.surface, at: l.rect.x, l.rect.y)
+    }
+
+    // MARK: - Surface trees
+
+    /// Where the tree being walked sits on the output. Instance state rather
+    /// than a context value, so a walk allocates nothing — the latch is C1's
+    /// budget.
+    private var walkX: Int32 = 0
+    private var walkY: Int32 = 0
+
+    /// A surface **and its subsurfaces**, in the order they are painted.
+    ///
+    /// **undertow advertised `wl_subcompositor` from Phase 6 and never drew a
+    /// subsurface** — each root was one texture, and anything a client put in
+    /// a subsurface (Firefox puts its whole page in one) was a mapped surface
+    /// nobody could see (API-STUDY §1.3; HANDOFF §2.58's shape, a third time).
+    /// wlroots keeps the tree and its stacking — `place_above`, `place_below`,
+    /// each child's offset — and walks it root to leaves in paint order, which
+    /// is the one order a naive "parent, then children" gets wrong: a child
+    /// placed below its parent is painted first.
+    @inline(__always)
+    private func addTree(_ root: UnsafeMutablePointer<wlr_surface>, at ox: Int32, _ oy: Int32) {
+        walkX = ox; walkY = oy
+        wlr_surface_for_each_surface(root, { surface, sx, sy, data in
+            guard let surface, let data else { return }
+            Unmanaged<SurfaceScene>.fromOpaque(data).takeUnretainedValue()
+                .addLeaf(surface, sx, sy)
+        }, Unmanaged.passUnretained(self).toOpaque())
+    }
+
+    private func addLeaf(_ s: UnsafeMutablePointer<wlr_surface>, _ sx: Int32, _ sy: Int32) {
+        guard count < capacity, let tex = wlr_surface_get_texture(s) else { return }
         texture[count] = tex
-        x[count] = l.rect.x; y[count] = l.rect.y
-        w[count] = l.width; h[count] = l.height
+        x[count] = walkX &+ sx; y[count] = walkY &+ sy
+        w[count] = s.pointee.current.width; h[count] = s.pointee.current.height
         count += 1
     }
 

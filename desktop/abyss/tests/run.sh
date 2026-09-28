@@ -191,6 +191,12 @@ if [ "$live" -eq 1 ]; then
   # abyss_window_manager_v1 — both laid out by one function (P11.6).
   echo "== depth =="
   sh "$root/abyss/tests/live-depth.sh" >/dev/null
+  # A window made of subsurfaces — one over its parent and desynchronised,
+  # one outside it, one placed below it — drawn, framed and routed to the
+  # leaf under the pointer. undertow advertised the global from Phase 6 and
+  # did none of it (U.1; API-STUDY §1.3).
+  echo "== subsurfaces =="
+  sh "$root/abyss/tests/live-subsurface.sh" >/dev/null
   # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
   # and its menu vocabulary, on our own compositor.
   echo "== System Preferences =="

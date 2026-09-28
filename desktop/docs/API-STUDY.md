@@ -63,7 +63,7 @@ is not optional. wlroots 0.19: `wlr_linux_dmabuf_v1_create_with_renderer`, and
 `wlr_linux_drm_syncobj_manager_v1_create` for explicit sync (whether drm-kmod
 wires syncobj eventfd is unverified).
 
-### 1.3 Open: subsurfaces are advertised and never drawn
+### 1.3 Fixed (U.1): subsurfaces were advertised and never drawn
 
 `wlr_subcompositor_create` is called (`Compositor.swift:367`) and nothing in
 `de/undertow` touches a subsurface: none is drawn, and none is sent frame-done.
@@ -72,6 +72,10 @@ one (`firefox/widget/gtk/WaylandSurface.cpp:449`), so under `undertow` it would
 draw its chrome and no page, or hang waiting for a callback. **§2.58 exactly** —
 a global with nothing behind it — in the one place §2.58's own rule ("name the
 object a client receives through each global") was not yet applied.
+
+Fixed 2026-09-28: the scene, frame-done and the hit-test walk each root's tree,
+and `live-subsurface.sh` proves drawing, frame callbacks and pointer routing
+separately, on both platforms (HANDOFF §2.71).
 
 ### 1.4 Open: a minimised window's frame clock stops
 
@@ -106,7 +110,7 @@ Wayland clients); a reader's own count agreed within ±1 for 11 of 19 and within
 | Protocol | Clients | Have | Missing means | Rank |
 |---|---|---|---|---|
 | linux-dmabuf-v1 | 6 + all of Mesa | no | GPU clients do not use the GPU (§1.2) | **P0** |
-| (subsurfaces) | 11 | global only | Firefox's page is not drawn (§1.3) | **P0** |
+| (subsurfaces) | 11 | **yes** (U.1) | Firefox's page was not drawn (§1.3) | done |
 | xdg-activation-v1 | 11 | yes | — | done |
 | xdg-decoration | 10 | yes (server-side) | — | done |
 | presentation-time | 3 | no | toolkits estimate present times (F-101); we hold the real ones | P1 |
