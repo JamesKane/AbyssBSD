@@ -225,6 +225,11 @@ if [ "$live" -eq 1 ]; then
   sh "$root/abyss/tests/live-settings.sh" >/dev/null
   echo "== System Preferences =="
   sh "$root/abyss/tests/live-prefs.sh" >/dev/null
+  # The Network pane (P14.4c): the kernel's status, rc.conf's configuration
+  # through the helper, typed and applied — write-only in the guest, whose
+  # network is how the test reaches it.
+  echo "== the Network pane =="
+  sh "$root/abyss/tests/live-network-pane.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

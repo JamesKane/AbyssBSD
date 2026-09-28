@@ -16,6 +16,7 @@ import CCairo
 import AquaDraw
 import MenuModel
 import MenuWire
+import Vents
 
 #if canImport(Glibc)
 import Glibc
@@ -109,12 +110,17 @@ public struct PrefsModel: Equatable, Sendable {
     public func note(for id: String) -> String {
         if let n = notes[id] { return n }
         // General chooses the theme (P14.2) — the first pane that changes anything.
-        return id == PrefsModel.appearancePane ? "Choose the theme, its scheme and its settings."
-                                               : "This pane cannot change anything yet."
+        switch id {
+        case PrefsModel.appearancePane: return "Choose the theme, its scheme and its settings."
+        case PrefsModel.networkPane: return "A wired interface's address, by DHCP or by hand, and the name servers."
+        default: return "This pane cannot change anything yet."
+        }
     }
 
     /// Jaguar's General pane, which chose the appearance: here, the theme.
     public static let appearancePane = "general"
+    /// The wired network (P14.4c).
+    public static let networkPane = "network"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -145,10 +151,12 @@ public struct PrefsLayout: Equatable, Sendable {
     public var body = Rect(0, 0, 0, 0)
     /// The General pane's controls, when it is showing (P14.2).
     public var appearance = AppearanceLayout()
+    /// The Network pane's controls, when it is showing (P14.4c).
+    public var network = NetworkLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
-            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance
+            && a.cells == b.cells && a.rules == b.rules && a.body == b.body && a.appearance == b.appearance && a.network == b.network
             && a.sectionTitles.map(\.0) == b.sectionTitles.map(\.0)
     }
 }
@@ -215,7 +223,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                                    model: PrefsModel = PrefsModel(),
                                    themes: [InstalledTheme]? = nil,
                                    choice: AppearanceChoice? = nil,
-                                   dragging: (String, Double)? = nil) -> PrefsLayout {
+                                   dragging: (String, Double)? = nil,
+                                   network: NetworkPaneState? = nil) -> PrefsLayout {
     var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
@@ -249,6 +258,10 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         l.appearance = appearanceLayout(body: l.body, themes: installed, choice: chosen)
         paintAppearancePane(cr, l.appearance, body: l.body, themes: installed, choice: chosen,
                             dragging: dragging)
+    case .pane(let id) where id == PrefsModel.networkPane:
+        let n = network ?? .sample
+        l.network = networkLayout(body: l.body, interfaces: n.interfaces)
+        paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy)
     case .pane(let id):
         paintPrefPage(cr, l, id, model)
     }
@@ -358,6 +371,14 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     /// Written when the button comes up, not on every step — one change,
     /// not a stream of them for every process on the desktop to follow.
     private var dragging: (String, Double)?
+    /// The Network pane: the kernel's status, the form, what the helper said.
+    private var network = NetworkPaneState(status: Vents.Network.Status(interfaces: [], router: nil, nameServers: []),
+                                           form: nil)
+    private var networkWatch: Vents.Network.Watch?
+    /// The socket an apply is reporting on, while it is.
+    private var applying: Int32?
+    private var skipped: [String] = []
+    private var dumpedNetwork: NetworkLayout?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -377,6 +398,12 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             menuService = service
             if win.publishMenus(at: name) { SystemPreferencesApp.log("menus on \(name)") }
         }
+        // The kernel says when an address, a link or a route changes; the
+        // Network pane redraws from it, so a lease or a cable shows at once.
+        if let w = Vents.Network.Watch() {
+            display.addFileDescriptor(w.fileDescriptor) { [weak self] in self?.networkChanged() }
+            networkWatch = w
+        }
     }
 
     static func log(_ s: String) {
@@ -389,6 +416,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         guard model.view != v else { return }
         model.view = v
         if v == .pane(PrefsModel.appearancePane) { installedThemes = AppearanceCatalogue.installed() }
+        if v == .pane(PrefsModel.networkPane) { loadNetwork(interface: nil) }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -411,7 +439,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         layout = paintSystemPreferences(cr, w: w, h: h, model: model,
                                         themes: installedThemes, choice: AppearanceChoice.current(),
-                                        dragging: dragging)
+                                        dragging: dragging, network: network)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -438,6 +466,135 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             }
             SystemPreferencesApp.log(line)
         }
+        // The Network pane's: `iface.<name>`, `mode.dhcp`/`mode.manual`,
+        // `field.<name>` (the editable ones), `revert`, `apply`.
+        if dumpLayout, model.view == .pane(PrefsModel.networkPane), dumpedNetwork != layout.network {
+            dumpedNetwork = layout.network
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            let n = layout.network
+            var line = "network layout"
+            for r in n.interfaces { line += " iface.\(r.value)=\(c(r.hit))" }
+            line += " mode.dhcp=\(c(n.dhcp.hit)) mode.manual=\(c(n.manual.hit))"
+            for f in NetworkField.allCases { if let r = n.fields[f] { line += " field.\(f.rawValue)=\(c(r))" } }
+            line += " revert=\(c(n.revert)) apply=\(c(n.apply))"
+            SystemPreferencesApp.log(line)
+        }
+    }
+
+    // MARK: the Network pane
+
+    /// Status from the kernel, the form from rc.conf through the helper. With
+    /// no interface named, the one showing — else the first there is.
+    private func loadNetwork(interface: String?) {
+        network.status = Vents.Network.status()
+        let names = network.interfaces
+        guard let name = interface ?? network.form.map(\.interface).flatMap({ names.contains($0) ? $0 : nil })
+                ?? names.first else {
+            network.form = nil
+            SystemPreferencesApp.log("network: no wired interface")
+            return
+        }
+        SystemPreferencesApp.log("network: status \(NetworkWords.statusLine(network.status, interface: name))")
+        switch NetworkClient.read(name) {
+        case .success(let plan):
+            network.form = NetworkForm.from(plan)
+            network.note = ""
+            SystemPreferencesApp.log("network: read \(network.form!.summary)")
+        case .failure(let why):
+            // Nothing to show from rc.conf: the form starts at DHCP, and the
+            // page says why in the helper's words.
+            network.form = NetworkForm(interface: name)
+            network.note = "The settings helper says: \(why.message)"
+            SystemPreferencesApp.log("network: cannot read \(name): \(why.message)")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func networkChanged() {
+        guard networkWatch?.drain() == true, model.view == .pane(PrefsModel.networkPane) else { return }
+        network.status = Vents.Network.status()
+        if let f = network.form {
+            SystemPreferencesApp.log("network: changed \(NetworkWords.statusLine(network.status, interface: f.interface))")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func applyNetwork() {
+        guard applying == nil, let form = network.form else { return }
+        SystemPreferencesApp.log("network: apply \(form.summary)")
+        guard let sock = NetworkClient.begin(form) else {
+            network.note = "Not applied: the settings helper is not running on this machine"
+            SystemPreferencesApp.log("network: \(network.note)")
+            window?.setNeedsDisplay()
+            return
+        }
+        applying = sock
+        skipped = []
+        network.busy = true
+        network.note = "Applying…"
+        display.addFileDescriptor(sock) { [weak self] in self?.networkEvent() }
+        window?.setNeedsDisplay()
+    }
+
+    private func networkEvent() {
+        guard let sock = applying else { return }
+        let e = NetworkClient.next(on: sock) ?? .finished(ok: false, error: "the settings helper hung up")
+        switch e {
+        case .starting(let i, let n, let what):
+            network.note = "Step \(i + 1) of \(n): \(what)"
+            SystemPreferencesApp.log("network: [\(i + 1)/\(n)] \(what)")
+        case .ok: return
+        case .skipped(_, let why):
+            skipped.append(why)
+            SystemPreferencesApp.log("network: skipped: \(why)")
+        case .failed(_, _, let why, let ignored):
+            SystemPreferencesApp.log("network: \(ignored ? "failed, and that is allowed" : "FAILED"): \(why)")
+        case .finished(let ok, let error):
+            display.removeFileDescriptor(sock)
+            close(sock)
+            applying = nil
+            network.busy = false
+            let said = NetworkWords.outcome(ok: ok, error: error, skipped: skipped)
+            SystemPreferencesApp.log("network: \(ok ? "applied" : "not applied") — \(said)")
+            if ok, let name = network.form?.interface { loadNetwork(interface: name) }
+            network.note = said
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func pressNetwork(_ hit: NetworkHit) {
+        guard network.form != nil else { return }
+        switch hit {
+        case .interface(let name):
+            guard name != network.form?.interface else { return }
+            loadNetwork(interface: name)
+        case .mode(let dhcp):
+            network.form!.setDHCP(dhcp)
+            SystemPreferencesApp.log("network: mode \(dhcp ? "dhcp" : "manual")")
+        case .field(let f):
+            network.form!.focus = f
+            SystemPreferencesApp.log("network: focus \(f.rawValue)")
+        case .revert:
+            SystemPreferencesApp.log("network: revert")
+            loadNetwork(interface: network.form!.interface)
+        case .apply:
+            applyNetwork()
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func networkKey(_ event: KeyEvent) {
+        guard network.form != nil else { return }
+        switch event.keysym {
+        case KeySym.tab where event.modifiers.contains(.shift), KeySym.backTab: network.form!.moveFocus(-1)
+        case KeySym.tab: network.form!.moveFocus(1)
+        case KeySym.backspace: network.form!.backspace()
+        case KeySym.enter: applyNetwork(); return
+        default:
+            guard !event.modifiers.contains(.command), !event.modifiers.contains(.control) else { return }
+            network.form!.type(event.text)
+        }
+        window?.setNeedsDisplay()
     }
 
     public func pointerMoved(x: Double, y: Double) {
@@ -492,6 +649,12 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if dumpLayout {
             SystemPreferencesApp.log("press at \(Int(pointerX)),\(Int(pointerY))")
         }
+        if model.view == .pane(PrefsModel.networkPane),
+           let hit = networkHit(layout.network, form: network.form ?? NetworkForm(interface: ""),
+                                x: pointerX, y: pointerY) {
+            pressNetwork(hit)
+            return
+        }
         if model.view == .pane(PrefsModel.appearancePane),
            let hit = appearanceHit(layout.appearance, themes: installedThemes,
                                    choice: AppearanceChoice.current(), x: pointerX, y: pointerY) {
@@ -520,6 +683,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         }
         guard model.view == .all else {
             if event.keysym == KeySym.escape { show(.all) }
+            else if model.view == .pane(PrefsModel.networkPane) { networkKey(event) }
             return
         }
         switch event.keysym {

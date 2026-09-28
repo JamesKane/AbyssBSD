@@ -67,7 +67,8 @@ static void reg_remove(void *data, struct wl_registry *reg, uint32_t name) {
 static const struct wl_registry_listener reg_listener = { reg_global, reg_remove };
 
 // ASCII → (evdev keycode, needs shift). Covers the printable set a test needs;
-// unknown characters are skipped. Codes are from linux/input-event-codes.h.
+// an unknown character is said on stderr, never skipped in silence — a test
+// that typed "10.0.2.5" and sent "10025" should fail saying why. Codes are from linux/input-event-codes.h.
 static int ascii_to_key(char c, unsigned *code, int *shift) {
     *shift = 0;
     if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A'), *shift = 0;
@@ -92,6 +93,11 @@ static int ascii_to_key(char c, unsigned *code, int *shift) {
     case '7': *code = 8;  return 1;  case '8': *code = 9;  return 1;
     case '9': *code = 10; return 1;  case '0': *code = 11; return 1;
     case ' ': *code = 57; return 1;  // KEY_SPACE
+    // Punctuation an address or a path is typed with (US layout).
+    case '.': *code = 52; return 1;  case ',': *code = 51; return 1;
+    case '-': *code = 12; return 1;  case '/': *code = 53; return 1;
+    case ':': *code = 39; *shift = 1; return 1;
+    case '_': *code = 12; *shift = 1; return 1;
     default:  return 0;
     }
 }
@@ -187,7 +193,10 @@ int main(void) {
         if (line[0] != 't' || line[1] != ' ') continue;
         for (const char *p = line + 2; *p && *p != '\n'; p++) {
             unsigned code; int shift;
-            if (!ascii_to_key(*p, &code, &shift)) continue;
+            if (!ascii_to_key(*p, &code, &shift)) {
+                fprintf(stderr, "vkeyboard: cannot type '%c'\n", *p);
+                continue;
+            }
             t += 10;
             if (shift) zwp_virtual_keyboard_v1_modifiers(vk, MOD_SHIFT, 0, 0, 0);
             zwp_virtual_keyboard_v1_key(vk, t, code, KEY_PRESSED);

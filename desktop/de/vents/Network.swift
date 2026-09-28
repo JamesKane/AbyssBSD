@@ -27,6 +27,7 @@ public extension Vents {
         public struct Address: Equatable, Sendable {
             public let address: String
             public let prefix: Int
+            public init(address: String, prefix: Int) { self.address = address; self.prefix = prefix }
         }
 
         public struct Interface: Equatable, Sendable {
@@ -37,12 +38,20 @@ public extension Vents {
             public let ipv4: [Address]
             /// `aa:bb:cc:dd:ee:ff`, or nil when it has none.
             public let mac: String?
+            public init(name: String, up: Bool, loopback: Bool, link: Link, ipv4: [Address], mac: String?) {
+                self.name = name; self.up = up; self.loopback = loopback
+                self.link = link; self.ipv4 = ipv4; self.mac = mac
+            }
         }
 
         public struct Status: Equatable, Sendable {
             public let interfaces: [Interface]
             public let router: (address: String, interface: String)?
             public let nameServers: [String]
+
+            public init(interfaces: [Interface], router: (address: String, interface: String)?, nameServers: [String]) {
+                self.interfaces = interfaces; self.router = router; self.nameServers = nameServers
+            }
 
             public static func == (a: Status, b: Status) -> Bool {
                 a.interfaces == b.interfaces && a.nameServers == b.nameServers

@@ -42,11 +42,12 @@ final class SystemPreferencesTests: XCTestCase {
     func testAPageIsTitledAndHonest() {
         var m = PrefsModel()
         XCTAssertEqual(m.title, "System Preferences")
-        m.view = .pane("network")
-        XCTAssertEqual(m.title, "Network")
-        XCTAssertEqual(m.note(for: "network"), "This pane cannot change anything yet.")
-        m.notes["network"] = "the settings service is not running"
-        XCTAssertEqual(m.note(for: "network"), "the settings service is not running")
+        m.view = .pane("sound")
+        XCTAssertEqual(m.title, "Sound")
+        XCTAssertEqual(m.note(for: "sound"), "This pane cannot change anything yet.")
+        XCTAssertNotEqual(m.note(for: "network"), "This pane cannot change anything yet.", "Network changes things (P14.4c)")
+        m.notes["sound"] = "the settings service is not running"
+        XCTAssertEqual(m.note(for: "sound"), "the settings service is not running")
     }
 
     func testTheKeyboardWalksThePanesInReadingOrder() {

@@ -242,7 +242,11 @@ let package = Package(
                            // asks the same refusals P5.1 wrote whether a disk
                            // may be chosen. `Install` depends on nothing, so
                            // this costs the toolkit no new libraries.
-                           "Install", "InstallWire"],
+                           "Install", "InstallWire",
+                           // The Network pane speaks the settings helper's
+                           // protocol (P14.4c) — and, like the installer, does
+                           // not link the half that runs `sysrc`.
+                           "Settings", "SettingsWire"],
             path: "de/aqua"
         ),
         // Demo: a single faithful Aqua window with live controls.
@@ -504,7 +508,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AquaTests",
-            dependencies: ["Aqua", "AquaDraw", "PoolConfig", "SVGImport"],
+            dependencies: ["Aqua", "AquaDraw", "PoolConfig", "SVGImport", "CurrentIPC", "Settings", "SettingsWire", "Vents"],
             path: "Tests/AquaTests"
         ),
         .testTarget(
