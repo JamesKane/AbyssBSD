@@ -185,7 +185,7 @@ kill -0 "$finder_pid" 2>/dev/null || fail "Force Quit killed the Finder too"
 echo "ok: Force Quit aquademo — the process is gone, and only that one"
 
 # ------------------------------------------------- 5. System Preferences
-focused_before=$(count "$work/ut.err" "focused org.abyssbsd.aquademo")
+focused_before=$(count "$work/ut.err" "focused org.abyssbsd.preferences")
 system_item "System Preferences"
 after "$work/bar.log" "chose System > System Preferences… (system.preferences) → ok" 0 \
   "System Preferences was not started"
@@ -193,9 +193,11 @@ i=0
 while [ $i -lt 25 ] && [ ! -s "$work/prefs.pid" ]; do sleep 0.2; i=$((i + 1)); done
 [ -s "$work/prefs.pid" ] || fail "nothing was launched"
 kill -0 "$(cat "$work/prefs.pid")" 2>/dev/null || fail "System Preferences started and died"
-# Its window maps and takes focus — the compositor says a new aquademo window
-# is frontmost (the Force Quit victim, the only other one, is dead).
-after "$work/ut.err" "focused org.abyssbsd.aquademo" "$focused_before" \
+# Its window maps and takes focus — the compositor says System Preferences is
+# frontmost. It has been an application of its own, `org.abyssbsd.preferences`,
+# since P14.1; this waited for `org.abyssbsd.aquademo` until 2026-09-28, and
+# failed from P14.1 on without anyone running it.
+after "$work/ut.err" "focused org.abyssbsd.preferences" "$focused_before" \
   "no System Preferences window ever became frontmost"
 [ "$(cat "$work/prefs.display")" = "$wd" ] \
   || fail "System Preferences was launched on '$(cat "$work/prefs.display")', not the ordinary display — a child of the bar must never inherit its privilege"
