@@ -234,6 +234,10 @@ if [ "$live" -eq 1 ]; then
   # read back by mixer(8), players shown, outside changes followed.
   echo "== the Sound pane =="
   sh "$root/abyss/tests/live-sound-pane.sh" >/dev/null
+  # The menu bar's volume item (P14.6d): real on the guest's snd_dummy —
+  # follows mixer(8), shows mute, and its slider sets vol; absent on Linux.
+  echo "== the volume item =="
+  sh "$root/abyss/tests/live-menubar-volume.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

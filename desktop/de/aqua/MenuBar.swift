@@ -157,9 +157,8 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var popup: Popup?
     private var pointerX = 0.0
     private var timerFd: Int32 = -1
-    /// The hardware bridges behind the status items. The mixer is opened once —
-    /// nil on a machine with no sound card, which is how the item stays hidden.
-    private var mixer: Vents.Mixer?
+    /// What the status items show, read through Vents each tick; an item with
+    /// nothing behind it (no sound card, no battery) is not drawn.
     private var status = MenuBarStatus()
     /// Who is frontmost and where their menus are, from the compositor
     /// (P10.3). Nil unless this bar connected through undertow's privileged
@@ -250,10 +249,8 @@ public final class MenuBar: LayerSurfaceDelegate {
         // The status items read the machine through Vents (sysctl / OSS). Both
         // are absent on a VM and on Linux, in which case nothing is drawn — see
         // MenuBarStatus.
-        mixer = Vents.Mixer()
-        status = MenuBarStatus.read(mixer: mixer)
-        MenuBar.log("status \(status.volume.map { "volume \($0)%" } ?? "no mixer"), "
-                    + "\(status.batteryPercent.map { "battery \($0)%" } ?? "no battery")")
+        status = MenuBarStatus.read()
+        MenuBar.log("status \(MenuBar.describe(status))")
 
         if let f = MenuBarFocus(display: display) {
             f.onFocus = { [weak self] f in
@@ -518,9 +515,18 @@ public final class MenuBar: LayerSurfaceDelegate {
         // Poll the hardware on the same tick rather than adding a second timer:
         // volume and charge move on a human timescale, and a second-resolution
         // status item is what Jaguar had.
-        let fresh = MenuBarStatus.read(mixer: mixer)
-        if fresh != status { status = fresh; dirty = true }
+        let fresh = MenuBarStatus.read()
+        if fresh != status {
+            // Said when it changes, so a level set elsewhere is seen to arrive.
+            if fresh.volume != status.volume || fresh.muted != status.muted { MenuBar.log("status \(MenuBar.describe(fresh))") }
+            status = fresh; dirty = true
+        }
         if dirty { layer?.setNeedsDisplay() }
+    }
+
+    static func describe(_ s: MenuBarStatus) -> String {
+        (s.volume.map { "volume \($0)%" + (s.muted ? " muted" : "") } ?? "no mixer") + ", "
+            + (s.batteryPercent.map { "battery \($0)%" } ?? "no battery")
     }
 
     private static func log(_ msg: String) {
@@ -543,6 +549,12 @@ public final class MenuBar: LayerSurfaceDelegate {
                                    openIndex: openIndex, showClock: showClock,
                                    status: status)
         if titlesDirty { titlesDirty = false; logTitles() }
+        // Where the speaker is, whenever that changes — for a test to click
+        // (§2.46); "none" when there is nothing to set.
+        if loggedVolumeRect == nil || loggedVolumeRect! != layoutCache.volumeRect {   // first frame too
+            loggedVolumeRect = .some(layoutCache.volumeRect)
+            MenuBar.log("volume item " + (layoutCache.volumeRect.map { "at \(Int($0.x + $0.w / 2)),\(Int($0.y + $0.h / 2))" } ?? "none"))
+        }
         cairo_surface_flush(cs)
         cairo_destroy(cr)
         cairo_surface_destroy(cs)
@@ -552,6 +564,11 @@ public final class MenuBar: LayerSurfaceDelegate {
 
     public func pointerButton(_ button: UInt32, pressed: Bool) {
         guard button == kBtnLeft, pressed else { return }
+        if let r = layoutCache.volumeRect, pointerX >= r.x, pointerX < r.x + r.w {
+            closeMenu()
+            if volumeSlider == nil { openVolumeSlider(r) } else { closeVolumeSlider() }
+            return
+        }
         if let i = titleAt(pointerX) {
             if openIndex == i { closeMenu() } else { openMenu(i) }
         } else {
@@ -650,6 +667,54 @@ public final class MenuBar: LayerSurfaceDelegate {
                         + "\(state)\(row.verb.map { " \($0)" } ?? "")")
         }
         layer?.setNeedsDisplay()
+    }
+
+    // MARK: the volume slider (P14.6d)
+
+    /// What was last said about the speaker's place: nil before the first frame.
+    private var loggedVolumeRect: Rect??
+    private var volumeSlider: VolumeSlider?
+    private var volumePopup: Popup?
+
+    private func openVolumeSlider(_ r: Rect) {
+        guard let unit = status.volumeUnit, let level = status.volume else {
+            MenuBar.log("volume: nothing to set (\(MenuBar.describe(status)))")
+            return
+        }
+        let slider = VolumeSlider(unit: unit, control: status.volumeControl, level: Int(level))
+        slider.onDone = { [weak self] v in
+            MenuBar.log("volume set to \(v)% (pcm\(unit) \(self?.status.volumeControl ?? "vol"))")
+            self?.closeVolumeSlider()
+            self?.clockTickNow()
+        }
+        slider.onDismiss = { [weak self] in self?.volumeSlider = nil; self?.volumePopup = nil }
+        guard let pop = layer?.openPopup(anchorX: Int32(r.x), anchorY: 0, anchorW: Int32(r.w), anchorH: Int32(r.h),
+                                         width: Int32(VolumeSliderMetrics.width),
+                                         height: Int32(VolumeSliderMetrics.height), delegate: slider)
+        else { return }
+        slider.popup = pop
+        volumeSlider = slider
+        volumePopup = pop
+        // Where the track is on the output, if the popup lands where asked —
+        // under the speaker, flush left — for a test to press on (§2.46).
+        let t = VolumeSliderMetrics.track
+        MenuBar.log("volume slider x=\(Int(r.x + t.x + t.w / 2)) top=\(Int(r.h + t.y)) bottom=\(Int(r.h + t.y + t.h))")
+    }
+
+    private func closeVolumeSlider() {
+        volumePopup?.close()
+        volumePopup = nil
+        volumeSlider = nil
+    }
+
+    /// Read the machine now, not at the next second: the level just set.
+    private func clockTickNow() {
+        let fresh = MenuBarStatus.read()
+        if fresh != status {
+            if fresh.volume != status.volume || fresh.muted != status.muted { MenuBar.log("status \(MenuBar.describe(fresh))") }
+            status = fresh
+            layer?.setNeedsDisplay()
+        }
     }
 
     private func closeMenu() {

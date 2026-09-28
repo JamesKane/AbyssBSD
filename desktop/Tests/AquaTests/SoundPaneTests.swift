@@ -58,3 +58,25 @@ final class SoundPaneTests: XCTestCase {
         XCTAssertEqual(try SettingsWire.decodePlan(m).get(), .sound(SoundPlan(defaultUnit: 1)))
     }
 }
+
+/// The menu bar's volume item (P14.6d).
+final class VolumeExtraTests: XCTestCase {
+    func testTheSliderIsLoudAtTheTop() {
+        let t = VolumeSliderMetrics.track
+        XCTAssertEqual(VolumeSliderMetrics.level(y: t.y), 100)
+        XCTAssertEqual(VolumeSliderMetrics.level(y: t.y + t.h), 0)
+        XCTAssertEqual(VolumeSliderMetrics.level(y: t.y + t.h * 0.7), 30)
+        XCTAssertEqual(VolumeSliderMetrics.level(y: -40), 100, "past the top is the top")
+        XCTAssertLessThanOrEqual(t.y + t.h, VolumeSliderMetrics.height, "the track is inside the popup")
+    }
+
+    func testTheBarSaysMutedAndHidesWhatItCannotFeed() {
+        var s = MenuBarStatus(volume: 40, batteryPercent: nil)
+        XCTAssertEqual(MenuBar.describe(s), "volume 40%, no battery")
+        s.muted = true
+        XCTAssertEqual(MenuBar.describe(s), "volume 40% muted, no battery")
+        XCTAssertEqual(MenuBar.describe(MenuBarStatus()), "no mixer, no battery")
+        XCTAssertNil(menuBarStatusLayout(status: MenuBarStatus(), h: 22, rightEdge: 700).volume,
+                     "no mixer, no speaker")
+    }
+}

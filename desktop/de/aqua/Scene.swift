@@ -143,7 +143,7 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                          // highlight, P11.5) — 0 is the system menu's mark.
                          openIndex: getenv("AQUA_MENUBAR_OPEN").flatMap { Int(String(cString: $0)) },
                          showClock: true,
-                         status: MenuBarStatus.read(mixer: Vents.Mixer()))
+                         status: MenuBarStatus.read())
         }
         if kind == .dock {
             let dockH = DockMetrics.surfaceHeight(tileSize: 48)
