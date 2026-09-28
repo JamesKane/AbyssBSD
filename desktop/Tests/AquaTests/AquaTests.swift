@@ -1743,6 +1743,26 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(Array(swapped[0..<3]), [0x30, 0x20, 0x10])
     }
 
+    /// **Three bytes a pixel is what a GPU renderer offers** (U.3): wlroots'
+    /// GLES2 screencopy hands out `BG24`, and every screenshot on a machine
+    /// with a GPU failed as "a pixel format we can't read". A padded stride,
+    /// and both 24-bit orders: `BG24` is R,G,B in memory, `RG24` is B,G,R.
+    func testTwentyFourBitFormatsAreRead() {
+        let w = 2, h = 1, stride = 8                   // 6 bytes of pixels, 2 of padding
+        let raw: [UInt8] = [0x30, 0x20, 0x10,  0x31, 0x21, 0x11,  0xEE, 0xEE]
+        guard let bg24 = ScreenPixels.normalise(raw, format: 0x3432_4742, width: w, height: h,
+                                                stride: stride, yInvert: false),
+              let rg24 = ScreenPixels.normalise(raw, format: 0x3432_4752, width: w, height: h,
+                                                stride: stride, yInvert: false)
+        else { return XCTFail("both 24-bit formats should normalise") }
+        // cairo's ARGB32 is B,G,R,A in memory.
+        XCTAssertEqual(bg24, [0x10, 0x20, 0x30, 0xFF,  0x11, 0x21, 0x31, 0xFF])
+        XCTAssertEqual(rg24, [0x30, 0x20, 0x10, 0xFF,  0x31, 0x21, 0x11, 0xFF])
+        XCTAssertNil(ScreenPixels.normalise(raw, format: 0x3432_4742, width: 3, height: 1,
+                                            stride: 8, yInvert: false),
+                     "a stride too short for three 3-byte pixels")
+    }
+
     /// A screenshot is opaque by definition. The X formats carry no alpha byte
     /// at all and a compositor may leave it as garbage even in the A formats —
     /// pass it through and the PNG comes out mysteriously see-through.

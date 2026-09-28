@@ -83,7 +83,12 @@ final class ShmBuffer {
           stride explicitStride: Int32? = nil, format: UInt32 = 0) {
         guard let shm = display.shm else { return nil }
         let stride = explicitStride ?? width * 4
-        guard width > 0, height > 0, stride >= width * 4 else { return nil }
+        // A dictated stride is the compositor's to choose, and it need not be
+        // four bytes a pixel: a GPU renderer offers screencopy 24-bit `BG24`,
+        // and this guard refused it — the second half of U.3's screenshot bug,
+        // after the format table. Only our own default is held to ARGB8888.
+        guard width > 0, height > 0,
+              stride >= (explicitStride == nil ? width * 4 : width) else { return nil }
         let length = Int(stride) * Int(height)
         let fd = aw_create_shm(length)
         if fd < 0 { return nil }

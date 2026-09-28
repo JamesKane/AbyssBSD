@@ -202,6 +202,12 @@ if [ "$live" -eq 1 ]; then
   # compositor can do (U.2; xdg-shell v6).
   echo "== a hidden window's clock =="
   sh "$root/abyss/tests/live-hidden.sh" >/dev/null
+  # GPU clients through linux-dmabuf: pixman says plainly it offers none;
+  # on a render node a GL and a Vulkan client run on it and are seen
+  # moving, and a screenshot on every renderer here is the right colour.
+  # The GPU half skips, loudly, where there is no render node (U.3).
+  echo "== GPU clients =="
+  sh "$root/abyss/tests/live-gpu.sh" >/dev/null
   # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
   # and its menu vocabulary, on our own compositor.
   echo "== System Preferences =="

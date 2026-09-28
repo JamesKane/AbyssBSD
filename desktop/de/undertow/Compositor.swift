@@ -359,6 +359,14 @@ public final class Compositor {
     ///   is listening on.
     /// Whose menus are whose (PHASE10.md P10.3).
     public private(set) var menus: Menus?
+    /// Whether `linux-dmabuf` is on offer — whether a GPU client can present.
+    public private(set) var dmabufOffered = false
+
+    static func log(_ s: String) {
+        let line = "undertow: \(s)\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
+    }
+
     /// The socket privileged clients connect to, if one was asked for.
     public private(set) var privilegedSocketName: String?
 
@@ -388,6 +396,25 @@ public final class Compositor {
         // missing global. Every shm client — which is every client we have —
         // needs this line.
         _ = wlr_shm_create_with_renderer(session.display, 1, session.renderer)
+
+        // **linux-dmabuf, without which a GPU client does not survive** (U.3).
+        // Mesa's EGL and Vulkan WSI on Wayland hand the compositor dma-bufs:
+        // with only wl_shm on offer, vkcube on RADV segfaulted and es2gears
+        // fell back to drawing in software (measured, on the dev box's AMD
+        // iGPU — the RX 6750 XT's driver family). The global is made from the renderer, which
+        // is what it can import; pixman — every headless run, the build VM —
+        // imports none, so there it is not offered and shm clients are all
+        // there is, as before. Explicit sync (linux-drm-syncobj) is not
+        // offered: it needs the scene to wait on each buffer's acquire point
+        // and signal its release, which ours does not do yet (BACKLOG U.3b);
+        // advertising it without that would be §2.58 again.
+        if let _ = wlr_linux_dmabuf_v1_create_with_renderer(session.display, 5, session.renderer) {
+            dmabufOffered = true
+            Compositor.log("linux-dmabuf offered — GPU clients can hand us their buffers")
+        } else {
+            Compositor.log("linux-dmabuf not offered — this renderer imports no dma-bufs "
+                           + "(pixman?); GPU clients will fail, shm clients are unaffected")
+        }
 
         // **v6, for `suspended`** (U.2): a minimized window is told it cannot
         // be seen, so a client that listens can stop drawing, while its frame

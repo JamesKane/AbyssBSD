@@ -931,8 +931,10 @@ each is hidden by something the harness substitutes for the real thing (HANDOFF
 - **A hardware keyboard had no keymap** — fixed (API-STUDY §1.1). The first
   thing to check on the next boot is that typing works, and what layout
   `undertow: keyboard:` names on the console.
-- **No `linux-dmabuf`**, so GPU clients most likely do not use the GPU (§1.2).
-  This is the "dmabuf" in PLAN's list for this phase, and it is not optional.
+- **No `linux-dmabuf`** — fixed (U.3, HANDOFF §2.73). Measured on the dev box's
+  AMD iGPU first: without it a Vulkan client crashed and a GL client drew in
+  software. `abyss/tests/live-gpu.sh` is the check to run on the machine.
+  Explicit sync is still not offered (BACKLOG U.3b).
 - **Subsurfaces are never drawn** (§1.3) — Firefox's page lives in one.
 - **A minimised FIFO client stalls for ever** on a frame callback that is
   withheld rather than throttled (§1.4).

@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**556 unit tests, 33 live modes and 36 live scripts, green on Linux and FreeBSD,
+**557 unit tests, 33 live modes and 37 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -666,6 +666,51 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.73 The harness renders in software, and so it never met a GPU client
+(U.3, 2026-09-28. API-STUDY §1.2.)
+
+Every run in this project renders with pixman — headless pins it, and the build
+VM has no GPU — and pixman imports no dma-bufs. So `undertow` offered only
+`wl_shm`, nothing ever complained, and the first GPU client would have met it on
+the RX 6750 XT. Measured on the dev box's AMD iGPU (RADV/radeonsi, the same
+driver family): **a Vulkan client segfaulted, and a GL client silently fell back
+to drawing in software.** `linux-dmabuf` is now created from the renderer, and
+where the renderer imports none, `undertow` says so in words.
+
+**Headless `undertow` can run on a GPU**: `WLR_RENDERER=gles2` overrides the
+pixman pin, and `WLR_RENDER_DRM_DEVICE` chooses the node — which matters,
+because wlroots' default on this box was the NVIDIA card, not the AMD iGPU.
+That is what made this testable here rather than on metal. Four things that
+cost time:
+
+- **Check the device, not the claim.** Mesa follows the dma-buf feedback's main
+  device, so a GL client lands on whatever node the renderer is on; `vkcube`
+  picks a discrete GPU by type, and Vulkan's device *numbering* is reordered by
+  Mesa's device-select layer according to the compositor it is talking to —
+  index 1 was AMD under `vulkaninfo` and NVIDIA under `undertow`. The test names
+  the device (`MESA_VK_DEVICE_SELECT=vendor:device`) and asks the kernel which
+  node each client holds (`/proc/<pid>/fd`).
+- **`es2gears` crashes on a seat with no devices** — it destroys a pointer and a
+  keyboard it never created. Its bug; the test gives the seat both first, as
+  every real desktop's has. A crash that looks like the compositor's is worth a
+  backtrace before a fix.
+- **Screencopy's format is the renderer's.** pixman offers XRGB8888; AMD's GLES2
+  offers `XB24`; NVIDIA's offers 24-bit `BG24`, which `abyssgrab` could not read
+  (format table) and then could not allocate (`ShmBuffer` held every stride to
+  four bytes a pixel). Both fixed; the RX 6750 XT was never affected — the
+  first reading of the failure said it was, before the formats were asked for.
+- **`--capture` does not work on a GPU renderer** — it reads the swapchain
+  buffer from the CPU. Screencopy does, so a GPU test grabs with `abyssgrab`.
+
+**Not done: explicit sync** (`linux-drm-syncobj`). Our scene would have to wait
+on each buffer's acquire point and signal its release, which `wlr_scene` does
+and ours does not; advertising it without that would be §2.58 again. Implicit
+sync is enough for radeonsi and radv. BACKLOG U.3b.
+
+`live-gpu.sh`: each fix was removed in turn and the test failed where it should
+— no global (with the log still claiming one): `es2gears` on the wrong node; no
+`BG24`: the NVIDIA screenshot's format; the old stride guard: its allocation.
 
 ### 2.72 A window nobody can see still needs a clock
 (U.2, 2026-09-28. API-STUDY §1.4.)
@@ -2589,6 +2634,7 @@ or name a subset: `run-live.sh dock trash`). 33 modes today. These are the
 | `live-undertow-places.sh` | a window reopens where it was dragged, in a **new session** (§2.22's debt) |
 | `live-subsurface.sh` | a window made of **subsurfaces** — over, outside and below its parent — drawn, framed and routed to the leaf (§2.71) |
 | `live-hidden.sh` | a **minimized** window keeps a slow frame clock (not none, not 60 Hz), is told it is `suspended`, and what the compositor can do (§2.72) |
+| `live-gpu.sh` | **GPU clients through `linux-dmabuf`**: pixman says it offers none; on a render node, es2gears and vkcube run on it and are seen moving; a screenshot on every renderer is the right colour. GPU half skips without a render node (§2.73) |
 | `live-dbus.sh` | we speak D-Bus, and `dbus-send`/`gdbus` — somebody else's encoder — agree |
 
 **Tests that need a compositor** (in `run.sh --live`):

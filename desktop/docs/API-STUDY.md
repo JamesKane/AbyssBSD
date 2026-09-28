@@ -50,7 +50,7 @@ translates it (`Install.Keymaps`), so the desktop types what the console types.
 Doing so found two of the installer's eight names were files FreeBSD does not
 ship (HANDOFF §2.70).
 
-### 1.2 Open: `undertow` offers no `linux-dmabuf`
+### 1.2 Fixed (U.3): `undertow` offered no `linux-dmabuf`
 
 `undertow` creates `wl_shm` and nothing else for buffers (`Compositor.swift:376`).
 Mesa's Wayland code on this box (`libEGL_mesa`, `libvulkan_radeon`) names
@@ -62,6 +62,13 @@ through Mesa. PLAN's Phase 4 already lists "dmabuf + explicit-sync"; this says i
 is not optional. wlroots 0.19: `wlr_linux_dmabuf_v1_create_with_renderer`, and
 `wlr_linux_drm_syncobj_manager_v1_create` for explicit sync (whether drm-kmod
 wires syncobj eventfd is unverified).
+
+**Measured, then fixed, 2026-09-28** (HANDOFF §2.73). On the dev box's AMD iGPU —
+RADV and radeonsi, the RX 6750 XT's driver family — the inference was right:
+with `wl_shm` alone, `vkcube` segfaulted and `es2gears` fell back to software.
+`linux-dmabuf` is now created from the renderer, and `live-gpu.sh` runs both on
+the AMD node under our compositor. Explicit sync is not offered yet (U.3b).
+Metal still has to confirm it on FreeBSD's drm-kmod.
 
 ### 1.3 Fixed (U.1): subsurfaces were advertised and never drawn
 

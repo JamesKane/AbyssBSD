@@ -86,9 +86,17 @@ enum CapturedFormat: UInt32 {
     case xrgb8888 = 1
     case abgr8888 = 0x3432_4241     // fourcc 'AB24'
     case xbgr8888 = 0x3432_4258     // fourcc 'XB24'
+    /// **Three bytes a pixel, and what a GPU renderer hands you** (U.3):
+    /// wlroots' GLES2 renderer offers screencopy `BG24`, and until this case
+    /// existed every screenshot on a machine with a GPU failed — the harness
+    /// runs pixman, which offers XRGB8888, so nothing here could see it.
+    /// In memory `BG24` is R,G,B and `RG24` is B,G,R.
+    case bgr888 = 0x3432_4742       // fourcc 'BG24'
+    case rgb888 = 0x3432_4752       // fourcc 'RG24'
 
     /// Whether red and blue are the other way round from cairo's ARGB32.
-    var swapsRedAndBlue: Bool { self == .abgr8888 || self == .xbgr8888 }
+    var swapsRedAndBlue: Bool { self == .abgr8888 || self == .xbgr8888 || self == .bgr888 }
+    var bytesPerPixel: Int { self == .bgr888 || self == .rgb888 ? 3 : 4 }
 }
 
 /// Pixel normalisation, kept pure so it can be tested without a compositor.
@@ -104,9 +112,10 @@ public enum ScreenPixels {
                                  width: Int, height: Int, stride: Int,
                                  yInvert: Bool) -> [UInt8]? {
         guard let fmt = CapturedFormat(rawValue: format),
-              width > 0, height > 0, stride >= width * 4,
+              width > 0, height > 0, stride >= width * fmt.bytesPerPixel,
               raw.count >= stride * height
         else { return nil }
+        let bpp = fmt.bytesPerPixel
 
         let outStride = width * 4
         var out = [UInt8](repeating: 0, count: outStride * height)
@@ -116,7 +125,7 @@ public enum ScreenPixels {
             let src = (yInvert ? (height - 1 - y) : y) * stride
             let dst = y * outStride
             for x in 0..<width {
-                let s = src + x * 4, d = dst + x * 4
+                let s = src + x * bpp, d = dst + x * 4
                 // In memory a little-endian ARGB8888 pixel is B,G,R,A — which
                 // is cairo's ARGB32 byte order too, so the common case is a
                 // straight copy.

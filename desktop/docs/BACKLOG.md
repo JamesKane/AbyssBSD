@@ -27,7 +27,7 @@ or more.
 |---|---|---|---|---|
 | ~~U.1~~ | ✅ **2026-09-28. Subsurfaces drawn, framed and hit-tested** (HANDOFF §2.71, `live-subsurface.sh`) | M | | done, both platforms |
 | ~~U.2~~ | ✅ **2026-09-28. A minimised window keeps a clock** — 1 Hz, xdg-shell v6 `suspended`, `wm_capabilities` (HANDOFF §2.72, `live-hidden.sh`) | S | | done, both platforms |
-| U.3 | **`linux-dmabuf`** (+ `linux-drm-syncobj` if the renderer offers it) (§1.2). **Spike first:** does nested `undertow` on the dev box get a GLES2 renderer? If yes, a GL client proves it here | M | no GPU client uses the GPU without it; done now, the next metal sitting tests it instead of discovering it | nested on Linux with an EGL client; headless and the guest must still fall back to shm cleanly |
+| ~~U.3~~ | ✅ **2026-09-28. `linux-dmabuf`** — GL and Vulkan clients on the AMD iGPU under headless GLES2 `undertow`; screenshots fixed for 24-bit renderers (HANDOFF §2.73, `live-gpu.sh`) | M | | done; GPU half on Linux, pixman half both platforms |
 | U.4 | **presentation-time, and honest frame-done timestamps** — the time the frame was shown, which `Metronome` already has (F-101) | S–M | cheap once U.2 is in that code; gives P4.5's metal sitting a client-side view too | a client reads feedback; headless timestamps match the recorder |
 | P14.2 | **Appearance, and a live theme switch** (PHASE14) — was next | M | unchanged from PHASE14 | pixels after the switch; a GTK app sees `color-scheme` change |
 | P14.3 | **`abyss-settings`**, the privileged half | M | every pane after it writes through it | `abyss-settingsctl` plans; refuses on Linux |
@@ -53,6 +53,7 @@ means" (§1.5 there).
 | U.7 | **cursor-shape-v1**, with a real cursor theme (today a rectangle) | M | every client draws its own cursor |
 | U.8 | **viewporter** (a source crop in our scene), then **fractional-scale-v1** | M | wrong video and scaled surfaces; guessed scale |
 | U.9 | **primary-selection, idle-inhibit** | S each | middle-click paste; a video cannot stop the screen blanking |
+| U.3b | **Explicit sync** (`linux-drm-syncobj-v1`): the scene waits on each buffer's acquire point and signals its release (HANDOFF §2.73) | M | only implicit sync today — fine for radeonsi/radv, not for NVIDIA's driver; and drm-kmod's syncobj support is unverified |
 | U.10 | **`wl_surface.enter`/`leave` for outputs** — `undertow` sends neither, to any surface (found in U.1, HANDOFF §2.71) | S | a client never learns its output, so cannot pick its scale; fractional-scale (U.8) assumes it |
 | P10.8 | **Submenus open.** They draw their ▸ and have never opened (PHASE10) | S–M | every real application's menus are one level deep |
 | T.1 | **The installer shows layout names**, not file names (`us.dvorak.kbd` → "Dvorak") | S | cosmetic; moves one golden |
@@ -76,8 +77,9 @@ One developer medium (`live-image.sh --ssh-key`), one boot, all of it:
 2. **P4.5's margin breakdown** — `abyss/mk/metal.sh report`. The hypothesis to
    be proved wrong: the display commit dominates. Then `rtprio`, then the
    margin ceiling (HANDOFF §5 item 2).
-3. **A GPU client under `undertow`**, if U.3 is done — the first time the RX
-   6750 XT renders a client rather than only the compositor.
+3. **A GPU client under `undertow`** — U.3 is done: run `abyss/tests/live-gpu.sh`
+   on the machine (it needs `es2gears_wayland` and `vkcube`). The first time the
+   RX 6750 XT renders a client rather than only the compositor, on drm-kmod.
 4. **Two one-minute checks:** `vulkaninfo` for `VK_EXT_external_memory_host`
    (probably absent — linuxkpi's MMU notifier is empty), and whether the
    12700KF's P/E cores are visible from userland (they should not be).
