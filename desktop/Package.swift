@@ -7,6 +7,16 @@
 // dependencies — the engine gets written in Swift here too (docs/PLAN.md).
 import PackageDescription
 
+// /dev/sndstat's nvlist and the mixer library (P14.6): base libraries on
+// FreeBSD, absent on Linux, where CVents' sound half is stubs. This
+// PackageDescription has no `.freebsd` platform condition, and the manifest is
+// compiled on the machine it builds for, so the host decides.
+#if os(FreeBSD)
+let soundLibraries: [LinkerSetting] = [.linkedLibrary("nv"), .linkedLibrary("mixer")]
+#else
+let soundLibraries: [LinkerSetting] = []
+#endif
+
 let package = Package(
     name: "AbyssBSD",
     products: [
@@ -273,7 +283,8 @@ let package = Package(
             name: "CVents",
             path: "de/cvents",
             sources: ["cvents.c"],
-            publicHeadersPath: "include"
+            publicHeadersPath: "include",
+            linkerSettings: soundLibraries
         ),
         // The hardware bridges themselves: sysctl, volume, battery, devd.
         // The shell reads the machine through native facilities — sysctl not

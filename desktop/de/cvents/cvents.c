@@ -198,3 +198,171 @@ int av_route_watch_drain(int fd) {
     }
     return any;
 }
+
+
+/* ---- sound (PHASE14 P14.6) ------------------------------------------ */
+
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
+
+/* Append to a bounded buffer; the total is kept even past the end, so a
+ * caller can see it was cut. */
+static void sb_add(char *buf, size_t len, size_t *at, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(*at < len ? buf + *at : NULL, *at < len ? len - *at : 0, fmt, ap);
+    va_end(ap);
+    if (n > 0) *at += (size_t)n;
+}
+
+/* Tabs and newlines inside a kernel string would break the line format. */
+static void sb_clean(char *dst, size_t n, const char *src) {
+    size_t i = 0;
+    for (; src != NULL && src[i] != '\0' && i + 1 < n; i++)
+        dst[i] = (src[i] == '\t' || src[i] == '\n') ? ' ' : src[i];
+    dst[i] = '\0';
+}
+
+#if defined(__FreeBSD__)
+#include <stdlib.h>
+#include <sys/nv.h>
+#include <sys/sndstat.h>
+#include <mixer.h>
+
+long av_sndstat_read(char *buf, size_t len) {
+    if (buf == NULL || len == 0) { errno = EINVAL; return -1; }
+    buf[0] = '\0';
+    int fd = open("/dev/sndstat", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return -1;
+    struct sndstioc_nv_arg arg = { .nbytes = 0, .buf = NULL };
+    long out = -1;
+    nvlist_t *nvl = NULL;
+    if (ioctl(fd, SNDSTIOC_REFRESH_DEVS, NULL) < 0) goto done;
+    if (ioctl(fd, SNDSTIOC_GET_DEVS, &arg) < 0) goto done;
+    arg.buf = malloc(arg.nbytes);
+    if (arg.buf == NULL) goto done;
+    if (ioctl(fd, SNDSTIOC_GET_DEVS, &arg) < 0) goto done;
+    nvl = nvlist_unpack(arg.buf, arg.nbytes, 0);
+    if (nvl == NULL) { errno = EIO; goto done; }
+    size_t at = 0;
+    if (nvlist_exists_nvlist_array(nvl, SNDST_DSPS)) {
+        size_t nd;
+        const nvlist_t * const *d = nvlist_get_nvlist_array(nvl, SNDST_DSPS, &nd);
+        for (size_t i = 0; i < nd; i++) {
+            char nameunit[64], desc[256], devnode[64];
+            sb_clean(nameunit, sizeof nameunit, nvlist_get_string(d[i], SNDST_DSPS_NAMEUNIT));
+            sb_clean(desc, sizeof desc, nvlist_get_string(d[i], SNDST_DSPS_DESC));
+            sb_clean(devnode, sizeof devnode, nvlist_get_string(d[i], SNDST_DSPS_DEVNODE));
+            int unit = -1;
+            const nvlist_t *pi = NULL;
+            if (nvlist_exists_nvlist(d[i], SNDST_DSPS_PROVIDER_INFO)) {
+                pi = nvlist_get_nvlist(d[i], SNDST_DSPS_PROVIDER_INFO);
+                if (nvlist_exists_number(pi, SNDST_DSPS_SOUND4_UNIT))
+                    unit = (int)nvlist_get_number(pi, SNDST_DSPS_SOUND4_UNIT);
+            }
+            int play = nvlist_exists_number(d[i], SNDST_DSPS_PCHAN) && nvlist_get_number(d[i], SNDST_DSPS_PCHAN) > 0;
+            int rec = nvlist_exists_number(d[i], SNDST_DSPS_RCHAN) && nvlist_get_number(d[i], SNDST_DSPS_RCHAN) > 0;
+            int user = nvlist_exists_bool(d[i], SNDST_DSPS_FROM_USER) && nvlist_get_bool(d[i], SNDST_DSPS_FROM_USER);
+            sb_add(buf, len, &at, "dev\t%d\t%s\t%s\t%s\t%d\t%d\t%d\n", unit, nameunit, desc, devnode, play, rec, user);
+            if (pi == NULL || !nvlist_exists_nvlist_array(pi, SNDST_DSPS_SOUND4_CHAN_INFO)) continue;
+            size_t nc;
+            const nvlist_t * const *c = nvlist_get_nvlist_array(pi, SNDST_DSPS_SOUND4_CHAN_INFO, &nc);
+            for (size_t k = 0; k < nc; k++) {
+                char cname[64], comm[64];
+                sb_clean(cname, sizeof cname, nvlist_get_string(c[k], SNDST_DSPS_SOUND4_CHAN_NAME));
+                sb_clean(comm, sizeof comm, nvlist_get_string(c[k], SNDST_DSPS_SOUND4_CHAN_COMM));
+                sb_add(buf, len, &at, "chan\t%d\t%s\t%d\t%s\t%d\t%d\n", unit, cname,
+                       (int)nvlist_get_number(c[k], SNDST_DSPS_SOUND4_CHAN_PID), comm,
+                       (int)nvlist_get_number(c[k], SNDST_DSPS_SOUND4_CHAN_LEFTVOL),
+                       (int)nvlist_get_number(c[k], SNDST_DSPS_SOUND4_CHAN_RIGHTVOL));
+            }
+        }
+    }
+    out = (long)(at < len ? at : len - 1);
+done:
+    if (nvl != NULL) nvlist_destroy(nvl);
+    free(arg.buf);
+    close(fd);
+    return out;
+}
+
+static struct mixer *open_unit(int unit) {
+    char path[32];
+    snprintf(path, sizeof path, "/dev/mixer%d", unit);
+    return mixer_open(path);
+}
+
+long av_mixer_describe(int unit, char *buf, size_t len) {
+    if (buf == NULL || len == 0) { errno = EINVAL; return -1; }
+    buf[0] = '\0';
+    struct mixer *m = open_unit(unit);
+    if (m == NULL) return -1;
+    size_t at = 0;
+    struct mix_dev *dp;
+    TAILQ_FOREACH(dp, &m->devs, devs) {
+        sb_add(buf, len, &at, "ctl\t%s\t%d\t%d\t%d\t%d\n", dp->name,
+               MIX_VOLDENORM(dp->vol.left), MIX_VOLDENORM(dp->vol.right),
+               MIX_ISMUTE(m, dp->devno), MIX_ISREC(m, dp->devno));
+    }
+    mixer_close(m);
+    return (long)(at < len ? at : len - 1);
+}
+
+int av_mixer_set(int unit, const char *control, int left, int right) {
+    struct mixer *m = open_unit(unit);
+    if (m == NULL) return -1;
+    int r = -1;
+    /* libmixer acts on the *selected* control (m->dev), and looking one up
+     * by name does not select it: without this, every set lands on `vol`. */
+    struct mix_dev *d = mixer_get_dev_byname(m, control);
+    if (d == NULL) { errno = ENOENT; goto out; }
+    m->dev = d;
+    mix_volume_t v = { .left = MIX_VOLNORM(left < 0 ? 0 : left > 100 ? 100 : left),
+                       .right = MIX_VOLNORM(right < 0 ? 0 : right > 100 ? 100 : right) };
+    r = mixer_set_vol(m, v);
+out:
+    mixer_close(m);
+    return r;
+}
+
+int av_mixer_mute(int unit, const char *control, int muted) {
+    struct mixer *m = open_unit(unit);
+    if (m == NULL) return -1;
+    int r = -1;
+    /* libmixer acts on the *selected* control (m->dev), and looking one up
+     * by name does not select it: without this, every set lands on `vol`. */
+    struct mix_dev *d = mixer_get_dev_byname(m, control);
+    if (d == NULL) { errno = ENOENT; goto out; }
+    m->dev = d;
+    r = mixer_set_mute(m, muted ? MIX_MUTE : MIX_UNMUTE);
+out:
+    mixer_close(m);
+    return r;
+}
+
+#else   /* no OSS here: the machine has no sound this bridge can see */
+
+long av_sndstat_read(char *buf, size_t len) {
+    if (buf != NULL && len > 0) buf[0] = '\0';
+    errno = ENOSYS;
+    return -1;
+}
+long av_mixer_describe(int unit, char *buf, size_t len) {
+    (void)unit;
+    if (buf != NULL && len > 0) buf[0] = '\0';
+    errno = ENOSYS;
+    return -1;
+}
+int av_mixer_set(int unit, const char *control, int left, int right) {
+    (void)unit; (void)control; (void)left; (void)right;
+    errno = ENOSYS;
+    return -1;
+}
+int av_mixer_mute(int unit, const char *control, int muted) {
+    (void)unit; (void)control; (void)muted;
+    errno = ENOSYS;
+    return -1;
+}
+
+#endif

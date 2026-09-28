@@ -340,6 +340,35 @@ default-device following for free and fits Phase 18's jails. A mixing server in
 front of OSS is not recommended: vchans already mix. §6.6's fallback still
 stands if neither is worth it.
 
+**The spike, run 2026-09-28 in the build guest (15.0-RELEASE-p11, `snd_dummy`):**
+
+- **Reading works, as the source said.** Two players set their own channels
+  to 30 and 80 with `SNDCTL_DSP_SETPLAYVOL`. An unrelated, unprivileged process
+  read both from `/dev/sndstat`'s nvlist (`dsp0.virtual_play.0 pid … comm
+  player vol 30:30`, `…1 … 80:80`).
+- **Setting from outside does not.** Another process's `SETPLAYVOL` opens a
+  channel of its own. The mixer's `pcm` control leaves channel volumes alone
+  (`hw.snd.vpc_mixer_bypass=1`). The one outside lever is `hw.snd.vpc_reset`:
+  root-only, and it resets *every* channel to 0 dB at once.
+- **Route (b) works, with two costs.** `virtual_oss` is in 15.0's base
+  (`/usr/sbin/virtual_oss`, needs `cuse`). Two applications on two
+  `virtual_oss` devices, measured through a loopback device, each playing a
+  tone that peaks at 8000 (16000 mixed): `VIRTUAL_OSS_SET_DEV_INFO` on the
+  control device, **at runtime and for one device only**, took app1 to −6 dB
+  (mix 12000), muted it (8000), and took app2 to −12 dB (10000). The playback
+  direction is `tx`. The costs: gain is a bit shift (−31…31), **6 dB steps**;
+  and an application only gets its own device if it is *handed* one when it
+  starts, because applications open `/dev/dsp`.
+- `virtual_oss_cmd … -a o,-1` changed nothing at runtime. The ioctl is the
+  interface; the header is not installed (it lives in the source tree).
+
+**Decided 2026-09-28 (the person): read-only now, route (b) later.** P14.6
+shows which applications are playing and at what level, read from
+`/dev/sndstat`, and does not offer to change them. Per-application control goes
+through `virtual_oss`, one device per application, and arrives with Phase 18,
+whose jails give each application its own `/dev/dsp`. PLAN's promise is amended
+to say so.
+
 ### 4.4 Can displays be arranged? — **The protocol is there on both platforms.**
 
 `wlr_output_management_v1.h` is in wlroots 0.19 on Fedora and FreeBSD, beside

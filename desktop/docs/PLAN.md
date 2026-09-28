@@ -907,7 +907,8 @@ load; an Ebb drawn over the eleven adversary clients C2 already survives.
 > **sound and Wi-Fi can be tested with no hardware** (`snd_dummy`, `wtap`); the
 > output-management protocol is in wlroots 0.19 on both platforms. Two things
 > are open: whether `wtap` can associate a station, and **whether OSS allows
-> per-application volume at all** — PLAN's promise below waits on that spike.
+> per-application volume at all** — answered 2026-09-28: it can be read, not
+> set; the promise below is amended.
 > An Appearance pane that switches the theme live (P14.2) comes first: it
 > needs no root, and it makes Phase 11 something a person can use.
 
@@ -922,9 +923,13 @@ is that `rc.conf` is not a user interface** (PRODUCT.md §4.5).
 - **Network first**, because more depends on it than on anything else in this
   document: `ifconfig`, `wpa_supplicant`, `dhclient`, and `rc.conf` written for
   you. It is also FreeBSD's weak spot and thesis 5's hardest promise — see risk 5.
-- **Sound** — output device choice and per-application levels over `sndstat`/OSS.
-  `Vents.Volume` is master get/set and nothing else, and the menu bar's volume
-  item has reported "no mixer" since P3.7.
+- **Sound** — output device choice, device levels and mute, and **which
+  applications are playing, at what level — shown, not set** (amended
+  2026-09-28, PHASE14 §4.3). OSS lets another process read a channel's volume
+  and not change it. Per-application *control* comes through `virtual_oss`,
+  one device per application, in Phase 18, whose jails hand each application
+  its own `/dev/dsp`. `Vents.Volume` is master get/set and nothing else, and
+  the menu bar's volume item has reported "no mixer" since P3.7.
 - **Displays** — `wlr-output-management` and an arrangement UI. Outputs are
   tracked today and never arranged.
 - **Energy** — the pane Phase 16's suspend work writes into.

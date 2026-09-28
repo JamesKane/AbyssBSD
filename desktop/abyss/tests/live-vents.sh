@@ -48,8 +48,69 @@ if [ "$os" != "FreeBSD" ]; then
       || { echo "FAIL: the router is not ip's ($r): $net"; exit 1; }
     echo "ok: the network agrees with ip(8) — every IPv4 address, and the default router"
   fi
+  # Sound (P14.6) is OSS, and there is none here: say so, invent nothing.
+  [ "$("$ctl" sound)" = "no sound devices" ] || { echo "FAIL: ventsctl sound found OSS devices on $os"; exit 1; }
+  rc=0; "$ctl" sound set 0 vol 50 >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 1 ] || { echo "FAIL: setting a level on $os did not fail (rc=$rc)"; exit 1; }
+  echo "ok: sound says there are no devices, and a set fails, rather than reaching for ALSA"
   echo "all green (stubs behave, and the network is real)."
   exit 0
+fi
+
+# ----------------------------------------------------------------- sound
+# The guest's snd_dummy is a real pcm device with a real mixer (PHASE14 §4.3):
+# ventsctl must agree with mixer(8) and /dev/sndstat, set what mixer(8) then
+# reads back, and see a player that has /dev/dsp open, with its own volume.
+echo "== sound =="
+sudo kldload -n snd_dummy 2>/dev/null || true
+if [ -e /dev/mixer0 ]; then
+  snd=$("$ctl" sound)
+  dunit=$(sysctl -n hw.snd.default_unit)
+  printf '%s\n' "$snd" | grep -qx "default pcm$dunit" || { echo "FAIL: the default is not hw.snd.default_unit ($dunit): $snd"; exit 1; }
+  # `mixer -o` is mixer(8)'s machine format: `pcm.volume=0.75:0.75`, `rec.mute=on`.
+  mixer -f /dev/mixer0 -o | sed -n 's/^\([a-z0-9]*\)\.volume=\([0-9.]*\):\([0-9.]*\)$/\1 \2 \3/p' > /tmp/abyss-mixer.$$
+  [ -s /tmp/abyss-mixer.$$ ] || { echo "FAIL: mixer -o gave no volumes"; exit 1; }
+  while read -r name l r; do
+    l=$(awk -v v="$l" 'BEGIN{printf "%d", v * 100 + 0.5}'); r=$(awk -v v="$r" 'BEGIN{printf "%d", v * 100 + 0.5}')
+    printf '%s\n' "$snd" | grep -q "^  control $name $l:$r" || { rm -f /tmp/abyss-mixer.$$; echo "FAIL: $name is $l:$r to mixer(8): $snd"; exit 1; }
+  done < /tmp/abyss-mixer.$$
+  rm -f /tmp/abyss-mixer.$$
+  echo "ok: every control agrees with mixer(8), and the default with hw.snd.default_unit"
+  before=$(mixer -f /dev/mixer0 -o | sed -n 's/^pcm\.volume=\([0-9.]*\):.*/\1/p')
+  "$ctl" sound set 0 pcm 33 >/dev/null || { echo "FAIL: could not set pcm"; exit 1; }
+  "$ctl" sound mute 0 rec on >/dev/null || { echo "FAIL: could not mute rec"; exit 1; }
+  after=$(mixer -f /dev/mixer0 -o)
+  "$ctl" sound set 0 pcm "$(awk -v v="$before" 'BEGIN{printf "%d", v * 100 + 0.5}')" >/dev/null
+  "$ctl" sound mute 0 rec off >/dev/null
+  printf '%s\n' "$after" | grep -qx 'pcm.volume=0.33:0.33' || { echo "FAIL: mixer(8) does not see pcm at 0.33:"; echo "$after"; exit 1; }
+  printf '%s\n' "$after" | grep -qx 'rec.mute=on' || { echo "FAIL: mixer(8) does not see rec muted:"; echo "$after"; exit 1; }
+  printf '%s\n' "$after" | grep -q '^vol.volume=0.33' && { echo "FAIL: setting pcm moved vol (libmixer's selected control):"; echo "$after"; exit 1; }
+  echo "ok: a level and a mute set by an unprivileged user are what mixer(8) reads back — on the control named"
+  # A player with /dev/dsp open, at a volume it set itself.
+  pw=$(mktemp -d)
+  cat > "$pw/p.c" <<'C'
+#include <sys/soundcard.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <unistd.h>
+int main(void) {
+    int fd = open("/dev/dsp", O_WRONLY), v = 37 | (37 << 8);
+    if (fd < 0) return 1;
+    ioctl(fd, SNDCTL_DSP_SETPLAYVOL, &v);
+    char buf[4096] = {0};
+    for (int i = 0; i < 400; i++) write(fd, buf, sizeof buf);
+    return 0;
+}
+C
+  cc -o "$pw/tuneplayer" "$pw/p.c" || { echo "FAIL: could not build the player"; exit 1; }
+  "$pw/tuneplayer" & pp=$!
+  sleep 0.5
+  snd=$("$ctl" sound)
+  kill "$pp" 2>/dev/null || true; wait "$pp" 2>/dev/null || true; rm -rf "$pw"
+  printf '%s\n' "$snd" | grep -qx "  playing $pp tuneplayer 37:37" || { echo "FAIL: the player ($pp, 37) is not seen playing: $snd"; exit 1; }
+  echo "ok: a process playing is seen by pid and name, at the volume it set for itself"
+else
+  echo "(no /dev/mixer0 even with snd_dummy — skipping sound)"
 fi
 
 echo "== sysctl =="

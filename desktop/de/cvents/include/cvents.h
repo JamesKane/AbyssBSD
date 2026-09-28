@@ -84,4 +84,34 @@ int av_route_watch_open(void);
 /* Read everything waiting; 1 if anything was, 0 if not. */
 int av_route_watch_drain(int fd);
 
+/* ---- sound: devices, channels, controls (PHASE14 P14.6) ------------- */
+
+/*
+ * The sound devices and their channels, from /dev/sndstat's nvlist, as lines
+ * the Swift side parses (so the parsing is tested on any platform):
+ *
+ *   dev <TAB> unit <TAB> nameunit <TAB> desc <TAB> devnode <TAB> play <TAB> rec <TAB> from_user
+ *   chan <TAB> unit <TAB> name <TAB> pid <TAB> comm <TAB> left <TAB> right
+ *
+ * `play`/`rec`/`from_user` are 0 or 1; a channel's volumes are 0..100 as the
+ * kernel keeps them, and its pid is -1 when nobody has it open. Returns the
+ * length written (NUL-terminated, truncated to `len`), or -1 with errno set —
+ * ENOSYS where there is no sndstat (Linux).
+ */
+long av_sndstat_read(char *buf, size_t len);
+
+/*
+ * One device's mixer controls, through libmixer, as lines:
+ *
+ *   ctl <TAB> name <TAB> left <TAB> right <TAB> muted <TAB> recordable
+ *
+ * volumes 0..100. `unit` is the pcm unit (mixerN). Returns the length, or -1.
+ */
+long av_mixer_describe(int unit, char *buf, size_t len);
+
+/* Set a control's volume (0..100 each side), or its mute. /dev/mixerN is
+ * the user's to change — no privilege. 0 on success, -1 with errno. */
+int av_mixer_set(int unit, const char *control, int left, int right);
+int av_mixer_mute(int unit, const char *control, int muted);
+
 #endif /* ABYSS_CVENTS_H */

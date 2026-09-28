@@ -196,4 +196,54 @@ final class VentsTests: XCTestCase {
                       "\(lo?.ipv4 ?? [])")
         XCTAssertNotNil(Vents.Network.Watch(), "no routing socket to watch")
     }
+
+    // MARK: - Sound (P14.6)
+
+    /// The lines CVents flattens /dev/sndstat's nvlist into, as the guest's
+    /// snd_dummy gives them with two players open.
+    func testSndstatGivesDevicesAndWhoIsPlaying() {
+        let text = """
+        dev\t0\tpcm0\tDummy Audio Device\tdsp0\t1\t1\t0
+        chan\t0\tdsp0.play.0\t-1\t<UNUSED>\t45\t45
+        chan\t0\tdsp0.virtual_play.0\t31118\tplayer\t30\t30
+        chan\t0\tdsp0.virtual_play.1\t31119\tmpv\t80\t75
+        chan\t0\tdsp0.record.0\t-1\t<UNUSED>\t45\t45
+        chan\t0\tdsp0.virtual_record.0\t4242\tobs\t50\t50
+        dev\t1\tpcm1\tUSB Headset\tdsp1\t1\t0\t0
+        dev\t-1\tvdsp\tVirtual OSS\tvdsp\t1\t1\t1
+        """
+        let d = Vents.Sound.parseSndstat(text)
+        XCTAssertEqual(d.map(\.name), ["pcm0", "pcm1"], "a device with no sound(4) unit (a user-space one) is not a pcm")
+        XCTAssertEqual(d[0].description, "Dummy Audio Device")
+        XCTAssertTrue(d[0].playback && d[0].recording)
+        XCTAssertFalse(d[1].recording)
+        XCTAssertEqual(d[0].channels.count, 5)
+        XCTAssertEqual(d[0].playing.map(\.command), ["player", "mpv"], "unused channels and a recorder are not 'playing'")
+        XCTAssertEqual(d[0].playing[1].pid, 31119)
+        XCTAssertEqual(d[0].playing[1].left, 80)
+        XCTAssertEqual(d[0].playing[1].right, 75)
+        XCTAssertNil(d[0].channels[0].pid)
+        XCTAssertEqual(d[1].channels, [])
+        XCTAssertEqual(Vents.Sound.parseSndstat(""), [])
+    }
+
+    func testMixerControlsWithLevelsAndMute() {
+        let c = Vents.Sound.parseControls("ctl\tvol\t75\t70\t0\t0\nctl\tpcm\t40\t40\t1\t0\nctl\trec\t75\t75\t0\t1\ngarbage\n")
+        XCTAssertEqual(c.map(\.name), ["vol", "pcm", "rec"])
+        XCTAssertEqual(c[0].level, 75, "a slider shows the louder side")
+        XCTAssertTrue(c[1].muted)
+        XCTAssertTrue(c[2].recordable)
+        XCTAssertFalse(c[0].recordable)
+    }
+
+    /// Real, on Linux: there is no OSS, and the bridge says none rather than guessing.
+    func testNoOSSMeansNoDevices() throws {
+        #if os(Linux)
+        XCTAssertEqual(Vents.Sound.devices(), [])
+        XCTAssertEqual(Vents.Sound.controls(unit: 0), [])
+        XCTAssertNotNil(Vents.Sound.set(unit: 0, control: "vol", left: 50, right: 50), "a set must fail, not pretend")
+        #else
+        throw XCTSkip("the guest's sound is live-vents.sh's, against mixer(8)")
+        #endif
+    }
 }

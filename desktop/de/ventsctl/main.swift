@@ -32,7 +32,7 @@ func fail(_ s: String) -> Never { emit(2, "ventsctl: \(s)"); exit(1) }
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let cmd = args.first else {
-    fail("usage: ventsctl sysctl <name> | kenv [name] | volume [pct] | battery | devd [secs]"
+    fail("usage: ventsctl sysctl <name> | kenv [name] | volume [pct] | battery | devd [secs] | sound [set|mute …]"
          + " | network [--wait secs]")
 }
 
@@ -131,6 +131,39 @@ case "network":
         out(changed ? "changed" : "no change")
     }
     show()
+
+case "sound":
+    //   ventsctl sound                          devices, controls, who is playing
+    //   ventsctl sound set UNIT CONTROL LEVEL   0..100, both sides
+    //   ventsctl sound mute UNIT CONTROL on|off
+    if args.count >= 2 {
+        guard args.count == 5, let unit = Int(args[2]) else {
+            fail("usage: ventsctl sound [set UNIT CONTROL LEVEL | mute UNIT CONTROL on|off]")
+        }
+        let why: String?
+        switch args[1] {
+        case "set":
+            guard let v = Int(args[4]), (0...100).contains(v) else { fail("a level is 0..100, not \(args[4])") }
+            why = Vents.Sound.set(unit: unit, control: args[3], left: v, right: v)
+        case "mute":
+            guard args[4] == "on" || args[4] == "off" else { fail("mute is on or off, not \(args[4])") }
+            why = Vents.Sound.set(unit: unit, control: args[3], muted: args[4] == "on")
+        default: fail("unknown sound verb '\(args[1])'")
+        }
+        if let why { fail("pcm\(unit) \(args[3]): \(why)") }
+    }
+    let devices = Vents.Sound.devices()
+    let dflt = Vents.Sound.defaultUnit()
+    guard !devices.isEmpty else { out("no sound devices"); exit(0) }
+    out("default " + (dflt.map { "pcm\($0)" } ?? "none"))
+    for d in devices {
+        out("device \(d.name) unit \(d.unit)" + (d.playback ? " play" : "") + (d.recording ? " rec" : "")
+            + (d.fromUser ? " user" : "") + (d.unit == dflt ? " default" : "") + " \(d.description)")
+        for c in Vents.Sound.controls(unit: d.unit) {
+            out("  control \(c.name) \(c.left):\(c.right)" + (c.muted ? " muted" : "") + (c.recordable ? " rec" : ""))
+        }
+        for c in d.playing { out("  playing \(c.pid!) \(c.command) \(c.left):\(c.right)") }
+    }
 
 default:
     fail("unknown command '\(cmd)'")
