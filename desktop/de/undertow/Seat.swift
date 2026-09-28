@@ -23,6 +23,7 @@ import AquaDraw
 import CWlroots
 import PoolConfig
 import Install
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -833,7 +834,7 @@ public final class Seat {
         case .previousWindow:  compositor.cycleWindow(forward: false)
         case .closeWindow:     compositor.closeFocusedWindow()
         case .quitApplication: compositor.quitFocusedApplication()
-        case .run(let words):  Seat.spawnDetached(words)
+        case .run(let words):  Spawn.detached(words)
         }
         keybindsFired += 1
     }
@@ -886,24 +887,6 @@ public final class Seat {
         if let x = getenv("ABYSS_CONFIG_DIR") { return String(cString: x) }
         if let h = getenv("HOME") { return String(cString: h) + "/.config/abyss" }
         return "/tmp"
-    }
-
-    /// Run a command and forget it. No shell, and the child is reaped by init
-    /// rather than by us — a compositor that accumulated zombies every time
-    /// somebody pressed a volume key would be a slow leak nobody attributed.
-    private static func spawnDetached(_ words: [String]) {
-        guard let first = words.first else { return }
-        let pid = fork()
-        if pid == 0 {
-            if fork() != 0 { _exit(0) }          // orphan the grandchild
-            var argv: [UnsafeMutablePointer<CChar>?] = words.map { strdup($0) }
-            argv.append(nil)
-            execvp(first, &argv)
-            _exit(127)
-        } else if pid > 0 {
-            var status: Int32 = 0
-            _ = waitpid(pid, &status, 0)         // the middle process, immediately
-        }
     }
 
     /// Focus whatever is now on top, or nobody.

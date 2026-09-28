@@ -289,6 +289,11 @@ let package = Package(
         ),
         // The session supervisor's logic — restart policy, the poll loop, the
         // control service. A library so it can be tested without a session.
+        // Starting a program detached, async-signal-safely: resolve and
+        // allocate in the parent, only fork/setsid/execve/_exit in the child
+        // (BACKLOG S.2). No dependencies, so the compositor and the supervisor
+        // can share it without the toolkit.
+        .target(name: "Spawn", path: "de/spawn"),
         .target(
             name: "Anchor",
             dependencies: ["CProc", "CurrentIPC"],
@@ -451,7 +456,7 @@ let package = Package(
             // name and the seat needs an XKB layout (HANDOFF §2.70). `Install`
             // depends on nothing, so this links no new library.
             dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo", "MenuModel",
-                           "Install"],
+                           "Install", "Spawn"],
             path: "de/undertow"
         ),
         .executableTarget(
@@ -561,6 +566,11 @@ let package = Package(
             // away from the theme token it was copied from.
             dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua", "AquaDraw"],
             path: "Tests/DBusPortalTests"
+        ),
+        .testTarget(
+            name: "SpawnTests",
+            dependencies: ["Spawn"],
+            path: "Tests/SpawnTests"
         ),
         .testTarget(
             name: "UndertowTests",

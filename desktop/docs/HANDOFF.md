@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**557 unit tests, 33 live modes and 38 live scripts, green on Linux and FreeBSD,
+**562 unit tests, 33 live modes and 38 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -2265,6 +2265,14 @@ Wayland client. What the pass taught:
   exact equality, and top/bottom probes differing from it prove the stacking.
 
 ### 2.25 Launching: resolve before the fork, and double-fork so nothing zombies
+
+> **2026-09-28 (BACKLOG S.2):** `undertow`'s keybind `run:` action broke this
+> rule for a whole phase — its child `strdup`ed every word, bridged a Swift
+> `String` for the path and searched `PATH` inside `execvp`, all after `fork`.
+> Found by a survey, not a hang: the deadlock is a race nobody had lost yet.
+> It now uses `Spawn.detached` (`de/spawn`, no dependencies), which also takes
+> the argv pointer before forking so the child runs no Swift at all. `Launcher`
+> and `anchor` still carry their own copies; moving them is S.3.
 (Phase 2.8.) Double-clicking an app bundle, an executable or a document now
 starts a process (`Launcher.swift`):
 

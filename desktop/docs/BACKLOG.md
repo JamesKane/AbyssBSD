@@ -74,8 +74,8 @@ toolkit shim, and not before U.3–U.4.
 |---|---|---|---|
 | S.0 | **Swift 6.3.3 on both platforms** — Linux via `swiftly`; the guest from the 2026Q4 quarterly | S | the rehearsal for 6.4 on a version both sides can run; `--full`, since the medium ships the runtime |
 | S.1 | **Retire the `aw_*` shims** — Swift calls `static inline` C directly (HANDOFF §2.1 corrected) | M | ~95 wrappers and ~680 lines of C gone; adding a protocol stops needing hand-written wrappers |
-| S.2 | **`Seat.spawnDetached` allocates after `fork`** — a real async-signal-safety bug | S | a deadlock waiting for the allocator's lock to be held at the wrong moment |
-| S.3 | **One spawn helper** for the six hand-written fork/exec paths | S–M | one place to be async-signal-safe |
+| ~~S.2~~ | ✅ **2026-09-28. `undertow`'s keybind spawn is async-signal-safe** — the new dependency-free `Spawn` target (`de/spawn`): resolve and allocate in the parent, only `fork`/`setsid`/`execve`/`_exit` in the child (HANDOFF §2.25) | S | done, both platforms |
+| S.3 | **One spawn helper** for the six hand-written fork/exec paths — `Spawn` exists since S.2; move `Launcher`, `anchor`\'s `resolveExecutable`, the installer and `fathombin` onto it | S–M | one place to be async-signal-safe |
 | S.4 | `InlineArray` for the scene's columns and the flight recorder — **only with bench numbers before and after** | S | safety and less code, not speed |
 | S.5 | `Span`/`RawSpan` in the wire parsers | M | bounds safety without copies |
 | S.6 | **Swift 6.4** — blocked until FreeBSD ports has it; first fix the font/theme search paths under Swift Build and decide the guest's build system (SWIFT-6.4 §4.2, §5) | M | the bump itself |
