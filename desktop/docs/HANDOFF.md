@@ -17,8 +17,7 @@ you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
 **546 unit tests, 33 live modes and 34 live scripts, green on Linux and FreeBSD,
-and a golden gate of 70 scenes on each** — except §2.70's three keymap tests,
-green on Linux and not yet run in the guest.
+and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
 and it reboots into the Jaguar desktop as the account that was created — proven

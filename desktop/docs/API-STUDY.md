@@ -230,4 +230,5 @@ backend-generic and matters on Vulkan too.
 - The vchan wake period and `GETODELAY` under-report: read, not measured.
 - Whether swift6 6.3.2 on FreeBSD accepts the study toolkit's `@_noLocks` and
   `Span` features.
-- §1.1's fix on FreeBSD and on metal: the unit tests are green on Linux only.
+- §1.1's fix on metal. Its unit tests are green on Linux and in the FreeBSD
+  guest (`run.sh --vm`, 2026-09-28); nobody has typed on the 12700KF yet.
