@@ -116,30 +116,7 @@ public func splitCommand(_ s: String) -> [String] {
     s.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
 }
 
-/// Turn a command into an absolute executable path: used as-is when it contains
-/// a slash, otherwise searched along `path` (defaults to `$PATH`).
-///
-/// Resolving here, in the parent, is the same discipline `Launcher` follows for
-/// the same reason (HANDOFF §2.25): after the fork a child may only make
-/// async-signal-safe calls, and `execvpe` does not exist on FreeBSD. This is a
-/// second copy of that logic on purpose — `Anchor` is a supervisor and must not
-/// drag in the toolkit (and through it cairo, FreeType and HarfBuzz) to find a
-/// binary on `$PATH`.
-public func resolveExecutable(_ command: String, path: String? = nil) -> String? {
-    guard !command.isEmpty else { return nil }
-    func isExecutableFile(_ p: String) -> Bool {
-        var st = stat()
-        guard p.withCString({ stat($0, &st) == 0 }) else { return false }
-        let mode = UInt32(st.st_mode)
-        return (mode & 0o170000) == 0o100000 && (mode & 0o111) != 0
-    }
-    if command.contains("/") {
-        return isExecutableFile(command) ? command : nil
-    }
-    let search = path ?? getenv("PATH").map { String(cString: $0) } ?? "/usr/bin:/bin"
-    for dir in search.split(separator: ":", omittingEmptySubsequences: true) {
-        let candidate = String(dir) + (dir.hasSuffix("/") ? "" : "/") + command
-        if isExecutableFile(candidate) { return candidate }
-    }
-    return nil
-}
+/// Resolving a command to an absolute path is `Spawn.resolveExecutable` —
+/// one copy for the supervisor, the toolkit and the compositor (S.3). `Spawn`
+/// depends on nothing, which is what kept this a second copy until it existed:
+/// a supervisor must not drag in the toolkit to find a binary on `$PATH`.

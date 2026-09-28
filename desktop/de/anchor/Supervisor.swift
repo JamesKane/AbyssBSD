@@ -10,6 +10,7 @@
 
 import CProc
 import CurrentIPC
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -76,8 +77,8 @@ public final class Supervisor {
         }
         let env = environmentBlock(base: currentEnvironment(), overrides: spec.env)
         var child = ap_child(fd: -1, pid: -1)
-        let rc = withCStringArray(spec.argv) { argv in
-            withCStringArray(env) { envp in
+        let rc = Spawn.withCStrings(spec.argv) { argv in
+            Spawn.withCStrings(env) { envp in
                 ap_child_spawn(argv, envp, stdoutTo, &child)
             }
         }
@@ -355,20 +356,3 @@ private let sockStreamType = Int32(SOCK_STREAM)
 #endif
 private let sunFamilyUnix = sa_family_t(AF_UNIX)
 
-/// Build a NULL-terminated C string array for `execve`, valid for the duration
-/// of `body`.
-///
-/// `strdup` rather than nested `withCString` closures: the pointers must all be
-/// live *at the same time*, and a pointer taken inside a `withUnsafeBufferPointer`
-/// is not valid once that closure returns — so the obvious `map` over borrowed
-/// buffers is undefined behaviour, however plausible it looks.
-func withCStringArray<R>(_ strings: [String],
-                         _ body: (UnsafePointer<UnsafePointer<CChar>?>) -> R) -> R {
-    var ptrs: [UnsafeMutablePointer<CChar>?] = strings.map { strdup($0) }
-    defer { for p in ptrs { free(p) } }
-    ptrs.append(nil)                    // execve wants a NULL terminator
-    return ptrs.withUnsafeBufferPointer { buf in
-        buf.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self,
-                                           capacity: buf.count) { body($0) }
-    }
-}

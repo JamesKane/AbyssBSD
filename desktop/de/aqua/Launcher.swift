@@ -18,6 +18,7 @@
 // `anchor` (pdfork + kqueue) in Phase 3; this is the Linux-dev stand-in.
 
 import PoolConfig
+import Spawn
 import CPlatform
 
 #if canImport(Glibc)
@@ -55,25 +56,6 @@ public enum Launcher {
         guard path.withCString({ stat($0, &st) == 0 }) else { return false }
         let mode = UInt32(st.st_mode)
         return (mode & 0o170000) == 0o100000 && (mode & 0o111) != 0
-    }
-
-    /// Turn a command into an absolute executable path: used as-is when it
-    /// contains a slash, otherwise searched along `path` (defaults to $PATH).
-    /// Returns nil if nothing executable is found — resolving *before* the fork
-    /// keeps the child free of PATH lookups (and of `execvpe`, which FreeBSD
-    /// doesn't have).
-    public static func resolveExecutable(_ command: String,
-                                         path: String? = nil) -> String? {
-        guard !command.isEmpty else { return nil }
-        if command.contains("/") {
-            return isExecutableFile(command) ? command : nil
-        }
-        let search = path ?? getenv("PATH").map { String(cString: $0) } ?? "/usr/bin:/bin"
-        for dir in search.split(separator: ":", omittingEmptySubsequences: true) {
-            let candidate = finderJoin(String(dir), command)
-            if isExecutableFile(candidate) { return candidate }
-        }
-        return nil
     }
 
     /// The executable inside an application bundle: `Foo.app/Contents/MacOS/Foo`
@@ -155,62 +137,13 @@ public enum Launcher {
 
     // MARK: - Spawning
 
-    /// Start `argv` detached from this process. Returns false if the command
-    /// can't be resolved or the fork fails.
+    /// Start `argv` detached from this process: its own session, reaped by
+    /// init. Returns false if the command can't be resolved or the fork fails.
+    /// The fork itself is `Spawn`'s — one async-signal-safe copy for the
+    /// Finder, the Dock, the menu bar and the compositor's keybinds (S.3).
     @discardableResult
     public static func launchDetached(_ argv: [String],
                                       extraEnv: [String: String] = [:]) -> Bool {
-        guard let first = argv.first, let exe = resolveExecutable(first) else {
-            return false
-        }
-        var command = argv
-        command[0] = exe
-
-        // Build the C argv/envp BEFORE forking: no allocation in the child.
-        var argvC: [UnsafeMutablePointer<CChar>?] = command.map { strdup($0) }
-        argvC.append(nil)
-        var envC: [UnsafeMutablePointer<CChar>?] = currentEnvironment(adding: extraEnv)
-            .map { strdup($0) }
-        envC.append(nil)
-        let exeC = strdup(exe)
-        defer {
-            for p in argvC where p != nil { free(p) }
-            for p in envC where p != nil { free(p) }
-            free(exeC)
-        }
-
-        let middle = fork()
-        if middle < 0 { return false }
-        if middle == 0 {
-            // Middle child: fork again so the grandchild is reparented to init
-            // and we never have to reap it.
-            if fork() == 0 {
-                setsid()
-                _ = argvC.withUnsafeMutableBufferPointer { a in
-                    envC.withUnsafeMutableBufferPointer { e in
-                        execve(exeC!, a.baseAddress!, e.baseAddress!)
-                    }
-                }
-                _exit(127)   // exec failed
-            }
-            _exit(0)
-        }
-        var status: Int32 = 0
-        _ = waitpid(middle, &status, 0)   // immediate; the middle child just exits
-        return true
-    }
-
-    /// `environ` as "KEY=VALUE" strings, with `extra` overriding.
-    private static func currentEnvironment(adding extra: [String: String]) -> [String] {
-        var out: [String] = []
-        var i = 0
-        while let entry = environ[i] {
-            let s = String(cString: entry)
-            let key = String(s.prefix(while: { $0 != "=" }))
-            if extra[key] == nil { out.append(s) }
-            i += 1
-        }
-        for (k, v) in extra { out.append("\(k)=\(v)") }
-        return out
+        Spawn.detached(argv, environment: extraEnv)
     }
 }

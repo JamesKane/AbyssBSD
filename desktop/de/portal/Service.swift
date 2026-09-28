@@ -4,6 +4,7 @@
 import CProc
 import CPlatform
 import CurrentIPC
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -147,8 +148,8 @@ public final class PortalService {
         // The environment passes through untouched: the helper needs this
         // session's WAYLAND_DISPLAY, and the portal is the one that has it.
         let envp = ProcessEnvironment().block()
-        let status = withCStrings(argv) { a in
-            withCStrings(envp) { e in ap_run_and_wait(a, e, &signalled) }
+        let status = Spawn.withCStrings(argv) { a in
+            Spawn.withCStrings(envp) { e in ap_run_and_wait(a, e, &signalled) }
         }
         if status < 0 {
             unlink(path)
@@ -214,8 +215,8 @@ public final class PortalService {
         let argv = [pickerBinary]
         let envp = env.block()
         var signalled: Int32 = 0
-        let status = withCStrings(argv) { a in
-            withCStrings(envp) { e in
+        let status = Spawn.withCStrings(argv) { a in
+            Spawn.withCStrings(envp) { e in
                 ap_run_and_wait(a, e, &signalled)
             }
         }
@@ -275,16 +276,3 @@ struct ProcessEnvironment {
     func block() -> [String] { vars.keys.sorted().map { "\($0)=\(vars[$0]!)" } }
 }
 
-/// Build a NULL-terminated C array for `execve`, valid for the duration of
-/// `body`. `strdup` because every pointer must be live at once — see Anchor's
-/// copy of this for why the obvious `map` over borrowed buffers is UB.
-func withCStrings<R>(_ strings: [String],
-                     _ body: (UnsafePointer<UnsafePointer<CChar>?>) -> R) -> R {
-    var ptrs: [UnsafeMutablePointer<CChar>?] = strings.map { strdup($0) }
-    defer { for p in ptrs { free(p) } }
-    ptrs.append(nil)
-    return ptrs.withUnsafeBufferPointer { buf in
-        buf.baseAddress!.withMemoryRebound(to: UnsafePointer<CChar>?.self,
-                                           capacity: buf.count) { body($0) }
-    }
-}

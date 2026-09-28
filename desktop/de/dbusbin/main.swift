@@ -16,6 +16,7 @@
 import CurrentIPC
 import DBusPortal
 import DBusMenus
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -42,32 +43,10 @@ func runPalette() -> String? {
     guard let slash = me.lastIndex(of: "/") else { return nil }
     let tool = String(me[..<slash]) + "/abyss-theme"
     guard access(tool, X_OK) == 0 else { return nil }
-    var fds: [Int32] = [0, 0]
-    guard pipe(&fds) == 0 else { return nil }
-    // A struct on Linux, a pointer on FreeBSD.
-    #if os(Linux)
-    var fa = posix_spawn_file_actions_t()
-    #else
-    var fa: posix_spawn_file_actions_t? = nil
-    #endif
-    posix_spawn_file_actions_init(&fa)
-    posix_spawn_file_actions_adddup2(&fa, fds[1], 1)
-    posix_spawn_file_actions_addclose(&fa, fds[0])
-    var pid: pid_t = 0
-    let argv: [UnsafeMutablePointer<CChar>?] = [strdup(tool), strdup("palette"), nil]
-    defer { for p in argv { free(p) }; posix_spawn_file_actions_destroy(&fa) }
-    guard posix_spawn(&pid, tool, &fa, nil, argv, environ) == 0 else { close(fds[0]); close(fds[1]); return nil }
-    close(fds[1])
-    var out: [UInt8] = [], chunk = [UInt8](repeating: 0, count: 4096)
-    while true {
-        let r = read(fds[0], &chunk, chunk.count)
-        if r <= 0 { break }
-        out += chunk[0..<r]
-    }
-    close(fds[0])
-    var status: Int32 = 0
-    waitpid(pid, &status, 0)
-    return out.isEmpty ? nil : String(decoding: out, as: UTF8.self)
+    // `Spawn.run` (S.3): the per-platform posix_spawn file-actions type lives
+    // there now, once. stderr stays ours, as it always did.
+    let r = Spawn.run([tool, "palette"], stderr: .inherit)
+    return r.stdout.isEmpty ? nil : r.stdoutText
 }
 
 var portal: String?

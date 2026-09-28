@@ -1053,17 +1053,6 @@ final class AquaTests: XCTestCase {
 
     // MARK: Launching
 
-    func testLauncherResolvesExecutables() {
-        // A bare name is searched along the given PATH…
-        XCTAssertEqual(Launcher.resolveExecutable("sh", path: "/nonexistent:/bin"),
-                       "/bin/sh")
-        XCTAssertNil(Launcher.resolveExecutable("sh", path: "/nonexistent"))
-        // …a path with a slash is used as-is, but only if it's executable.
-        XCTAssertEqual(Launcher.resolveExecutable("/bin/sh"), "/bin/sh")
-        XCTAssertNil(Launcher.resolveExecutable("/etc/hostname"))   // not executable
-        XCTAssertNil(Launcher.resolveExecutable(""))
-    }
-
     func testLauncherFindsItsOwnExecutable() {
         // The mechanism is per-OS and lives in CPlatform (/proc/self/exe on
         // Linux, the KERN_PROC_PATHNAME sysctl on FreeBSD, which mounts no

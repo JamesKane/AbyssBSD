@@ -8,6 +8,7 @@
 // tested against an assumption.
 
 import Install
+import Spawn
 import Vents
 
 #if canImport(Glibc)
@@ -391,31 +392,9 @@ public func inventory(geom: String, mounts: String, labels: String,
 struct CaptureResult { let status: Int32; let text: String }
 
 func runCaptureStdout(_ argv: [String]) -> CaptureResult {
-    guard let program = argv.first else { return CaptureResult(status: -1, text: "") }
-    var p: [Int32] = [-1, -1]
-    guard pipe(&p) == 0 else { return CaptureResult(status: -1, text: errnoText()) }
-    let pid = fork()
-    if pid < 0 { close(p[0]); close(p[1]); return CaptureResult(status: -1, text: errnoText()) }
-    if pid == 0 {
-        dup2(p[1], 1); dup2(p[1], 2)
-        close(p[0]); close(p[1])
-        let devnull = open("/dev/null", O_RDONLY)
-        if devnull >= 0 { dup2(devnull, 0); close(devnull) }
-        withCStrings(argv) { _ = execvp(program, $0) }
-        _exit(127)
-    }
-    close(p[1])
-    var captured = [UInt8]()
-    var chunk = [UInt8](repeating: 0, count: 8192)
-    while true {
-        let n = chunk.withUnsafeMutableBytes { read(p[0], $0.baseAddress, 8192) }
-        if n <= 0 { break }
-        captured.append(contentsOf: chunk[0..<n])
-        if captured.count > 1 << 20 { break }
-    }
-    close(p[0])
-    var status: Int32 = 0
-    while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
-    return CaptureResult(status: exitStatus(status),
-                         text: String(decoding: captured, as: UTF8.self))
+    // `Spawn.run` (S.3): this built its argv inside the child, after `fork`.
+    // stderr joins stdout, and stdin is /dev/null, as before.
+    let r = Spawn.run(argv, stderr: .merge, limit: 1 << 20)
+    if r.rawStatus == nil { return CaptureResult(status: r.code, text: r.failure ?? "") }
+    return CaptureResult(status: r.code, text: r.stdoutText)
 }

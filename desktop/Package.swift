@@ -236,7 +236,7 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["AquaDraw", "MenuModel", "MenuWire", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform",
+            dependencies: ["AquaDraw", "MenuModel", "MenuWire", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform", "Spawn",
                            "Vents", "CurrentIPC",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
@@ -296,7 +296,7 @@ let package = Package(
         .target(name: "Spawn", path: "de/spawn"),
         .target(
             name: "Anchor",
-            dependencies: ["CProc", "CurrentIPC"],
+            dependencies: ["CProc", "CurrentIPC", "Spawn"],
             path: "de/anchor"
         ),
         // The installer's thinking half (Phase 5): what an install IS, as a
@@ -338,7 +338,7 @@ let package = Package(
             name: "InstallRun",
             // `Vents` for the kernel environment: the machine's identity is in
             // `kenv`, not sysctl, and this is the half that is allowed to look.
-            dependencies: ["Install", "InstallWire", "CurrentIPC", "CPlatform", "Vents"],
+            dependencies: ["Install", "InstallWire", "CurrentIPC", "CPlatform", "Vents", "Spawn"],
             path: "de/installrun"
         ),
         // The privileged half: runs as root, commanded by an unprivileged GUI,
@@ -358,7 +358,7 @@ let package = Package(
         // The supervisor itself: the Swift replacement for abyss/session.sh.
         .executableTarget(
             name: "anchor",
-            dependencies: ["Anchor", "CurrentIPC", "CPlatform"],
+            dependencies: ["Anchor", "CurrentIPC", "CPlatform", "Spawn"],
             path: "de/anchorbin"
         ),
         // Capsicum: entering capability mode, so the sandboxed client can prove
@@ -394,7 +394,7 @@ let package = Package(
         // chose, and the descriptor goes back over SCM_RIGHTS. No D-Bus.
         .target(
             name: "Portal",
-            dependencies: ["CurrentIPC", "CProc", "CPlatform"],
+            dependencies: ["CurrentIPC", "CProc", "CPlatform", "Spawn"],
             path: "de/portal"
         ),
         .executableTarget(
@@ -475,7 +475,7 @@ let package = Package(
         // that gets a stock GTK or Qt app the Finder as its file chooser.
         .executableTarget(
             name: "abyss-dbus",
-            dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC"],
+            dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC", "Spawn"],
             path: "de/dbusbin"
         ),
         // Read the machine through the FreeBSD-native bridges.
@@ -536,7 +536,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "fathom",
-            dependencies: ["Fathom", "Vents"],
+            dependencies: ["Fathom", "Vents", "Spawn"],
             path: "de/fathombin"
         ),
         .testTarget(

@@ -323,19 +323,6 @@ final class AnchorTests: XCTestCase {
         XCTAssertEqual(p.components.first { $0.name == "bridge" }?.argv, ["/opt/abyss/abyss-dbus"])
     }
 
-    // MARK: - Resolving a command
-
-    func testResolveExecutableSearchesThePathAndRefusesWhatIsNotAProgram() {
-        XCTAssertEqual(resolveExecutable("sh", path: "/bin:/usr/bin"), "/bin/sh")
-        XCTAssertEqual(resolveExecutable("/bin/sh"), "/bin/sh")
-        // A directory is executable in the `x` sense and is not a program; a
-        // supervisor that exec'd one would fail after the fork, where the only
-        // thing it can do about it is die.
-        XCTAssertNil(resolveExecutable("/bin"))
-        XCTAssertNil(resolveExecutable("no-such-program-anywhere", path: "/bin:/usr/bin"))
-        XCTAssertNil(resolveExecutable(""))
-    }
-
     func testTheBusAddressCanBeTurnedBackIntoASocketPath() {
         XCTAssertEqual(unixSocketPath(ofBusAddress: "unix:path=/run/abyss/bus"), "/run/abyss/bus")
         // dbus-daemon prints the address with its guid appended; the path stops

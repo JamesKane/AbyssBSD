@@ -16,7 +16,7 @@ this desktop, opens a file through the Finder**; since Phase 9 it is a desktop
 you can *use*; since Phase 10 applications publish their menus to our bar (GTK's
 and Qt's included); and since Phase 11 **its look is data** — Jaguar re-expressed
 pixel for pixel, and a second theme, Trench, that no code names.
-**562 unit tests, 33 live modes and 38 live scripts, green on Linux and FreeBSD,
+**571 unit tests, 33 live modes and 38 live scripts, green on Linux and FreeBSD,
 and a golden gate of 70 scenes on each.**
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5): a
 machine with an empty disk boots our medium, the Aqua installer comes up on it,
@@ -2273,6 +2273,22 @@ Wayland client. What the pass taught:
 > It now uses `Spawn.detached` (`de/spawn`, no dependencies), which also takes
 > the argv pointer before forking so the child runs no Swift at all. `Launcher`
 > and `anchor` still carry their own copies; moving them is S.3.
+>
+> **S.3, the same day, found the mistake three more times** — the installer's
+> step runner (which runs as root) and its machine probe each built argv inside
+> the child with a `withCStrings` that `strdup`s, and `fathom` `strdup`ed there
+> too — and two more faults beside them: `fathom` drained stdout to its end
+> before reading stderr, so a child that filled stderr first would hang both;
+> and the installer closed its pipe at 8 KiB, so a chattier step died of
+> SIGPIPE and was reported as a failed step. All of them now call `Spawn.run`,
+> which does not fork in Swift at all (`posix_spawn`), services input and both
+> outputs in one `poll` loop, drains past its limit, and blocks SIGPIPE while
+> writing input. `Launcher` uses `Spawn.detached(_:environment:)`; `anchor` and
+> the portal keep `cproc` (pdfork) and share `Spawn.withCStrings`. There is one
+> `resolveExecutable`. **No Swift in this tree forks except `de/spawn`.**
+> Each fault was put back and its test failed — the limit test only after it
+> stopped running `head` under `sh -c`, whose shell exited 0 over its child's
+> SIGPIPE and hid the bug.
 (Phase 2.8.) Double-clicking an app bundle, an executable or a document now
 starts a process (`Launcher.swift`):
 

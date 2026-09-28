@@ -24,6 +24,7 @@
 
 import Fathom
 import Vents
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -63,60 +64,26 @@ func capture(_ argv: [String]) -> String? {
 /// somebody drove to a different city to read off a screen. The rule is not
 /// "discard stderr", it is **never parse stderr as data** — so it is captured
 /// separately and only ever quoted, never fed to a parser.
+///
+/// `Spawn.run` (S.3). The first version forked here, built argv inside the
+/// child, and read stdout to its end *before* stderr — so a program that
+/// filled its stderr pipe first would have waited for us while we waited for
+/// it. Spawn services both in one loop, and stdin is /dev/null.
 func run(_ argv: [String]) -> (stdout: String?, reason: String) {
-    var outFds: [Int32] = [0, 0]
-    var errFds: [Int32] = [0, 0]
-    guard pipe(&outFds) == 0 else { return (nil, "could not create a pipe") }
-    guard pipe(&errFds) == 0 else {
-        close(outFds[0]); close(outFds[1])
-        return (nil, "could not create a pipe")
-    }
-    let pid = fork()
-    if pid == 0 {
-        close(outFds[0]); close(errFds[0])
-        dup2(outFds[1], 1)
-        dup2(errFds[1], 2)
-        close(outFds[1]); close(errFds[1])
-        var cargs: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) }
-        cargs.append(nil)
-        execvp(argv[0], &cargs)
-        _exit(127)
-    }
-    guard pid > 0 else {
-        close(outFds[0]); close(outFds[1]); close(errFds[0]); close(errFds[1])
-        return (nil, "could not fork")
-    }
-    close(outFds[1]); close(errFds[1])
-
-    func drain(_ fd: Int32) -> String {
-        var text = ""
-        var buf = [UInt8](repeating: 0, count: 4096)
-        while true {
-            let n = buf.withUnsafeMutableBytes { read(fd, $0.baseAddress, 4096) }
-            if n <= 0 { break }
-            text += String(decoding: buf[0..<n], as: UTF8.self)
-        }
-        close(fd)
-        return text
-    }
-    let outText = drain(outFds[0])
-    let errText = drain(errFds[0])
-
-    var status: Int32 = 0
-    waitpid(pid, &status, 0)
-    // A command that did not exist, or ran and failed, tells us nothing. One that
-    // succeeded and printed nothing has told us something — an empty string is
-    // an answer and nil is not.
-    let exited = (status & 0x7f) == 0
-    let code = (status >> 8) & 0xff
-    guard exited, code == 0 else {
+    let r = Spawn.run(argv)
+    // Not found, or could not start: that is the reason, in its own words.
+    if r.rawStatus == nil { return (nil, r.failure ?? "\(argv.first ?? "") could not start") }
+    // A command that ran and failed tells us nothing. One that succeeded and
+    // printed nothing has told us something — an empty string is an answer
+    // and nil is not.
+    guard r.succeeded else {
         // The last non-empty line: a failing program's useful sentence is
         // usually its last, and the ones above it are context we did not ask for.
-        let last = errText.split(separator: "\n")
+        let last = r.stderrText.split(separator: "\n")
             .map { String($0) }.last { !$0.trimmingPrefixSpaces().isEmpty }
-        return (nil, last ?? "\(argv[0]) exited \(code) and said nothing")
+        return (nil, last ?? "\(argv[0]) exited \(r.code) and said nothing")
     }
-    return (outText, "")
+    return (r.stdoutText, "")
 }
 
 extension String {
@@ -202,7 +169,7 @@ let measure = args.contains("--measure")
 var results = report.results
 
 if measure {
-    // Absolute path first, then bare so `execvp` searches PATH — the medium
+    // Absolute path first, then bare so `Spawn` searches PATH — the medium
     // installs to /usr/local/bin, a developer has it somewhere else.
     let installed = "/usr/local/bin/undertow"
     let undertow = installed.withCString { access($0, X_OK) == 0 } ? installed : "undertow"

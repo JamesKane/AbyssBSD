@@ -93,6 +93,13 @@ final class SpawnTests: XCTestCase {
         XCTAssertEqual(errno, ECHILD)
     }
 
+    func testTheEnvironmentReachesADetachedProgram() {
+        let out = dir + "/out"
+        XCTAssertTrue(Spawn.detached(["sh", "-c", "echo \"$ABYSS_SPAWN_T\" > '\(out)'"],
+                                     environment: ["ABYSS_SPAWN_T": "given"]))
+        XCTAssertEqual(read(out, within: 5), "given")
+    }
+
     func testAProgramThatCannotBeFoundIsNotForked() {
         XCTAssertFalse(Spawn.detached(["no-such-program-anywhere-\(getpid())"]))
         XCTAssertFalse(Spawn.detached([]))
@@ -100,5 +107,96 @@ final class SpawnTests: XCTestCase {
         errno = 0
         XCTAssertEqual(waitpid(-1, &status, WNOHANG), -1)
         XCTAssertEqual(errno, ECHILD, "a fork happened for a command that was never going to run")
+    }
+
+    // MARK: - Running, for the output (S.3)
+
+    func testStdoutAndStderrAreKeptApartAndTheExitCodeIsReported() {
+        let r = Spawn.run(["sh", "-c", "echo out; echo err >&2; exit 3"])
+        XCTAssertEqual(r.stdoutText, "out\n")
+        XCTAssertEqual(r.stderrText, "err\n", "stderr must never be parsed as data — so it is kept apart")
+        XCTAssertEqual(r.exitCode, 3)
+        XCTAssertEqual(r.code, 3)
+        XCTAssertFalse(r.succeeded)
+        XCTAssertNil(r.failure)
+    }
+
+    func testMergedOutputKeepsItsOrder() {
+        let r = Spawn.run(["sh", "-c", "echo a; echo b >&2; echo c"], stderr: .merge)
+        XCTAssertEqual(r.stdoutText, "a\nb\nc\n")
+        XCTAssertTrue(r.stderr.isEmpty)
+    }
+
+    /// Without input a child reads /dev/null: `cat` must finish, not wait on
+    /// whatever the caller's stdin is.
+    func testWithoutInputStdinIsDevNull() {
+        let r = Spawn.run(["cat"])
+        XCTAssertTrue(r.succeeded)
+        XCTAssertTrue(r.stdout.isEmpty)
+    }
+
+    /// **More than a pipe holds, both ways at once.** Writing all the input
+    /// and then reading the output deadlocks here: cat blocks writing to a full
+    /// stdout while we block writing to its full stdin. One poll loop does not.
+    func testInputAndOutputLargerThanAPipeDoNotDeadlock() {
+        let input = (0..<(1 << 20)).map { UInt8(truncatingIfNeeded: $0 &* 7) }
+        let r = Spawn.run(["cat"], input: input, limit: 2 << 20)
+        XCTAssertTrue(r.succeeded)
+        XCTAssertEqual(r.stdout.count, input.count)
+        XCTAssertEqual(r.stdout, input)
+    }
+
+    /// **The fathom bug.** A child that fills stderr before writing stdout,
+    /// read by a caller that drains stdout first, waits for ever on both sides.
+    func testAFullStderrBeforeStdoutDoesNotDeadlock() {
+        let r = Spawn.run(["sh", "-c", "head -c 1048576 /dev/zero >&2; echo done"],
+                          limit: 2 << 20)
+        XCTAssertTrue(r.succeeded)
+        XCTAssertEqual(r.stderr.count, 1 << 20)
+        XCTAssertEqual(r.stdoutText, "done\n")
+    }
+
+    /// **The installer's bug.** Past the limit the rest is read and dropped,
+    /// so the program runs to its real end — not killed by SIGPIPE and
+    /// reported as failing.
+    func testPastTheLimitTheRestIsDrainedAndTheProgramFinishes() {
+        // `head` itself, not under `sh -c`: a shell that carries on after its
+        // child dies of SIGPIPE exits 0 and hides exactly what this is for —
+        // the first version of this test did, and passed with the bug put back.
+        let r = Spawn.run(["head", "-c", "3000000", "/dev/zero"], limit: 1000)
+        XCTAssertEqual(r.stdout.count, 1000)
+        XCTAssertEqual(r.exitCode, 0, "the program did not finish normally (signal \(r.signal ?? 0))")
+    }
+
+    /// A child that exits without reading its input: our write gets EPIPE,
+    /// and the SIGPIPE it raises must not kill us. If it did, this test
+    /// process would die here rather than fail.
+    func testAChildThatIgnoresItsInputCannotKillTheCaller() {
+        let r = Spawn.run(["true"], input: [UInt8](repeating: 65, count: 4 << 20))
+        XCTAssertEqual(r.exitCode, 0)
+    }
+
+    func testASignalledProgramIsReportedAsSignalled() {
+        let r = Spawn.run(["sh", "-c", "kill -TERM $$"])
+        XCTAssertNil(r.exitCode)
+        XCTAssertEqual(r.signal, SIGTERM)
+        XCTAssertEqual(r.code, 128 + SIGTERM)
+    }
+
+    func testAProgramThatIsNotFoundSaysSo() {
+        let r = Spawn.run(["no-such-program-anywhere-\(getpid())"])
+        XCTAssertNil(r.rawStatus)
+        XCTAssertEqual(r.code, 127, "the shell's number for not found")
+        XCTAssertTrue(r.failure?.hasSuffix(": not found") ?? false, r.failure ?? "no failure")
+        var status: Int32 = 0
+        errno = 0
+        XCTAssertEqual(waitpid(-1, &status, WNOHANG), -1)
+        XCTAssertEqual(errno, ECHILD, "a process was started for a command that does not exist")
+    }
+
+    func testTheEnvironmentIsAddedToOursNotInsteadOfIt() {
+        let r = Spawn.run(["sh", "-c", "echo \"$ABYSS_SPAWN_T:${PATH:+path}\""],
+                          environment: ["ABYSS_SPAWN_T": "given"])
+        XCTAssertEqual(r.stdoutText, "given:path\n")
     }
 }

@@ -30,6 +30,7 @@
 // The session is controlled with `abyssctl status|quit`.
 
 import Anchor
+import Spawn
 import CurrentIPC
 import CPlatform
 
@@ -157,7 +158,7 @@ if explicitComponents.isEmpty {
     // and resolved HERE, in the parent, because a forked child may not go
     // searching (HANDOFF §2.25). A box without one still gets a desktop; it
     // just gets one with no bus, and `plan.notes` says so out loud.
-    let dbusDaemon = resolveExecutable("dbus-daemon")
+    let dbusDaemon = Spawn.resolveExecutable("dbus-daemon")
 
     // Where the compositor's socket will be, when that is knowable: a bare
     // `WAYLAND_DISPLAY` is a name under $XDG_RUNTIME_DIR, and an absolute one is

@@ -12,6 +12,7 @@
 
 import Install
 import InstallWire
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -75,92 +76,21 @@ public func execute(_ steps: [Step], dryRun: Bool = false,
 // MARK: - Doing one thing
 
 /// Run a command, feeding it `stdin` if it has any, and collect its stderr.
-///
-/// `fork`/`execvp` rather than `posix_spawn`: the file-actions type is a struct
-/// on Linux and a pointer typedef on FreeBSD, so the spawn route needs a
-/// platform fork of its own for no benefit here. The child does nothing between
-/// fork and exec but `dup2` and `close`, which is async-signal-safe, and
-/// `Aqua.Launcher` has spawned this way since Phase 2.
 func runCommand(_ argv: [String], stdin: String?) -> CommandResult {
-    guard let program = argv.first else { return CommandResult(status: -1, message: "empty command") }
-
-    var inPipe: [Int32] = [-1, -1]
-    if stdin != nil, pipe(&inPipe) != 0 {
-        return CommandResult(status: -1, message: "pipe: \(errnoText())")
-    }
-    var errPipe: [Int32] = [-1, -1]
-    if pipe(&errPipe) != 0 {
-        if inPipe[0] >= 0 { close(inPipe[0]); close(inPipe[1]) }
-        return CommandResult(status: -1, message: "pipe: \(errnoText())")
-    }
-
-    let pid = fork()
-    if pid < 0 {
-        let e = errnoText()
-        if inPipe[0] >= 0 { close(inPipe[0]); close(inPipe[1]) }
-        close(errPipe[0]); close(errPipe[1])
-        return CommandResult(status: -1, message: "fork: \(e)")
-    }
-
-    if pid == 0 {
-        // ---- child ----
-        if inPipe[0] >= 0 {
-            dup2(inPipe[0], 0)
-            close(inPipe[0]); close(inPipe[1])
-        } else {
-            // Never let a step read from the installer's own stdin: a command
-            // that decides to ask a question would hang the install forever
-            // with no indication of why.
-            let devnull = open("/dev/null", O_RDONLY)
-            if devnull >= 0 { dup2(devnull, 0); close(devnull) }
-        }
-        // stdout follows stderr so a chatty command cannot interleave with the
-        // service's own protocol on its real stdout.
-        dup2(errPipe[1], 1)
-        dup2(errPipe[1], 2)
-        close(errPipe[0]); close(errPipe[1])
-        withCStrings(argv) { cargv in
-            _ = execvp(program, cargv)
-        }
-        // execvp only returns on failure, and the child must not run any of the
-        // parent's cleanup.
-        _exit(127)
-    }
-
-    // ---- parent ----
-    if inPipe[0] >= 0 {
-        close(inPipe[0])
-        if let text = stdin {
-            let bytes = Array((text.hasSuffix("\n") ? text : text + "\n").utf8)
-            var off = 0
-            bytes.withUnsafeBufferPointer { buf in
-                while off < bytes.count {
-                    let n = write(inPipe[1], buf.baseAddress! + off, bytes.count - off)
-                    if n <= 0 { break }
-                    off += n
-                }
-            }
-        }
-        close(inPipe[1])
-    }
-    close(errPipe[1])
-
-    var captured = [UInt8]()
-    var chunk = [UInt8](repeating: 0, count: 4096)
-    while true {
-        let n = chunk.withUnsafeMutableBytes { read(errPipe[0], $0.baseAddress, 4096) }
-        if n <= 0 { break }
-        captured.append(contentsOf: chunk[0..<n])
-        // A command that decides to print a megabyte does not get to make the
-        // installer hold it.
-        if captured.count > 8192 { captured.removeLast(captured.count - 8192); break }
-    }
-    close(errPipe[0])
-
-    var status: Int32 = 0
-    while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
-    let code = exitStatus(status)
-    return CommandResult(status: code, message: trimmed(String(decoding: captured, as: UTF8.self)))
+    // `Spawn.run`, not a fork of our own (S.3): this ran as root and built its
+    // argv inside the child, after `fork` — the async-signal-safety mistake
+    // HANDOFF §2.25 forbids. And it stopped reading at 8 KiB and closed the
+    // pipe, so a chattier command died of SIGPIPE and was reported as failed;
+    // Spawn keeps the first 8 KiB and drains the rest.
+    //
+    // stdout follows stderr (`.merge`) so a chatty command cannot interleave
+    // with the service's own protocol on its real stdout; and without `stdin`
+    // the child reads /dev/null, never the installer's stdin — a command that
+    // decided to ask a question would otherwise hang the install for ever.
+    let input = stdin.map { Array(($0.hasSuffix("\n") ? $0 : $0 + "\n").utf8) }
+    let r = Spawn.run(argv, input: input, stderr: .merge, limit: 8192)
+    if r.rawStatus == nil { return CommandResult(status: r.code, message: r.failure ?? "") }
+    return CommandResult(status: r.code, message: trimmed(r.stdoutText))
 }
 
 func writeFile(path: String, contents: String, mode: UInt16) -> String? {
@@ -202,12 +132,6 @@ func appendFile(path: String, contents: String) -> String? {
 
 // MARK: - Small helpers
 
-/// `WEXITSTATUS`/`WIFSIGNALED` are macros, so Swift cannot see them.
-func exitStatus(_ raw: Int32) -> Int32 {
-    if raw & 0x7f == 0 { return (raw >> 8) & 0xff }      // exited normally
-    return 128 + (raw & 0x7f)                             // killed by a signal
-}
-
 func errnoText() -> String {
     String(cString: strerror(errno))
 }
@@ -217,13 +141,4 @@ func trimmed(_ s: String) -> String {
     while let f = out.first, f == " " || f == "\n" || f == "\t" { out = out.dropFirst() }
     while let l = out.last, l == " " || l == "\n" || l == "\t" { out = out.dropLast() }
     return String(out)
-}
-
-/// Hand an array of Swift strings to a C function wanting `char *const argv[]`.
-func withCStrings(_ strings: [String],
-                  _ body: (UnsafePointer<UnsafeMutablePointer<CChar>?>) -> Void) {
-    var pointers: [UnsafeMutablePointer<CChar>?] = strings.map { strdup($0) }
-    pointers.append(nil)
-    pointers.withUnsafeBufferPointer { body($0.baseAddress!) }
-    for p in pointers where p != nil { free(p) }
 }
