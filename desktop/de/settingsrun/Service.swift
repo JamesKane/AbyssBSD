@@ -85,6 +85,8 @@ public final class SettingsService {
     public let rcConf: String
     /// The resolver configuration name servers go into (P14.4).
     public let resolvconf: String
+    /// Kernel settings applied at boot — the default sound device (P14.6).
+    public let sysctlConf: String
     /// Where every apply is recorded, whatever its outcome. Empty for none.
     public let journal: String
     /// Write the files for real, but run no service and no tool: for a test
@@ -94,11 +96,13 @@ public final class SettingsService {
 
     public init(authority: Authority, dryRun: Bool = false,
                 rcConf: String = "/etc/rc.conf", resolvconf: String = "/etc/resolvconf.conf",
-                journal: String = "/var/log/abyss-settings.log", writeOnly: Bool = false) {
+                journal: String = "/var/log/abyss-settings.log", writeOnly: Bool = false,
+                sysctlConf: String = "/etc/sysctl.conf") {
         self.authority = authority
         self.dryRun = dryRun
         self.rcConf = rcConf
         self.resolvconf = resolvconf
+        self.sysctlConf = sysctlConf
         self.journal = journal
         self.writeOnly = writeOnly
     }
@@ -108,6 +112,7 @@ public final class SettingsService {
         switch f {
         case .rcConf: return rcConf
         case .resolvconf: return resolvconf
+        case .sysctlConf: return sysctlConf
         }
     }
 
@@ -120,6 +125,12 @@ public final class SettingsService {
             guard Settings.isInterfaceName(n.interface) else { return [] }   // said already
             return if_nametoindex(n.interface) == 0
                 ? [SettingsRefusal("there is no interface \(n.interface) on this machine")] : []
+        case .sound(let s):
+            // Before sysctl.conf is written: a default the kernel then refuses
+            // would leave the next boot pointing at nothing.
+            guard s.defaultUnit >= 0 else { return [] }                     // said already
+            return access("/dev/dsp\(s.defaultUnit)", F_OK) != 0
+                ? [SettingsRefusal("there is no sound device pcm\(s.defaultUnit) on this machine")] : []
         }
     }
 
@@ -182,6 +193,16 @@ public final class SettingsService {
         var values: [String: String] = [:]
         for (file, k) in keys {
             // `sysrc -n` answers as rc(8) would — the defaults, then the file.
+            if !file.isShellVariables {
+                // Not sh: read it ourselves. With no line for it, what the
+                // kernel has now is what the next boot gets too.
+                if let v = Settings.sysctlConfValue(Runner.readText(path(file)) ?? "", key: k) { values[k] = v }
+                else {
+                    let r = Spawn.run(["sysctl", "-n", k], limit: 4096)
+                    if r.succeeded { values[k] = trimmed(r.stdoutText) }
+                }
+                continue
+            }
             let r = Spawn.run(["sysrc", "-f", path(file), "-n", k], limit: 4096)
             if r.succeeded { values[k] = trimmed(r.stdoutText) }
         }
@@ -288,8 +309,15 @@ public enum Runner {
                     if let why = copyFile(path(file), to: copy) { return fail(i, step.description, why) }
                     staged[file] = copy
                 }
-                let r = Spawn.run(step.command { staged[$0] ?? path($0) }, stderr: .merge, limit: 8192)
-                guard r.succeeded else { return fail(i, step.description, reason(r)) }
+                if case .setVar(_, let key, let value) = step, !file.isShellVariables {
+                    // sysctl.conf is not sh; sysrc refuses it. Edited here.
+                    let copy = staged[file]!
+                    let text = Settings.editSysctlConf(readText(copy) ?? "", key: key, value: value)
+                    if let why = writeText(text, to: copy) { return fail(i, step.description, why) }
+                } else {
+                    let r = Spawn.run(step.command { staged[$0] ?? path($0) }, stderr: .merge, limit: 8192)
+                    guard r.succeeded else { return fail(i, step.description, reason(r)) }
+                }
                 if i == lastWrite {
                     // Every write succeeded: now, and only now, the real files.
                     for (f, copy) in staged.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
@@ -332,6 +360,34 @@ public enum Runner {
         if let f = r.failure { return f }
         let said = trimmed(r.stdoutText)
         return said.isEmpty ? "exited \(r.code) and said nothing" : said
+    }
+
+    /// A whole (small) file, or nil when it cannot be read.
+    static func readText(_ path: String) -> String? {
+        let fd = open(path, O_RDONLY)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var bytes: [UInt8] = [], buf = [UInt8](repeating: 0, count: 65536)
+        while true {
+            let n = buf.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+            if n <= 0 { return n == 0 ? String(decoding: bytes, as: UTF8.self) : nil }
+            bytes += buf[0..<n]
+        }
+    }
+
+    /// Replace a staged file's contents (its mode kept: it is truncated, not recreated).
+    static func writeText(_ text: String, to path: String) -> String? {
+        let fd = open(path, O_WRONLY | O_TRUNC)
+        guard fd >= 0 else { return "could not write \(path): \(String(cString: strerror(errno)))" }
+        defer { close(fd) }
+        let b = Array(text.utf8)
+        var off = 0
+        while off < b.count {
+            let w = b.withUnsafeBytes { write(fd, $0.baseAddress! + off, b.count - off) }
+            if w <= 0 { return "could not write \(path): \(String(cString: strerror(errno)))" }
+            off += w
+        }
+        return nil
     }
 
     /// Copy `from` to `to` with `from`'s mode — or, when `from` does not exist,

@@ -75,7 +75,8 @@ final class SettingsTests: XCTestCase {
             return nil
         }
         XCTAssertEqual(refusal([]), "the request names no kind of plan")
-        XCTAssertEqual(refusal([("kind", "sound")]), "there is no sound plan (there is: energy, network)")
+        XCTAssertEqual(refusal([("kind", "displays")]), "there is no displays plan (there is: energy, network, sound)")
+        XCTAssertEqual(refusal([("kind", "sound")]), "a sound plan must say which device is the default")
         XCTAssertEqual(refusal([("kind", "energy")], powerd: nil), "an energy plan must say whether powerd runs")
         XCTAssertTrue(refusal([("kind", "energy"), ("energy.ac", "turbo")])?.hasPrefix("powerd has no mode turbo") ?? false)
     }
@@ -305,5 +306,67 @@ final class SettingsTests: XCTestCase {
         XCTAssertFalse(ok)
         XCTAssertEqual(read(rc), rcBefore); XCTAssertEqual(read(rv), rvBefore)
         #endif
+    }
+
+    // MARK: - Sound (P14.6b)
+
+    func testTheDefaultDeviceCompilesToSysctlConfThenSysctl() throws {
+        let steps = try Settings.compile(.sound(SoundPlan(defaultUnit: 1)))
+        XCTAssertEqual(steps, [.setVar(.sysctlConf, key: "hw.snd.default_unit", value: "1"),
+                               .tool(argv: ["sysctl", "hw.snd.default_unit=1"], mayFail: false)])
+        XCTAssertEqual(steps[0].command { "/etc/" + $0.rawValue }, [], "sysrc cannot edit sysctl.conf; no command pretends to")
+        let r = Settings.render(steps)
+        XCTAssertTrue(r.contains("set hw.snd.default_unit=\"1\" in sysctl.conf\n   (the helper edits the file itself)"), r)
+        XCTAssertTrue(r.contains("$ sysctl hw.snd.default_unit=1"), r)
+        XCTAssertThrowsError(try Settings.compile(.sound(SoundPlan(defaultUnit: -1))))
+    }
+
+    func testSysctlConfIsEditedLineByLine() {
+        let conf = "# kernel settings\nsecurity.bsd.see_other_uids=0\n hw.snd.default_unit = 0  # the card\nkern.foo=1\nhw.snd.default_unit=3\n"
+        let set = Settings.editSysctlConf(conf, key: "hw.snd.default_unit", value: "1")
+        XCTAssertEqual(set, "# kernel settings\nsecurity.bsd.see_other_uids=0\nhw.snd.default_unit=1\nkern.foo=1\n",
+                       "the first assignment replaced in place, the later one (which would win) dropped, the rest kept")
+        XCTAssertEqual(Settings.sysctlConfValue(conf, key: "hw.snd.default_unit"), "3", "the last one wins, as in sysctl(8)")
+        XCTAssertEqual(Settings.sysctlConfValue(set, key: "hw.snd.default_unit"), "1")
+        XCTAssertEqual(Settings.editSysctlConf("#x\n", key: "hw.snd.default_unit", value: "2"), "#x\nhw.snd.default_unit=2\n")
+        XCTAssertEqual(Settings.editSysctlConf("", key: "a.b", value: "2"), "a.b=2\n")
+        XCTAssertEqual(Settings.editSysctlConf(set, key: "hw.snd.default_unit", value: nil),
+                       "# kernel settings\nsecurity.bsd.see_other_uids=0\nkern.foo=1\n")
+        XCTAssertEqual(Settings.editSysctlConf("#hw.snd.default_unit=5\n", key: "hw.snd.default_unit", value: "1"),
+                       "#hw.snd.default_unit=5\nhw.snd.default_unit=1\n", "a comment is not an assignment")
+        XCTAssertNil(Settings.sysctlConfValue("#hw.snd.default_unit=5\n", key: "hw.snd.default_unit"))
+    }
+
+    func testTheDefaultDeviceIsReadBackAndCrossesTheWire() throws {
+        XCTAssertEqual(Settings.keys(for: "sound")?.map(\.key), ["hw.snd.default_unit"])
+        XCTAssertEqual(Settings.current(kind: "sound", values: ["hw.snd.default_unit": "2"]), .sound(SoundPlan(defaultUnit: 2)))
+        XCTAssertNil(Settings.current(kind: "sound", values: [:]))
+        var m = Msg()
+        SettingsWire.encode(.sound(SoundPlan(defaultUnit: 1)), into: &m)
+        XCTAssertEqual(try SettingsWire.decodePlan(m).get(), .sound(SoundPlan(defaultUnit: 1)))
+        var typed = Msg(); typed.set("kind", "sound"); typed.set("sound.default", "pcm3")
+        XCTAssertEqual(try SettingsWire.decodePlan(typed).get(), .sound(SoundPlan(defaultUnit: 3)), "pcm3 is how a person says it")
+        var bad = Msg(); bad.set("kind", "sound"); bad.set("sound.default", "speakers")
+        guard case .failure(let why) = SettingsWire.decodePlan(bad) else { return XCTFail("speakers was accepted") }
+        XCTAssertEqual(why.message, "speakers is not a sound device (pcm0, pcm1 …)")
+    }
+
+    /// The edit is the helper's own code, not a tool — so it runs for real on
+    /// both platforms, into a staged copy, and the tool after it is skipped.
+    func testSysctlConfIsWrittenWholeAndTheSysctlSkippedWhenWriteOnly() throws {
+        let dir = scratch(), sc = dir + "/sysctl.conf"
+        defer { for f in [sc, sc + ".abyss-staged"] { unlink(f) }; rmdir(dir) }
+        let f = fopen(sc, "w")!; fputs("# kernel\nkern.foo=1\n", f); fclose(f)
+        chmod(sc, 0o600)
+        var events: [SettingsEvent] = []
+        let ok = Runner.apply(try Settings.compile(.sound(SoundPlan(defaultUnit: 1))), path: { _ in sc },
+                              dryRun: false, writeOnly: true) { events.append($0) }
+        XCTAssertTrue(ok, "\(events)")
+        XCTAssertEqual(read(sc), "# kernel\nkern.foo=1\nhw.snd.default_unit=1\n")
+        XCTAssertNil(read(sc + ".abyss-staged"))
+        var st = stat(); stat(sc, &st)
+        XCTAssertEqual(st.st_mode & 0o777, 0o600, "the file keeps its mode")
+        XCTAssertEqual(events.filter { if case .skipped = $0 { return true }; return false }.count, 1,
+                       "write-only: the sysctl is skipped, and said to be")
     }
 }

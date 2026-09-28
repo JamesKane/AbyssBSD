@@ -57,13 +57,25 @@ public struct EnergyPlan: Equatable, Sendable {
 public enum SettingsPlan: Equatable, Sendable {
     case energy(EnergyPlan)
     case network(NetworkPlan)
+    case sound(SoundPlan)
 
     public var kind: String {
         switch self {
         case .energy: return "energy"
         case .network: return "network"
+        case .sound: return "sound"
         }
     }
+}
+
+// MARK: - Sound (P14.6)
+
+/// Which device `/dev/dsp` means. Levels and mute are not here: `/dev/mixerN`
+/// is the user's to change, and `rc.d/mixer` saves them at shutdown and
+/// restores them at boot. The default unit is a sysctl, which is root's.
+public struct SoundPlan: Equatable, Sendable {
+    public var defaultUnit: Int
+    public init(defaultUnit: Int) { self.defaultUnit = defaultUnit }
 }
 
 // MARK: - Network (P14.4)
@@ -144,6 +156,13 @@ public enum ConfFile: String, CaseIterable, Equatable, Sendable {
     /// `/etc/resolvconf.conf` — where name servers a person chose live, for
     /// `resolvconf -u` to put into resolv.conf beside what DHCP says.
     case resolvconf = "resolvconf.conf"
+    /// `/etc/sysctl.conf` — kernel settings applied at boot (the default sound
+    /// device). Not an sh file, so not `sysrc`'s: the helper edits it itself
+    /// (`Settings.editSysctlConf`), in the same staged copy.
+    case sysctlConf = "sysctl.conf"
+
+    /// Whether `sysrc` can edit it (sh variable assignments).
+    public var isShellVariables: Bool { self != .sysctlConf }
 }
 
 /// One thing the helper will do.
@@ -182,6 +201,8 @@ public enum SettingsStep: Equatable, Sendable {
     /// The exact command; `path(file)` is the file `sysrc` edits — the staged copy.
     public func command(path: (ConfFile) -> String) -> [String] {
         switch self {
+        case .setVar(let f, _, _) where !f.isShellVariables:
+            return []           // no command: the helper edits the file itself
         case .setVar(let f, let k, let v?): return ["sysrc", "-f", path(f), "\(k)=\(v)"]
         case .setVar(let f, let k, nil): return ["sysrc", "-f", path(f), "-x", k]
         case .service(let n, let a, _): return ["service", n] + a
@@ -209,6 +230,8 @@ public enum Settings {
             return []
         case .network(let n):
             return networkProblems(n)
+        case .sound(let s):
+            return s.defaultUnit < 0 ? [SettingsRefusal("pcm\(s.defaultUnit) is not a sound device's unit")] : []
         }
     }
 
@@ -272,6 +295,12 @@ public enum Settings {
             return [.rcConf(key: "powerd_enable", value: "YES"),
                     .rcConf(key: "powerd_flags", value: "-a \(e.onAC.rawValue) -b \(e.onBattery.rawValue)"),
                     .service(name: "powerd", action: "onerestart", mayFail: false)]
+        case .sound(let s):
+            // For the next boot, then for now. The kernel refuses a unit with
+            // no device behind it, which fails the plan — after sysctl.conf
+            // is written, so the helper checks the unit exists first.
+            return [.setVar(.sysctlConf, key: "hw.snd.default_unit", value: "\(s.defaultUnit)"),
+                    .tool(argv: ["sysctl", "hw.snd.default_unit=\(s.defaultUnit)"], mayFail: false)]
         case .network(let n):
             var steps: [SettingsStep] = []
             switch n.ipv4 {
@@ -308,6 +337,7 @@ public enum Settings {
             guard isInterfaceName(interface) else { return nil }
             return [(.rcConf, "ifconfig_\(interface)"), (.rcConf, "defaultrouter"),
                     (.resolvconf, "name_servers")]
+        case "sound": return [(.sysctlConf, "hw.snd.default_unit")]
         default: return nil
         }
     }
@@ -322,6 +352,8 @@ public enum Settings {
             return NetworkPlan.from(interface: interface, ifconfig: values["ifconfig_\(interface)"],
                                     router: values["defaultrouter"],
                                     nameServers: values["name_servers"]).map { .network($0) }
+        case "sound":
+            return values["hw.snd.default_unit"].flatMap { Int($0) }.map { .sound(SoundPlan(defaultUnit: $0)) }
         default: return nil
         }
     }
@@ -331,8 +363,55 @@ public enum Settings {
     public static func render(_ steps: [SettingsStep],
                               path: (ConfFile) -> String = { "/etc/" + $0.rawValue }) -> String {
         steps.enumerated().map { i, s in
-            "\(i + 1). \(s.description)\n   $ " + s.command(path: path).joined(separator: " ")
+            let c = s.command(path: path)
+            return "\(i + 1). \(s.description)\n   " + (c.isEmpty ? "(the helper edits the file itself)"
+                                                               : "$ " + c.joined(separator: " "))
         }.joined(separator: "\n")
+    }
+
+    // MARK: - sysctl.conf
+
+    /// `text` with `key` set to `value` (or removed, for nil): the first
+    /// assignment of the key is replaced in place and any later ones dropped
+    /// (sysctl.conf applies lines in order, so a later one would win);
+    /// otherwise the line is appended. Comments and everything else are kept.
+    public static func editSysctlConf(_ text: String, key: String, value: String?) -> String {
+        var out: [Substring] = []
+        var done = false
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        for line in lines {
+            if sysctlConfKey(line) == key {
+                if !done, let v = value { out.append(Substring("\(key)=\(v)")) }
+                done = true
+                continue
+            }
+            out.append(line)
+        }
+        if !done, let v = value {
+            if let last = out.last, last.isEmpty { out.removeLast() }
+            out.append(Substring("\(key)=\(v)"))
+            out.append("")
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// The value sysctl.conf gives `key` — the last assignment, as sysctl(8)
+    /// would leave it — or nil.
+    public static func sysctlConfValue(_ text: String, key: String) -> String? {
+        var found: String?
+        for line in text.split(separator: "\n") where sysctlConfKey(line) == key {
+            var v = line[line.index(after: line.firstIndex(of: "=")!)...]
+            if let hash = v.firstIndex(of: "#") { v = v[..<hash] }
+            found = String(v.drop { $0 == " " || $0 == "\t" }.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
+        }
+        return found
+    }
+
+    private static func sysctlConfKey(_ line: Substring) -> String? {
+        let t = line.drop { $0 == " " || $0 == "\t" }
+        guard !t.hasPrefix("#"), let eq = t.firstIndex(of: "=") else { return nil }
+        let k = t[..<eq].reversed().drop { $0 == " " || $0 == "\t" }.reversed()
+        return k.isEmpty ? nil : String(k)
     }
     public static func render(_ steps: [SettingsStep], rcConf: String) -> String {
         render(steps) { $0 == .rcConf ? rcConf : "/etc/" + $0.rawValue }

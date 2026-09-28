@@ -18,6 +18,11 @@
 #      interface, then a WRITE-ONLY apply — rc.conf and resolvconf.conf written
 #      for real (scratch copies), netif/routing/resolvconf skipped and said to
 #      be, because this guest's network is how the test reaches it (§6.3).
+#   7. sound (P14.6b): a device the machine lacks, and a name that is no
+#      device, refused in words; on FreeBSD, with snd_dummy, the default read
+#      from the kernel, a write-only apply writing a scratch sysctl.conf, and a
+#      real one as root — to the unit it already is, so the guest is unchanged
+#      and the sysctl step is seen to run.
 #
 # Usage: abyss/tests/live-settings.sh
 set -eu
@@ -55,7 +60,8 @@ serve() {  # serve [HELPER OPTIONS…] — start it, wait for its socket
   if [ -n "${svc_pid:-}" ]; then $sudo kill "$svc_pid" 2>/dev/null || true; wait "$svc_pid" 2>/dev/null || true; fi
   $sudo rm -f "$rundir/settings.sock"
   $sudo env ABYSS_RUNTIME_DIR="$rundir" "$helper" --rc-conf "$work/rc.conf" \
-      --resolvconf "$work/resolvconf.conf" --journal "$work/journal" "$@" 2> "$work/svc.err" &
+      --resolvconf "$work/resolvconf.conf" --sysctl-conf "$work/sysctl.conf" \
+      --journal "$work/journal" "$@" 2> "$work/svc.err" &
   svc_pid=$!
   i=0
   while [ ! -S "$rundir/settings.sock" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
@@ -172,6 +178,44 @@ else
   grep -q '^defaultrouter' "$work/rc.conf" && fail "DHCP kept the manual router: $(cat "$work/rc.conf")"
   grep -q '^name_servers' "$work/resolvconf.conf" && fail "DHCP kept the chosen name servers"
   echo "ok: 6. network on $iface: check, a dry run, a write-only apply (both files, three actions skipped and said), read agrees, and back to DHCP"
+fi
+
+# ------------------------------------------------------------------ 7. sound
+serve --uid "$me" --admin-group "$mygroup"
+[ "$freebsd" = 1 ] && { sudo kldload -n snd_dummy 2>/dev/null || true; }
+ctlrun check sound --default pcm7
+[ "$rc" != 0 ] && case "$out" in *"there is no sound device pcm7 on this machine"*) ;; *) false ;; esac \
+  || fail "a device this machine lacks was not refused: $out"
+ctlrun check sound --default speakers
+[ "$rc" != 0 ] && case "$out" in *"speakers is not a sound device (pcm0, pcm1"*) ;; *) false ;; esac \
+  || fail "a name that is no device was not refused: $out"
+if [ "$freebsd" = 0 ]; then
+  ctlrun read sound
+  [ "$rc" != 0 ] && case "$out" in *"not FreeBSD"*) ;; *) false ;; esac || fail "Linux read sound: $out"
+  echo "ok: 7. sound: an absent device and a non-device refused in words; a read refused, because this is not FreeBSD"
+else
+  [ -e /dev/dsp0 ] || fail "no /dev/dsp0 even with snd_dummy loaded"
+  dunit=$(sysctl -n hw.snd.default_unit)
+  printf '# kernel settings\nkern.coredump=1\n' > "$work/sysctl.conf"; chmod 644 "$work/sysctl.conf"
+  ctlrun read sound
+  [ "$out" = "sound: default pcm$dunit" ] || fail "with nothing in sysctl.conf, read did not give the kernel's default ($dunit): $out"
+  ctlrun check sound --default "pcm$dunit"
+  [ "$rc" = 0 ] || fail "check refused pcm$dunit: $out"
+  case "$out" in *"(the helper edits the file itself)"*"$ sysctl hw.snd.default_unit=$dunit"*) ;; *) fail "check: $out" ;; esac
+  serve --uid "$me" --admin-group "$mygroup" --write-only
+  ctlrun apply sound --default "pcm$dunit"
+  [ "$rc" = 0 ] && [ "$(printf '%s\n' "$out" | grep -c '(skipped)')" = 1 ] || fail "write-only apply: $out"
+  [ "$(cat "$work/sysctl.conf")" = "$(printf '# kernel settings\nkern.coredump=1\nhw.snd.default_unit=%s' "$dunit")" ] \
+    || fail "sysctl.conf is not the old one plus the default: $(cat "$work/sysctl.conf")"
+  ctlrun read sound
+  [ "$out" = "sound: default pcm$dunit" ] || fail "read after apply: $out"
+  serve --uid "$me" --admin-group "$mygroup"
+  ctlrun apply sound --default "pcm$dunit"
+  [ "$rc" = 0 ] || fail "a real apply as root failed: $out"
+  case "$out" in *"run sysctl hw.snd.default_unit=$dunit"*"done"*) ;; *) fail "the sysctl step did not run: $out" ;; esac
+  case "$out" in *skipped*) fail "a real apply skipped something: $out" ;; esac
+  [ "$(sysctl -n hw.snd.default_unit)" = "$dunit" ] || fail "the guest's default moved"
+  echo "ok: 7. sound: refusals in words; the kernel's default read; sysctl.conf written whole (write-only), then a real sysctl as root — pcm$dunit, unchanged"
 fi
 
 echo "all green (the settings helper admits an administrator, compiles, and writes rc.conf whole or not at all)."

@@ -7,6 +7,8 @@
 //   abyss-settingsctl check network --interface IF (--dhcp |
 //                     --address A --netmask M [--router R]) [--dns "A B"]
 //   abyss-settingsctl apply network …
+//   abyss-settingsctl read  sound
+//   abyss-settingsctl check|apply sound --default pcmN
 //
 // It links `SettingsWire` and not `SettingsRun`, as the pane does: a client
 // speaks the protocol and carries none of the code that runs `sysrc`. It exists
@@ -29,7 +31,7 @@ func emit(_ fd: Int32, _ s: String) {
 }
 func usage() -> Never {
     emit(1, """
-    usage: abyss-settingsctl <read|check|apply> <energy|network> [options]
+    usage: abyss-settingsctl <read|check|apply> <energy|network|sound> [options]
       --powerd on|off      energy: whether powerd runs
       --ac MODE            its policy on AC: \(PowerdMode.allCases.map(\.rawValue).joined(separator: ", "))
       --battery MODE       its policy on battery
@@ -38,6 +40,7 @@ func usage() -> Never {
       --address A --netmask M [--router R]
                            network: a manual IPv4 address
       --dns "A B"          network: name servers
+      --default pcmN       sound: the device /dev/dsp means
       --service NAME       the service to talk to (default settings)
     """)
     exit(2)
@@ -55,7 +58,7 @@ while i < args.count {
     guard i + 1 < args.count else { emit(2, "abyss-settingsctl: \(args[i]) needs a value"); exit(2) }
     switch args[i] {
     case "--service": serviceName = args[i + 1]
-    case "--powerd", "--ac", "--battery", "--interface", "--address", "--netmask", "--router", "--dns":
+    case "--powerd", "--ac", "--battery", "--interface", "--address", "--netmask", "--router", "--dns", "--default":
         fields[String(args[i].dropFirst(2))] = args[i + 1]
     default: emit(2, "abyss-settingsctl: unknown option '\(args[i])'"); exit(2)
     }
@@ -82,6 +85,9 @@ if verb != "read" {
         for k in ["address", "netmask", "router", "dns"] {
             if let v = fields[k] { request.set("network.\(k)", v) }
         }
+    case "sound":
+        guard let d = fields["default"] else { emit(2, "abyss-settingsctl: --default pcmN is required"); exit(2) }
+        request.set("sound.default", d)       // as typed: the helper decides
     default:
         emit(2, "abyss-settingsctl: there is no \(kind) plan"); exit(2)
     }
@@ -116,6 +122,8 @@ case "read":
         case .manual(let a, let p, let r):
             emit(1, "network \(n.interface): \(a)/\(p)" + (r.map { " via \($0)" } ?? "") + dns)
         }
+    case .success(.sound(let s)):
+        emit(1, "sound: default pcm\(s.defaultUnit)")
     case .failure(let why):
         emit(2, "abyss-settingsctl: \(why.message)"); exit(1)
     }

@@ -43,6 +43,8 @@ public enum SettingsWire {
                 if let r { m.set("network.router", r.description) }
             }
             m.set("network.dns", n.dns.map(\.description).joined(separator: " "))
+        case .sound(let s):
+            m.set("sound.default", "\(s.defaultUnit)")
         }
     }
 
@@ -94,10 +96,17 @@ public enum SettingsWire {
                 return .failure(SettingsRefusal(other.isEmpty ? "a network plan must say DHCP or manual"
                                                              : "\(other) is not DHCP or manual"))
             }
+        case "sound":
+            let said = m.string("sound.default") ?? ""
+            guard let u = Int(said.hasPrefix("pcm") ? String(said.dropFirst(3)) : said) else {
+                return .failure(SettingsRefusal(said.isEmpty ? "a sound plan must say which device is the default"
+                                                             : "\(said) is not a sound device (pcm0, pcm1 …)"))
+            }
+            return .success(.sound(SoundPlan(defaultUnit: u)))
         case "":
             return .failure(SettingsRefusal("the request names no kind of plan"))
         case let other:
-            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network)"))
+            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network, sound)"))
         }
     }
 
