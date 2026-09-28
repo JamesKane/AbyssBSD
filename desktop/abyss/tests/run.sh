@@ -313,6 +313,12 @@ if [ "$live" -eq 1 ]; then
   # over, with nobody watching. On Linux, a positive control.
     phase "empty disk to Jaguar desktop"
     sh "$root/abyss/tests/live-desktop.sh"
+
+  # And on the machine it installed: a manual address, set as its
+  # administrator through the settings helper, held across a reboot (PHASE14
+  # P14.4's gate). Needs the disk live-desktop.sh just installed.
+    phase "a manual address survives a reboot"
+    sh "$root/abyss/tests/live-network-reboot.sh"
   else
     # **Named, timed, and told how to run.** These two are the only tests in the
     # tree that put an operating system on a disk and boot it; skipping them
@@ -320,6 +326,7 @@ if [ "$live" -eq 1 ]; then
     phase "the nested installs — SKIPPED (--full runs them)"
     echo "   the installer, and what it installed   (~190s)"
     echo "   empty disk to Jaguar desktop           (~490s)"
+    echo "   a manual address survives a reboot     (~150s, not yet timed)"
     echo "   Run --full before shipping anything that touches the installer,"
     echo "   the medium, the distribution sets, or the boot path."
   fi

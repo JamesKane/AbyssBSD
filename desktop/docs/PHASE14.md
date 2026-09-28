@@ -222,6 +222,52 @@ restart <if>` and `service routing restart`; status live. **Gate** (§6.3): in a
 nested bhyve guest, a manual address is set from the pane, the guest reboots,
 and the address held.
 
+**Done** (2026-09-28, P14.4a–d; the gate written and waiting on `--full`). What
+landed:
+
+- **The plan** (P14.4a): `NetworkPlan` — an interface, DHCP or a manual address
+  with mask and router, name servers — compiled to `ifconfig_<if>`
+  (`SYNCDHCP`, or `inet A netmask M`), `defaultrouter` (set, or removed),
+  resolvconf.conf's `name_servers`, then `service netif restart <if>`,
+  `service routing restart` and `resolvconf -u`. Both files are written in
+  staged copies that replace the real ones only once every write succeeded.
+  The helper refuses an interface the machine lacks, a router outside the
+  subnet, and the loopback, in words. **`--write-only`** writes the files and
+  skips the three actions, *saying so*, for a harness whose network is how it
+  is reached.
+- **Status without privilege** (P14.4b): `Vents.Network` — `getifaddrs`, link
+  state, the default route (`route -n get` / `/proc/net/route`), resolv.conf —
+  and a routing-socket (rtnetlink on Linux) watch; `ventsctl network [--wait]`.
+- **The pane** (P14.4c): Status is the kernel's, redrawn when the watch fires;
+  Configure is rc.conf's, read through the helper. It offers wired interfaces
+  only (Wi-Fi is P14.5's). DHCP or Manually, four fields with Tab between
+  them, Revert, and Apply Now (or Return), whose events arrive on the run loop.
+  It links `SettingsWire`, not `SettingsRun`; what was typed is sent, and the
+  helper's refusals are shown in its words. A write-only apply is "saved, and
+  not put into effect", never "applied".
+- **The gate** (P14.4d): `live-network-reboot.sh`, in `--full` after
+  `live-desktop.sh`, on the disk that test installed: a one-shot rc script
+  planted on it runs `abyss-settingsctl apply network` **as the
+  administrator**, the machine reboots itself, and the second boot must have
+  the address, the router and the name server from rc.conf alone. As with
+  P5.5, nobody clicks inside the nested machine; the clicking is
+  `live-network-pane.sh`'s, on the same binary and helper.
+
+**Verified:** `SettingsTests` +7, `VentsTests` +4, `NetworkPaneTests` 8 — 611 on
+both platforms; `live-settings.sh` §6 (a write-only apply on the guest's own
+vtnet0, both files written, three actions skipped and said, read back, back to
+DHCP); `live-vents.sh`'s network half against ip(8) / ifconfig, and the watch
+seen to fire on an lo0 alias; `live-network-pane.sh` on both (the pane's status
+equals `ventsctl`'s; a bad address refused in the helper's words; corrected and
+applied write-only, the files read back and vtnet0 untouched; Revert; an lo0
+alias redraws the page), with fault injections each seen to fail; the golden
+`sysprefs-pane` re-pictured on both. **Not yet run:** the reboot gate itself.
+It was run against the guest's stale installed disk from 2026-09-25, and it
+failed where it should: that rc.conf names no settings administrator. That run
+exercised the pool import, the mount, the export and the cleanup. A real run
+needs `live-desktop.sh` to install a fresh disk first, which makes it the
+`--full` lane.
+
 **P14.5 — Network, Wi-Fi.** Scan (`ifconfig wlan0 scan`), join (a
 `wpa_supplicant.conf` network block, `wlans_<dev>` in `rc.conf`), forget.
 Its testability is a spike (§4.2): `wtap(4)` loads in the guest; whether it can

@@ -44,8 +44,12 @@ The items below are the context for it.
    (`live-appearance.sh`). **P14.3 is done** too: `abyss-settings`, the
    privileged half, in the installer's shape — typed plans, `wheel` asked at
    every connection, `rc.conf` written with `sysrc` whole or not at all, an
-   `rc.d` service on installed systems. **Next is P14.4**, network (wired),
-   the first pane to write through it. **Open, for the person:** §6.5,
+   `rc.d` service on installed systems. **P14.4 is done** bar its gate's
+   first run: the Network pane (wired) shows the kernel's status beside
+   rc.conf's configuration and applies through the helper
+   (`live-network-pane.sh`); `live-network-reboot.sh`, in `--full`, reboots
+   an installed machine and checks the address held. **Next is P14.6**,
+   Sound, starting from §4.3's spike (BACKLOG §1). **Open, for the person:** §6.5,
    whether the i7-12700KF has a Wi-Fi card. **Phase gates** (`run.sh --live`,
    `--vm --live`, `--full`) are run only when the phase closes.
    **Phase 11, the theme system, is COMPLETE**
@@ -679,6 +683,23 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.77 A test helper that skips what it cannot do, in silence
+(P14.4c. Found because the pane logged what it sent.)
+
+`vkeyboard` maps characters to evdev keycodes, and its table had letters,
+digits and space. For anything else it did `continue`. Every test before
+P14.4c typed a user name or a password, so nothing noticed. The Network pane's
+test typed `10.0.2.300` and the pane sent `1002300`. The pane was right about
+what it received: the dots were never pressed.
+
+It types `. , - / : _` now, and **an unknown character goes to stderr**:
+`vkeyboard: cannot type 'x'`. The general rule is the §2.75 one, applied to
+the tools: **a harness tool that cannot do what it was asked must say so**,
+because the test reading its result cannot tell "not done" from "done, and the
+product ignored it". It helped that the pane logs what it will send, not only
+the outcome. A test that had checked only the helper's refusal would have
+reported a helper bug.
 
 ### 2.76 rc.subr owns `${name}_user`
 (P14.3b. Found by running the `rc.d` script under the real rc.subr.)
