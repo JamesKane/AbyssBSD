@@ -1,0 +1,130 @@
+#!/bin/sh
+# AbyssBSD Swift DE — the settings helper, as a service (PHASE14 P14.3).
+#
+# `abyss-settings` (root) commanded by `abyss-settingsctl` (this user), over
+# CurrentIPC, exactly as System Preferences will command it. Claims:
+#
+#   1. it admits the uid it was started for, and only while that uid is an
+#      administrator — a stranger and a non-administrator are each refused, in
+#      words (§6.1);
+#   2. `check` shows the exact commands a plan compiles to, running nothing;
+#   3. a dry run reports every step and writes nothing; the journal records it;
+#   4. on Linux, a real read or apply is REFUSED, and says why (§6.4) — the
+#      positive control that the refusal exists;
+#   5. on FreeBSD, as root, a real apply to a scratch rc.conf writes it with
+#      sysrc — and read agrees afterwards — without touching /etc/rc.conf.
+#
+# Usage: abyss/tests/live-settings.sh
+set -eu
+
+root=$(cd "$(dirname "$0")/../.." && pwd)
+cd "$root"
+. "$root/abyss/common.sh"
+abyss_ensure_runtime_dir
+
+helper="$root/.build/debug/abyss-settings"
+ctl="$root/.build/debug/abyss-settingsctl"
+[ -x "$helper" ] && [ -x "$ctl" ] || swift build
+
+work=$(mktemp -d /tmp/abyss-settings.XXXXXX)
+chmod 755 "$work"                       # a root helper writes here, as well as us
+cleanup() {
+  [ -n "${svc_pid:-}" ] && { $sudo kill "$svc_pid" 2>/dev/null || true; }
+  $sudo rm -rf "$work" 2>/dev/null || rm -rf "$work"
+}
+fail() { echo "FAIL: $1"; [ -s "$work/svc.err" ] && sed 's/^/  helper| /' "$work/svc.err"; exit 1; }
+trap cleanup EXIT INT TERM HUP
+
+me=$(id -u)
+mygroup=$(id -gn)
+freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1
+sudo=""
+if [ "$freebsd" = 1 ]; then
+  sudo -n true 2>/dev/null || fail "on FreeBSD this test runs the helper as root, and needs passwordless sudo"
+  sudo=sudo
+fi
+rundir="$work/run"; mkdir -p "$rundir"; chmod 700 "$rundir"
+export ABYSS_RUNTIME_DIR="$rundir"
+
+serve() {  # serve [HELPER OPTIONS…] — start it, wait for its socket
+  if [ -n "${svc_pid:-}" ]; then $sudo kill "$svc_pid" 2>/dev/null || true; wait "$svc_pid" 2>/dev/null || true; fi
+  $sudo rm -f "$rundir/settings.sock"
+  $sudo env ABYSS_RUNTIME_DIR="$rundir" "$helper" --rc-conf "$work/rc.conf" \
+      --journal "$work/journal" "$@" 2> "$work/svc.err" &
+  svc_pid=$!
+  i=0
+  while [ ! -S "$rundir/settings.sock" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  [ -S "$rundir/settings.sock" ] || fail "the helper never came up: $(cat "$work/svc.err")"
+}
+ctlrun() {  # ctlrun ARGS… -> stdout+stderr in $out, status in $rc
+  rc=0; out=$("$ctl" "$@" 2>&1) || rc=$?
+}
+echo 'hostname="abyss"' > "$work/rc.conf"
+chmod 644 "$work/rc.conf"
+original=$(cat "$work/rc.conf")
+
+# ---------------------------------------------------------------- 1. who
+# The socket is handed to one uid, so a stranger is stopped by its permissions
+# before the helper hears a word. The caller who gets past permissions is root
+# — so root is the stranger that tests the peer check. Where sudo is.
+if [ -n "$sudo" ]; then
+  serve --uid "$me" --admin-group "$mygroup"
+  rc=0; out=$(sudo env ABYSS_RUNTIME_DIR="$rundir" "$ctl" read energy 2>&1) || rc=$?
+  [ "$rc" != 0 ] && case "$out" in *"uid 0 may not use a settings helper started for uid $me"*) ;; *) false ;; esac \
+    || fail "root, a caller who is not the helper's uid, was not refused by name: $out"
+  echo "ok: 1. root — the one caller socket permissions do not stop — is refused by the peer check, by name"
+else
+  echo "note: no passwordless sudo here, so the peer check is not tested against a second uid"
+fi
+serve --uid "$me" --admin-group "abyss-no-such-group"
+ctlrun check energy --powerd on
+[ "$rc" != 0 ] && case "$out" in *"not an administrator"*) ;; *) false ;; esac \
+  || fail "a caller who is not an administrator was not refused: $out"
+echo "ok: 1. a caller who is not an administrator is refused, in words"
+
+# ---------------------------------------------------------------- 2. check
+serve --uid "$me" --admin-group "$mygroup"
+ctlrun check energy --powerd on --ac max --battery adaptive
+[ "$rc" = 0 ] || fail "check refused a good plan: $out"
+case "$out" in *"$ sysrc -f $work/rc.conf powerd_flags=-a max -b adaptive"*) ;; *) fail "check did not show the command: $out" ;; esac
+case "$out" in *"$ service powerd onerestart"*) ;; *) fail "check did not show the restart: $out" ;; esac
+ctlrun check energy --powerd on --ac turbo
+[ "$rc" != 0 ] && case "$out" in *"powerd has no mode turbo"*) ;; *) false ;; esac || fail "a bad mode was not refused: $out"
+[ "$(cat "$work/rc.conf")" = "$original" ] || fail "check wrote rc.conf"
+echo "ok: 2. check shows the exact commands, refuses a bad mode by name, and runs nothing"
+
+# ---------------------------------------------------------------- 3. dry run
+serve --uid "$me" --admin-group "$mygroup" --dry-run
+ctlrun apply energy --powerd on --ac max
+[ "$rc" = 0 ] || fail "a dry run failed: $out"
+[ "$(printf '%s\n' "$out" | grep -c '^\[')" = 3 ] || fail "a dry run did not report three steps: $out"
+[ "$(cat "$work/rc.conf")" = "$original" ] || fail "a dry run wrote rc.conf"
+[ ! -e "$work/rc.conf.abyss-staged" ] || fail "a dry run left a staged copy"
+grep -q "apply energy for uid $me (dry run)" "$work/journal" || fail "the journal did not record the dry run: $(cat "$work/journal" 2>/dev/null)"
+echo "ok: 3. a dry run reports every step, writes nothing, and the journal says so"
+
+# ---------------------------------------------------------------- 4 / 5
+serve --uid "$me" --admin-group "$mygroup"
+if [ "$freebsd" = 0 ]; then
+  ctlrun read energy
+  [ "$rc" != 0 ] && case "$out" in *"not FreeBSD"*) ;; *) false ;; esac || fail "Linux did not refuse a read: $out"
+  ctlrun apply energy --powerd off
+  [ "$rc" != 0 ] && case "$out" in *"not FreeBSD"*) ;; *) false ;; esac || fail "Linux did not refuse an apply: $out"
+  [ "$(cat "$work/rc.conf")" = "$original" ] || fail "a refused apply wrote rc.conf"
+  echo "ok: 4. on Linux a real read or apply is refused, in words, and nothing is written"
+else
+  etc_before=$(sha256 -q /etc/rc.conf)
+  ctlrun apply energy --powerd off
+  [ "$rc" = 0 ] || fail "applying powerd off failed: $out"
+  grep -q '^powerd_enable="NO"' "$work/rc.conf" || fail "sysrc did not write powerd_enable: $(cat "$work/rc.conf")"
+  grep -q '^hostname="abyss"' "$work/rc.conf" || fail "the rest of rc.conf was not kept: $(cat "$work/rc.conf")"
+  [ ! -e "$work/rc.conf.abyss-staged" ] || fail "a staged copy was left behind"
+  ctlrun read energy
+  [ "$rc" = 0 ] && [ "$out" = "energy: powerd off, ac hiadaptive, battery adaptive" ] \
+    || fail "read did not agree with what was applied: $out"
+  [ "$(sha256 -q /etc/rc.conf)" = "$etc_before" ] || fail "the machine's own /etc/rc.conf changed"
+  grep -q "apply energy for uid $me\$" "$work/journal" || fail "the journal did not record the apply"
+  echo "ok: 5. as root on FreeBSD: sysrc wrote the scratch rc.conf whole, read agrees, /etc/rc.conf untouched"
+fi
+
+echo "all green (the settings helper admits an administrator, compiles, and writes rc.conf whole or not at all)."

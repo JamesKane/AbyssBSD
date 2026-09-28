@@ -218,6 +218,11 @@ if [ "$live" -eq 1 ]; then
   # that draws follows appearance.ini, and back again byte for byte.
   echo "== appearance, live =="
   sh "$root/abyss/tests/live-appearance.sh" >/dev/null
+  # System Preferences' privileged half (PHASE14 P14.3): who may change the
+  # machine, check, dry run, the Linux refusal — and on FreeBSD, as root, a
+  # real sysrc write to a scratch rc.conf.
+  echo "== the settings helper =="
+  sh "$root/abyss/tests/live-settings.sh" >/dev/null
   echo "== System Preferences =="
   sh "$root/abyss/tests/live-prefs.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:

@@ -294,6 +294,18 @@ let package = Package(
         // (BACKLOG S.2). No dependencies, so the compositor and the supervisor
         // can share it without the toolkit.
         .target(name: "Spawn", path: "de/spawn"),
+        // System Preferences' privileged half (PHASE14 P14.3), in the
+        // installer's shape: plans as values that import nothing, a wire the
+        // pane links without the executor, the runner, and two binaries.
+        .target(name: "Settings", path: "de/settings"),
+        .target(name: "SettingsWire", dependencies: ["Settings", "CurrentIPC"], path: "de/settingswire"),
+        .target(name: "SettingsRun",
+                dependencies: ["Settings", "SettingsWire", "CurrentIPC", "CPlatform", "Spawn"],
+                path: "de/settingsrun"),
+        .executableTarget(name: "abyss-settings",
+                          dependencies: ["SettingsRun", "CurrentIPC"], path: "de/settingsbin"),
+        .executableTarget(name: "abyss-settingsctl",
+                          dependencies: ["Settings", "SettingsWire", "CurrentIPC"], path: "de/settingsctl"),
         .target(
             name: "Anchor",
             dependencies: ["CProc", "CurrentIPC", "Spawn"],
@@ -566,6 +578,11 @@ let package = Package(
             // away from the theme token it was copied from.
             dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua", "AquaDraw"],
             path: "Tests/DBusPortalTests"
+        ),
+        .testTarget(
+            name: "SettingsTests",
+            dependencies: ["Settings", "SettingsWire", "SettingsRun", "CurrentIPC"],
+            path: "Tests/SettingsTests"
         ),
         .testTarget(
             name: "SpawnTests",
