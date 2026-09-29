@@ -110,6 +110,7 @@ void aw_xdg_positioner_set_anchor_rect(void *p, int32_t x, int32_t y,
                                        int32_t w, int32_t h);
 void aw_xdg_positioner_set_anchor(void *p, uint32_t anchor);
 void aw_xdg_positioner_set_gravity(void *p, uint32_t gravity);
+void aw_xdg_positioner_set_offset(void *p, int32_t x, int32_t y);
 void aw_xdg_positioner_set_constraint_adjustment(void *p, uint32_t adj);
 void aw_xdg_positioner_destroy(void *p);
 void *aw_xdg_surface_get_popup(void *xdg_surface, void *parent, void *positioner);

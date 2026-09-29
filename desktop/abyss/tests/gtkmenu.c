@@ -48,11 +48,11 @@ static void activated(gp action, gp param, gp data) {
   fflush(stdout);
 }
 static void startup(gp app, gp data) {
-  const char *names[] = {"new", "open", "copy", "paste", "quit"};
-  for (int i = 0; i < 5; i++) {
+  const char *names[] = {"new", "open", "copy", "paste", "quit", "export-png", "export-pdf", "export-svg"};
+  for (int i = 0; i < 8; i++) {
     gp a = g_simple_action_new(names[i], NULL);
     g_signal_connect_data(a, "activate", activated, NULL, NULL, 0);
-    if (i == 3) g_simple_action_set_enabled(a, 0);
+    if (i == 3 || i == 6) g_simple_action_set_enabled(a, 0);
     g_action_map_add_action(app, a);
   }
   const char *qa[] = {"<Primary>q", NULL};
@@ -60,6 +60,16 @@ static void startup(gp app, gp data) {
   gp bar = g_menu_new(), file = g_menu_new(), edit = g_menu_new();
   g_menu_append(file, "New", "app.new");
   g_menu_append(file, "Open…", "app.open");
+  // P10.8: with GTKMENU_SUBMENUS=1, File > Export ▸ (As PNG, As PDF —
+  // disabled — and More ▸ As SVG): a submenu two deep, as real apps have.
+  if (getenv("GTKMENU_SUBMENUS")) {
+    gp export = g_menu_new(), more = g_menu_new();
+    g_menu_append(export, "As PNG", "app.export-png");
+    g_menu_append(export, "As PDF", "app.export-pdf");
+    g_menu_append(more, "As SVG", "app.export-svg");
+    g_menu_append_submenu(export, "More", more);
+    g_menu_append_submenu(file, "Export", export);
+  }
   g_menu_append(file, "Quit", "app.quit");
   g_menu_append(edit, "Copy", "app.copy");
   g_menu_append(edit, "Paste", "app.paste");

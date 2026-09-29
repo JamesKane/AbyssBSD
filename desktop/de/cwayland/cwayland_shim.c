@@ -175,6 +175,10 @@ void aw_xdg_positioner_set_gravity(void *p, uint32_t gravity) {
     xdg_positioner_set_gravity((struct xdg_positioner *)p, gravity);
 }
 
+void aw_xdg_positioner_set_offset(void *p, int32_t x, int32_t y) {
+    xdg_positioner_set_offset((struct xdg_positioner *)p, x, y);
+}
+
 void aw_xdg_positioner_set_constraint_adjustment(void *p, uint32_t adj) {
     xdg_positioner_set_constraint_adjustment((struct xdg_positioner *)p, adj);
 }

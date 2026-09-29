@@ -130,14 +130,33 @@ public final class PopupSurface {
     /// popup is positioned in — its parent's window geometry. A menu opened
     /// near the right edge flips or slides, as the positioner asked, instead of
     /// hanging off the screen.
+    ///
+    /// **In the ROOT's coordinates, not the parent's** (P10.8). wlroots wants
+    /// the box relative to the toplevel or layer surface at the top of the
+    /// popup chain, and adds up the popups between itself. For a menu those
+    /// are the same thing; for a submenu they are not — given its parent
+    /// menu's coordinates, a submenu that fitted was "constrained" and flipped
+    /// to the wrong side, where the pointer moving right never found it.
     private func unconstrain() {
-        guard let f = parentFrame else { return }
-        // The display the parent is on, in the parent's coordinates.
+        guard let f = rootFrame else { return }
+        // The display the root is on, in the root's coordinates.
         let d = compositor.layout.display(for: Rect(x: f.x, y: f.y, width: 1, height: 1))
             ?? DisplayBox(name: "", x: 0, y: 0, width: 0, height: 0)
         var box = wlr_box(x: d.x &- (f.x &+ f.gx), y: d.y &- (f.y &+ f.gy),
                           width: d.width, height: d.height)
         wlr_xdg_popup_unconstrain_from_box(popup, &box)
+    }
+
+    /// The frame of the toplevel or layer surface at the top of this popup's
+    /// chain: up through every popup parent.
+    private var rootFrame: (x: Int32, y: Int32, gx: Int32, gy: Int32)? {
+        var p: PopupSurface = self
+        for _ in 0..<16 {
+            guard let parent = p.popup.pointee.parent else { return nil }
+            guard let up = compositor.popups.first(where: { $0.surface == parent }) else { return p.parentFrame }
+            p = up
+        }
+        return nil
     }
 }
 

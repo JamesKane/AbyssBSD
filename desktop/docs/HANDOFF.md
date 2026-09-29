@@ -49,7 +49,9 @@ The items below are the context for it.
    BACKLOG §2 was U.3b: **done** (2026-09-29), explicit sync on every GPU
    here, NVIDIA's included (`live-syncobj.sh`; §2.87). **U.7b is done**
    (2026-09-29): our cursors as the XCursor theme "Abyss", named by the
-   session (`live-xcursor.sh`; §2.88). Left in §2: P10.8 and T.1–T.3. The phase's history, pass by pass:
+   session (`live-xcursor.sh`; §2.88). **P10.8 is done** (2026-09-29):
+   submenus open, a GTK app's and kcalc's (`live-submenus.sh`; §2.89). Left
+   in §2: P10.9 (found by P10.8) and T.1–T.3. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -713,6 +715,52 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.89 Submenus: three layers, and a `where` that bound to one pattern
+(P10.8. The ▸ had been drawn since P10.1, and nothing opened.)
+
+It took all three layers:
+- **Surface** routed the pointer to one `activePopup`. It now keeps a stack of
+  open popups and sends each event to the one the pointer is over; the
+  topmost is still where a new popup's grab comes from. `Popup(parentPopup:)`
+  places a child beside a row: anchored top-right, flipped left at the
+  display's edge, and offset up by the menu's padding so its first row lines
+  up with the row that opened it.
+- **AquaMenu** keeps the chain:
+  - hovering a submenu row opens it, and hovering another row closes it;
+  - → or Return opens it with its first row highlighted, and ← closes it;
+  - Escape from any depth, or an outside click, ends the whole menu;
+  - keys go to the deepest menu the person moved into, as on a Mac, where
+    hovering a submenu row does not take the keyboard;
+  - **closing is children first**. xdg-shell makes destroying a popup that
+    isn't the topmost a protocol error, and the fault injection that reversed
+    the order killed the bar's connection.
+- **undertow** placed a grandchild on the wrong side.
+  `wlr_xdg_popup_unconstrain_from_box` wants the box **in the root's
+  coordinates** (the toplevel or layer surface at the top of the chain), and
+  wlroots adds up the popups between. undertow gave it the immediate parent's
+  coordinates. For a menu those are the same; for a submenu the box was off
+  by the parent menu's position, so a submenu that fitted was "constrained"
+  and flipped left, where the pointer moving right never found it.
+
+**The Swift trap:** `case KeySym.right, KeySym.enter, KeySym.space where
+cond:` applies `where` to **the last pattern only**. → and Return matched
+unconditionally, so Return on an ordinary row inside a submenu tried to open
+a submenu there and chose nothing. It's written as plain conditions now, with
+a comment. Any comma-separated `case … where` is worth a second look.
+
+**Two test traps:**
+- A shell helper (`open_menu`) assigned a global `$n` that the calling claim
+  had saved a count in. The claim then waited for a count it had already
+  passed. Helpers in these scripts use distinct names.
+- The first debug copy of the test ran from the scratchpad, and the script
+  finds the repository from its own path, so it found nothing.
+
+**Found, not fixed (BACKLOG P10.9):** the bar reads a GTK or Qt app's menus
+when the app becomes frontmost, and nothing bridges their change signals.
+kcalc's Constants menu, which Science Mode adds, doesn't reach the bar until
+kcalc is next frontmost. The Qt claim therefore quits kcalc from our bar
+(File ▸ Quit, which also saves its mode) and starts it again.
 
 ### 2.88 Our cursors as an XCursor theme, and who still needs one
 (U.7b.)

@@ -104,9 +104,19 @@ public final class Display {
     private var pointerOnLayer = false
     private var keyboardOnLayer = false
 
-    // The active grabbing popup (menu), if any. Weak — the caller owns it; we
-    // just route input to it and clear on teardown. Set in Popup.init.
-    weak var activePopup: Popup?
+    // The open grabbing popups, oldest first — a menu and the submenus opened
+    // from it (P10.8). Weak: the caller owns each; we route input to the one
+    // the pointer is on. Pushed in Popup.init, removed on teardown.
+    private var openPopups: [WeakPopup] = []
+    /// The topmost open popup: the last one opened and not yet gone.
+    var activePopup: Popup? { openPopups.last(where: { $0.popup != nil })?.popup }
+    func popupOpened(_ p: Popup) { openPopups.removeAll { $0.popup == nil }; openPopups.append(WeakPopup(p)) }
+    func popupClosed(_ p: Popup) {
+        openPopups.removeAll { $0.popup == nil || $0.popup === p }
+        if pointerPopup === p { pointerPopup = nil; pointerOnPopup = false }
+    }
+    /// The popup the pointer is over — any of the open ones, not only the top.
+    private weak var pointerPopup: Popup?
     // Serial of the most recent pointer button event — xdg_popup.grab needs it.
     /// The most recent **pointer** serial.
     ///
@@ -442,8 +452,9 @@ public final class Display {
         pointerOnPopup = false
         pointerOnLayer = false
         guard let surface else { return }
-        if let popup = activePopup, surface == popup.surface {
+        if let popup = openPopups.lazy.compactMap({ $0.popup }).first(where: { $0.surface == surface }) {
             pointerOnPopup = true
+            pointerPopup = popup
         } else if let w = window(forSurface: surface) {
             pointerWindow = w
         } else if let ls = layerSurface, surface == ls.surface {
@@ -453,7 +464,7 @@ public final class Display {
     }
 
     private func routePointerMotion(_ sx: Int32, _ sy: Int32) {
-        if pointerOnPopup, let popup = activePopup {
+        if pointerOnPopup, let popup = pointerPopup {
             popup.pointerMoved(fx: sx, fy: sy)
         } else if pointerOnLayer {
             layerSurface?.pointerMoved(fx: sx, fy: sy)
@@ -465,7 +476,7 @@ public final class Display {
     }
 
     private func routePointerButton(_ button: UInt32, pressed: Bool) {
-        if pointerOnPopup, let popup = activePopup {
+        if pointerOnPopup, let popup = pointerPopup {
             if button == 0x110 { popup.pointerButton(pressed: pressed) }  // BTN_LEFT
         } else if pointerOnLayer {
             layerSurface?.pointerButton(button, pressed: pressed)
@@ -696,6 +707,12 @@ public final class Display {
     public func setEverythingNeedsDisplay() {
         for w in windowRegistry { w.window?.setNeedsDisplay() }
         layerSurface?.setNeedsDisplay()
-        activePopup?.setNeedsDisplay()
+        for p in openPopups { p.popup?.setNeedsDisplay() }
     }
+}
+
+/// A weak reference to a popup, for the open-popup stack.
+final class WeakPopup {
+    weak var popup: Popup?
+    init(_ p: Popup) { popup = p }
 }

@@ -594,9 +594,14 @@ public final class MenuBar: LayerSurfaceDelegate {
     public func keyEvent(_ event: KeyEvent) {
         guard event.pressed, let open = openIndex else { return }
         switch event.keysym {
-        case KeySym.left:  openMenu(neighbourTitle(from: open, step: -1))
-        case KeySym.right: openMenu(neighbourTitle(from: open, step: 1))
-        default:           menu?.keyDown(event.keysym)
+        // ← and → walk the titles only from the top menu: inside a submenu
+        // they go in and out of it (P10.8), and → on a submenu row opens it.
+        case KeySym.left where menu?.keyMenu === menu:
+            openMenu(neighbourTitle(from: open, step: -1))
+        case KeySym.right where menu?.keyMenu === menu && menu?.highlightOpensSubmenu != true:
+            openMenu(neighbourTitle(from: open, step: 1))
+        default:
+            menu?.keyDown(event.keysym)
         }
     }
 
@@ -634,19 +639,11 @@ public final class MenuBar: LayerSurfaceDelegate {
                 forceQuitTarget.map { "Force Quit \($0.split(separator: ".").last.map(String.init) ?? $0)" }
                     ?? "Force Quit"])
             : m.menu
-        let rows = aquaMenuItems(shown, enablement: enabled)
-        let commands = Dictionary(shown.commands.map { ($0.verb, $0) },
-                                  uniquingKeysWith: { a, _ in a })
-        let am = AquaMenu(items: rows)
-        am.onChoose = { [weak self] idx in
-            self?.closeMenu()
-            if let verb = rows[idx].verb, let c = commands[verb] {
-                self?.choose(c, in: name)
-            }
-        }
+        let r = layoutCache.titleRects[i]
+        let am = makeMenu(shown, name: name, at: (Int(r.x), Int(r.h)))
+        let rows = am.items
         am.onDismiss = { [weak self] in self?.menuDismissed() }
 
-        let r = layoutCache.titleRects[i]
         let popupW = Int32(max(150, am.preferredWidth))
         let popupH = Int32(am.preferredHeight.rounded(.up))
         guard let pop = layer?.openPopup(
@@ -660,13 +657,53 @@ public final class MenuBar: LayerSurfaceDelegate {
         MenuBar.log("opened \(name)")
         // Every row, where it will be on screen if the compositor places the
         // popup where it was asked to — under its title, flush left.
+        MenuBar.logRows(rows, x: Int(r.x), y: Int(r.h))
+        layer?.setNeedsDisplay()
+    }
+
+    /// One level of an open menu, and — through `submenuFor` — every level
+    /// under it (P10.8). `at` is where its popup is asked to go on the output,
+    /// for the rows a test reads; a submenu's is its parent's right edge, level
+    /// with its row.
+    private func makeMenu(_ menu: Menu, name: String, at origin: (x: Int, y: Int)) -> AquaMenu {
+        let rows = aquaMenuItems(menu, enablement: enabled)
+        let am = AquaMenu(items: rows)
+        am.onChoose = { [weak self] idx in
+            guard idx < menu.items.count, case .command(let c) = menu.items[idx] else { return }
+            self?.closeMenu()
+            self?.choose(c, in: name)
+        }
+        let width = Int(max(150, am.preferredWidth))
+        am.submenuFor = { [weak self] idx in
+            guard let self, idx < menu.items.count, case .submenu(let sub) = menu.items[idx] else { return nil }
+            let geo = aquaMenuRows(rows)[idx]
+            let child = self.makeMenu(sub, name: name + " > " + sub.title,
+                                      at: (origin.x + width, origin.y + Int(geo.y) - Int(AquaMenu.padV)))
+            return child
+        }
+        am.onSubmenuOpened = { idx, child in
+            let geo = aquaMenuRows(rows)[idx]
+            let cx = origin.x + width, cy = origin.y + Int(geo.y) - Int(AquaMenu.padV)
+            MenuBar.log("opened submenu \(name) > \(rows[idx].title)")
+            MenuBar.logRows(child.items, x: cx, y: cy)
+        }
+        am.onSubmenuClosed = { idx in
+            guard idx >= 0, idx < rows.count else { return }
+            MenuBar.log("closed submenu \(name) > \(rows[idx].title)")
+        }
+        return am
+    }
+
+    /// Every row of a menu whose popup's top-left is (x, y) on the output —
+    /// where it will be if the compositor puts it where it was asked (§2.46).
+    private static func logRows(_ rows: [AquaMenuItem], x: Int, y: Int) {
         for (row, geo) in zip(rows, aquaMenuRows(rows)) where !row.isSeparator {
             let state = row.enabled ? "enabled" : "disabled"
             let key = row.keyText.isEmpty ? "" : "\(row.keyText) "
-            MenuBar.log("item '\(row.title)' \(key)at \(Int(r.x) + 30),\(Int(r.h + geo.y + geo.h / 2)) "
-                        + "\(state)\(row.verb.map { " \($0)" } ?? "")")
+            let sub = row.hasSubmenu ? " submenu" : ""
+            MenuBar.log("item '\(row.title)' \(key)at \(x + 30),\(y + Int(geo.y + geo.h / 2)) "
+                        + "\(state)\(row.verb.map { " \($0)" } ?? "")\(sub)")
         }
-        layer?.setNeedsDisplay()
     }
 
     // MARK: the volume slider (P14.6d)
@@ -718,7 +755,8 @@ public final class MenuBar: LayerSurfaceDelegate {
     }
 
     private func closeMenu() {
-        popup?.close()   // programmatic close does not fire onDismiss
+        menu?.closeAll()   // submenus first (P10.8); does not fire onDismiss
+        popup?.close()
         popup = nil
         menu = nil
         if openIndex != nil { openIndex = nil; layer?.setNeedsDisplay() }

@@ -333,6 +333,10 @@ if [ "$live" -eq 1 ]; then
   # in abyss-dbus --menus, and the other end a stock GtkApplication (P10.6).
   echo "== GTK's menus in our bar =="
   quiet "$root/abyss/tests/live-menus-gtk.sh"
+  # Submenus open (P10.8): a GTK app's File ▸ Export ▸ More ▸, by pointer and
+  # keyboard, through undertow; the chain closed children first.
+  echo "== submenus =="
+  quiet "$root/abyss/tests/live-submenus.sh"
   # And a Qt/KDE application's: stock kcalc, org_kde_kwin_appmenu in
   # undertow, com.canonical.dbusmenu through the same bridge (P10.7). Skips,
   # loudly, on a box without kcalc.

@@ -9,6 +9,13 @@
 // rules, a key equivalent sits right-aligned in its own column, and a submenu
 // row carries its ▸. Row geometry comes from `aquaMenuRows` for paint and
 // hit-test alike (§2.9).
+//
+// Since P10.8 a submenu **opens**: hovering its row, or → / Return on it,
+// opens a child AquaMenu in a popup parented to this one, beside the row.
+// The owner says what the child is (`submenuFor`); the menu keeps the chain —
+// which child is open, which menu has the keyboard (the deepest one the
+// person moved into), and closing children before parents, which xdg-shell
+// requires (destroying a popup that is not the topmost is a protocol error).
 
 import Surface
 import CCairo
@@ -28,6 +35,26 @@ public final class AquaMenu: PopupDelegate {
     public var onChoose: (Int) -> Void = { _ in }
     /// Called when the popup is dismissed without a choice (outside click).
     public var onDismiss: () -> Void = {}
+    /// The menu a submenu row opens, built by the owner — nil for a row with
+    /// nothing to open. Its `onChoose` is the owner's to wire.
+    public var submenuFor: ((Int) -> AquaMenu?)?
+    /// Told when a submenu opens: its row, the child, and where the child's
+    /// popup was asked to go relative to this menu's top-left (a test reads
+    /// it — §2.46).
+    public var onSubmenuOpened: (Int, AquaMenu) -> Void = { _, _ in }
+    /// Told when the submenu on a row closes without a choice.
+    public var onSubmenuClosed: (Int) -> Void = { _ in }
+
+    /// The submenu open beside this menu, and its row.
+    public private(set) var child: AquaMenu?
+    private var childRow = -1
+    private var childPopup: Popup?
+    /// Whether the keyboard is in the child — set when the person moves the
+    /// pointer into it or presses → on its row; until then it stays here, as
+    /// on a Mac, where hovering a submenu row opens it without taking the keys.
+    private var keysInChild = false
+    /// The menu that opened this one.
+    private weak var parent: AquaMenu?
 
     public init(items: [AquaMenuItem], selected: Int = -1) {
         self.items = items
@@ -112,14 +139,94 @@ public final class AquaMenu: PopupDelegate {
     }
 
     public func pointerMoved(x: Double, y: Double) {
+        // The pointer is here: the keyboard follows it, and a parent's keys
+        // come down the chain to this menu.
+        parent?.keysInChild = true
+        keysInChild = false
         let idx = aquaMenuRow(atY: y, items) ?? -1
-        if idx != hovered { hovered = idx; popup?.setNeedsDisplay() }
+        guard idx != hovered else { return }
+        hovered = idx
+        popup?.setNeedsDisplay()
+        // Hovering a submenu row opens it; hovering another row closes it.
+        if idx >= 0, idx < items.count, items[idx].hasSubmenu, items[idx].enabled {
+            if idx != childRow { openChild(idx) }
+        } else {
+            closeChild()
+        }
+    }
+
+    // MARK: the submenu (P10.8)
+
+    /// Open the submenu on row `i`, beside it. With `highlightFirst` (the
+    /// keyboard opened it) its first choosable row is highlighted and the
+    /// keys go to it.
+    @discardableResult
+    public func openChild(_ i: Int, highlightFirst: Bool = false) -> Bool {
+        closeChild()
+        guard let pop = popup, let menu = submenuFor?(i) else { return false }
+        let rows = aquaMenuRows(items)
+        let w = Int32(max(150, menu.preferredWidth))
+        let h = Int32(menu.preferredHeight.rounded(.up))
+        // Its first row level with this one: up by the menu's top padding.
+        guard let cp = Popup(parentPopup: pop, anchorY: Int32(rows[i].y), anchorH: Int32(rows[i].h),
+                             offsetY: Int32(AquaMenu.padV), width: w, height: h, delegate: menu)
+        else { return false }
+        menu.popup = cp
+        menu.parent = self
+        // Dismissed from outside (the compositor ends the whole chain): forget
+        // it here; the root tells the owner.
+        let before = menu.onDismiss
+        menu.onDismiss = { [weak self, weak menu] in
+            before()
+            if let self, self.child === menu { self.child = nil; self.childPopup = nil; self.childRow = -1; self.keysInChild = false }
+        }
+        child = menu
+        childPopup = cp
+        childRow = i
+        if highlightFirst {
+            keysInChild = true
+            menu.moveHighlight(1)
+        }
+        onSubmenuOpened(i, menu)
+        return true
+    }
+
+    /// Close the submenu, and any it opened, deepest first.
+    public func closeChild() {
+        guard let c = child else { return }
+        c.closeChild()
+        childPopup?.close()
+        onSubmenuClosed(childRow)
+        child = nil
+        childPopup = nil
+        childRow = -1
+        keysInChild = false
+    }
+
+    /// Close this menu and everything opened from it, children first — the
+    /// one way to take a chain down without a protocol error.
+    public func closeAll() {
+        closeChild()
+        popup?.close()
+    }
+
+    /// Whether the highlighted row opens a submenu — so → goes into it, and
+    /// not to the next title in the bar.
+    public var highlightOpensSubmenu: Bool {
+        hovered >= 0 && hovered < items.count && items[hovered].hasSubmenu && items[hovered].enabled
+    }
+
+    /// The menu that has the keyboard: the deepest one the person moved into.
+    public var keyMenu: AquaMenu {
+        if keysInChild, let c = child { return c.keyMenu }
+        return self
     }
 
     public func pointerButton(pressed: Bool) {
         // Choose on release over an item (click-open then click-select).
+        // A submenu row opens on hover; releasing on it chooses nothing.
         guard !pressed, hovered >= 0, hovered < items.count,
-              items[hovered].isChoosable else { return }
+              items[hovered].isChoosable, !items[hovered].hasSubmenu else { return }
         onChoose(hovered)
     }
 
@@ -130,6 +237,33 @@ public final class AquaMenu: PopupDelegate {
     /// dismisses. Returns whether the key was consumed.
     @discardableResult
     public func keyDown(_ keysym: UInt32) -> Bool {
+        // The deepest menu the person is in takes the key.
+        if keysInChild, let c = child { return c.keyDown(keysym) }
+        // Plain conditions, not `case a, b, c where …`: a `where` binds to the
+        // last pattern only, and that switch took every Return for "open a
+        // submenu here" — on rows that had none (HANDOFF §2.89).
+        let intoSubmenu = keysym == KeySym.right || keysym == KeySym.enter || keysym == KeySym.space
+        if intoSubmenu, highlightOpensSubmenu {
+            // Into the submenu: → or Return on its row.
+            if hovered == childRow, child != nil {
+                keysInChild = true
+                child?.moveHighlight(1)
+                child?.popup?.setNeedsDisplay()
+            } else {
+                openChild(hovered, highlightFirst: true)
+            }
+            return true
+        }
+        if keysym == KeySym.left, parent != nil {
+            // Out of a submenu: ← closes it, and the keys go back up.
+            parent?.closeChild()
+            return true
+        }
+        if keysym == KeySym.right, parent != nil {
+            // → on a plain row inside a submenu does nothing (the bar's
+            // title-walking is the root's, and only there).
+            return true
+        }
         switch keysym {
         case KeySym.up:    moveHighlight(-1); return true
         case KeySym.down:  moveHighlight(1); return true
@@ -144,15 +278,19 @@ public final class AquaMenu: PopupDelegate {
             // itself after a choice). Escape *is* a dismissal, though, so say so
             // — otherwise the owner keeps thinking the menu is still open, and
             // the menu bar leaves its title highlighted for a menu that's gone.
-            popup?.close()
-            onDismiss()
+            // From a submenu it ends the whole menu, as on a Mac: the root's
+            // owner is the one to tell.
+            var root: AquaMenu = self
+            while let p = root.parent { root = p }
+            root.closeAll()
+            root.onDismiss()
             return true
         default:
             return false
         }
     }
 
-    private func moveHighlight(_ d: Int) {
+    func moveHighlight(_ d: Int) {
         // Starting from the checked item when nothing is hovered, so a pop-up
         // button's arrows move from its current value.
         let start: Int? = hovered >= 0 ? hovered

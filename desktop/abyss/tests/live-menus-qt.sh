@@ -15,6 +15,9 @@
 #   4. Choosing Settings ▸ Science Mode with a real pointer **switches kcalc's
 #      mode**, which kcalc itself reports afterwards: its own layout says the
 #      radio item is now on.
+#   5. A Qt submenu opens (P10.8): kcalc, quit from our bar and started again
+#      in Science Mode, has Constants; its first submenu opens beside its row
+#      and a constant chosen from it runs in kcalc.
 #
 # Usage: abyss/tests/live-menus-qt.sh      (skips, loudly, without kcalc)
 set -eu
@@ -167,5 +170,49 @@ i=0
 while [ $i -lt 25 ] && [ "$(state)" != 1 ]; do sleep 0.2; i=$((i + 1)); done
 [ "$(state)" = 1 ] || fail "the bar said ok and kcalc's Science Mode is still off"
 echo "ok: Settings ▸ Science Mode, chosen in our bar, switched kcalc — by kcalc's own account"
+
+# 5. A Qt submenu opens (P10.8). Science Mode gives kcalc a Constants menu
+#    whose rows are submenus Qt fills lazily (AboutToShow, §4.5). The bar
+#    reads an application's menus when it becomes frontmost and does not yet
+#    follow them changing under it (BACKLOG P10.9), so kcalc is quit — File ▸
+#    Quit, from our bar, which also has it save its mode — and started again,
+#    in Science Mode, Constants and all.
+open_menu File
+qxy=$(item_line File Quit | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
+[ -n "$qxy" ] || fail "File has no Quit row"
+click $qxy
+i=0; while kill -0 "$app_pid" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.2; i=$((i + 1)); done
+kill -0 "$app_pid" 2>/dev/null && fail "File ▸ Quit, from our bar, did not quit kcalc"
+shown=$(count "$work/bar.log" "showing kcalc's menus from menus-dbus (Qt)")
+env WAYLAND_DISPLAY="$wd" QT_QPA_PLATFORM=wayland kcalc > "$work/app2.out" 2>&1 &
+app_pid=$!
+after "$work/bar.log" "showing kcalc's menus from menus-dbus (Qt)" "$shown" "the bar never showed the restarted kcalc's menus"
+i=0
+while [ $i -lt 25 ] && ! grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | grep -q ' Constants@'; do
+  sleep 0.2; i=$((i + 1)); done
+grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | grep -q ' Constants@' \
+  || fail "kcalc, restarted in Science Mode, has no Constants menu in the bar: $(grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1)"
+open_menu Constants
+sub=$(awk 'index($0, "MenuBar: opened Constants") { buf = ""; on = 1; next }
+           on && /MenuBar: item / { buf = buf $0 "\n"; next } on { on = 0 }
+           END { printf "%s", buf }' "$work/bar.log" | grep ' enabled submenu$' | head -1)
+[ -n "$sub" ] || fail "Constants has no submenu row: $(grep -A4 'opened Constants' "$work/bar.log" | tail -4)"
+title=$(printf '%s' "$sub" | sed -n "s/.*item '\([^']*\)'.*/\1/p")
+sxy=$(printf '%s' "$sub" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
+printf 'm %s\n' "$sxy" >&3
+after "$work/bar.log" "MenuBar: opened submenu Constants > $title" 0 "hovering Constants ▸ $title opened nothing"
+first=$(awk -v m="MenuBar: opened submenu Constants > $title" 'index($0, m) { buf = ""; on = 1; next }
+           on && /MenuBar: item / { buf = buf $0 "\n"; next } on { on = 0 }
+           END { printf "%s", buf }' "$work/bar.log" | grep ' enabled ' | head -1)
+[ -n "$first" ] || fail "$title's submenu has no enabled row"
+fname=$(printf '%s' "$first" | sed -n "s/.*item '\([^']*\)'.*/\1/p")
+fxy=$(printf '%s' "$first" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
+printf 'm %s %s\n' "${fxy% *}" "${sxy#* }" >&3; sleep 0.3     # across, level with the row
+click $fxy
+after "$work/bar.log" "chose Constants > $title > $fname" 0 "choosing $fname in Qt's submenu returned no result"
+grep "chose Constants > $title > $fname" "$work/bar.log" | tail -1 | grep -q '→ ok' \
+  || fail "kcalc did not take $fname: $(grep 'chose Constants' "$work/bar.log" | tail -1)"
+kill -0 "$app_pid" 2>/dev/null || fail "kcalc died"
+echo "ok: kcalc quit from our bar and came back in Science Mode; Constants ▸ $title, a Qt submenu, opened beside its row, and $fname ran in kcalc"
 
 echo "all green (a Qt application's menus, in our bar, the other end never ours)."

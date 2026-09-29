@@ -30,9 +30,11 @@ public protocol PopupDelegate: AnyObject {
 
 // xdg_positioner anchor/gravity/constraint values (avoid importing the C enums).
 private let kAnchorBottomLeft: UInt32 = 6
+private let kAnchorTopRight: UInt32 = 7
 private let kGravityBottomRight: UInt32 = 8
 private let kConstraintSlideX: UInt32 = 1
 private let kConstraintSlideY: UInt32 = 2
+private let kConstraintFlipX: UInt32 = 4
 private let kConstraintFlipY: UInt32 = 8
 
 public final class Popup {
@@ -44,6 +46,8 @@ public final class Popup {
     public weak var delegate: PopupDelegate?
 
     let scale: Int32
+    /// Its size in the parent's logical coordinates — where a submenu anchors.
+    public var width: Int32 { logicalW }
     private let logicalW: Int32
     private let logicalH: Int32
 
@@ -92,7 +96,7 @@ public final class Popup {
         aw_surface_commit(raw(surface))  // triggers the initial configure
         wl_display_flush(display.display)
 
-        display.activePopup = self
+        display.popupOpened(self)
     }
 
     /// A popup anchored to a rect in an xdg-shell `Window`'s logical coordinates.
@@ -135,6 +139,32 @@ public final class Popup {
         aw_layer_surface_get_popup(raw(layerParent.layerSurface), raw(pop))
         self.init(display: display, surface: surf, xdgSurface: xs, xdgPopup: pop,
                   seat: seat, scale: layerParent.scale, width: width, height: height,
+                  delegate: delegate)
+    }
+
+    /// A **submenu** (P10.8): a popup whose parent is a popup, beside the row
+    /// `anchorY…anchorY+anchorH` of it — its top-left at that row's
+    /// top-right, `offsetY` up so its first item lines up with the row, and
+    /// flipped to the left when the display's right edge is in the way.
+    public convenience init?(parentPopup parent: Popup, anchorY: Int32, anchorH: Int32,
+                             offsetY: Int32, width: Int32, height: Int32, delegate: PopupDelegate) {
+        let display = parent.display
+        guard let seat = display.seat,
+              let (surf, xs, pos) = Popup.makeSurfaceAndPositioner(
+                  display: display, anchorX: 0, anchorY: anchorY,
+                  anchorW: parent.logicalW, anchorH: anchorH, width: width, height: height)
+        else { return nil }
+        aw_xdg_positioner_set_anchor(raw(pos), kAnchorTopRight)
+        aw_xdg_positioner_set_gravity(raw(pos), kGravityBottomRight)
+        aw_xdg_positioner_set_offset(raw(pos), 0, -offsetY)
+        aw_xdg_positioner_set_constraint_adjustment(raw(pos), kConstraintFlipX | kConstraintSlideY)
+        guard let pop = opt(aw_xdg_surface_get_popup(raw(xs), raw(parent.xdgSurface), raw(pos))) else {
+            aw_xdg_positioner_destroy(raw(pos))
+            return nil
+        }
+        aw_xdg_positioner_destroy(raw(pos))
+        self.init(display: display, surface: surf, xdgSurface: xs, xdgPopup: pop,
+                  seat: seat, scale: parent.scale, width: width, height: height,
                   delegate: delegate)
     }
 
@@ -234,7 +264,7 @@ public final class Popup {
     private func teardown() {
         guard !tornDown else { return }
         tornDown = true
-        if display.activePopup === self { display.activePopup = nil }
+        display.popupClosed(self)
         for b in buffers { b.destroy() }
         buffers.removeAll()
         aw_xdg_popup_destroy(raw(xdgPopup))

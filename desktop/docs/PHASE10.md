@@ -642,7 +642,13 @@ placement.
   had a submenu. A GTK or Qt application's menus can have them (§4.5's lazy
   "Constants"), and there they are drawn and cannot be entered. It is the
   largest thing Phase 10 leaves, and the reason Force Quit is a single item
-  and not a list.
+  and not a list. **Fixed 2026-09-29 (BACKLOG P10.8, HANDOFF §2.89):** a
+  submenu opens on hover or → / Return, closes on ← or when another row is
+  hovered, and Escape or an outside click takes the whole chain down,
+  children first. It is verified on a GTK app's File ▸ Export ▸ More ▸
+  (`live-submenus.sh`) and on kcalc's own Constants ▸ Mathematics ▸ Pi
+  (`live-menus-qt.sh`). Found on the way: the bar does not follow a GTK or
+  Qt app's menus changing under it (P10.9).
 - *(My own test, twice: `gdbus` reading `-1` as an option in P10.7, and here a
   shell variable reused by a helper — both harness, both caught by a test
   failing a compositor that was right.)*
