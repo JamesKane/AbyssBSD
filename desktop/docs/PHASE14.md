@@ -441,6 +441,45 @@ is an ioctl a small helper makes. **Open:** whether a `wtap` station can
 associate with `hostapd` on a second `wtap`. If it can, joining is verified in
 the harness; if not, scan and join are verified on metal only.
 
+**The spike, run 2026-09-28 in the build guest (15.0-RELEASE-p11):**
+
+- **Stock 15.0 `wtap` cannot.** The radios create and the medium links, but
+  `ifconfig wlan create wlandev wtap0` fails ("HOSTAP mode not supported", and
+  a station the same): 15.0's `wtap` declares only mesh and ad-hoc.
+- **Upstream added station and access-point modes, with WPA, after 15.0**:
+  `d4de0a69a92` (2026-06-16, D36243), 24 lines in `if_wtap.c`. The AbyssBSD fork
+  predates it.
+- **Decided (the person): backport it to the guest.** `abyss/tests/wtap/`
+  holds the upstream patch, `build-wtap.sh` (15.0's own `if_wtap.c` plus the
+  patch, built out of tree against `/usr/src/sys` from the release's `src.txz`
+  in under a second), and `wtapctl` (FreeBSD's two unshipped `tools/tools/wtap`
+  tools in one).
+- **With it, the join works in the harness.** `hostapd` (WPA2-PSK, CCMP) is
+  `AP-ENABLED` on one radio; a scan from the other finds it (`RSN`); and
+  `wpa_supplicant` joins it: `status: associated`, `wpa_state=COMPLETED`. Two
+  traps are on the way. WPA's authenticator and ciphers (`wlan_xauth`,
+  `wlan_ccmp`, `wlan_tkip`) are modules a real NIC's driver pulls in and
+  `wtap`'s does not; without them `hostapd` fails with "Invalid argument" on
+  `IEEE80211_IOC_AUTHMODE`. And a daemonised `hostapd` keeps its caller's
+  stdin, holding an ssh session open.
+- `abyss/tests/wtap/lab.sh up SSID PASSPHRASE | down` is the fixture: an access
+  point on `wlan90` over `wtap0`, with `wtap1` left for the system under test.
+- **And three kernel panics, fixed.** The backported `wtap` panicked the guest
+  on its create/teardown path, identically every time, and the same code is in
+  FreeBSD main. Read with `kgdb` from the dumps:
+  (1) an access point entering RUN on a bss with no channel
+  (`IEEE80211_CHAN_ANYC`) built a beacon from it, faulting in
+  `ieee80211_getcapinfo(chan=0xffff)`;
+  (2) `deinit_hal` destroyed its mutex with the TSF callout still armed, so
+  after `kldunload` it fired on freed memory (softclock, `mtx_lock`);
+  (3) `wtap_vap_delete` stopped the beacon callout without draining it.
+  `wtap-teardown.patch` fixes all three and is upstreamable. With it,
+  `live-wifi-lab.sh` does three joins and full teardowns, module unload
+  included, and the guest is still on the same boot with no new dump. The
+  build without the drain panicked again within 30 s. **The cost:** the guest
+  panicked and rebooted about ten times before the dumps were read. Seven were
+  deleted (the person chose to keep one); HANDOFF §2.80.
+
 ### 4.3 Can sound be tested without a sound card? — **Yes: `snd_dummy`.**
 
 `kldload snd_dummy` gives `pcm0: <Dummy Audio Device> (play/rec) default` with a

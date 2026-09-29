@@ -693,6 +693,25 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.80 A "hang" that cleans up after itself is a guest that rebooted
+(P14.5. Ten kernel panics before it was seen.)
+
+The Wi-Fi lab seemed to hang. An ssh command never returned, yet the next
+connection found the interfaces gone and the modules unloaded, as if the
+teardown had finished slowly. It had not finished at all: the patched `wtap`
+panicked the kernel, the guest rebooted in under a minute, and "the state
+cleaned itself up" was a fresh boot. I spent several rounds timing individual
+commands and blaming ssh before running `uptime`, which read "up 46 secs",
+beside `/var/crash` holding eight 700 MB dumps.
+
+**When the guest's state is cleaner than you left it, check `uptime` and
+`/var/crash` first.** And have a test that loads kernel code assert the same
+boot (`kern.boottime`) and no new dump at the end, as `live-wifi-lab.sh` does:
+from outside, a panic looks like a hang or a flake. `savecore` keeps each dump,
+and `kgdb` (the `gdb` package) against `/usr/lib/debug/boot/kernel/kernel.debug`
+gives the stack. A module built with `DEBUG_FLAGS=-g` gives its lines; the flag
+does not change the code, so a rebuild still matches the dump.
+
 ### 2.79 A capture that renders the last frame's latch renders freed textures
 (P14.7a. Found only with a second output, and only in the guest, 2 runs in 6.)
 

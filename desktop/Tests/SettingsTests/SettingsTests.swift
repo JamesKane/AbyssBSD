@@ -369,4 +369,29 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(events.filter { if case .skipped = $0 { return true }; return false }.count, 1,
                        "write-only: the sysctl is skipped, and said to be")
     }
+
+    // MARK: - Wi-Fi keys (P14.5)
+
+    func testSHA1AndHMACAreTheStandardOnes() {
+        func hex(_ b: [UInt8]) -> String { b.map { WifiKey.hex($0) }.joined() }
+        XCTAssertEqual(hex(WifiKey.sha1(Array("abc".utf8))), "a9993e364706816aba3e25717850c26c9cd0d89d")
+        XCTAssertEqual(hex(WifiKey.sha1([])), "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+        XCTAssertEqual(hex(WifiKey.sha1(Array(String(repeating: "a", count: 1000).utf8))),
+                       "291e9a6c66994949b57ba5e650361e98fc36b1ba", "more than one block")
+        // RFC 2202, test case 2.
+        XCTAssertEqual(hex(WifiKey.hmacSHA1(key: Array("Jefe".utf8), message: Array("what do ya want for nothing?".utf8))),
+                       "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79")
+    }
+
+    /// IEEE 802.11i-2004, Annex H.4 — the PSK wpa_passphrase(8) would print.
+    func testAPassphraseBecomesTheKeyWPAUses() {
+        XCTAssertEqual(WifiKey.psk(passphrase: "password", ssid: "IEEE"),
+                       "f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e")
+        XCTAssertEqual(WifiKey.psk(passphrase: "ThisIsAPassword", ssid: "ThisIsASSID"),
+                       "0dc0d6eb90555ed6419756b9a15ec3e3209b63df707dd508d14581f8982721af")
+        XCTAssertNil(WifiKey.psk(passphrase: "short", ssid: "x"), "WPA wants 8 to 63 characters")
+        XCTAssertNil(WifiKey.psk(passphrase: String(repeating: "x", count: 64), ssid: "x"))
+        XCTAssertTrue(WifiKey.isPSK("f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e"))
+        XCTAssertFalse(WifiKey.isPSK("password"))
+    }
 }

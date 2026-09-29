@@ -253,6 +253,10 @@ if [ "$live" -eq 1 ]; then
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="
   sh "$root/abyss/tests/live-energy-pane.sh" >/dev/null
+  # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
+  # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
+  echo "== the Wi-Fi lab =="
+  sh "$root/abyss/tests/live-wifi-lab.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).
