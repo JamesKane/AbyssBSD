@@ -185,8 +185,20 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     case .systemPreferences:
         // AQUA_PREFS_PANE=<id> pictures a pane's page (P14.1); else the grid.
         var m = PrefsModel()
-        if let p = getenv("AQUA_PREFS_PANE").map({ String(cString: $0) }) { m.view = .pane(p) }
-        paintSystemPreferences(cr, w: cw, h: ch, model: m)
+        var network: NetworkPaneState?
+        if let p = getenv("AQUA_PREFS_PANE").map({ String(cString: $0) }) {
+            // "network-wifi": the Network pane with its radio chosen (P14.5c).
+            if p == "network-wifi" {
+                m.view = .pane("network")
+                var n = NetworkPaneState.sample
+                n.radios = ["iwn0"]
+                n.wifi = .sample
+                network = n
+            } else {
+                m.view = .pane(p)
+            }
+        }
+        paintSystemPreferences(cr, w: cw, h: ch, model: m, network: network)
     case .widgets:
         paintWidgets(cr, w: cw, h: ch, state: WidgetState(), focus: .ok)
     case .scroll:

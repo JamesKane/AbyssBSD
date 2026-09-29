@@ -216,9 +216,12 @@ public struct NetworkLayout: Equatable, Sendable {
     public var noteBaseline = 0.0
     public var showBaseline = 0.0
     public var configureBaseline = 0.0
+    /// The Wi-Fi page, when a radio is chosen (P14.5c).
+    public var wifi = WifiLayout()
 }
 
-public func networkLayout(body: Rect, interfaces: [String]) -> NetworkLayout {
+public func networkLayout(body: Rect, interfaces: [String], radios: [String] = [],
+                          wifi: WifiPaneState? = nil) -> NetworkLayout {
     var l = NetworkLayout()
     l.labelRight = body.x + 170
     let x = l.labelRight + 12
@@ -229,7 +232,13 @@ public func networkLayout(body: Rect, interfaces: [String]) -> NetworkLayout {
         l.interfaces.append(.init(value: name, hit: Rect(ix, y, 100, 22), control: Rect(ix, y + 3, 16, 16)))
         ix += 104
     }
+    // A radio beside them, as Jaguar put AirPort beside Ethernet: "wifi:<radio>".
+    for r in radios {
+        l.interfaces.append(.init(value: "wifi:" + r, hit: Rect(ix, y, 150, 22), control: Rect(ix, y + 3, 16, 16)))
+        ix += 154
+    }
     y += 36
+    if let wifi { l.wifi = wifiLayout(body: body, top: y, wifi) }
     l.status = Rect(body.x + 40, y, body.w - 80, 5 * 20 + 30)
     y += l.status.h + 18
     l.configureBaseline = y + 15
@@ -268,21 +277,28 @@ public func networkHit(_ l: NetworkLayout, form: NetworkForm, x: Double, y: Doub
 // MARK: - Paint
 
 public func paintNetworkPane(_ cr: OpaquePointer, _ l: NetworkLayout, status: Vents.Network.Status,
-                             form: NetworkForm?, note: String, busy: Bool) {
+                             form: NetworkForm?, note: String, busy: Bool, wifi: WifiPaneState? = nil) {
     func heading(_ s: String, _ baseline: Double) {
         let w = Draw.textWidth(cr, s, size: 13)
         Draw.textLeft(cr, s, x: l.labelRight - w, baselineY: baseline, color: Theme.bodyText, size: 13)
     }
     heading("Show:", l.showBaseline)
-    guard let form else {
+    guard form != nil || wifi != nil else {
         Draw.textLeft(cr, "This machine has no wired interface to configure.", x: l.labelRight + 12,
                       baselineY: l.showBaseline, color: Theme.secondaryText, size: 13)
         return
     }
+    let shown = wifi.map { "wifi:" + $0.device } ?? form?.interface
     for r in l.interfaces {
-        Draw.radioButton(cr, cx: r.control.x + 8, cy: r.control.y + 8, radius: 7, selected: r.value == form.interface)
-        Draw.textLeft(cr, r.value, x: r.control.x + 24, baselineY: r.control.y + 12, color: Theme.bodyText, size: 13)
+        Draw.radioButton(cr, cx: r.control.x + 8, cy: r.control.y + 8, radius: 7, selected: r.value == shown)
+        let label = r.value.hasPrefix("wifi:") ? "Wi-Fi (\(r.value.dropFirst(5)))" : r.value
+        Draw.textLeft(cr, label, x: r.control.x + 24, baselineY: r.control.y + 12, color: Theme.bodyText, size: 13)
     }
+    if let wifi {
+        paintWifiPane(cr, l.wifi, wifi)
+        return
+    }
+    guard let form else { return }
 
     Draw.groupBox(cr, l.status, title: "Status")
     var y = l.status.y + 30
@@ -323,6 +339,10 @@ public struct NetworkPaneState: Sendable {
     public var form: NetworkForm?
     public var note: String
     public var busy: Bool
+    /// The radios (`net.wlan.devices`), offered beside the wired interfaces.
+    public var radios: [String] = []
+    /// The Wi-Fi page, when a radio is the one shown.
+    public var wifi: WifiPaneState?
 
     public init(status: Vents.Network.Status, form: NetworkForm?, note: String = "", busy: Bool = false) {
         self.status = status; self.form = form; self.note = note; self.busy = busy

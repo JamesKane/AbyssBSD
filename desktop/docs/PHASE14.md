@@ -275,6 +275,50 @@ Its testability is a spike (§4.2): `wtap(4)` loads in the guest; whether it can
 put a station against a `hostapd` on another `wtap` decides whether the join is
 verified in the harness or only on metal (§6.5).
 
+**Done** (2026-09-28, P14.5a–c; the join verified in the harness). §4.2 has
+the spike: 15.0's `wtap` could not do it, upstream's could, it was backported
+to the guest, and three kernel panics were fixed on the way. What landed:
+
+- **The lab** (P14.5a): `abyss/tests/wtap/` builds and loads `wtap` with
+  station and access-point modes and our teardown fixes, and runs `hostapd`
+  (WPA2-PSK). `live-wifi-lab.sh` asserts the kernel survives it.
+- **The plan and the helper** (P14.5b): join (an SSID and its WPA key) or
+  forget.
+  - A join compiles to the network in `wpa_supplicant.conf` (the helper's
+    fourth file, edited in-process, mode 0600, SSIDs in hex), `wlans_<radio>`,
+    `ifconfig_wlanN="WPA DHCP"`, and `service netif restart wlanN`: rc's own
+    path.
+  - `read wifi` gives names only; `scan` runs as root.
+  - **The passphrase never leaves the pane.** `WifiKey` derives the PSK there
+    (PBKDF2, IEEE's vectors), and no step description, render or journal line
+    holds a key.
+- **The pane** (P14.5c): the radio beside the wired interfaces on the Network
+  pane, as AirPort was.
+  - Status from `ifconfig` without privilege, refreshed by the routing
+    socket's association events.
+  - Scan, choose, a password field that draws dots, Join (or Return); known
+    networks with Forget.
+  - It logs how many characters were typed, never which.
+
+**Verified:** 656 unit tests on both. On both, `live-wifi.sh` and
+`live-wifi-pane.sh` (Linux: the refusals; no radio is offered). In the guest,
+on its real `rc.conf` and `wpa_supplicant.conf`, backed up and restored:
+- scan;
+- a wrong key never completes WPA; the right one joins by rc's path
+  (COMPLETED);
+- the file is 0600 with the key and no passphrase; the journal and the app's
+  log hold neither;
+- forget;
+- and through the pane: choose, type, Return, associated shown, Forget.
+
+Six fault injections, each seen to fail. **Known, and said in the tests' own
+output:** `wtap`'s young WPA handshake fails about one attempt in three with
+the right key, and badly on re-joins over the same radios. The tests give each
+join fresh radios and retry as a person pressing Join would, printing how many
+retries it took. Real hardware is not expected to share it. **Not built:**
+hidden networks, enterprise (802.1X) networks, and choosing among several
+known networks by priority.
+
 **P14.6 — Sound.** Devices (`/dev/sndstat`, `sndctl(8)`), the default device
 (`hw.snd.default_unit`), levels and mute through the mixer, persisted by
 `rc.d/mixer`. **The menu bar's volume item becomes real** — tested on the

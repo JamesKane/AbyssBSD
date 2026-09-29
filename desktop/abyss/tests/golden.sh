@@ -49,6 +49,7 @@ scenes='window|window|
 window@2x|window|AQUA_SCALE=2
 sysprefs|sysprefs|
 sysprefs-pane|sysprefs|AQUA_PREFS_PANE=network
+sysprefs-wifi|sysprefs|AQUA_PREFS_PANE=network-wifi
 sysprefs-sound|sysprefs|AQUA_PREFS_PANE=sound
 sysprefs-displays|sysprefs|AQUA_PREFS_PANE=displays
 sysprefs-energy|sysprefs|AQUA_PREFS_PANE=energySaver

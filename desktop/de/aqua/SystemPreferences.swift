@@ -283,8 +283,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                             dragging: dragging)
     case .pane(let id) where id == PrefsModel.networkPane:
         let n = network ?? .sample
-        l.network = networkLayout(body: l.body, interfaces: n.interfaces)
-        paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy)
+        l.network = networkLayout(body: l.body, interfaces: n.interfaces, radios: n.radios, wifi: n.wifi)
+        paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy, wifi: n.wifi)
     case .pane(let id) where id == PrefsModel.energyPane:
         l.energy = energyLayout(body: l.body)
         paintEnergyPane(cr, l.energy, energy ?? .sample)
@@ -537,6 +537,18 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             line += " mode.dhcp=\(c(n.dhcp.hit)) mode.manual=\(c(n.manual.hit))"
             for f in NetworkField.allCases { if let r = n.fields[f] { line += " field.\(f.rawValue)=\(c(r))" } }
             line += " revert=\(c(n.revert)) apply=\(c(n.apply))"
+            SystemPreferencesApp.log(line)
+        }
+        // The Wi-Fi page's: `scan`, `net.<i>` (the i-th network scanned,
+        // named in the `wifi: scanned` line), `field`, `join`, `forget.<i>`.
+        if dumpLayout, model.view == .pane(PrefsModel.networkPane), network.wifi != nil,
+           dumpedWifi != layout.network.wifi {
+            dumpedWifi = layout.network.wifi
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            let w = layout.network.wifi
+            var line = "wifi layout scan=\(c(w.scan)) field=\(c(w.field)) join=\(c(w.join))"
+            for (i, r) in w.networks.enumerated() { line += " net.\(i)=\(c(r))" }
+            for (i, r) in w.forgets.enumerated() { line += " forget.\(i)=\(c(r))" }
             SystemPreferencesApp.log(line)
         }
         // Energy Saver's: `computer` and `display` tracks as `x0-x1,y`,
@@ -903,6 +915,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     /// no interface named, the one showing — else the first there is.
     private func loadNetwork(interface: String?) {
         network.status = Vents.Network.status()
+        network.radios = Vents.Wifi.radios()
         let names = network.interfaces
         guard let name = interface ?? network.form.map(\.interface).flatMap({ names.contains($0) ? $0 : nil })
                 ?? names.first else {
@@ -931,6 +944,147 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         network.status = Vents.Network.status()
         if let f = network.form {
             SystemPreferencesApp.log("network: changed \(NetworkWords.statusLine(network.status, interface: f.interface))")
+        }
+        // An association is a routing-socket event too (RTM_IEEE80211_*).
+        if let w = network.wifi {
+            let st = Vents.Wifi.status(w.interface)
+            if st != w.status {
+                network.wifi?.status = st
+                SystemPreferencesApp.log("wifi: status \(WifiWords.statusLine(network.wifi!))")
+            }
+        }
+        window?.setNeedsDisplay()
+    }
+
+    // MARK: Wi-Fi (P14.5c)
+
+    private var wifiApplying: Int32?
+    private var dumpedWifi: WifiLayout?
+
+    private func loadWifi() {
+        guard let device = network.wifi?.device else { return }
+        switch SettingsClient.readWifi(device) {
+        case .success(let k):
+            network.wifi?.interface = k.interface ?? "wlan0"
+            network.wifi?.known = k.networks
+            network.wifi?.note = ""
+        case .failure(let why):
+            network.wifi?.note = "The settings helper says: \(why.message)"
+            SystemPreferencesApp.log("wifi: cannot read: \(why.message)")
+        }
+        let interface = network.wifi!.interface
+        network.wifi?.status = Vents.Wifi.status(interface)
+        SystemPreferencesApp.log("wifi: status \(WifiWords.statusLine(network.wifi!))")
+        window?.setNeedsDisplay()
+    }
+
+    private func pressWifi(_ hit: WifiHit) {
+        guard var w = network.wifi else { return }
+        switch hit {
+        case .scan:
+            SystemPreferencesApp.log("wifi: scan \(w.device)")
+            switch SettingsClient.scanWifi(device: w.device, interface: w.interface) {
+            case .success(let nets):
+                w.scanned = nets
+                w.note = nets.isEmpty ? "No networks in range." : ""
+                SystemPreferencesApp.log("wifi: scanned " + (nets.isEmpty ? "none" :
+                    nets.enumerated().map { "\($0.offset)=\($0.element.ssid)" }.joined(separator: ";")))
+            case .failure(let why):
+                w.note = "Could not scan: \(why.message)"
+                SystemPreferencesApp.log("wifi: \(w.note)")
+            }
+        case .network(let ssid):
+            w.chosen = ssid
+            w.passphrase = ""
+            w.fieldFocused = w.chosenNetwork?.secured ?? false
+            SystemPreferencesApp.log("wifi: chose \(ssid)")
+        case .field:
+            w.fieldFocused = true
+        case .join:
+            network.wifi = w
+            joinWifi()
+            return
+        case .forget(let ssid):
+            network.wifi = w
+            applyWifi(.forget(ssid: ssid), what: "forget \(ssid)")
+            return
+        }
+        network.wifi = w
+        window?.setNeedsDisplay()
+    }
+
+    private func wifiKey(_ event: KeyEvent) {
+        guard var w = network.wifi, w.fieldFocused else { return }
+        switch event.keysym {
+        case KeySym.backspace: if !w.passphrase.isEmpty { w.passphrase.removeLast() }
+        case KeySym.enter: network.wifi = w; joinWifi(); return
+        default:
+            guard !event.modifiers.contains(.command), !event.modifiers.contains(.control),
+                  event.text.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7f }) else { return }
+            w.passphrase += event.text
+        }
+        network.wifi = w
+        // How many characters, never which.
+        SystemPreferencesApp.log("wifi: password \(w.passphrase.count) characters")
+        window?.setNeedsDisplay()
+    }
+
+    private func joinWifi() {
+        guard var w = network.wifi, let n = w.chosenNetwork else { return }
+        var psk: String?
+        if n.secured {
+            // The key, here: the passphrase goes no further than this process.
+            guard let k = WifiKey.psk(passphrase: w.passphrase, ssid: n.ssid) else {
+                w.note = "A WPA password is 8 to 63 characters."
+                network.wifi = w
+                SystemPreferencesApp.log("wifi: \(w.note)")
+                window?.setNeedsDisplay()
+                return
+            }
+            psk = k
+        }
+        w.passphrase = ""                      // not kept once it is a key
+        network.wifi = w
+        applyWifi(.join(ssid: n.ssid, psk: psk), what: "join \(n.ssid)" + (n.secured ? " (secured)" : " (open)"))
+    }
+
+    private func applyWifi(_ action: WifiAction, what: String) {
+        guard wifiApplying == nil, let w = network.wifi else { return }
+        var m = Msg()
+        m.set("method", "apply")
+        SettingsWire.encode(.wifi(WifiPlan(device: w.device, interface: w.interface, action: action)), into: &m)
+        SystemPreferencesApp.log("wifi: apply \(what)")
+        guard let sock = SettingsClient.begin(m) else {
+            network.wifi?.note = "Not changed: the settings helper is not running on this machine"
+            SystemPreferencesApp.log("wifi: \(network.wifi!.note)")
+            window?.setNeedsDisplay()
+            return
+        }
+        wifiApplying = sock
+        skipped = []
+        network.wifi?.busy = true
+        display.addFileDescriptor(sock) { [weak self] in self?.wifiEvent() }
+        window?.setNeedsDisplay()
+    }
+
+    private func wifiEvent() {
+        guard let sock = wifiApplying else { return }
+        let e = SettingsClient.next(on: sock) ?? .finished(ok: false, error: "the settings helper hung up")
+        switch e {
+        case .starting(let i, let n, let what): SystemPreferencesApp.log("wifi: [\(i + 1)/\(n)] \(what)")
+        case .ok: return
+        case .skipped(_, let why): skipped.append(why); SystemPreferencesApp.log("wifi: skipped: \(why)")
+        case .failed(_, _, let why, let ignored):
+            SystemPreferencesApp.log("wifi: \(ignored ? "failed, and that is allowed" : "FAILED"): \(why)")
+        case .finished(let ok, let error):
+            display.removeFileDescriptor(sock)
+            close(sock)
+            wifiApplying = nil
+            network.wifi?.busy = false
+            let said = NetworkWords.outcome(ok: ok, error: error, skipped: skipped)
+            SystemPreferencesApp.log("wifi: \(ok ? "applied" : "not applied") — \(said)")
+            loadWifi()
+            network.wifi?.note = ok ? (said == "Applied." ? "Applied. Joining takes a moment." : said) : said
         }
         window?.setNeedsDisplay()
     }
@@ -981,8 +1135,14 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private func pressNetwork(_ hit: NetworkHit) {
         guard network.form != nil else { return }
         switch hit {
+        case .interface(let name) where name.hasPrefix("wifi:"):
+            let device = String(name.dropFirst(5))
+            guard network.wifi?.device != device else { return }
+            network.wifi = WifiPaneState(device: device)
+            loadWifi()
         case .interface(let name):
-            guard name != network.form?.interface else { return }
+            guard name != network.form?.interface || network.wifi != nil else { return }
+            network.wifi = nil
             loadNetwork(interface: name)
         case .mode(let dhcp):
             network.form!.setDHCP(dhcp)
@@ -1000,6 +1160,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     }
 
     private func networkKey(_ event: KeyEvent) {
+        if network.wifi != nil { wifiKey(event); return }
         guard network.form != nil else { return }
         switch event.keysym {
         case KeySym.tab where event.modifiers.contains(.shift), KeySym.backTab: network.form!.moveFocus(-1)
@@ -1105,6 +1266,17 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         }
         if model.view == .pane(PrefsModel.soundPane), let hit = soundHit(layout.sound, x: pointerX, y: pointerY) {
             pressSound(hit)
+            return
+        }
+        if model.view == .pane(PrefsModel.networkPane), network.wifi != nil {
+            // The Wi-Fi page: the "Show:" row still switches, the rest is Wi-Fi's.
+            if let r = layout.network.interfaces.first(where: { $0.hit.contains(pointerX, pointerY) }) {
+                pressNetwork(.interface(r.value)); return
+            }
+            if let w = network.wifi, let hit = wifiHit(layout.network.wifi, w, x: pointerX, y: pointerY) {
+                pressWifi(hit); return
+            }
+            if network.wifi?.fieldFocused == true { network.wifi?.fieldFocused = false; window?.setNeedsDisplay() }
             return
         }
         if model.view == .pane(PrefsModel.networkPane),

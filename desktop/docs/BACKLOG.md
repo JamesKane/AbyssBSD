@@ -35,7 +35,7 @@ or more.
 | ~~P14.6~~ | ✅ **2026-09-28. Sound** — §4.3 answered (per-app volume read-only now, `virtual_oss` in Phase 18); `Vents.Sound`, the default device via the helper (`sysctl.conf`), the Sound pane, a real menu-bar volume item (HANDOFF §2.78; `live-sound-pane.sh`, `live-menubar-volume.sh`) | M | | done, both platforms; a *different* default device waits for metal |
 | ~~P14.7~~ | ✅ **2026-09-28. Displays** — re-scoped M→L (undertow drove one output): multi-output undertow (EDF `Conductor`), `wlr-output-management-v1` + `displays.ini` (`abyss-displays`; wlr-randr in the guest), the pane (drag, snap, resolution, scale) — `live-displays*.sh` (HANDOFF §2.79) | L | | done, both platforms; display-off and mirroring not offered |
 | ~~P14.8~~ | ✅ **2026-09-28. Energy** — `energy.ini` (`EnergyPrefs`, for Phase 16), Energy Saver pane (sleep sliders, powerd via the helper, battery), `live-energy-pane.sh` | S | | done, both platforms; the battery row waits for metal |
-| P14.5 | **Network, Wi-Fi** — last in the phase because it waits on the `wtap` spike and on §4.1's question | M | | harness if `wtap` associates, else metal (§3) |
+| ~~P14.5~~ | ✅ **2026-09-28. Network, Wi-Fi** — `wtap` backported to the guest (upstream d4de0a69a92) with three panic fixes; join/forget through the helper by rc's own path; the passphrase never leaves the pane; Wi-Fi on the Network pane (HANDOFF §2.80; `live-wifi*.sh`) | M | | done: the join verified in the harness |
 | P14.9 | **The phase gate** — both `--live` lanes and `--full` | S | | |
 
 ---

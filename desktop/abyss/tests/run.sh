@@ -262,6 +262,10 @@ if [ "$live" -eq 1 ]; then
   # real rc.conf and wpa_supplicant.conf, backed up and restored.
   echo "== Wi-Fi, joined =="
   sh "$root/abyss/tests/live-wifi.sh" >/dev/null
+  # And on the Network pane (P14.5c): scan, choose, type, join, forget — and
+  # the passphrase in nothing anyone wrote down.
+  echo "== Wi-Fi on the Network pane =="
+  sh "$root/abyss/tests/live-wifi-pane.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

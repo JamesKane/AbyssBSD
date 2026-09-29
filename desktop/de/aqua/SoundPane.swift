@@ -266,6 +266,33 @@ public enum SettingsClient {
         return nil
     }
 
+    /// A radio's wlan and the networks wpa_supplicant.conf holds.
+    public static func readWifi(_ device: String) -> Result<WifiKnown, SettingsRefusal> {
+        var request = Msg()
+        request.set("method", "read")
+        request.set("kind", "wifi")
+        request.set("wifi.device", device)
+        guard let reply = try? Current.call(service, request) else {
+            return .failure(SettingsRefusal("the settings helper is not running on this machine"))
+        }
+        guard reply.bool("ok") == true else { return .failure(SettingsRefusal(reply.string("error") ?? "refused")) }
+        return .success(SettingsWire.decodeKnown(reply))
+    }
+
+    /// Scan from a radio, as root. Synchronous: a scan takes a second or two,
+    /// and the page has nothing to show until it is done.
+    public static func scanWifi(device: String, interface: String) -> Result<[WifiNetwork], SettingsRefusal> {
+        var request = Msg()
+        request.set("method", "scan")
+        request.set("wifi.device", device)
+        request.set("wifi.interface", interface)
+        guard let reply = try? Current.call(service, request) else {
+            return .failure(SettingsRefusal("the settings helper is not running on this machine"))
+        }
+        guard reply.bool("ok") == true else { return .failure(SettingsRefusal(reply.string("error") ?? "refused")) }
+        return .success(SettingsWire.decodeScan(reply))
+    }
+
     /// Make `unit` the default output, as a request.
     public static func soundRequest(defaultUnit unit: Int) -> Msg {
         var m = Msg()
