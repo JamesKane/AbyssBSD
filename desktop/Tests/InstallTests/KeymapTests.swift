@@ -94,3 +94,19 @@ final class KeymapTests: XCTestCase {
         }
     }
 }
+
+/// BACKLOG T.1: a layout is shown by its name, not its file.
+final class KeymapNameTests: XCTestCase {
+    func testEveryOfferedLayoutHasANameAndNoTwoShareOne() {
+        let names = Keymaps.offered.map(\.name)
+        XCTAssertFalse(names.contains(""), "an offered layout with no name would show as a file")
+        XCTAssertEqual(Set(names).count, names.count)
+        XCTAssertEqual(Keymaps.displayName(forKbdmap: "us.dvorak.kbd"), "Dvorak")
+        XCTAssertEqual(Keymaps.displayName(forKbdmap: "uk.kbd"), "British")
+    }
+
+    func testAKeymapTheInstallerDoesNotOfferIsShownByItsFile() {
+        XCTAssertEqual(Keymaps.displayName(forKbdmap: "de.acc.kbd"), "de.acc.kbd",
+                       "a guessed name could be wrong; the file is at least the truth")
+    }
+}

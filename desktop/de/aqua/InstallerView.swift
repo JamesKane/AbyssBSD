@@ -217,7 +217,7 @@ private func paintListSpoke(_ cr: OpaquePointer, l: InstallerLayout,
         var detail = ""
         var refused = false
         switch s {
-        case .keyboard: label = installerKeymaps[i]
+        case .keyboard: label = installerKeymapNames[i]
         case .timezone: label = installerTimezones[i]
         case .disk:
             let d = model.installableDisks[i]

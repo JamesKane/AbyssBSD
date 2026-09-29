@@ -51,8 +51,9 @@ The items below are the context for it.
    (2026-09-29): our cursors as the XCursor theme "Abyss", named by the
    session (`live-xcursor.sh`; §2.88). **P10.8 is done** (2026-09-29):
    submenus open, a GTK app's and kcalc's (`live-submenus.sh`; §2.89). Left
-   in §2: T.1–T.3. **P10.9 is done** (2026-09-29): the bar follows a GTK or
-   Qt app's menus changing while it is frontmost (§2.90). The phase's history, pass by pass:
+   in §2: T.2 and T.3. **P10.9 is done** (2026-09-29): the bar follows a GTK
+   or Qt app's menus changing while it is frontmost (§2.90). **T.1 is done**
+   (2026-09-29): the installer names layouts ("Dvorak", not `us.dvorak.kbd`). The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn

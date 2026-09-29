@@ -142,7 +142,9 @@ public struct InstallerModel: Sendable {
     public func status(_ spoke: Spoke) -> String {
         switch spoke {
         case .keyboard:
-            return keymap.isEmpty ? "US (default)" : keymap
+            // The layout's name, not its file (T.1).
+            return keymap.isEmpty ? Keymaps.displayName(forKbdmap: "us.kbd") + " (default)"
+                                  : Keymaps.displayName(forKbdmap: keymap)
         case .disk:
             guard !disk.isEmpty else {
                 if !inventoryError.isEmpty { return inventoryError }
@@ -452,6 +454,8 @@ public struct InstallerModel: Sendable {
 /// takes. The list is `Install.Keymaps.offered`, which also carries each one's
 /// XKB layout, so the desktop types what the console types (HANDOFF §2.70).
 public let installerKeymaps = Keymaps.offered.map(\.kbdmap)
+/// What each is called on the Keyboard page, in the same order (T.1).
+public let installerKeymapNames = Keymaps.offered.map(\.name)
 
 /// Likewise for time zones — the common ones, plus UTC.
 public let installerTimezones = [

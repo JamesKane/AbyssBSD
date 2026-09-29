@@ -251,7 +251,7 @@ final class InstallerTests: XCTestCase {
         // leaving the rows blank.
         let m = ready()
         XCTAssertTrue(m.canInstall, "an unvisited keyboard spoke blocked the install")
-        XCTAssertEqual(m.status(.keyboard), "US (default)")
+        XCTAssertEqual(m.status(.keyboard), "U.S. (default)")
         XCTAssertEqual(m.status(.timezone), "UTC (default)")
         XCTAssertTrue(m.complete(.keyboard))
         XCTAssertTrue(m.complete(.timezone))
@@ -513,5 +513,17 @@ final class InstallerTests: XCTestCase {
         // reason rather than inventing one of its own.
         m.inventoryError = "disk discovery needs FreeBSD's geom(8)"
         XCTAssertEqual(m.status(.disk), "disk discovery needs FreeBSD's geom(8)")
+    }
+
+    /// T.1: the hub and the Keyboard page say the layout's name; rc.conf
+    /// still gets the file.
+    func testTheKeyboardSpokeSaysTheLayoutsNameNotItsFile() {
+        var m = ready()
+        XCTAssertEqual(m.status(.keyboard), "U.S. (default)")
+        m.enter(.keyboard); m.selection = 6; m.chooseSelection()
+        XCTAssertEqual(m.keymap, "us.dvorak.kbd", "the plan keeps the file")
+        XCTAssertEqual(m.status(.keyboard), "Dvorak")
+        XCTAssertEqual(installerKeymapNames.count, installerKeymaps.count)
+        XCTAssertEqual(installerKeymapNames[1], "British")
     }
 }

@@ -20,11 +20,16 @@ public struct Keymap: Equatable, Sendable {
     /// XKB's layout and variant (`us`, `dvorak`); an empty variant is the default.
     public let layout: String
     public let variant: String
+    /// What a person reads (BACKLOG T.1): Jaguar's name for the layout — "U.S.",
+    /// "British", "Dvorak" — not the file (`us.dvorak.kbd`). Empty for a keymap
+    /// the installer does not offer, which is shown by its file name.
+    public let name: String
 
-    public init(kbdmap: String, layout: String, variant: String = "") {
+    public init(kbdmap: String, layout: String, variant: String = "", name: String = "") {
         self.kbdmap = kbdmap
         self.layout = layout
         self.variant = variant
+        self.name = name
     }
 }
 
@@ -34,15 +39,22 @@ public enum Keymaps {
     /// ships**: the list once offered `dvorak.kbd` and `colemak.kbd`, which do
     /// not exist, so choosing either wrote a console keymap that could not load.
     public static let offered: [Keymap] = [
-        Keymap(kbdmap: "us.kbd", layout: "us"),
-        Keymap(kbdmap: "uk.kbd", layout: "gb"),
-        Keymap(kbdmap: "de.kbd", layout: "de"),
-        Keymap(kbdmap: "fr.kbd", layout: "fr"),
-        Keymap(kbdmap: "es.kbd", layout: "es"),
-        Keymap(kbdmap: "it.kbd", layout: "it"),
-        Keymap(kbdmap: "us.dvorak.kbd", layout: "us", variant: "dvorak"),
-        Keymap(kbdmap: "colemak.acc.kbd", layout: "us", variant: "colemak"),
+        Keymap(kbdmap: "us.kbd", layout: "us", name: "U.S."),
+        Keymap(kbdmap: "uk.kbd", layout: "gb", name: "British"),
+        Keymap(kbdmap: "de.kbd", layout: "de", name: "German"),
+        Keymap(kbdmap: "fr.kbd", layout: "fr", name: "French"),
+        Keymap(kbdmap: "es.kbd", layout: "es", name: "Spanish"),
+        Keymap(kbdmap: "it.kbd", layout: "it", name: "Italian"),
+        Keymap(kbdmap: "us.dvorak.kbd", layout: "us", variant: "dvorak", name: "Dvorak"),
+        Keymap(kbdmap: "colemak.acc.kbd", layout: "us", variant: "colemak", name: "Colemak"),
     ]
+
+    /// What to call a `kbdmap` on screen: its name when the installer offers
+    /// it, and otherwise the file — a keymap somebody chose by hand is still
+    /// theirs to recognise, and a guessed name could be wrong.
+    public static func displayName(forKbdmap file: String) -> String {
+        offered.first(where: { $0.kbdmap == file }).map(\.name) ?? file
+    }
 
     /// The XKB layout for a `kbdmap` name.
     ///
