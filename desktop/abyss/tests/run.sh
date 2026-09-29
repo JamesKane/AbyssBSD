@@ -281,6 +281,11 @@ if [ "$live" -eq 1 ]; then
   # destination, a buffer transform, fractional-scale drawn pixel for pixel.
   echo "== a buffer, cropped, turned and scaled =="
   quiet "$root/abyss/tests/live-viewport.sh"
+  # Idle (U.9): the displays sleep after energy.ini's delay and wake on input,
+  # an idle inhibitor on a visible window holds them, ext-idle-notify agrees;
+  # and the primary selection pastes into the next window focused.
+  echo "== idle, and the primary selection =="
+  quiet "$root/abyss/tests/live-idle.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="

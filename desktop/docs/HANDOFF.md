@@ -43,8 +43,10 @@ The items below are the context for it.
    (`live-lock.sh`; §2.83). **U.7 is done** (2026-09-29): the pointer is the
    theme's (18 Jaguar cursors as draw lists), the frame's or the client's
    (`live-cursor.sh`; §2.84). **U.8 is done** (2026-09-29): buffers are
-   cropped, turned and told their scale (`live-viewport.sh`; §2.85). Next in
-   BACKLOG §2 is U.9. The phase's history, pass by pass:
+   cropped, turned and told their scale (`live-viewport.sh`; §2.85). **U.9 is
+   done** (2026-09-29): the displays sleep and wake, an idle inhibitor holds
+   them, and the primary selection pastes (`live-idle.sh`; §2.86). Next in
+   BACKLOG §2 is U.3b (explicit sync), or U.7b, P10.8 and T.1–T.3. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -708,6 +710,56 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.86 Display sleep is the compositor's, and "idle" means one thing
+(U.9. The Energy pane had written `display_sleep_minutes` since P14.8, and
+nothing read it.)
+
+**Idle-inhibit needs something that goes idle.** Nothing in undertow did,
+and PHASE14 had left idle to Phase 16. The user chose to have undertow sleep
+the displays itself: it is the one process that sees every input and owns
+every output. `DisplaySleep` works like this:
+- it reads energy.ini's minutes, re-read once a second, or `--display-sleep
+  SECONDS` for a test;
+- after that long without input, every output is committed disabled (on
+  metal that is DPMS: the CRTC off, the monitor in standby), and `submit`
+  draws nothing;
+- the first key, motion, button or wheel turns them back on, and is delivered
+  as usual;
+- while asleep, every client gets the 1 Hz frame clock a minimised window
+  gets (U.2). None of them needs 60 Hz, but a FIFO client blocked on its
+  callback must still be let go.
+The decision itself is `IdleClock`, which is pure and unit-tested. While
+inhibited the clock is held, so the full timeout runs from when the
+inhibitor ends, not from the last input.
+
+**An inhibitor counts only while its surface can be seen:** part of a mapped,
+unminimised window or of a mapped layer surface. A minimised video player
+must not keep the displays on.
+
+**ext-idle-notify-v1 is fed the same activity and the same inhibition**
+(`wlr_idle_notifier_v1_notify_activity` and `set_inhibited`). So when Phase 16
+sleeps the computer, it uses the displays' notion of idle, not a second one.
+`live-idle.sh` asserts that an inhibitor also stops the `idled` event.
+
+The primary selection works like the clipboard (§2.58: a global with nothing behind it): the global
+alone does nothing until `request_set_primary_selection` is answered with
+`wlr_seat_set_primary_selection`. wlroots checks the serial and hands the
+selection to each client when it gets keyboard focus.
+
+Traps:
+- **A test client must not ask for a keyboard the seat does not have**
+  (`wl_seat.get_keyboard` with no keyboard capability is a protocol error).
+  Follow the capabilities event.
+- **The Energy pane's note had to change** ("Nothing sleeps on its own yet"
+  was now false), which moved the `sysprefs-energy` golden on both platforms.
+  The first rewrite overflowed its group box; the golden is where that shows.
+- **Unbounded runs now sleep after 10 minutes without input** (energy.ini's
+  default). No test's idle stretch is that long (live-desktop's whole run is
+  about 7 minutes). A future long, input-free test should pass
+  `--display-sleep 0` or write energy.ini.
+- The conductor still latches the scene while asleep; only the output's
+  draw and commit stop. Cheap, but not free.
 
 ### 2.85 A surface's size was right; which part of its buffer to draw was not
 (U.8. Viewporter, buffer transforms and fractional scale.)

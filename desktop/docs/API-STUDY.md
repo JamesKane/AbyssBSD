@@ -132,8 +132,8 @@ Wayland clients); a reader's own count agreed within ±1 for 11 of 19 and within
 | cursor-shape-v1 | 10 | **yes** (U.7) | clients drew their own cursor, and ours was a rectangle | done, with the theme's cursors |
 | viewporter | 10 | **yes** (U.8) | video and scaled surfaces were wrong; the scene now crops (and turns) | done |
 | fractional-scale-v1 | 12 | **yes** (U.8) | clients guessed their scale | done, with wl_surface v6 preferred_buffer_scale |
-| primary-selection | 8 | no | middle-click paste | P1, cheap |
-| idle-inhibit | 7 | no | video players cannot stop the screen blanking (Phase 16) | P1, cheap |
+| primary-selection | 8 | **yes** (U.9) | there was no middle-click paste | done |
+| idle-inhibit | 7 | **yes** (U.9) | video players could not stop the screen blanking — undertow now sleeps the displays itself, and offers ext-idle-notify-v1 too | done |
 | xdg-output | 7 | no | mostly covered by `wl_output` v4 | P2 |
 | pointer-gestures, tablet-v2 | 9, 9 | no | no pinch or pen | P2 |
 | xdg-toplevel-icon | 8 | no | the Dock guesses icons | P2 |

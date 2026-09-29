@@ -1,9 +1,9 @@
 // EnergyPrefs — when the display and the computer sleep, per user
 // (PHASE14 P14.8).
 //
-// Written by System Preferences' Energy Saver pane; read by Phase 16's idle
-// and suspend, which do the sleeping. Until then these are a person's stated
-// wishes and nothing acts on them — and the pane says so. Kept here, in the
+// Written by System Preferences' Energy Saver pane. The display's delay is
+// read by undertow, which sleeps the displays (U.9, DisplaySleep); the
+// computer's waits for Phase 16's suspend — and the pane says so. Kept here, in the
 // config pool, because both the toolkit and the compositor-side session will
 // read it and neither should depend on the other.
 //

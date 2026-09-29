@@ -1038,6 +1038,10 @@ public final class Compositor {
 
     /// The seat, once one exists — set by `Seat.init`.
     weak var seat: Seat?
+    /// Display sleep, its inhibitors and idle-notify (U.9). Made by the run
+    /// loop, which owns the outputs it switches.
+    public var displaySleep: DisplaySleep?
+    private var asleepFrameAt: UInt64 = 0
 
     func forgetPopup(_ p: PopupSurface) {
         p.teardown()
@@ -1118,6 +1122,18 @@ public final class Compositor {
     public func sendFrameDone() {
         var now = timespec()
         clock_gettime(CLOCK_MONOTONIC, &now)
+        let nowNs = UInt64(now.tv_sec) &* 1_000_000_000 &+ UInt64(now.tv_nsec)
+        // **Displays asleep (U.9): everyone gets the slow clock.** Nothing is
+        // shown, so nothing needs the display's rate — but a FIFO client
+        // blocked on its callback must still be let go now and then (U.2).
+        if displaySleep?.asleep == true {
+            guard nowNs &- asleepFrameAt >= Compositor.hiddenFramePeriodNs else { return }
+            asleepFrameAt = nowNs
+            for t in toplevels where t.mapped { Compositor.frameDone(tree: t.surface, &now) }
+            for l in mappedLayers { Compositor.frameDone(tree: l.surface, &now) }
+            for p in mappedPopups { Compositor.frameDone(tree: p.surface, &now) }
+            return
+        }
         for t in mappedToplevels { Compositor.frameDone(tree: t.surface, &now) }
         // **A window nobody can see keeps a clock, a slow one** (U.2). It used
         // to get none: `mappedToplevels` leaves minimized windows out, so their
@@ -1125,7 +1141,6 @@ public final class Compositor {
         // (Mesa's default: SDL, Blender, zed) blocks inside its swap until the
         // callback comes, which was never. Once a second is enough to keep it
         // alive and cheap enough to cost nothing (API-STUDY §1.4, F-102/F-209).
-        let nowNs = UInt64(now.tv_sec) &* 1_000_000_000 &+ UInt64(now.tv_nsec)
         for t in toplevels where t.mapped && t.minimized && wlr_surface_has_buffer(t.surface) {
             guard nowNs &- t.hiddenFrameAt >= Compositor.hiddenFramePeriodNs else { continue }
             t.hiddenFrameAt = nowNs

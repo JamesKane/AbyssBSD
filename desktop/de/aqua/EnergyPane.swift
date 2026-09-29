@@ -3,9 +3,10 @@
 // Deliberately thin, as PHASE14 says. Three things:
 //
 //   - **Sleep delays** for the computer and the display: the user's, written
-//     to energy.ini (`EnergyPrefs`) as the slider is let go. Nothing sleeps
-//     yet — idle and suspend are Phase 16's — and the page says so, rather
-//     than drawing sliders that look like they do something today.
+//     to energy.ini (`EnergyPrefs`) as the slider is let go. The display's
+//     is undertow's to act on, and does (U.9: DisplaySleep); the computer's
+//     waits for Phase 16's suspend — and the page says so, rather than
+//     drawing a slider that looks like it does something today.
 //   - **powerd**: whether the processor's speed follows the work, and how on
 //     AC and on battery. rc.conf's, so through the settings helper (the
 //     `energy` plan, P14.3 — the first plan the helper ever had).
@@ -178,7 +179,7 @@ public func paintEnergyPane(_ cr: OpaquePointer, _ l: EnergyLayout, _ s: EnergyP
     }
     slider(l.computer, "Put the computer to sleep when it is inactive for:", s.prefs.systemSleepMinutes)
     slider(l.display, "Put the display to sleep when the computer is inactive for:", s.prefs.displaySleepMinutes)
-    Draw.text(cr, "Nothing sleeps on its own yet: these are kept for when it does.  "
+    Draw.text(cr, "The display sleeps as set; the computer does not yet.  "
               + EnergyWords.sleepStates(s.sleepStates),
               centerX: l.sleepBox.x + l.sleepBox.w / 2, centerY: l.sleepBox.y + l.sleepBox.h - 12,
               color: Theme.secondaryText, size: 11)

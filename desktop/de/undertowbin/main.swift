@@ -43,6 +43,7 @@ func usage() -> Never {
                                     [--assert-layers N] [--assert-usable X,Y,WxH]
                                     [--assert-missed N] [--config-dir DIR] [--verbose]
                                     [--socket NAME] [--privileged-socket NAME]
+                                    [--display-sleep SECONDS]  (else energy.ini's minutes)
     """)
     exit(2)
 }
@@ -68,6 +69,7 @@ var assertSurfaces: Int? = nil
 var assertLayers: Int? = nil
 var assertUsable: String? = nil
 var configDir: String? = nil
+var displaySleepSeconds: Double? = nil
 var socketName: String?
 var privilegedSocket: String?
 /// nil means headless (the default everywhere but metal).
@@ -124,6 +126,7 @@ while i < args.count {
     case "--assert-layers": assertLayers = Int(value("--assert-layers"))
     case "--assert-usable": assertUsable = value("--assert-usable")
     case "--config-dir": configDir = value("--config-dir")
+    case "--display-sleep": displaySleepSeconds = Double(value("--display-sleep"))
     case "--socket": socketName = value("--socket")
     case "--privileged-socket": privilegedSocket = value("--privileged-socket")
     case "--backend":
@@ -464,6 +467,14 @@ case "run":
     guard !outs.isEmpty else { die("no output") }
     defer { for sc in scenes { sc.release() } }
     let output = outs[0], scene = scenes[0]
+    // Display sleep (U.9): after energy.ini's minutes without input (or
+    // --display-sleep's seconds), every output off; the first input, on.
+    let sleep = DisplaySleep(compositor: compositor, overrideSeconds: displaySleepSeconds)
+    compositor.displaySleep = sleep
+    sleep.onChange = { asleep in
+        for o in outs { o.setAsleep(asleep) }
+        out(asleep ? "displays asleep" : "displays awake")
+    }
     var conductor = Conductor(outputs: outs, sinks: scenes)
     // A client rearranged the displays (P14.7b): each scene shows its new
     // rectangle, and an output with a new refresh rate is retuned.
@@ -540,6 +551,8 @@ case "run":
     var reportedTextInput = ""
     var reportedConstraints = ""
     var reportedCursor = ""
+    var reportedIdle = ""
+    var reportedPrimary = 0
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -594,6 +607,16 @@ case "run":
                 + "rasterised=\(seat.cursorImages.rasterisations)"
             if line != reportedCursor { reportedCursor = line; out(line) }
         }
+        // Display sleep and what holds it off (U.9).
+        do {
+            let line = "display-sleep \(sleep.asleep ? "asleep" : "awake") sleeps=\(sleep.sleeps) "
+                + "wakes=\(sleep.wakes) inhibited=\(sleep.inhibited ? "yes" : "no")"
+            if line != reportedIdle { reportedIdle = line; out(line) }
+        }
+        if seat.primarySelectionsAccepted != reportedPrimary {
+            reportedPrimary = seat.primarySelectionsAccepted
+            out("primary-selections-accepted=\(reportedPrimary)")
+        }
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted
             out("selections-accepted=\(reportedSelections)")
@@ -619,6 +642,8 @@ case "run":
         }
         // --frames counts the main display's frames; the others keep their own
         // pace in between.
+        // Before the frame: a display that has just gone to sleep is not drawn.
+        sleep.tick()
         if conductor.serveNext(recorders: recorders) { drawn += 1 }
         // Which outputs each surface is on (U.10): changes only, off the
         // present path.

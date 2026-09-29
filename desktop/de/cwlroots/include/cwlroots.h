@@ -80,6 +80,10 @@
 #include <wlr/types/wlr_input_method_v2.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
+#include <wlr/types/wlr_idle_inhibit_v1.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/box.h>

@@ -397,9 +397,26 @@ public final class WlrootsOutput: Output {
     public var width: Int32 { output.pointee.width }
     public var height: Int32 { output.pointee.height }
 
+    /// Off while the displays sleep (U.9). On metal that is the CRTC, and the
+    /// monitor goes to standby; nothing is drawn or committed until it wakes.
+    public private(set) var asleep = false
+
+    public func setAsleep(_ on: Bool) {
+        guard on != asleep else { return }
+        var state = wlr_output_state()
+        wlr_output_state_init(&state)
+        defer { wlr_output_state_finish(&state) }
+        wlr_output_state_set_enabled(&state, !on)
+        if !wlr_output_commit_state(output, &state) {
+            Compositor.log("\(name): could not turn \(on ? "off" : "on")")
+        }
+        asleep = on
+    }
+
     /// Render and commit a frame. Fire-and-forget: `wlr_output_commit_state`
     /// queues the flip, and `present` reports back later.
     public func submit(target: UInt64, at now: UInt64) {
+        guard !asleep else { return }
         var state = wlr_output_state()
         wlr_output_state_init(&state)
         defer { wlr_output_state_finish(&state) }

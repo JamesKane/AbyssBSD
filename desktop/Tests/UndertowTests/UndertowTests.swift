@@ -1137,3 +1137,38 @@ final class CursorFrameTests: XCTestCase {
         XCTAssertEqual(Seat.cursorName(for: .close), "default")
     }
 }
+
+/// BACKLOG U.9: when the displays sleep — pure, so tested without a clock.
+final class IdleClockTests: XCTestCase {
+    let s: UInt64 = 1_000_000_000
+
+    func testTheDisplaysSleepAfterTheTimeoutAndTheFirstInputWakesThem() {
+        var c = IdleClock(timeoutNs: 60 * s, now: 0)
+        XCTAssertNil(c.tick(at: 59 * s, inhibited: false))
+        XCTAssertEqual(c.tick(at: 60 * s, inhibited: false), .sleep)
+        XCTAssertNil(c.tick(at: 61 * s, inhibited: false), "asleep is said once")
+        XCTAssertEqual(c.activity(at: 70 * s), .wake)
+        XCTAssertNil(c.activity(at: 71 * s), "awake is said once")
+        XCTAssertNil(c.tick(at: 130 * s, inhibited: false), "the clock runs from the last input")
+        XCTAssertEqual(c.tick(at: 131 * s, inhibited: false), .sleep)
+    }
+
+    func testAnInhibitorHoldsTheClockAndItRunsInFullAfter() {
+        var c = IdleClock(timeoutNs: 60 * s, now: 0)
+        XCTAssertNil(c.tick(at: 100 * s, inhibited: true))
+        XCTAssertNil(c.tick(at: 159 * s, inhibited: false), "the full timeout from the inhibitor's end, not from the last input")
+        XCTAssertEqual(c.tick(at: 160 * s, inhibited: false), .sleep)
+    }
+
+    func testNeverMeansNever() {
+        var c = IdleClock(timeoutNs: 0, now: 0)
+        XCTAssertNil(c.tick(at: 1_000_000 * s, inhibited: false))
+    }
+
+    func testTheTimeoutIsEnergyInisMinutesUnlessARunGaveSeconds() {
+        XCTAssertEqual(IdleClock.timeoutNs(prefs: EnergyPrefs(displaySleepMinutes: 10), overrideSeconds: nil), 600 * s)
+        XCTAssertEqual(IdleClock.timeoutNs(prefs: EnergyPrefs(displaySleepMinutes: 0), overrideSeconds: nil), 0)
+        XCTAssertEqual(IdleClock.timeoutNs(prefs: EnergyPrefs(displaySleepMinutes: 10), overrideSeconds: 1.5), 1_500_000_000)
+        XCTAssertEqual(IdleClock.timeoutNs(prefs: EnergyPrefs(displaySleepMinutes: 10), overrideSeconds: 0), 0)
+    }
+}

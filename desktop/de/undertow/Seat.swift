@@ -131,6 +131,9 @@ public final class Seat {
     /// this one did until P9.1. A test that asserts on pasted *bytes* still
     /// cannot tell "nobody copied" from "the copy was dropped"; this can.
     public private(set) var selectionsAccepted = 0
+    /// The same for the primary selection (U.9): what is selected, pasted
+    /// with the middle button.
+    public private(set) var primarySelectionsAccepted = 0
     /// How many drags the compositor has started. The positive control for a
     /// drag test, for the same reason `selectionsAccepted` is one for a copy.
     public private(set) var dragsStarted = 0
@@ -197,6 +200,19 @@ public final class Seat {
             // it was never given.
             wlr_seat_set_selection(seat.seat, ev.pointee.source, ev.pointee.serial)
             seat.selectionsAccepted += 1
+        }, me))
+
+        // **The primary selection (U.9)**: X11's other clipboard — select
+        // text, middle-click to paste it — which every GTK and Qt application
+        // offers and Linux users reach for without thinking. The same rule as
+        // the clipboard: wlroots checks the serial, and we accept.
+        _ = wlr_primary_selection_v1_device_manager_create(compositor.session.display)
+        listeners.append(tw_listen(&s.pointee.events.request_set_primary_selection, { ctx, data in
+            guard let ctx, let data else { return }
+            let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(to: wlr_seat_request_set_primary_selection_event.self)
+            wlr_seat_set_primary_selection(seat.seat, ev.pointee.source, ev.pointee.serial)
+            seat.primarySelectionsAccepted += 1
         }, me))
 
         // **Drag and drop (P9.3), which is the selection with a grab on it.**
@@ -366,6 +382,7 @@ public final class Seat {
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_button_event.self)
+            s.compositor.displaySleep?.activity()
             s.button(e.pointee.button, state: e.pointee.state,
                      timeMsec: e.pointee.time_msec)
         }, me))
@@ -373,6 +390,7 @@ public final class Seat {
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_axis_event.self)
+            s.compositor.displaySleep?.activity()
             wlr_seat_pointer_notify_axis(s.seat, e.pointee.time_msec,
                                          e.pointee.orientation, e.pointee.delta,
                                          e.pointee.delta_discrete, e.pointee.source,
@@ -398,6 +416,7 @@ public final class Seat {
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_keyboard_key_event.self)
+            s.compositor.displaySleep?.activity()
             // **The desktop hears it first (P9.5).** Everything the compositor
             // owns — switching windows, closing one, taking a picture of the
             // screen — can only be decided here, because after this line the
@@ -692,9 +711,14 @@ public final class Seat {
         (cursorX, cursorY) = compositor.layout.clamp(cursorX, cursorY)
     }
 
+    /// wlroots' seat, for the protocols that take it (idle-notify, U.9).
+    var wlrSeat: UnsafeMutablePointer<wlr_seat> { seat }
+
     /// A motion, from any pointer: the delta goes to the client with the
     /// pointer, then a constraint decides where the pointer itself goes (U.6).
     private func motion(dx: Double, dy: Double, unaccelDX: Double, unaccelDY: Double, timeMsec: UInt32) {
+        // Any input is a person, and wakes sleeping displays (U.9).
+        compositor.displaySleep?.activity()
         guard let pc = pointerConstraints else {
             moveCursor(to: cursorX + dx, cursorY + dy, timeMsec: timeMsec)
             return
