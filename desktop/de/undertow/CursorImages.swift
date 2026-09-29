@@ -17,25 +17,15 @@ final class CursorTexture {
     let themeGeneration = Theme.generation
 
     init?(renderer: UnsafeMutablePointer<wlr_renderer>, name: String, scale: Double) {
-        let px = Int32((Cursor.size * scale).rounded(.up))
-        guard px > 0, let surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, px, px),
-              let cr = cairo_create(surface) else { return nil }
-        defer { cairo_destroy(cr); cairo_surface_destroy(surface) }
-        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE)
-        cairo_set_source_rgba(cr, 0, 0, 0, 0)
-        cairo_paint(cr)
-        cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
-        cairo_scale(cr, scale, scale)
-        let was = Text.renderScale
-        Text.renderScale = Int32(scale.rounded(.up))
-        defer { Text.renderScale = was }
-        Cursor.draw(name, cr, x: 0, y: 0)
-        cairo_surface_flush(surface)
-        guard let data = cairo_image_surface_get_data(surface) else { return nil }
+        // The one rasteriser (AquaDraw's Cursor.rasterise): the XCursor theme
+        // a toolkit loads (U.7b) is these same pixels.
+        guard let im = Cursor.rasterise(name, scale: scale) else { return nil }
         // DRM_FORMAT_ARGB8888: cairo's premultiplied ARGB32, as the frames are.
-        guard let tex = wlr_texture_from_pixels(renderer, UInt32(0x34325241),
-                                                UInt32(cairo_image_surface_get_stride(surface)),
-                                                UInt32(px), UInt32(px), data) else { return nil }
+        let tex = im.pixels.withUnsafeBytes { p in
+            wlr_texture_from_pixels(renderer, UInt32(0x34325241), UInt32(im.size * 4),
+                                    UInt32(im.size), UInt32(im.size), p.baseAddress)
+        }
+        guard let tex else { return nil }
         texture = tex
         (hotX, hotY) = Cursor.hotspot(name)
     }

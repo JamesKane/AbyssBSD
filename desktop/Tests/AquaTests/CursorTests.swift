@@ -58,3 +58,40 @@ final class CursorTests: XCTestCase {
         cairo_destroy(cr); cairo_surface_destroy(s)
     }
 }
+
+/// BACKLOG U.7b: the XCursor file libXcursor and libwayland-cursor read.
+final class XCursorFileTests: XCTestCase {
+    override func tearDown() { Theme.use(.jaguar) }
+
+    private func u32(_ b: [UInt8], _ at: Int) -> UInt32 {
+        UInt32(b[at]) | UInt32(b[at + 1]) << 8 | UInt32(b[at + 2]) << 16 | UInt32(b[at + 3]) << 24
+    }
+
+    func testTheFileIsLibXcursorsFormatOneImagePerSize() throws {
+        Theme.use(.jaguar)
+        let images = XCursorTheme.sizes.compactMap { Cursor.rasterise("default", scale: Double($0) / 24) }
+        XCTAssertEqual(images.map(\.size), [24, 32, 48, 64])
+        let b = XCursorTheme.encode(images)
+        XCTAssertEqual(Array(b[0..<4]), Array("Xcur".utf8))
+        XCTAssertEqual(u32(b, 4), 16)
+        XCTAssertEqual(u32(b, 8), 0x10000)
+        XCTAssertEqual(u32(b, 12), 4)
+        // The second table entry points at the 32-point image, whose chunk
+        // header says so, with the arrow's hotspot scaled (5,3 × 4/3).
+        XCTAssertEqual(u32(b, 16 + 12 + 4), 32)
+        let at = Int(u32(b, 16 + 12 + 8))
+        XCTAssertEqual(u32(b, at), 36)
+        XCTAssertEqual(u32(b, at + 4), 0xfffd0002)
+        XCTAssertEqual(u32(b, at + 16), 32)
+        XCTAssertEqual(u32(b, at + 20), 32)
+        XCTAssertEqual(u32(b, at + 24), 7)
+        XCTAssertEqual(u32(b, at + 28), 4)
+        XCTAssertEqual(b.count, 16 + 12 * 4 + (36 * 4) + 4 * (24 * 24 + 32 * 32 + 48 * 48 + 64 * 64))
+    }
+
+    func testEveryX11NameIsADrawnShapesName() {
+        for (x, css) in XCursorTheme.x11Names {
+            XCTAssertTrue(Cursor.shapeNames.contains(css), "\(x) → \(css) is not a cursor-shape name")
+        }
+    }
+}

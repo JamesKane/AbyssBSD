@@ -14,6 +14,9 @@
 //
 //     s <n>    a cursor-shape-v1 shape, by its enum value (1 default, 9 text…)
 //     c        a surface of its own: 16x16, red, its hotspot at 3,4
+//     x <name> the XCursor theme's <name>, loaded as GTK 3 and SDL load it
+//              (libwayland-cursor: $XCURSOR_THEME, $XCURSOR_SIZE or 24,
+//              from $XCURSOR_PATH); prints `xcursor <name> <w>x<h> hot <x>,<y>`
 //     h        no cursor at all
 //     q        quit
 //
@@ -34,6 +37,7 @@
 #include "xdg-shell-client-protocol.h"
 #include "cursor-shape-proto.h"
 #include "xdg-decoration-proto.h"
+#include <wayland-cursor.h>
 
 #define W 400
 #define H 300
@@ -54,7 +58,9 @@ static struct wl_buffer *buffer, *cursor_buffer;
 static int ready;
 static uint32_t enter_serial;
 static int has_pointer;
-static char mode = 0;        /* 's', 'c', 'h', or 0: never set */
+static char mode = 0;        /* 's', 'c', 'h', 'x', or 0: never set */
+static struct wl_cursor_theme *xtheme;
+static struct wl_cursor_image *ximage;
 static int mode_shape;
 
 static void reg_global(void *d, struct wl_registry *r, uint32_t id, const char *iface, uint32_t v) {
@@ -108,6 +114,13 @@ static void apply(void) {
         break;
     case 'h':
         wl_pointer_set_cursor(pointer, enter_serial, NULL, 0, 0);
+        break;
+    case 'x':
+        if (!ximage) break;
+        wl_pointer_set_cursor(pointer, enter_serial, cursor_surface, (int32_t)ximage->hotspot_x, (int32_t)ximage->hotspot_y);
+        wl_surface_attach(cursor_surface, wl_cursor_image_get_buffer(ximage), 0, 0);
+        wl_surface_damage_buffer(cursor_surface, 0, 0, (int32_t)ximage->width, (int32_t)ximage->height);
+        wl_surface_commit(cursor_surface);
         break;
     }
 }
@@ -166,6 +179,16 @@ static void command(char *line) {
         break;
     case 'c': mode = 'c'; break;
     case 'h': mode = 'h'; break;
+    case 'x': {
+        const char *name = line + 2, *sz = getenv("XCURSOR_SIZE");
+        if (!xtheme) xtheme = wl_cursor_theme_load(getenv("XCURSOR_THEME"), sz ? atoi(sz) : 24, shm);
+        struct wl_cursor *c = xtheme ? wl_cursor_theme_get_cursor(xtheme, name) : NULL;
+        if (!c) { printf("xcursor %s missing\n", name); return; }
+        ximage = c->images[0];
+        printf("xcursor %s %ux%u hot %u,%u\n", name, ximage->width, ximage->height, ximage->hotspot_x, ximage->hotspot_y);
+        mode = 'x';
+        break;
+    }
     case 'q': exit(0);
     default: return;
     }

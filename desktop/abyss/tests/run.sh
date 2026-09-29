@@ -277,6 +277,10 @@ if [ "$live" -eq 1 ]; then
   # on the frame, a client's shape, surface or none — only with the pointer.
   echo "== the pointer's picture =="
   quiet "$root/abyss/tests/live-cursor.sh"
+  # Our cursors as an XCursor theme (U.7b): written, loaded by
+  # libwayland-cursor, the same pixels as undertow's, named by the session.
+  echo "== our cursors, as an XCursor theme =="
+  quiet "$root/abyss/tests/live-xcursor.sh"
   # A buffer cropped, turned and scaled (U.8): viewporter's source crop and
   # destination, a buffer transform, fractional-scale drawn pixel for pixel.
   echo "== a buffer, cropped, turned and scaled =="

@@ -235,3 +235,32 @@ public func defaultSession(shellBinary: String,
 
     return SessionPlan(components: components, busAddress: busAddress, notes: notes)
 }
+
+// MARK: - The pointer, for the toolkits that draw their own (U.7b)
+
+/// The XCursor theme the session writes and names.
+public let sessionCursorTheme = "Abyss"
+
+/// What every process in the session is told about cursors: the theme
+/// `abyss-theme cursors` wrote into `<runtimeDir>/icons`, its size, and a
+/// search path that finds it first. GTK 3, SDL and X clients read these
+/// (libwayland-cursor, libXcursor); without them they draw Adwaita's arrow
+/// over our windows.
+///
+/// **A person's own choice stands**: an `XCURSOR_THEME` or `XCURSOR_SIZE`
+/// already in the environment is kept — the variables are theirs before they
+/// are ours. The path is always extended, ours first, so that choosing
+/// "Abyss" by hand also works.
+public func cursorEnvironment(runtimeDir: String, environment: [String: String]) -> [String: String] {
+    var out: [String: String] = [:]
+    if (environment["XCURSOR_THEME"] ?? "").isEmpty { out["XCURSOR_THEME"] = sessionCursorTheme }
+    if (environment["XCURSOR_SIZE"] ?? "").isEmpty { out["XCURSOR_SIZE"] = "24" }
+    let home = environment["HOME"] ?? ""
+    // libXcursor's own default path, with /usr/local for FreeBSD's ports, as
+    // the tail — replacing it would hide every other theme.
+    let defaults = (home.isEmpty ? [] : ["\(home)/.local/share/icons", "\(home)/.icons"])
+        + ["/usr/local/share/icons", "/usr/share/icons", "/usr/share/pixmaps"]
+    let rest = (environment["XCURSOR_PATH"].flatMap { $0.isEmpty ? nil : $0 }) ?? defaults.joined(separator: ":")
+    out["XCURSOR_PATH"] = runtimeDir + "/icons:" + rest
+    return out
+}

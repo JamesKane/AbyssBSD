@@ -3,6 +3,10 @@
 //   abyss-theme palette       the palette the portal publishes (INI, stdout)
 //   abyss-theme check [NAME]  every scheme of a theme against the legibility
 //                             floor, in words (a theme author's tool)
+//   abyss-theme cursors DIR [NAME]
+//                             the theme's cursors as an XCursor theme, NAME
+//                             ("Abyss") in DIR — for the toolkits that draw
+//                             their own (GTK 3, SDL, X clients; U.7b)
 //   abyss-theme set NAME [SCHEME]
 //                             choose the desktop's theme: writes appearance.ini,
 //                             which every running process follows (P14.2) — the
@@ -53,6 +57,15 @@ case "check":
         } catch { bad = true; print("\(name) \(label): \(error)") }
     }
     exit(bad ? 1 : 0)
+case "cursors":
+    guard args.count == 2 || args.count == 3 else { err("usage: abyss-theme cursors DIR [NAME]"); exit(2) }
+    ThemeLoader.announce(ThemeLoader.loadCurrent())
+    let name = args.count == 3 ? args[2] : "Abyss"
+    guard let n = XCursorTheme.install(in: args[1], name: name) else {
+        err("abyss-theme: could not write the cursor theme \(name) in \(args[1])"); exit(1)
+    }
+    print("abyss-theme: wrote \(args[1])/\(name): \(n.files) cursors at sizes "
+          + XCursorTheme.sizes.map(String.init).joined(separator: ",") + ", \(n.links) X11 names linked")
 case "set":
     guard args.count == 2 || args.count == 3 else {
         err("usage: abyss-theme set NAME [SCHEME]"); exit(2)

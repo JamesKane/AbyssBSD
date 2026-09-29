@@ -133,6 +133,28 @@ if let dir = runtimeDir {
     setenv("ABYSS_RUNTIME_DIR", dir, 1)
 }
 
+// **Our cursors, for the toolkits that draw their own (U.7b).** Written into
+// the runtime directory now — from the theme as it is at login, beside this
+// binary's `abyss-theme` — and named in the environment before anything is
+// spawned, so every component and every application they launch inherits it.
+// Without abyss-theme (a partial install) the variables are still set: a
+// missing theme costs a toolkit its fallback cursor, not a crash.
+if let dir = try? Current.runtimeDir() {
+    let theme = (selfDirectory() ?? ".") + "/abyss-theme"
+    if access(theme, X_OK) == 0 {
+        let r = Spawn.run([theme, "cursors", dir + "/icons", sessionCursorTheme])
+        if r.exitCode != 0 {
+            let b = Array("anchor: could not write the cursor theme: \(String(decoding: r.stderr, as: UTF8.self))\n".utf8)
+            _ = b.withUnsafeBufferPointer { write(2, $0.baseAddress, b.count) }
+        }
+    }
+    var env: [String: String] = [:]
+    for k in ["XCURSOR_THEME", "XCURSOR_SIZE", "XCURSOR_PATH", "HOME"] {
+        if let v = getenv(k) { env[k] = String(cString: v) }
+    }
+    for (k, v) in cursorEnvironment(runtimeDir: dir, environment: env) { setenv(k, v, 1) }
+}
+
 // Resolve the shell binary once, here, so a child never has to search $PATH
 // after forking.
 let shellBinary: String = binary ?? {

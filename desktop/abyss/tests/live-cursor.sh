@@ -71,7 +71,7 @@ cc -I"$work" "$root/abyss/tests/vpointer.c" "$work/vpointer-proto.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$work/vpointer" || fail "could not build vpointer"
 cc -I"$work" -I"$root/de/cwayland/include" "$root/abyss/tests/cursortest.c" \
    "$root/de/cabyssprotocols/xdg-shell-protocol.c" "$work/cursor-shape-proto.c" "$work/tablet-proto.c" \
-   "$work/xdg-decoration-proto.c" $(pkg-config --cflags --libs wayland-client) -o "$work/cursortest" \
+   "$work/xdg-decoration-proto.c" $(pkg-config --cflags --libs wayland-client wayland-cursor) -o "$work/cursortest" \
    || fail "could not build cursortest"
 
 W=800; H=600

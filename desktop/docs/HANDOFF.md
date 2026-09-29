@@ -47,8 +47,9 @@ The items below are the context for it.
    done** (2026-09-29): the displays sleep and wake, an idle inhibitor holds
    them, and the primary selection pastes (`live-idle.sh`; §2.86). Next in
    BACKLOG §2 was U.3b: **done** (2026-09-29), explicit sync on every GPU
-   here, NVIDIA's included (`live-syncobj.sh`; §2.87). Left in §2: U.7b,
-   P10.8 and T.1–T.3. The phase's history, pass by pass:
+   here, NVIDIA's included (`live-syncobj.sh`; §2.87). **U.7b is done**
+   (2026-09-29): our cursors as the XCursor theme "Abyss", named by the
+   session (`live-xcursor.sh`; §2.88). Left in §2: P10.8 and T.1–T.3. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -713,6 +714,45 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.88 Our cursors as an XCursor theme, and who still needs one
+(U.7b.)
+
+A toolkit that draws its own cursor loads an XCursor theme through
+libwayland-cursor or libXcursor. It looks the theme up by `$XCURSOR_THEME`
+(size `$XCURSOR_SIZE`) along `$XCURSOR_PATH`, and without ours it would draw
+Adwaita's arrow over Jaguar's windows.
+- **`abyss-theme cursors DIR [NAME]`** writes the current theme's shapes as
+  one ("Abyss"): all 34 cursor-shape (CSS) names at 24, 32, 48 and 64 pixels,
+  and 44 X11 names (`left_ptr`, `xterm`, `hand2`, `watch`,
+  `bottom_right_corner`…) as links to them.
+- The format is libXcursor's: header, table of contents, and image chunks of
+  premultiplied ARGB with a hotspot each, all little-endian.
+- **The pixels come from `Cursor.rasterise`, which undertow's own cursor
+  texture now uses too.** `live-xcursor.sh` checks this end to end: a client
+  that sets `left_ptr` from the theme shows, in undertow's capture, exactly
+  undertow's own arrow, while one on Adwaita doesn't.
+- **anchor** writes the theme into `$ABYSS_RUNTIME_DIR/icons` at login, from
+  `abyss-theme` beside itself, and exports the three variables before
+  spawning anything, so every component and every application they launch
+  inherits them. **A person's own `XCURSOR_THEME` and `XCURSOR_SIZE` stand**
+  (`cursorEnvironment`, unit-tested). Only the path is always extended, ours
+  first. A theme changed mid-session reaches applications started after the
+  next login.
+
+**Who still reads it (found while testing):** GTK 3.24, in the guest and on
+Fedora, binds `wp_cursor_shape_manager_v1` and asks for shapes by name. So a
+GTK 3 app already got Jaguar's cursor from U.7, and GTK 4 and Qt 6.7+ do the
+same. The XCursor theme is for everything that still loads cursors itself:
+libwayland-cursor and libXcursor clients (the test's own client among them),
+older SDL and Qt 5, X clients once there is an Xwayland, and any cursor a
+toolkit asks for by a name cursor-shape doesn't have. The first experiment
+seemed to show GTK 3 setting no cursor at all. In fact the pointer sat in its
+client-side shadow, which takes no input, so GTK 3 never got an enter.
+
+A fault injection has to break the path under test. Changing the shared
+rasteriser changed both sides equally and passed; changing only the encoder
+failed, as it should.
+
 ### 2.87 Explicit sync: wait on the acquire point, arm the release point
 (U.3b. §2.73 left it out, because offering the global without honouring it
 would have been §2.58 again.)
@@ -864,8 +904,8 @@ name with its hotspot marked in red.
 Still open: a client's cursor surface is not told its outputs (U.10 covers
 window trees), so on a scale-2 display it draws at 1x; the wait disc doesn't
 spin; the hardware cursor plane is Phase 4's. Clients that draw their own
-cursor with libwayland-cursor (GTK 3, SDL) load an XCursor theme, not ours:
-BACKLOG U.7b.
+cursor with libwayland-cursor load an XCursor theme: ours since U.7b (§2.88),
+which also found that GTK 3.24 asks by shape and never needed it.
 
 ### 2.83 A pointer constraint has no region until its surface commits
 (U.6. The first lock never took effect.)

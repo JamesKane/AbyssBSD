@@ -336,3 +336,29 @@ final class AnchorTests: XCTestCase {
     }
 }
 
+
+/// BACKLOG U.7b: the session names our XCursor theme, and a person's own
+/// choice stands.
+final class CursorEnvironmentTests: XCTestCase {
+    func testTheSessionNamesAbyssAndPutsItsDirectoryFirst() {
+        let e = cursorEnvironment(runtimeDir: "/run/s", environment: ["HOME": "/home/p"])
+        XCTAssertEqual(e["XCURSOR_THEME"], "Abyss")
+        XCTAssertEqual(e["XCURSOR_SIZE"], "24")
+        XCTAssertEqual(e["XCURSOR_PATH"], "/run/s/icons:/home/p/.local/share/icons:/home/p/.icons:"
+                       + "/usr/local/share/icons:/usr/share/icons:/usr/share/pixmaps")
+    }
+
+    func testAPersonsOwnThemeAndSizeAreKeptAndTheirPathExtended() {
+        let e = cursorEnvironment(runtimeDir: "/run/s", environment: [
+            "XCURSOR_THEME": "Adwaita", "XCURSOR_SIZE": "48", "XCURSOR_PATH": "/opt/icons"])
+        XCTAssertNil(e["XCURSOR_THEME"], "theirs stands")
+        XCTAssertNil(e["XCURSOR_SIZE"], "theirs stands")
+        XCTAssertEqual(e["XCURSOR_PATH"], "/run/s/icons:/opt/icons")
+    }
+
+    func testAnEmptyVariableIsNotAChoice() {
+        let e = cursorEnvironment(runtimeDir: "/r", environment: ["XCURSOR_THEME": "", "XCURSOR_PATH": ""])
+        XCTAssertEqual(e["XCURSOR_THEME"], "Abyss")
+        XCTAssertEqual(e["XCURSOR_PATH"], "/r/icons:/usr/local/share/icons:/usr/share/icons:/usr/share/pixmaps")
+    }
+}
