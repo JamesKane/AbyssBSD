@@ -187,3 +187,4 @@ public enum DisplaysConfig {
         return DisplaySetting(name: name, modeWidth: w, modeHeight: h, refreshMilliHz: r, x: x, y: y, scale: scale)
     }
 }
+

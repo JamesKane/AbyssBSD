@@ -34,8 +34,9 @@ The items below are the context for it.
 1. **Phase 14, preferences that write, is COMPLETE (2026-09-29)**: both
    `--live` lanes and `--full` green (PHASE14 P14.9; HANDOFF §2.81 for what
    the gate found). **Next is BACKLOG §2**, what Phase 15's applications need
-   from the compositor. U.10 (`wl_surface.enter`) matters more now that
-   `undertow` has several outputs. The phase's history, pass by pass:
+   from the compositor. **U.10 is done** (2026-09-29): every surface is told
+   its outputs, and a window on a scale-2 display draws at 2x
+   (`live-surface-enter.sh`). The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -973,6 +974,10 @@ for each global, name the object a client receives — and for each object, the
 **Found while doing it, not fixed:** `undertow` never sends `wl_surface.enter`
 for an output, to any surface. A client never learns which output it is on,
 which is how GTK and others pick their scale. BACKLOG U.10.
+**Fixed in U.10 (2026-09-29):** `Compositor.updateSurfaceOutputs` sends enter and
+leave for every visible surface tree, each loop iteration. wlroots makes both
+no-ops when nothing changed, so only changes go out. A minimised window leaves
+every output.
 
 ### 2.70 A virtual keyboard is not a keyboard
 (2026-09-28. Found by reading, not running — the NeoDarwin API study review,

@@ -593,6 +593,9 @@ case "run":
         // --frames counts the main display's frames; the others keep their own
         // pace in between.
         if conductor.serveNext(recorders: recorders) { drawn += 1 }
+        // Which outputs each surface is on (U.10): changes only, off the
+        // present path.
+        compositor.updateSurfaceOutputs()
         // Release clients to draw the next frame, and push the events out.
         // Without this a client renders once and waits for ever.
         compositor.endFrame()

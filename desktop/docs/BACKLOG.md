@@ -54,7 +54,7 @@ means" (§1.5 there).
 | U.8 | **viewporter** (a source crop in our scene), then **fractional-scale-v1** | M | wrong video and scaled surfaces; guessed scale |
 | U.9 | **primary-selection, idle-inhibit** | S each | middle-click paste; a video cannot stop the screen blanking |
 | U.3b | **Explicit sync** (`linux-drm-syncobj-v1`): the scene waits on each buffer's acquire point and signals its release (HANDOFF §2.73) | M | only implicit sync today — fine for radeonsi/radv, not for NVIDIA's driver; and drm-kmod's syncobj support is unverified |
-| U.10 | **`wl_surface.enter`/`leave` for outputs** — `undertow` sends neither, to any surface (found in U.1, HANDOFF §2.71); with several outputs since P14.7 a window on a scale-2 display cannot know it | S | a client never learns its output, so cannot pick its scale; fractional-scale (U.8) assumes it |
+| ~~U.10~~ | ✅ **2026-09-29. `wl_surface.enter`/`leave`** — every visible surface tree is told the outputs its rectangle overlaps, each loop iteration, changes only; a window dragged onto a scale-2 display redraws at 2x and back (`live-surface-enter.sh`) | S | | done, both platforms |
 | P10.8 | **Submenus open.** They draw their ▸ and have never opened (PHASE10) | S–M | every real application's menus are one level deep |
 | T.1 | **The installer shows layout names**, not file names (`us.dvorak.kbd` → "Dvorak") | S | cosmetic; moves one golden |
 | T.2 | **The live installer applies the layout it was given** — today only the installed system gets it | S | typing an account password on a non-US keyboard, on the medium |

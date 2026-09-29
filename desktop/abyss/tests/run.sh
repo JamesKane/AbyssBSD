@@ -261,6 +261,10 @@ if [ "$live" -eq 1 ]; then
   # And the pane (P14.7c): dragged, scaled, and following the compositor.
   echo "== the Displays pane =="
   quiet "$root/abyss/tests/live-displays-pane.sh"
+  # Which outputs a surface is on (U.10): a window dragged onto a scale-2
+  # display is told so, redraws at 2x, and returns to 1x when it leaves.
+  echo "== a surface's outputs =="
+  quiet "$root/abyss/tests/live-surface-enter.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="
