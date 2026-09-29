@@ -277,6 +277,10 @@ if [ "$live" -eq 1 ]; then
   # on the frame, a client's shape, surface or none — only with the pointer.
   echo "== the pointer's picture =="
   quiet "$root/abyss/tests/live-cursor.sh"
+  # A buffer cropped, turned and scaled (U.8): viewporter's source crop and
+  # destination, a buffer transform, fractional-scale drawn pixel for pixel.
+  echo "== a buffer, cropped, turned and scaled =="
+  quiet "$root/abyss/tests/live-viewport.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="

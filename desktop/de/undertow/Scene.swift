@@ -33,6 +33,13 @@ public final class SurfaceScene: FrameSink {
     /// The client surface each entry was drawn from — nil for the frames the
     /// compositor draws itself. What presentation-time is told was on screen.
     private let source: UnsafeMutableBufferPointer<UnsafeMutablePointer<wlr_surface>?>
+    /// The part of each texture drawn, in buffer pixels (U.8): a viewport's
+    /// source crop, else the whole buffer. An empty box means the whole
+    /// texture — the compositor's own frames.
+    private let crop: UnsafeMutableBufferPointer<wlr_fbox>
+    /// How each texture is turned to be drawn: the inverse of its buffer's
+    /// transform (a client that rendered rotated says so, and we undo it).
+    private let turn: UnsafeMutableBufferPointer<wl_output_transform>
 
     private unowned let compositor: Compositor
     /// The rectangle of the layout this scene shows — its output's (P14.7a).
@@ -62,6 +69,12 @@ public final class SurfaceScene: FrameSink {
             return UnsafeMutableBufferPointer(start: p, count: capacity)
         }
         x = ints(); y = ints(); w = ints(); h = ints()
+        let c = UnsafeMutablePointer<wlr_fbox>.allocate(capacity: capacity)
+        c.initialize(repeating: wlr_fbox(), count: capacity)
+        crop = UnsafeMutableBufferPointer(start: c, count: capacity)
+        let tr = UnsafeMutablePointer<wl_output_transform>.allocate(capacity: capacity)
+        tr.initialize(repeating: WL_OUTPUT_TRANSFORM_NORMAL, count: capacity)
+        turn = UnsafeMutableBufferPointer(start: tr, count: capacity)
     }
 
     /// The output moved, changed mode or scale (P14.7b applies these).
@@ -80,6 +93,10 @@ public final class SurfaceScene: FrameSink {
             b.baseAddress?.deinitialize(count: capacity)
             b.baseAddress?.deallocate()
         }
+        crop.baseAddress?.deinitialize(count: capacity)
+        crop.baseAddress?.deallocate()
+        turn.baseAddress?.deinitialize(count: capacity)
+        turn.baseAddress?.deallocate()
     }
 
     /// Latch the window list and compute what is visible.
@@ -113,6 +130,8 @@ public final class SurfaceScene: FrameSink {
                                              width: t.width, height: t.height)
                 texture[count] = frame
                 source[count] = nil                 // ours: nobody to tell
+                crop[count] = wlr_fbox()            // all of it, as drawn
+                turn[count] = WL_OUTPUT_TRANSFORM_NORMAL
                 x[count] = box.x; y[count] = box.y
                 w[count] = box.w; h[count] = box.h
                 count += 1
@@ -186,7 +205,15 @@ public final class SurfaceScene: FrameSink {
         texture[count] = tex
         source[count] = s
         x[count] = walkX &+ sx; y[count] = walkY &+ sy
+        // The size on screen is the surface's: wlroots has already applied
+        // the buffer scale, the transform and a viewport's destination.
         w[count] = s.pointee.current.width; h[count] = s.pointee.current.height
+        // **What part of the buffer (U.8).** A viewport may crop it — a video
+        // player showing a 16:9 picture out of a padded decoder buffer, or a
+        // client that rendered at 1.5x drawing into a 1x rectangle. Drawn
+        // whole, the crop's outside shows and everything inside is squeezed.
+        wlr_surface_get_buffer_source_box(s, crop.baseAddress! + count)
+        turn[count] = wlr_output_transform_invert(s.pointee.current.transform)
         count += 1
     }
 
@@ -245,6 +272,8 @@ public final class SurfaceScene: FrameSink {
             var opts = wlr_render_texture_options()
             opts.texture = tex
             opts.dst_box = box(x[i], y[i], w[i], h[i])
+            opts.src_box = crop[i]
+            opts.transform = turn[i]
             opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
             wlr_render_pass_add_texture(pass, &opts)
         }

@@ -13,14 +13,20 @@ extension Compositor {
     /// path — and sends only changes. A surface's rectangle decides: its
     /// subsurfaces are told what their root is.
     public func updateSurfaceOutputs() {
-        var outs: [(rect: Rect, output: UnsafeMutablePointer<wlr_output>)] = []
-        for d in layout.displays { if let o = session.output(named: d.name) { outs.append((d.rect, o)) } }
+        var outs: [(rect: Rect, output: UnsafeMutablePointer<wlr_output>, scale: Double)] = []
+        for d in layout.displays { if let o = session.output(named: d.name) { outs.append((d.rect, o, d.scale)) } }
         guard !outs.isEmpty else { return }
         func tell(_ root: UnsafeMutablePointer<wlr_surface>, _ r: Rect?) {
-            for (d, o) in outs {
+            // The scale a surface should draw at (U.8): the largest of the
+            // displays it is on — too sharp on the smaller is right; too soft
+            // on the larger is what the person sees. On none (minimised), the
+            // last it was told stands.
+            var best = 0.0
+            for (d, o, scale) in outs {
                 let on = r.map { r in
                     min(r.x + r.width, d.x + d.width) > max(r.x, d.x) && min(r.y + r.height, d.y + d.height) > max(r.y, d.y)
                 } ?? false
+                if on { best = max(best, scale) }
                 let job = SurfaceOutputJob(output: o, enter: on)
                 wlr_surface_for_each_surface(root, { s, _, _, data in
                     guard let s, let data else { return }
@@ -28,6 +34,18 @@ extension Compositor {
                     if j.enter { wlr_surface_send_enter(s, j.output) } else { wlr_surface_send_leave(s, j.output) }
                 }, Unmanaged.passUnretained(job).toOpaque())
             }
+            guard best > 0 else { return }
+            // Both ways a client can hear it: fractional-scale-v1's preferred
+            // scale, and wl_surface v6's integer preferred_buffer_scale (for
+            // the toolkits that know only that). wlroots sends each only when
+            // it changes.
+            let job = SurfaceScaleJob(best)
+            wlr_surface_for_each_surface(root, { s, _, _, data in
+                guard let s, let data else { return }
+                let j = Unmanaged<SurfaceScaleJob>.fromOpaque(data).takeUnretainedValue()
+                wlr_fractional_scale_v1_notify_scale(s, j.scale)
+                wlr_surface_set_preferred_buffer_scale(s, Int32(j.scale.rounded(.up)))
+            }, Unmanaged.passUnretained(job).toOpaque())
         }
         for t in toplevels where t.mapped {
             // Minimised: on no output — it is not shown anywhere.
@@ -49,4 +67,9 @@ private final class SurfaceOutputJob {
     let output: UnsafeMutablePointer<wlr_output>
     let enter: Bool
     init(output: UnsafeMutablePointer<wlr_output>, enter: Bool) { self.output = output; self.enter = enter }
+}
+
+private final class SurfaceScaleJob {
+    let scale: Double
+    init(_ scale: Double) { self.scale = scale }
 }

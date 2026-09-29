@@ -42,7 +42,9 @@ The items below are the context for it.
    pointer locks and confines, and every motion is also a delta
    (`live-lock.sh`; §2.83). **U.7 is done** (2026-09-29): the pointer is the
    theme's (18 Jaguar cursors as draw lists), the frame's or the client's
-   (`live-cursor.sh`; §2.84). Next in BACKLOG §2 is U.8. The phase's history, pass by pass:
+   (`live-cursor.sh`; §2.84). **U.8 is done** (2026-09-29): buffers are
+   cropped, turned and told their scale (`live-viewport.sh`; §2.85). Next in
+   BACKLOG §2 is U.9. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -706,6 +708,36 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.85 A surface's size was right; which part of its buffer to draw was not
+(U.8. Viewporter, buffer transforms and fractional scale.)
+
+wlroots does more of this than it seems. Its `current.width/height` already
+apply the buffer scale, the buffer transform and a viewport's destination, and
+input routing uses them. So a viewported surface was always the right *size*
+on screen. **What the scene got wrong was the source:** it drew the whole
+buffer, upright, into that rectangle. A crop showed the outside of the crop
+squeezed in, and a transformed buffer was squashed rather than turned. The
+scene now keeps a source box (`wlr_surface_get_buffer_source_box`) and a
+transform (the inverse of the buffer's, as `wlr_scene` does) per entry, in its
+preallocated arrays like everything else. The compositor's own frames draw
+their whole texture, upright.
+
+The scale a surface hears is the **largest** of the displays its rectangle
+overlaps. Too sharp on the smaller display is harmless; too soft on the larger
+is what a person sees. A minimised window keeps the last scale it was told.
+The scale is sent both ways: fractional-scale-v1 (n/120) and wl_surface v6
+`preferred_buffer_scale` (rounded up), for toolkits that know only integers.
+wlroots sends each only when it changes, which is why U.10's every-iteration
+loop can carry it; `live-viewport.sh` asserts each arrives exactly once.
+
+Two things caught the test itself out:
+- **The pointer now rests mid-display as a black arrow** (U.7), and a
+  centred window's middle is exactly there. Sample captures away from the
+  centre.
+- **undertow prints two kinds of `window <app-id>` line:** the box
+  (`X,Y WxH`) and the placement (`at X,Y`). Match the box's shape, not just
+  the app id.
 
 ### 2.84 The cursor is theme data, and whose it is depends on where it is
 (U.7. undertow drew a white 10x16 rectangle and ignored every client's cursor.)

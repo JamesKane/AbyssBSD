@@ -130,8 +130,8 @@ Wayland clients); a reader's own count agreed within ±1 for 11 of 19 and within
 | text-input-v3 + input-method-v2 | 9 | **yes** (U.5) | there was no input method, so no CJK | done |
 | relative-pointer, pointer-constraints | 9, 9 | **yes** (U.6) | games and Blender could not lock the pointer | done |
 | cursor-shape-v1 | 10 | **yes** (U.7) | clients drew their own cursor, and ours was a rectangle | done, with the theme's cursors |
-| viewporter | 10 | no | video and scaled surfaces are wrong; needs a source crop in our scene | P1 |
-| fractional-scale-v1 | 12 | no | guessed scale; moot at the metal box's scale 1, so after viewporter | P1 |
+| viewporter | 10 | **yes** (U.8) | video and scaled surfaces were wrong; the scene now crops (and turns) | done |
+| fractional-scale-v1 | 12 | **yes** (U.8) | clients guessed their scale | done, with wl_surface v6 preferred_buffer_scale |
 | primary-selection | 8 | no | middle-click paste | P1, cheap |
 | idle-inhibit | 7 | no | video players cannot stop the screen blanking (Phase 16) | P1, cheap |
 | xdg-output | 7 | no | mostly covered by `wl_output` v4 | P2 |

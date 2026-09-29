@@ -446,6 +446,14 @@ public final class Compositor {
         else { throw BackendError.noGlobals("wl_compositor") }
         _ = wlr_subcompositor_create(session.display)
         _ = wlr_data_device_manager_create(session.display)
+        // **viewporter and fractional-scale (U.8).** wlroots does the protocol
+        // and applies a viewport's destination to the surface's size; the
+        // source crop is the scene's to draw (SurfaceScene.addLeaf). A client
+        // told its display's fractional scale renders at it and says, through
+        // a viewport, how big that is in the layout: sharp at 1.5x, where one
+        // guessing 2x and scaled down is soft, and one guessing 1x is blurred.
+        _ = wlr_viewporter_create(session.display)
+        _ = wlr_fractional_scale_manager_v1_create(session.display, 1)
         // **wl_shm, without which no client can attach a buffer.**
         // `wlr_compositor_create` does not create it, and its absence looks like
         // "the compositor is not a compositor": our own `Display.init` requires
