@@ -74,6 +74,9 @@ public enum PointerRouting {
 /// The seat: pointer, keyboard, focus, and the routing between them.
 public final class Seat {
     private let seat: UnsafeMutablePointer<wlr_seat>
+    /// text-input-v3 and input-method-v2 (U.5): the relay between a field and
+    /// an input method. Nil only if wlroots could not make the globals.
+    public private(set) var textInput: TextInputRelay?
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
     /// Listeners that belong to **one input device**, keyed by that device.
@@ -123,6 +126,7 @@ public final class Seat {
         }
         seat = s
         compositor.seat = self
+        textInput = TextInputRelay(compositor: compositor, seat: s)
 
         let me = Unmanaged.passUnretained(self).toOpaque()
 
@@ -332,6 +336,10 @@ public final class Seat {
             if let kbd = wlr_seat_get_keyboard(s.seat), s.intercept(key: e, keyboard: kbd) {
                 return
             }
+            // An input method holding the keyboard composes with it (U.5).
+            if let kbd = wlr_seat_get_keyboard(s.seat), s.textInput?.routeKey(e, keyboard: kbd) == true {
+                return
+            }
             wlr_seat_keyboard_notify_key(s.seat, e.pointee.time_msec,
                                          e.pointee.keycode, UInt32(e.pointee.state.rawValue))
         }, me))
@@ -339,6 +347,7 @@ public final class Seat {
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let kbd = data.assumingMemoryBound(to: wlr_keyboard.self)
+            if s.textInput?.routeModifiers(kbd) == true { return }
             wlr_seat_keyboard_notify_modifiers(s.seat, &kbd.pointee.modifiers)
         }, me))
         group.append(tw_listen(&keyboard.pointee.base.events.destroy, { ctx, data in

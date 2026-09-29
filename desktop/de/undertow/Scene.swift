@@ -126,6 +126,11 @@ public final class SurfaceScene: FrameSink {
             guard let o = p.origin else { continue }
             addTree(p.surface, at: o.x, o.y)
         }
+        // An input method's candidates over everything, below the text
+        // cursor of the field being composed into (U.5).
+        if let ti = compositor.seat?.textInput {
+            for p in ti.mappedPopups { addTree(p.surface, at: p.x, p.y) }
+        }
 
         var painted: Int32 = 0
         var area: Int64 = 0

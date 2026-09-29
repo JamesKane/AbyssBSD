@@ -36,7 +36,9 @@ The items below are the context for it.
    the gate found). **Next is BACKLOG §2**, what Phase 15's applications need
    from the compositor. **U.10 is done** (2026-09-29): every surface is told
    its outputs, and a window on a scale-2 display draws at 2x
-   (`live-surface-enter.sh`). The phase's history, pass by pass:
+   (`live-surface-enter.sh`). **U.5 is done** (2026-09-29): text-input-v3 and
+   input-method-v2 are relayed, so an input method composes into another
+   toolkit's field (`live-ime.sh`; §2.82). Next in BACKLOG §2 is U.6. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -700,6 +702,36 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.82 wlroots 0.19 asserts that you let go of its destroy signal
+(U.5. undertow aborted when an input method released its keyboard grab.)
+
+wlroots 0.19 destroys an object with `wl_signal_emit_mutable(&x->events.destroy)`
+**then asserts `wl_list_empty(&x->events.destroy.listener_list)`**:
+`wlr_input_method_keyboard_grab_v2_destroy` aborts if any listener is still
+attached. Earlier wlroots didn't check, and our older destroy handlers only
+cleared *our* pointer to the object. **A destroy handler must remove its own
+listener** (`tw_listener_free`, which does `wl_list_remove`). Removing it during
+the emit is safe; that is what `_mutable` is for. Check the other handlers
+whenever a new wlroots object gets a destroy listener.
+
+Two more things the same pass found:
+
+- **A GTK app makes no text input for a seat without a keyboard.** Headless
+  undertow has none until a virtual keyboard attaches, so `live-ime.sh` binds
+  `vkeyboard` *before* it starts zenity. Otherwise the IM is never activated,
+  and nothing says why.
+- **An aborted compositor looked like a quiet test.** The script's next write
+  to a FIFO whose reader was dead killed the shell with SIGPIPE, and there was
+  no FAIL line. `live-ime.sh` now does `trap '' PIPE` and checks, after each
+  step that can kill undertow, that it is still `alive`, naming the assertion.
+  Fault-injected: with the listener left attached, the test FAILs with the
+  wlroots assertion's text.
+
+The IM's own virtual keyboard is excluded from the grab: a key from a virtual
+keyboard whose client is the input method's goes to the application
+(`TextInputRelay.fromMethod`). Otherwise the keys the method types would loop
+back to it.
 
 ### 2.81 A test's cleanup can fail it after "all green"
 (P14.9. The phase gate stopped at "== drag and drop ==", and said nothing.)

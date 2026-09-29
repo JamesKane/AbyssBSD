@@ -127,7 +127,7 @@ Wayland clients); a reader's own count agreed within ±1 for 11 of 19 and within
 | xdg-activation-v1 | 11 | yes | — | done |
 | xdg-decoration | 10 | yes (server-side) | — | done |
 | presentation-time | 3 | **yes** (U.4) | toolkits estimated present times (F-101) | done |
-| text-input-v3 + input-method-v2 | 9 | no | no input method, so no CJK | P1 |
+| text-input-v3 + input-method-v2 | 9 | **yes** (U.5) | there was no input method, so no CJK | done |
 | relative-pointer, pointer-constraints | 9, 9 | no | games and Blender cannot lock the pointer | P1 |
 | cursor-shape-v1 | 10 | no | clients draw their own cursor; ours is a rectangle (`Seat.swift:16`) | P1, with the cursor theme |
 | viewporter | 10 | no | video and scaled surfaces are wrong; needs a source crop in our scene | P1 |

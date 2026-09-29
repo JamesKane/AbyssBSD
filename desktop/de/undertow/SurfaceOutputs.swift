@@ -38,6 +38,10 @@ extension Compositor {
             guard let o = p.origin else { continue }
             tell(p.surface, Rect(x: o.x, y: o.y, width: p.width, height: p.height))
         }
+        for p in seat?.textInput?.mappedPopups ?? [] {
+            tell(p.surface, Rect(x: p.x, y: p.y, width: p.surface.pointee.current.width,
+                                 height: p.surface.pointee.current.height))
+        }
     }
 }
 

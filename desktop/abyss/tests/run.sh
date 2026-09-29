@@ -265,6 +265,10 @@ if [ "$live" -eq 1 ]; then
   # display is told so, redraws at 2x, and returns to 1x when it leaves.
   echo "== a surface's outputs =="
   quiet "$root/abyss/tests/live-surface-enter.sh"
+  # An input method (U.5): text-input-v3 and input-method-v2 relayed, so an
+  # IME composes 日本語 into another toolkit's field (zenity's GTK entry).
+  echo "== an input method =="
+  quiet "$root/abyss/tests/live-ime.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="

@@ -48,7 +48,7 @@ means" (§1.5 there).
 
 | # | Item | Size | Missing means |
 |---|---|---|---|
-| U.5 | **text-input-v3 + input-method-v2** | L | no input method, so no CJK |
+| ~~U.5~~ | ✅ **2026-09-29. text-input-v3 + input-method-v2**: undertow relays a field's state to the input method and the IM's preedit and commits back, and its keyboard grab takes keys from the application while held. An IM composes 日本語 into zenity's GTK entry (`live-ime.sh`) | L | | done, both platforms |
 | U.6 | **pointer-constraints + relative-pointer** | M | games and Blender cannot lock the pointer |
 | U.7 | **cursor-shape-v1**, with a real cursor theme (today a rectangle) | M | every client draws its own cursor |
 | U.8 | **viewporter** (a source crop in our scene), then **fractional-scale-v1** | M | wrong video and scaled surfaces; guessed scale |

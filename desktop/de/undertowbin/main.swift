@@ -537,6 +537,7 @@ case "run":
     // **The stacking order, as it changes** (P11.6): the depth gadget's only
     // effect is where a window sits in it, and nothing else says.
     var reportedStack = ""
+    var reportedTextInput = ""
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -566,6 +567,12 @@ case "run":
         if stack != reportedStack {
             reportedStack = stack
             out("stack=\(stack)")        // bottom to top
+        }
+        // The text-input relay's counts (U.5): events, never text.
+        if let ti = seat.textInput {
+            let line = "text-input enters=\(ti.enters) activations=\(ti.activations) "
+                + "commits-relayed=\(ti.commitsRelayed) keys-grabbed=\(ti.keysGrabbed)"
+            if line != reportedTextInput { reportedTextInput = line; out(line) }
         }
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted
