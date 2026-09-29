@@ -40,7 +40,9 @@ The items below are the context for it.
    input-method-v2 are relayed, so an input method composes into another
    toolkit's field (`live-ime.sh`; §2.82). **U.6 is done** (2026-09-29): the
    pointer locks and confines, and every motion is also a delta
-   (`live-lock.sh`; §2.83). Next in BACKLOG §2 is U.7. The phase's history, pass by pass:
+   (`live-lock.sh`; §2.83). **U.7 is done** (2026-09-29): the pointer is the
+   theme's (18 Jaguar cursors as draw lists), the frame's or the client's
+   (`live-cursor.sh`; §2.84). Next in BACKLOG §2 is U.8. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -704,6 +706,42 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.84 The cursor is theme data, and whose it is depends on where it is
+(U.7. undertow drew a white 10x16 rectangle and ignored every client's cursor.)
+
+**The pictures** are draw lists, `cursor.<name>` in `themes/aqua/icons/cursors.dl`
+(compiled into JaguarLists, so every theme falls back to them). The names are
+cursor-shape-v1's, which are CSS's. A list says where its hotspot is in its
+header, `list cursor.text hotspot w/2 h/2`. That is the only non-drawing thing a
+list can say, and it lives there so a theme that draws its arrow differently
+also says where its tip is. The lists work in a 24-unit grid (`scale w/24
+w/24`) inside a `cursor.size` cell. `Cursor.resolve` maps the 34 names onto the
+18 drawn (each edge's arrow to its axis, and so on) and then to `default`.
+undertow rasterises each shape once per display scale and theme
+(`CursorImages`), as it does frames. The `cursors` golden sheet shows every
+name with its hotspot marked in red.
+
+**Whose picture it is:**
+- The client with the pointer may set a shape (cursor-shape-v1), a surface
+  (`wl_pointer.set_cursor`) or none. **The focus check is ours:** wlroots emits
+  the request from any client, and a background window must not change the
+  cursor over another. `live-cursor.sh` asks from off the window and expects
+  a refusal.
+- When pointer focus moves (`pointer_state.events.focus_change`), the picture
+  returns to the arrow. Otherwise a window that never sets a cursor inherits
+  the last one's.
+- Over the frame, the compositor chooses: sizing arrows on the bottom edge and
+  corners (the only edges that size, P9.4), the arrow on the title bar.
+- Over the desktop it is the arrow, set explicitly. `clear_focus` on an
+  already-empty focus emits nothing, so relying on `focus_change` alone left a
+  resize arrow on the desktop.
+
+Still open: a client's cursor surface is not told its outputs (U.10 covers
+window trees), so on a scale-2 display it draws at 1x; the wait disc doesn't
+spin; the hardware cursor plane is Phase 4's. Clients that draw their own
+cursor with libwayland-cursor (GTK 3, SDL) load an XCursor theme, not ours:
+BACKLOG U.7b.
 
 ### 2.83 A pointer constraint has no region until its surface commits
 (U.6. The first lock never took effect.)

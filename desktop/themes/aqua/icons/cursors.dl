@@ -1,0 +1,282 @@
+# Aqua — the pointer (BACKLOG U.7): Jaguar's arrow, I-beam, hands, sizing
+# arrows and the spinning wait disc, each a list `cursor.<name>` named as
+# cursor-shape-v1 (CSS) names them, drawn in a `cursor.size` square. Every list
+# works in a 24-unit grid (`scale w/24 w/24`), so the size is the theme's, and
+# its header says where the hotspot is. Names not drawn here fall back
+# (AquaDraw's Cursor.resolve): every edge's arrow to its axis, and so on.
+# Original drawings, not Apple's artwork.
+
+list cursor.default hotspot w*5/24 w*3/24
+  push
+  scale w/24 w/24
+  path 5 3 5 19.5 9 16 11.6 21.8 14.4 20.6 11.8 15 16.8 15 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  pop
+end
+
+list cursor.context-menu hotspot w*5/24 w*3/24
+  push
+  scale w/24 w/24
+  path 5 3 5 19.5 9 16 11.6 21.8 14.4 20.6 11.8 15 16.8 15 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  rect 12.5 12 9.5 10 1
+  fill #ffffff
+  stroke #000000 1
+  path 14 15 20.5 15
+  and path 14 17.5 20.5 17.5
+  and path 14 20 20.5 20
+  stroke #000000/0.6 1
+  pop
+end
+
+list cursor.help hotspot w*5/24 w*3/24
+  push
+  scale w/24 w/24
+  path 5 3 5 19.5 9 16 11.6 21.8 14.4 20.6 11.8 15 16.8 15 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  circle 17.5 17.5 5
+  fill #3a78d8
+  stroke #ffffff 1
+  text "?" 17.5 17.5 center bold size=7.5 color=#ffffff
+  pop
+end
+
+list cursor.progress hotspot w*5/24 w*3/24
+  push
+  scale w/24 w/24
+  path 5 3 5 19.5 9 16 11.6 21.8 14.4 20.6 11.8 15 16.8 15 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  circle 17.5 17.5 4.8
+  shadow #000000/0.3 0.5 1 1.5
+  fill conic 17.5 17.5 4.8 stops 0 #e8453c 0.2 #f2b33d 0.4 #7cc444 0.6 #3a9ee4 0.8 #9a55d6 1 #e8453c
+  stroke #000000/0.45 0.8
+  ellipse 14.524000000000001 13.564 5.952 4.32
+  fill vertical stops 0 #ffffff/0.7 1 #ffffff/0.05
+  pop
+end
+
+list cursor.wait hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  circle 12 12 9
+  shadow #000000/0.3 0.5 1 1.5
+  fill conic 12 12 9 stops 0 #e8453c 0.2 #f2b33d 0.4 #7cc444 0.6 #3a9ee4 0.8 #9a55d6 1 #e8453c
+  stroke #000000/0.45 1
+  ellipse 6.42 4.62 11.16 8.1
+  fill vertical stops 0 #ffffff/0.7 1 #ffffff/0.05
+  pop
+end
+
+list cursor.pointer hotspot w*9.8/24 w*2.5/24
+  push
+  scale w/24 w/24
+  rect 6.5 13 14.5 8.5 3.5
+  shadow #000000/0.35 0.6 1.2 1.5
+  rect 3.2 12.2 6.5 3.2 3.25
+  fill #ffffff
+  stroke #000000 1
+  rect 8 2 3.6 13 1.8
+  fill #ffffff
+  stroke #000000 1
+  rect 11.6 8 3.4 8 1.7
+  fill #ffffff
+  stroke #000000 1
+  rect 15 9 3.2 7.5 1.6
+  fill #ffffff
+  stroke #000000 1
+  rect 18.2 10.5 2.8 6.5 1.4
+  fill #ffffff
+  stroke #000000 1
+  rect 6.5 13 14.5 8.5 3.5
+  fill #ffffff
+  stroke #000000 1
+  pop
+end
+
+list cursor.grab hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  rect 6 12 13.5 9.5 4
+  shadow #000000/0.35 0.6 1.2 1.5
+  rect 2.2 11.5 6.5 3.2 3.25
+  fill #ffffff
+  stroke #000000 1
+  rect 6.2 5 3.3 10 1.65
+  fill #ffffff
+  stroke #000000 1
+  rect 9.6 3 3.3 12 1.65
+  fill #ffffff
+  stroke #000000 1
+  rect 13 3.5 3.3 11.5 1.65
+  fill #ffffff
+  stroke #000000 1
+  rect 16.4 5.5 3.1 9.5 1.55
+  fill #ffffff
+  stroke #000000 1
+  rect 6 12 13.5 9.5 4
+  fill #ffffff
+  stroke #000000 1
+  pop
+end
+
+list cursor.grabbing hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  rect 6.5 10.5 13.5 9.5 4
+  shadow #000000/0.35 0.6 1.2 1.5
+  rect 4.5 12 5 3.2 2.5
+  fill #ffffff
+  stroke #000000 1
+  rect 7 8.5 3.4 5 1.7
+  fill #ffffff
+  stroke #000000 1
+  rect 10.4 8 3.4 5 1.7
+  fill #ffffff
+  stroke #000000 1
+  rect 13.8 8 3.4 5 1.7
+  fill #ffffff
+  stroke #000000 1
+  rect 17.2 8.5 3.2 5 1.6
+  fill #ffffff
+  stroke #000000 1
+  rect 6.5 10.5 13.5 9.5 4
+  fill #ffffff
+  stroke #000000 1
+  pop
+end
+
+list cursor.text hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  path 9 3.5 11 3.5 12 4.5 13 3.5 15 3.5
+  and path 12 4.5 12 19.5
+  and path 9 20.5 11 20.5 12 19.5 13 20.5 15 20.5
+  and path 10 12 14 12
+  stroke #ffffff 3 round
+  stroke #000000 1.2
+  pop
+end
+
+list cursor.crosshair hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  path 12 3 12 21
+  and path 3 12 21 12
+  stroke #ffffff 3 round
+  stroke #000000 1.2
+  pop
+end
+
+list cursor.alias hotspot w*5/24 w*3/24
+  push
+  scale w/24 w/24
+  path 5 3 5 19.5 9 16 11.6 21.8 14.4 20.6 11.8 15 16.8 15 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  rect 12.5 13 9 8.5 1.5
+  fill #ffffff
+  stroke #000000 1
+  path 15 19.5 curve 15 16.5 16.5 15.5 18.5 15.5
+  stroke #000000 1.2
+  path 18 13.5 20.5 15.5 18 17.5 close
+  fill #000000
+  pop
+end
+
+list cursor.copy hotspot w*5/24 w*3/24
+  push
+  scale w/24 w/24
+  path 5 3 5 19.5 9 16 11.6 21.8 14.4 20.6 11.8 15 16.8 15 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  circle 17 17 5
+  fill #3fae3f
+  stroke #ffffff 1
+  path 17 14.2 17 19.8
+  and path 14.2 17 19.8 17
+  stroke #ffffff 1.6
+  pop
+end
+
+list cursor.move hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  path 3 12 7 8 7 10.8 17 10.8 17 8 21 12 17 16 17 13.2 7 13.2 7 16 close
+  and path 12 3 16 7 13.2 7 13.2 17 16 17 12 21 8 17 10.8 17 10.8 7 8 7 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  pop
+end
+
+list cursor.not-allowed hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  circle 12 12 7.5
+  stroke #ffffff 4.5
+  stroke #d8261c 2.5
+  path 6.9 6.9 17.1 17.1
+  stroke #ffffff 4.5
+  stroke #d8261c 2.5
+  pop
+end
+
+list cursor.ew-resize hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  path 3 12 7 8 7 10.8 17 10.8 17 8 21 12 17 16 17 13.2 7 13.2 7 16 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  pop
+end
+
+list cursor.ns-resize hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  path 12 3 16 7 13.2 7 13.2 17 16 17 12 21 8 17 10.8 17 10.8 7 8 7 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  pop
+end
+
+list cursor.nwse-resize hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  push
+  move 12 12
+  rotate pi/4
+  move -12 -12
+  path 3 12 7 8 7 10.8 17 10.8 17 8 21 12 17 16 17 13.2 7 13.2 7 16 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  pop
+  pop
+end
+
+list cursor.nesw-resize hotspot w/2 w/2
+  push
+  scale w/24 w/24
+  push
+  move 12 12
+  rotate -pi/4
+  move -12 -12
+  path 3 12 7 8 7 10.8 17 10.8 17 8 21 12 17 16 17 13.2 7 13.2 7 16 close
+  shadow #000000/0.35 0.6 1.2 1.5
+  stroke #ffffff 2 round
+  fill #000000
+  pop
+  pop
+end

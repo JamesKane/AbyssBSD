@@ -1125,3 +1125,15 @@ func oneDisplay(_ session: WlrootsSession, _ w: Int32, _ h: Int32) -> DisplayLay
     let name = session.outputs.first.map { String(cString: $0.pointee.name) } ?? "HEADLESS-1"
     return DisplayLayout([DisplayBox(name: name, x: 0, y: 0, width: w, height: h)])
 }
+
+/// BACKLOG U.7: the frame's own edges show sizing arrows — the edges that size.
+final class CursorFrameTests: XCTestCase {
+    func testTheFramesSizingEdgesHaveTheirArrows() {
+        let b = UInt32(WLR_EDGE_BOTTOM.rawValue), l = UInt32(WLR_EDGE_LEFT.rawValue), r = UInt32(WLR_EDGE_RIGHT.rawValue)
+        XCTAssertEqual(Seat.cursorName(for: .resize(b)), "ns-resize")
+        XCTAssertEqual(Seat.cursorName(for: .resize(b | r)), "nwse-resize")
+        XCTAssertEqual(Seat.cursorName(for: .resize(b | l)), "nesw-resize")
+        XCTAssertEqual(Seat.cursorName(for: .title), "default")
+        XCTAssertEqual(Seat.cursorName(for: .close), "default")
+    }
+}

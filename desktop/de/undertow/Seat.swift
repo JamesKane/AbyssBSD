@@ -15,9 +15,12 @@
 //
 // **The cursor is compositor-drawn.** DESKTOP.md §3/§9 makes that a latency
 // argument — the pointer must not round-trip to a client — and it is also the
-// only way a headless capture can show where the pointer is. It is a plain
-// rectangle for now; a real cursor theme belongs with the hardware cursor plane
-// in Phase 4.
+// only way a headless capture can show where the pointer is. What it looks like
+// (U.7) is the client's to say while it has the pointer — a shape by name
+// (cursor-shape-v1), a surface of its own (wl_pointer.set_cursor), or none —
+// and the theme's otherwise: the arrow over the desktop, sizing arrows on a
+// frame's edges. Shapes are the theme's draw lists (`cursor.*`, CursorImages).
+// The hardware cursor plane is still Phase 4's.
 
 import AquaDraw
 import CWlroots
@@ -96,6 +99,24 @@ public final class Seat {
     public private(set) var cursorX: Double = 0
     public private(set) var cursorY: Double = 0
     public var cursorVisible = true
+
+    /// What the pointer looks like (U.7).
+    public enum CursorImage: Equatable {
+        /// A theme shape, by cursor-shape-v1's (CSS's) name.
+        case shape(String)
+        /// A surface the client with the pointer gave us.
+        case client
+        /// The client with the pointer asked for none.
+        case hidden
+    }
+    public private(set) var cursorImage: CursorImage = .shape("default")
+    private var cursorSurface: UnsafeMutablePointer<wlr_surface>?
+    private var cursorHotX: Int32 = 0, cursorHotY: Int32 = 0
+    private var cursorSurfaceListeners: [UnsafeMutablePointer<tw_listener>?] = []
+    public let cursorImages = CursorImages()
+    /// Cursor requests taken, and refused because the client asking did not
+    /// have the pointer — for the log a test reads.
+    public private(set) var cursorRequests = 0, cursorRefused = 0
 
     // The desktop is the compositor's layout (P14.7a): the pointer ranges over
     // every display, and never into the gaps between them.
@@ -224,6 +245,48 @@ public final class Seat {
             }, Unmanaged.passUnretained(seat).toOpaque())
         }, me))
 
+        // **The pointer's picture (U.7).** A client may set it only while it has
+        // the pointer — wlroots hands us who asked, and the check is ours: a
+        // window in the background must not change the cursor over another.
+        listeners.append(tw_listen(&s.pointee.events.request_set_cursor, { ctx, data in
+            guard let ctx, let data else { return }
+            let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(to: wlr_seat_pointer_request_set_cursor_event.self)
+            guard ev.pointee.seat_client == seat.seat.pointee.pointer_state.focused_client else {
+                seat.cursorRefused += 1
+                return
+            }
+            seat.cursorRequests += 1
+            if let surface = ev.pointee.surface {
+                seat.setCursor(surface: surface, hotX: ev.pointee.hotspot_x, hotY: ev.pointee.hotspot_y)
+            } else {
+                seat.setCursor(.hidden)
+            }
+        }, me))
+        if let shapes = wlr_cursor_shape_manager_v1_create(compositor.session.display, 1) {
+            listeners.append(tw_listen(&shapes.pointee.events.request_set_shape, { ctx, data in
+                guard let ctx, let data else { return }
+                let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+                let ev = data.assumingMemoryBound(to: wlr_cursor_shape_manager_v1_request_set_shape_event.self)
+                guard ev.pointee.device_type == WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_POINTER,
+                      ev.pointee.seat_client == seat.seat.pointee.pointer_state.focused_client,
+                      let name = wlr_cursor_shape_v1_name(ev.pointee.shape) else {
+                    seat.cursorRefused += 1
+                    return
+                }
+                seat.cursorRequests += 1
+                seat.setCursor(.shape(String(cString: name)))
+            }, me))
+        }
+        // The pointer went to another surface, or to none: the arrow, until
+        // whoever has it now says otherwise (a client sets its cursor on enter).
+        listeners.append(tw_listen(&s.pointee.pointer_state.events.focus_change, { ctx, data in
+            guard let ctx, let data else { return }
+            let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+            let ev = data.assumingMemoryBound(to: wlr_seat_pointer_focus_change_event.self)
+            if ev.pointee.old_surface != ev.pointee.new_surface { seat.setCursor(.shape("default")) }
+        }, me))
+
         guard let vk = wlr_virtual_keyboard_manager_v1_create(compositor.session.display)
         else { throw BackendError.noGlobals("zwp_virtual_keyboard_manager_v1") }
         listeners.append(tw_listen(&vk.pointee.events.new_virtual_keyboard, { ctx, data in
@@ -236,6 +299,7 @@ public final class Seat {
 
     deinit {
         for l in listeners { tw_listener_free(l) }
+        for l in cursorSurfaceListeners { tw_listener_free(l) }
         tw_listener_free(dragIconDestroy)
         for (_, group) in deviceListeners {
             for l in group { tw_listener_free(l) }
@@ -678,12 +742,17 @@ public final class Seat {
             // Off every surface: the pointer belongs to the desktop, and a client
             // that still thought it had the pointer must be told it does not.
             wlr_seat_pointer_clear_focus(seat)
+            setCursor(.shape("default"))
             return
         }
         // A frame has no client behind it: nobody is told the pointer is there,
-        // and whoever had it is told it left.
+        // and whoever had it is told it left. Its picture is ours: sizing
+        // arrows on the edges that size.
         guard let surface = hit.surface else {
             wlr_seat_pointer_clear_focus(seat)
+            if case .frame(let t, let fx, let fy) = hit {
+                setCursor(.shape(Seat.cursorName(for: frameHit(t, x: fx, y: fy))))
+            }
             return
         }
         let (rx, ry) = hit.local
@@ -696,6 +765,59 @@ public final class Seat {
         wlr_seat_pointer_notify_enter(seat, leaf, lx, ly)
         wlr_seat_pointer_notify_motion(seat, timeMsec, lx, ly)
         wlr_seat_pointer_notify_frame(seat)
+    }
+
+    /// The picture for a place on a window's frame.
+    static func cursorName(for hit: FrameHit) -> String {
+        guard case .resize(let edges) = hit else { return "default" }
+        let bottom = edges & UInt32(WLR_EDGE_BOTTOM.rawValue) != 0
+        let left = edges & UInt32(WLR_EDGE_LEFT.rawValue) != 0
+        let right = edges & UInt32(WLR_EDGE_RIGHT.rawValue) != 0
+        switch (bottom, left, right) {
+        case (true, true, _): return "nesw-resize"
+        case (true, _, true): return "nwse-resize"
+        case (true, _, _): return "ns-resize"
+        default: return "ew-resize"
+        }
+    }
+
+    /// A theme shape, or none.
+    private func setCursor(_ image: CursorImage) {
+        dropCursorSurface()
+        cursorImage = image
+    }
+
+    /// The client's own surface, its hotspot `hotX, hotY` in from its corner.
+    private func setCursor(surface: UnsafeMutablePointer<wlr_surface>, hotX: Int32, hotY: Int32) {
+        if surface != cursorSurface {
+            dropCursorSurface()
+            cursorSurface = surface
+            let me = Unmanaged.passUnretained(self).toOpaque()
+            // The surface may go before the pointer moves: the arrow then.
+            cursorSurfaceListeners.append(tw_listen(&surface.pointee.events.destroy, { ctx, _ in
+                guard let ctx else { return }
+                Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue().setCursor(.shape("default"))
+            }, me))
+            // An attach offset moves the hotspot the other way, as wlr_cursor has it.
+            cursorSurfaceListeners.append(tw_listen(&surface.pointee.events.commit, { ctx, _ in
+                guard let ctx else { return }
+                let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
+                guard let cs = s.cursorSurface else { return }
+                s.cursorHotX -= cs.pointee.current.dx
+                s.cursorHotY -= cs.pointee.current.dy
+            }, me))
+        }
+        cursorHotX = hotX
+        cursorHotY = hotY
+        cursorImage = .client
+    }
+
+    /// Off the client's surface's signals (§2.82: wlroots asserts they are
+    /// gone when it destroys the surface).
+    private func dropCursorSurface() {
+        for l in cursorSurfaceListeners { tw_listener_free(l) }
+        cursorSurfaceListeners = []
+        cursorSurface = nil
     }
 
     private func button(_ button: UInt32, state: wl_pointer_button_state,
@@ -979,10 +1101,32 @@ public final class Seat {
             wlr_render_pass_add_texture(pass, &opts)
         }
         guard cursorVisible else { return }
-        var opts = wlr_render_rect_options()
-        opts.box = scene.box(Int32(cursorX), Int32(cursorY), 10, 16)
-        opts.color = wlr_render_color(r: 1, g: 1, b: 1, a: 1)
-        opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
-        wlr_render_pass_add_rect(pass, &opts)
+        let cx = Int32(cursorX.rounded(.down)), cy = Int32(cursorY.rounded(.down))
+        switch cursorImage {
+        case .hidden:
+            return
+        case .client:
+            guard let cs = cursorSurface else { return }
+            // Its clock too: an animated cursor draws on frame callbacks.
+            var now = timespec()
+            clock_gettime(CLOCK_MONOTONIC, &now)
+            defer { wlr_surface_send_frame_done(cs, &now) }
+            guard let tex = wlr_surface_get_texture(cs) else { return }
+            var opts = wlr_render_texture_options()
+            opts.texture = tex
+            opts.dst_box = scene.box(cx - cursorHotX, cy - cursorHotY,
+                                     cs.pointee.current.width, cs.pointee.current.height)
+            opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
+            wlr_render_pass_add_texture(pass, &opts)
+        case .shape(let name):
+            guard let renderer = compositor.rendererForFrames,
+                  let img = cursorImages.image(name, scale: scene.scale, renderer: renderer) else { return }
+            let size = Int32(Cursor.size.rounded(.up))
+            var opts = wlr_render_texture_options()
+            opts.texture = img.texture
+            opts.dst_box = scene.box(cx - Int32(img.hotX.rounded()), cy - Int32(img.hotY.rounded()), size, size)
+            opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
+            wlr_render_pass_add_texture(pass, &opts)
+        }
     }
 }

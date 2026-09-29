@@ -95,6 +95,11 @@ if let out = envString("AQUA_RENDER_PNG") {
         print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
         exit(ok ? 0 : 1)
     }
+    if sceneName == "cursors" {
+        let ok = renderCursorSheetPNG(path: out, scale: max(1, scale))
+        print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
+        exit(ok ? 0 : 1)
+    }
     if sceneName == "menu" || sceneName == "frame" {
         let ok = sceneName == "menu" ? renderMenuPNG(path: out, scale: max(1, scale))
                                      : renderFramePNG(path: out, scale: max(1, scale))

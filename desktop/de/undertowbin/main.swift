@@ -539,6 +539,7 @@ case "run":
     var reportedStack = ""
     var reportedTextInput = ""
     var reportedConstraints = ""
+    var reportedCursor = ""
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -580,6 +581,18 @@ case "run":
             let line = "pointer-constraints locks=\(pc.locks) confines=\(pc.confines) "
                 + "held=\(pc.held) warps=\(pc.warps) active=\(pc.isActive ? "yes" : "none")"
             if line != reportedConstraints { reportedConstraints = line; out(line) }
+        }
+        // The pointer's picture (U.7): whose it is, and what it cost to draw.
+        do {
+            let image: String
+            switch seat.cursorImage {
+            case .shape(let n): image = "shape:\(n)"
+            case .client: image = "client"
+            case .hidden: image = "hidden"
+            }
+            let line = "cursor \(image) requests=\(seat.cursorRequests) refused=\(seat.cursorRefused) "
+                + "rasterised=\(seat.cursorImages.rasterisations)"
+            if line != reportedCursor { reportedCursor = line; out(line) }
         }
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted

@@ -273,6 +273,10 @@ if [ "$live" -eq 1 ]; then
   # that holds only for the focused window, its cursor hint, a confinement.
   echo "== the pointer, locked and confined =="
   quiet "$root/abyss/tests/live-lock.sh"
+  # The pointer's picture (U.7): the theme's arrow in a capture, sizing arrows
+  # on the frame, a client's shape, surface or none — only with the pointer.
+  echo "== the pointer's picture =="
+  quiet "$root/abyss/tests/live-cursor.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="

@@ -20,6 +20,8 @@
 //   end
 //
 // Coordinates are the widget's own: 0 0 is its top-left, `w` and `h` its size.
+// A cursor's list names its hotspot in its header — `list cursor.text hotspot
+// w/2 h/2` — the one thing a list says that is not drawing (BACKLOG U.7).
 //
 // **Operands** are arithmetic in the manner of CSS `calc()`: numbers, `w`, `h`,
 // `@metric` (a theme metric), `$param` (a theme parameter, or one the widget
@@ -197,6 +199,11 @@ struct Step: Sendable {
 public struct DrawList: Sendable {
     public let name: String
     let steps: [Step]
+    /// A cursor's hotspot (BACKLOG U.7), from `list cursor.text hotspot w/2 h/2`:
+    /// the point of the drawing that IS the pointer's position, in the list's
+    /// own coordinates. With the drawing, so a theme that draws its arrow
+    /// differently says where its tip is.
+    var hotspot: (x: Operand, y: Operand)? = nil
 }
 
 /// A parsed draw-list file.
@@ -257,7 +264,7 @@ enum DrawListParser {
 
     static func parse(_ text: String) throws -> [String: DrawList] {
         var lists: [String: DrawList] = [:]
-        var current: (name: String, line: Int, steps: [Step])?
+        var current: (name: String, line: Int, steps: [Step], hotspot: (x: Operand, y: Operand)?)?
         for (i, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
             let n = i + 1
             var w = words(raw)
@@ -269,14 +276,17 @@ enum DrawListParser {
             }
             if w[0] == "list" {
                 guard current == nil else { throw DrawListError(line: n, message: "list inside list \(current!.name) (missing end?)") }
-                guard w.count == 2 else { throw DrawListError(line: n, message: "want: list <name>") }
+                guard w.count == 2 || (w.count == 5 && w[2] == "hotspot") else {
+                    throw DrawListError(line: n, message: "want: list <name> [hotspot <x> <y>]")
+                }
                 guard lists[w[1]] == nil else { throw DrawListError(line: n, message: "a second list called \(w[1])") }
-                current = (w[1], n, [])
+                let hot = w.count == 5 ? (x: try operand(w[3], line: n), y: try operand(w[4], line: n)) : nil
+                current = (w[1], n, [], hot)
                 continue
             }
             if w[0] == "end" {
                 guard let c = current else { throw DrawListError(line: n, message: "end with no list") }
-                lists[c.name] = DrawList(name: c.name, steps: c.steps)
+                lists[c.name] = DrawList(name: c.name, steps: c.steps, hotspot: c.hotspot)
                 current = nil
                 continue
             }

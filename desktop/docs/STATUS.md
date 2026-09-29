@@ -10,8 +10,8 @@ where an unmodified GTK 3 application opens a file through the Finder**;
 applications publish their menus to our bar (Phase 10); and **the look is data**
 — Jaguar re-expressed pixel for pixel, and a second theme, Trench, from the same
 interpreter (Phase 11).
-**656 unit tests, 33 live modes and 54 live scripts, green on Linux *and*
-FreeBSD**, and a golden gate of 77 scenes on each. (Different denominators — see
+**661 unit tests, 33 live modes and 55 live scripts, green on Linux *and*
+FreeBSD**, and a golden gate of 79 scenes on each. (Different denominators — see
 [HANDOFF §3](HANDOFF.md).)
 **Phase 14 — preferences that write — is COMPLETE** ([PHASE14.md](PHASE14.md)):
 the panes change the machine through a root helper, `undertow` drives several

@@ -50,7 +50,8 @@ means" (§1.5 there).
 |---|---|---|---|
 | ~~U.5~~ | ✅ **2026-09-29. text-input-v3 + input-method-v2**: undertow relays a field's state to the input method and the IM's preedit and commits back, and its keyboard grab takes keys from the application while held. An IM composes 日本語 into zenity's GTK entry (`live-ime.sh`) | L | | done, both platforms |
 | ~~U.6~~ | ✅ **2026-09-29. pointer-constraints + relative-pointer**: every motion is also a delta; a lock holds the pointer and a confinement keeps it in a region, only for the focused window with the pointer over it; a lock's cursor hint is where the pointer goes when it ends (`live-lock.sh`) | M | | done, both platforms |
-| U.7 | **cursor-shape-v1**, with a real cursor theme (today a rectangle) | M | every client draws its own cursor |
+| ~~U.7~~ | ✅ **2026-09-29. cursor-shape-v1, with the theme's cursors**: 18 Jaguar shapes as draw lists (`cursor.*`, hotspot in the list header), rasterised per scale; sizing arrows on the frame; a client with the pointer sets a shape, its own surface, or none (`live-cursor.sh`, `cursors` goldens) | M | | done, both platforms |
+| U.7b | **Our cursors as an XCursor theme**, installed and named in `XCURSOR_THEME`, for clients that draw their own (GTK 3, SDL, Xwayland: libwayland-cursor) | S | those draw Adwaita's arrow over our windows, not Jaguar's |
 | U.8 | **viewporter** (a source crop in our scene), then **fractional-scale-v1** | M | wrong video and scaled surfaces; guessed scale |
 | U.9 | **primary-selection, idle-inhibit** | S each | middle-click paste; a video cannot stop the screen blanking |
 | U.3b | **Explicit sync** (`linux-drm-syncobj-v1`): the scene waits on each buffer's acquire point and signals its release (HANDOFF §2.73) | M | only implicit sync today — fine for radeonsi/radv, not for NVIDIA's driver; and drm-kmod's syncobj support is unverified |

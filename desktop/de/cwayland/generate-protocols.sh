@@ -54,6 +54,9 @@ gen_server wlr-output-management-unstable-v1
 # U.6: wlr_pointer_constraints_v1.h includes this one. relative-pointer's
 # wlroots header needs none; its XML is vendored for the test client alone.
 gen_server pointer-constraints-unstable-v1
+# U.7: wlr_cursor_shape_v1.h includes this one. tablet-unstable-v2 is vendored
+# only because cursor-shape names its tablet tool: the test client links it.
+gen_server cursor-shape-v1
 
 # Protocols this project defines (PHASE10.md P10.3). Nobody links an
 # implementation for us, so the interface tables are generated too — ONCE, into

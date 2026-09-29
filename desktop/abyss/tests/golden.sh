@@ -96,6 +96,8 @@ drawlist|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl
 drawlist@2x|drawlist|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl AQUA_SCALE=2
 icons|icons|
 icons@2x|icons|AQUA_SCALE=2
+cursors|cursors|
+cursors@2x|cursors|AQUA_SCALE=2
 svg-beacon@2x|icons|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl AQUA_SCALE=2
 trench-window|window|ABYSS_THEME=trench
 trench-window@2x|window|ABYSS_THEME=trench AQUA_SCALE=2

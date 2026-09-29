@@ -423,3 +423,34 @@ public func renderIconSheetPNG(path: String, listFile: String?, scale: Int32 = 1
     return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
 }
 
+
+/// The pointer's shapes (BACKLOG U.7): every name cursor-shape-v1 can ask
+/// for, each as the theme draws it after the fallbacks, labelled, with its
+/// hotspot marked by a red dot. What undertow puts on screen, under the
+/// golden gate.
+public func renderCursorSheetPNG(path: String, scale: Int32 = 1) -> Bool {
+    let names = Cursor.shapeNames
+    let columns = 6, cellW = 104.0, cellH = 58.0
+    let rows = (names.count + columns - 1) / columns
+    let w = Int32(cellW * Double(columns)), h = Int32(cellH * Double(rows))
+    guard let cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w * scale, h * scale),
+          let cr = cairo_create(cs) else { return false }
+    defer { cairo_destroy(cr); cairo_surface_destroy(cs) }
+    cairo_scale(cr, Double(scale), Double(scale))
+    Text.renderScale = scale
+    defer { Text.renderScale = 1 }
+    Draw.setColor(cr, Theme.contentBackground)
+    cairo_paint(cr)
+    for (i, n) in names.enumerated() {
+        let x0 = cellW * Double(i % columns), y0 = cellH * Double(i / columns)
+        let cx = x0 + (cellW - Cursor.size) / 2, cy = y0 + 4
+        Cursor.draw(n, cr, x: cx, y: cy)
+        let hot = Cursor.hotspot(n)
+        cairo_set_source_rgba(cr, 1, 0, 0, 1)
+        cairo_rectangle(cr, cx + hot.x - 1, cy + hot.y - 1, 2, 2)
+        cairo_fill(cr)
+        Draw.text(cr, n, centerX: x0 + cellW / 2, centerY: y0 + cellH - 12, color: Theme.secondaryText, size: 9)
+    }
+    cairo_surface_flush(cs)
+    return cairo_surface_write_to_png(cs, path) == CAIRO_STATUS_SUCCESS
+}

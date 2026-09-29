@@ -129,7 +129,7 @@ Wayland clients); a reader's own count agreed within ±1 for 11 of 19 and within
 | presentation-time | 3 | **yes** (U.4) | toolkits estimated present times (F-101) | done |
 | text-input-v3 + input-method-v2 | 9 | **yes** (U.5) | there was no input method, so no CJK | done |
 | relative-pointer, pointer-constraints | 9, 9 | **yes** (U.6) | games and Blender could not lock the pointer | done |
-| cursor-shape-v1 | 10 | no | clients draw their own cursor; ours is a rectangle (`Seat.swift:16`) | P1, with the cursor theme |
+| cursor-shape-v1 | 10 | **yes** (U.7) | clients drew their own cursor, and ours was a rectangle | done, with the theme's cursors |
 | viewporter | 10 | no | video and scaled surfaces are wrong; needs a source crop in our scene | P1 |
 | fractional-scale-v1 | 12 | no | guessed scale; moot at the metal box's scale 1, so after viewporter | P1 |
 | primary-selection | 8 | no | middle-click paste | P1, cheap |

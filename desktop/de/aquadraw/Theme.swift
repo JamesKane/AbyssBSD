@@ -78,6 +78,9 @@ public struct ThemeTokens: Sendable, Equatable {
     /// Below this many points an icon draws its `.small` variant when it has
     /// one (P11.8) — detail that is only legible at full size.
     public var iconSmallBelow: Double = 24
+    /// The pointer's cell, in points (BACKLOG U.7): a cursor list draws in a
+    /// `cursor.size` square, and is rasterised at each display's scale.
+    public var cursorSize: Double = 24
 
     // Layer 3: the toolkit's layout metrics (P11.5), once enums in de/aqua.
     public var toastWidth: Double = 300
@@ -432,6 +435,7 @@ public struct ThemeTokens: Sendable, Equatable {
         ("chrome.pillInset", \.chromePillInset),
         ("chrome.titleSize", \.chromeTitleSize),
         ("icon.smallBelow", \.iconSmallBelow),
+        ("cursor.size", \.cursorSize),
         ("toast.width", \.toastWidth),
         ("toast.topInset", \.toastTopInset),
         ("toast.rightInset", \.toastRightInset),
