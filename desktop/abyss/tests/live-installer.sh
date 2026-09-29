@@ -53,7 +53,7 @@ cleanup() {
   for p in ${vk_pid:-} ${vp_pid:-} ${app_pid:-} ${svc_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT
 export ABYSS_RUNTIME_DIR="$rundir"

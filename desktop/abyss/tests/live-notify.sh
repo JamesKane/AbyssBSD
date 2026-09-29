@@ -32,7 +32,7 @@ cleanup() {
   for p in ${center_pid:-} ${portal_pid:-} ${wall_pid:-} ${sway_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$rundir" "${cfg:-}" "${swaylog:-}"
+  rm -rf "$rundir" "${cfg:-}" "${swaylog:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 export ABYSS_RUNTIME_DIR="$rundir"

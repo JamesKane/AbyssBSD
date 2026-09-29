@@ -84,15 +84,26 @@ final class DisplaysTests: XCTestCase {
     }
 
     /// Three outputs at one rate: the third is not starved by ties.
+    ///
+    /// Per unit of time, not per call. The first version asserted 60 frames
+    /// each from 60 `serveNext` calls, which holds only while the three grids'
+    /// deadlines coincide exactly: they start microseconds apart, so a call can
+    /// serve one output and the next the others. It passed when quiet and failed
+    /// in the phase gate's busier run (32 of 60) — a test of timing luck.
+    /// The re-planning bug it was written for is caught by the mixed-rate test
+    /// above (a 60 Hz output beside a 144 Hz one makes no frames).
     func testEqualOutputsAreAllServed() {
         var c = Conductor(outputs: (0..<3).map { _ in SyntheticOutput(periodNs: 16_666_667) },
                           sinks: (0..<3).map { _ in SyntheticScene(surfaces: 2, viewport: (320, 240)) })
         defer { for i in c.sinks.indices { c.sinks[i].release() } }
-        let recs = (0..<3).map { _ in FlightRecorder(capacity: 256) }
-        for _ in 0..<60 { c.serveNext(recorders: recs) }
-        XCTAssertEqual(recs.map(\.retained).min() ?? 0, recs.map(\.retained).max() ?? 0,
-                       "frames per output: \(recs.map(\.retained))")
-        XCTAssertGreaterThanOrEqual(recs[2].retained, 55)
+        let warm = (0..<3).map { _ in FlightRecorder(capacity: 256) }
+        for _ in 0..<30 { c.serveNext(recorders: warm) }
+        let recs = (0..<3).map { _ in FlightRecorder(capacity: 4096) }
+        let start = Mono.now()
+        while Mono.since(start, Mono.now()) < 500_000_000 { c.serveNext(recorders: recs) }
+        let frames = recs.map(\.retained)
+        XCTAssertLessThanOrEqual((frames.max() ?? 0) - (frames.min() ?? 0), 1, "frames per output: \(frames)")
+        for f in frames { XCTAssertEqual(Double(f), 30, accuracy: 3, "frames per output in half a second: \(frames)") }
     }
 }
 

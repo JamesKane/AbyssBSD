@@ -29,7 +29,7 @@ rundir=$(mktemp -d /tmp/abyss-anchor.XXXXXX)
 cleanup() {
   [ -n "${anchor_pid:-}" ] && kill "$anchor_pid" 2>/dev/null || true
   [ -n "${sway_pid:-}" ] && kill "$sway_pid" 2>/dev/null || true
-  rm -rf "$rundir" "${cfg:-}" "${swaylog:-}"
+  rm -rf "$rundir" "${cfg:-}" "${swaylog:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 export ABYSS_RUNTIME_DIR="$rundir"

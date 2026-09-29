@@ -46,6 +46,18 @@ phase() {
   _phase_start=$_now
   echo "== $1 =="
 }
+# Run a test quietly — and when it fails, say which and show what it said.
+# Tests used to run `>/dev/null`, which kept a green run short and threw away
+# the one line that mattered on a red one: the P14.9 gate stopped at "== drag
+# and drop ==" with no reason, from a test that passed three times alone.
+quiet() {
+  _log=$(mktemp /tmp/abyss-run.XXXXXX)
+  if sh "$@" > "$_log" 2>&1; then rm -f "$_log"; return 0; fi
+  echo "FAIL: $(basename "$1") — its last words:"
+  tail -25 "$_log" | sed 's/^/   | /'
+  rm -f "$_log"
+  return 1
+}
 phase_end() {
   _now=$(date +%s)
   [ -n "$_phase_name" ] && printf '   (%s: %ss)\n' "$_phase_name" "$((_now - _phase_start))"
@@ -160,134 +172,134 @@ if [ "$live" -eq 1 ]; then
   phase "the sandboxed client"
   sh "$root/abyss/tests/live-sandbox.sh"
   phase "notifications"
-  sh "$root/abyss/tests/live-notify.sh" >/dev/null
+  quiet "$root/abyss/tests/live-notify.sh"
   # The clipboard: an empty one says so, and a copy with no input behind it is
   # refused by name (PHASE9 P9.1). Against undertow, because undertow's own
   # handling is the thing under test.
   phase "the clipboard"
-  sh "$root/abyss/tests/live-clipboard.sh" >/dev/null
+  quiet "$root/abyss/tests/live-clipboard.sh"
   # And the same protocol with a grab on it: a file pressed in one process and
   # released on the Trash in another, plus the two other targets the shell
   # draws (PHASE9 P9.3). Every claim is checked on disk.
   phase "drag and drop"
-  sh "$root/abyss/tests/live-dnd.sh" >/dev/null
+  quiet "$root/abyss/tests/live-dnd.sh"
   # What a window may ask about itself: moved by its title bar, zoomed to the
   # usable area (not the output), resized from a corner that stays anchored,
   # snapped to an edge, and put in the Dock and taken back out (P9.4).
   phase "window management"
-  sh "$root/abyss/tests/live-window.sh" >/dev/null
+  quiet "$root/abyss/tests/live-window.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).
   echo "== keybinds =="
-  sh "$root/abyss/tests/live-keys.sh" >/dev/null
+  quiet "$root/abyss/tests/live-keys.sh"
   # And a window that never heard of this desktop, wearing its frame: the
   # compositor answers xdg-decoration server-side and paints an Aqua title bar
   # around somebody else's surface (P9.6).
   echo "== server-side decorations =="
-  sh "$root/abyss/tests/live-decorations.sh" >/dev/null
+  quiet "$root/abyss/tests/live-decorations.sh"
   # The depth gadget, the one window operation Phase 11 adds: lowered from a
   # frame undertow drew, and from an Aqua window's own chrome over
   # abyss_window_manager_v1 — both laid out by one function (P11.6).
   echo "== depth =="
-  sh "$root/abyss/tests/live-depth.sh" >/dev/null
+  quiet "$root/abyss/tests/live-depth.sh"
   # A window made of subsurfaces — one over its parent and desynchronised,
   # one outside it, one placed below it — drawn, framed and routed to the
   # leaf under the pointer. undertow advertised the global from Phase 6 and
   # did none of it (U.1; API-STUDY §1.3).
   echo "== subsurfaces =="
-  sh "$root/abyss/tests/live-subsurface.sh" >/dev/null
+  quiet "$root/abyss/tests/live-subsurface.sh"
   # A minimized window keeps a slow frame clock instead of none — a FIFO
   # client hangs without one — and is told it is suspended, and what this
   # compositor can do (U.2; xdg-shell v6).
   echo "== a hidden window's clock =="
-  sh "$root/abyss/tests/live-hidden.sh" >/dev/null
+  quiet "$root/abyss/tests/live-hidden.sh"
   # GPU clients through linux-dmabuf: pixman says plainly it offers none;
   # on a render node a GL and a Vulkan client run on it and are seen
   # moving, and a screenshot on every renderer here is the right colour.
   # The GPU half skips, loudly, where there is no render node (U.3).
   echo "== GPU clients =="
-  sh "$root/abyss/tests/live-gpu.sh" >/dev/null
+  quiet "$root/abyss/tests/live-gpu.sh"
   # presentation-time: every frame a client commits is reported shown, on
   # CLOCK_MONOTONIC, at the display's period — 60 Hz and 144 Hz (U.4).
   echo "== presentation time =="
-  sh "$root/abyss/tests/live-present.sh" >/dev/null
+  quiet "$root/abyss/tests/live-present.sh"
   # System Preferences as an application (PHASE14 P14.1): pointer, keyboard
   # and its menu vocabulary, on our own compositor.
   # The theme changes while the desktop runs (PHASE14 P14.2): every process
   # that draws follows appearance.ini, and back again byte for byte.
   echo "== appearance, live =="
-  sh "$root/abyss/tests/live-appearance.sh" >/dev/null
+  quiet "$root/abyss/tests/live-appearance.sh"
   # System Preferences' privileged half (PHASE14 P14.3): who may change the
   # machine, check, dry run, the Linux refusal — and on FreeBSD, as root, a
   # real sysrc write to a scratch rc.conf.
   echo "== the settings helper =="
-  sh "$root/abyss/tests/live-settings.sh" >/dev/null
+  quiet "$root/abyss/tests/live-settings.sh"
   echo "== System Preferences =="
-  sh "$root/abyss/tests/live-prefs.sh" >/dev/null
+  quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration
   # through the helper, typed and applied — write-only in the guest, whose
   # network is how the test reaches it.
   echo "== the Network pane =="
-  sh "$root/abyss/tests/live-network-pane.sh" >/dev/null
+  quiet "$root/abyss/tests/live-network-pane.sh"
   # The Sound pane (P14.6c): levels and mute set on the guest's snd_dummy and
   # read back by mixer(8), players shown, outside changes followed.
   echo "== the Sound pane =="
-  sh "$root/abyss/tests/live-sound-pane.sh" >/dev/null
+  quiet "$root/abyss/tests/live-sound-pane.sh"
   # The menu bar's volume item (P14.6d): real on the guest's snd_dummy —
   # follows mixer(8), shows mute, and its slider sets vol; absent on Linux.
   echo "== the volume item =="
-  sh "$root/abyss/tests/live-menubar-volume.sh" >/dev/null
+  quiet "$root/abyss/tests/live-menubar-volume.sh"
   # Several outputs (P14.7a): three headless displays with gaps and negative
   # coordinates; a window dragged across and drawn there; every contract kept.
   echo "== several displays =="
-  sh "$root/abyss/tests/live-displays.sh" >/dev/null
+  quiet "$root/abyss/tests/live-displays.sh"
   # And rearranged by protocol (P14.7b): wlr-output-management-v1, tested,
   # refused, applied at a new mode and scale 2, kept in displays.ini.
   echo "== displays, rearranged =="
-  sh "$root/abyss/tests/live-displays-config.sh" >/dev/null
+  quiet "$root/abyss/tests/live-displays-config.sh"
   # And the pane (P14.7c): dragged, scaled, and following the compositor.
   echo "== the Displays pane =="
-  sh "$root/abyss/tests/live-displays-pane.sh" >/dev/null
+  quiet "$root/abyss/tests/live-displays-pane.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="
-  sh "$root/abyss/tests/live-energy-pane.sh" >/dev/null
+  quiet "$root/abyss/tests/live-energy-pane.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="
-  sh "$root/abyss/tests/live-wifi-lab.sh" >/dev/null
+  quiet "$root/abyss/tests/live-wifi-lab.sh"
   # Joining through the helper (P14.5b): scan, a wrong key, the right one by
   # rc's own netif path, kept without the passphrase, forgotten. The guest's
   # real rc.conf and wpa_supplicant.conf, backed up and restored.
   echo "== Wi-Fi, joined =="
-  sh "$root/abyss/tests/live-wifi.sh" >/dev/null
+  quiet "$root/abyss/tests/live-wifi.sh"
   # And on the Network pane (P14.5c): scan, choose, type, join, forget — and
   # the passphrase in nothing anyone wrote down.
   echo "== Wi-Fi on the Network pane =="
-  sh "$root/abyss/tests/live-wifi-pane.sh" >/dev/null
+  quiet "$root/abyss/tests/live-wifi-pane.sh"
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).
   echo "== the vocabulary =="
-  sh "$root/abyss/tests/live-vocabulary.sh" >/dev/null
+  quiet "$root/abyss/tests/live-vocabulary.sh"
   # And the compositor's half: a window publishes where its menus are, and
   # only a client on the privileged socket is told who is frontmost (P10.3).
   echo "== whose menus are whose =="
-  sh "$root/abyss/tests/live-menu-focus.sh" >/dev/null
+  quiet "$root/abyss/tests/live-menu-focus.sh"
   # And the bar made real: the frontmost application's menus, drawn by our
   # own compositor (popups, at last), enabled as the app says as each menu
   # opens, chosen by pointer and by keyboard, checked on disk (P10.4).
   echo "== the menu bar =="
-  sh "$root/abyss/tests/live-menus.sh" >/dev/null
+  quiet "$root/abyss/tests/live-menus.sh"
   # Undo, decided: per window, a verb like any other, titled from the stack,
   # pushed to the bar, and never a delete (P10.5).
   echo "== undo =="
-  sh "$root/abyss/tests/live-undo.sh" >/dev/null
+  quiet "$root/abyss/tests/live-undo.sh"
   # A GTK application's menus in our bar: gtk_shell1 in undertow, the bridge
   # in abyss-dbus --menus, and the other end a stock GtkApplication (P10.6).
   echo "== GTK's menus in our bar =="
-  sh "$root/abyss/tests/live-menus-gtk.sh" >/dev/null
+  quiet "$root/abyss/tests/live-menus-gtk.sh"
   # And a Qt/KDE application's: stock kcalc, org_kde_kwin_appmenu in
   # undertow, com.canonical.dbusmenu through the same bridge (P10.7). Skips,
   # loudly, on a box without kcalc.
@@ -296,7 +308,7 @@ if [ "$live" -eq 1 ]; then
   # The menus the desktop owns: right-click menus built from the menu bar's
   # commands, and a system menu whose items do what they say (P10.8).
   echo "== the desktop's own menus =="
-  sh "$root/abyss/tests/live-context.sh" >/dev/null
+  quiet "$root/abyss/tests/live-context.sh"
   # The same claim with a sharper control: a client that cannot call socket(2),
   # and therefore cannot reach the compositor, holding a picture of the screen.
   phase "the screenshot portal"

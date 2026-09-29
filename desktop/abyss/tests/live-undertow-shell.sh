@@ -37,7 +37,7 @@ mkdir -p "$deskdir"
 ppm="$work/shell.ppm"
 cleanup() {
   for p in ${shell_pids:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
 

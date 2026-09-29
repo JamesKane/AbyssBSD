@@ -37,7 +37,7 @@ ppm="$work/frame.ppm"
 cleanup() {
   [ -n "${client_pid:-}" ] && kill "$client_pid" 2>/dev/null || true
   [ -n "${ut_pid:-}" ] && kill "$ut_pid" 2>/dev/null || true
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
 

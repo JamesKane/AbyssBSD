@@ -292,6 +292,9 @@ app_pid=$!
 # The Finder is its own application (its own app_id), not the demo shell.
 app_id="org.abyssbsd.aquademo"
 [ "$scene" = "finder" ] && app_id="org.abyssbsd.finder"
+# System Preferences has been an application of its own since P14.1; this
+# mode still looked for the demo's app_id, and only a phase gate runs it.
+[ "$scene" = "sysprefs" ] && app_id="org.abyssbsd.preferences"
 mapped=0
 for _ in $(seq 1 32); do
   if [ -n "$is_layer" ]; then

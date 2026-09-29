@@ -39,7 +39,7 @@ sess_pid=""
 cleanup() {
   [ -n "$sess_pid" ] && kill -TERM "$sess_pid" 2>/dev/null || true
   [ -n "$sess_pid" ] && wait "$sess_pid" 2>/dev/null || true
-  rm -rf "$scratch"
+  rm -rf "$scratch" 2>/dev/null || true
 }
 trap cleanup EXIT
 

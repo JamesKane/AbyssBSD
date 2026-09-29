@@ -61,7 +61,7 @@ after="$work/after.ppm"
 cleanup() {
   [ -s "${pidfile:-}" ] && while read -r p; do kill -9 "$p" 2>/dev/null || true; done < "$pidfile"
   for p in ${client_pid:-} ${ut_pid:-}; do kill -9 "$p" 2>/dev/null || true; done
-  rm -rf "$work" "${adv_dir:-}"
+  rm -rf "$work" "${adv_dir:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 

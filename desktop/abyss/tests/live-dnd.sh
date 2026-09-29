@@ -40,7 +40,7 @@ cleanup() {
   for p in ${vp_pid:-} ${finder_pid:-} ${dock_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 # INT/TERM as well as EXIT: a `timeout` on this script kills the shell with a
 # signal, and a shell that dies on an untrapped signal never runs its EXIT trap —

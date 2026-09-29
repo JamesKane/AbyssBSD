@@ -24,7 +24,7 @@ rundir=$(mktemp -d /tmp/abyss-palette.XXXXXX)
 cleanup() {
   [ -n "${bridge_pid:-}" ] && kill "$bridge_pid" 2>/dev/null || true
   [ -s "$rundir/buspid" ] && kill "$(cat "$rundir/buspid")" 2>/dev/null || true
-  rm -rf "$rundir"
+  rm -rf "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

@@ -45,7 +45,7 @@ cleanup() {
   exec 4>&- 2>/dev/null || true
   for p in ${vk_pid:-} ${vp_pid:-} ${app_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
   [ -n "${svc_pid:-}" ] && { $sudo kill "$svc_pid" 2>/dev/null || true; }
-  $sudo rm -rf "$work" "$rundir" 2>/dev/null || rm -rf "$work" "$rundir"
+  $sudo rm -rf "$work" "$rundir" 2>/dev/null || rm -rf "$work" "$rundir" || true
 }
 trap cleanup EXIT INT TERM HUP
 export ABYSS_RUNTIME_DIR="$rundir"

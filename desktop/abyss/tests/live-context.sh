@@ -40,7 +40,7 @@ cleanup() {
     kill "$p" 2>/dev/null || true
   done
   [ -s "$work/prefs.pid" ] && kill "$(cat "$work/prefs.pid")" 2>/dev/null || true
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

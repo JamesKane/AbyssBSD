@@ -48,7 +48,7 @@ work=$(mktemp -d /tmp/abyss-inst.XXXXXX)
 rundir=$(mktemp -d /tmp/abyss-instr.XXXXXX)
 cleanup() {
   [ -n "${svc_pid:-}" ] && kill "$svc_pid" 2>/dev/null || true
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT
 export ABYSS_RUNTIME_DIR="$rundir"

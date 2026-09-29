@@ -45,7 +45,7 @@ mkdir -p "$cfg"
 cleanup() {
   [ -s "${pidfile:-}" ] && while read -r p; do kill -9 "$p" 2>/dev/null || true; done < "$pidfile"
   kill -9 "${ut_pid:-}" 2>/dev/null || true
-  rm -rf "$work" "${bin_dir:-}"
+  rm -rf "$work" "${bin_dir:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 pidfile="$work/pids"

@@ -30,7 +30,7 @@ undertow="$root/.build/debug/undertow"
 work=$(mktemp -d /tmp/abyss-hidden.XXXXXX)
 cleanup() {
   for p in ${app_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; echo "--- client"; cat "$work/app.log" 2>/dev/null; exit 1; }

@@ -35,7 +35,7 @@ rundir=$(mktemp -d /tmp/abyss-undor.XXXXXX)
 priv="abyss-ubar-$$"
 cleanup() {
   for p in ${finder_pid:-} ${bar_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

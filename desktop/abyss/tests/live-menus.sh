@@ -41,7 +41,7 @@ cleanup() {
   for p in ${vk_pid:-} ${vp_pid:-} ${finder_pid:-} ${desk_pid:-} ${bar_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

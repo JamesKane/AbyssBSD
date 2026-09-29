@@ -34,7 +34,7 @@ rundir=$(mktemp -d /tmp/abyss-disppaner.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
   for p in ${vp_pid:-} ${app_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 export ABYSS_RUNTIME_DIR="$rundir"

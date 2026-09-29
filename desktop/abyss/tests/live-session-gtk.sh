@@ -66,7 +66,7 @@ cleanup() {
   for p in ${vp_pid:-} ${app_pid:-} ${mon_pid:-} ${anchor_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work" "$rundir" "${vp_dir:-}" "${fifo:-}"
+  rm -rf "$work" "$rundir" "${vp_dir:-}" "${fifo:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 

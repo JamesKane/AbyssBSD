@@ -44,7 +44,7 @@ work=$(mktemp -d /tmp/abyss-gpu.XXXXXX)
 cleanup() {
   exec 3>&- 4>&- 2>/dev/null || true
   for p in ${cl_pid:-} ${vk_pid:-} ${vp_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

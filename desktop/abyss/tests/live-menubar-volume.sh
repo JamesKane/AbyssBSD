@@ -34,7 +34,7 @@ cleanup() {
   exec 3>&- 2>/dev/null || true
   for p in ${vp_pid:-} ${app_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
   [ -s "$work/mixer.state" ] && { mixer -f /dev/mixer0 $(cat "$work/mixer.state") >/dev/null 2>&1 || true; }
-  rm -rf "$work" "$rundir"
+  rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 export ABYSS_RUNTIME_DIR="$rundir"

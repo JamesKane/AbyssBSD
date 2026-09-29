@@ -39,7 +39,7 @@ cleanup() {
   for p in ${vk_pid:-} ${vp_pid:-} ${client_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work" "${vp_dir:-}"
+  rm -rf "$work" "${vp_dir:-}" 2>/dev/null || true
 }
 trap cleanup EXIT
 

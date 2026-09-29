@@ -74,7 +74,7 @@ cleanup() {
   sudo umount "$work/mnt" 2>/dev/null || true
   [ -n "${md:-}" ] && sudo mdconfig -d -u "${md#md}" 2>/dev/null || true
   sudo bhyvectl --destroy --vm=abyssmedium >/dev/null 2>&1 || true
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
 

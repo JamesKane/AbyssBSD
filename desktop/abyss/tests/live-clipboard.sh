@@ -57,7 +57,7 @@ cleanup() {
   for p in ${vk_pid:-} ${finder2_pid:-} ${finder_pid:-} ${copy_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
 fail() { echo "FAIL: $1"; [ -f "$work/ut.err" ] && sed 's/^/    /' "$work/ut.err"; exit 1; }

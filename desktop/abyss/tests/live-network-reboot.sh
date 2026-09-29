@@ -55,7 +55,7 @@ cleanup() {
   sudo zpool export "$pool" 2>/dev/null || true
   [ -n "${md:-}" ] && sudo mdconfig -d -u "${md#md}" 2>/dev/null || true
   [ -n "${tap:-}" ] && sudo ifconfig "$tap" destroy 2>/dev/null || true
-  sudo rm -rf "$work"
+  sudo rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 

@@ -33,7 +33,7 @@ secret="the pixels never moved $$"
 
 cleanup() {
   [ -n "${srv_pid:-}" ] && kill "$srv_pid" 2>/dev/null || true
-  rm -rf "$rundir"
+  rm -rf "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT
 

@@ -54,7 +54,7 @@ cleanup() {
     else sudo rm -f /etc/wpa_supplicant.conf; fi
     sh "$lab" down >/dev/null 2>&1 || true
   fi
-  $sudo rm -rf "$work" 2>/dev/null || rm -rf "$work"
+  $sudo rm -rf "$work" 2>/dev/null || rm -rf "$work" || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; [ -s "$work/svc.err" ] && tail -8 "$work/svc.err" | sed 's/^/  helper| /'; exit 1; }

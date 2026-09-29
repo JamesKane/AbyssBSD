@@ -37,7 +37,7 @@ cleanup() {
   for p in ${vp_pid:-} ${dock_pid:-} ${app_pid:-} ${bar_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 # INT/TERM as well as EXIT — see live-dnd.sh: a timeout that kills this shell
 # without running the trap leaves a compositor squatting on a wayland-N socket.

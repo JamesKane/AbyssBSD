@@ -35,7 +35,7 @@ work=$(mktemp -d /tmp/abyss-depth.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
   for p in ${vp_pid:-} ${fg_pid:-} ${app_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

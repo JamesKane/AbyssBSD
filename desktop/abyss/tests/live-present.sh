@@ -34,7 +34,7 @@ command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, 
 work=$(mktemp -d /tmp/abyss-present.XXXXXX)
 cleanup() {
   [ -n "${ut_pid:-}" ] && kill "$ut_pid" 2>/dev/null || true
-  rm -rf "$work"
+  rm -rf "$work" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }

@@ -695,6 +695,28 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.81 A test's cleanup can fail it after "all green"
+(P14.9. The phase gate stopped at "== drag and drop ==", and said nothing.)
+
+`live-dnd.sh` printed "all green" and exited 1. Its EXIT trap killed the
+compositor and clients, then ran `rm -rf "$work"` while a dying process was
+still writing its log there. `rm` failed ("Directory not empty"), `set -e` is
+still in force inside a trap, and the script's status became the trap's.
+Proven on both shells in one line: `set -eu; trap 'mkdir -p d; rm d' EXIT;
+echo "all green"` prints and exits 1.
+
+Two fixes. **Every `rm -rf` in a test's `cleanup()` is `2>/dev/null || true`**
+(49 lines in 49 files); a cleanup must not decide a result. And **run.sh no
+longer runs tests `>/dev/null`**: `quiet` keeps the output and, on failure,
+prints the test's name and its last 25 lines. The gate's first run had stopped
+with no reason at all.
+
+The same gate found a live mode stale since P14.1 (`live-sway.sh sysprefs`
+still looked for the demo's app id), and a unit test that counted frames per
+*call* where only frames per unit of time are meaningful (it passed when the
+machine was quiet). Both were fixed. Only a phase gate runs everything; it is
+worth running for exactly this.
+
 ### 2.80 A "hang" that cleans up after itself is a guest that rebooted
 (P14.5. Ten kernel panics before it was seen.)
 

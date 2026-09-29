@@ -40,7 +40,7 @@ work=$(mktemp -d /tmp/abyss-settings.XXXXXX)
 chmod 755 "$work"                       # a root helper writes here, as well as us
 cleanup() {
   [ -n "${svc_pid:-}" ] && { $sudo kill "$svc_pid" 2>/dev/null || true; }
-  $sudo rm -rf "$work" 2>/dev/null || rm -rf "$work"
+  $sudo rm -rf "$work" 2>/dev/null || rm -rf "$work" || true
 }
 fail() { echo "FAIL: $1"; [ -s "$work/svc.err" ] && sed 's/^/  helper| /' "$work/svc.err"; exit 1; }
 trap cleanup EXIT INT TERM HUP
