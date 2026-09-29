@@ -77,6 +77,9 @@ public final class Seat {
     /// text-input-v3 and input-method-v2 (U.5): the relay between a field and
     /// an input method. Nil only if wlroots could not make the globals.
     public private(set) var textInput: TextInputRelay?
+    /// relative-pointer and pointer-constraints (U.6): deltas to the client
+    /// with the pointer, and a pointer it may lock or confine.
+    public private(set) var pointerConstraints: PointerConstraints?
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
     /// Listeners that belong to **one input device**, keyed by that device.
@@ -127,6 +130,7 @@ public final class Seat {
         seat = s
         compositor.seat = self
         textInput = TextInputRelay(compositor: compositor, seat: s)
+        pointerConstraints = PointerConstraints(compositor: compositor, seat: s)
 
         let me = Unmanaged.passUnretained(self).toOpaque()
 
@@ -279,16 +283,20 @@ public final class Seat {
             // The protocol reports 0…1 across the output.
             // Absolute devices (a tablet, the virtual pointer) span the whole
             // layout, as wlr_cursor maps them.
+            // Its delta is from where the pointer is — so, locked, the
+            // pointer stays put and each report is a fresh delta from there.
             let b = s.compositor.layout.bounds
-            s.moveCursor(to: Double(b.x) + e.pointee.x * Double(b.width), Double(b.y) + e.pointee.y * Double(b.height),
-                         timeMsec: e.pointee.time_msec)
+            let dx = Double(b.x) + e.pointee.x * Double(b.width) - s.cursorX
+            let dy = Double(b.y) + e.pointee.y * Double(b.height) - s.cursorY
+            s.motion(dx: dx, dy: dy, unaccelDX: dx, unaccelDY: dy, timeMsec: e.pointee.time_msec)
         }, me))
         group.append(tw_listen(&pointer.pointee.events.motion, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let e = data.assumingMemoryBound(to: wlr_pointer_motion_event.self)
-            s.moveCursor(to: s.cursorX + e.pointee.delta_x, s.cursorY + e.pointee.delta_y,
-                         timeMsec: e.pointee.time_msec)
+            s.motion(dx: e.pointee.delta_x, dy: e.pointee.delta_y,
+                     unaccelDX: e.pointee.unaccel_dx, unaccelDY: e.pointee.unaccel_dy,
+                     timeMsec: e.pointee.time_msec)
         }, me))
         group.append(tw_listen(&pointer.pointee.events.button, { ctx, data in
             guard let ctx, let data else { return }
@@ -620,6 +628,35 @@ public final class Seat {
         (cursorX, cursorY) = compositor.layout.clamp(cursorX, cursorY)
     }
 
+    /// A motion, from any pointer: the delta goes to the client with the
+    /// pointer, then a constraint decides where the pointer itself goes (U.6).
+    private func motion(dx: Double, dy: Double, unaccelDX: Double, unaccelDY: Double, timeMsec: UInt32) {
+        guard let pc = pointerConstraints else {
+            moveCursor(to: cursorX + dx, cursorY + dy, timeMsec: timeMsec)
+            return
+        }
+        pc.sendRelative(dx: dx, dy: dy, unaccelDX: unaccelDX, unaccelDY: unaccelDY, timeMsec: timeMsec)
+        // A move or resize grab owns the pointer, constraint or not.
+        if compositor.moving != nil || compositor.resizing != nil {
+            moveCursor(to: cursorX + dx, cursorY + dy, timeMsec: timeMsec)
+            return
+        }
+        guard let (x, y) = pc.constrain(fromX: cursorX, fromY: cursorY, toX: cursorX + dx, toY: cursorY + dy) else {
+            // Locked: the pointer stays, and the delta's frame closes here.
+            wlr_seat_pointer_notify_frame(seat)
+            return
+        }
+        moveCursor(to: x, y, timeMsec: timeMsec)
+        pc.refresh()
+    }
+
+    /// Put the pointer somewhere without telling the client it moved — a lock
+    /// ending at the client's cursor hint, which is where it already drew it.
+    func warpCursor(to x: Double, _ y: Double, surfaceX: Double, surfaceY: Double) {
+        (cursorX, cursorY) = compositor.layout.clamp(x, y)
+        wlr_seat_pointer_warp(seat, surfaceX, surfaceY)
+    }
+
     private func moveCursor(to x: Double, _ y: Double, timeMsec: UInt32) {
         (cursorX, cursorY) = compositor.layout.clamp(x, y)
 
@@ -765,6 +802,8 @@ public final class Seat {
         t.setForeignActivated(true)
         // And the menu bar, which shows whoever is frontmost (P10.3).
         compositor.menus?.focusChanged()
+        // A constraint holds only for the focused window: ⌘-Tab ends a lock.
+        pointerConstraints?.refresh()
         guard let kbd = wlr_seat_get_keyboard(seat) else {
             // No keyboard on the seat yet: focus is still ours to record, and
             // the client will be told when one arrives.

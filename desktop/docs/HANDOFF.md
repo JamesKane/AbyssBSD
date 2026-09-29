@@ -38,7 +38,9 @@ The items below are the context for it.
    its outputs, and a window on a scale-2 display draws at 2x
    (`live-surface-enter.sh`). **U.5 is done** (2026-09-29): text-input-v3 and
    input-method-v2 are relayed, so an input method composes into another
-   toolkit's field (`live-ime.sh`; §2.82). Next in BACKLOG §2 is U.6. The phase's history, pass by pass:
+   toolkit's field (`live-ime.sh`; §2.82). **U.6 is done** (2026-09-29): the
+   pointer locks and confines, and every motion is also a delta
+   (`live-lock.sh`; §2.83). Next in BACKLOG §2 is U.7. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -702,6 +704,37 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.83 A pointer constraint has no region until its surface commits
+(U.6. The first lock never took effect.)
+
+`lock_pointer` and `confine_pointer` create the constraint at once, but its
+region is **double-buffered surface state**. wlroots starts it empty and
+computes it (the requested region intersected with the surface's input
+region) on the surface's next commit, then emits `set_region`. A compositor
+that activates a constraint only while the pointer is inside the region will
+see a lock that never takes effect until the client commits. Real clients
+(SDL, GTK) commit straight after asking; `locktest` has to as well. undertow
+re-checks on `set_region`, so the lock takes effect on that commit.
+
+Three more things from the same pass:
+
+- **`pixman_region32_*` needs `-lpixman-1`.** wlroots' headers declare them,
+  so the code compiles, but ld refuses a symbol it can reach only through
+  libwlroots ("DSO missing from command line"). They now come from `CPixman`,
+  a system library found through pkg-config, like `CXkb`.
+- **undertow reports windows only after its 4 s warm-up.** A test that waits
+  3 s for a `window …` line fails with a live window on screen. `live-ime.sh`
+  hit the same thing with its counts line.
+- **A fault injection that doesn't compile tests the old binary.** The first
+  try printed "all green". The injection harness now refuses to run the test
+  unless `swift build` says "Build complete".
+
+The rules undertow keeps are sway's. A constraint holds only for the focused
+window with the pointer over it, so a new window taking focus ends a lock;
+a persistent lock takes effect again on the next motion over its focused
+window. A move or resize grab ignores constraints. Absolute devices send
+deltas from where the pointer is, so a locked pointer stays put.
 
 ### 2.82 wlroots 0.19 asserts that you let go of its destroy signal
 (U.5. undertow aborted when an input method released its keyboard grab.)

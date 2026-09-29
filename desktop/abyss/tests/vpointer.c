@@ -15,6 +15,9 @@
 // Usage:  vpointer <width> <height>   (output size, for absolute coordinates)
 // Commands (one per line on stdin):
 //   m <x> <y>   move the cursor to output pixel (x, y)
+//   d <dx> <dy> move the cursor BY (dx, dy) — relative motion, as a mouse
+//               sends it (U.6: a lock swallows these, and the client is
+//               still told the delta)
 //   p           press   the left button
 //   r           release the left button
 //   P           press   the right button (contextual menus)
@@ -83,6 +86,14 @@ int main(int argc, char **argv) {
                 zwlr_virtual_pointer_v1_frame(vp);
             }
             break;
+        case 'd': {
+            int dx = 0, dy = 0;
+            if (sscanf(line, " d %d %d", &dx, &dy) == 2) {
+                zwlr_virtual_pointer_v1_motion(vp, t, wl_fixed_from_int(dx), wl_fixed_from_int(dy));
+                zwlr_virtual_pointer_v1_frame(vp);
+            }
+            break;
+        }
         case 'p':
             zwlr_virtual_pointer_v1_button(vp, t, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
             zwlr_virtual_pointer_v1_frame(vp);

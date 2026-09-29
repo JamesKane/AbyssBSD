@@ -1,0 +1,10 @@
+// pkg-config "pixman-1": the include dir and -lpixman-1. wlroots' headers
+// already declare pixman's region functions (and so the compile worked); a
+// constraint's region is a pixman_region32_t and undertow tests points
+// against it (U.6), so the link needs the library named — ld refuses a symbol
+// reached only through libwlroots (DSO missing from command line).
+module CPixman [system] {
+    header "shim.h"
+    link "pixman-1"
+    export *
+}

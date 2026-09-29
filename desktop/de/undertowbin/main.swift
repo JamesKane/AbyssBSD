@@ -538,6 +538,7 @@ case "run":
     // effect is where a window sits in it, and nothing else says.
     var reportedStack = ""
     var reportedTextInput = ""
+    var reportedConstraints = ""
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -573,6 +574,12 @@ case "run":
             let line = "text-input enters=\(ti.enters) activations=\(ti.activations) "
                 + "commits-relayed=\(ti.commitsRelayed) keys-grabbed=\(ti.keysGrabbed)"
             if line != reportedTextInput { reportedTextInput = line; out(line) }
+        }
+        // Pointer constraints (U.6): how many took effect, and what they did.
+        if let pc = seat.pointerConstraints {
+            let line = "pointer-constraints locks=\(pc.locks) confines=\(pc.confines) "
+                + "held=\(pc.held) warps=\(pc.warps) active=\(pc.isActive ? "yes" : "none")"
+            if line != reportedConstraints { reportedConstraints = line; out(line) }
         }
         if seat.selectionsAccepted != reportedSelections {
             reportedSelections = seat.selectionsAccepted

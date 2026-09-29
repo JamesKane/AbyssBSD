@@ -269,6 +269,10 @@ if [ "$live" -eq 1 ]; then
   # IME composes 日本語 into another toolkit's field (zenity's GTK entry).
   echo "== an input method =="
   quiet "$root/abyss/tests/live-ime.sh"
+  # The pointer locked and confined (U.6): relative-pointer deltas, a lock
+  # that holds only for the focused window, its cursor hint, a confinement.
+  echo "== the pointer, locked and confined =="
+  quiet "$root/abyss/tests/live-lock.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="

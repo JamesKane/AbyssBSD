@@ -457,6 +457,13 @@ let package = Package(
             pkgConfig: "wlroots-0.19",
             providers: [.apt(["libwlroots-dev"])]
         ),
+        // pixman, for pointer-constraint regions (U.6) — see its modulemap.
+        .systemLibrary(
+            name: "CPixman",
+            path: "de/cpixman",
+            pkgConfig: "pixman-1",
+            providers: [.apt(["libpixman-1-dev"])]
+        ),
         .systemLibrary(
             name: "CWaylandServer",
             path: "de/cwaylandserver",
@@ -490,7 +497,7 @@ let package = Package(
             // name and the seat needs an XKB layout (HANDOFF §2.70). `Install`
             // depends on nothing, so this links no new library.
             dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo", "MenuModel",
-                           "Install", "Spawn"],
+                           "Install", "Spawn", "CPixman"],
             path: "de/undertow"
         ),
         .executableTarget(

@@ -51,6 +51,9 @@ gen wlr-output-management-unstable-v1
 gen_server xdg-shell
 gen_server wlr-layer-shell-unstable-v1
 gen_server wlr-output-management-unstable-v1
+# U.6: wlr_pointer_constraints_v1.h includes this one. relative-pointer's
+# wlroots header needs none; its XML is vendored for the test client alone.
+gen_server pointer-constraints-unstable-v1
 
 # Protocols this project defines (PHASE10.md P10.3). Nobody links an
 # implementation for us, so the interface tables are generated too — ONCE, into
