@@ -51,7 +51,8 @@ The items below are the context for it.
    (2026-09-29): our cursors as the XCursor theme "Abyss", named by the
    session (`live-xcursor.sh`; §2.88). **P10.8 is done** (2026-09-29):
    submenus open, a GTK app's and kcalc's (`live-submenus.sh`; §2.89). Left
-   in §2: P10.9 (found by P10.8) and T.1–T.3. The phase's history, pass by pass:
+   in §2: T.1–T.3. **P10.9 is done** (2026-09-29): the bar follows a GTK or
+   Qt app's menus changing while it is frontmost (§2.90). The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -716,6 +717,42 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.90 A foreign app's menus change under the bar: watched, coalesced, compared
+(P10.9. Found by P10.8: kcalc's Constants menu, added by Science Mode, stayed
+out of the bar until kcalc was next frontmost.)
+
+Our own applications push `changed` down a MenuWire subscription. A GTK or Qt
+app's menus come through the D-Bus bridge (`menus-dbus`), which only answered
+requests, so the bar re-read them when focus moved and never otherwise. Now
+the bar subscribes for every application, with the target for a bridged one,
+and the bridge keeps a **watch** per target while any bar holds a
+subscription:
+- **Qt:** a match on `com.canonical.dbusmenu` signals from the app's name and
+  path (`LayoutUpdated`, `ItemsPropertiesUpdated`).
+- **GTK:** a match on `org.gtk.Menus.Changed`, **and a held `Start` on every
+  group**. GTK sends `Changed` only to a watcher that has called `Start` and
+  not `End`; the old code ended at once, so no signal would ever have come.
+  The fault injection that dropped the hold failed the GTK claim.
+- **A signal only marks the app dirty.** After 100 ms of quiet the bridge
+  re-reads the menus and pushes `changed` only if the `MenuBarModel`
+  differs, and every signal-driven re-read that finds nothing new is logged
+  as a quiet re-read. This absorbs bursts and property noise, such as
+  enablement, which the bar pulls when a menu opens anyway.
+- **The echo:** reading a Qt menu calls `AboutToShow` on its lazy submenus,
+  which can make Qt announce a new layout, which would have the bar read
+  again. A `LayoutUpdated` whose revision is no newer than the one the bridge
+  just read is dropped. **No test can see this yet.** kcalc's lazy submenus
+  fill once and stay filled, so without the filter there is at most one
+  extra quiet re-read, and the injection passed. The test asserts the result
+  instead: once settled, no more than three quiet re-reads (it saw 0).
+- When the last bar lets go (its connection hangs up, which the bridge polls
+  for), the match is removed and GTK's groups are ended.
+
+`live-menus-qt.sh` no longer restarts kcalc for P10.8's submenu claim:
+Constants now appears in place. `live-menus-gtk.sh` gains GTKMENU_GROW: File ▸
+New makes gtkmenu add a Tools menu, which the bar shows and which works, and
+killing the app makes the bridge let go.
+
 ### 2.89 Submenus: three layers, and a `where` that bound to one pattern
 (P10.8. The ▸ had been drawn since P10.1, and nothing opened.)
 
@@ -756,11 +793,10 @@ a comment. Any comma-separated `case … where` is worth a second look.
 - The first debug copy of the test ran from the scratchpad, and the script
   finds the repository from its own path, so it found nothing.
 
-**Found, not fixed (BACKLOG P10.9):** the bar reads a GTK or Qt app's menus
-when the app becomes frontmost, and nothing bridges their change signals.
-kcalc's Constants menu, which Science Mode adds, doesn't reach the bar until
-kcalc is next frontmost. The Qt claim therefore quits kcalc from our bar
-(File ▸ Quit, which also saves its mode) and starts it again.
+**Found, and fixed next (P10.9, §2.90):** the bar read a GTK or Qt app's
+menus only when the app became frontmost, and nothing bridged their change
+signals, so kcalc's Constants menu (added by Science Mode) didn't reach the
+bar until kcalc was next frontmost.
 
 ### 2.88 Our cursors as an XCursor theme, and who still needs one
 (U.7b.)

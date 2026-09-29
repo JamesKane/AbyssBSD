@@ -647,8 +647,9 @@ placement.
   hovered, and Escape or an outside click takes the whole chain down,
   children first. It is verified on a GTK app's File ▸ Export ▸ More ▸
   (`live-submenus.sh`) and on kcalc's own Constants ▸ Mathematics ▸ Pi
-  (`live-menus-qt.sh`). Found on the way: the bar does not follow a GTK or
-  Qt app's menus changing under it (P10.9).
+  (`live-menus-qt.sh`). Found on the way, and fixed the same day (P10.9,
+  HANDOFF §2.90): the bar now follows a GTK or Qt app's menus changing
+  under it.
 - *(My own test, twice: `gdbus` reading `-1` as an option in P10.7, and here a
   shell variable reused by a helper — both harness, both caught by a test
   failing a compositor that was right.)*

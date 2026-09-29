@@ -15,9 +15,9 @@
 #   4. Choosing Settings ▸ Science Mode with a real pointer **switches kcalc's
 #      mode**, which kcalc itself reports afterwards: its own layout says the
 #      radio item is now on.
-#   5. A Qt submenu opens (P10.8): kcalc, quit from our bar and started again
-#      in Science Mode, has Constants; its first submenu opens beside its row
-#      and a constant chosen from it runs in kcalc.
+#   5. The bar follows kcalc's menus changing (P10.9): Science Mode adds
+#      Constants, and it appears with no focus change. A Qt submenu opens
+#      (P10.8): its first opens beside its row, and a constant chosen runs.
 #
 # Usage: abyss/tests/live-menus-qt.sh      (skips, loudly, without kcalc)
 set -eu
@@ -171,27 +171,22 @@ while [ $i -lt 25 ] && [ "$(state)" != 1 ]; do sleep 0.2; i=$((i + 1)); done
 [ "$(state)" = 1 ] || fail "the bar said ok and kcalc's Science Mode is still off"
 echo "ok: Settings ▸ Science Mode, chosen in our bar, switched kcalc — by kcalc's own account"
 
-# 5. A Qt submenu opens (P10.8). Science Mode gives kcalc a Constants menu
-#    whose rows are submenus Qt fills lazily (AboutToShow, §4.5). The bar
-#    reads an application's menus when it becomes frontmost and does not yet
-#    follow them changing under it (BACKLOG P10.9), so kcalc is quit — File ▸
-#    Quit, from our bar, which also has it save its mode — and started again,
-#    in Science Mode, Constants and all.
-open_menu File
-qxy=$(item_line File Quit | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
-[ -n "$qxy" ] || fail "File has no Quit row"
-click $qxy
-i=0; while kill -0 "$app_pid" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.2; i=$((i + 1)); done
-kill -0 "$app_pid" 2>/dev/null && fail "File ▸ Quit, from our bar, did not quit kcalc"
-shown=$(count "$work/bar.log" "showing kcalc's menus from menus-dbus (Qt)")
-env WAYLAND_DISPLAY="$wd" QT_QPA_PLATFORM=wayland kcalc > "$work/app2.out" 2>&1 &
-app_pid=$!
-after "$work/bar.log" "showing kcalc's menus from menus-dbus (Qt)" "$shown" "the bar never showed the restarted kcalc's menus"
+# 5. The bar follows kcalc's menus changing (P10.9), and a Qt submenu opens
+#    (P10.8). Science Mode gives kcalc a Constants menu while it is frontmost;
+#    the bridge hears dbusmenu's LayoutUpdated and the bar shows it, with no
+#    focus change. Its rows are submenus Qt fills lazily (AboutToShow, §4.5):
+#    the first opens beside its row, and a constant chosen from it runs.
+grep -q 'menus-dbus: watching ' "$work/bridge.log" || fail "the bar never asked the bridge to watch kcalc: $(tail -3 "$work/bridge.log")"
 i=0
 while [ $i -lt 25 ] && ! grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | grep -q ' Constants@'; do
   sleep 0.2; i=$((i + 1)); done
 grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | grep -q ' Constants@' \
-  || fail "kcalc, restarted in Science Mode, has no Constants menu in the bar: $(grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1)"
+  || fail "Science Mode added Constants to kcalc, and the bar never showed it: $(grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1) — bridge: $(grep 'menus-dbus:' "$work/bridge.log" | tail -2 | tr '\n' ' ')"
+grep -q "menus-dbus: .*'s menus changed; told 1 bar" "$work/bridge.log" \
+  || fail "the bridge never said it pushed the change: $(grep 'menus-dbus:' "$work/bridge.log" | tail -2)"
+grep -q "MenuBar: .*vocabulary changed; redescribed" "$work/bar.log" \
+  || fail "the bar did not say it re-read kcalc's menus"
+echo "ok: Science Mode added Constants, and the bar showed it without a focus change — the bridge heard kcalc's LayoutUpdated and told it"
 open_menu Constants
 sub=$(awk 'index($0, "MenuBar: opened Constants") { buf = ""; on = 1; next }
            on && /MenuBar: item / { buf = buf $0 "\n"; next } on { on = 0 }
@@ -213,6 +208,12 @@ after "$work/bar.log" "chose Constants > $title > $fname" 0 "choosing $fname in 
 grep "chose Constants > $title > $fname" "$work/bar.log" | tail -1 | grep -q '→ ok' \
   || fail "kcalc did not take $fname: $(grep 'chose Constants' "$work/bar.log" | tail -1)"
 kill -0 "$app_pid" 2>/dev/null || fail "kcalc died"
-echo "ok: kcalc quit from our bar and came back in Science Mode; Constants ▸ $title, a Qt submenu, opened beside its row, and $fname ran in kcalc"
+echo "ok: Constants ▸ $title, a Qt submenu, opened beside its row, and $fname ran in kcalc"
+# Reading a Qt menu asks its lazy submenus to fill, which can make Qt announce
+# a new layout: the bridge must not chase its own echo (P10.9).
+sleep 2
+quiet=$(grep -c 'signalled, and its menus are the same' "$work/bridge.log" || true)
+[ "$quiet" -le 3 ] || fail "the bridge re-read kcalc $quiet times for nothing — an echo loop: $(grep 'menus-dbus:' "$work/bridge.log" | tail -3)"
+echo "ok: settled — $(grep -c "menus changed; told" "$work/bridge.log") change pushed, $quiet quiet re-reads, no echo"
 
 echo "all green (a Qt application's menus, in our bar, the other end never ours)."

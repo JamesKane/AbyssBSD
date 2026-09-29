@@ -312,8 +312,9 @@ public final class MenuBar: LayerSurfaceDelegate {
                 MenuBar.log("showing \(d.model.appName)'s menus from \(from) "
                             + "(\(d.model.commands.count) commands, described in "
                             + "\(MenuBar.nowUs() - t0) us)")
-                // GTK's Changed is not bridged yet; the bar re-reads on open.
-                if tgt == nil { subscribe(svc) }
+                // Told when they change: our own applications say so
+                // themselves, the bridge for a GTK or Qt one (P10.9).
+                subscribe(svc, target: tgt)
             } catch {
                 // An address nobody answers — the application is going, or
                 // stuck. The bar must still be a bar.
@@ -339,8 +340,11 @@ public final class MenuBar: LayerSurfaceDelegate {
             + (name.isEmpty ? [] : [MenuBarMenu(Menu(name, []), bold: true)])
     }
 
-    private func subscribe(_ address: String) {
-        guard let fd = try? MenuClient.subscribe(address) else { return }
+    private func subscribe(_ address: String, target: String?) {
+        guard let fd = try? MenuClient.subscribe(address, target: target) else {
+            MenuBar.log("could not subscribe to \(address)'s changes")
+            return
+        }
         changesFd = fd
         display.addFileDescriptor(fd) { [weak self] in self?.vocabularyChanged() }
     }
@@ -361,7 +365,8 @@ public final class MenuBar: LayerSurfaceDelegate {
             unsubscribe()
             return
         }
-        if let d = try? MenuClient.describe(address) {
+        if let d = try? MenuClient.describe(address, target: target) {
+            closeMenu()
             menus = MenuBar.menus(for: d.model)
             MenuBar.log("\(d.model.appName)'s vocabulary changed; redescribed")
             titlesDirty = true

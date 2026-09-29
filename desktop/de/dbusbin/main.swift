@@ -97,6 +97,8 @@ if menus {
     do { bridge = try GtkMenuBridge(connection: conn) } catch {
         die("cannot serve \(GtkMenuBridge.serviceName): \(error)")
     }
+    // What it watches and what it pushes (P10.9), for the log a test reads.
+    bridge.log = { emit(1, "menus-dbus: \($0)") }
     // Qt exports its menus only if this name is owned (P10.7).
     let registrar: AppMenuRegistrar
     do { registrar = try AppMenuRegistrar(connection: conn) } catch {

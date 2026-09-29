@@ -17,6 +17,7 @@
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef void *gp;
 static void *gtk;
@@ -43,13 +44,25 @@ F(void, g_simple_action_set_enabled, gp, int);
 F(gp, gtk_settings_get_default, void);
 F(void, g_object_get, gp, const char *, ...);
 
+static gp menubar_model;
+static int grown;
 static void activated(gp action, gp param, gp data) {
   printf("activated=%s\n", g_action_get_name(action));
   fflush(stdout);
+  // P10.9: with GTKMENU_GROW=1, New adds a Tools menu to the menubar while
+  // the app runs — GTK announces it with org.gtk.Menus.Changed.
+  if (getenv("GTKMENU_GROW") && !grown && !strcmp(g_action_get_name(action), "new")) {
+    gp tools = g_menu_new();
+    g_menu_append(tools, "Frobnicate", "app.frobnicate");
+    g_menu_append_submenu(menubar_model, "Tools", tools);
+    grown = 1;
+    printf("grew Tools\n");
+    fflush(stdout);
+  }
 }
 static void startup(gp app, gp data) {
-  const char *names[] = {"new", "open", "copy", "paste", "quit", "export-png", "export-pdf", "export-svg"};
-  for (int i = 0; i < 8; i++) {
+  const char *names[] = {"new", "open", "copy", "paste", "quit", "export-png", "export-pdf", "export-svg", "frobnicate"};
+  for (int i = 0; i < 9; i++) {
     gp a = g_simple_action_new(names[i], NULL);
     g_signal_connect_data(a, "activate", activated, NULL, NULL, 0);
     if (i == 3 || i == 6) g_simple_action_set_enabled(a, 0);
@@ -75,6 +88,7 @@ static void startup(gp app, gp data) {
   g_menu_append(edit, "Paste", "app.paste");
   g_menu_append_submenu(bar, "File", file);
   g_menu_append_submenu(bar, "Edit", edit);
+  menubar_model = bar;
   gtk_application_set_menubar(app, bar);
 }
 static void activate(gp app, gp data) {

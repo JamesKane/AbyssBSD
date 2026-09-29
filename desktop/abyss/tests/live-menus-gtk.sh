@@ -14,6 +14,9 @@
 #   4. Paste is drawn disabled because **GTK** disabled it.
 #   5. Choosing File ▸ Open… with a real pointer runs the action **in GTK's
 #      process**, which says so in its own words.
+#   6. **The bar follows GTK's menus changing** (P10.9): File ▸ New makes
+#      gtkmenu (GTKMENU_GROW=1) add a Tools menu while it is frontmost; the
+#      bridge hears org.gtk.Menus.Changed, and Tools appears and works.
 #
 # Usage: abyss/tests/live-menus-gtk.sh      (skips, loudly, with no GTK runtime)
 set -eu
@@ -101,7 +104,7 @@ bar_pid=$!
 after "$work/bar.log" "MenuBar: frontmost: nothing" 0 "the bar never came up"
 
 # ---------------------------------------------------------- the stock app
-env WAYLAND_DISPLAY="$wd" GDK_BACKEND=wayland "$work/gtkmenu" \
+env WAYLAND_DISPLAY="$wd" GDK_BACKEND=wayland GTKMENU_GROW=1 "$work/gtkmenu" \
     > "$work/app.out" 2> "$work/app.err" &
 app_pid=$!
 i=0
@@ -175,5 +178,33 @@ after "$work/app.out" "activated=open" 0 "choosing Open… never reached GTK"
 grep -q "chose File > Open… (app.open) → ok" "$work/bar.log" \
   || fail "the bar did not log the result: $(grep 'chose' "$work/bar.log" | tail -1)"
 echo "ok: File ▸ Open…, chosen in our bar, ran in GTK's process: $(grep activated "$work/app.out")"
+
+# 6. GTK's menus change under the bar, and it follows (P10.9).
+grep -q 'menus-dbus: watching org.abyss.MenuSpike' "$work/bridge.log" \
+  || fail "the bar never asked the bridge to watch the GTK app: $(tail -3 "$work/bridge.log")"
+open_menu File
+xy=$(item_line File "New" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
+[ -n "$xy" ] || fail "File has no New row"
+click $xy
+after "$work/app.out" "grew Tools" 0 "File ▸ New did not make gtkmenu grow its menus"
+i=0
+while [ $i -lt 25 ] && ! grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | grep -q ' Tools@'; do
+  sleep 0.2; i=$((i + 1)); done
+grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | grep -q ' Tools@' \
+  || fail "GTK added Tools, and the bar never showed it: $(grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1) — bridge: $(grep 'menus-dbus:' "$work/bridge.log" | tail -2 | tr '\n' ' ')"
+grep -q "menus-dbus: org.abyss.MenuSpike's menus changed; told 1 bar" "$work/bridge.log" \
+  || fail "the bridge never said it pushed GTK's change"
+open_menu Tools
+xy=$(item_line Tools "Frobnicate" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
+[ -n "$xy" ] || fail "Tools has no Frobnicate row"
+click $xy
+after "$work/app.out" "activated=frobnicate" 0 "Tools ▸ Frobnicate never reached GTK"
+echo "ok: GTK added a Tools menu while frontmost; the bridge heard Changed, the bar showed it, and Frobnicate ran"
+# The app goes; the bar stops watching, and the bridge lets go of GTK's
+# signals and its held groups rather than keep them for nobody.
+kill "$app_pid"; wait "$app_pid" 2>/dev/null || true; app_pid=""
+after "$work/bridge.log" "menus-dbus: no bar watches org.abyss.MenuSpike now" 0 \
+  "the bar stopped following the GTK app, and the bridge kept watching it"
+echo "ok: the app gone, the bar stopped watching and the bridge let go of it"
 
 echo "all green (a GTK application's menus, in our bar, the other end never ours)."

@@ -178,6 +178,15 @@ public final class DBusConnection {
                                  body: [.string(rule)]))
     }
 
+    /// Stop receiving what `addMatch` asked for — the same rule, word for word.
+    public func removeMatch(_ rule: String) throws {
+        _ = try call(.methodCall(destination: "org.freedesktop.DBus",
+                                 path: "/org/freedesktop/DBus",
+                                 interface: "org.freedesktop.DBus",
+                                 member: "RemoveMatch",
+                                 body: [.string(rule)]))
+    }
+
     // MARK: - Sending
 
     public func send(_ message: DBusMessage) throws {

@@ -58,7 +58,9 @@ public enum MenuClient {
     /// Ask to be told when `service`'s vocabulary changes. Returns the held
     /// connection: it becomes readable with a `changed` message each time, and
     /// with EOF when the application goes. The caller owns and closes it.
-    public static func subscribe(_ service: String) throws -> Int32 {
+    /// `target` names the application, for a service that answers for many —
+    /// the D-Bus bridge (P10.9).
+    public static func subscribe(_ service: String, target: String? = nil) throws -> Int32 {
         let s = try Current.connect(service)
         do {
             // Bounded like every call; the held connection is only ever read
@@ -66,6 +68,7 @@ public enum MenuClient {
             var tv = timeval(tv_sec: Int(timeoutSeconds), tv_usec: 0)
             _ = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
             var m = Msg(); m.set("method", "subscribe")
+            if let target { m.set("target", target) }
             try Current.send(m, on: s)
             let reply = try Current.receive(on: s)
             guard reply.bool("ok") == true else {
