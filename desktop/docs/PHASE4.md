@@ -934,7 +934,12 @@ each is hidden by something the harness substitutes for the real thing (HANDOFF
 - **No `linux-dmabuf`** — fixed (U.3, HANDOFF §2.73). Measured on the dev box's
   AMD iGPU first: without it a Vulkan client crashed and a GL client drew in
   software. `abyss/tests/live-gpu.sh` is the check to run on the machine.
-  Explicit sync is still not offered (BACKLOG U.3b).
+  Explicit sync is offered where the renderer and backend take timelines (U.3b,
+  HANDOFF §2.87), and `abyss/tests/live-syncobj.sh` is the check. It has only
+  run on Linux: **whether drm-kmod's amdgpu gives the renderer timelines**
+  (DRM syncobj timeline ioctls, `EGL_ANDROID_native_fence_sync`) is unknown
+  until the machine boots. If it doesn't, undertow says so in its log and
+  clients use implicit sync, which radv and radeonsi are fine with.
 - **Subsurfaces are never drawn** (§1.3) — Firefox's page lives in one.
 - **A minimised FIFO client stalls for ever** on a frame callback that is
   withheld rather than throttled (§1.4).

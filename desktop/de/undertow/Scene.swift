@@ -40,6 +40,13 @@ public final class SurfaceScene: FrameSink {
     /// How each texture is turned to be drawn: the inverse of its buffer's
     /// transform (a client that rendered rotated says so, and we undo it).
     private let turn: UnsafeMutableBufferPointer<wl_output_transform>
+    /// What the renderer must wait for before reading each texture (U.3b):
+    /// its buffer's acquire point, when its client uses explicit sync.
+    private let waitTimeline: UnsafeMutableBufferPointer<UnsafeMutablePointer<wlr_drm_syncobj_timeline>?>
+    private let waitPoint: UnsafeMutableBufferPointer<UInt64>
+    /// Textures drawn behind an acquire wait, all told — the test's witness
+    /// that the scene, and not only wlroots, took part.
+    public private(set) var acquireWaits = 0
 
     private unowned let compositor: Compositor
     /// The rectangle of the layout this scene shows — its output's (P14.7a).
@@ -75,6 +82,12 @@ public final class SurfaceScene: FrameSink {
         let tr = UnsafeMutablePointer<wl_output_transform>.allocate(capacity: capacity)
         tr.initialize(repeating: WL_OUTPUT_TRANSFORM_NORMAL, count: capacity)
         turn = UnsafeMutableBufferPointer(start: tr, count: capacity)
+        let wt = UnsafeMutablePointer<UnsafeMutablePointer<wlr_drm_syncobj_timeline>?>.allocate(capacity: capacity)
+        wt.initialize(repeating: nil, count: capacity)
+        waitTimeline = UnsafeMutableBufferPointer(start: wt, count: capacity)
+        let wp = UnsafeMutablePointer<UInt64>.allocate(capacity: capacity)
+        wp.initialize(repeating: 0, count: capacity)
+        waitPoint = UnsafeMutableBufferPointer(start: wp, count: capacity)
     }
 
     /// The output moved, changed mode or scale (P14.7b applies these).
@@ -97,6 +110,10 @@ public final class SurfaceScene: FrameSink {
         crop.baseAddress?.deallocate()
         turn.baseAddress?.deinitialize(count: capacity)
         turn.baseAddress?.deallocate()
+        waitTimeline.baseAddress?.deinitialize(count: capacity)
+        waitTimeline.baseAddress?.deallocate()
+        waitPoint.baseAddress?.deinitialize(count: capacity)
+        waitPoint.baseAddress?.deallocate()
     }
 
     /// Latch the window list and compute what is visible.
@@ -132,6 +149,7 @@ public final class SurfaceScene: FrameSink {
                 source[count] = nil                 // ours: nobody to tell
                 crop[count] = wlr_fbox()            // all of it, as drawn
                 turn[count] = WL_OUTPUT_TRANSFORM_NORMAL
+                waitTimeline[count] = nil           // drawn by us, on the CPU
                 x[count] = box.x; y[count] = box.y
                 w[count] = box.w; h[count] = box.h
                 count += 1
@@ -214,6 +232,9 @@ public final class SurfaceScene: FrameSink {
         // whole, the crop's outside shows and everything inside is squeezed.
         wlr_surface_get_buffer_source_box(s, crop.baseAddress! + count)
         turn[count] = wlr_output_transform_invert(s.pointee.current.transform)
+        // Not before the GPU has finished drawing it (U.3b).
+        (waitTimeline[count], waitPoint[count]) = compositor.explicitSync == nil
+            ? (nil, 0) : ExplicitSync.acquire(s)
         count += 1
     }
 
@@ -274,6 +295,11 @@ public final class SurfaceScene: FrameSink {
             opts.dst_box = box(x[i], y[i], w[i], h[i])
             opts.src_box = crop[i]
             opts.transform = turn[i]
+            if let t = waitTimeline[i] {
+                opts.wait_timeline = t
+                opts.wait_point = waitPoint[i]
+                acquireWaits &+= 1
+            }
             opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
             wlr_render_pass_add_texture(pass, &opts)
         }

@@ -411,6 +411,8 @@ public final class Compositor {
 
     /// Whether `linux-dmabuf` is on offer — whether a GPU client can present.
     public private(set) var dmabufOffered = false
+    /// linux-drm-syncobj (U.3b), where the renderer and backend can keep it.
+    public private(set) var explicitSync: ExplicitSync?
 
     static func log(_ s: String) {
         let line = "undertow: \(s)\n"
@@ -470,10 +472,8 @@ public final class Compositor {
         // iGPU — the RX 6750 XT's driver family). The global is made from the renderer, which
         // is what it can import; pixman — every headless run, the build VM —
         // imports none, so there it is not offered and shm clients are all
-        // there is, as before. Explicit sync (linux-drm-syncobj) is not
-        // offered: it needs the scene to wait on each buffer's acquire point
-        // and signal its release, which ours does not do yet (BACKLOG U.3b);
-        // advertising it without that would be §2.58 again.
+        // there is, as before. Explicit sync (linux-drm-syncobj, U.3b) is
+        // offered after it, where the renderer and backend take timelines.
         // **presentation-time** (U.4): when a client's frame actually reached
         // the display, per surface, from the output's present event. Without
         // it every toolkit estimates (F-101: mpv, Chromium, GTK, Zed and LÖVE
@@ -491,6 +491,8 @@ public final class Compositor {
             Compositor.log("linux-dmabuf not offered — this renderer imports no dma-bufs "
                            + "(pixman?); GPU clients will fail, shm clients are unaffected")
         }
+        explicitSync = ExplicitSync(display: session.display, compositor: comp,
+                                    renderer: session.renderer, backend: session.backend)
 
         // **v6, for `suspended`** (U.2): a minimized window is told it cannot
         // be seen, so a client that listens can stop drawing, while its frame

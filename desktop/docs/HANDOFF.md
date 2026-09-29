@@ -46,7 +46,9 @@ The items below are the context for it.
    cropped, turned and told their scale (`live-viewport.sh`; §2.85). **U.9 is
    done** (2026-09-29): the displays sleep and wake, an idle inhibitor holds
    them, and the primary selection pastes (`live-idle.sh`; §2.86). Next in
-   BACKLOG §2 is U.3b (explicit sync), or U.7b, P10.8 and T.1–T.3. The phase's history, pass by pass:
+   BACKLOG §2 was U.3b: **done** (2026-09-29), explicit sync on every GPU
+   here, NVIDIA's included (`live-syncobj.sh`; §2.87). Left in §2: U.7b,
+   P10.8 and T.1–T.3. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -710,6 +712,44 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.87 Explicit sync: wait on the acquire point, arm the release point
+(U.3b. §2.73 left it out, because offering the global without honouring it
+would have been §2.58 again.)
+
+A client's buffer comes with two points on DRM syncobj timelines. The
+**acquire** point means "don't read this before it's signalled"; the
+**release** point is "signal this when you're done, because I'll draw into it
+again". Two halves, as in `wlr_scene`:
+- **Acquire**: the scene latches each surface's acquire point and passes it to
+  the renderer as the texture's `wait_timeline`. The GPU waits, and nothing
+  blocks on the CPU. wlroots already holds the commit until the point has
+  materialised.
+- **Release**: on each commit that brings a new buffer
+  (`current.committed & WLR_SURFACE_STATE_BUFFER`), call
+  `wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer`. wlroots
+  signals the point when the buffer is released. undertow tracks every
+  surface through `wl_compositor.new_surface` for this; each surface's
+  listeners come off in its destroy handler (§2.82).
+
+It is offered only when **both** `renderer.features.timeline` and
+`backend.features.timeline` are set, and otherwise says in the log which one
+is missing. pixman has neither, so every software run and the build VM offer
+none. The headless backend has timelines, which is why the dev box can test
+it.
+
+**The release half is not optional.** With it removed, vkcube (Mesa radv's
+WSI, which uses explicit sync whenever it is offered) set 6 points and then
+stalled: its swapchain ran out of buffers it was allowed to reuse. That is the
+test's main claim. `live-syncobj.sh` runs on every render node. On the dev box
+both pass: the AMD iGPU and the NVIDIA card, whose driver is why explicit sync
+exists, each got about 910 frames in 4 s. The kernel confirms which node
+vkcube holds.
+
+**On FreeBSD it is unverified.** The build VM has no GPU, and whether
+drm-kmod's amdgpu gives the gles2 renderer timelines is a question for the
+metal box (PHASE4 §6.8). If it doesn't, the log says so and nothing breaks:
+radv and radeonsi work with implicit sync.
 
 ### 2.86 Display sleep is the compositor's, and "idle" means one thing
 (U.9. The Energy pane had written `display_sleep_minutes` since P14.8, and

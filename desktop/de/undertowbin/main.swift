@@ -552,6 +552,7 @@ case "run":
     var reportedConstraints = ""
     var reportedCursor = ""
     var reportedIdle = ""
+    var reportedSync = ""
     var reportedPrimary = 0
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
@@ -612,6 +613,12 @@ case "run":
             let line = "display-sleep \(sleep.asleep ? "asleep" : "awake") sleeps=\(sleep.sleeps) "
                 + "wakes=\(sleep.wakes) inhibited=\(sleep.inhibited ? "yes" : "no")"
             if line != reportedIdle { reportedIdle = line; out(line) }
+        }
+        // Explicit sync (U.3b): releases armed, textures drawn behind a wait.
+        if let es = compositor.explicitSync {
+            let line = "explicit-sync releases-armed=\(es.releasesArmed) "
+                + "acquire-waits=\(scenes.reduce(0) { $0 + $1.acquireWaits })"
+            if line != reportedSync { reportedSync = line; out(line) }
         }
         if seat.primarySelectionsAccepted != reportedPrimary {
             reportedPrimary = seat.primarySelectionsAccepted

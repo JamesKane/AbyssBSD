@@ -286,6 +286,10 @@ if [ "$live" -eq 1 ]; then
   # and the primary selection pastes into the next window focused.
   echo "== idle, and the primary selection =="
   quiet "$root/abyss/tests/live-idle.sh"
+  # Explicit sync (U.3b): not offered on pixman, and why; on every GPU,
+  # offered, used by vkcube, and kept — acquire waits, releases armed.
+  echo "== explicit sync =="
+  quiet "$root/abyss/tests/live-syncobj.sh"
   # Energy Saver (P14.8): sleep delays kept in energy.ini, the display never
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="

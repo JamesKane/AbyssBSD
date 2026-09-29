@@ -67,7 +67,7 @@ wires syncobj eventfd is unverified).
 RADV and radeonsi, the RX 6750 XT's driver family — the inference was right:
 with `wl_shm` alone, `vkcube` segfaulted and `es2gears` fell back to software.
 `linux-dmabuf` is now created from the renderer, and `live-gpu.sh` runs both on
-the AMD node under our compositor. Explicit sync is not offered yet (U.3b).
+the AMD node under our compositor. Explicit sync is offered too, where the renderer takes timelines (U.3b).
 Metal still has to confirm it on FreeBSD's drm-kmod.
 
 ### 1.3 Fixed (U.1): subsurfaces were advertised and never drawn
