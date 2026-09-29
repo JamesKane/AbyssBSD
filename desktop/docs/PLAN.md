@@ -902,6 +902,14 @@ load; an Ebb drawn over the eleven adversary clients C2 already survives.
 
 ## Phase 14 — preferences that write
 
+> **COMPLETE 2026-09-29** ([PHASE14.md](PHASE14.md), P14.1–P14.9): the theme
+> switches live; a root helper writes `rc.conf`, `sysctl.conf` and
+> `wpa_supplicant.conf` whole or not at all; the Network (wired and Wi-Fi),
+> Sound, Displays (with a multi-output `undertow` and
+> `wlr-output-management-v1`) and Energy Saver panes change the machine; a
+> manual address holds across a reboot. `run.sh --live` and `--vm --live
+> --full` are green.
+
 > **Scoped 2026-09-25 in [PHASE14.md](PHASE14.md)** (P14.1–P14.9). Spiked on the
 > FreeBSD guest first: all the network tooling is in base (`sysrc` included);
 > **sound and Wi-Fi can be tested with no hardware** (`snd_dummy`, `wtap`); the

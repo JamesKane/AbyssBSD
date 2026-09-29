@@ -463,6 +463,31 @@ has none (§4.5); `Vents.Battery` is metal's.
 live the way `live-installer.sh` drives the installer, by pointer and keyboard,
 against the helper in dry-run on Linux and for real in the guest.
 
+**Done — and PHASE 14 IS COMPLETE (2026-09-29).**
+- `run.sh --live` on Linux: green, 404 s, 35 live modes.
+- `run.sh --vm --live --full`: green on its first run, 1423 s. It ran the
+  nested install (193 s), the live medium (92 s, including P14.3's
+  settings-helper check, never run until now), empty disk to Jaguar desktop
+  (434 s), the reboot gate (149 s: a manual address held across a reboot),
+  every pane test and the Wi-Fi lab.
+
+The Linux lane took five runs, and each stop was the suite's own fault,
+recorded in HANDOFF §2.81:
+- run.sh discarded a failing test's output;
+- 49 cleanups could fail a green test;
+- `live-sway.sh sysprefs` had been stale since P14.1;
+- a unit test counted frames per call.
+
+**How PLAN's claim is met:**
+- *Each pane driven live*: `live-appearance`, `live-network-pane`,
+  `live-sound-pane`, `live-displays-pane`, `live-energy-pane` and
+  `live-wifi-pane`, by pointer and keyboard. On Linux the helper refuses or
+  runs dry; in the guest it acts for real, or write-only where the guest's own
+  network is at stake.
+- *A setting written, rebooted, held*: `live-network-reboot.sh`, through the
+  helper with the pane's protocol. The pane's own clicking is proven on the
+  same binary and helper, as P5.5 argued for the installer.
+
 ---
 
 ## 4. The spikes

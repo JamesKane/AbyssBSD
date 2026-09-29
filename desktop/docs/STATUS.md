@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-09-26. **Phases 0–3 and 5–11 are complete; Phase 14 is in progress (P14.1 done).** The Jaguar desktop
+Last updated: 2026-09-29. **Phases 0–3, 5–11 and 14 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract (headless) under eleven hostile
 processes; the portals hand out descriptors; **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder**;
@@ -13,8 +13,12 @@ interpreter (Phase 11).
 **656 unit tests, 33 live modes and 51 live scripts, green on Linux *and*
 FreeBSD**, and a golden gate of 77 scenes on each. (Different denominators — see
 [HANDOFF §3](HANDOFF.md).)
-The suite has lanes now: `run.sh --vm --live` is ~280s, and **`--full` adds the
-two nested-bhyve install tests (~1000s)** — the rule for anything touching the
+**Phase 14 — preferences that write — is COMPLETE** ([PHASE14.md](PHASE14.md)):
+the panes change the machine through a root helper, `undertow` drives several
+displays, and Wi-Fi joins in the harness on a backported `wtap`.
+The suite has lanes now: `run.sh --live` is ~400 s on Linux, and **`run.sh --vm
+--live --full` ~1400 s, including the nested-bhyve installs and the reboot
+gate** — the rule for anything touching the
 installer, the medium, the distribution sets or the boot path.
 **Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5):
 **a machine with an empty disk boots our medium, the Aqua installer comes up on

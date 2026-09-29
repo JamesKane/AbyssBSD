@@ -31,7 +31,12 @@ then Phase 14 from P14.2, then what Phase 15 needs; metal work is batched for
 one sitting, because the bring-up machine's USB is in use elsewhere for now.
 The items below are the context for it.
 
-1. **The phase in progress is 14, preferences that write** — scoped in
+1. **Phase 14, preferences that write, is COMPLETE (2026-09-29)**: both
+   `--live` lanes and `--full` green (PHASE14 P14.9; HANDOFF §2.81 for what
+   the gate found). **Next is BACKLOG §2**, what Phase 15's applications need
+   from the compositor. U.10 (`wl_surface.enter`) matters more now that
+   `undertow` has several outputs. The phase's history, pass by pass:
+   scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
    from the theme's icon set, one layout for paint and hit-test, an honest

@@ -36,7 +36,7 @@ or more.
 | ~~P14.7~~ | ✅ **2026-09-28. Displays** — re-scoped M→L (undertow drove one output): multi-output undertow (EDF `Conductor`), `wlr-output-management-v1` + `displays.ini` (`abyss-displays`; wlr-randr in the guest), the pane (drag, snap, resolution, scale) — `live-displays*.sh` (HANDOFF §2.79) | L | | done, both platforms; display-off and mirroring not offered |
 | ~~P14.8~~ | ✅ **2026-09-28. Energy** — `energy.ini` (`EnergyPrefs`, for Phase 16), Energy Saver pane (sleep sliders, powerd via the helper, battery), `live-energy-pane.sh` | S | | done, both platforms; the battery row waits for metal |
 | ~~P14.5~~ | ✅ **2026-09-28. Network, Wi-Fi** — `wtap` backported to the guest (upstream d4de0a69a92) with three panic fixes; join/forget through the helper by rc's own path; the passphrase never leaves the pane; Wi-Fi on the Network pane (HANDOFF §2.80; `live-wifi*.sh`) | M | | done: the join verified in the harness |
-| P14.9 | **The phase gate** — both `--live` lanes and `--full` | S | | |
+| ~~P14.9~~ | ✅ **2026-09-29. The phase gate** — `--live` 404 s, `--vm --live --full` 1423 s, green; **Phase 14 complete** (HANDOFF §2.81) | S | | done |
 
 ---
 
@@ -54,13 +54,13 @@ means" (§1.5 there).
 | U.8 | **viewporter** (a source crop in our scene), then **fractional-scale-v1** | M | wrong video and scaled surfaces; guessed scale |
 | U.9 | **primary-selection, idle-inhibit** | S each | middle-click paste; a video cannot stop the screen blanking |
 | U.3b | **Explicit sync** (`linux-drm-syncobj-v1`): the scene waits on each buffer's acquire point and signals its release (HANDOFF §2.73) | M | only implicit sync today — fine for radeonsi/radv, not for NVIDIA's driver; and drm-kmod's syncobj support is unverified |
-| U.10 | **`wl_surface.enter`/`leave` for outputs** — `undertow` sends neither, to any surface (found in U.1, HANDOFF §2.71) | S | a client never learns its output, so cannot pick its scale; fractional-scale (U.8) assumes it |
+| U.10 | **`wl_surface.enter`/`leave` for outputs** — `undertow` sends neither, to any surface (found in U.1, HANDOFF §2.71); with several outputs since P14.7 a window on a scale-2 display cannot know it | S | a client never learns its output, so cannot pick its scale; fractional-scale (U.8) assumes it |
 | P10.8 | **Submenus open.** They draw their ▸ and have never opened (PHASE10) | S–M | every real application's menus are one level deep |
 | T.1 | **The installer shows layout names**, not file names (`us.dvorak.kbd` → "Dvorak") | S | cosmetic; moves one golden |
 | T.2 | **The live installer applies the layout it was given** — today only the installed system gets it | S | typing an account password on a non-US keyboard, on the medium |
 | T.3 | **The toolkit binds xdg-shell v6** and stops drawing while `suspended` (and handles `wm_capabilities`, `configure_bounds`) — it binds v2 today (HANDOFF §2.72) | S | a minimised Aqua window still draws at 1 Hz for nobody |
 
-Later, when something asks: xdg-output, pointer-gestures, tablet-v2,
+Later, when something asks (xdg-output landed with P14.7): pointer-gestures, tablet-v2,
 xdg-toplevel-icon (the Dock would use it), color-management-v1, and fifo /
 commit-timing (no helper in wlroots 0.19 — after a wlroots bump). The toolkit's
 `poll()` loop → `kqueue` (API-STUDY §3) belongs with any port of the study's
