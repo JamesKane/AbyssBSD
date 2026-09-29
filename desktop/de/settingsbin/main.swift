@@ -31,6 +31,7 @@ var allowed: UInt32?
 var dryRun = false, once = false
 var serviceName = "settings", rcConf = "/etc/rc.conf", journal = "/var/log/abyss-settings.log"
 var resolvconf = "/etc/resolvconf.conf", writeOnly = false, sysctlConf = "/etc/sysctl.conf"
+var wpaConf = "/etc/wpa_supplicant.conf"
 var adminGroup = "wheel"
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
@@ -50,12 +51,13 @@ while i < args.count {
     case "--rc-conf": rcConf = value("--rc-conf")
     case "--resolvconf": resolvconf = value("--resolvconf")
     case "--sysctl-conf": sysctlConf = value("--sysctl-conf")
+    case "--wpa-conf": wpaConf = value("--wpa-conf")
     case "--write-only": writeOnly = true
     case "--journal": journal = value("--journal")
     case "--admin-group": adminGroup = value("--admin-group")
     case "-h", "--help":
         emit(1, "usage: abyss-settings --uid N [--dry-run] [--once] [--service NAME]"
-             + " [--rc-conf PATH] [--resolvconf PATH] [--sysctl-conf PATH] [--journal PATH]"
+             + " [--rc-conf PATH] [--resolvconf PATH] [--sysctl-conf PATH] [--wpa-conf PATH] [--journal PATH]"
              + " [--admin-group NAME] [--write-only]")
         exit(0)
     default:
@@ -74,7 +76,8 @@ guard let uid = allowed else {
 signal(SIGPIPE, SIG_IGN)
 let service = SettingsService(authority: Authority(allowed: uid, adminGroup: adminGroup),
                               dryRun: dryRun, rcConf: rcConf, resolvconf: resolvconf,
-                              journal: journal, writeOnly: writeOnly, sysctlConf: sysctlConf)
+                              journal: journal, writeOnly: writeOnly, sysctlConf: sysctlConf,
+                              wpaConf: wpaConf)
 let server: Current.Server
 do { server = try Current.Server(service: serviceName) } catch {
     emit(2, "abyss-settings: cannot bind the settings service: \(error)"); exit(1)

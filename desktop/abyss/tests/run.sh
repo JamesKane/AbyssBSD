@@ -257,6 +257,11 @@ if [ "$live" -eq 1 ]; then
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="
   sh "$root/abyss/tests/live-wifi-lab.sh" >/dev/null
+  # Joining through the helper (P14.5b): scan, a wrong key, the right one by
+  # rc's own netif path, kept without the passphrase, forgotten. The guest's
+  # real rc.conf and wpa_supplicant.conf, backed up and restored.
+  echo "== Wi-Fi, joined =="
+  sh "$root/abyss/tests/live-wifi.sh" >/dev/null
   # An application's vocabulary, asked by something that cannot draw a menu:
   # abyssmenu describes the Finder, is refused with reasons, and invokes verbs
   # whose results are checked on disk; a picker publishes nothing (P10.2).

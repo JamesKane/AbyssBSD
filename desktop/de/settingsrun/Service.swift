@@ -87,6 +87,8 @@ public final class SettingsService {
     public let resolvconf: String
     /// Kernel settings applied at boot — the default sound device (P14.6).
     public let sysctlConf: String
+    /// The Wi-Fi networks this machine may join (P14.5).
+    public let wpaConf: String
     /// Where every apply is recorded, whatever its outcome. Empty for none.
     public let journal: String
     /// Write the files for real, but run no service and no tool: for a test
@@ -97,12 +99,13 @@ public final class SettingsService {
     public init(authority: Authority, dryRun: Bool = false,
                 rcConf: String = "/etc/rc.conf", resolvconf: String = "/etc/resolvconf.conf",
                 journal: String = "/var/log/abyss-settings.log", writeOnly: Bool = false,
-                sysctlConf: String = "/etc/sysctl.conf") {
+                sysctlConf: String = "/etc/sysctl.conf", wpaConf: String = "/etc/wpa_supplicant.conf") {
         self.authority = authority
         self.dryRun = dryRun
         self.rcConf = rcConf
         self.resolvconf = resolvconf
         self.sysctlConf = sysctlConf
+        self.wpaConf = wpaConf
         self.journal = journal
         self.writeOnly = writeOnly
     }
@@ -113,6 +116,7 @@ public final class SettingsService {
         case .rcConf: return rcConf
         case .resolvconf: return resolvconf
         case .sysctlConf: return sysctlConf
+        case .wpaSupplicant: return wpaConf
         }
     }
 
@@ -125,6 +129,11 @@ public final class SettingsService {
             guard Settings.isInterfaceName(n.interface) else { return [] }   // said already
             return if_nametoindex(n.interface) == 0
                 ? [SettingsRefusal("there is no interface \(n.interface) on this machine")] : []
+        case .wifi(let w):
+            guard Settings.isRadioName(w.device) else { return [] }         // said already
+            return radios().contains(w.device) ? []
+                : [SettingsRefusal("there is no wireless device \(w.device) on this machine"
+                                   + " (it has: \(radios().joined(separator: ", ").isEmpty ? "none" : radios().joined(separator: ", ")))")]
         case .sound(let s):
             // Before sysctl.conf is written: a default the kernel then refuses
             // would leave the next boot pointing at nothing.
@@ -162,7 +171,9 @@ public final class SettingsService {
         }
         request.closeFDs()
         switch request.string("method") ?? "" {
+        case "read" where request.string("kind") == "wifi": return handleReadWifi(client, request)
         case "read": return handleRead(client, request)
+        case "scan": return handleScan(client, request)
         case "check": return handleCheck(client, request)
         case "apply": return handleApply(client, request, log: log)
         case let other:
@@ -180,6 +191,55 @@ public final class SettingsService {
         reply.set("error", why)
         try? Current.send(reply, on: client)
         return "refused: \(why)"
+    }
+
+    /// The radios the kernel has: `net.wlan.devices`.
+    func radios() -> [String] {
+        let r = Spawn.run(["sysctl", "-n", "net.wlan.devices"], limit: 4096)
+        return r.succeeded ? trimmed(r.stdoutText).split(separator: " ").map(String.init) : []
+    }
+
+    /// A radio's configuration: the wlan rc makes on it, and the networks
+    /// wpa_supplicant.conf holds. Names only — never a key.
+    private func handleReadWifi(_ client: Int32, _ request: Msg) -> String {
+        let device = request.string("wifi.device") ?? ""
+        guard Settings.isRadioName(device) else { return refuse(client, "\(device.isEmpty ? "no radio" : device) is not a wireless device's name") }
+        if let why = platformRefusal { return refuse(client, why) }
+        let r = Spawn.run(["sysrc", "-f", rcConf, "-n", "wlans_\(device)"], limit: 4096)
+        let interface = r.succeeded ? trimmed(r.stdoutText) : ""
+        let known = WifiKnown(device: device, interface: interface.isEmpty ? nil : interface,
+                              networks: WpaConf.networks(Runner.readText(wpaConf) ?? ""))
+        var reply = Msg()
+        reply.set("ok", true)
+        SettingsWire.encode(known, into: &reply)
+        try? Current.send(reply, on: client)
+        return "read wifi \(device): \(interface.isEmpty ? "no wlan" : interface), \(known.networks.count) network(s)"
+    }
+
+    /// Scan from a radio, as root (`ifconfig wlanN scan` is privileged). A
+    /// radio rc has not given a wlan yet gets one for the scan, removed after:
+    /// a scan must not leave the machine configured differently.
+    private func handleScan(_ client: Int32, _ request: Msg) -> String {
+        let device = request.string("wifi.device") ?? ""
+        let interface = request.string("wifi.interface") ?? "wlan0"
+        guard Settings.isRadioName(device) else { return refuse(client, "\(device.isEmpty ? "no radio" : device) is not a wireless device's name") }
+        if let why = platformRefusal { return refuse(client, why) }
+        guard radios().contains(device) else { return refuse(client, "there is no wireless device \(device) on this machine") }
+        let exists = if_nametoindex(interface) != 0
+        if !exists {
+            let c = Spawn.run(["ifconfig", interface, "create", "wlandev", device], stderr: .merge, limit: 4096)
+            guard c.succeeded else { return refuse(client, "could not make \(interface) on \(device): \(Runner.reason(c))") }
+            _ = Spawn.run(["ifconfig", interface, "up"], limit: 4096)
+        }
+        defer { if !exists { _ = Spawn.run(["ifconfig", interface, "destroy"], limit: 4096) } }
+        let r = Spawn.run(["ifconfig", interface, "scan"], stderr: .merge, limit: 65536)
+        guard r.succeeded else { return refuse(client, "the scan failed: \(Runner.reason(r))") }
+        let nets = WifiScan.parse(r.stdoutText)
+        var reply = Msg()
+        reply.set("ok", true)
+        SettingsWire.encode(nets, into: &reply)
+        try? Current.send(reply, on: client)
+        return "scan \(device): \(nets.count) network(s)"
     }
 
     private func handleRead(_ client: Int32, _ request: Msg) -> String {
@@ -306,13 +366,15 @@ public enum Runner {
             if case .setVar(let file, _, _) = step {
                 if staged[file] == nil {
                     let copy = path(file) + ".abyss-staged"
-                    if let why = copyFile(path(file), to: copy) { return fail(i, step.description, why) }
+                    if let why = copyFile(path(file), to: copy, newMode: mode_t(file.newFileMode)) {
+                        return fail(i, step.description, why)
+                    }
                     staged[file] = copy
                 }
                 if case .setVar(_, let key, let value) = step, !file.isShellVariables {
                     // sysctl.conf is not sh; sysrc refuses it. Edited here.
                     let copy = staged[file]!
-                    let text = Settings.editSysctlConf(readText(copy) ?? "", key: key, value: value)
+                    let text = Settings.editFile(file, readText(copy) ?? "", key: key, value: value)
                     if let why = writeText(text, to: copy) { return fail(i, step.description, why) }
                 } else {
                     let r = Spawn.run(step.command { staged[$0] ?? path($0) }, stderr: .merge, limit: 8192)
@@ -392,10 +454,10 @@ public enum Runner {
 
     /// Copy `from` to `to` with `from`'s mode — or, when `from` does not exist,
     /// an empty file: a machine with no rc.conf yet gets its first one.
-    static func copyFile(_ from: String, to: String) -> String? {
+    static func copyFile(_ from: String, to: String, newMode: mode_t = 0o644) -> String? {
         var st = stat()
         let exists = stat(from, &st) == 0
-        let mode = exists ? mode_t(st.st_mode & 0o7777) : 0o644
+        let mode = exists ? mode_t(st.st_mode & 0o7777) : newMode
         let out = open(to, O_WRONLY | O_CREAT | O_TRUNC, mode)
         guard out >= 0 else { return "could not stage \(to): \(String(cString: strerror(errno)))" }
         defer { close(out) }

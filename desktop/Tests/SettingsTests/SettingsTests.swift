@@ -75,7 +75,7 @@ final class SettingsTests: XCTestCase {
             return nil
         }
         XCTAssertEqual(refusal([]), "the request names no kind of plan")
-        XCTAssertEqual(refusal([("kind", "displays")]), "there is no displays plan (there is: energy, network, sound)")
+        XCTAssertEqual(refusal([("kind", "displays")]), "there is no displays plan (there is: energy, network, sound, wifi)")
         XCTAssertEqual(refusal([("kind", "sound")]), "a sound plan must say which device is the default")
         XCTAssertEqual(refusal([("kind", "energy")], powerd: nil), "an energy plan must say whether powerd runs")
         XCTAssertTrue(refusal([("kind", "energy"), ("energy.ac", "turbo")])?.hasPrefix("powerd has no mode turbo") ?? false)
@@ -393,5 +393,114 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(WifiKey.psk(passphrase: String(repeating: "x", count: 64), ssid: "x"))
         XCTAssertTrue(WifiKey.isPSK("f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e"))
         XCTAssertFalse(WifiKey.isPSK("password"))
+    }
+
+    // MARK: - Wi-Fi (P14.5b)
+
+    private let key = "f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e"
+
+    func testJoiningCompilesToTheNetworkTheRadioAndARestart() throws {
+        let steps = try Settings.compile(.wifi(WifiPlan(device: "iwn0", action: .join(ssid: "Café Wi-Fi", psk: key))))
+        XCTAssertEqual(steps.count, 4)
+        XCTAssertEqual(steps[1], .rcConf(key: "wlans_iwn0", value: "wlan0"))
+        XCTAssertEqual(steps[2], .rcConf(key: "ifconfig_wlan0", value: "WPA DHCP"))
+        XCTAssertEqual(steps[3], .service(name: "netif", action: ["restart", "wlan0"], mayFail: false))
+        XCTAssertEqual(steps[0].description, "add network \"Café Wi-Fi\" to wpa_supplicant.conf")
+        let r = Settings.render(steps)
+        XCTAssertFalse(r.contains(key), "the key is never in what a person or the journal reads: \(r)")
+        let forget = try Settings.compile(.wifi(WifiPlan(device: "iwn0", action: .forget(ssid: "Café Wi-Fi"))))
+        XCTAssertEqual(forget.map(\.description), ["forget network \"Café Wi-Fi\" in wpa_supplicant.conf",
+                                                   "run wpa_cli -i wlan0 reconfigure"])
+    }
+
+    func testAWifiPlanIsRefusedInWords() {
+        func why(_ w: WifiPlan) -> [String] { Settings.problems(.wifi(w)).map(\.message) }
+        XCTAssertEqual(why(WifiPlan(device: "iwn0", action: .join(ssid: "x", psk: "password"))),
+                       ["the network key is not a WPA key (64 hex digits)"], "a passphrase is not a key")
+        XCTAssertEqual(why(WifiPlan(device: "lo", action: .join(ssid: "x", psk: nil))), ["lo is not a wireless device's name"])
+        XCTAssertEqual(why(WifiPlan(device: "iwn0", interface: "em0", action: .forget(ssid: "x"))),
+                       ["em0 is not a wlan interface (wlan0, wlan1 …)"])
+        XCTAssertEqual(why(WifiPlan(device: "iwn0", action: .join(ssid: String(repeating: "x", count: 33), psk: nil))),
+                       ["a network's name is 1 to 32 bytes, not 33"])
+        XCTAssertEqual(why(WifiPlan(device: "iwn0", action: .join(ssid: "Open Net", psk: nil))), [])
+    }
+
+    func testWpaSupplicantConfIsEditedByNetwork() {
+        let hand = "# by hand\nctrl_interface=/var/run/wpa_supplicant\nnetwork={\n\tssid=\"Home\"\n\tpsk=\"hunter22\"\n}\nnetwork={\n\tssid=\"Work\"\n\tkey_mgmt=NONE\n}\n"
+        XCTAssertEqual(WpaConf.networks(hand), ["Home", "Work"])
+        // Joining Home again replaces the hand-written block where it was, in hex.
+        let joined = WpaConf.edit(hand, ssid: "Home", body: "ssid=\(WpaConf.hex("Home"))\npsk=\(key)")
+        XCTAssertEqual(WpaConf.networks(joined), ["Home", "Work"])
+        XCTAssertFalse(joined.contains("hunter22"), "the old passphrase went with the old block")
+        XCTAssertTrue(joined.contains("\tssid=486f6d65\n\tpsk=\(key)"), joined)
+        XCTAssertTrue(joined.hasPrefix("# by hand\n"), "the rest of the file is kept")
+        // A name that would break out of quotes is only ever hex.
+        let evil = "a\"\n}\nnetwork={ssid=\"x"
+        let e = WpaConf.edit("", ssid: evil, body: "ssid=\(WpaConf.hex(evil))\nkey_mgmt=NONE")
+        XCTAssertEqual(WpaConf.networks(e), [evil])
+        XCTAssertEqual(e.split(separator: "\n").filter { $0.hasPrefix("network={") }.count, 1, e)
+        XCTAssertTrue(e.hasPrefix("ctrl_interface=/var/run/wpa_supplicant\n"), "wpa_cli needs the socket")
+        // Forgetting removes only that network.
+        XCTAssertEqual(WpaConf.networks(WpaConf.edit(joined, ssid: "Home", body: nil)), ["Work"])
+        XCTAssertEqual(WpaConf.unhex("486f6d65"), "Home")
+        XCTAssertNil(WpaConf.unhex("48z"))
+    }
+
+    func testAScanIsReadByItsBSSIDsAndEachNetworkOnce() {
+        let scan = """
+        SSID/MESH ID                      BSSID              CHAN RATE    S:N     INT CAPS
+        abyss-lab                         00:98:9a:98:96:97    1   11M   10:10    100 EP   RSN
+        Café Wi-Fi 5G                     aa:bb:cc:dd:ee:01   36   54M  -61:-95   100 EP   RSN HTCAP WME
+        Café Wi-Fi 5G                     aa:bb:cc:dd:ee:02   40   54M  -48:-95   100 EP   RSN HTCAP WME
+        Library                           aa:bb:cc:dd:ee:03    6   54M  -70:-95   100 E    WME
+        """
+        let n = WifiScan.parse(scan)
+        XCTAssertEqual(n.map(\.ssid), ["abyss-lab", "Café Wi-Fi 5G", "Library"], "strongest first; one row per network")
+        XCTAssertEqual(n[1].bssid, "aa:bb:cc:dd:ee:02", "the strongest access point of the two")
+        XCTAssertEqual(n[1].channel, 40)
+        XCTAssertTrue(n[0].secured)
+        XCTAssertFalse(n[2].secured, "no privacy, no RSN: open")
+        XCTAssertEqual(WifiScan.parse("SSID/MESH ID  BSSID  CHAN\n"), [])
+    }
+
+    func testWifiCrossesTheWire() throws {
+        var m = Msg()
+        let plan = SettingsPlan.wifi(WifiPlan(device: "wtap1", action: .join(ssid: "abyss-lab", psk: key)))
+        SettingsWire.encode(plan, into: &m)
+        XCTAssertEqual(try SettingsWire.decodePlan(m).get(), plan)
+        var k = Msg()
+        SettingsWire.encode(WifiKnown(device: "wtap1", interface: "wlan0", networks: ["a", "b c"]), into: &k)
+        XCTAssertEqual(SettingsWire.decodeKnown(k), WifiKnown(device: "wtap1", interface: "wlan0", networks: ["a", "b c"]))
+        var sc = Msg()
+        let nets = [WifiNetwork(ssid: "x y", bssid: "00:11:22:33:44:55", channel: 6, signal: -48, secured: true)]
+        SettingsWire.encode(nets, into: &sc)
+        XCTAssertEqual(SettingsWire.decodeScan(sc), nets)
+    }
+
+    /// wpa_supplicant.conf is the helper's own edit, like sysctl.conf: real on
+    /// both platforms, into a staged copy — and a new one is root's alone.
+    func testWpaSupplicantConfIsWrittenWholeAndPrivately() throws {
+        let dir = scratch(), rc = dir + "/rc.conf", wpa = dir + "/wpa_supplicant.conf"
+        defer { for f in [rc, wpa, rc + ".abyss-staged", wpa + ".abyss-staged"] { unlink(f) }; rmdir(dir) }
+        let f = fopen(rc, "w")!; fputs("hostname=\"abyss\"\n", f); fclose(f)
+        var events: [SettingsEvent] = []
+        let ok = Runner.apply(try Settings.compile(.wifi(WifiPlan(device: "wtap1", action: .join(ssid: "abyss-lab", psk: key)))),
+                              path: { $0 == .wpaSupplicant ? wpa : rc }, dryRun: false, writeOnly: true) { events.append($0) }
+        #if os(FreeBSD)
+        XCTAssertTrue(ok, "\(events)")
+        XCTAssertTrue(read(rc)?.contains("wlans_wtap1=\"wlan0\"") ?? false, read(rc) ?? "")
+        #else
+        XCTAssertFalse(ok, "sysrc is FreeBSD's; the plan stops at rc.conf")
+        #endif
+        _ = ok
+        if let text = read(wpa) {
+            XCTAssertEqual(WpaConf.networks(text), ["abyss-lab"])
+            var st = stat(); stat(wpa, &st)
+            XCTAssertEqual(st.st_mode & 0o777, 0o600, "a file of network keys is root's alone")
+        } else {
+            #if os(FreeBSD)
+            XCTFail("wpa_supplicant.conf was not written")
+            #endif
+        }
     }
 }

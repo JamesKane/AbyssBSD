@@ -9,6 +9,10 @@
 //   abyss-settingsctl apply network …
 //   abyss-settingsctl read  sound
 //   abyss-settingsctl check|apply sound --default pcmN
+//   abyss-settingsctl read  wifi --device RADIO
+//   abyss-settingsctl scan  wifi --device RADIO [--interface wlanN]
+//   abyss-settingsctl check|apply wifi --device RADIO [--interface wlanN]
+//                     (--join SSID (--passphrase P | --open) | --forget SSID)
 //
 // It links `SettingsWire` and not `SettingsRun`, as the pane does: a client
 // speaks the protocol and carries none of the code that runs `sysrc`. It exists
@@ -31,7 +35,7 @@ func emit(_ fd: Int32, _ s: String) {
 }
 func usage() -> Never {
     emit(1, """
-    usage: abyss-settingsctl <read|check|apply> <energy|network|sound> [options]
+    usage: abyss-settingsctl <read|check|apply|scan> <energy|network|sound|wifi> [options]
       --powerd on|off      energy: whether powerd runs
       --ac MODE            its policy on AC: \(PowerdMode.allCases.map(\.rawValue).joined(separator: ", "))
       --battery MODE       its policy on battery
@@ -41,13 +45,16 @@ func usage() -> Never {
                            network: a manual IPv4 address
       --dns "A B"          network: name servers
       --default pcmN       sound: the device /dev/dsp means
+      --device RADIO       wifi: the radio (iwn0, wtap1)
+      --join SSID          wifi: a network to join, with --passphrase P or --open
+      --forget SSID        wifi: a network to forget
       --service NAME       the service to talk to (default settings)
     """)
     exit(2)
 }
 
 var args = Array(CommandLine.arguments.dropFirst())
-guard args.count >= 2, ["read", "check", "apply"].contains(args[0]) else { usage() }
+guard args.count >= 2, ["read", "check", "apply", "scan"].contains(args[0]) else { usage() }
 let verb = args[0], kind = args[1]
 args.removeFirst(2)
 var serviceName = "settings"
@@ -55,10 +62,12 @@ var fields: [String: String] = [:]
 var i = 0
 while i < args.count {
     if args[i] == "--dhcp" { fields["mode"] = "dhcp"; i += 1; continue }
+    if args[i] == "--open" { fields["open"] = "1"; i += 1; continue }
     guard i + 1 < args.count else { emit(2, "abyss-settingsctl: \(args[i]) needs a value"); exit(2) }
     switch args[i] {
     case "--service": serviceName = args[i + 1]
-    case "--powerd", "--ac", "--battery", "--interface", "--address", "--netmask", "--router", "--dns", "--default":
+    case "--powerd", "--ac", "--battery", "--interface", "--address", "--netmask", "--router", "--dns", "--default",
+         "--device", "--join", "--forget", "--passphrase":
         fields[String(args[i].dropFirst(2))] = args[i + 1]
     default: emit(2, "abyss-settingsctl: unknown option '\(args[i])'"); exit(2)
     }
@@ -69,7 +78,11 @@ var request = Msg()
 request.set("method", verb)
 request.set("kind", kind)
 if let iface = fields["interface"] { request.set("interface", iface) }
-if verb != "read" {
+if kind == "wifi" {
+    request.set("wifi.device", fields["device"] ?? "")
+    request.set("wifi.interface", fields["interface"] ?? "wlan0")
+}
+if verb != "read" && verb != "scan" {
     switch kind {
     case "energy":
         guard let on = fields["powerd"], on == "on" || on == "off" else {
@@ -84,6 +97,25 @@ if verb != "read" {
         request.set("network.mode", fields["mode"] ?? (fields["address"] != nil ? "manual" : ""))
         for k in ["address", "netmask", "router", "dns"] {
             if let v = fields[k] { request.set("network.\(k)", v) }
+        }
+    case "wifi":
+        if let ssid = fields["join"] {
+            request.set("wifi.action", "join")
+            request.set("wifi.ssid", ssid)
+            if let pass = fields["passphrase"] {
+                // The key, derived here: the passphrase goes no further.
+                guard let psk = WifiKey.psk(passphrase: pass, ssid: ssid) else {
+                    emit(2, "abyss-settingsctl: a WPA passphrase is 8 to 63 characters"); exit(2)
+                }
+                request.set("wifi.psk", psk)
+            } else if fields["open"] == nil {
+                emit(2, "abyss-settingsctl: --join needs --passphrase P, or --open for an open network"); exit(2)
+            }
+        } else if let ssid = fields["forget"] {
+            request.set("wifi.action", "forget")
+            request.set("wifi.ssid", ssid)
+        } else {
+            emit(2, "abyss-settingsctl: wifi needs --join SSID or --forget SSID"); exit(2)
         }
     case "sound":
         guard let d = fields["default"] else { emit(2, "abyss-settingsctl: --default pcmN is required"); exit(2) }
@@ -109,6 +141,20 @@ func receive() -> Msg {
 }
 
 switch verb {
+case "read" where kind == "wifi":
+    let r = receive()
+    guard r.bool("ok") == true else { emit(2, "abyss-settingsctl: \(r.string("error") ?? "refused")"); exit(1) }
+    let k = SettingsWire.decodeKnown(r)
+    emit(1, "wifi \(k.device): " + (k.interface ?? "no wlan") + ", networks: "
+         + (k.networks.isEmpty ? "none" : k.networks.map { "\"\($0)\"" }.joined(separator: " ")))
+case "scan":
+    let r = receive()
+    guard r.bool("ok") == true else { emit(2, "abyss-settingsctl: \(r.string("error") ?? "refused")"); exit(1) }
+    let nets = SettingsWire.decodeScan(r)
+    if nets.isEmpty { emit(1, "no networks") }
+    for n in nets {
+        emit(1, "network \"\(n.ssid)\" signal \(n.signal) channel \(n.channel) \(n.secured ? "secured" : "open")")
+    }
 case "read":
     let r = receive()
     guard r.bool("ok") == true else { emit(2, "abyss-settingsctl: \(r.string("error") ?? "refused")"); exit(1) }
@@ -124,6 +170,8 @@ case "read":
         }
     case .success(.sound(let s)):
         emit(1, "sound: default pcm\(s.defaultUnit)")
+    case .success(.wifi):
+        emit(2, "abyss-settingsctl: read wifi is answered separately"); exit(1)
     case .failure(let why):
         emit(2, "abyss-settingsctl: \(why.message)"); exit(1)
     }

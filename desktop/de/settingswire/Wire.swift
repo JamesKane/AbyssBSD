@@ -45,6 +45,17 @@ public enum SettingsWire {
             m.set("network.dns", n.dns.map(\.description).joined(separator: " "))
         case .sound(let s):
             m.set("sound.default", "\(s.defaultUnit)")
+        case .wifi(let w):
+            m.set("wifi.device", w.device)
+            m.set("wifi.interface", w.interface)
+            m.set("wifi.ssid", w.ssid)
+            switch w.action {
+            case .join(_, let psk):
+                m.set("wifi.action", "join")
+                if let psk { m.set("wifi.psk", psk) }      // the derived key; never a passphrase
+            case .forget:
+                m.set("wifi.action", "forget")
+            }
         }
     }
 
@@ -103,10 +114,23 @@ public enum SettingsWire {
                                                              : "\(said) is not a sound device (pcm0, pcm1 …)"))
             }
             return .success(.sound(SoundPlan(defaultUnit: u)))
+        case "wifi":
+            let device = m.string("wifi.device") ?? "", interface = m.string("wifi.interface") ?? "wlan0"
+            let ssid = m.string("wifi.ssid") ?? ""
+            switch m.string("wifi.action") ?? "" {
+            case "join":
+                return .success(.wifi(WifiPlan(device: device, interface: interface,
+                                               action: .join(ssid: ssid, psk: m.string("wifi.psk")))))
+            case "forget":
+                return .success(.wifi(WifiPlan(device: device, interface: interface, action: .forget(ssid: ssid))))
+            case let other:
+                return .failure(SettingsRefusal(other.isEmpty ? "a Wi-Fi plan must say join or forget"
+                                                             : "\(other) is not join or forget"))
+            }
         case "":
             return .failure(SettingsRefusal("the request names no kind of plan"))
         case let other:
-            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network, sound)"))
+            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network, sound, wifi)"))
         }
     }
 
@@ -140,6 +164,55 @@ public enum SettingsWire {
         case "skipped": return .skipped(index: i, why: m.string("why") ?? "")
         case "finished": return .finished(ok: m.bool("ok") ?? false, error: m.string("error") ?? "")
         default: return nil
+        }
+    }
+}
+
+
+// MARK: - Wi-Fi: what the machine knows, and what a scan found (P14.5)
+
+/// A radio's configuration as rc.conf and wpa_supplicant.conf have it.
+public struct WifiKnown: Equatable, Sendable {
+    public var device: String
+    /// The wlan interface rc makes on it, or nil when `wlans_<device>` is unset.
+    public var interface: String?
+    /// The networks wpa_supplicant.conf holds, in order.
+    public var networks: [String]
+    public init(device: String, interface: String?, networks: [String]) {
+        self.device = device; self.interface = interface; self.networks = networks
+    }
+}
+
+extension SettingsWire {
+    public static func encode(_ k: WifiKnown, into m: inout Msg) {
+        m.set("wifi.device", k.device)
+        if let i = k.interface { m.set("wifi.interface", i) }
+        m.set("wifi.known.count", UInt64(k.networks.count))
+        for (i, n) in k.networks.enumerated() { m.set("wifi.known.\(i)", n) }
+    }
+
+    public static func decodeKnown(_ m: Msg) -> WifiKnown {
+        let n = Int(m.uint64("wifi.known.count") ?? 0)
+        return WifiKnown(device: m.string("wifi.device") ?? "", interface: m.string("wifi.interface"),
+                         networks: (0..<n).compactMap { m.string("wifi.known.\($0)") })
+    }
+
+    public static func encode(_ nets: [WifiNetwork], into m: inout Msg) {
+        m.set("scan.count", UInt64(nets.count))
+        for (i, n) in nets.enumerated() {
+            m.set("scan.\(i).ssid", n.ssid); m.set("scan.\(i).bssid", n.bssid)
+            m.set("scan.\(i).channel", UInt64(max(0, n.channel))); m.set("scan.\(i).signal", "\(n.signal)")
+            m.set("scan.\(i).secured", n.secured)
+        }
+    }
+
+    public static func decodeScan(_ m: Msg) -> [WifiNetwork] {
+        (0..<Int(m.uint64("scan.count") ?? 0)).compactMap { i in
+            guard let ssid = m.string("scan.\(i).ssid") else { return nil }
+            return WifiNetwork(ssid: ssid, bssid: m.string("scan.\(i).bssid") ?? "",
+                               channel: Int(m.uint64("scan.\(i).channel") ?? 0),
+                               signal: Int(m.string("scan.\(i).signal") ?? "") ?? 0,
+                               secured: m.bool("scan.\(i).secured") ?? false)
         }
     }
 }

@@ -58,12 +58,14 @@ public enum SettingsPlan: Equatable, Sendable {
     case energy(EnergyPlan)
     case network(NetworkPlan)
     case sound(SoundPlan)
+    case wifi(WifiPlan)
 
     public var kind: String {
         switch self {
         case .energy: return "energy"
         case .network: return "network"
         case .sound: return "sound"
+        case .wifi: return "wifi"
         }
     }
 }
@@ -160,9 +162,15 @@ public enum ConfFile: String, CaseIterable, Equatable, Sendable {
     /// device). Not an sh file, so not `sysrc`'s: the helper edits it itself
     /// (`Settings.editSysctlConf`), in the same staged copy.
     case sysctlConf = "sysctl.conf"
+    /// `/etc/wpa_supplicant.conf` — the Wi-Fi networks this machine may join
+    /// (P14.5). Not sh either; the helper edits it itself (`WpaConf`).
+    case wpaSupplicant = "wpa_supplicant.conf"
 
     /// Whether `sysrc` can edit it (sh variable assignments).
-    public var isShellVariables: Bool { self != .sysctlConf }
+    public var isShellVariables: Bool { self != .sysctlConf && self != .wpaSupplicant }
+
+    /// The mode a new copy is made with: a file of network keys is root's alone.
+    public var newFileMode: UInt32 { self == .wpaSupplicant ? 0o600 : 0o644 }
 }
 
 /// One thing the helper will do.
@@ -191,9 +199,17 @@ public enum SettingsStep: Equatable, Sendable {
     /// What a person reads in the journal and the pane.
     public var description: String {
         switch self {
+        // **Never the key.** This line is what `check` shows, the journal
+        // keeps and the pane says; a network is named, its PSK is not.
+        case .setVar(.wpaSupplicant, let k, let v):
+            let name = WpaConf.unhex(k.dropFirst(5)).map { "\"\($0)\"" } ?? k
+            return v == nil ? "forget network \(name) in wpa_supplicant.conf"
+                            : "add network \(name) to wpa_supplicant.conf"
         case .setVar(let f, let k, let v?): return "set \(k)=\"\(v)\" in \(f.rawValue)"
         case .setVar(let f, let k, nil): return "remove \(k) from \(f.rawValue)"
-        case .service(let n, let a, _): return "\(a.joined(separator: " ")) the \(n) service"
+        case .service(let n, let a, _):
+            // "restart the netif service for wlan0", not "restart wlan0 the …".
+            return "\(a.first ?? "") the \(n) service" + (a.count > 1 ? " for " + a.dropFirst().joined(separator: " ") : "")
         case .tool(let argv, _): return "run " + argv.joined(separator: " ")
         }
     }
@@ -232,6 +248,8 @@ public enum Settings {
             return networkProblems(n)
         case .sound(let s):
             return s.defaultUnit < 0 ? [SettingsRefusal("pcm\(s.defaultUnit) is not a sound device's unit")] : []
+        case .wifi(let w):
+            return wifiProblems(w)
         }
     }
 
@@ -295,6 +313,8 @@ public enum Settings {
             return [.rcConf(key: "powerd_enable", value: "YES"),
                     .rcConf(key: "powerd_flags", value: "-a \(e.onAC.rawValue) -b \(e.onBattery.rawValue)"),
                     .service(name: "powerd", action: "onerestart", mayFail: false)]
+        case .wifi(let w):
+            return compileWifi(w)
         case .sound(let s):
             // For the next boot, then for now. The kernel refuses a unit with
             // no device behind it, which fails the plan — after sysctl.conf
@@ -367,6 +387,15 @@ public enum Settings {
             return "\(i + 1). \(s.description)\n   " + (c.isEmpty ? "(the helper edits the file itself)"
                                                                : "$ " + c.joined(separator: " "))
         }.joined(separator: "\n")
+    }
+
+    /// Edit a file the helper edits itself (not sh): the one place that knows
+    /// which editor each such file has.
+    public static func editFile(_ file: ConfFile, _ text: String, key: String, value: String?) -> String {
+        switch file {
+        case .wpaSupplicant: return WpaConf.edit(text, ssid: WpaConf.unhex(key.dropFirst(5)) ?? key, body: value)
+        default: return editSysctlConf(text, key: key, value: value)
+        }
     }
 
     // MARK: - sysctl.conf
