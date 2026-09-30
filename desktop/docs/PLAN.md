@@ -1124,16 +1124,19 @@ Finder is a claim nobody else can make.
   the same vocabulary to GTK and Qt applications. **Pixels** (`screencopy`,
   already in `Surface`) are the documented fallback for an application that
   cannot describe itself, and stop being used the day it can.
-- **Where the model runs is a constraint, not a preference — and the reason
-  changed.** It used to be the hardware: GCN 1.0 could not run local inference
-  whatever the OS did. Since the 2026-09-05 retarget it is purely the *operating
-  system* — an RX 6750 XT is RDNA 2 and would run local inference happily on
-  Linux, and FreeBSD has neither ROCm nor CUDA. That is something FreeBSD could
-  plausibly gain, so **re-check it rather than assuming it**. Until then a small
-  CPU model from ports or a remote API, and **we do not write an inference
-  engine** — same rule as the browser.
-- **One wire format, local and remote alike**, so the line above is a backend
-  swap and not a redesign. **The credential is a design, not a gap:** the key
+- **A local model is the default backend** (decided 2026-09-30, PRODUCT §4.4). An
+  agent whose every prompt leaves the machine is the reach confinement exists to
+  remove, and a local model needs no credential, egress grant or spend budget. A person
+  may point the same wire at any provider they choose; the desktop does not make
+  that harder, and does not make it the default. FreeBSD still has neither ROCm
+  nor CUDA, but ports' `ggml` (under `llama-cpp` and `ollama`) builds its
+  **Vulkan** backend by default, and the RX 6750 XT should run it under RADV — so
+  GPU inference on the bring-up machine is a thing to *test*, not wait for
+  (checked available 2026-09-30, nothing run). CPU inference from the same
+  packages is the floor, and **we do not write an inference engine** — same rule
+  as the browser.
+- **One wire format, local and remote alike**, so local or remote, CPU or GPU, is
+  a backend swap and not a redesign. **The credential is a design, not a gap:** the key
   lives in a process outside the jail, egress goes through the thing that adds
   the header, and the agent cannot read it because that process is not in its
   namespace. **The budget is a line** — tokens or currency per session, counted,

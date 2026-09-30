@@ -1,19 +1,33 @@
 # What kind of OS this is — five theses, and the gap between them and the tree
 
-The argument about what we are building a desktop *for*, and an inventory of how
-far the tree is from it. **[PLAN.md](PLAN.md) is the roadmap** — everything argued
+The argument about what we are building a desktop *for*, and a map of where each
+need it names has landed. **[PLAN.md](PLAN.md) is the roadmap** — everything argued
 here lands there as Phases 9–18, ordered by dependency (§9) — [STATUS.md](STATUS.md)
-is what is built, [HANDOFF.md](HANDOFF.md) the traps.
+and [BACKLOG.md](BACKLOG.md) are what is built and what is next, [HANDOFF.md](HANDOFF.md)
+the traps.
+
+_Reviewed 2026-09-30, after Phase 14, the BACKLOG's U/T passes and the move into
+the AbyssBSD monorepo. This document keeps the argument and says where each need
+went; it does not narrate progress, which is how it went stale before. When a
+row changes state, change it here in one line and put the detail in STATUS._
 
 ---
 
 ## 0. The one-line version
 
-**We have built a desktop. We have not built a system.** 23,600 lines of Swift
-across 40 targets, essentially all of it engine and shell: a compositor, a
-toolkit, a control plane, portals, a supervisor, an installer. The application
-layer contains **two programs** — the Finder and the Installer. System
-Preferences is a *painting* (`Aqua.paintSystemPreferences`, backed by nothing).
+**We have built a desktop, and the half of a system that configures the machine
+it runs on. We have not built the half a person lives in.** About 43,000 lines of
+Swift across 80 targets (22 of them programs): a compositor, a toolkit, a control
+plane, portals, a supervisor, an installer, a menu protocol, a theme engine. The
+application layer is **three Aqua programs** — the Finder, the Installer, and
+System Preferences, whose Appearance, Network (wired and Wi-Fi), Sound, Displays
+and Energy Saver panes now change the machine through a privileged helper — plus
+`Fathom`, which reports on a machine as text. There is still **no terminal, no text
+editor, no browser, no login window, no lock screen and no way to update**. That
+list is Phases 15–17.
+
+*(On 2026-09-05 this paragraph said "23,600 lines, 40 targets, two programs, and
+System Preferences is a painting". It was true then.)*
 
 Omarchy is the mirror image: almost no engine, a very deliberate application
 layer. It is strong exactly where we are empty, and the thing it gets right is
@@ -46,10 +60,13 @@ An opinion is a rejection, so each is stated with what it rules out.
    machine.
 
 Thesis 5 was in tension with the roadmap: **Phase 4 was scoped as "the Mac Pro",
-and thesis 5 says the deliverable is a hardware *matrix*.** Partly resolved on
+and thesis 5 says the deliverable is a hardware *matrix*.** Resolved on
 2026-09-05 — bring-up retargeted to an i7-12700KF / RX 6750 XT and the Mac Pro
 became the matrix's second row (PHASE4 §1.1), which is the shape thesis 5 asked
-for. See §9.
+for. **The 12700KF is still the machine the desktop is brought up on** (reaffirmed
+2026-09-30). The monorepo also carries a second architecture, the Radxa Dragon Q8B
+(aarch64, board work under `src/` and `kmod/`), but it is not far enough along to
+host the desktop: a row the matrix will gain, not the target. See §4.5 and §9.
 
 ---
 
@@ -75,93 +92,99 @@ shipped surface.
 
 **Leave:** TUIs, tiling, keybind-primary discovery — and Omarchy's *theme
 catalogue*, the curated pack of looks and the churn of keeping it current. **We
-ship exactly one theme and it is Jaguar.** The *mechanism*, though, is a
-must-have: §8.
+ship Jaguar as the product**, and a second theme only as proof the format is one
+(§8.7). The *mechanism*, though, is a must-have: §8.
 
 ---
 
 ## 3. Where we stand
 
-**Engine — strong, and mostly done.**
+**Engine — done enough that the next gaps are not in it.**
 
 | | |
 |---|---|
-| Compositor | `undertow`: wlroots-backed, three backends (headless/nested/DRM), frame contract with metronome and flight recorder, scene, seat, layer shell, remembered window positions |
-| Client runtime | `Surface`: xdg-shell, layer shell, popups, keyboard + xkb, pointer + scroll, per-output HiDPI scale, foreign-toplevel, xdg-activation, screencopy |
-| Toolkit | `Aqua`: the 10.2 widget set, cairo drawing grammar, FreeType/HarfBuzz text, focus traversal, sheets, menus |
-| Control plane | `CurrentIPC` (typed messages + `SCM_RIGHTS`), `PoolConfig` (`.ini`, mmap/atomic-rename/watch), `Anchor` (supervisor, session plan), `Vents` (sysctl, OSS volume, battery, devd) |
-| Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus` (`org.freedesktop.portal.*` for GTK/Qt, D-Bus spoken from scratch) |
-| Delivery | `abyss-install` + `Installer`, a live medium that boots and installs onto an empty disk |
+| Compositor | `undertow`: wlroots-backed, three backends (headless/nested/DRM), frame contract with metronome and flight recorder, its own scene, several outputs on one metronome, server-side Aqua decorations, the keybind table, linux-dmabuf and explicit sync, presentation-time, viewporter and fractional scale, text input and input methods, pointer constraints, cursor shapes drawn from the theme, display sleep with idle inhibit |
+| Client runtime | `Surface`: xdg-shell v6, layer shell, popups and submenus, keyboard + xkb, pointer + scroll, per-output HiDPI, clipboard and drag-and-drop, foreign-toplevel, xdg-activation, screencopy, output management |
+| Toolkit | `Aqua` over `AquaDraw`: the 10.2 widget set, drawn from **theme data** (tokens, draw lists, chrome, fonts, icons, cursors — Phase 11), FreeType/HarfBuzz text, focus traversal, sheets, menus, undo |
+| Control plane | `CurrentIPC`, `PoolConfig`, `Anchor` (supervisor, session plan), `Vents` (sysctl, sound, battery, devd, network), `Spawn` (the one async-signal-safe way to start a process) |
+| Menus | the menu protocol: an application publishes its **vocabulary**, the bar is its first consumer; GTK (`org.gtk.Menus`) and Qt (`dbusmenu`) applications appear in the same bar through `abyss-dbus` (Phase 10) |
+| Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus` (`org.freedesktop.portal.*`, including the theme's palette) |
+| Privileged helpers | `abyss-install` and `abyss-settings`: an unprivileged GUI sends a typed plan, a root service checks who is asking and does the writing |
+| Delivery | a live medium that boots, runs `Fathom`, and installs onto an empty disk |
 
-**Shell — present, thinner than it looks.** Desktop with icons, menu bar with
-status items, Dock with magnification and a working Trash, Finder (browser +
-spatial, real file ops), notifications, `Launcher`.
+**Shell — present and wired.** Desktop with icons, a menu bar that shows the
+frontmost application's menus (ours or GTK's or Qt's) with status items and a real
+volume control, a Dock with magnification and a working Trash, the Finder (browser
++ spatial, real file operations, contextual menus), notifications, `Launcher`.
 
-**Applications — two.** **System — one:** an installer. No updates, no package
-UI, no login window, no lock screen, no preferences that write anything, no
-hardware beyond what the build VM has, and zero machines booted.
+**Applications — three, and a report.** The Finder, the Installer, System
+Preferences (five panes that write), and `Fathom` as text. **System:** it installs
+and it configures, and nothing else yet — no updates, no package UI, no login
+window, no lock screen, no suspend. **Machines:** the installer is on screen on the
+12700KF, and nothing has been installed on metal (§4.5).
 
 ---
 
 ## 4. The gap map
 
 Sizes are relative to this tree: **S** ≈ a few hundred lines (`Portal` is 224);
-**M** ≈ `Dock` (575); **L** ≈ `Finder` (1340); **XL** is a phase.
+**M** ≈ `Dock` (575); **L** ≈ `Finder` (1340); **XL** is a phase. A ✅ row names
+where it landed; the rest name the phase that owns them.
 
 ### 4.1 Thesis 1 — GUI answers to the TUI questions
 
-| The need | Omarchy | Us today | Gap | Size |
+| The need | Omarchy | Us | Where it lands | Size |
 |---|---|---|---|---|
 | Files | yazi | **Finder** ✅ | — | — |
-| Terminal | Ghostty | **nothing** — no pty code in the tree | `openpty`, a VT parser, Aqua chrome, scrollback, selection | **L** |
-| Wifi / network | impala | **nothing** | Network prefs over `ifconfig`/`wpa_supplicant`/`dhclient`, writing `rc.conf` | **L** |
-| Audio mixing | wiremix | `Vents.Volume` — master get/set only | Sound prefs: device choice, per-app levels, `sndstat`/OSS | **M** |
+| Wifi / network | impala | ✅ **Network pane**, wired and Wi-Fi: status without privilege, joins through `abyss-settings` by rc's own path, the passphrase never leaves the pane (P14.4, P14.5) | Proven in the harness on a simulated radio (`wtap`); no real radio yet | — |
+| Audio mixing | wiremix | ✅ **Sound pane** and a real menu-bar volume item: device choice, levels, who is playing (P14.6) | Per-application volume is read-only: OSS cannot set another process's level, and `virtual_oss` is the route, with Phase 18's jails | **M** |
+| Launcher / menu | walker | The Apple menu's items now do what they say (P10.8); the Dock's tiles are still a fixed list | Phase 15: §6.1's generated bundles give both real applications | **S–M** |
+| Idle | hypridle | ✅ display sleep in `undertow`, idle-inhibit, ext-idle-notify (U.9) | — | — |
+| Lock | hyprlock | **nothing** — no `ext-session-lock` | Phase 16, with the login window | **L** |
+| Terminal | Ghostty | **nothing** — no pty code in the tree | Phase 15: `openpty`, a VT parser, Aqua chrome, scrollback, selection | **L** |
+| System monitor | btop | **nothing** | Phase 15: Activity Monitor over `kvm`/sysctl | **M** |
+| Screenshots | hyprshot | `abyssgrab` (portal + CLI) | Phase 15: Grab — selection rectangle, window picker, save sheet | **S** |
+| Editing | nvim | **nothing** | Phase 15: TextEdit. Not an IDE — the thing that opens a `.txt` without a terminal | **M** |
+| Web apps | Chromium `--app=` | **nothing**, and no browser at all | Phase 15: §6.1 generates the bundles; §5.1 picks the browser that backs them | **M** |
+| Disks | — | `DiskInventory` (installer only) | Phase 15: Disk Utility — mount, format, ZFS snapshots | **M** |
+| Package install | pacman/yay | **nothing**; the medium has *no package database* (P5.3, by design) | Phase 17: Install Software over `pkg(8)`, through the privileged split the helpers already model | **L** |
+| System update | `omarchy-update` | **nothing** | Phase 17: §6.2 — ours can be better than theirs | **M** |
 | Bluetooth | bluetui | **nothing** | FreeBSD's stack is thin. Scoping it out honestly is a valid answer; silently omitting it is not | **M–XL** |
-| System monitor | btop | **nothing** | Activity Monitor over `kvm`/sysctl | **M** |
-| Screenshots | hyprshot | `abyssgrab` (portal + CLI) | Grab.app: selection rectangle, window picker, save sheet | **S** |
-| Package install | pacman/yay | **nothing**; the medium has *no package database* (P5.3, by design) | Install Software over `pkg(8)`, with the privileged split `abyss-install` already models | **L** |
-| System update | `omarchy-update` | **nothing** | §6.2 — ours can be better than theirs | **M** |
-| Editing | nvim | **nothing** | TextEdit. Not an IDE — the thing that opens a `.txt` without a terminal | **M** |
-| Git | lazygit | **nothing** | A developer tool, not a desktop capability. Defer without apology | |
-| Launcher / menu | walker | Dock + Apple menu, both static | The Apple menu carrying real actions; the Dock carrying real applications (§6.1) | **S–M** |
-| Lock / idle | hyprlock, hypridle | **nothing** — no `ext-session-lock`, no idle notifier | Screen lock, idle blanking, and the login window PLAN.md named and never built | **L** |
-| Web apps | Chromium `--app=` | **nothing**, and no browser at all | §6.1 generates the bundles; §5.1 picks the browser that backs them | **M** |
-| Disks | — | `DiskInventory` (installer only) | Disk Utility: mount, format, ZFS snapshots | **M** |
 | Printing | — | **nothing** | CUPS is in ports; a print sheet is a toolkit feature we lack | **L** |
+| Git | lazygit | **nothing** | A developer tool, not a desktop capability. Defer without apology | |
 
 ### 4.2 Thesis 2 — WIMP, keyboard second
 
-**Our menu bar is a picture of a menu bar.** `Aqua.MenuBar` draws File/Edit/View
-for nobody; no application publishes a menu to it. In Jaguar the global menu bar
-*is* the WIMP contract — every command discoverable in one place, with a mouse,
-without memorising anything. Until menus travel from applications to the bar,
-thesis 2 is undelivered no matter how good the widgets are.
+**Delivered, except the switcher.** This section used to open "our menu bar is a
+picture of a menu bar", and it was: titles drawn for nobody. Phase 9 and Phase 10
+made it the WIMP contract Jaguar had — every command in one place, found with a
+mouse, then bound to a key — and extended it to applications that have never
+heard of us.
 
-| | Have | Gap |
-|---|---|---|
-| Menus in the bar | static titles drawn by the bar itself | **A menu protocol.** Ours: a `CurrentIPC` channel publishing a menu tree, the bar routing activation back. **Foreign apps already have an answer and we own the bridge** — GTK exports `org.gtk.Menus`/`org.gtk.Actions`, Qt/KDE use `com.canonical.dbusmenu`; `abyss-dbus` is where that translation belongs |
-| Global key bindings | **none.** `undertow` has no hotkey table | Cmd-Tab, Cmd-Q, Cmd-W, Cmd-Space, Cmd-Shift-3/4, volume/brightness keys. Compositor-level, config-driven. **S**, and it makes the desktop feel finished out of proportion to its size |
-| Copy and paste | **Broken for everyone, and worse than this document first said.** `undertow` creates `wlr_data_device_manager` but never answers `wlr_seat.request_set_selection`, which wlroots requires — so a copy is discarded whoever makes it, foreign apps included. `Surface` has no client-side data device at all; the Finder's ⌘C/⌘X/⌘V run off `FinderApp.clipboard`, a **process-local field**, and the menu bar's Edit menu is wired to nothing | Four lines of server-side arbitration, then `wl_data_device` + `wl_data_source` in `Surface` and a wire under the clipboard the Finder already has. **A defect, not a feature** — see [PHASE9 §4.1](PHASE9.md) |
-| Drag and drop | none | Same protocol; drag a file to the Trash, a Finder window, a Dock tile |
-| Application switcher | none | Cmd-Tab over `Compositor.toplevels`, drawn in Aqua |
-| Contextual menus | Trash only | Right-click in the Finder, on the desktop, on Dock tiles |
-| Undo | none anywhere | A toolkit-level concern. Decide before more apps exist, not after |
+| | Where it landed |
+|---|---|
+| Menus in the bar | ✅ **The menu protocol** (Phase 10): an application publishes its vocabulary over `CurrentIPC`, the bar routes activation back, submenus open by pointer and keyboard. GTK and Qt menus arrive through `abyss-dbus` and follow the application's own changes (P10.6–P10.9) |
+| Global key bindings | ✅ the keybind table in `undertow`, config-driven (P9) |
+| Copy and paste | ✅ `wl_data_device` in `Surface`, the selection arbitrated in `undertow` (P9). *It had been broken for everyone, foreign apps included — PHASE9 §4.1* |
+| Drag and drop | ✅ to the Trash, a Finder window, a Dock tile (P9) |
+| Contextual menus | ✅ the Finder's items and background, the desktop, Dock tiles — the same commands the bar shows (P10.8) |
+| Undo | ✅ per window, in the toolkit (P10) |
+| Application switcher | The Cmd-Tab binding exists; **its UI is Phase 13's**, drawn with the island switcher |
 
 ### 4.3 Thesis 3 — traditional window management
 
-The cheapest thesis: wlroots plus what `undertow` does gets most of it.
+**Delivered, except the part that beats tiling.**
 
-| | Have | Gap |
-|---|---|---|
-| Click to focus, raise | ✅ `Seat.focus` | — |
-| Interactive move | `request_move` handled — **and no client here sends it.** `Surface.Window` issues only `set_title` and `set_app_id`, so no Aqua window can be dragged by its title bar; the only client that has ever asked is `adversary.c` (PHASE9 §4.2) | The client half: `move` from the title-bar drag. **S** |
-| Interactive resize | **`request_resize` unhandled** | Handle it; add resize edges to the Aqua frame. **S** |
-| Zoom / minimize / fullscreen | **no handlers** | `set_maximized`/`set_minimized`/`set_fullscreen`. Minimize wants the Dock genie. **S–M** |
-| Remembered positions | ✅ `WindowPlaces` | — |
-| **Decorations for foreign windows** | none — no `xdg-decoration` | **Highest visual payoff here.** A GTK headerbar on a Jaguar desktop looks broken in a way no missing feature does. Server-side decorations with `Aqua` painting the frame make every foreign window Mac-shaped for one protocol's work. **M** |
-| Multi-monitor | outputs tracked; no arrangement | `wlr-output-management` + a Displays pane. **M** |
-| Snapping | none | Drag-to-edge halves — the one tiling affordance worth offering. **S** |
-| **Islands, Shoals, Ebb** | none | Workspaces, window sets, an Exposé equivalent. The largest piece here; §7. **M–L** |
+| | Where it landed |
+|---|---|
+| Click to focus, raise | ✅ `Seat.focus` |
+| Interactive move and resize | ✅ the title-bar drag sends `move`, the frame's edges send `resize`, and `undertow` answers both (P9.4). *Until then no Aqua window could be dragged by its title bar* |
+| Zoom / minimize / fullscreen | ✅ handled (P9.4); a minimised window keeps a 1 Hz clock and is told it is suspended (U.2, T.3) |
+| Remembered positions | ✅ `WindowPlaces` |
+| **Decorations for foreign windows** | ✅ server-side decorations with the Aqua frame (P9.5) — every GTK and Qt window is Mac-shaped |
+| Multi-monitor | ✅ several outputs, `wlr-output-management`, the Displays pane (P14.7). Mirroring and display-off are not offered |
+| Snapping | ✅ drag-to-edge halves — the one tiling affordance worth offering |
+| **Islands, Shoals, Ebb** | **Phase 13.** Workspaces, window sets, an Exposé equivalent — the largest piece here, and the part of thesis 3 that beats tiling; §7. **M–L** |
 
 ### 4.4 Thesis 4 — agents in jails
 
@@ -216,28 +239,41 @@ Missing:
   affordable the way a mount table is — expect pooled, long-lived jails per class
   rather than one per task, and say so before someone designs for the cheap case.
 - **The vocabulary the agent acts through.** Not a tool API of its own — §5.5.
-  This is the single largest dependency thesis 4 has, and it is being built in
-  Phase 10 for another reason entirely.
-- **Where the model runs.** **No local GPU inference on FreeBSD** — no ROCm, no
-  CUDA. Worth being precise about why, because the reason changed: it used to be
-  the *hardware* (GCN 1.0 could not run it anyway), and since the retarget it is
-  purely the *operating system* — an RX 6750 XT is RDNA 2 and would run local
-  inference happily on Linux. The blocker is now something FreeBSD could
-  plausibly gain, which makes it worth re-checking rather than assuming. Until
-  then: a small CPU model from ports or a remote API. **We do not write an
-  inference engine** (§10) — `GHOST` budgets four thousand lines for one because
-  Plan 9 has no ports tree; we have one.
+  This was the single largest dependency thesis 4 had, and **Phase 10 built it**
+  for another reason entirely: `abyssmenu` already asks an application what it can
+  do and invokes its verbs, with nothing written per application.
+- **Where the model runs: on this machine, by default.** A local model is the
+  **preferred** backend in the current design, not a fallback waiting for better
+  hardware. It is the only choice consistent with the rest of this section: an
+  agent whose every prompt leaves the machine is exactly the reach confinement
+  exists to remove, and a local model needs no credential, no egress grant, no
+  spend budget and no network — it works on a laptop on a train. **A person may
+  still use whatever provider they want** — a remote API, their own server — by
+  pointing the same wire (below) somewhere else; that is their decision, and the
+  desktop does not make it harder. It is not the default we ship.
+  **What makes the default practical changed.** This used to say "no local GPU
+  inference on FreeBSD — no ROCm, no CUDA", and both are still absent. But ports'
+  `ggml`, the library under `llama-cpp` and `ollama`, builds with its **Vulkan**
+  backend on by default (latest branch, checked 2026-09-30), and the RX 6750 XT is
+  RDNA 2 under Mesa's RADV. So GPU inference on the bring-up machine no longer
+  waits on FreeBSD gaining a vendor stack. *Availability is checked; nothing has
+  been run* — a model answering under `undertow` on the 12700KF is the test that
+  matters (§2.43), with CPU inference from the same packages as the floor.
+  **We do not write an inference engine** (§10) — `GHOST` budgets four thousand
+  lines for one because Plan 9 has no ports tree; we have one.
 - **One wire format, local and remote alike.** The interface between the desktop
-  and a model is the Messages API's JSON whichever end answers it. This is worth
-  deciding now rather than later, because it is what makes the line above a
-  *backend swap instead of a redesign*: the day FreeBSD gains ROCm, or the day a
-  CPU model is good enough, nothing above the backend learns about it.
+  and a model is the Messages API's JSON whichever end answers it. This is what
+  lets local be the default without taking the choice away: local or remote,
+  CPU or GPU, is a *backend swap instead of a redesign*, and nothing above the
+  backend learns which one answered.
 - **The credential, which is a design and not a gap.** "A credential store we do
   not have" was the wrong framing. The requirement is `factotum`'s principle: the
   key lives in a process **outside** the jail, egress goes through something that
   adds the header, and the agent cannot read the credential because the thing
   holding it is not in its namespace. Stated that way it is a small daemon and a
-  `CurrentIPC` channel, not a keychain we have to invent first.
+  `CurrentIPC` channel, not a keychain we have to invent first. The default
+  local backend needs none of it; the daemon exists for the person who chooses a
+  remote provider.
 - **The budget is a line.** Tokens or currency per session, counted as it spends,
   stopping at the next tool call with the reason where the person can see it.
   This is §8.5's rule in another dimension — *a budget, not a boolean* — and the
@@ -290,43 +326,46 @@ has none. We have base OpenSSL and a ports tree, and we are not writing an
 inference engine either. Most of that design's line count is not our line count —
 which is worth knowing before this phase is estimated from the outside.
 
-Ordering consequence: thesis 4 depends on thesis 5's network, thesis 2's
-preferences, and — newly, and most importantly — **thesis 2's menu protocol**
-(§5.5). It is not the next thing; it is what the next things make possible, and
-one of those next things needs a decision made in its own phase to keep it that
-way.
+Ordering consequence: thesis 4 depended on thesis 5's network, thesis 2's
+preferences and, most importantly, **thesis 2's menu protocol** (§5.5). All three
+now exist (Phases 10 and 14). What still stands between here and an agent is
+Phase 18's own first half — the jails — which is why it is "jails, then agents".
 
 ### 4.5 Thesis 5 — it just works
 
-The widest gap, and the least code-shaped.
+Still the widest gap, and the least code-shaped — but it now has software under
+it and one machine in front of it.
 
 | | Have | Gap |
 |---|---|---|
-| Machines that boot it | **zero installed.** The medium boots on the Mac Pro (P4.0), and the retarget machine already runs FreeBSD 15.0 with somebody else's desktop | PHASE4 §5 has never run past step 2. §6.4 turns that checklist into something the medium runs by itself |
-| GPUs | `amdgpu` + **RDNA 2 and Southern Islands** firmware + `i915kms` on the medium. **RDNA 2 is proven** — the bring-up machine runs FreeBSD 15.0 on an RX 6750 XT today; `si_support` for GCN 1.0 is still unproven and is now one matrix cell rather than a gate | Intel and AMD are plausible from what the medium carries; NVIDIA is a separate decision. **A hardware support matrix is a deliverable, not a side effect** — and §6.4 is how it gets populated by people who are not us |
-| Wifi | **nothing** | FreeBSD's weak spot and thesis 5's hardest promise. `iwlwifi` covers modern Intel; Broadcom is risk 5 |
-| Suspend / lid / power | **nothing** | A laptop that does not sleep is not a desktop that just works |
-| Login | **nothing** — `LoginWindow` was named in PLAN.md, never built | Login window, multi-user sessions, `anchor` per user |
-| Preferences that write | System Preferences is a **painting** | Real panes over `PoolConfig` + `Vents` + `rc.conf`. Thesis 5's core: `rc.conf` is not a user interface |
-| First run | **nothing** | Jaguar had a Setup Assistant; we boot into a bare desktop |
-| Updates | **nothing** | §6.2 |
-| Software | medium has **no package database** by design; the installed system takes FreeBSD's repos plus an Abyss overlay (§6.3) | Build the overlay: a poudriere builder, a signing key, a mirror |
-| When something is wrong | `SessionPlan.notes` — right instinct, no surface | Somewhere the machine says what failed. §2.45 generalises: a graceful degradation nobody can see is a lie |
+| Machines that boot it | **The 12700KF / RX 6750 XT is the machine** (reaffirmed 2026-09-30). The medium boots there, `amdgpu` binds, `undertow` finds the output and **the Aqua installer is on screen** — PHASE4 §5 steps 1–5. **Nothing is installed on metal**: that machine's only disk is its positive control (PHASE4 §6.6). The Mac Pro is the matrix's second row | Install to a second disk. **C1 fails on metal** — 58 of 300 frames missed, margin pinned at 8 ms — and the per-term breakdown that would say why has not been run (PHASE4 §5.7). Metal work is paused while the USB is in use for the Q8B |
+| GPUs | `amdgpu` + **RDNA 2 and Southern Islands** firmware + `i915kms` on the medium; **RDNA 2 proven** on the 12700KF. `undertow` can render on the GPU with linux-dmabuf and explicit sync (proven on Linux; FreeBSD's timeline support unverified) | Intel and AMD are plausible from what the medium carries; NVIDIA is a separate decision. **A hardware support matrix is a deliverable, not a side effect** — and `Fathom` (§6.4) is how people who are not us populate it |
+| A second architecture | The Radxa Dragon Q8B (aarch64, SC8280XP): the board boots stock GENERIC, its GPU runs GL ES 3.2 and Vulkan 1.3, display is the firmware framebuffer only ([board notes](../../docs/boards/radxa-dragon-q8b/README.md)) | **Not far enough along for the desktop**, and not the focus. Before it can be a row: **Swift on aarch64** — ports' `lang/swift6` is amd64-only, and the one aarch64 build is a community one, untested on 16-CURRENT — plus display KMS rather than a fixed framebuffer |
+| Wifi | ✅ the Network pane joins and forgets networks (P14.5) | **Proven only in the harness**, on a simulated radio. FreeBSD's weak spot and thesis 5's hardest promise: `iwlwifi` covers modern Intel; Broadcom is risk 5 |
+| Suspend / lid / power | Energy Saver writes sleep delays and `powerd` (P14.8); displays sleep (U.9) | **The machine never sleeps.** Suspend, lid and battery behaviour are Phase 16. A laptop that does not sleep is not a desktop that just works |
+| Login | **nothing** | Phase 16: login window, multi-user sessions, `anchor` per user |
+| Preferences that write | ✅ **five panes** — Appearance, Network, Sound, Displays, Energy Saver — through `abyss-settings`, `wheel` checked on every connection (Phase 14). `rc.conf` is no longer the user interface for any of them | The rest of the catalogue's 25 panes are honest pages that say so |
+| First run | **nothing** | Jaguar had a Setup Assistant; we boot into a bare desktop. Phase 16 |
+| Updates | **nothing** | Phase 17, §6.2 |
+| Software | the medium has **no package database** by design; `ports/` in the monorepo is the overlay's first contents (§6.3) | **The desktop itself is not packaged yet**; a builder, a signing key and a mirror are Phase 17 |
+| When something is wrong | `SessionPlan.notes`, notifications, `Fathom`'s report | Somewhere the running machine says what failed. §2.45 generalises: a graceful degradation nobody can see is a lie |
 | Documentation | good repo docs, no user documentation | A manual is a shipped surface |
-| Accessibility | **nothing** | Not listed elsewhere in this document and it should be. §8.4 is the cheapest down payment |
+| Accessibility | ✅ **the legibility floor** — a theme whose body text fails contrast is refused at load, secondary pairs are warned about with their ratios (P11.10) | That is the down payment, not the story: no screen reader, no keyboard-only audit, no reduced motion |
 
 ---
 
 ## 5. Cross-cutting gaps
 
-These block several theses at once, which is what makes them worth doing first.
-Three are already above — **the clipboard** and **the menu protocol** (§4.2), and
-**server-side decorations** (§4.3). Five more:
+These block several theses at once, which is what made them worth doing first.
+Three are already above and are built — **the clipboard** and **the menu
+protocol** (§4.2), and **server-side decorations** (§4.3). Five more, of which
+§5.2 is decided and §5.5 is built:
 
 ### 5.1 The browser — pick an engine, not a browser
 
 We will not write one (§10). Shell size is an illusion; installed footprints from
-the FreeBSD 15.0 repo:
+the FreeBSD 15.0 amd64 repo (measured 2026-09; the base is now FreeBSD `main`,
+whose packages come from the *latest* branch, so re-measure before choosing):
 
 | Browser | Shell | Engine + toolkit | Total |
 |---|---|---|---|
@@ -397,11 +436,15 @@ study corpus's projects ([API-STUDY.md](API-STUDY.md) §2).
 
 ### 5.3 What foreign applications look like
 
-`PortalSettings` reports `color-scheme: prefer light` precisely so a GTK dialog is
-not dark on a Jaguar desktop — the instinct is right and the coverage is one key
-wide. Under §8 the fix is a *generated* GTK/Qt theme rather than a hand-written
-Aqua one, emitted from whatever tokens are active, so a user's own theme re-skins
-foreign apps too.
+`PortalSettings` reported `color-scheme: prefer light` precisely so a GTK dialog
+was not dark on a Jaguar desktop — the right instinct, one key wide. It is wider
+now: the portal reports the **active theme's** scheme, accent and contrast, plus
+the full palette as `org.abyssbsd.palette`, and follows a theme switch live
+(P11.10, P14.2); foreign applications get **our cursors** as an XCursor theme
+(U.7b); and every foreign window gets the **Aqua frame** (P9.5). What remains is
+the widgets inside that frame: a *generated* GTK/Qt theme rather than a
+hand-written Aqua one, emitted from whatever tokens are active, so a user's own
+theme re-skins foreign apps too (§8).
 
 ### 5.4 A security model for ordinary applications
 
@@ -413,8 +456,14 @@ earlier than the agent motivating it.
 
 ### 5.5 The menu protocol is also the automation surface
 
-**The cheapest decision in this document, and it expires.** Phase 10 builds a
-`CurrentIPC` channel over which an application publishes its menu tree and the
+**Built, as argued (Phase 10).** The protocol publishes vocabulary, the menu bar
+is its first consumer, and `abyssmenu` — something that cannot draw a menu —
+describes the Finder, is refused with reasons, and invokes verbs whose results are
+checked on disk (`live-vocabulary.sh`). The argument is kept because it is still
+the reason for §10's "no second automation surface".
+
+**It was the cheapest decision in this document, and it would have expired.**
+Phase 10 was to build a `CurrentIPC` channel over which an application publishes its menu tree and the
 bar routes activation back (§4.2). A menu tree is an application's vocabulary in
 machine-readable form — which is the same object AppleScript called a
 *dictionary*, and 10.2 shipped both the dictionary and the global menu bar
@@ -434,12 +483,12 @@ The consequence for us is an ordering claim §4.4 could not make on its own:
 > Designed as *published vocabulary, of which the menu bar is the first
 > consumer*, the agent's tool list comes for free.
 
-The delta is small and it is only cheap **now**: a verb carries argument types
+The delta was small and it was only cheap **then**: a verb carries argument types
 and a sentence of description; activation returns a result rather than nothing;
 and the channel answers a query — *what can you do* — rather than only pushing.
-Phase 10's text already says it must land before Phase 15 because every
-application built without it has to be retrofitted. This is that same argument
-carried one phase further, and it costs a design constraint written down rather
+Phase 10's text already said it must land before Phase 15 because every
+application built without it has to be retrofitted. This was that same argument
+carried one phase further, and it cost a design constraint written down rather
 than any code.
 
 Two things fall out, both free:
@@ -451,8 +500,8 @@ Two things fall out, both free:
   same observation about a different toolkit.
 - **`abyss-dbus` serves it for foreign applications too.** §4.2 already has us
   translating `org.gtk.Menus`/`org.gtk.Actions` and `com.canonical.dbusmenu` into
-  our bar. That is a vocabulary for every GTK and Qt application on the machine,
-  through a bridge we are building anyway. **One bridge, two consumers** — the
+  our bar (P10.6–P10.9). That is a vocabulary for every GTK and Qt application on
+  the machine, through the bridge the bar already uses. **One bridge, two consumers** — the
   menu bar and the agent — which is a better return than either justifies alone.
 
 And it is the reason §4.4's pixel fallback stays a fallback: an application that
@@ -490,47 +539,60 @@ way a rolling config merge cannot be.
 The GUI is Software Update — a sheet, a progress bar, a Restart button. The
 privileged half is `abyss-install`'s exact shape, already built and shipped once.
 
-### 6.3 Packages — FreeBSD's repos with an Abyss overlay
+### 6.3 A FreeBSD fork, FreeBSD's ports, and an Abyss overlay
 
-**Decided.** The installed system takes FreeBSD's repositories with an Abyss
-overlay on top, and we do not become a distribution until we choose to. (The
-medium still carries no package database at all — P5.3, unchanged and correct.)
+**Decided, and revised on 2026-09-30: AbyssBSD is a fork of FreeBSD, and will
+likely always be one.** Upstreaming is worth doing and we do it
+([UPSTREAMING.md](../../docs/UPSTREAMING.md)), but review moves at FreeBSD's pace
+and we move faster. The fork is where our work ships first; upstream gets it when
+review allows, and every change that lands there is one we stop carrying. The
+base is FreeBSD `main` (16-CURRENT), in the monorepo as `src/`.
 
-FreeBSD's repos give thesis 5 its breadth for nothing: tens of thousands of ports,
-a security-advisory pipeline, and mirrors we do not run. The overlay carries what
-is ours — the desktop itself (`undertow`, `anchor`, `abyss-portal`, `abyss-dbus`,
-the Aqua applications, the installer), the generated GTK/Qt theme (§5.3, §8), the
-`.desktop` → `.app` generator and its `pkg` hook (§6.1), and `Fathom` (§6.4).
+This section used to say the opposite — *"we are a desktop on FreeBSD, not a
+derivative that has to answer for `openssl`"* — and listed what would move us to
+owning the OS: base built differently, and patches we carry indefinitely. Both
+fired: the board's new drivers and LinuxKPI changes are in `src/` now, with the
+kernel's `allow.rtprio` and thesis 4's jail work planned behind them. So the question stopped being *whether* to own the base and became
+**how to keep owning it cheap**. The answer is the same discipline this section
+always had, applied one level down: **the fork carries what we wrote, plus the
+minimum change to FreeBSD needed to make it work, and it tracks `main` rather
+than diverging from it.** A fork that rebases is a patch set; a fork that drifts
+is a second operating system, and we are not staffed for one.
 
-**The discipline that keeps it bounded: the overlay carries what we wrote, plus
-the minimum patched upstream needed to make what we wrote work.** Every rebuilt
-upstream port is a maintenance obligation that does not end — rebuild WebKit and we
-own WebKit's security response. Anything else is a bug report to FreeBSD, not a
-fork. Cost: a poudriere builder, a signing key, somewhere to host. Real, bounded,
-and not the cost of maintaining a base system.
+**Packages still come from FreeBSD's ports**, and that is still where thesis 5
+gets its breadth for nothing: tens of thousands of ports, a security-advisory
+pipeline, mirrors we do not run. The **overlay** (`ports/` in the monorepo,
+`poudriere bulk -O abyss`) carries what is ours — the desktop itself (`undertow`,
+`anchor`, `abyss-portal`, `abyss-dbus`, `abyss-settings`, the Aqua applications,
+the installer), the generated GTK/Qt theme (§5.3, §8), the `.desktop` → `.app`
+generator and its `pkg` hook (§6.1), and `Fathom` (§6.4).
 
-**What would move us to ownership at the OS level**, written down so it stays a
-decision rather than a drift. We already have one foot across the line —
-`allow.rtprio` is a *kernel* patch and thesis 4's jails are kernel-level, so this
-is already a fork of the kernel while being a consumer of the packages. What would
-move the rest:
+**The overlay's discipline is unchanged: what we wrote, plus the minimum patched
+upstream needed to make what we wrote work.** Every rebuilt upstream port is a
+maintenance obligation that does not end — rebuild WebKit and we own WebKit's
+security response. Its first contents are that obligation made visible: Mesa,
+libdrm, drm-kmod and GPU firmware, patched for the Q8B's GPU. Each is accepted
+because the board cannot work without it and each has an upstreaming path; none
+is a precedent for carrying a port because we would like it newer. §5.1's
+WebKitGTK is where that rule gets tested next.
 
-- a port we depend on goes stale on something security-relevant — **§5.1's
-  WebKitGTK at 2.46.6 is the live candidate**, and the first place this decision
-  gets tested;
-- a patch we need is rejected upstream, so we carry it indefinitely anyway;
-- we need base built differently — kernel options, not package options.
+**What the fork costs, stated so it gets paid on purpose** (MIGRATION §5):
 
-The test is cost measured rather than felt: when carrying the patches exceeds the
-cost of owning the thing. Until then we are a desktop on FreeBSD, not a derivative
-that has to answer for `openssl`.
-
-**It composes with §6.2.** Tracking a rolling upstream means an update can break
-the desktop through no change of ours; boot environments make that survivable —
-clone, update, reboot, roll back if the desktop does not come up — which is why the
-update mechanism and the package decision belong together.
+- **A release pipeline is ours.** `buildworld` and `buildkernel` from `src/`, a
+  poudriere jail made from that world, the overlay's bulk build, and images for
+  amd64 and arm64. FreeBSD's release engineering no longer does this for us.
+- **CURRENT has no quarterly branch.** On `main`, FreeBSD's packages are the
+  *latest* branch only, so a port can move under us any day. §6.2 is what makes
+  that survivable, and it is why the update mechanism and the base decision
+  belong together.
+- **The toolchain follows the base.** The build VM still runs 15.0-RELEASE, and
+  `lang/swift6` has not been checked on 16-CURRENT; both are MIGRATION §5.
 
 ### 6.4 `Fathom` — the medium tells you whether this machine works
+
+**Built as Phase 12**, all but its Aqua view (P12.3): the medium runs it, it
+writes its report to the ESP, and `docs/reports/` holds the first row, from the
+12700KF. What follows is the design it was built from.
 
 Today the live medium is a delivery mechanism, not a live CD: it boots into the
 Installer, and if `amdgpu` does not bind the user gets a headless session or a
@@ -717,6 +779,10 @@ toplevel, so windows on an inactive island would keep drawing. For the Shoals
 strip and a live Ebb that is wanted; for an island nobody can see it is waste. The
 rule should be explicit — frame callbacks follow *visibility*, not mapping — and
 it wants a test, because getting it wrong is invisible until something is slow.
+*Half of it exists:* a minimised window gets a 1 Hz clock and xdg-shell's
+`suspended` state, and an Aqua window that is told it is suspended draws nothing
+(U.2, T.3, `live-hidden.sh`, `live-suspend.sh`). A window on an inactive island is
+the same case, and should get the same treatment.
 
 ### 7.5 Fidelity
 
@@ -773,7 +839,17 @@ building a mid-90s retro-cyberpunk theme or a modern GPU-effects extravaganza.**
 See §8.7: `Trench` is the second theme, and it exists as the format's positive
 control rather than as the start of a catalogue.
 
-### 8.1 The tree is already the right shape
+**Built as Phase 11** (2026-09-25; [PHASE11.md](PHASE11.md)): layers 1–3 — tokens
+in `theme.ini`, widgets and chrome as draw lists, type roles, icons and cursors as
+data — with Jaguar re-expressed byte-identical under the golden gate, `Trench`
+drawn by the same interpreter, and the legibility floor enforced at load. A theme
+switches while the desktop runs (P14.2). **Still open:** layer 4 (effects, which
+wait on a real vblank — Phase 4), layer 5 (the shell presenting menus another way),
+and the generated GTK/Qt widget theme (§5.3). The rest of this section is the
+argument it was built from; its numbers are the ones that justified doing it
+early.
+
+### 8.1 The tree was already the right shape
 
 - **`de/aqua/Theme.swift` — 141 lines of `public static let`.** Colours, metrics,
   two font properties. A token table already; just compile-time and
@@ -853,11 +929,11 @@ Permissiveness is safe only if the floor is explicit. A theme changes how things
   still fails.)*
 - **The frame contract (C1–C6).** §8.5.
 - **A legibility floor** — minimum contrast and hit-target size, checked at load,
-  refused with a reason. We have **no accessibility story at all**; this is the
-  cheapest down payment on one. *(Scoped in PHASE11 §6.2. Body text that fails
-  its surface is refused. Secondary roles are warned about in Preferences with
-  the pair and the ratio. The Plan Neo study flags two failing pairs of its own,
-  so the floor's first case is a real design.)*
+  refused with a reason. We had **no accessibility story at all**; this is the
+  cheapest down payment on one. *(Shipped in P11.10, as scoped in PHASE11 §6.2:
+  body text that fails its surface is refused; secondary roles are warned about
+  with the pair and the ratio. The Plan Neo study flagged two failing pairs of its
+  own, so the floor's first case was a real design.)*
 - **No code.** §8.3.
 
 ### 8.5 Effects are a budget, not a boolean
@@ -875,6 +951,8 @@ performance or refusing on principle — and it inherits §7.2's rule: **an effe
 may never delay a commit.**
 
 ### 8.6 Cost, risk, timing
+
+*Status: every row below is done except layer 4 and the generated GTK/Qt theme.*
 
 | Piece | Size |
 |---|---|
@@ -942,23 +1020,33 @@ to stall the project, which is what a matrix is *for*. The retarget also bought 
 **positive control**: on a machine where every layer below ours demonstrably
 works, a black screen means us (PHASE4 §1.2).
 
+**It holds as of 2026-09-30.** The distribution moved into a monorepo on a FreeBSD
+`main` fork (§6.3), and that monorepo also carries the Radxa Dragon Q8B's board
+work — a second architecture, done on another machine. **The desktop's metal
+target stays the 12700KF / RX 6750 XT**; the Q8B becomes a row when it can run
+Swift and drive a display, and not before (§4.5).
+
 **Everything in this document is now on [PLAN.md](PLAN.md) as Phases 9–18,
 ordered by dependency**, and that document is the roadmap — this section says
 what changed, not what order to work in. Two orderings of the same work in two
 files is how they drift.
 
-| PLAN phase | What it is | Where it comes from here |
-|---|---|---|
-| **9** — the interaction substrate | clipboard, drag-and-drop, a keybind table, the window requests we ignore, server-side decorations, the XWayland decision | §4.2, §4.3, §5.2 |
-| **10** — the menu protocol | ours over `CurrentIPC`, foreign through `abyss-dbus` — **as published vocabulary, not menus only** | §4.2, §5.5 |
-| **11** — the theme system, layers 1–3 | tokens, declarative widget drawing, chrome — plus `Trench` as the format's positive control | §8, §8.7, §5.3 |
-| **12** — `Fathom` | PHASE4 §5 as a program; the hardware matrix | §6.4, §4.5 |
-| **13** — Islands, Shoals and Ebb | workspaces, window sets, Exposé — and C6 | §7 |
-| **14** — preferences that write | Network, Sound, Displays, Energy over `PoolConfig`/`Vents`/`rc.conf` | §4.5 |
-| **15** — the application layer | `.desktop` → `.app`, the browser, Terminal, TextEdit, Grab, Activity Monitor, Disk Utility | §6.1, §5.1, §4.1 |
-| **16** — the session | login window, lock, idle, suspend, first run | §4.5 |
-| **17** — delivery | the Abyss overlay, and `abyss update` over boot environments | §6.2, §6.3 |
-| **18** — confinement, then agents | jails first (they are not only for agents), classes as data, the four requesters, the budget, the off switch, the crash task | §4.4, §5.4 |
+| PLAN phase | What it is | Where it comes from here | State (2026-09-30) |
+|---|---|---|---|
+| **9** — the interaction substrate | clipboard, drag-and-drop, a keybind table, the window requests we ignore, server-side decorations, the XWayland decision | §4.2, §4.3, §5.2 | ✅ |
+| **10** — the menu protocol | ours over `CurrentIPC`, foreign through `abyss-dbus` — **as published vocabulary, not menus only** | §4.2, §5.5 | ✅ |
+| **11** — the theme system, layers 1–3 | tokens, declarative widget drawing, chrome — plus `Trench` as the format's positive control | §8, §8.7, §5.3 | ✅ |
+| **12** — `Fathom` | PHASE4 §5 as a program; the hardware matrix | §6.4, §4.5 | ✅ but its Aqua view |
+| **13** — Islands, Shoals and Ebb | workspaces, window sets, Exposé — and C6 | §7 | not started |
+| **14** — preferences that write | Network, Sound, Displays, Energy over `PoolConfig`/`Vents`/`rc.conf` | §4.5 | ✅ |
+| **15** — the application layer | `.desktop` → `.app`, the browser, Terminal, TextEdit, Grab, Activity Monitor, Disk Utility | §6.1, §5.1, §4.1 | **next** |
+| **16** — the session | login window, lock, idle, suspend, first run | §4.5 | idle done (U.9) |
+| **17** — delivery | the Abyss overlay, a release pipeline for the fork, and `abyss update` over boot environments | §6.2, §6.3 | the overlay exists, for the board |
+| **18** — confinement, then agents | jails first (they are not only for agents), classes as data, the four requesters, the budget, the off switch, the crash task — and a local model as the default backend | §4.4, §5.4 | not started |
+
+Between Phases 14 and 15, [BACKLOG.md](BACKLOG.md) closed what Phase 15's
+applications would need from the compositor (U.1–U.10, U.3b, U.7b), the
+installer's keyboard items (T.1–T.3) and the toolchain passes (S.0–S.3).
 
 **What the dependency ordering changed about this document's own instincts**, in
 both directions:
@@ -1007,7 +1095,8 @@ both directions:
   GUI yet.
 - **An inference engine.** A model is a program we run, from ports, behind one
   wire format (§4.4). The same argument as the browser: we adopt engines, we do
-  not write them.
+  not write them. And the one we adopt runs **here by default**; a remote
+  provider is the person's choice to make, never the one made for them.
 - **An agent that cannot be removed.** Off is one file, and with it absent there
   is no menu item, no chord, no spend indicator and no process parked on a crash.
   A person who wants none of it gets none of it, and the rest of the desktop does
