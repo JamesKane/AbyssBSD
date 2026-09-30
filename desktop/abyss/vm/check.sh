@@ -60,6 +60,19 @@ else
   note "all seeded packages present"
 fi
 
+# --- the base is the pinned snapshot ------------------------------------
+# A pkgbase guest can upgrade its own world and kernel (first boot does, unless
+# the seed stops it), and then it no longer matches the sets the medium is
+# built from. Assert on the installed packages, not on uname: a kernel upgrade
+# does not show in uname until the next reboot.
+if [ -n "$ABYSS_BASE_PKG_PREFIX" ]; then
+  got=$(ssh_run 'pkg query %v FreeBSD-runtime FreeBSD-kernel-generic 2>/dev/null | tr "\n" " "' || true)
+  case " $got" in
+    *" $ABYSS_BASE_PKG_PREFIX"*" $ABYSS_BASE_PKG_PREFIX"*) note "base is the pinned snapshot ($ABYSS_BASE_PKG_PREFIX): $got" ;;
+    *) bad "base has moved off the pinned snapshot $ABYSS_BASE_PKG_PREFIX: FreeBSD-runtime/kernel are $got" ;;
+  esac
+fi
+
 # --- the C substrate SwiftPM will look for ------------------------------
 # These are the pkg-config names in Package.swift's systemLibrary targets
 # (plus wayland-client, which CWayland links directly).

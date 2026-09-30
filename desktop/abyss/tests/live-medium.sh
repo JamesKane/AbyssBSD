@@ -130,7 +130,11 @@ echo "ok: the wallpaper and the Aqua installer both composited — from a build 
 # question a test can ask — but "does the medium carry the driver, the firmware,
 # and the knob" is, and a medium that reaches the Mac Pro without them wastes a
 # boot cycle that costs a person's afternoon.
-grep -q "amdgpu kernel modesetting enabled" "$work/boot.log" \
+# The medium says it from kldstat. This used to grep amdgpu's own "kernel
+# modesetting enabled" banner, which drm-66-kmod printed at load and
+# drm-612-kmod (FreeBSD 16) does not print at all without a device: the check
+# failed on a module that had loaded (HANDOFF §2.96).
+grep -q "abyss-live: kernel module amdgpu is loaded" "$work/boot.log" \
   || fail "the medium did not load amdgpu — it would come up blank on real hardware"
 grep -q "Starting seatd" "$work/boot.log" \
   || fail "seatd did not start, so an unprivileged session cannot take DRM master"

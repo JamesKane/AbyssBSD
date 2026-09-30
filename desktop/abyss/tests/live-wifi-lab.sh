@@ -2,9 +2,10 @@
 # AbyssBSD Swift DE — the Wi-Fi lab works, and survives (PHASE14 P14.5).
 #
 # The harness for P14.5's join: two wtap(4) radios, hostapd (WPA2-PSK) on one,
-# a station on the other. 15.0's wtap cannot do either mode; the lab builds
-# upstream's (d4de0a69a92) plus our three teardown fixes, each of which was a
-# kernel panic in this guest (abyss/tests/wtap/). Claims, three rounds of each:
+# a station on the other. 15.0's wtap cannot do either mode, so there the lab
+# adds upstream's (d4de0a69a92); FreeBSD main has it. Either way it adds our
+# three teardown fixes, each of which was a kernel panic in this guest
+# (abyss/tests/wtap/). Claims, three rounds of each:
 #
 #   1. the access point comes up, and a scan from the station finds it (RSN);
 #   2. wpa_supplicant joins it: wpa_state=COMPLETED;
@@ -27,7 +28,7 @@ if [ "$(uname -s)" != FreeBSD ]; then
   echo "all green (nothing to simulate here)."
   exit 0
 fi
-[ -f /usr/src/sys/dev/wtap/if_wtap.c ] || fail "no /usr/src/sys — fetch the release's src.txz (PHASE14 §4.2)"
+[ -f /usr/src/sys/dev/wtap/if_wtap.c ] || fail "no /usr/src/sys — abyss/vm/fetch-sets.sh puts the guest's src.txz there (PHASE14 §4.2)"
 sudo -n true 2>/dev/null || fail "the lab needs passwordless sudo"
 
 boot=$(sysctl -n kern.boottime | sed 's/.*sec = \([0-9]*\).*/\1/')

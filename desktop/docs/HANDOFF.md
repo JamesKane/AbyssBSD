@@ -730,6 +730,72 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.97 A client whose compositor is leaving has not failed
+(MIGRATION §5, 2026-09-30, the fourth 16-CURRENT gate.)
+
+The medium's session ended in `anchor: could not restart installer: … never
+accepted a connection — tearing down`, exit 1, and `live-medium.sh` failed.
+Nothing had broken. The medium runs `undertow --frames 1800`: after 30 s the
+compositor finishes, drops its clients, prints its verdict and exits. The
+installer, disconnected, exits too — and **its** exit reached `anchor`'s poll
+loop before the compositor's. `anchor` restarted it, the restart waited on a
+socket nothing would ever accept again, and the failure was booked against a
+session that had ended exactly as designed. Every earlier medium had won the
+race; 16's scheduling lost it once in four runs.
+
+The fix is one question asked twice: **is the compositor's exit already
+pending?** (a zero-timeout `poll` on its process descriptor). Asked before
+restarting a component, and again if the restart fails — the compositor may
+still have been on its way out when the client's exit arrived. If it is gone,
+the session ends through `compositorExited()`, with the exit code it would have
+had. **Rule: when one process's exit is caused by another's, decide by the
+cause** — the order two exits are observed in is not the order they happened.
+
+### 2.96 A driver's banner is not proof it loaded
+(MIGRATION §5, 2026-09-30, the first 16-CURRENT medium.)
+
+`live-medium.sh` said *"the medium did not load amdgpu"* on a medium where it
+had. It grepped the nested boot's console for `amdgpu kernel modesetting
+enabled`, which `drm-66-kmod`'s amdgpu printed at load. On 16, `drm-kmod`
+resolves to `drm-612-kmod`, whose amdgpu prints nothing until a device probes —
+and the VM has no AMD GPU. rc had printed `Loading kernel modules: amdgpu.`
+with no `KLD … depends on` and no `Unable to load` after it.
+
+It cost a detour: the first theory was a KBI mismatch (the packages are built
+for `__FreeBSD_version` 1600022, the snapshot kernel is 1600026), and the
+second a missing `linker.hints`. Both were wrong — `pkg fetch` takes kmods from
+`kmods_latest`, built for 1600026, and rc's `kldxref` builds the hints at boot.
+Loading `drm`, `ttm` and `amdgpu` by hand in the guest settled that the module
+was fine; only the test's evidence was not.
+
+Now the medium says it: its session prints `abyss-live: kernel module amdgpu is
+loaded` from `kldstat`, and the test asserts on that. **Rule: assert on the
+state, not on a message the component happens to print** — §2.44 again, in a
+kernel module. A version bump changes what drivers say long before it changes
+what they do.
+
+### 2.95 FreeBSD 16: sound belongs to the `audio` group
+(MIGRATION §5, 2026-09-30, the first `--vm --live` on the 16-CURRENT guest.)
+
+`live-sound-pane.sh` failed with *"mixer: /dev/mixer0: no such mixer"* while
+`snd_dummy` was loaded and `/dev/mixer0` existed. On 15.0 the sound devices were
+open to everyone; on 16-CURRENT they are **`root:audio` 0660**, and `mixer(8)`
+reports a device it may not open as absent rather than as denied — so the
+message points at the driver when the cause is a group.
+
+This is a product change, not a harness one. A desktop user outside `audio` on
+16 has no mixer and no playback: the Sound pane, the menu bar's volume item and
+every application go quiet, with nothing saying why. So **every account the
+installer creates is in `audio`** (`InstallerModel.groups`, administrators too),
+the live medium's `abyss` user is, and so is the build guest's `build` user
+(the seed). **Rule: when the base moves, list the device nodes the desktop opens
+and read their owners** — a permission change is invisible to every test that
+runs as root, and to every error message that says "no such".
+
+Noticed on the way, not fixed: nothing in the installed system puts an account
+in `video`, which seatd's socket needs for DRM master. The live medium does it
+by hand; the installed path has never run on metal (PHASE4 §6.6). PHASE4 §6.10.
+
 ### 2.93 Swift cannot take a C global's address — a release build passes a copy
 (S.1. The 2026-09-28 spike proved Swift calls libwayland's `static inline`
 requests; it never bound a global, and binding is where it goes wrong.)

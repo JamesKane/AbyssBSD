@@ -948,3 +948,31 @@ Two one-minute checks for the machine, while it is up: `vulkaninfo` for
 `VK_EXT_external_memory_host` (probably absent — linuxkpi's MMU notifier is
 empty), and `sysctl dev.cpu.0` to confirm the 12700KF's P/E split is invisible to
 userland (API-STUDY §3).
+
+**6.9 A 16-CURRENT medium carries kmods built for an older 16 (2026-09-30).**
+The build guest moved to a 16.0-CURRENT snapshot (MIGRATION §5), so the next
+medium is built on it: its world and kernel are the snapshot's (`main-n289650`,
+2026-09-28), and its GPU modules come from FreeBSD's *latest* packages, which
+were built for `__FreeBSD_version` 1600022 — `drm-612-kmod` now, since that is
+what `drm-kmod` resolves to on 16 (`live-image.sh` asks pkg rather than naming
+it). On a release that is one ABI; on CURRENT a KBI change between the two can
+stop `amdgpu` loading. *Update, same day:* the nested medium does load it —
+`pkg fetch` takes the kmods from `kmods_latest`, which is built for the
+snapshot's own 1600026, and the medium now reports `kldstat`'s answer on its
+console (HANDOFF §2.96). What the VM still cannot say is whether it **binds**
+the RX 6750 XT: 6.12's amdgpu is a different driver from the 6.6 that was proven
+on that card. When the machine is back, that is the first thing to look at, and
+if it misbehaves, a kmod built against the medium's own kernel is the overlay's
+job (Phase 17), not a different package. Note also that *latest* moves: the next
+medium may fetch a kmod built for a newer CURRENT than its pinned kernel.
+
+**6.10 An installed account is never put in `video` (noticed 2026-09-30).** The
+live medium adds its `abyss` user to `video`, because seatd's socket is group
+`video` and that is how an unprivileged session gets DRM master (live-image.sh).
+Nothing in the installed system does the same for the account the installer
+creates — `InstallerModel.groups` gives `audio` (HANDOFF §2.95), and `wheel` and
+`operator` to an administrator, but not `video`. The installed path has only
+ever run headless in the VM, where it cannot matter. The first install on metal
+will show whether the session falls back to no display; if it does, the fix is
+one word in `InstallerModel.groups`, and it should be made *with* that machine in
+front of us, not before.

@@ -295,6 +295,15 @@ public struct InstallerModel: Sendable {
     /// thing it exists to install is the thing it is running on.
     public static let sets = ["base.txz", "kernel.txz", InstallPlan.desktopSet]
 
+    /// The account's supplementary groups. `wheel` and `operator` make it an
+    /// administrator. **`audio` is for everyone**: from FreeBSD 16 the sound
+    /// devices are `root:audio` 0660, so a desktop user outside the group has no
+    /// mixer and no sound at all — the Sound pane, the menu bar's volume and
+    /// every application go quiet (HANDOFF §2.95).
+    public static func groups(administrator: Bool) -> [String] {
+        administrator ? ["wheel", "operator", "audio"] : ["audio"]
+    }
+
     /// - Parameter erase: overrides the granted permission. **The predicates
     ///   that ask "what is wrong with this disk" must pass `false`**, because
     ///   they are asking about the disk and not about what has already been
@@ -311,7 +320,7 @@ public struct InstallerModel: Sendable {
             accounts.append(Account(name: accountName,
                                     fullName: accountFullName,
                                     passwordHash: passwordHash,
-                                    groups: accountIsAdministrator ? ["wheel", "operator"] : [],
+                                    groups: InstallerModel.groups(administrator: accountIsAdministrator),
                                     shell: "/bin/sh"))
         }
         return InstallPlan(disk: overrideDisk ?? disk,

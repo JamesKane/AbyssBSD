@@ -193,8 +193,12 @@ BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus abyss-theme
 # cannot. Precise, not transitive: named packages, and only `/boot/modules` and
 # `/usr/local` out of each.
 #
-#   drm-66-kmod   what `drm-kmod` resolves to on FreeBSD 15. 3.7 MB, six
-#                 modules: amdgpu, radeonkms, i915kms, drm, ttm, dmabuf.
+#   drm-*-kmod    whatever the `drm-kmod` meta-port resolves to on the
+#                 builder's FreeBSD, asked of pkg rather than written here:
+#                 drm-66-kmod on 15 (3.7 MB, six modules: amdgpu, radeonkms,
+#                 i915kms, drm, ttm, dmabuf), drm-612-kmod on 16-CURRENT.
+#                 Kernel modules must match the kernel they load into, so a
+#                 name pinned for one release is wrong on the next.
 #   gpu-firmware  Two families, because we bring up on two machines (PHASE4 §1).
 #
 #                 **RDNA 2 — the primary target.** The RX 6750 XT is Navi 22,
@@ -217,7 +221,9 @@ BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus abyss-theme
 #                 purpose (PHASE5 §4.4); libseat is already in our closure, but
 #                 the daemon it talks to is not.
 #
-GPU_PKGS="drm-66-kmod seatd
+drm_kmod=$(pkg rquery '%dn' drm-kmod 2>/dev/null | grep '^drm-.*-kmod$' | head -1)
+[ -n "$drm_kmod" ] || drm_kmod=drm-66-kmod   # no catalogue to ask: the 15.0 answer
+GPU_PKGS="$drm_kmod seatd
           gpu-firmware-amd-kmod-navy-flounder gpu-firmware-amd-kmod-sienna-cichlid
           gpu-firmware-amd-kmod-dimgrey-cavefish gpu-firmware-amd-kmod-beige-goby
           gpu-firmware-amd-kmod-tahiti gpu-firmware-amd-kmod-pitcairn
@@ -872,6 +878,15 @@ run() {
   # silent, which looked like a crash and was a redirection.
   [ -z "${ABYSS_LIVE_TRACE:-}" ] || set -x
   echo "abyss-live: $(cat /etc/abyss-live)"
+  # Whether rc's kld_list got the GPU driver in, said from kldstat rather than
+  # left to the driver: drm-66-kmod's amdgpu announced itself at load, and
+  # drm-612-kmod's (FreeBSD 16) says nothing until a device probes — so on a
+  # machine with no GPU the driver's own banner proves nothing either way.
+  if kldstat -q -n amdgpu.ko; then
+    echo "abyss-live: kernel module amdgpu is loaded"
+  else
+    echo "abyss-live: KERNEL MODULE amdgpu IS NOT LOADED"
+  fi
 
   # The privileged half first: the disk spoke is empty until it answers.
   # Straight to the console, not into a file read at the end: a service that
@@ -1004,6 +1019,11 @@ GRP
 sudo sed -i '' 's|^video:\*:44:.*|video:*:44:abyss|' "$stage/etc/group" 2>/dev/null || true
 grep -q '^video:' "$stage/etc/group" 2>/dev/null \
   || sudo sh -c "echo 'video:*:44:abyss' >> $stage/etc/group"
+# And `audio`: from FreeBSD 16 the sound devices are root:audio 0660, so a
+# session outside the group has no mixer (HANDOFF §2.95).
+sudo sed -i '' 's|^audio:\*:43:.*|audio:*:43:abyss|' "$stage/etc/group" 2>/dev/null || true
+grep -q '^audio:' "$stage/etc/group" 2>/dev/null \
+  || sudo sh -c "echo 'audio:*:43:abyss' >> $stage/etc/group"
 sudo mkdir -p "$stage/home/abyss"
 # So that someone logging in at the live console can just run
 # `abyss-installctl` — the installer service belongs to this user's session and

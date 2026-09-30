@@ -87,8 +87,7 @@ if [ ! -f "$uefi" ]; then
 fi
 if [ ! -s "$dist/base.txz" ] || [ ! -s "$dist/kernel.txz" ]; then
   echo "SKIP: no distribution sets in $dist (base.txz + kernel.txz)."
-  echo "      fetch them once: mkdir -p $dist && cd $dist &&"
-  echo "      fetch https://download.freebsd.org/ftp/releases/amd64/15.0-RELEASE/base.txz kernel.txz"
+  echo "      from the host: abyss/vm/fetch-sets.sh (the sets the guest's image was built with)"
   exit 0
 fi
 

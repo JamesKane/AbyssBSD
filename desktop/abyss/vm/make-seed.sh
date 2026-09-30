@@ -20,7 +20,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 cat > "$work/meta-data" <<EOF
-instance-id: abyss-build-001
+instance-id: abyss-build$_suffix-001
 local-hostname: $ABYSS_HOSTNAME
 EOF
 
@@ -30,11 +30,26 @@ hostname: $ABYSS_HOSTNAME
 ssh_pwauth: false
 users:
   - name: $ABYSS_SSH_USER
-    groups: [wheel]
+    # audio: from FreeBSD 16 the sound devices are root:audio 0660, and the
+    # harness drives snd_dummy's mixer as this user (HANDOFF §2.95).
+    groups: [wheel, audio]
     shell: /bin/sh
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     ssh_authorized_keys:
       - $pubkey
+# Hold the base system at the image's own snapshot. A pkgbase image (16) comes
+# with firstboot_pkg_upgrade on and the FreeBSD-base repository enabled, so its
+# first boot would upgrade world and kernel to whatever CURRENT built last night
+# — past the snapshot config.sh pins, and past the base.txz/kernel.txz the medium
+# is built from. nuageinit writes these before NETWORKING; the upgrade needs it.
+# Moving the base is a deliberate step: a new pin in config.sh, and a new guest.
+write_files:
+  - path: /etc/rc.conf.d/firstboot_pkg_upgrade
+    content: |
+      firstboot_pkg_upgrade_enable="NO"
+  - path: /usr/local/etc/pkg/repos/FreeBSD.conf
+    content: |
+      FreeBSD-base: { enabled: no }
 runcmd:
   - ASSUME_ALWAYS_YES=yes pkg bootstrap -f || true
   - pkg update -f || true
@@ -53,6 +68,16 @@ runcmd:
   # against sway here exactly as it does on Linux (a Swift compositor is
   # Phase 6). grim captures the headless output for the live tests.
   - pkg install -y wlroots019 seatd sway grim || true
+  # wlroots 0.20 beside 0.19: undertow moves to it on both platforms at once
+  # (Package.swift's pin), and the guest should already have it when it does.
+  - pkg install -y wlroots020 || true
+  # What the harness grew into after the seed was written, installed by hand
+  # on the 15.0 box and recorded here so a rebuilt guest is the same guest:
+  # nested bhyve's firmware for the --full installs (P5), gdb for the wtap
+  # vmcores (P14.5), a Qt and a GTK application whose menus our bar has to show
+  # (kcalc, qt6-wayland, zenity — P10.7, U.5), and an independent
+  # wlr-output-management client (P14.7).
+  - pkg install -y edk2-bhyve gdb kcalc qt6-wayland zenity wlr-randr || true
   # Swift toolchain. FreeBSD is not an *official* swift.org target, but ports
   # carries one: the package is \`swift6\` (\`swift\` alone matches nothing, which
   # is why this line used to report a false negative). Confirmed 2026-07-28:
@@ -67,7 +92,7 @@ runcmd:
   # Every install above is best-effort (|| true) so one missing port can't wedge
   # first boot — which means a silent miss would otherwise look like success.
   # Record what actually landed; abyss/vm/check.sh asserts on this file.
-  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 seatd sway grim; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
+  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb kcalc qt6-wayland zenity wlr-randr swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
   - touch /home/$ABYSS_SSH_USER/.cloud-init-done
   - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
 EOF

@@ -246,9 +246,25 @@ public final class Supervisor {
         stopping = true
     }
 
+    /// Whether the compositor's exit is already waiting on its descriptor —
+    /// asked without blocking.
+    private func compositorIsGone() -> Bool {
+        guard compositorChild.fd >= 0 else { return false }
+        var p = pollfd(fd: compositorChild.fd,
+                       events: Int16(ap_child_exit_events() | POLLERR | POLLHUP | POLLIN),
+                       revents: 0)
+        return withUnsafeMutablePointer(to: &p) { poll($0, 1, 0) } > 0
+    }
+
     private func componentExited(_ r: Running) {
         let ran = monotonicSeconds() - r.startedAt
         _ = ap_child_reap(&r.child, nil)
+        // **A client whose compositor is leaving has not failed.** When the
+        // compositor ends — a `--frames` run on the medium, say — it drops its
+        // clients before its own process is gone, and a client's exit can reach
+        // this loop first. Restarting it then waits on a socket that will never
+        // accept, and the session ended in an error it never had (HANDOFF §2.97).
+        if compositorIsGone() { compositorExited(); return }
         switch policy.decide(ranFor: ran, previousFailures: r.failures) {
         case .giveUp(let n):
             log("\(r.spec.name) failed \(n) times in a row — giving up, tearing down")
@@ -265,6 +281,9 @@ public final class Supervisor {
             do {
                 try start(r)
             } catch {
+                // The same race, caught late: the compositor was still on its
+                // way out when the client's exit arrived, and it is gone now.
+                if compositorIsGone() { compositorExited(); return }
                 log("could not restart \(r.spec.name): \(error) — tearing down")
                 exitCode = 1
                 stopping = true

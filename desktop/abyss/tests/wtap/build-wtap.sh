@@ -6,7 +6,10 @@
 #
 # 15.0-RELEASE's wtap does mesh and ad-hoc only, so a station could not join
 # an access point in the harness; upstream added both, with WPA, after 15.0.
-# /usr/src/sys comes from the release's src.txz (see the test that calls this).
+# FreeBSD main (16-CURRENT) has that commit already, so the patch is applied
+# only to a source without it — and our teardown fixes, which main does not
+# have, go on either way. /usr/src/sys comes from the guest's src.txz
+# (abyss/vm/fetch-sets.sh).
 #
 # Usage: build-wtap.sh OUTDIR   -> OUTDIR/wtap.ko and OUTDIR/wtapctl
 set -eu
@@ -18,8 +21,17 @@ mkdir -p "$out"
 b=$(mktemp -d /tmp/abyss-wtap.XXXXXX)
 trap 'rm -rf "$b"' EXIT
 cp -R /usr/src/sys/dev/wtap "$b/src"
-( cd "$b/src" && sed -n '/^diff/,$p' "$here/wtap-sta-hostap.patch" | patch -s -p4 ) \
-  || { echo "build-wtap.sh: the patch does not apply to this if_wtap.c" >&2; exit 1; }
+# Ask the source whether it can already be an access point, rather than
+# whether the patch reverses: main has moved on around those lines since
+# d4de0a69a92 (more capabilities on the same line), so neither direction of
+# the patch matches it.
+if grep -q 'IEEE80211_C_HOSTAP' "$b/src/if_wtap.c"; then
+  base="this FreeBSD's wtap, which has station and access-point modes"
+else
+  ( cd "$b/src" && sed -n '/^diff/,$p' "$here/wtap-sta-hostap.patch" | patch -s -p4 ) \
+    || { echo "build-wtap.sh: the patch does not apply to this if_wtap.c" >&2; exit 1; }
+  base="this FreeBSD's wtap + d4de0a69a92"
+fi
 # And ours: three teardown bugs, each a kernel panic (wtap-teardown.patch).
 ( cd "$b/src" && patch -s -p1 < "$here/wtap-teardown.patch" ) \
   || { echo "build-wtap.sh: wtap-teardown.patch does not apply" >&2; exit 1; }
@@ -32,4 +44,4 @@ sed -i '' "s|^\.PATH:.*|.PATH: $b/src $b/src/wtap_hal $b/src/plugins|" "$b/Makef
 cp "$b/wtap.ko" "$out/wtap.ko"
 [ -f "$b/wtap.ko.debug" ] && cp "$b/wtap.ko.debug" "$out/wtap.ko.debug"      # for kgdb on a crash
 cc -o "$out/wtapctl" "$here/wtapctl.c"
-echo "built $out/wtap.ko (15.0's wtap + d4de0a69a92 + teardown fixes) and $out/wtapctl"
+echo "built $out/wtap.ko ($base, + teardown fixes) and $out/wtapctl"

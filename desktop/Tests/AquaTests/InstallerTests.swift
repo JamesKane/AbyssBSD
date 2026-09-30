@@ -441,7 +441,7 @@ final class InstallerTests: XCTestCase {
             rootPasswordHash: "*",
             accounts: [Account(name: "jkane", fullName: "J Kane",
                                passwordHash: "$6$fake",
-                               groups: ["wheel", "operator"], shell: "/bin/sh")])
+                               groups: ["wheel", "operator", "audio"], shell: "/bin/sh")])
         XCTAssertEqual(built, expected)
     }
 
