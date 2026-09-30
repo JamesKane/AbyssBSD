@@ -74,7 +74,7 @@ toolkit shim, and not before U.3–U.4.
 
 | # | Item | Size | Why |
 |---|---|---|---|
-| S.0 | **Swift 6.3.3 on both platforms** — Linux via `swiftly`; the guest from the 2026Q4 quarterly | S | the rehearsal for 6.4 on a version both sides can run; `--full`, since the medium ships the runtime |
+| ~~S.0~~ | ✅ **2026-09-30. Swift 6.3.3 on both platforms** — Linux via `swiftly`, pinned by `desktop/.swift-version`; the guest's `swift6` from ports *latest* ahead of 2026Q4 (SWIFT-ON-FREEBSD). Unit tests and both golden gates green; the long lanes skipped by the user's call (a patch release) | S | done, both platforms |
 | ~~S.1~~ | ✅ **2026-09-30. The `aw_*` shims retired** — 95 wrappers and `cwayland_shim.c` gone; Swift calls libwayland's requests directly; binds through `wlBind` and `*_iface` pointers, because a release build passes a *copy* of a C global (HANDOFF §2.93) | M | ~95 wrappers and ~680 lines of C gone; adding a protocol stops needing hand-written wrappers |
 | ~~S.2~~ | ✅ **2026-09-28. `undertow`'s keybind spawn is async-signal-safe** — the new dependency-free `Spawn` target (`de/spawn`): resolve and allocate in the parent, only `fork`/`setsid`/`execve`/`_exit` in the child (HANDOFF §2.25) | S | done, both platforms |
 | ~~S.3~~ | ✅ **2026-09-28. One spawn helper** — `Spawn.run` (posix_spawn, one poll loop, drain past the limit, SIGPIPE blocked) and `Spawn.detached` with an environment; the installer's runner and probe, `fathom`, `abyss-dbus` and `Launcher` moved onto it; one `resolveExecutable`, one `withCStrings` (HANDOFF §2.25) | S–M | done, both platforms; `live-install.sh` green on 782c198 — the new runner ran all 39 install steps as root and the result booted |

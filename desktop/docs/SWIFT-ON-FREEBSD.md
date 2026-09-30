@@ -121,4 +121,16 @@ closed, and of the FreeBSD-specific facts that came out of it.
     `-D_THREAD_SAFE`, which SwiftPM refuses to forward: every build prints
     `warning: prohibited flag(s): -D_THREAD_SAFE`. It is dropped, it is benign
     for our single-threaded painting, and `abyss/vm/build.sh` filters it.
+- **2026-09-30 (S.0) — 6.3.3 on both sides.** The guest follows the
+  *quarterly* branch (still 6.3.2, since 2026Q4 has not opened); *latest* has
+  `swift6-6.3.3`. To take one package from *latest* without switching the
+  guest's branch, give pkg a second repo directory:
+  `pkg -R /tmp/latest-repo update -r latest` over a `latest.conf` naming
+  `pkg+https://pkg.FreeBSD.org/${ABI}/latest`, then `pkg -R /tmp/latest-repo
+  install -r latest swift6`. The dry run moved `swift6` and nothing else. A
+  guest provisioned fresh from `make-seed.sh` gets whatever quarterly carries,
+  so until 2026Q4 opens it lands on 6.3.2 and needs the same step. Still no
+  6.4 anywhere for FreeBSD amd64, and `swiftly list-available` on the Linux
+  box stops at 6.3.3 too. *latest* also carries `wlroots020` 0.20.2 beside
+  `wlroots019` 0.19.3 (MIGRATION §5).
 - _(append dated findings here as the spike runs)_

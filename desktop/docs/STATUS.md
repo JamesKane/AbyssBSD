@@ -114,7 +114,8 @@ A Swift 6 package builds on Linux and renders a faithful Jaguar window
 (![first window](screenshots/first-window.png) — glossy traffic lights,
 gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp).
 
-- **Swift 6.3.1** is installed on this Linux box; all client-side C libs are
+- **Swift 6.3.3**, via `swiftly`, pinned for this tree by `desktop/.swift-version`
+  (S.0, 2026-09-30; the guest has ports' `swift6` 6.3.3 too); all client-side C libs are
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
   are not.

@@ -43,6 +43,7 @@ FreeBSD has 6.4, then bump (§5).
 |---|---|---|
 | In use | 6.3.1, via `swiftly` | `swift6-6.3.2`, ports quarterly, `/usr/local/swift6/bin` |
 | Available now | 6.3.3 (`swiftly install 6.3.3`); 6.4.0 released upstream — `swiftly list-available` on this box did not list it yet | 6.3.3 on the ports *latest* branch (2026-07-15); the 2026Q4 quarterly branch opens in early October |
+| **2026-09-30 (S.0)** | **6.3.3**, `swiftly`, pinned by `desktop/.swift-version` | **6.3.3** from ports *latest* (`pkg install -r latest swift6`: that one package, no dependencies moved); quarterly still 6.3.2 until 2026Q4 opens, and carries the same 6.3.3 after |
 | 6.4 | released 2026-09-15 | **none**: not in ports, no swift.org release (a nightly of `main` only), community builds aarch64-only; `lang/swift64` planned, undated |
 
 **What a bump touches in this tree:** no version pin in code. `Package.swift` is
