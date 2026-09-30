@@ -4,16 +4,19 @@
 # Large VM artifacts (images, disks, seed) live OUTSIDE the git repo so they
 # never bloat history.
 
-# Repo root (this file lives at $REPO/abyss/vm/config.sh). The vm/ scripts get
-# this right from $0; anything else that sources this file (abyss/tests/run.sh
-# --vm) sets ABYSS_VM_DIR first, since $0 would then point somewhere else.
+# The desktop's root (this file lives at $REPO/abyss/vm/config.sh), which is
+# the monorepo's desktop/. The vm/ scripts get this right from $0; anything
+# else that sources this file (abyss/tests/run.sh --vm) sets ABYSS_VM_DIR
+# first, since $0 would then point somewhere else.
 : "${ABYSS_VM_DIR:=$(cd "$(dirname "$0")" && pwd)}"
 ABYSS_REPO="$(cd "$ABYSS_VM_DIR/../.." && pwd)"
+# The monorepo holding it.
+ABYSS_MONOREPO="$(cd "$ABYSS_REPO/.." && pwd)"
 
-# Where VM artifacts are stored (sibling of the repo by default).
-# A Swift-DE-specific home so we do NOT clobber the sibling Rust project's
-# ../abyss-vm. Set ABYSS_VM_HOME=../abyss-vm to reuse that provisioned VM.
-: "${ABYSS_VM_HOME:=$(cd "$ABYSS_REPO/.." && pwd)/abyss-swift-vm}"
+# Where VM artifacts are stored: beside the monorepo, never inside it. The
+# name predates the monorepo and is kept, so a box provisioned when the
+# desktop was a repo of its own is the one used.
+: "${ABYSS_VM_HOME:=$(cd "$ABYSS_MONOREPO/.." && pwd)/abyss-swift-vm}"
 
 # FreeBSD image
 : "${ABYSS_FBSD_VERSION:=15.0-RELEASE}"
@@ -47,8 +50,9 @@ ABYSS_REPO="$(cd "$ABYSS_VM_DIR/../.." && pwd)"
 : "${ABYSS_CPUS:=8}"
 : "${ABYSS_MEM:=16G}"
 
-# Source location inside the guest
-: "${ABYSS_GUEST_SRC:=/home/${ABYSS_SSH_USER}/AbyssBSD-swiftDE}"
+# Source location inside the guest: the desktop only, where it sits in the
+# monorepo. The rest of the monorepo (the FreeBSD fork, drm-kmod) is not synced.
+: "${ABYSS_GUEST_SRC:=/home/${ABYSS_SSH_USER}/AbyssBSD/desktop}"
 
 # Where the FreeBSD swift6 port puts its toolchain. It is deliberately NOT on
 # the default PATH (so lang/swift510 and lang/swift6 can coexist), and a

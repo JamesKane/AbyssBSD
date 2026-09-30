@@ -5,3 +5,6 @@
 *.img
 *.qcow2
 .DS_Store
+
+# Editors
+.idea/
