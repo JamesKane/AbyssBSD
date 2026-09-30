@@ -40,7 +40,7 @@ directory records what we found, so nobody has to find it again.
 | Ethernet ×2, 2.5G/1G/100M/10M | Works: ~2.2 Gbit/s each way, TSO, checksum offload, jumbo, hardware multicast filter | `sys/dev/tcx` |
 | USB-A (multiport) | Works | `generic_xhci_acpi.c` |
 | USB-C ×2 (host) | Works at 112 MB/s; SuperSpeed only in one plug orientation | `generic_xhci_acpi.c` |
-| Thermal sensors (46) | Works; critical-temperature shutdown untested | `sys/dev/qcom_tsens` |
+| Thermal sensors (46) | Works; critical-temperature shutdown tested (clean shutdown, PSCI power-off) | `sys/dev/qcom_tsens` |
 | CPU frequency, 2 domains | Works; per-domain powerd | `sys/dev/qcom_epss`, `usr.sbin/powerd` |
 | Deep idle (PSCI power-down, C3) | Works, on by default (`balanced` power profile; the kernel picks the always-on timer) | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c`, `kern_clocksource.c` |
 | Power profiles (power-saver/balanced/performance) | Works: CPU idle, powerd mode, GPU clock; live switch | `libexec/rc/rc.d/power_profile` |
@@ -48,12 +48,34 @@ directory records what we found, so nobody has to find it again.
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |
 | SD card | No ACPI SDHC driver | — |
-| RTC | None (no driver; ntpd sets the clock) | — |
-| I²C (EEPROM MACs, TC9563 setup) | No ACPI GENI I²C driver; not needed yet | — |
+| RTC | Works: ST M41T11 on I²C bus 12, as a DS1307; sets the clock at boot | `sys/dev/iicbus/rtc/ds13rtc.c` |
+| I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
 | The AbyssBSD desktop on this board | Not tried | — |
+
+## Clock, I²C and devices
+
+- **RTC:** ACPI's Time and Alarm device (`\_SB.PRTC`, `ACPI000E`) is
+  disabled (`_STA` 0) and works through Windows' PEP. UEFI's `GetTime` is
+  unsupported (`efirtc` error 78). The real clock is an **ST M41T11 at
+  `0x68` on QUP 1 SE 4** (`\_SB.IC13`, `0xa90000`), next to the MAC
+  EEPROM at `0x50`. The M41T11 has the DS1307's registers (plus century
+  bits, left 0), so `ds13rtc` drives it as a `dallas,ds1307`.
+  `qcom_geni_i2c` declares it as iicbus hints for this board, since ACPI
+  doesn't describe it. Both drivers are built into GENERIC (`std.qcom`),
+  because `inittodr` runs at mountroot, before modules load.
+- **I²C engine:** UEFI leaves its clocks on (GCC vote `0x52008`), the I²C
+  protocol firmware loaded (`GENI_FW_REVISION_RO` `0x303`), and a 400 kHz
+  bus (divider 2, SCL counters `0x00503018`). **I²C FIFO packing is MSB
+  first** (`0xff` per byte). The UART's LSB-first `0x0f` bit-reverses every
+  byte.
+- **MAC EEPROM:** cells at `0x9e` and `0xa4` hold `88:12:4e:00:02:00` and
+  `:01`, which `tcx` already reads from the TC956x.
+- **`/dev/drm/0`–`255`:** all 256 nodes exist. LinuxKPI's
+  `register_chrdev()` creates a whole Linux major's minors up front, on
+  every FreeBSD running drm-kmod. Cosmetic; not ours.
 
 ## Kernel changes (freebsd-src branch `radxa-dragon-q8b`)
 
@@ -67,6 +89,7 @@ directory records what we found, so nobody has to find it again.
   - `sys/dev/qcom_gpucc/`
   - `sys/dev/qcom_smmu/`
   - `sys/dev/qcom_adsp/` (+ `qcom_adsp.4`)
+  - `sys/dev/qcom_geni/qcom_geni_i2c.c` (+ `qcom_geni_i2c.4`)
   - `sys/arm/arm/generic_timer_mem.c`
 - arm64 and ACPI:
   - `cpu_suspend.c` and `locore.S` (PSCI suspend/resume)

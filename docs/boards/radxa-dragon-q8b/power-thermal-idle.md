@@ -65,8 +65,11 @@ Four controllers:
   - other: pcie-0 = 1.14, aoss = 1.0/3.0, audio 2.7, video 2.8, nsp, smss,
     camss.
 - DT trip points: CPU/SoC 110 °C, GPU 85 °C, memory 90 °C. The driver's
-  critical poweroff is `hw.qcom_tsens.crit_temp` (default 110). It's
-  **untested**: testing it powers the board off.
+  critical poweroff is `hw.qcom_tsens.crit_temp` (default 110,
+  runtime-writable). Tested 2026-09-30 by setting it to 30 °C at idle. It
+  logged "sensor 5 at 36.4 C, at or above 30 C; powering off" 2 s later
+  (two readings in a row), shut down cleanly, and PSCI powered the board
+  fully off.
 - Measured:
   - idle 29–35 °C;
   - four big cores at 3 GHz go from 31 to 80 °C in 30 s;
