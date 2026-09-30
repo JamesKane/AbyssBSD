@@ -180,6 +180,18 @@ public final class Window {
     public private(set) var isActivated = false
     /// True while the compositor is running an interactive resize we asked for.
     public private(set) var isResizing = false
+    /// **Nobody can see it** (xdg-shell v6, T.3): minimised, or on no output.
+    /// While it is, nothing is drawn or committed — a redraw asked for waits,
+    /// and happens once, when the window can be seen again.
+    public private(set) var isSuspended = false
+    /// What the compositor serves (`wm_capabilities`, v5), or nil before it
+    /// says — a compositor that never says serves everything, as before v5.
+    public private(set) var capabilities: Set<UInt32>?
+    /// The most room the compositor will give a window (`configure_bounds`,
+    /// v4), or nil for no limit it knows of.
+    public private(set) var bounds: (width: Int32, height: Int32)?
+    public var canMinimize: Bool { capabilities?.contains(XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE.rawValue) ?? true }
+    public var canMaximize: Bool { capabilities?.contains(XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE.rawValue) ?? true }
 
     private var buffers: [ShmBuffer] = []
     private var needsRedraw = true
@@ -237,6 +249,24 @@ public final class Window {
             guard let data else { return }
             let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
             w.delegate?.windowShouldClose(w)
+        }
+        // v4 and v5 (T.3). Bound at v6, the compositor sends both; a NULL slot
+        // is libwayland's abort.
+        tll.configure_bounds = { data, _, width, height in
+            guard let data else { return }
+            let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
+            w.bounds = width > 0 && height > 0 ? (width, height) : nil
+        }
+        tll.wm_capabilities = { data, _, caps in
+            guard let data else { return }
+            let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
+            w.capabilities = Window.states(from: caps)
+            let names = [(XDG_TOPLEVEL_WM_CAPABILITIES_WINDOW_MENU, "window-menu"),
+                         (XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE, "maximize"),
+                         (XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN, "fullscreen"),
+                         (XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE, "minimize")]
+                .filter { w.capabilities!.contains($0.0.rawValue) }.map(\.1)
+            Window.log("the compositor serves: " + (names.isEmpty ? "nothing" : names.joined(separator: " ")))
         }
         display.addListener(to: tl, listener: tll, data: me)
 
@@ -313,10 +343,23 @@ public final class Window {
         // whose zoom light then asks to maximize a second time and never
         // un-zooms.
         let wasMax = isMaximized, wasFull = isFullscreen, wasActive = isActivated
+        let wasSuspended = isSuspended
         isMaximized  = pendingStates.contains(XDG_TOPLEVEL_STATE_MAXIMIZED.rawValue)
         isFullscreen = pendingStates.contains(XDG_TOPLEVEL_STATE_FULLSCREEN.rawValue)
         isActivated  = pendingStates.contains(XDG_TOPLEVEL_STATE_ACTIVATED.rawValue)
         isResizing   = pendingStates.contains(XDG_TOPLEVEL_STATE_RESIZING.rawValue)
+        isSuspended  = pendingStates.contains(XDG_TOPLEVEL_STATE_SUSPENDED.rawValue)
+        if isSuspended != wasSuspended {
+            Window.log(isSuspended ? "suspended: nobody can see it; drawing nothing"
+                                   : "resumed after \(redrawsHeld) redraw(s) held; drawing once")
+            if !isSuspended { redrawsHeld = 0 }
+        }
+        // The compositor left the size to us (0x0): keep within its bounds —
+        // a window on a small display that fits it rather than hangs off it.
+        if let b = bounds, pendingW > b.width || pendingH > b.height, !isMaximized, !isFullscreen {
+            pendingW = min(pendingW, b.width)
+            pendingH = min(pendingH, b.height)
+        }
         if isMaximized != wasMax || isFullscreen != wasFull || isActivated != wasActive {
             needsRedraw = true
             delegate?.windowStateChanged(self)
@@ -384,8 +427,21 @@ public final class Window {
         buffers.first { !$0.busy }
     }
 
+    /// Redraws asked for while suspended, for the line that says so.
+    private var redrawsHeld = 0
+
     private func renderAndCommit() {
         guard !tornDown else { return }
+        // **Not for nobody** (T.3). The redraw waits; the configure that ends
+        // the suspension asks for it again. A configure's ack still needs a
+        // commit, which carries no new buffer.
+        if isSuspended {
+            if needsRedraw { redrawsHeld += 1 }
+            needsRedraw = true
+            aw_surface_commit(raw(surface))
+            wl_display_flush(display.display)
+            return
+        }
         guard let buf = freeBuffer() else {
             needsRedraw = true  // both busy; retry on release/frame
             return
@@ -490,14 +546,12 @@ public final class Window {
     /// exclusive zone is part of the answer.
     public func setMaximized(_ on: Bool) {
         guard !tornDown else { return }
+        guard canMaximize else { Window.log("not zooming: the compositor does not maximise"); return }
         if on { aw_xdg_toplevel_set_maximized(raw(xdgToplevel)) }
         else { aw_xdg_toplevel_unset_maximized(raw(xdgToplevel)) }
         display.flush()
     }
 
-    /// Minimize. There is no `unset_minimized` in the protocol: a minimized
-    /// window is restored by the compositor (a Dock tile, a switcher), never by
-    /// the client, because a client that could un-minimize itself would.
     /// Tell the compositor this window's menus are published at `address` (a
     /// MenuWire service name), or withdraw them with "" (PHASE10.md P10.3).
     /// False when the compositor does not speak the protocol — under anything
@@ -510,10 +564,18 @@ public final class Window {
         return true
     }
 
-    public func minimize() {
-        guard !tornDown else { return }
+    /// Minimize. There is no `unset_minimized` in the protocol: a minimized
+    /// window is restored by the compositor (a Dock tile, a switcher), never by
+    /// the client, because a client that could un-minimize itself would.
+    /// False, and nothing asked, when the compositor said it does not
+    /// minimise (`wm_capabilities`, T.3).
+    @discardableResult
+    public func minimize() -> Bool {
+        guard !tornDown else { return false }
+        guard canMinimize else { Window.log("not minimising: the compositor does not"); return false }
         aw_xdg_toplevel_set_minimized(raw(xdgToplevel))
         display.flush()
+        return true
     }
 
     /// Send this window behind the others — the depth gadget (P11.6). False
@@ -540,4 +602,9 @@ public final class Window {
 
     /// Logical (surface) size, useful to the toolkit for layout.
     public var size: (width: Int32, height: Int32) { (logicalW, logicalH) }
+
+    static func log(_ msg: String) {
+        let line = "Surface.Window: \(msg)\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
+    }
 }

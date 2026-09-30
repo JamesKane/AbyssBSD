@@ -563,6 +563,7 @@ case "run":
     var reportedIdle = ""
     var reportedSync = ""
     var reportedLayout = ""
+    var reportedHidden = -1
     var reportedPrimary = 0
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
@@ -623,6 +624,11 @@ case "run":
             let line = "display-sleep \(sleep.asleep ? "asleep" : "awake") sleeps=\(sleep.sleeps) "
                 + "wakes=\(sleep.wakes) inhibited=\(sleep.inhibited ? "yes" : "no")"
             if line != reportedIdle { reportedIdle = line; out(line) }
+        }
+        // What minimised windows drew anyway (T.3).
+        if compositor.hiddenCommits != reportedHidden {
+            reportedHidden = compositor.hiddenCommits
+            out("hidden-commits=\(reportedHidden)")
         }
         // The keyboard layout, and how often it has changed under us (T.2).
         do {

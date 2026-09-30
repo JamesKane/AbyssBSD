@@ -293,7 +293,11 @@ public final class Display {
             // when the second of the two lands rather than from one of them.
             attachClipboardIfReady()
         case "xdg_wm_base":
-            guard let b = opt(aw_bind_xdg_wm_base(raw(registry), name, min(version, 2)))
+            // v6 (T.3): `suspended` (don't draw for nobody), `wm_capabilities`
+            // (don't ask for what is not served) and `configure_bounds` (the
+            // most room there is). Every one of their listener slots is
+            // filled in Window — libwayland aborts on an event with none.
+            guard let b = opt(aw_bind_xdg_wm_base(raw(registry), name, min(version, 6)))
             else { return }
             wmBase = b
             var bl = xdg_wm_base_listener()

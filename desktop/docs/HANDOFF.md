@@ -55,7 +55,9 @@ The items below are the context for it.
    or Qt app's menus changing while it is frontmost (§2.90). **T.1 is done**
    (2026-09-29): the installer names layouts ("Dvorak", not `us.dvorak.kbd`).
    **T.2 is done** (2026-09-29): the layout chosen in the installer is the one
-   the medium types with, at once (§2.91). Left in §2: T.3. The phase's history, pass by pass:
+   the medium types with, at once (§2.91). **T.3 is done** (2026-09-29): the
+   toolkit binds xdg-shell v6 and draws nothing while suspended (§2.92).
+   **BACKLOG §2 is empty.** The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -720,6 +722,34 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
 
+### 2.92 An Aqua window hears xdg-shell v6
+(T.3. The toolkit bound v2, so it heard none of v4–v6. U.2 had made undertow
+send `suspended` to a minimised window, and no Aqua window listened.)
+
+Surface binds `xdg_wm_base` at v6, and **every new event has a handler in the
+same change**. At v6 the compositor sends `configure_bounds` and
+`wm_capabilities`, and a NULL listener slot is libwayland's abort, which is
+why this couldn't be a one-number change.
+- **`suspended`:** `Window.isSuspended` is applied with the configure's other
+  states. While suspended, `renderAndCommit` draws nothing and commits only
+  what an ack needs. A redraw asked for is held (and counted), and the
+  configure that lifts the suspension draws once. Before this, a theme change
+  while an Aqua window was minimised made it commit 2 buffers for nobody
+  (the fault injection). undertow now counts buffers from minimised windows
+  (`hidden-commits=N`), a witness the client can't fake.
+- **`wm_capabilities`:** recorded (`canMinimize`, `canMaximize`, logged as
+  "the compositor serves: …"). `minimize()` and `setMaximized` don't ask a
+  compositor that said it doesn't. The traffic lights still draw enabled
+  there; drawing a disabled gadget is a theme matter for later.
+- **`configure_bounds`:** a window left to choose its size keeps within the
+  bounds. undertow now sends the usable area, from the first-commit handler
+  with the capabilities, so an Aqua window on a 320x240 display is 320x240,
+  not 440x300.
+
+The test minimises and restores through `wlr-foreign-toplevel-management` with
+a small tool, `ftctl`, as the Dock does, because xdg-shell has no way for a
+window to un-minimise itself.
+
 ### 2.91 The layout chosen on the medium is the one the medium types with
 (T.2. The installer wrote `keymap=` into the installed system's rc.conf and
 nothing else. The account password was typed on the medium in U.S.
@@ -1319,9 +1349,9 @@ client that listens; the clock is for one that does not. Two traps in doing it:
   scheduling a configure earlier is P9.6's assertion. Found by removing the
   call and watching the test fail on `window_menu`; the comment first written
   here had guessed the default was *empty*.
-- **Our own toolkit binds xdg-shell v2**, so the version bump changes nothing
-  for Aqua applications — and they do not hear `suspended` either. That is the
-  client half, BACKLOG T.3.
+- **Our own toolkit bound xdg-shell v2**, so the version bump changed nothing
+  for Aqua applications — and they did not hear `suspended` either. That was
+  the client half, BACKLOG T.3 — done (§2.92).
 
 `live-hidden.sh` asserts the four claims separately (capabilities, suspended
 both ways, the slow clock, the clock's return) and each was shown to fail

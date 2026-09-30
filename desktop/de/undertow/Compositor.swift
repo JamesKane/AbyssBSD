@@ -113,6 +113,16 @@ public final class Toplevel {
                 // ...and the decoration mode, which could not be answered
                 // before this commit (P9.6).
                 t.compositor.decorations?.answer(t)
+                // The most room a window can have (T.3): the usable area of the
+                // main display. A client choosing its own size keeps within it
+                // — on a small display, a window that fits.
+                let u = t.compositor.usableArea
+                _ = wlr_xdg_toplevel_set_bounds(t.xdgToplevel, u.width, u.height)
+            }
+            // **A window nobody can see drew anyway** (T.3): counted, so a test
+            // can hold a client to xdg-shell's `suspended`.
+            if t.minimized, t.surface.pointee.current.committed & UInt32(WLR_SURFACE_STATE_BUFFER.rawValue) != 0 {
+                t.compositor.hiddenCommits += 1
             }
             // A resize in progress: the client just told us the size it managed,
             // which is the only moment the anchored edge can be put back exactly
@@ -411,6 +421,8 @@ public final class Compositor {
 
     /// Whether `linux-dmabuf` is on offer — whether a GPU client can present.
     public private(set) var dmabufOffered = false
+    /// Buffers committed by minimised windows — drawing for nobody (T.3).
+    public internal(set) var hiddenCommits = 0
     /// linux-drm-syncobj (U.3b), where the renderer and backend can keep it.
     public private(set) var explicitSync: ExplicitSync?
 

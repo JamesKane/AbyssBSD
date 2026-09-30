@@ -218,6 +218,10 @@ if [ "$live" -eq 1 ]; then
   # compositor can do (U.2; xdg-shell v6).
   echo "== a hidden window's clock =="
   quiet "$root/abyss/tests/live-hidden.sh"
+  # The client half (T.3): an Aqua window binds xdg-shell v6 — told what is
+  # served, kept within bounds, and drawing nothing while suspended.
+  echo "== an Aqua window, suspended =="
+  quiet "$root/abyss/tests/live-suspend.sh"
   # GPU clients through linux-dmabuf: pixman says plainly it offers none;
   # on a render node a GL and a Vulkan client run on it and are seen
   # moving, and a screenshot on every renderer here is the right colour.
