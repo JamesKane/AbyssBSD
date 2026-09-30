@@ -38,3 +38,25 @@ size_t tw_output_config_heads(struct wlr_output_configuration_v1 *config,
     }
     return n;
 }
+
+/* A stand-in for a hardware keyboard (BACKLOG T.2): a wlr_keyboard undertow
+ * owns, with no keymap of its own — which is what libinput hands a compositor
+ * on metal, and what a headless run otherwise never has. */
+static const struct wlr_keyboard_impl stand_in_impl = { .name = "stand-in-keyboard" };
+
+struct wlr_keyboard *tw_stand_in_keyboard_create(void) {
+    struct wlr_keyboard *k = calloc(1, sizeof(*k));
+    if (!k) return NULL;
+    wlr_keyboard_init(k, &stand_in_impl, "stand-in keyboard");
+    return k;
+}
+
+void tw_stand_in_keyboard_key(struct wlr_keyboard *k, uint32_t keycode, bool pressed, uint32_t time_msec) {
+    struct wlr_keyboard_key_event e = {
+        .time_msec = time_msec,
+        .keycode = keycode,
+        .update_state = true,
+        .state = pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED,
+    };
+    wlr_keyboard_notify_key(k, &e);
+}

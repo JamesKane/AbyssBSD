@@ -119,6 +119,10 @@ void tw_listener_free(struct tw_listener *l);
  * most `max`; returns how many there are. wl_list_for_each is a macro Swift
  * cannot call, and walking `link` by hand from Swift is offset arithmetic on a
  * struct wlroots may reorder. */
+/* A keyboard with no keymap of its own, fed key codes by a test (T.2). */
+struct wlr_keyboard *tw_stand_in_keyboard_create(void);
+void tw_stand_in_keyboard_key(struct wlr_keyboard *k, uint32_t keycode, bool pressed, uint32_t time_msec);
+
 size_t tw_output_config_heads(struct wlr_output_configuration_v1 *config,
                               struct wlr_output_configuration_head_v1 **out, size_t max);
 

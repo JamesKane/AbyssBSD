@@ -118,6 +118,24 @@ public final class Seat {
     /// have the pointer — for the log a test reads.
     public private(set) var cursorRequests = 0, cursorRefused = 0
 
+    /// The session's keyboard layout (T.2): keyboard.ini's `kbdmap`, or empty
+    /// for rc.conf's. Kept so a change is applied once, not every time the
+    /// config directory stirs.
+    public private(set) var sessionKbdmap = ""
+    /// The keyboards whose keymap is ours to change — the ones that had none
+    /// of their own. A virtual keyboard brings its own, and keeps it.
+    private var keymapped: [UnsafeMutablePointer<wlr_keyboard>] = []
+    private var keyboardWatch: Pool.Watcher?
+    private var keyboardWatchSource: OpaquePointer?
+    /// A stand-in for a hardware keyboard, for a test (`--stand-in-keyboard`).
+    private var standIn: UnsafeMutablePointer<wlr_keyboard>?
+    private var standInFd: Int32 = -1
+    private var standInSource: OpaquePointer?
+    private var standInBuffer: [UInt8] = []
+    /// What the keyboards type with now, in words — for the log a test reads.
+    public private(set) var layoutDescription = ""
+    public private(set) var layoutChanges = 0
+
     // The desktop is the compositor's layout (P14.7a): the pointer ranges over
     // every display, and never into the gaps between them.
     private var capabilities: UInt32 = 0
@@ -327,6 +345,7 @@ public final class Seat {
     /// Called from the device's own `destroy` signal, which wlroots emits with
     /// `wl_signal_emit_mutable` precisely so a listener may remove itself here.
     private func forget(device: UnsafeMutableRawPointer) {
+        keymapped.removeAll { UnsafeMutableRawPointer($0) == device }
         guard let group = deviceListeners.removeValue(forKey: device) else { return }
         for l in group { tw_listener_free(l) }
     }
@@ -341,7 +360,7 @@ public final class Seat {
             if let k = wlr_keyboard_from_input_device(device) {
                 // Before `attach`, because `wlr_seat_set_keyboard` there is what
                 // sends clients the keymap.
-                Seat.giveKeymap(to: k)
+                if Seat.giveKeymap(to: k, session: sessionKbdmap) { keymapped.append(k) }
                 attach(keyboard: k)
             }
         default:
@@ -490,28 +509,107 @@ public final class Seat {
     /// is the 12700KF's, on metal.
     ///
     /// Which layout is `compileKeymap`'s to decide.
+    @discardableResult
     static func giveKeymap(to keyboard: UnsafeMutablePointer<wlr_keyboard>,
-                           rcConf: [String] = Seat.rcConf) {
+                           rcConf: [String] = Seat.rcConf, session: String = "") -> Bool {
         let name = keyboard.pointee.base.name.map { String(cString: $0) } ?? "a keyboard"
         if let existing = keyboard.pointee.keymap {
             // A backend that already chose one knows better than our default.
             log("\(name) came with keymap \(layoutName(existing)); keeping it")
-            return
+            return false
         }
-        guard let keymap = compileKeymap(rcConf: rcConf) else {
+        guard let keymap = compileKeymap(rcConf: rcConf, session: session) else {
             log("no keymap compiled (are the xkeyboard-config layouts installed?) — "
                 + "this keyboard's keys will reach clients as codes nobody can read")
-            return
+            return false
         }
         defer { xkb_keymap_unref(keymap) }  // the keyboard takes its own reference
         if !wlr_keyboard_set_keymap(keyboard, keymap) {
             log("wlroots refused the keymap")
-            return
+            return false
         }
         // wlroots' own defaults, stated rather than assumed: a rate of 0 would
         // tell clients not to repeat at all.
         wlr_keyboard_set_repeat_info(keyboard, 25, 600)
         log("\(name) had no keymap; gave it \(layoutName(keymap))")
+        return true
+    }
+
+    // MARK: - The session's layout (T.2)
+
+    /// Read keyboard.ini now, and follow it: when it changes, every keyboard
+    /// whose keymap is ours types the new layout at once — and the focused
+    /// client is sent the new keymap by the seat, which wlroots does when its
+    /// keyboard's keymap changes.
+    public func followSessionLayout() {
+        sessionKbdmap = KeyboardPrefs.load(configDir: compositor.configDir).kbdmap
+        describeLayout()
+        guard keyboardWatch == nil, let w = try? Pool.Watcher(in: compositor.configDir) else { return }
+        keyboardWatch = w
+        let loop = wl_display_get_event_loop(compositor.session.display)
+        keyboardWatchSource = wl_event_loop_add_fd(loop, w.fileDescriptor, UInt32(WL_EVENT_READABLE), { _, _, data in
+            guard let data else { return 0 }
+            let s = Unmanaged<Seat>.fromOpaque(data).takeUnretainedValue()
+            _ = s.keyboardWatch?.drain()
+            let now = KeyboardPrefs.load(configDir: s.compositor.configDir).kbdmap
+            if now != s.sessionKbdmap { s.applySessionLayout(now) }
+            return 0
+        }, Unmanaged.passUnretained(self).toOpaque())
+    }
+
+    private func applySessionLayout(_ kbdmap: String) {
+        sessionKbdmap = kbdmap
+        layoutChanges += 1
+        guard let keymap = Seat.compileKeymap(session: kbdmap) else { return }
+        defer { xkb_keymap_unref(keymap) }
+        for k in keymapped { _ = wlr_keyboard_set_keymap(k, keymap) }
+        describeLayout()
+        Seat.log("keyboard layout is now \(layoutDescription), on \(keymapped.count) keyboard(s)")
+    }
+
+    private func describeLayout() {
+        let (source, name): (String, String) =
+            getenv("XKB_DEFAULT_LAYOUT") != nil ? ("environment", String(cString: getenv("XKB_DEFAULT_LAYOUT")))
+            : !sessionKbdmap.isEmpty ? ("keyboard.ini", Keymaps.displayName(forKbdmap: sessionKbdmap))
+            : Keymaps.configured().map { ("rc.conf", Keymaps.displayName(forKbdmap: $0)) } ?? ("default", "U.S.")
+        layoutDescription = "\(name) (\(source))"
+    }
+
+    /// A stand-in for a hardware keyboard, fed from `fifo` — lines of `k CODE`
+    /// (press and release) — so a headless run has what metal has: a keyboard
+    /// with no keymap of its own, which takes the session's layout.
+    public func addStandInKeyboard(fifo: String) -> Bool {
+        guard standIn == nil, let k = tw_stand_in_keyboard_create() else { return false }
+        let fd = open(fifo, O_RDWR | O_NONBLOCK)   // RDWR: never sees EOF between writers
+        guard fd >= 0 else { return false }
+        standIn = k
+        standInFd = fd
+        if Seat.giveKeymap(to: k, session: sessionKbdmap) { keymapped.append(k) }
+        attach(keyboard: k)
+        let loop = wl_display_get_event_loop(compositor.session.display)
+        standInSource = wl_event_loop_add_fd(loop, fd, UInt32(WL_EVENT_READABLE), { _, _, data in
+            guard let data else { return 0 }
+            Unmanaged<Seat>.fromOpaque(data).takeUnretainedValue().readStandIn()
+            return 0
+        }, Unmanaged.passUnretained(self).toOpaque())
+        return true
+    }
+
+    private func readStandIn() {
+        var buf = [UInt8](repeating: 0, count: 512)
+        let n = read(standInFd, &buf, buf.count)
+        guard n > 0, let k = standIn else { return }
+        standInBuffer += buf[0..<n]
+        while let nl = standInBuffer.firstIndex(of: 10) {
+            let line = String(decoding: standInBuffer[..<nl], as: UTF8.self)
+            standInBuffer.removeSubrange(...nl)
+            let f = line.split(separator: " ")
+            guard f.count == 2, f[0] == "k", let code = UInt32(f[1]) else { continue }
+            var ts = timespec(); clock_gettime(CLOCK_MONOTONIC, &ts)
+            let ms = UInt32(truncatingIfNeeded: Int(ts.tv_sec) * 1000 + Int(ts.tv_nsec) / 1_000_000)
+            tw_stand_in_keyboard_key(k, code, true, ms)
+            tw_stand_in_keyboard_key(k, code, false, ms)
+        }
     }
 
     /// Where the system's keyboard layout is written: the installer puts a
@@ -524,13 +622,24 @@ public final class Seat {
     /// 1. **`XKB_DEFAULT_LAYOUT` in the environment** — how a person overrides
     ///    everything for one session; xkbcommon reads it (and `_VARIANT`,
     ///    `_OPTIONS`, …) itself.
-    /// 2. **rc.conf's `keymap=`, translated** (`Install.Keymaps`), so the
+    /// 2. **The session's choice** — keyboard.ini's `kbdmap` (T.2): what the
+    ///    installer chose on the live medium, before there was an rc.conf.
+    /// 3. **rc.conf's `keymap=`, translated** (`Install.Keymaps`), so the
     ///    desktop types what the console types. A name the installer never
     ///    offered is guessed from its prefix, and a guess XKB refuses is said so.
-    /// 3. **xkbcommon's default**, which is US.
-    static func compileKeymap(rcConf: [String] = Seat.rcConf) -> OpaquePointer? {
+    /// 4. **xkbcommon's default**, which is US.
+    static func compileKeymap(rcConf: [String] = Seat.rcConf, session: String = "") -> OpaquePointer? {
         guard let ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS) else { return nil }
         defer { xkb_context_unref(ctx) }
+        if getenv("XKB_DEFAULT_LAYOUT") == nil, !session.isEmpty {
+            if let (k, _) = Keymaps.xkb(forKbdmap: session),
+               let km = compile(ctx, layout: k.layout, variant: k.variant) {
+                log("the session's keymap \(session) is XKB \(k.layout)"
+                    + (k.variant.isEmpty ? "" : "(\(k.variant))"))
+                return km
+            }
+            log("the session's keymap \(session) has no XKB layout that compiles; trying rc.conf's")
+        }
         if getenv("XKB_DEFAULT_LAYOUT") == nil, let kbdmap = Keymaps.configured(rcConf: rcConf) {
             if let (k, exact) = Keymaps.xkb(forKbdmap: kbdmap),
                let km = compile(ctx, layout: k.layout, variant: k.variant) {

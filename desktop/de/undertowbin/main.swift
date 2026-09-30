@@ -44,6 +44,7 @@ func usage() -> Never {
                                     [--assert-missed N] [--config-dir DIR] [--verbose]
                                     [--socket NAME] [--privileged-socket NAME]
                                     [--display-sleep SECONDS]  (else energy.ini's minutes)
+                                    [--stand-in-keyboard FIFO] (a keyboard with no keymap, for tests)
     """)
     exit(2)
 }
@@ -70,6 +71,7 @@ var assertLayers: Int? = nil
 var assertUsable: String? = nil
 var configDir: String? = nil
 var displaySleepSeconds: Double? = nil
+var standInKeyboard: String? = nil
 var socketName: String?
 var privilegedSocket: String?
 /// nil means headless (the default everywhere but metal).
@@ -127,6 +129,7 @@ while i < args.count {
     case "--assert-usable": assertUsable = value("--assert-usable")
     case "--config-dir": configDir = value("--config-dir")
     case "--display-sleep": displaySleepSeconds = Double(value("--display-sleep"))
+    case "--stand-in-keyboard": standInKeyboard = value("--stand-in-keyboard")
     case "--socket": socketName = value("--socket")
     case "--privileged-socket": privilegedSocket = value("--privileged-socket")
     case "--backend":
@@ -448,6 +451,12 @@ case "run":
     } catch {
         die("\(error)")
     }
+    // The session's keyboard layout, followed as it changes (T.2) — before any
+    // keyboard is attached, so the first one gets it.
+    seat.followSessionLayout()
+    if let fifo = standInKeyboard, !seat.addStandInKeyboard(fifo: fifo) {
+        die("could not make a stand-in keyboard reading \(fifo)")
+    }
     // **One rig per output** (P14.7a): its own scene (its rectangle of the
     // layout), its own metronome (its own vblank) and its own recorder — so
     // each display keeps its own frame contract, whatever the others' rates.
@@ -553,6 +562,7 @@ case "run":
     var reportedCursor = ""
     var reportedIdle = ""
     var reportedSync = ""
+    var reportedLayout = ""
     var reportedPrimary = 0
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
@@ -613,6 +623,11 @@ case "run":
             let line = "display-sleep \(sleep.asleep ? "asleep" : "awake") sleeps=\(sleep.sleeps) "
                 + "wakes=\(sleep.wakes) inhibited=\(sleep.inhibited ? "yes" : "no")"
             if line != reportedIdle { reportedIdle = line; out(line) }
+        }
+        // The keyboard layout, and how often it has changed under us (T.2).
+        do {
+            let line = "keyboard-layout \(seat.layoutDescription) changes=\(seat.layoutChanges)"
+            if line != reportedLayout { reportedLayout = line; out(line) }
         }
         // Explicit sync (U.3b): releases armed, textures drawn behind a wait.
         if let es = compositor.explicitSync {

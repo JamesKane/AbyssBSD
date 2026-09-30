@@ -684,6 +684,34 @@ final class UndertowTests: XCTestCase {
                        "no layout zz, so the default — not a keyboard with no keymap")
     }
 
+    /// T.2: the session's choice (keyboard.ini) outranks rc.conf — it is what
+    /// the installer chose on the medium, before there was an rc.conf — and
+    /// the environment still outranks both.
+    func testTheSessionsLayoutBeatsRcConfAndTheEnvironmentBeatsBoth() {
+        let rc = rcConf("uk.kbd")
+        withXKBLayout(nil) {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: [rc], session: "de.kbd")
+                XCTAssertEqual(kb.pointee.keymap.map { Seat.layoutName($0) }, "German")
+            }
+        }
+        withXKBLayout("fr") {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: [rc], session: "de.kbd")
+                XCTAssertEqual(kb.pointee.keymap.map { Seat.layoutName($0) }, "French")
+            }
+        }
+    }
+
+    func testASessionLayoutThatWillNotCompileFallsBackToRcConfs() {
+        withXKBLayout(nil) {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: [rcConf("uk.kbd")], session: "zz.kbd")
+                XCTAssertEqual(kb.pointee.keymap.map { Seat.layoutName($0) }, "English (UK)")
+            }
+        }
+    }
+
     // MARK: - The keybind table (P9.5)
 
     /// A stub keysym table, so the parse can be tested without xkb — and so the

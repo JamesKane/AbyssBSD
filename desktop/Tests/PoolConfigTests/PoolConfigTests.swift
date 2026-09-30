@@ -129,6 +129,16 @@ final class PoolConfigTests: XCTestCase {
         XCTAssertEqual(loaded, c)   // full-config equality
     }
 
+    /// T.2: the session's keyboard layout, as the installer writes it and
+    /// undertow reads it; none written is "none", so rc.conf's stands.
+    func testKeyboardPrefsRoundTripAndDefaultToNone() throws {
+        let dir = makeTempDir()
+        XCTAssertEqual(KeyboardPrefs.load(configDir: dir).kbdmap, "")
+        try KeyboardPrefs(kbdmap: "de.kbd").store(configDir: dir)
+        XCTAssertTrue(exists(dir + "/keyboard.ini"))
+        XCTAssertEqual(KeyboardPrefs.load(configDir: dir), KeyboardPrefs(kbdmap: "de.kbd"))
+    }
+
     func testMissingDomainIsEmpty() throws {
         let dir = makeTempDir()
         let c = try Pool.load("does-not-exist", in: dir)

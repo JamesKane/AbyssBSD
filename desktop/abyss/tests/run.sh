@@ -193,6 +193,10 @@ if [ "$live" -eq 1 ]; then
   # combination for itself (P9.5, and §6.2's decision made into data).
   echo "== keybinds =="
   quiet "$root/abyss/tests/live-keys.sh"
+  # The installer's keyboard choice is the medium's at once (T.2): chosen
+  # German, the same keys type "zebra" where they typed "yebra".
+  echo "== the installer's keyboard, on the medium =="
+  quiet "$root/abyss/tests/live-installer-keyboard.sh"
   # And a window that never heard of this desktop, wearing its frame: the
   # compositor answers xdg-decoration server-side and paints an Aqua title bar
   # around somebody else's surface (P9.6).

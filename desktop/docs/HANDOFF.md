@@ -53,7 +53,9 @@ The items below are the context for it.
    submenus open, a GTK app's and kcalc's (`live-submenus.sh`; §2.89). Left
    in §2: T.2 and T.3. **P10.9 is done** (2026-09-29): the bar follows a GTK
    or Qt app's menus changing while it is frontmost (§2.90). **T.1 is done**
-   (2026-09-29): the installer names layouts ("Dvorak", not `us.dvorak.kbd`). The phase's history, pass by pass:
+   (2026-09-29): the installer names layouts ("Dvorak", not `us.dvorak.kbd`).
+   **T.2 is done** (2026-09-29): the layout chosen in the installer is the one
+   the medium types with, at once (§2.91). Left in §2: T.3. The phase's history, pass by pass:
    scoped in
    [PHASE14.md](PHASE14.md), §6's recommendations adopted (all but §6.5).
    **P14.1 is done**: System Preferences is an application — 25 panes drawn
@@ -717,6 +719,41 @@ doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+
+### 2.91 The layout chosen on the medium is the one the medium types with
+(T.2. The installer wrote `keymap=` into the installed system's rc.conf and
+nothing else. The account password was typed on the medium in U.S.
+whatever the Keyboard page said, so a person on a German keyboard installed
+a system they could not log in to.)
+
+The session now has a layout of its own: `keyboard.ini` (`KeyboardPrefs` in
+PoolConfig, a `kbdmap` name like rc.conf's). The installer writes it when a
+layout is chosen. undertow reads it at start, watches the config directory
+(a second `Pool.Watcher` in its own event loop, like the appearance watch),
+and on a change gives every keyboard **whose keymap it gave** the new one.
+wlroots then sends the focused client the new keymap. The order is now
+`XKB_DEFAULT_LAYOUT` > keyboard.ini > rc.conf > U.S., with a session layout
+that won't compile falling back to rc.conf's (unit-tested). A Keyboard pane
+would write the same file.
+
+**Only keyboards with no keymap of their own are ours to change.** A virtual
+keyboard brings its own layout and keeps it, which is also why no test could
+see this with `vkeyboard`. undertow gained `--stand-in-keyboard FIFO`: a
+`wlr_keyboard` it owns (a C shim around `wlr_keyboard_init` and
+`notify_key`), with no keymap, fed `k CODE` lines. That is what libinput hands
+it on metal. `live-installer-keyboard.sh` types the keys marked Y E B R A:
+"yebra" before a layout is chosen, "zebra" after choosing German, because
+QWERTZ swaps the two. undertow reports `keyboard-layout <name> (<source>)
+changes=N`.
+
+Traps:
+- **The dev box exports `XKB_DEFAULT_LAYOUT=us`**, which outranks
+  everything, so the test runs undertow with it unset.
+- **On the medium the file lands in `$HOME/.config/abyss`**, and the live
+  session runs as root on a read-write root. A read-only root, which a USB
+  stick wants (live-image.sh says so), will need a writable home for it.
+  The medium itself was not rebuilt for this; the --full lane's
+  live-medium/live-desktop are the check.
 
 ### 2.90 A foreign app's menus change under the bar: watched, coalesced, compared
 (P10.9. Found by P10.8: kcalc's Constants menu, added by Science Mode, stayed

@@ -5,6 +5,7 @@
 import Surface
 import CCairo
 import Install
+import PoolConfig
 
 #if canImport(Glibc)
 import Glibc
@@ -699,7 +700,18 @@ extension AquaWindow {
                             installerLog("refused that disk: "
                                 + installer.objection(to: installer.installableDisks[installer.selection]))
                         }
-                    case .keyboard: installerLog("keyboard is \(installer.keymap)")
+                    case .keyboard:
+                        installerLog("keyboard is \(installer.keymap)")
+                        // **And this session types it now** (T.2): the
+                        // password is typed on the medium, before rc.conf
+                        // exists. keyboard.ini is the session's layout, and
+                        // the compositor follows it.
+                        do {
+                            try KeyboardPrefs(kbdmap: installer.keymap).store()
+                            installerLog("this session types \(Keymaps.displayName(forKbdmap: installer.keymap)) now")
+                        } catch {
+                            installerLog("could not set this session's keyboard: \(error)")
+                        }
                     case .timezone: installerLog("time zone is \(installer.timezone)")
                     case .account: break
                     }
