@@ -44,12 +44,12 @@ the medium, in the build guest, or in a test. A Qt application a person
 installs still runs — as any Wayland client, with Aqua decorations — but its
 menus stay in its window. Phase history below keeps its Qt passes as written.
 
-### Where this stands (2026-09-30)
+### Where this stands (2026-09-30, evening)
 
 **Phases 0–3, 5–12 and 14 are complete** (Phase 12 but for `Fathom`'s Aqua view).
 The Jaguar desktop runs on our own Swift compositor on Linux and FreeBSD; GTK
 applications put their menus in our bar and get the Finder through our
-portals (one foreign toolkit, GTK: Qt support was removed 2026-09-30); the look is data, with a second theme to prove it; System Preferences
+portals; the look is data, with a second theme to prove it; System Preferences
 changes the machine through a privileged helper; and a blank disk becomes a
 machine running all of it. Every piece is proven by `abyss/tests/run.sh --vm
 --live` on both platforms, with no hardware and no human in the loop. Between
@@ -57,23 +57,37 @@ Phases 14 and 15, [BACKLOG.md](BACKLOG.md) closed what Phase 15's applications
 would need from the compositor (U.1–U.10), the installer's keyboard items
 (T.1–T.3) and the toolchain passes (S.0–S.3; Swift 6.3.3 on both platforms).
 
-**Phase 4 is in flight and paused.** On the i7-12700KF / RX 6750 XT the medium
-boots, `amdgpu` binds and the Aqua installer is on screen (PHASE4 §5 steps 1–5),
-but nothing is installed on metal — the machine's one disk is its positive
-control — and **C1 fails there**: 58 of 300 frames missed, with the breakdown
-that would say why still unrun (PHASE4 §5.7). The machine's USB is in use
-elsewhere for now.
+**Phase 15, the application layer, is half done** ([PHASE15.md](PHASE15.md)).
+Every installed port is a Mac-shaped `.app` (P15.1); the Dock carries real
+applications — pinned, dragged on and off, matched to their running windows —
+and the Apple menu has Recent Items (P15.2); **Firefox ESR is the browser**, in
+the session with the Finder as its file chooser and on the medium, so a machine
+installed from it has one (P15.3); and **Terminal** is a shell in a window —
+the pty and a VT screen model, scrollback, selection and the clipboard, in the
+Dock, and the host for ports that need a terminal (P15.4). **One foreign
+toolkit: GTK** (decided 2026-09-30; the rule is in Context, above) — the Qt menu work of P10.7 is gone.
+**Next is P15.5, TextEdit** (the toolkit's multi-line text view), then Grab,
+Activity Monitor and Disk Utility.
 
-**Next is Phase 15, the application layer**, with the monorepo move's leftovers
-alongside it ([MIGRATION.md §5](../../docs/MIGRATION.md): a 16-CURRENT build VM,
-and `undertow` on wlroots 0.20). Phases 13 and 16–18 have not started.
+**Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
+medium boots, `amdgpu` binds, typing and the pointer work, and after five
+measured fixes **C1 holds: 0 of 1800 frames missed at a ~2 ms margin**
+(PHASE4 §5.12–§5.13); Vulkan and GL clients render under `undertow` on RADV and
+radeonsi. Still owed: an install on metal (which also fixes an installed
+system's missing `kld_list` and `video` group), P4.5's second row, and seeing
+P15.3's Firefox on the medium on that machine ([BACKLOG](BACKLOG.md) §3). A
+developer medium is updated in place over ssh (`abyss/mk/metal.sh push`).
+
+**The monorepo move's migration is done** ([MIGRATION.md §5](../../docs/MIGRATION.md)):
+the build VM is 16-CURRENT (a pinned snapshot) and `undertow` is on wlroots
+0.20.2 on both platforms. Phases 13 and 16–18 have not started.
 
 *History.* On 2026-09-05 this section recorded the medium booting on the Mac Pro
 (a FAT16 ESP for Apple's firmware, `hw.pci.enable_pcie_hp="0"` against a
 power-fault storm), the retarget to the 12700KF that retired `si_support` by
 evidence, and [PRODUCT.md](PRODUCT.md)'s gap map arriving here as Phases 9–18.
-**Every C1–C5 number in [PHASE6.md](PHASE6.md) is still provisional** until P4.5
-re-measures it against a real vblank.
+**C1 has since been measured against a real vblank and holds** (PHASE4 §5.12);
+C2–C5 in [PHASE6.md](PHASE6.md) are still provisional until P4.5 re-measures them.
 
 ### Decisions locked in (from planning Q&A)
 
@@ -236,14 +250,14 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 6 | `undertow`, the Swift compositor | 2 | 4, 5, 8, 9, 13, 16 | ✅ |
 | 8 | The D-Bus bridge — portals for everyone else | 6, 7 | 10's foreign half, 15 | ✅ |
 | 5 | The installer — a machine with an empty disk | 6, 8 | 4, 12, 17 | ✅ |
-| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — steps 1–5 pass, C1 fails; paused while the machine's USB is elsewhere ([BACKLOG](BACKLOG.md) §3) |
+| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — C1 holds on the 12700KF (0/1800 missed); an install on metal and the second row owed ([BACKLOG](BACKLOG.md) §3) |
 | 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | ✅ 2026-09-06 |
 | 10 | The menu protocol | 3, 8; *before* 15 | 15, **18**, and thesis 2 at all | ✅ 2026-09-25 |
 | 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | ✅ 2026-09-25 |
 | 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | ✅ 2026-09-05, but its Aqua view |
 | 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | C6 waits on Phase 4 |
 | 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | ✅ 2026-09-29 |
-| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | **next** |
+| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | **in flight** — P15.1–P15.4 done (bundles, Dock, Firefox, Terminal); TextEdit next |
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | idle done early (BACKLOG U.9) |
 | 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | the overlay exists, for the board |
 | 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | |
@@ -1026,6 +1040,19 @@ app's own published layout rather than constants (§2.46).
 **Needs:** 9 (clipboard), 10 (menus), 11 (theme), 14 (network). **Unblocks:**
 17's `pkg` hook, and thesis 1.
 
+**Status (2026-09-30): P15.1–P15.4 done; the passes and their evidence are in
+[PHASE15.md](PHASE15.md).** What the scoping changed from the plan below:
+**the browser is Firefox ESR**, because WebKitGTK's port is still 2.46.6 (risk
+6); **web applications are Firefox windows** — Firefox dropped its
+site-specific mode, so a web-app bundle opens a window on the site (PHASE15
+§6.1); **the protocols bullet was already done** by BACKLOG U.1–U.10 before a
+line of Phase 15 was written; and **AbyssBSD depends on one foreign toolkit,
+GTK** — Firefox is GTK-only on FreeBSD and the ports' `qt6-base` requires
+`gtk3` anyway, so Qt was removed (PHASE15 §6.6). Firefox and its runtime pieces
+are on the medium (0.4 GB, measured rather than guessed; the image is 1.3 GB in
+3). Remaining: P15.5 TextEdit, P15.6 Grab, P15.7 Activity Monitor, P15.8 Disk
+Utility.
+
 **Goal:** the answer to "how do I do X", for the set of X a person actually has.
 Omarchy enumerated that set and we did not have to invent the shopping list
 (PRODUCT.md §4.1); what makes this a phase rather than a pile is that everything
@@ -1039,7 +1066,8 @@ above it has to exist first, or every application pays the retrofit.
   Mac-shaped application, Dock tiles with real icons and names, something for
   Recent Items to contain, and **web applications as first-class citizens for
   free** — a browser's `--app=` is just another generated bundle.
-- **The browser is adopted, not written** (PRODUCT.md §5.1, §10). Epiphany is the
+- **The browser is adopted, not written** (PRODUCT.md §5.1, §10). *(Decided:
+  Firefox ESR — see the status above.)* Epiphany is the
   recommendation — GTK4, so Phase 11's generated theme reaches it; it speaks
   xdg-desktop-portal by default, the path P8.4 proved; and `--application-mode`
   with a `.desktop` file is exactly the generator's input. **Firefox ESR is the
@@ -1048,7 +1076,8 @@ above it has to exist first, or every application pays the retrofit.
   which is the test that matters and which `abyss/tests/live-gtk.sh` is the
   pattern for.
 - **Terminal** — `openpty`, a VT parser, Aqua chrome, scrollback, selection.
-  There is no pty code in the tree. It is not a TUI: it is the escape hatch that
+  *(Done: P15.4 — `posix_openpt` rather than `openpty`, which lives in
+  different libraries on the two platforms.)* There was no pty code in the tree. It is not a TUI: it is the escape hatch that
   lets us ship a GUI without having shipped every GUI yet, which is why it makes
   every remaining gap survivable.
 - **TextEdit, Grab, Activity Monitor, Disk Utility** — the thing that opens a
@@ -1056,7 +1085,7 @@ above it has to exist first, or every application pays the retrofit.
   sheet over the `abyssgrab` we already have; `kvm`/sysctl; and mount, format and
   ZFS snapshots over the `DiskInventory` the installer already carries.
 - **The protocols applications expect, which `undertow` mostly does not
-  offer.** Of the sixteen extension protocols the NeoDarwin study found real
+  offer.** *(Done before Phase 15 began: BACKLOG U.1–U.10.)* Of the sixteen extension protocols the NeoDarwin study found real
   applications use, we implement two (xdg-activation, xdg-decoration).
   [API-STUDY.md](API-STUDY.md) §2 ranks the rest by what breaks without them:
   **subsurfaces and `linux-dmabuf` first** (Firefox draws no page without the
@@ -1347,7 +1376,9 @@ that has never failed is a comment.
    default is **Firefox ESR**, an independent engine with a real security-support
    model. Rebuilding WebKit ourselves is the move that would make us own WebKit's
    security response, which is exactly the line PRODUCT §6.3 refuses to cross
-   casually.
+   casually. **Resolved 2026-09-30: re-checked on 16-CURRENT's *latest*
+   packages — `webkit2-gtk` still 2.46.6, `firefox-esr` 153.4 — so the default
+   is Firefox ESR** (PHASE15 P15.3), on the medium and in what it installs.
 7. **The theme system's fidelity and its cost** — Phase 11. A tokenised,
    interpreted Aqua must stay pixel-identical, and the golden-image gate is the
    only reason it is safe to attempt at all; `Trench` (§11.1) is the other half of
