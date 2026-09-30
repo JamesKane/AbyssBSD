@@ -11,12 +11,12 @@ LinuxKPI platform bus, the component framework, runtime PM and platform IRQs).
 
 - [ ] `src` → freebsd-src `radxa-dragon-q8b` **`5fcf853ccb`** (pinned: `9fbc25e3a1`).
       Kernel `__FreeBSD_version` 1600032 (arm64 write-combining).
-- [ ] `kmod/drm-msm` → drm-msm-kmod **`349d5ea`** (imported up to `02f48c0`;
-      missing everything since: Phase C, then the msmfb display driver
-      `fc3e136`..`349d5ea`). The msm code at `02f48c0` won't run against the
+- [ ] `kmod/drm-msm` → drm-msm-kmod **`412bc43`** (imported up to `02f48c0`;
+      missing everything since: Phase C, the msmfb display driver
+      `fc3e136`..`349d5ea`, and GPU devfreq `412bc43`). The msm code at `02f48c0` won't run against the
       Phase C kernel.
-- [ ] `ports/` → freebsd-ports `freedreno` **`83b3c204e`** (copied from
-      `d80cb373e`): drm-msm-kmod at `349d5ea`, PORTREVISION 10.
+- [ ] `ports/` → freebsd-ports `freedreno` **`c73357345`** (copied from
+      `d80cb373e`): drm-msm-kmod at `412bc43`, PORTREVISION 11.
 - [ ] Decide which copy of msm is canonical: `kmod/drm-msm`, or the
       standalone `JamesKane/drm-msm-kmod` repo that the port still fetches.
       Retire the other copy.

@@ -264,8 +264,10 @@ Also needed:
 | vkmark 1080p | 5446 | 4716 |
 | glmark2 "heavy" 1080p | 2473 | not comparable |
 
-- The GPU runs at its top operating point all the time (690 MHz). devfreq
-  would save only power.
+- The GPU's frequency follows its load (devfreq; see
+  [power-thermal-idle.md](power-thermal-idle.md#gpu-frequency-devfreq)).
+  Scenes that saturate it get 690 MHz and score the same as with the clock
+  pinned there.
 - DDR bandwidth voting doesn't limit performance: the a690 has no GMU
   bandwidth votes even in Linux 7.2. So RPMh interconnect work is deferred.
 - Two early bottlenecks, both fixed:

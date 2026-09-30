@@ -74,6 +74,39 @@ Four controllers:
     the hardware (LMh) clips the big cores to 2.80–2.90 GHz on its own, so
     the silicon protects itself.
 
+## GPU frequency: devfreq (`kmod/drm-msm/freebsd/msm_freebsd_devfreq.c`)
+
+msm scales the Adreno 690 through Linux's devfreq framework, which
+LinuxKPI lacks. The glue provides enough of it:
+- a 50 ms poll of the GPU's busy time (the GMU's 19.2 MHz counter);
+- the simple_ondemand policy with msm's thresholds: the top OPP above 50%
+  busy, hold down to 40%, otherwise scale down in proportion;
+- clamping to the OPPs (270–690 MHz, 8 levels; see the SoC table) and to
+  PM QoS minimum-frequency requests, which msm uses to boost after idle;
+- no polling while the GPU is runtime-suspended.
+
+msm itself changes the frequency: a GMU HFI perf vote, which moves the GPU
+clock and its RPMh `gfx.lvl` together.
+
+Controls:
+- `hw.msm.gpu_freq` (Hz) and `hw.msm.gpu_load` (%) show what devfreq last saw;
+- `hw.msm.devfreq=0` pins 690 MHz, for comparisons.
+
+Measured (2026-09-30):
+- A vsync-bound GL client under sway (glmark2 terrain in a window, 60 fps):
+  270 MHz for the whole run, 15% busy, against 690 MHz and 9% busy with
+  devfreq off. The frame rate is the same.
+- glmark2 at 1080p offscreen, which saturates the GPU: 690 MHz, and scores
+  within the 3% run-to-run spread of the pinned clock.
+- Idle: 270 MHz until runtime PM suspends the GPU.
+
+Not done:
+- No GPU thermal cooling: FreeBSD has no thermal framework for a cooling
+  device, and the DT's 85 °C GPU trip was never approached. The a690 has no
+  GMU bandwidth votes to scale either.
+- The GPU's CX domain stays on while msm is loaded (see
+  [gpu-display.md](gpu-display.md)).
+
 ## Deep idle: ACPI `_LPI` on arm64
 
 Before this work, FreeBSD/arm64 only ever executed WFI.
