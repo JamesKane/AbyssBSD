@@ -47,7 +47,7 @@ directory records what we found, so nobody has to find it again.
 | Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480), DPMS; sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |
-| SD card | No ACPI SDHC driver | — |
+| SD card | Works: 50 MHz, 4-bit, 23 MB/s (PIO); card not hot-swappable, no UHS | `sys/dev/sdhci/sdhci_acpi.c` |
 | RTC | Works: ST M41T11 on I²C bus 12, as a DS1307; sets the clock at boot | `sys/dev/iicbus/rtc/ds13rtc.c` |
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
@@ -55,7 +55,7 @@ directory records what we found, so nobody has to find it again.
 | Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
 | The AbyssBSD desktop on this board | Not tried | — |
 
-## Clock, I²C and devices
+## Clock, I²C, SD and devices
 
 - **RTC:** ACPI's Time and Alarm device (`\_SB.PRTC`, `ACPI000E`) is
   disabled (`_STA` 0) and works through Windows' PEP. UEFI's `GetTime` is
@@ -73,6 +73,21 @@ directory records what we found, so nobody has to find it again.
   byte.
 - **MAC EEPROM:** cells at `0x9e` and `0xa4` hold `88:12:4e:00:02:00` and
   `:01`, which `tcx` already reads from the TC956x.
+- **SD (`\_SB.SDC2`, `QCOM2466`, `0x8804000`):** an SDHCI 3.00 core in an
+  MSM v5 wrapper. ACPI gives the SDHCI block, the host IRQ, and the
+  card-detect GPIOs, but not the wrapper's power IRQ. The wrapper posts
+  bus-power and I/O-voltage requests in `PWRCTL_STATUS` (`+0x240`) after
+  power-control, reset and host-control-2 writes, and stalls until they're
+  cleared (`+0x248`) and acknowledged (`+0x24c`). `sdhci_acpi` polls for
+  them after those writes. UEFI leaves the clocks (GCC `0x14004`,
+  `0x14008`) and the card rails on at 3 V, so there's no regulator
+  control, no 1.8 V and no UHS. The slot is treated as non-removable,
+  because card detect is a TLMM GPIO. Transfers are PIO: DMA would go
+  through the apps SMMU, whose UEFI identity SMRs may not include SD's
+  stream, and an unmatched stream resets the SoC. At 50 MHz × 4 bits, PIO
+  reaches 23 MB/s, near the mode's ceiling. The boot card's GPT backup
+  header isn't at the last LBA (an image smaller than the card); left
+  alone.
 - **`/dev/drm/0`–`255`:** all 256 nodes exist. LinuxKPI's
   `register_chrdev()` creates a whole Linux major's minors up front, on
   every FreeBSD running drm-kmod. Cosmetic; not ours.
