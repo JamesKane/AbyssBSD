@@ -448,13 +448,14 @@ let package = Package(
         ),
         // wlroots + libwayland-server, reached the portable way: only a
         // systemLibrary can carry `pkgConfig:`, and dependents inherit its
-        // cflags/libs (HANDOFF §2.29). wlroots is PINNED to 0.19 — the guest
-        // offers 0.20 as well and a compositor built against different wlroots
-        // per platform is a failure mode we have not had (PHASE6.md §7.3).
+        // cflags/libs (HANDOFF §2.29). wlroots is PINNED, to 0.20 since
+        // 2026-09-30 — a compositor built against different wlroots per
+        // platform is a failure mode we have not had (PHASE6.md §7.3), so a
+        // bump moves both at once, as a pass of its own (HANDOFF §2.94).
         .systemLibrary(
             name: "CWlrootsSys",
             path: "de/cwlrootssys",
-            pkgConfig: "wlroots-0.19",
+            pkgConfig: "wlroots-0.20",
             providers: [.apt(["libwlroots-dev"])]
         ),
         // pixman, for pointer-constraint regions (U.6) — see its modulemap.

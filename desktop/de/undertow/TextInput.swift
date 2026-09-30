@@ -32,17 +32,33 @@ import Glibc
 import Darwin
 #endif
 
+/// One text input, and the context its listeners are called with. wlroots
+/// 0.20 emits a text input's `enable`, `commit`, `disable` and `destroy` with
+/// **NULL data** (0.19 passed the text input), so a handler cannot learn from
+/// the signal which text input it is about — the entry has to say.
 final class TextInputEntry {
     let ti: UnsafeMutablePointer<wlr_text_input_v3>
+    unowned let relay: TextInputRelay
     var listeners: [UnsafeMutablePointer<tw_listener>?] = []
-    init(_ ti: UnsafeMutablePointer<wlr_text_input_v3>) { self.ti = ti }
+    init(_ ti: UnsafeMutablePointer<wlr_text_input_v3>, relay: TextInputRelay) {
+        self.ti = ti
+        self.relay = relay
+    }
     deinit { for l in listeners { tw_listener_free(l) } }
+    static func of(_ ctx: UnsafeMutableRawPointer) -> TextInputEntry {
+        Unmanaged<TextInputEntry>.fromOpaque(ctx).takeUnretainedValue()
+    }
 }
 
+/// The same for a candidate popup, whose `destroy` also arrives with NULL data.
 final class InputPopupEntry {
     let popup: UnsafeMutablePointer<wlr_input_popup_surface_v2>
+    unowned let relay: TextInputRelay
     var listener: UnsafeMutablePointer<tw_listener>?
-    init(_ p: UnsafeMutablePointer<wlr_input_popup_surface_v2>) { popup = p }
+    init(_ p: UnsafeMutablePointer<wlr_input_popup_surface_v2>, relay: TextInputRelay) {
+        popup = p
+        self.relay = relay
+    }
     deinit { tw_listener_free(listener) }
 }
 
@@ -66,12 +82,12 @@ public final class TextInputRelay {
         self.compositor = compositor
         self.seat = seat
         let me = Unmanaged.passUnretained(self).toOpaque()
-        listeners.append(tw_listen(&tim.pointee.events.text_input, { ctx, data in
+        listeners.append(tw_listen(&tim.pointee.events.new_text_input, { ctx, data in
             guard let ctx, let data else { return }
             Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
                 .newTextInput(data.assumingMemoryBound(to: wlr_text_input_v3.self))
         }, me))
-        listeners.append(tw_listen(&imm.pointee.events.input_method, { ctx, data in
+        listeners.append(tw_listen(&imm.pointee.events.new_input_method, { ctx, data in
             guard let ctx, let data else { return }
             Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
                 .newInputMethod(data.assumingMemoryBound(to: wlr_input_method_v2.self))
@@ -96,32 +112,35 @@ public final class TextInputRelay {
     }
 
     private func newTextInput(_ ti: UnsafeMutablePointer<wlr_text_input_v3>) {
-        let e = TextInputEntry(ti)
-        let me = Unmanaged.passUnretained(self).toOpaque()
-        // The entry is looked up by pointer in each handler: a C callback
-        // cannot capture it, and the relay's context is enough.
-        e.listeners.append(tw_listen(&ti.pointee.events.enable, { ctx, data in
-            guard let ctx, let data else { return }
-            Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
-                .enabled(data.assumingMemoryBound(to: wlr_text_input_v3.self))
-        }, me))
-        e.listeners.append(tw_listen(&ti.pointee.events.commit, { ctx, data in
-            guard let ctx, let data else { return }
-            Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
-                .committed(data.assumingMemoryBound(to: wlr_text_input_v3.self))
-        }, me))
-        e.listeners.append(tw_listen(&ti.pointee.events.disable, { ctx, data in
-            guard let ctx, let data else { return }
-            Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
-                .disabled(data.assumingMemoryBound(to: wlr_text_input_v3.self))
-        }, me))
-        e.listeners.append(tw_listen(&ti.pointee.events.destroy, { ctx, data in
-            guard let ctx, let data else { return }
-            let r = Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
-            let t = data.assumingMemoryBound(to: wlr_text_input_v3.self)
-            if r.active == t { r.deactivate() }
-            r.textInputs.removeAll { $0.ti == t }
-        }, me))
+        let e = TextInputEntry(ti, relay: self)
+        // A C callback cannot capture, and the signal no longer says which
+        // text input it is about (0.20), so each listener's context is its
+        // entry. The relay's array keeps the entry alive until `destroy`.
+        let ctx = Unmanaged.passUnretained(e).toOpaque()
+        e.listeners.append(tw_listen(&ti.pointee.events.enable, { ctx, _ in
+            guard let ctx else { return }
+            let e = TextInputEntry.of(ctx)
+            e.relay.enabled(e.ti)
+        }, ctx))
+        e.listeners.append(tw_listen(&ti.pointee.events.commit, { ctx, _ in
+            guard let ctx else { return }
+            let e = TextInputEntry.of(ctx)
+            e.relay.committed(e.ti)
+        }, ctx))
+        e.listeners.append(tw_listen(&ti.pointee.events.disable, { ctx, _ in
+            guard let ctx else { return }
+            let e = TextInputEntry.of(ctx)
+            e.relay.disabled(e.ti)
+        }, ctx))
+        e.listeners.append(tw_listen(&ti.pointee.events.destroy, { ctx, _ in
+            guard let ctx else { return }
+            // `e` holds the entry until this returns; dropping it from the
+            // array takes its listeners off their signals (§2.82).
+            let e = TextInputEntry.of(ctx)
+            let r = e.relay
+            if r.active == e.ti { r.deactivate() }
+            r.textInputs.removeAll { $0 === e }
+        }, ctx))
         textInputs.append(e)
         // Its client may already have the keyboard.
         if let f = seat.pointee.keyboard_state.focused_surface, client(f) == wl_resource_get_client(ti.pointee.resource) {
@@ -303,14 +322,12 @@ public final class TextInputRelay {
     // MARK: the candidate popup
 
     private func newPopup(_ p: UnsafeMutablePointer<wlr_input_popup_surface_v2>) {
-        let e = InputPopupEntry(p)
-        let me = Unmanaged.passUnretained(self).toOpaque()
-        e.listener = tw_listen(&p.pointee.events.destroy, { ctx, data in
-            guard let ctx, let data else { return }
-            let r = Unmanaged<TextInputRelay>.fromOpaque(ctx).takeUnretainedValue()
-            let gone = data.assumingMemoryBound(to: wlr_input_popup_surface_v2.self)
-            r.popups.removeAll { $0.popup == gone }
-        }, me)
+        let e = InputPopupEntry(p, relay: self)
+        e.listener = tw_listen(&p.pointee.events.destroy, { ctx, _ in
+            guard let ctx else { return }
+            let e = Unmanaged<InputPopupEntry>.fromOpaque(ctx).takeUnretainedValue()
+            e.relay.popups.removeAll { $0 === e }
+        }, Unmanaged.passUnretained(e).toOpaque())
         popups.append(e)
         placePopups()
     }

@@ -90,11 +90,18 @@ public final class ExplicitSync {
 
     /// A new buffer with a release point: arm it. wlroots signals it when the
     /// buffer is released — the surface has moved on and no frame holds it.
+    ///
+    /// wlroots 0.20 made the release point private; the acquire point stands
+    /// in for it, because the protocol requires the two together on any commit
+    /// that attaches a buffer (`no_release_point`/`no_acquire_point` are
+    /// errors). 0.20's helper would also accept a commit with neither and
+    /// quietly arm nothing — the guard keeps `releasesArmed` a count of real
+    /// releases, which is what live-syncobj.sh reads.
     private func committed(_ s: UnsafeMutablePointer<wlr_surface>) {
         guard s.pointee.current.committed & UInt32(WLR_SURFACE_STATE_BUFFER.rawValue) != 0,
               let buffer = s.pointee.buffer,
               let state = wlr_linux_drm_syncobj_v1_get_surface_state(s),
-              state.pointee.release_timeline != nil else { return }
+              state.pointee.acquire_timeline != nil else { return }
         if wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer(state, &buffer.pointee.base) {
             releasesArmed += 1
         }

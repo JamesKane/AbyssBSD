@@ -1,10 +1,10 @@
-// wlroots 0.19, via pkg-config. A systemLibrary rather than flags on the C
+// wlroots 0.20, via pkg-config. A systemLibrary rather than flags on the C
 // target, because only a systemLibrary can carry `pkgConfig:` and dependent
 // targets inherit its cflags/libs — the portable pattern from HANDOFF §2.29.
-// The version is pinned: the dev box has 0.19 only, the guest offers 0.19 and
-// 0.20, and both are 0.19.3 today (PHASE6.md §7.3).
+// The version is pinned, and both platforms move together (PHASE6.md §7.3):
+// 0.20.2 on the dev box and the guest since 2026-09-30 (HANDOFF §2.94).
 module CWlrootsSys [system] {
     header "shim.h"
-    link "wlroots-0.19"
+    link "wlroots-0.20"
     export *
 }

@@ -645,8 +645,9 @@ body does not guarantee zero in the real one. The mitigation is that the
 allocation counter is a *test*, run every build, not a one-off measurement — and
 that the flight recorder makes a violation visible as a latency spike.
 
-**7.3 wlroots is a moving substrate.** Today both platforms are on 0.19.3 and
-`check.sh` asserts it, so this is fine *now*. The risk is future drift: the
+**7.3 wlroots is a moving substrate.** Both platforms were on 0.19.3 until
+2026-09-30, and are on 0.20.2 since, moved together in one pass (HANDOFF
+§2.94); `check.sh` asserts the version Package.swift pins. The risk is future drift: the
 guest already offers 0.20, ports will move, and wlroots breaks API between minor
 versions as a matter of policy. This is the first dependency where the dev box
 and the target could diverge — everything else has been the same version on

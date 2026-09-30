@@ -796,6 +796,34 @@ Noticed on the way, not fixed: nothing in the installed system puts an account
 in `video`, which seatd's socket needs for DRM master. The live medium does it
 by hand; the installed path has never run on metal (PHASE4 §6.6). PHASE4 §6.10.
 
+### 2.94 wlroots 0.20: a signal whose data became NULL compiles, and goes silent
+(MIGRATION §5, 2026-09-30. `undertow` moved from wlroots 0.19.3 to 0.20.2 on
+Linux and the FreeBSD guest together.)
+
+The compiler found three changes: `text_input`/`input_method` renamed to
+`new_text_input`/`new_input_method`, and explicit sync's `release_timeline`
+moved into the private block. **It could not find the one that mattered.** 0.20
+emits a text input's `enable`, `commit`, `disable` and `destroy` with **NULL**
+data where 0.19 passed the text input (wlroots !5032; the input popup's
+`destroy` too). Every one of our handlers began `guard let ctx, let data else {
+return }`, which still compiles, and under 0.20 would have returned every time:
+an input method that never activates, and text inputs that outlive their
+clients in the relay's list. `live-ime.sh` catches it — with the old handlers
+it fails at "focusing the entry did not activate the input method" — so the fix
+was watched failing first.
+
+The fix is the pattern the handlers should have had: **a listener's context
+is the object it is about**, never learned from the signal. Each
+`TextInputEntry` and `InputPopupEntry` is its own listeners' context and knows
+its relay. Explicit sync reads the public `acquire_timeline` instead of the
+private release point: the protocol requires both on a commit that attaches a
+buffer, and 0.20's `signal_release_with_buffer` would otherwise quietly arm
+nothing and still count.
+
+**Rule: on a wlroots bump, read the release notes' "breaking changes" for
+signals whose data changed, and grep for `let data` on each** — the compiler
+checks field names and types, and a signal's payload is neither.
+
 ### 2.93 Swift cannot take a C global's address — a release build passes a copy
 (S.1. The 2026-09-28 spike proved Swift calls libwayland's `static inline`
 requests; it never bound a global, and binding is where it goes wrong.)

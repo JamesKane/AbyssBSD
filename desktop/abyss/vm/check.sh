@@ -76,12 +76,12 @@ fi
 # --- the C substrate SwiftPM will look for ------------------------------
 # These are the pkg-config names in Package.swift's systemLibrary targets
 # (plus wayland-client, which CWayland links directly).
-# Phase 6 adds wayland-server + wlroots-0.19 for `undertow` (PHASE6.md §4.3).
-# The version is PINNED: the guest offers 0.19 and 0.20, the Linux dev box only
-# 0.19, and a compositor that builds against different wlroots on each platform
-# is a failure mode this project has not had before (PHASE6.md §7.3).
+# Phase 6 adds wayland-server + wlroots for `undertow` (PHASE6.md §4.3).
+# The version is PINNED, to 0.20 since 2026-09-30: a compositor that builds
+# against different wlroots on each platform is a failure mode this project
+# has not had (PHASE6.md §7.3), so it must match Package.swift's.
 for pc in wayland-client wayland-scanner xkbcommon cairo freetype2 harfbuzz libpng \
-          wayland-server wlroots-0.19; do
+          wayland-server wlroots-0.20; do
   if ssh_run "pkg-config --exists $pc" 2>/dev/null; then
     note "pkg-config $pc: $(ssh_run "pkg-config --modversion $pc" 2>/dev/null)"
   else
