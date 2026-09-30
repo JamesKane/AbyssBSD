@@ -12,7 +12,14 @@
 #      app-ids, not the tile's label);
 #   4. clicking again activates the running window rather than launching a
 #      second copy;
-#   5. a running application that is not pinned wears its bundle's name.
+#   5. a running application that is not pinned wears its bundle's name;
+#   6. its tile's "Keep in Dock" pins it, and dock.ini says so;
+#   7. a pinned tile's "Remove from Dock" unpins it, and "Quit" quits it —
+#      the window found through the bundle's app-ids;
+#   8. a bundle dragged out of the Finder onto a tile is pinned before that
+#      tile, and saved;
+#   9. a document dropped on an application's tile opens with it (the bundle's
+#      launcher is given the file).
 #
 # Usage: abyss/tests/live-dock-apps.sh
 set -eu
@@ -30,7 +37,7 @@ command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, 
 work=$(mktemp -d /tmp/abyss-dockapps.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
-  for p in ${vp_pid:-} ${dock_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  for p in ${vp_pid:-} ${finder_pid:-} ${dock_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
   pkill -f "$work" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -55,7 +62,10 @@ EOF
 printf '[dock]\napps = finder; Aqua Window; sysprefs\n' > "$work/cfg/dock.ini"
 
 # ------------------------------------------------------------ the compositor
-env -u WAYLAND_DISPLAY "$undertow" run --frames 0 --width 800 --height 600 \
+# `--config-dir`: no window position remembered from another run moves the
+# Finder out from under claim 8's aim.
+mkdir -p "$work/ut-cfg"
+env -u WAYLAND_DISPLAY "$undertow" run --frames 0 --width 800 --height 600 --config-dir "$work/ut-cfg" \
     > "$work/ut.out" 2> "$work/ut.err" &
 ut_pid=$!
 wd=""; i=0
@@ -145,5 +155,74 @@ i=0; until grep -q 'Dock: tiles .*Aqua Window=' "$work/dock.log" || [ $i -ge 40 
 grep 'Dock: tiles ' "$work/dock.log" | tail -1 | grep -q 'Aqua Window=' \
   || fail "the unpinned running application did not wear its bundle's name: $(grep 'Dock: tiles ' "$work/dock.log" | tail -1)"
 echo "ok: 5. an unpinned running application wears its bundle's name, not its window's title"
+
+# ------------------------------------------------------------ the tile menu
+# menu TILE ROW: right-click TILE, then click ROW where the menu really is — the
+# popup's placement (relative to the Dock's surface, which sits at the bottom of
+# the output) plus the row's offset in it, both as logged.
+menu() {
+  printf 'm %s\n' "$(tile "$1")" >&3; sleep 0.5
+  n=$(grep -c 'Surface.Popup: placed at' "$work/dock.log" || true)
+  printf 'P\nR\n' >&3
+  i=0; while [ $i -lt 30 ] && [ "$(grep -c 'Surface.Popup: placed at' "$work/dock.log" || true)" -le "$n" ]; do sleep 0.1; i=$((i + 1)); done
+  pl=$(grep 'Surface.Popup: placed at' "$work/dock.log" | tail -1 | sed 's/.*placed at \(-*[0-9]*\),\(-*[0-9]*\) .*/\1 \2/')
+  row=$(grep -F "context item '$2' at" "$work/dock.log" | tail -1 | sed 's/.* at +\([0-9]*\),+\([0-9]*\) .*/\1 \2/')
+  sh_=$(grep 'Surface.LayerSurface: mapped' "$work/dock.log" | tail -1 | sed 's/.*mapped [0-9]*x\([0-9]*\) .*/\1/')
+  [ -n "$pl" ] && [ -n "$row" ] && [ -n "$sh_" ] || fail "no '$2' in $1's menu: $(grep 'context item' "$work/dock.log" | tail -4)"
+  set -- $pl $row
+  printf 'm %s %s\np\nr\n' "$(($1 + $3))" "$((600 - sh_ + $2 + $4))" >&3
+  sleep 0.8
+}
+apps_saved() { sed -n 's/^apps *= *//p' "$work/cfg/dock.ini"; }
+
+# ------------------------------------------------------------ 6. keep
+menu "Aqua Window" "Keep in Dock"
+[ "$(apps_saved)" = "finder; sysprefs; Aqua Window" ] || fail "Keep in Dock saved '$(apps_saved)'"
+grep -q 'Dock: kept Aqua Window in the Dock' "$work/dock.log" || fail "Keep in Dock kept nothing"
+echo "ok: 6. Keep in Dock pinned the running application (dock.ini: $(apps_saved))"
+
+# ------------------------------------------------------------ 7. remove, quit
+menu "Aqua Window" "Remove from Dock"
+[ "$(apps_saved)" = "finder; sysprefs" ] || fail "Remove from Dock saved '$(apps_saved)'"
+menu "Aqua Window" "Quit"
+grep -q 'Dock: asked Aqua Window to quit (1 window)' "$work/dock.log" || fail "Quit found no window to close"
+i=0; until ! grep 'Dock: tiles ' "$work/dock.log" | tail -1 | grep -q 'Aqua Window='; do
+  [ $i -ge 50 ] && fail "the application did not quit"; sleep 0.1; i=$((i + 1)); done
+echo "ok: 7. Remove from Dock unpinned it (dock.ini: $(apps_saved)); Quit closed its window, and its tile went"
+
+# ------------------------------------------------------------ 8. drag a bundle on
+# The Finder on ~/Applications: 520x400, centred at (140, 100); entries sort by
+# name in 88px cells, so "Aqua Window.app" is cell 0 at screen (194, 196) and
+# "Note.txt" (for claim 9) cell 1 at (282, 196) — live-dnd's numbers.
+printf 'a note\n' > "$home/Applications/Note.txt"
+env WAYLAND_DISPLAY="$wd" HOME="$home" ABYSS_CONFIG_DIR="$work/cfg" ABYSS_FINDER_DIR="$home/Applications" \
+    AQUA_SCENE=finder "$aqua" > "$work/finder.log" 2>&1 &
+finder_pid=$!
+i=0; until grep -q 'Finder: listed' "$work/finder.log" 2>/dev/null; do
+  [ $i -ge 80 ] && fail "the Finder never listed ~/Applications"; sleep 0.25; i=$((i + 1)); done
+sleep 1
+drag() {  # drag X Y NAME TILE — press on the Finder's NAME at X,Y and drop it on TILE
+  printf 'm %s %s\np\n' "$1" "$2" >&3; sleep 0.6
+  grep -q "Finder: selected $3" "$work/finder.log" || fail "the press did not land on $3: $(tail -3 "$work/finder.log")"
+  printf 'm %s %s\n' "$1" "$(($2 + 16))" >&3; sleep 0.6
+  grep -q "Finder: dragging $home/Applications/$3" "$work/finder.log" || fail "no drag of $3 started"
+  printf 'm %s\n' "$(tile "$4")" >&3; sleep 0.8
+  printf 'r\n' >&3; sleep 1.2
+}
+drag 194 196 "Aqua Window.app" "System Preferences"
+[ "$(apps_saved)" = "finder; Aqua Window; sysprefs" ] \
+  || fail "the bundle dropped on System Preferences saved '$(apps_saved)'"
+grep 'Dock: tiles ' "$work/dock.log" | tail -1 | grep -q 'Finder=[0-9,]* Aqua Window=[0-9,]* System Preferences=' \
+  || fail "the tiles are not in that order: $(grep 'Dock: tiles ' "$work/dock.log" | tail -1)"
+echo "ok: 8. a bundle dragged out of the Finder was pinned before the tile it was dropped on (dock.ini: $(apps_saved))"
+
+# ------------------------------------------------------------ 9. open with
+w=$(grep -c '^window org.abyssbsd.aquademo/' "$work/ut.out" || true)
+drag 282 196 "Note.txt" "Aqua Window"
+grep -q "Dock: opened $home/Applications/Note.txt with Aqua Window" "$work/dock.log" \
+  || fail "the document was not opened with the tile's application"
+i=0; until [ "$(grep -c '^window org.abyssbsd.aquademo/' "$work/ut.out" || true)" -gt "$w" ]; do
+  [ $i -ge 150 ] && fail "no window mapped for the opened document"; sleep 0.1; i=$((i + 1)); done
+echo "ok: 9. a document dropped on the application's tile opened with it"
 
 echo "all green (the Dock carries installed applications)."

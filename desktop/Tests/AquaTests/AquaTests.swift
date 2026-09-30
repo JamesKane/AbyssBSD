@@ -556,6 +556,35 @@ final class AquaTests: XCTestCase {
                        ["Open", "Empty Trash"])
     }
 
+    /// Editing the Dock (P15.2b): what a tile's menu offers, and what pinning
+    /// does to `dock.ini`'s list.
+    func testTheDockIsEditedByPinningAndRemoving() {
+        func verbs(_ m: Menu) -> [String] { m.commands.map(\.verb) }
+        XCTAssertEqual(verbs(Dock.tileMenu(isTrash: false, running: false, pinned: true, removable: true)),
+                       ["dock.open", "dock.remove", "dock.show-in-finder"])
+        XCTAssertEqual(verbs(Dock.tileMenu(isTrash: false, running: true, pinned: true, removable: false)),
+                       ["dock.quit", "dock.show-in-finder"], "the Finder cannot be removed")
+        XCTAssertEqual(verbs(Dock.tileMenu(isTrash: false, running: true, pinned: false, removable: true)),
+                       ["dock.quit", "dock.keep", "dock.show-in-finder"])
+
+        let t = ["finder", "Firefox", "sysprefs"]
+        XCTAssertEqual(Dock.pinning("KCalc", before: "sysprefs", in: t), ["finder", "Firefox", "KCalc", "sysprefs"])
+        XCTAssertEqual(Dock.pinning("KCalc", before: nil, in: t), t + ["KCalc"])
+        XCTAssertEqual(Dock.pinning("sysprefs", before: "Firefox", in: t), ["finder", "sysprefs", "Firefox"],
+                       "pinned again: moved, not doubled")
+
+        let lib = [InstalledApp(name: "KCalc", bundle: "/Applications/KCalc.app", executable: nil, icon: nil, appIDs: []),
+                   InstalledApp(name: "Firefox", bundle: "/home/u/Applications/Firefox.app", executable: nil, icon: nil,
+                                appIDs: ["firefox"])]
+        XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/KCalc.app", library: lib), "KCalc")
+        XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/Firefox.app", library: lib), "/Applications/Firefox.app",
+                       "shadowed by the person's own Firefox: only the path means this one")
+        XCTAssertEqual(Dock.pinTokens(setting: nil, library: lib), ["finder", "Firefox", "sysprefs"])
+        XCTAssertEqual(Dock.pinTokens(setting: " finder ;Gone; KCalc;", library: lib), ["finder", "Gone", "KCalc"])
+        XCTAssertEqual(Dock.items(tokens: ["finder", "Gone", "KCalc"], library: lib).map(\.label), ["Finder", "KCalc"],
+                       "an application not installed has no tile but keeps its place in the list")
+    }
+
     func testTheDesktopsMenuIsItsOwnFewCommands() {
         XCTAssertEqual(Wallpaper.contextMenu.commands.map(\.verb),
                        ["desktop.new-folder", "desktop.change-background"])

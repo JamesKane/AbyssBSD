@@ -314,7 +314,8 @@ if [ "$live" -eq 1 ]; then
   quiet "$root/abyss/tests/live-appgen.sh"
   # The Dock carries them (P15.2): dock.ini pins a bundle by name, its tile
   # launches it, and the running window is matched back to the tile through the
-  # bundle's app-ids — pinned or not.
+  # bundle's app-ids — pinned or not; Keep, Remove and a bundle dragged out of
+  # the Finder edit dock.ini, and a document dropped on a tile opens with it.
   echo "== the Dock carries installed applications =="
   quiet "$root/abyss/tests/live-dock-apps.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;

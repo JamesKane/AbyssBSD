@@ -36,6 +36,9 @@ public struct DockItem: Sendable {
     /// Every app_id this tile's windows may carry (P15.2): a bundle's
     /// `Contents/app-id`, or just `appID`. `owns` is the one test.
     public let appIDs: [String]
+    /// The `dock.ini` entry that pinned this tile (`finder`, `KCalc`, a path);
+    /// nil for a tile that is only there because its application is running.
+    public let pinToken: String?
     public let isTrash: Bool
     /// What to run when the tile isn't already running. argv, plus environment
     /// to add — nil for a tile we can't launch (yet).
@@ -43,18 +46,23 @@ public struct DockItem: Sendable {
     public let environment: [String: String]
 
     public init(icon: DockIcon, label: String, appID: String?, isTrash: Bool = false,
-                command: [String]? = nil, environment: [String: String] = [:], appIDs: [String] = []) {
+                command: [String]? = nil, environment: [String: String] = [:], appIDs: [String] = [],
+                pinToken: String? = nil) {
         self.icon = icon; self.label = label; self.appID = appID; self.isTrash = isTrash
-        self.command = command; self.environment = environment
+        self.command = command; self.environment = environment; self.pinToken = pinToken
         self.appIDs = appIDs.isEmpty ? (appID.map { [$0] } ?? []) : appIDs
     }
 
     /// An installed application's tile.
-    public init(app: InstalledApp) {
+    public init(app: InstalledApp, pinToken: String? = nil) {
         self.init(icon: .bundle(app.icon ?? ""), label: app.name,
                   appID: app.appIDs.first ?? app.name, command: app.executable.map { [$0] },
-                  appIDs: app.appIDs.isEmpty ? [app.name] : app.appIDs)
+                  appIDs: app.appIDs.isEmpty ? [app.name] : app.appIDs, pinToken: pinToken)
     }
+
+    /// An installed application's own tile — not the desktop's Finder or System
+    /// Preferences, which are this binary in another scene.
+    public var isBundle: Bool { if case .bundle = icon { return true } else { return false } }
 
     /// Whether a running window is this tile's.
     public func owns(_ runningAppID: String) -> Bool {
@@ -199,7 +207,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var layer: LayerSurface?
     private var toplevels: ForeignToplevels?
     private var pinned: [DockItem]
-    private let pinnedSetting: String?
+    /// `dock.ini`'s `apps`, parsed; what an edit changes and saves (P15.2b).
+    private var pinTokens: [String]
     /// The installed bundles, reread when windows come and go — at first login
     /// `abyss-appgen` may still be writing them (P15.1).
     private var library: [InstalledApp] = []
@@ -228,33 +237,63 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     /// one is installed, and System Preferences — no placeholder tile that
     /// launches nothing (the Browser, Mail and Music tiles until P15.2).
     public static func pinned(setting: String?, library: [InstalledApp]) -> [DockItem] {
-        let selfExe = Launcher.selfExecutable()
-        let finder = DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
-                              command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "finder"])
-        let prefs = DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
-                             command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "sysprefs"])
+        items(tokens: pinTokens(setting: setting, library: library), library: library)
+    }
+
+    /// `dock.ini`'s entries, or the default ones.
+    public static func pinTokens(setting: String?, library: [InstalledApp]) -> [String] {
         guard let setting else {
-            var out = [finder]
+            var out = ["finder"]
             if let browser = library.first(where: { $0.matches(appID: "firefox") || $0.name.hasPrefix("Firefox") }) {
-                out.append(DockItem(app: browser))
+                out.append(browser.name)
             }
-            out.append(prefs)
+            out.append("sysprefs")
             return out
         }
-        return setting.split(separator: ";").compactMap { token -> DockItem? in
-            let t = token.trimmingWhitespaceForDock()
+        return setting.split(separator: ";").map { $0.trimmingWhitespaceForDock() }.filter { !$0.isEmpty }
+    }
+
+    /// The tiles for those entries. One naming a bundle that is not installed
+    /// has no tile — but stays in the list, so an application reinstalled comes
+    /// back where it was, and editing the Dock does not forget it.
+    public static func items(tokens: [String], library: [InstalledApp]) -> [DockItem] {
+        let selfExe = Launcher.selfExecutable()
+        return tokens.compactMap { t -> DockItem? in
             switch t {
-            case "": return nil
-            case "finder": return finder
-            case "sysprefs": return prefs
+            case "finder":
+                return DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
+                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "finder"],
+                                pinToken: t)
+            case "sysprefs":
+                return DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
+                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "sysprefs"],
+                                pinToken: t)
             default:
                 guard let app = AppLibrary.find(t, in: library) else {
                     Dock.log("dock.ini names \(t), which is not installed")
                     return nil
                 }
-                return DockItem(app: app)
+                return DockItem(app: app, pinToken: t)
             }
         }
+    }
+
+    /// The entry that pins a bundle: its name when that finds it again (so a
+    /// bundle regenerated or moved between the two Applications folders stays
+    /// pinned), else its path.
+    public static func pinToken(forBundle path: String, library: [InstalledApp]) -> String {
+        let base = String(path.split(separator: "/").last ?? Substring(path))
+        let name = base.hasSuffix(".app") ? String(base.dropLast(4)) : base
+        return AppLibrary.find(name, in: library)?.bundle == path ? name : path
+    }
+
+    /// `tokens` with `token` placed before `before` (at the end if nil or not
+    /// there), moved rather than doubled if it is already pinned.
+    public static func pinning(_ token: String, before: String?, in tokens: [String]) -> [String] {
+        var out = tokens.filter { $0 != token }
+        let at = before.flatMap { b in out.firstIndex(of: b) } ?? out.count
+        out.insert(token, at: at)
+        return out
     }
 
     /// For the golden scene and anything else that wants the stock Dock.
@@ -264,9 +303,9 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         let config = (try? Pool.load("dock")) ?? Config()
         tileSize = Double(config.uint64("dock", "tile_size") ?? 48)
         magnify = config.bool("dock", "magnify") ?? true
-        pinnedSetting = config.string("dock", "apps")
         library = AppLibrary.all()
-        pinned = Dock.pinned(setting: pinnedSetting, library: library)
+        pinTokens = Dock.pinTokens(setting: config.string("dock", "apps"), library: library)
+        pinned = Dock.items(tokens: pinTokens, library: library)
         Dock.log("pinned " + pinned.map(\.label).joined(separator: ", "))
 
         let height = Int32(DockMetrics.surfaceHeight(tileSize: tileSize))
@@ -314,7 +353,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         let now = AppLibrary.all()
         if now != library {
             library = now
-            pinned = Dock.pinned(setting: pinnedSetting, library: library)
+            pinned = Dock.items(tokens: pinTokens, library: library)
             Dock.log("pinned " + pinned.map(\.label).joined(separator: ", "))
         }
         var seen = Set<String>()
@@ -357,7 +396,15 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         clip.onDrop = { [weak self] _, bytes, x, y in
             guard let self, clip.dragSurface == self.layer?.surface else { return }
             guard let path = finderDroppedPath(bytes), finderExists(path) else { return }
-            guard let (i, _) = self.tile(at: x, y) else {
+            let hit = self.tile(at: x, y)
+            // An application dropped anywhere on the Dock but the Trash is
+            // pinned there, before the tile it landed on (P15.2b).
+            if path.hasSuffix(".app"), finderIsDirectory(path),
+               hit.map({ !self.displayItems[$0.0].isTrash }) ?? true {
+                self.pin(path, before: hit.flatMap { self.displayItems[$0.0].pinToken })
+                return
+            }
+            guard let (i, _) = hit else {
                 Dock.log("dropped \(path) on no tile")
                 return
             }
@@ -395,6 +442,16 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             trashChanged()          // the watcher will also fire; this is idempotent
             return
         }
+        if item.isBundle, let command = item.command {
+            // The bundle's launcher passes its arguments on as the files to
+            // open (P15.1's `"$@"`).
+            if Launcher.launchDetached(command + [path], extraEnv: item.environment) {
+                Dock.log("opened \(path) with \(item.label)")
+            } else {
+                Dock.log("failed to open \(path) with \(item.label)")
+            }
+            return
+        }
         guard item.appID == "org.abyssbsd.finder", let exe = Launcher.selfExecutable() else {
             Dock.log("\(item.label) does not open documents")
             return
@@ -407,6 +464,41 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         } else {
             Dock.log("failed to open \(dir)")
         }
+    }
+
+    // MARK: - Editing (P15.2b)
+
+    private func pin(_ bundle: String, before: String?) {
+        let token = Dock.pinToken(forBundle: bundle, library: library)
+        if AppLibrary.find(token, in: library) == nil { library = AppLibrary.all() }
+        guard AppLibrary.find(token, in: library) != nil else {
+            Dock.log("\(bundle) is not an application")
+            return
+        }
+        pinTokens = Dock.pinning(token, before: before, in: pinTokens)
+        Dock.log("kept \(token) in the Dock")
+        pinsChanged()
+    }
+
+    private func unpin(_ item: DockItem) {
+        guard let token = item.pinToken else { return }
+        pinTokens.removeAll { $0 == token }
+        Dock.log("removed \(item.label) from the Dock")
+        pinsChanged()
+    }
+
+    /// Show the new tiles and write them to `dock.ini`, keeping its other keys.
+    private func pinsChanged() {
+        pinned = Dock.items(tokens: pinTokens, library: library)
+        var config = (try? Pool.load("dock")) ?? Config()
+        _ = config.set("dock", "apps", pinTokens.joined(separator: "; "))
+        do {
+            try config.store("dock")
+            Dock.log("saved apps = \(pinTokens.joined(separator: "; "))")
+        } catch {
+            Dock.log("could not save dock.ini: \(error)")
+        }
+        toplevelsChanged(toplevels?.current ?? [])
     }
 
     private func rebuild() {
@@ -508,13 +600,26 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     static let appQuit = Command("dock.quit", "Quit", summary: "Ask this application to quit.")
     static let showInFinder = Command("dock.show-in-finder", "Show In Finder",
                                       summary: "Show where this application lives.")
+    static let removeFromDock = Command("dock.remove", "Remove from Dock",
+                                        summary: "Take this application's tile off the Dock.")
+    static let keepInDock = Command("dock.keep", "Keep in Dock",
+                                    summary: "Leave this application's tile on the Dock when it quits.")
 
     /// A tile's menu: the Trash's two commands, or an application's — Open when
     /// it is not running, Quit when it is (P10.8).
-    static func tileMenu(isTrash: Bool, running: Bool) -> Menu {
-        isTrash ? Menu("Trash", [.command(trashOpen), .command(trashEmpty)])
-                : Menu("", [.command(running ? appQuit : appOpen), .separator,
-                            .command(showInFinder)])
+    /// A pinned tile can be removed (the Finder's cannot: it is always there,
+    /// as on Mac); a running application's own tile can be kept (P15.2b).
+    static func tileMenu(isTrash: Bool, running: Bool, pinned: Bool = false,
+                         removable: Bool = false) -> Menu {
+        if isTrash { return Menu("Trash", [.command(trashOpen), .command(trashEmpty)]) }
+        var items: [MenuItem] = [.command(running ? appQuit : appOpen), .separator]
+        if pinned {
+            if removable { items.append(.command(removeFromDock)) }
+        } else if removable {
+            items.append(.command(keepInDock))
+        }
+        items.append(.command(showInFinder))
+        return Menu("", items)
     }
 
     private func isRunning(_ item: DockItem) -> Bool {
@@ -526,7 +631,9 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private func openTileMenu(_ item: DockItem, frame f: DockTileFrame, iconBottom: Double) {
         closeMenu()
         let running = isRunning(item)
-        let menu = Dock.tileMenu(isTrash: item.isTrash, running: running)
+        let menu = Dock.tileMenu(isTrash: item.isTrash, running: running,
+                                 pinned: item.pinToken != nil,
+                                 removable: item.pinToken.map { $0 != "finder" } ?? item.isBundle)
         let full = trashFull
         context = ContextMenu.open(
             menu, name: item.isTrash ? "Trash" : item.label,
@@ -552,6 +659,11 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
                 case "dock.open-trash":  self.openTrash()
                 case "dock.empty-trash": self.emptyTrash()
                 case "dock.open":        self.activate(item)
+                case "dock.remove":      self.unpin(item)
+                case "dock.keep":
+                    if let app = AppLibrary.owner(of: item.appID ?? "", in: self.library) {
+                        self.pin(app.bundle, before: nil)
+                    }
                 case "dock.quit":
                     let ids = Set((self.toplevels?.current ?? []).map(\.appID).filter { item.owns($0) })
                     let n = ids.reduce(0) { $0 + (self.toplevels?.close(appID: $1) ?? 0) }

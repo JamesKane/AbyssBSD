@@ -82,7 +82,13 @@ public final class Popup {
         display.addListener(to: xdgSurface, listener: xsl, data: me)
 
         var pl = xdg_popup_listener()
-        pl.configure = { _, _, _, _, _, _ in }  // position/size; we use our own
+        // The size is our own; the position is only logged — where the
+        // compositor put the menu, relative to its parent, is what a test needs
+        // to aim at a row (P15.2b). Logged to fd 2, like LayerSurface's `mapped`.
+        pl.configure = { _, _, x, y, w, h in
+            let msg = "Surface.Popup: placed at \(x),\(y) \(w)x\(h)\n"
+            msg.withCString { _ = write(2, $0, strlen($0)) }
+        }
         pl.popup_done = { data, _ in
             guard let data else { return }
             let p = Unmanaged<Popup>.fromOpaque(data).takeUnretainedValue()

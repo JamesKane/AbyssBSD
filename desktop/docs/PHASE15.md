@@ -101,8 +101,21 @@ In three:
   `live-dock-apps.sh`: pinned by name, launched by a click, the running window
   matched to its tile (no second tile), a second click activates rather than
   launches, and an unpinned running application wears its bundle's name.
-- **(b) editing:** a bundle dropped on the Dock is pinned there, and the tile
-  menu's "Remove from Dock" unpins; both write `dock.ini`.
+- **(b) ✅ Done 2026-09-30 — editing.** A bundle dropped anywhere on the Dock
+  but the Trash is pinned before the tile it landed on (moved, not doubled, if
+  it was already there); a pinned tile's menu has "Remove from Dock" (not the
+  Finder's), a running unpinned application's has "Keep in Dock". Each edit
+  rewrites `dock.ini`'s `apps`, keeping its other keys. An entry naming a bundle
+  that is not installed has no tile but keeps its place in the list, so a
+  reinstalled application comes back where it was. A bundle is pinned by name
+  when the name finds it again, else by path — a root bundle shadowed by the
+  person's own of the same name. A document dropped on an application's tile
+  opens with it: the launcher's `"$@"` (P15.1) is given the file. The popup
+  now logs where the compositor placed it (`Surface.Popup: placed at X,Y`), so a
+  test clicks a Dock menu's row where it really is. `live-dock-apps.sh` claims
+  6–9: Keep, Remove and Quit through the tile menu; a bundle dragged out of the
+  Finder and onto System Preferences lands before it; a text file dropped on
+  the application's tile opens a window.
 - **(c) the Apple menu's Recent Items:** the applications launched from the Dock,
   the Finder and the menu, most recent first.
 
