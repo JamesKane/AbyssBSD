@@ -12,7 +12,14 @@
 #   3. dragging the display's slider to Never pushes the computer's to Never;
 #   4. FreeBSD: powerd, read from rc.conf through the helper (off), turned on
 #      by its checkbox, then its battery mode set to Slowest — rc.conf written
-#      for real (scratch), the restart skipped and said (write-only).
+#      for real (scratch), the restart skipped and said (write-only);
+#   5. FreeBSD, power profiles (P14.8b): this guest's upstream base has none,
+#      and the page says why and shows none; given a `power_profile` (in the
+#      scratch rc.conf, as the AbyssBSD base's defaults give one) the page shows
+#      the power mode instead of powerd's per-source modes, and choosing
+#      Performance writes it and clears powerd's flags so the profile chooses
+#      them. `service power_profile start` is skipped (write-only): running it
+#      is the AbyssBSD base's half, and this guest has upstream's script.
 #
 # Usage: abyss/tests/live-energy-pane.sh
 set -eu
@@ -193,5 +200,41 @@ else
   echo "ok: 4. (powerd is rc.conf's; the guest runs this half)"
 fi
 
+# ------------------------------------------------------- 5. power profiles
+if [ "$freebsd" = 1 ]; then
+  # Upstream's base: no profile, said in the log, and none on the page.
+  last "energy: status " | grep -q " profile " && fail "a profile on a base without them: $(last 'energy: status ')"
+  grep -q "energy: no power mode: this FreeBSD offers no power profiles" "$work/app.log" \
+    || fail "the page did not say why there is no power mode"
+  grep 'energy layout' "$work/app.log" | tail -1 | grep -q 'profile\.' && fail "power-mode radios without profiles"
+  # And refused, not attempted: applying a profile on this base changes nothing.
+  before=$(cat "$work/rc.conf")
+  out=$(env ABYSS_RUNTIME_DIR="$rundir" "$root/.build/debug/abyss-settingsctl" apply power-profile --profile performance 2>&1) \
+    && fail "a profile was applied on a base without them: $out"
+  case "$out" in *"offers no power profiles"*) ;; *) fail "the refusal: $out" ;; esac
+  [ "$(cat "$work/rc.conf")" = "$before" ] || fail "a refused profile still changed rc.conf: $(cat "$work/rc.conf")"
+  # The AbyssBSD base's defaults, stood in for by the scratch rc.conf.
+  # (root's by now: the helper has replaced it whole, twice)
+  printf 'power_profile="balanced"\n' | $sudo tee -a "$work/rc.conf" > /dev/null
+  b=$(mark "energy: status ")
+  # Away and back, as a person would: choosing the pane already showing is
+  # rightly nothing, so it would not read the machine again.
+  "$menu" run systempreferences view.showAll > /dev/null || fail "could not go to Show All"
+  "$menu" run systempreferences view.pane.energySaver > /dev/null || fail "could not reopen Energy Saver"
+  await "energy: status " "$b" "the pane did not read again"
+  last "energy: status " | grep -q " profile balanced " || fail "the page: $(last 'energy: status ')"
+  await "energy layout .*profile.performance=" 0 "the pane did not lay out the power mode"
+  grep 'energy layout' "$work/app.log" | tail -1 | grep -q ' ac\.' && fail "powerd's per-source modes are still on the page"
+  b=$(mark "energy: applied"); click profile.performance
+  await "energy: applied" "$b" "choosing Performance applied nothing"
+  grep -q '^power_profile="performance"' "$work/rc.conf" || fail "rc.conf: $(cat "$work/rc.conf")"
+  grep -q '^powerd_flags=' "$work/rc.conf" && fail "powerd's flags were left to outrank the profile: $(cat "$work/rc.conf")"
+  last "energy: applied" | grep -q "Saved, and not put into effect (write-only" || fail "said: $(last 'energy: applied')"
+  await "energy: status .*profile performance" 0 "the page did not read Performance back"
+  echo "ok: 5. no power mode on upstream's base, why, and a refused apply; with a profile, Performance chosen — rc.conf written, powerd's flags cleared"
+else
+  echo "ok: 5. (power profiles are the FreeBSD base's; the guest runs this half)"
+fi
+
 exec 3>&- 4>&- 2>/dev/null || true
-echo "all green (Energy Saver: sleep delays kept, the rule between them held, powerd through the helper)."
+echo "all green (Energy Saver: sleep delays kept, the rule between them held, powerd and the power mode through the helper)."

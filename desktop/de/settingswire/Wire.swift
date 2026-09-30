@@ -31,6 +31,9 @@ public enum SettingsWire {
             m.set("energy.powerd", e.powerd)
             m.set("energy.ac", e.onAC.rawValue)
             m.set("energy.battery", e.onBattery.rawValue)
+            if e.modesFromProfile { m.set("energy.modes-from-profile", true) }
+        case .powerProfile(let pp):
+            m.set("power-profile", pp.profile.rawValue)
         case .network(let n):
             m.set("network.interface", n.interface)
             switch n.ipv4 {
@@ -74,7 +77,13 @@ public enum SettingsWire {
                 return .failure(SettingsRefusal("powerd has no mode \(PowerdMode(rawValue: ac) == nil ? ac : bat)"
                     + " (it has: \(PowerdMode.allCases.map(\.rawValue).joined(separator: ", ")))"))
             }
-            return .success(.energy(EnergyPlan(powerd: on, onAC: a, onBattery: b)))
+            return .success(.energy(EnergyPlan(powerd: on, onAC: a, onBattery: b,
+                                               modesFromProfile: m.bool("energy.modes-from-profile") ?? false)))
+        case "power-profile":
+            guard let v = m.string("power-profile"), let pp = PowerProfile(rawValue: v) else {
+                return .failure(SettingsRefusal("a power-profile plan must name power-saver, balanced or performance"))
+            }
+            return .success(.powerProfile(PowerProfilePlan(profile: pp)))
         case "network":
             let iface = m.string("network.interface") ?? ""
             var dns: [IPv4] = []
@@ -130,7 +139,7 @@ public enum SettingsWire {
         case "":
             return .failure(SettingsRefusal("the request names no kind of plan"))
         case let other:
-            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network, sound, wifi)"))
+            return .failure(SettingsRefusal("there is no \(other) plan (there is: energy, network, power-profile, sound, wifi)"))
         }
     }
 

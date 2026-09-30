@@ -67,5 +67,20 @@ final class EnergyPaneTests: XCTestCase {
         XCTAssertEqual(energyHit(l, x: l.battery[2].hit.x + 5, y: l.battery[2].hit.y + 5), .battery(.minimum))
         XCTAssertEqual(energyHit(l, x: l.ac[3].hit.x + 5, y: l.ac[3].hit.y + 5), .ac(.maximum))
         XCTAssertLessThan(l.noteBaseline, 620)
+        XCTAssertTrue(l.profile.isEmpty)
+    }
+
+    /// With power profiles (P14.8b) the power mode replaces powerd's per-source
+    /// modes — one layout still, and nothing to hit where the old rows were.
+    func testWithProfilesThePowerModeReplacesThePerSourceModes() {
+        let l = energyLayout(body: Rect(0, 80, 760, 540), profiles: true)
+        XCTAssertTrue(l.ac.isEmpty && l.battery.isEmpty)
+        XCTAssertEqual(l.profile.map(\.value), ["power-saver", "balanced", "performance"])
+        XCTAssertEqual(energyHit(l, x: l.profile[2].hit.x + 5, y: l.profile[2].hit.y + 5), .profile(.performance))
+        XCTAssertEqual(energyHit(l, x: l.powerd.hit.x + 5, y: l.powerd.hit.y + 5), .powerd)
+        XCTAssertEqual(EnergyWords.profile(.powerSaver), "Power Saver")
+        var s = EnergyPaneState.sample
+        s.profile = .balanced
+        XCTAssertTrue(EnergyWords.statusLine(s).contains(" profile balanced battery "))
     }
 }

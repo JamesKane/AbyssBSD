@@ -59,11 +59,53 @@ final class SettingsTests: XCTestCase {
 
     // MARK: - The wire refuses what it does not understand
 
-    func testAPlanCrossesTheWireIntact() throws {
-        let plan = SettingsPlan.energy(EnergyPlan(powerd: true, onAC: .minimum, onBattery: .hiadaptive))
+    // MARK: - Power profiles (P14.8b)
+
+    /// The profile, powerd's own flags cleared so the profile chooses its mode,
+    /// then applied as boot would.
+    func testAPowerProfileCompilesToItsVariableClearedFlagsAndAStart() throws {
+        let steps = try Settings.compile(.powerProfile(PowerProfilePlan(profile: .powerSaver)))
+        XCTAssertEqual(steps, [
+            .rcConf(key: "power_profile", value: "power-saver"),
+            .rcConf(key: "powerd_flags", value: nil),
+            .service(name: "power_profile", action: "start", mayFail: false),
+        ])
+    }
+
+    /// powerd turned on under a profile runs with no flags, so the profile keeps
+    /// choosing its mode; the per-source modes are not written.
+    func testPowerdUnderAProfileRunsWithNoFlags() throws {
+        let steps = try Settings.compile(.energy(EnergyPlan(powerd: true, onAC: .maximum, modesFromProfile: true)))
+        XCTAssertEqual(steps[1], .rcConf(key: "powerd_flags", value: nil))
         var m = Msg()
+        let plan = SettingsPlan.energy(EnergyPlan(powerd: true, modesFromProfile: true))
         SettingsWire.encode(plan, into: &m)
         XCTAssertEqual(try SettingsWire.decodePlan(m).get(), plan)
+    }
+
+    /// Read back through `sysrc -n`, which answers from the defaults: a profile
+    /// is a plan; no variable at all is upstream FreeBSD, and is said in words.
+    func testAPowerProfileIsReadBackOrTheBaseIsSaidToLackThem() {
+        XCTAssertEqual(Settings.current(kind: "power-profile", values: ["power_profile": "performance"]),
+                       .powerProfile(PowerProfilePlan(profile: .performance)))
+        XCTAssertNil(Settings.unavailable(kind: "power-profile", values: ["power_profile": "balanced"]))
+        XCTAssertNil(Settings.current(kind: "power-profile", values: [:]))
+        XCTAssertEqual(Settings.unavailable(kind: "power-profile", values: [:]),
+                       "this FreeBSD offers no power profiles — its rc.d/power_profile is the older AC-line script")
+        XCTAssertEqual(Settings.unavailable(kind: "power-profile", values: ["power_profile": "NONE"]),
+                       "power profiles are turned off on this machine (power_profile=NONE)")
+        XCTAssertNotNil(Settings.unavailable(kind: "power-profile", values: ["power_profile": "turbo"]))
+        XCTAssertNil(Settings.unavailable(kind: "energy", values: [:]))
+        XCTAssertEqual(Settings.keys(for: "power-profile")?.map(\.key), ["power_profile"])
+    }
+
+    func testAPlanCrossesTheWireIntact() throws {
+        for plan in [SettingsPlan.energy(EnergyPlan(powerd: true, onAC: .minimum, onBattery: .hiadaptive)),
+                     .powerProfile(PowerProfilePlan(profile: .performance))] {
+            var m = Msg()
+            SettingsWire.encode(plan, into: &m)
+            XCTAssertEqual(try SettingsWire.decodePlan(m).get(), plan)
+        }
     }
 
     func testTheWireRefusesInWordsRatherThanGuessing() {
@@ -75,7 +117,9 @@ final class SettingsTests: XCTestCase {
             return nil
         }
         XCTAssertEqual(refusal([]), "the request names no kind of plan")
-        XCTAssertEqual(refusal([("kind", "displays")]), "there is no displays plan (there is: energy, network, sound, wifi)")
+        XCTAssertEqual(refusal([("kind", "displays")]), "there is no displays plan (there is: energy, network, power-profile, sound, wifi)")
+        XCTAssertEqual(refusal([("kind", "power-profile"), ("power-profile", "turbo")]),
+                       "a power-profile plan must name power-saver, balanced or performance")
         XCTAssertEqual(refusal([("kind", "sound")]), "a sound plan must say which device is the default")
         XCTAssertEqual(refusal([("kind", "energy")], powerd: nil), "an energy plan must say whether powerd runs")
         XCTAssertTrue(refusal([("kind", "energy"), ("energy.ac", "turbo")])?.hasPrefix("powerd has no mode turbo") ?? false)

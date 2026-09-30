@@ -3,6 +3,8 @@
 //   abyss-settingsctl read  energy
 //   abyss-settingsctl check energy --powerd on|off [--ac MODE] [--battery MODE]
 //   abyss-settingsctl apply energy --powerd on|off [--ac MODE] [--battery MODE]
+//   abyss-settingsctl read  power-profile
+//   abyss-settingsctl check|apply power-profile --profile power-saver|balanced|performance
 //   abyss-settingsctl read  network --interface IF
 //   abyss-settingsctl check network --interface IF (--dhcp |
 //                     --address A --netmask M [--router R]) [--dns "A B"]
@@ -66,7 +68,7 @@ while i < args.count {
     guard i + 1 < args.count else { emit(2, "abyss-settingsctl: \(args[i]) needs a value"); exit(2) }
     switch args[i] {
     case "--service": serviceName = args[i + 1]
-    case "--powerd", "--ac", "--battery", "--interface", "--address", "--netmask", "--router", "--dns", "--default",
+    case "--powerd", "--ac", "--battery", "--profile", "--interface", "--address", "--netmask", "--router", "--dns", "--default",
          "--device", "--join", "--forget", "--passphrase":
         fields[String(args[i].dropFirst(2))] = args[i + 1]
     default: emit(2, "abyss-settingsctl: unknown option '\(args[i])'"); exit(2)
@@ -91,6 +93,9 @@ if verb != "read" && verb != "scan" {
         request.set("energy.powerd", on == "on")
         if let a = fields["ac"] { request.set("energy.ac", a) }
         if let b = fields["battery"] { request.set("energy.battery", b) }
+    case "power-profile":
+        // Sent as typed; the helper refuses a name that is not a profile.
+        request.set("power-profile", fields["profile"] ?? "")
     case "network":
         // Sent as typed: the helper decides what is an address, not this.
         request.set("network.interface", fields["interface"] ?? "")
@@ -170,6 +175,8 @@ case "read":
         }
     case .success(.sound(let s)):
         emit(1, "sound: default pcm\(s.defaultUnit)")
+    case .success(.powerProfile(let p)):
+        emit(1, "power profile: \(p.profile.rawValue)")
     case .success(.wifi):
         emit(2, "abyss-settingsctl: read wifi is answered separately"); exit(1)
     case .failure(let why):

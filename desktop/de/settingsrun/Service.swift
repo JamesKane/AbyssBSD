@@ -125,6 +125,13 @@ public final class SettingsService {
     public func machineProblems(_ plan: SettingsPlan) -> [SettingsRefusal] {
         switch plan {
         case .energy: return []
+        case .powerProfile:
+            // The one plan that depends on the base: refused where rc.conf has
+            // no `power_profile` at all, before anything is written — upstream's
+            // rc.d/power_profile would reject `start` after rc.conf had changed.
+            let r = Spawn.run(["sysrc", "-f", path(.rcConf), "-n", "power_profile"], limit: 4096)
+            return r.succeeded ? []
+                : [SettingsRefusal(Settings.unavailable(kind: "power-profile", values: [:]) ?? "no power profiles")]
         case .network(let n):
             guard Settings.isInterfaceName(n.interface) else { return [] }   // said already
             return if_nametoindex(n.interface) == 0
@@ -266,6 +273,7 @@ public final class SettingsService {
             let r = Spawn.run(["sysrc", "-f", path(file), "-n", k], limit: 4096)
             if r.succeeded { values[k] = trimmed(r.stdoutText) }
         }
+        if let why = Settings.unavailable(kind: kind, values: values) { return refuse(client, why) }
         guard let plan = Settings.current(kind: kind, interface: iface, values: values) else {
             return refuse(client, "this machine's \(kind) settings are not ones this pane can show: "
                           + values.keys.sorted().map { "\($0)=\"\(values[$0]!)\"" }.joined(separator: " "))

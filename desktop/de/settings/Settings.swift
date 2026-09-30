@@ -28,11 +28,17 @@ public struct EnergyPlan: Equatable, Sendable {
     public var powerd: Bool
     public var onAC: PowerdMode
     public var onBattery: PowerdMode
+    /// powerd's modes are the power profile's to choose (P14.8b): run it with
+    /// no flags, because rc.d/power_profile only sets powerd's mode when
+    /// `powerd_flags` is empty. `onAC`/`onBattery` are then not written.
+    public var modesFromProfile: Bool
 
-    public init(powerd: Bool, onAC: PowerdMode = .hiadaptive, onBattery: PowerdMode = .adaptive) {
+    public init(powerd: Bool, onAC: PowerdMode = .hiadaptive, onBattery: PowerdMode = .adaptive,
+                modesFromProfile: Bool = false) {
         self.powerd = powerd
         self.onAC = onAC
         self.onBattery = onBattery
+        self.modesFromProfile = modesFromProfile
     }
 
     /// What rc.conf says, as `sysrc -n` reports it (defaults already applied).
@@ -52,10 +58,28 @@ public struct EnergyPlan: Equatable, Sendable {
     }
 }
 
+/// The base system's power profile (P14.8b): rc.conf's `power_profile`, as
+/// `rc.d/power_profile` in the AbyssBSD base reads it — CPU idle depth, powerd's
+/// mode and hooks such as a GPU's clocks, chosen as one thing, the way Linux
+/// desktops offer power-profiles-daemon. **Upstream FreeBSD has no such
+/// variable** (its `rc.d/power_profile` is the older AC-line script), so a base
+/// without it is told, not guessed at: `unavailable(kind:values:)`.
+public enum PowerProfile: String, CaseIterable, Equatable, Sendable {
+    case powerSaver = "power-saver"
+    case balanced
+    case performance
+}
+
+public struct PowerProfilePlan: Equatable, Sendable {
+    public var profile: PowerProfile
+    public init(profile: PowerProfile) { self.profile = profile }
+}
+
 /// Everything System Preferences may ask of the machine. One case per pane;
 /// P14.4 adds network, P14.6 sound.
 public enum SettingsPlan: Equatable, Sendable {
     case energy(EnergyPlan)
+    case powerProfile(PowerProfilePlan)
     case network(NetworkPlan)
     case sound(SoundPlan)
     case wifi(WifiPlan)
@@ -63,6 +87,7 @@ public enum SettingsPlan: Equatable, Sendable {
     public var kind: String {
         switch self {
         case .energy: return "energy"
+        case .powerProfile: return "power-profile"
         case .network: return "network"
         case .sound: return "sound"
         case .wifi: return "wifi"
@@ -242,7 +267,7 @@ public enum Settings {
     /// devices) will have more.
     public static func problems(_ plan: SettingsPlan) -> [SettingsRefusal] {
         switch plan {
-        case .energy:
+        case .energy, .powerProfile:
             return []
         case .network(let n):
             return networkProblems(n)
@@ -311,8 +336,17 @@ public enum Settings {
                         .service(name: "powerd", action: "onestop", mayFail: true)]
             }
             return [.rcConf(key: "powerd_enable", value: "YES"),
-                    .rcConf(key: "powerd_flags", value: "-a \(e.onAC.rawValue) -b \(e.onBattery.rawValue)"),
+                    .rcConf(key: "powerd_flags",
+                            value: e.modesFromProfile ? nil : "-a \(e.onAC.rawValue) -b \(e.onBattery.rawValue)"),
                     .service(name: "powerd", action: "onerestart", mayFail: false)]
+        case .powerProfile(let p):
+            // The profile, then powerd's own flags cleared: rc.d/power_profile
+            // chooses powerd's mode only when `powerd_flags` is empty, so a
+            // policy the Energy pane once set would silently outrank the
+            // profile. Then applied now, as boot would.
+            return [.rcConf(key: "power_profile", value: p.profile.rawValue),
+                    .rcConf(key: "powerd_flags", value: nil),
+                    .service(name: "power_profile", action: "start", mayFail: false)]
         case .wifi(let w):
             return compileWifi(w)
         case .sound(let s):
@@ -353,6 +387,7 @@ public enum Settings {
         -> [(file: ConfFile, key: String)]? {
         switch kind {
         case "energy": return [(.rcConf, "powerd_enable"), (.rcConf, "powerd_flags")]
+        case "power-profile": return [(.rcConf, "power_profile")]
         case "network":
             guard isInterfaceName(interface) else { return nil }
             return [(.rcConf, "ifconfig_\(interface)"), (.rcConf, "defaultrouter"),
@@ -368,6 +403,9 @@ public enum Settings {
         switch kind {
         case "energy":
             return .energy(EnergyPlan.from(enable: values["powerd_enable"], flags: values["powerd_flags"]))
+        case "power-profile":
+            return values["power_profile"].flatMap { PowerProfile(rawValue: $0) }
+                .map { .powerProfile(PowerProfilePlan(profile: $0)) }
         case "network":
             return NetworkPlan.from(interface: interface, ifconfig: values["ifconfig_\(interface)"],
                                     router: values["defaultrouter"],
@@ -376,6 +414,21 @@ public enum Settings {
             return values["hw.snd.default_unit"].flatMap { Int($0) }.map { .sound(SoundPlan(defaultUnit: $0)) }
         default: return nil
         }
+    }
+
+    /// Why a plan kind cannot be shown or applied on this machine at all, from
+    /// what reading its keys found — nil when it can. Power profiles are the one
+    /// that depends on the base: `sysrc -n` answers from /etc/defaults/rc.conf,
+    /// which declares `power_profile` in the AbyssBSD base and not upstream.
+    public static func unavailable(kind: String, values: [String: String]) -> String? {
+        guard kind == "power-profile" else { return nil }
+        guard let v = values["power_profile"] else {
+            return "this FreeBSD offers no power profiles — its rc.d/power_profile is the older AC-line script"
+        }
+        if v.uppercased() == "NONE" {
+            return "power profiles are turned off on this machine (power_profile=NONE)"
+        }
+        return PowerProfile(rawValue: v) == nil ? "power_profile is \"\(v)\", which is not a profile this pane knows" : nil
     }
 
     /// The list, as the commands it will run — for `check`, the journal, and a

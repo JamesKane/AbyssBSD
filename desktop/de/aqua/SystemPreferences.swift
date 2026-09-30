@@ -286,8 +286,9 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         l.network = networkLayout(body: l.body, interfaces: n.interfaces, radios: n.radios, wifi: n.wifi)
         paintNetworkPane(cr, l.network, status: n.status, form: n.form, note: n.note, busy: n.busy, wifi: n.wifi)
     case .pane(let id) where id == PrefsModel.energyPane:
-        l.energy = energyLayout(body: l.body)
-        paintEnergyPane(cr, l.energy, energy ?? .sample)
+        let e = energy ?? .sample
+        l.energy = energyLayout(body: l.body, profiles: e.profile != nil)
+        paintEnergyPane(cr, l.energy, e)
     case .pane(let id) where id == PrefsModel.displaysPane:
         let d = displays ?? .sample
         l.displays = displaysLayout(body: l.body, d)
@@ -561,6 +562,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             var line = "energy layout computer=\(t(e.computer)) display=\(t(e.display)) powerd=\(c(e.powerd.hit))"
             for r in e.ac { line += " ac.\(r.value)=\(c(r.hit))" }
             for r in e.battery { line += " battery.\(r.value)=\(c(r.hit))" }
+            for r in e.profile { line += " profile.\(r.value)=\(c(r.hit))" }
             SystemPreferencesApp.log(line)
         }
         // The Displays pane's: `disp.<name>` at each rectangle's centre,
@@ -604,6 +606,17 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             energy.note = "The settings helper says: \(why.message)"
             SystemPreferencesApp.log("energy: cannot read powerd: \(why.message)")
         }
+        // The power mode, where the base has one (P14.8b). A refusal here is
+        // usually the base saying it has no profiles, which is not a fault:
+        // the page falls back to powerd's own modes and the log says why.
+        switch SettingsClient.read("power-profile") {
+        case .success(.powerProfile(let p)): energy.profile = p.profile; energy.profileUnavailable = nil
+        case .success: break
+        case .failure(let why):
+            energy.profile = nil
+            energy.profileUnavailable = why.message
+            SystemPreferencesApp.log("energy: no power mode: \(why.message)")
+        }
         SystemPreferencesApp.log("energy: status \(EnergyWords.statusLine(energy))")
         window?.setNeedsDisplay()
     }
@@ -616,7 +629,13 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         case .powerd:
             guard var p = energy.powerd else { return }
             p.powerd.toggle()
+            // With a power profile, powerd runs with no flags, so the profile
+            // keeps choosing its mode (P14.8b).
+            p.modesFromProfile = energy.profile != nil
             applyEnergy(p)
+        case .profile(let chosen):
+            guard energy.profile != chosen else { return }
+            apply(.powerProfile(PowerProfilePlan(profile: chosen)), "power profile \(chosen.rawValue)")
         case .ac(let m):
             guard var p = energy.powerd, p.onAC != m else { return }
             p.onAC = m
@@ -651,11 +670,17 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     }
 
     private func applyEnergy(_ plan: EnergyPlan) {
+        apply(.energy(plan), "powerd \(plan.powerd ? "on" : "off") ac \(plan.onAC.rawValue) battery \(plan.onBattery.rawValue)"
+                             + (plan.modesFromProfile ? " (modes from the power profile)" : ""))
+    }
+
+    /// Either of the page's two plans, through the one helper connection.
+    private func apply(_ plan: SettingsPlan, _ what: String) {
         guard energyApplying == nil else { return }
         var m = Msg()
         m.set("method", "apply")
-        SettingsWire.encode(.energy(plan), into: &m)
-        SystemPreferencesApp.log("energy: apply powerd \(plan.powerd ? "on" : "off") ac \(plan.onAC.rawValue) battery \(plan.onBattery.rawValue)")
+        SettingsWire.encode(plan, into: &m)
+        SystemPreferencesApp.log("energy: apply \(what)")
         guard let sock = SettingsClient.begin(m) else {
             energy.note = "Not changed: the settings helper is not running on this machine"
             SystemPreferencesApp.log("energy: \(energy.note)")

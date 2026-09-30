@@ -12,6 +12,10 @@
 //     `energy` plan, P14.3 — the first plan the helper ever had).
 //   - **The battery**, where `Vents` finds one; and which sleep states the
 //     machine says it supports (`hw.acpi.supported_sleep_state`).
+//   - **The power mode** (P14.8b), where the base has power profiles: Power
+//     Saver, Balanced or Performance, as GNOME and KDE offer them. It replaces
+//     the per-source powerd modes, which the profile then chooses; on a base
+//     without profiles (upstream FreeBSD) the page is as it was.
 
 import AquaDraw
 import PoolConfig
@@ -27,6 +31,10 @@ public struct EnergyPaneState: Equatable, Sendable {
     public var battery: Vents.Battery?
     /// `S3 S4 S5`, or nil where there is no ACPI to ask.
     public var sleepStates: String?
+    /// The base's power profile, through the helper; nil where there is none
+    /// to show — `profileUnavailable` says why.
+    public var profile: PowerProfile?
+    public var profileUnavailable: String?
     public var note = ""
     public var busy = false
 
@@ -43,6 +51,14 @@ public struct EnergyPaneState: Equatable, Sendable {
 }
 
 public enum EnergyWords {
+    public static func profile(_ p: PowerProfile) -> String {
+        switch p {
+        case .powerSaver: return "Power Saver"
+        case .balanced: return "Balanced"
+        case .performance: return "Performance"
+        }
+    }
+
     public static func mode(_ m: PowerdMode) -> String {
         switch m {
         case .adaptive: return "Adaptive"
@@ -74,6 +90,7 @@ public enum EnergyWords {
     public static func statusLine(_ s: EnergyPaneState) -> String {
         "computer \(s.prefs.systemSleepMinutes) display \(s.prefs.displaySleepMinutes) powerd "
             + (s.powerd.map { $0.powerd ? "on ac \($0.onAC.rawValue) battery \($0.onBattery.rawValue)" : "off" } ?? "unknown")
+            + (s.profile.map { " profile \($0.rawValue)" } ?? "")
             + " battery " + (s.battery?.percent.map { "\($0)" } ?? "none")
     }
 }
@@ -109,11 +126,15 @@ public struct EnergyLayout: Equatable, Sendable {
     public var powerd = Row(value: "powerd", hit: Rect(0, 0, 0, 0), control: Rect(0, 0, 0, 0))
     public var ac: [Row] = []
     public var battery: [Row] = []
+    /// The power mode's radios (P14.8b), where the base has profiles; then
+    /// `ac` and `battery` are empty, and the other way round.
+    public var profile: [Row] = []
     public var labelRight = 0.0
     public var acBaseline = 0.0, batteryBaseline = 0.0, batteryLineBaseline = 0.0, noteBaseline = 0.0
+    public var profileBaseline = 0.0
 }
 
-public func energyLayout(body: Rect) -> EnergyLayout {
+public func energyLayout(body: Rect, profiles: Bool = false) -> EnergyLayout {
     var l = EnergyLayout()
     let left = body.x + 40, w = body.w - 80
     l.sleepBox = Rect(left, body.y + 18, w, 186)
@@ -125,6 +146,17 @@ public func energyLayout(body: Rect) -> EnergyLayout {
     l.powerd = .init(value: "powerd", hit: Rect(left + 16, y, 420, 22), control: Rect(left + 16, y + 3, 16, 16))
     y += 30
     l.labelRight = left + 150
+    if profiles {
+        l.profileBaseline = y + 15
+        var x = l.labelRight + 12
+        for p in PowerProfile.allCases {
+            l.profile.append(.init(value: p.rawValue, hit: Rect(x, y, 140, 22), control: Rect(x, y + 3, 16, 16)))
+            x += 144
+        }
+        l.batteryLineBaseline = l.powerdBox.y + l.powerdBox.h + 28
+        l.noteBaseline = l.batteryLineBaseline + 26
+        return l
+    }
     l.acBaseline = y + 15
     var x = l.labelRight + 12
     for m in PowerdMode.allCases {
@@ -150,6 +182,7 @@ public enum EnergyHit: Equatable, Sendable {
     case powerd
     case ac(PowerdMode)
     case battery(PowerdMode)
+    case profile(PowerProfile)
 }
 
 public func energyHit(_ l: EnergyLayout, x: Double, y: Double) -> EnergyHit? {
@@ -160,6 +193,7 @@ public func energyHit(_ l: EnergyLayout, x: Double, y: Double) -> EnergyHit? {
     if l.powerd.hit.contains(x, y) { return .powerd }
     if let r = l.ac.first(where: { $0.hit.contains(x, y) }), let m = PowerdMode(rawValue: r.value) { return .ac(m) }
     if let r = l.battery.first(where: { $0.hit.contains(x, y) }), let m = PowerdMode(rawValue: r.value) { return .battery(m) }
+    if let r = l.profile.first(where: { $0.hit.contains(x, y) }), let p = PowerProfile(rawValue: r.value) { return .profile(p) }
     return nil
 }
 
@@ -193,8 +227,22 @@ public func paintEnergyPane(_ cr: OpaquePointer, _ l: EnergyLayout, _ s: EnergyP
         let w = Draw.textWidth(cr, t, size: 13)
         Draw.textLeft(cr, t, x: l.labelRight - w, baselineY: baseline, color: on ? Theme.bodyText : Theme.secondaryText, size: 13)
     }
-    heading("On AC power:", l.acBaseline)
-    heading("On battery:", l.batteryBaseline)
+    if !l.profile.isEmpty {
+        // The profile sets more than powerd (CPU idle depth, a GPU's clocks),
+        // so its row is live whether or not powerd runs.
+        let w = Draw.textWidth(cr, "Power mode:", size: 13)
+        Draw.textLeft(cr, "Power mode:", x: l.labelRight - w, baselineY: l.profileBaseline, color: Theme.bodyText, size: 13)
+        for r in l.profile {
+            guard let p = PowerProfile(rawValue: r.value) else { continue }
+            Draw.radioButton(cr, cx: r.control.x + 8, cy: r.control.y + 8, radius: 7, selected: p == s.profile)
+            Draw.textLeft(cr, EnergyWords.profile(p), x: r.control.x + 22,
+                          baselineY: r.control.y + 12, color: Theme.bodyText, size: 12)
+        }
+    }
+    if !l.ac.isEmpty {
+        heading("On AC power:", l.acBaseline)
+        heading("On battery:", l.batteryBaseline)
+    }
     for (rows, chosen) in [(l.ac, s.powerd?.onAC), (l.battery, s.powerd?.onBattery)] {
         for r in rows {
             guard let m = PowerdMode(rawValue: r.value) else { continue }
