@@ -853,6 +853,58 @@ whole shape, and worth saying rather than implying the fix is verified.
 
 ---
 
+### 5.11 The first 16-CURRENT sitting (2026-09-30): update in place, and six things only metal could say
+
+**The loop changed shape.** The medium is built with `--ssh-key` and `--frames
+0`, written once, and then *updated in place*: `abyss/mk/metal.sh push` builds in
+the VM, stops the session, carries the binaries, themes and fonts onto the
+stick's read-write root (the same list `live-image.sh` uses, `desktop-files.sh`),
+asks `ldd` whether the stick can run them, and starts the session again. `stop`,
+`start` and `restart` do the session alone; `report` sets the session aside for
+the measurement, since the desktop holds DRM master. A new stick is owed only
+when the base, the libraries or the medium's scripts change.
+
+What the machine said, in the order it said it — none of it visible in the VM:
+
+1. **`drm-612-kmod` binds the RX 6750 XT** on the 16-CURRENT medium (§6.9's
+   question): all of `navy_flounder`'s firmware, `card0` and `renderD128`.
+2. **The developer medium had never started a session.** Every live session
+   passed `--capture`, and `undertow` refuses a capture on an unbounded run —
+   which `--frames 0` is. It exited at once. A capture is now asked for only
+   with a frame count.
+3. **The GPU was not drawing.** Mesa 26 loads GBM's backend by path
+   (`gbm/dri_gbm.so`); without it wlroots fell back to pixman and the display
+   still lit up. Carried now, and checked by name (§5.3's lesson, one Mesa on).
+4. **The mouse needed `hms`**, which GENERIC does not build in and devmatch did
+   not offer. The medium's `kld_list` loads it.
+5. **Every input device present at start was dropped.** `WlrootsSession` started
+   the backend with only an *output* listener; `Seat` registered `new_input`
+   later, so libinput announced the keyboards to nobody. The mouse had only
+   worked as a hot-plug. The session now collects the devices announced during
+   start and `Seat` adopts them. Typing and Tab verified on metal — the first
+   time anything has been typed there.
+6. **The session had `HOME=/`** (`su -m` keeps rc's), so the installer could not
+   save the chosen layout and fontconfig and Mesa had no caches.
+
+And one that cost ten minutes: with a display, the session's log replay (`sed`
+over `/var/log/abyss-live.log`) wrote into the file it was reading, so every
+stopped session grew it without end. It filled the stick (1.5 GB) and stalled
+the next `push`. The replay now happens only when its output is the console.
+
+**The frame contract.** P4.5's breakdown ran for the first time: 44 of 300
+missed, composite p99 37 µs, margin **"dominated by display commit (30 ms)"**,
+pinned at its ceiling. That term was the measurement feeding on itself: the
+wlroots output reported a flip's `done` as its present time, which on DRM is the
+vblank, so every on-time frame "took" the whole margin to commit and the margin
+grew to cover it. `done` is now when the commit returned. The re-measurement
+(100 of 300 missed, margin now "unattributed", still at its ceiling) shows the
+misses are real and have another cause; the session log's repeated *"Failed to
+page-flip output: a page-flip is already pending"* is the lead (§5.12).
+
+Also answered: no Wi-Fi device is recognised (PHASE14 §6.5); the 12700KF's P and
+E cores are visible only as cache topology (0–15 in SMT pairs, 16–19 one
+shared-L2 group), with no flag the scheduler acts on.
+
 ## 6. Risks / open decisions
 
 **6.1 The frame contract's metric is headless-or-DRM, and nesting is neither.**
@@ -976,3 +1028,9 @@ ever run headless in the VM, where it cannot matter. The first install on metal
 will show whether the session falls back to no display; if it does, the fix is
 one word in `InstallerModel.groups`, and it should be made *with* that machine in
 front of us, not before.
+
+**6.11 An installed system sets no `kld_list` (noticed 2026-09-30).** The medium
+loads `amdgpu` and `hms` through `kld_list`; nothing the installer writes does
+the same, so an installed machine would come up with neither the GPU driver nor
+a USB mouse. Same untested path as §6.10, and the same answer: fix it with an
+install on metal in front of us.

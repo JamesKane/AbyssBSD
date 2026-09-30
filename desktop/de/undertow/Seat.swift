@@ -183,6 +183,8 @@ public final class Seat {
             let seat = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             seat.attach(device: data.assumingMemoryBound(to: wlr_input_device.self))
         }, me))
+        // And the devices that were there before this seat was (Backend.swift).
+        for device in compositor.session.takeStartupInputs() { attach(device: device) }
 
         // Virtual devices — how the harness drives us, exactly as it drives sway.
         guard let vp = wlr_virtual_pointer_manager_v1_create(compositor.session.display)

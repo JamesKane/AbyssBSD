@@ -122,7 +122,8 @@ DATA="/usr/local/share/fonts/dejavu
       /usr/local/etc/fonts
       /usr/local/share/libinput
       /usr/local/share/glvnd
-      /usr/local/share/vulkan/icd.d"
+      /usr/local/share/vulkan/icd.d
+      /usr/local/share/libdrm"
 
 # **Objects nothing links and something `dlopen`s — the converse of §2.45, and
 # it cost a boot on metal to find (PHASE4 §5.3).**
@@ -177,14 +178,21 @@ DLOPEN_DIR="/usr/local/lib/dri"
 # in that same log, which is a false lead for anyone reading it). Either complete
 # it or do not ship it, and we cannot not ship it; so it is completed, and
 # wlroots gains the fallback renderer it was already trying to use.
+#
+# **`gbm/dri_gbm.so` is the same link again, one Mesa later** (PHASE4 §5.11).
+# Mesa 26 moved GBM's backend out of `libgbm` into a module it loads by path;
+# without it GBM cannot allocate, wlroots cannot make a GLES2 renderer, and
+# undertow falls back to pixman — the display lights up and the GPU draws
+# nothing. The first 16-CURRENT boot on metal said only "MESA-LOADER: failed to
+# open dri". (`libdrm/amdgpu.ids`, in DATA above, is the card's marketing name,
+# read by path; its absence is a warning, not a failure.)
 DLOPEN_LIBS="/usr/local/lib/libEGL_mesa.so.0
-             /usr/local/lib/libvulkan_radeon.so"
+             /usr/local/lib/libvulkan_radeon.so
+             /usr/local/lib/gbm/dri_gbm.so"
 
-# The products that go on the medium. An explicit list, not a glob over
-# `.build/debug`, because that directory is full of SwiftPM's own intermediates.
-BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus abyss-theme
-          abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl
-          fathom abyss-settings abyss-settingsctl"
+# The products that go on the medium, and the data beside them: one list,
+# shared with metal.sh's `push` (desktop-files.sh).
+. "$root/abyss/mk/desktop-files.sh"
 
 # The graphics stack, for a medium that has to come up on a real machine
 # (PHASE4 P4.3). Packages rather than an `ldd` closure, because kernel modules
@@ -406,7 +414,7 @@ dlopen_roots=$(ls "$DLOPEN_DIR"/libdril_dri.so /usr/local/lib/libgallium-*.so $D
 # that names something else entirely, so they are checked by name rather than
 # left to a glob that quietly matches less than it should.
 for want in "$DLOPEN_DIR/libdril_dri.so" /usr/local/lib/libEGL_mesa.so.0 \
-            /usr/local/lib/libvulkan_radeon.so; do
+            /usr/local/lib/libvulkan_radeon.so /usr/local/lib/gbm/dri_gbm.so; do
   [ -e "$want" ] || die "$want is missing on this machine — the medium would ship a GPU it cannot render on"
 done
 for r in $dlopen_roots; do
@@ -550,12 +558,20 @@ for card in /dev/dri/card*; do
 done
 echo "abyss-session: $backend backend ($(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo 'no /dev/dri'))"
 
+# **A capture needs an end.** undertow writes the frame when its run finishes,
+# so it refuses `--capture` on an unbounded run — and `--frames 0` is exactly
+# what a machine with a person at it gets. Passed together, undertow exited at
+# once and the metal medium never drew anything (PHASE4 §5.11). Only a run with a
+# frame count is captured; a person at the screen does not need a picture of it.
+capture=
+[ -n "${ABYSS_CAPTURE:-}" ] && [ "$frames" != 0 ] && capture="--capture $ABYSS_CAPTURE"
+
 exec /usr/local/bin/anchor \
   --mode "$mode" \
   --compositor "/usr/local/bin/undertow run --hz 60 $limit --backend $backend \
                 --width ${ABYSS_WIDTH:-1024} --height ${ABYSS_HEIGHT:-768} \
                 --socket $sock --privileged-socket $sock-bar \
-                ${ABYSS_CAPTURE:+--capture $ABYSS_CAPTURE}" \
+                $capture" \
   --display "$sock" --menubar-display "$sock-bar"
 SESSION
 sudo chmod 755 "$de/usr/local/libexec/abyss-session"
@@ -701,7 +717,13 @@ abyss_settings_enable="NO"
 # instructions say: the module wants a running system, not a loader. On a
 # machine with no AMD card this loads and attaches nothing — measured in the
 # build VM, which has no GPU at all — so it is safe to ask for unconditionally.
-kld_list="amdgpu"
+#
+# **And `hms`, the USB mouse driver** (PHASE4 §5.11). With usbhid, FreeBSD's
+# default, a USB mouse attaches to hidbus and needs hms(4), which GENERIC does
+# not build in; devmatch never offered it for the bring-up machine's mouse, so
+# the first 16-CURRENT boot had a keyboard and a dead pointer. Like amdgpu, it
+# loads harmlessly where there is nothing for it.
+kld_list="amdgpu hms"
 seatd_enable="YES"
 RC
 
@@ -914,7 +936,13 @@ run() {
 
   # `$rundir` is expanded here, by root, before su — the session's own shell has
   # no reason to know where root decided to put it.
-  su -m "$user" -c "ABYSS_RUNTIME_DIR=$rundir \
+  #
+  # **And HOME is set, because `su -m` keeps rc's**, which is `/`. With it the
+  # installer could not save the layout chosen on its Keyboard page ("mkdir
+  # /.config: Permission denied"), and fontconfig and Mesa had nowhere for their
+  # caches — found on the first metal boot that could type (PHASE4 §5.11).
+  su -m "$user" -c "HOME=/home/$user \
+                    ABYSS_RUNTIME_DIR=$rundir \
                     ABYSS_SESSION_MODE=installer \
                     ABYSS_SESSION_FRAMES=$frames \
                     ABYSS_CAPTURE=$rundir/frame.ppm \
@@ -923,7 +951,14 @@ run() {
   rc=$?
 
   echo "abyss-live: session exited $rc"
-  sed 's/^/abyss-live| /' /var/log/abyss-live.log
+  # The session's log, onto the console — which is where the VM's tests read it.
+  # **Only when this is not already writing into that log**: with a display, run
+  # is backgrounded with its output appended to /var/log/abyss-live.log itself,
+  # and `sed` reading a file it is appending to never reaches the end. On metal
+  # every stopped session did exactly that, until the stick was full (PHASE4
+  # §5.11: 1.5 GB of "abyss-live| abyss-live| …", and a `push` that took ten
+  # minutes to fail).
+  [ "$haveDisplay" = 1 ] || sed 's/^/abyss-live| /' /var/log/abyss-live.log
   # The session runs as an unprivileged user and cannot write to /var/log —
   # which is the right answer to "why did the capture fail", and cost a boot to
   # find. It writes into its own runtime directory; root moves it here.

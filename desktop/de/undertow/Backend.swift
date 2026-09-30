@@ -130,6 +130,10 @@ public final class WlrootsSession {
     /// Outputs the backend has announced, in arrival order.
     public private(set) var outputs: [UnsafeMutablePointer<wlr_output>] = []
     private var newOutputListener: UnsafeMutablePointer<tw_listener>?
+    /// Input devices the backend announced while it started, before anything
+    /// that handles input existed. `Seat` adopts them (`takeStartupInputs`).
+    private var startupInputs: [UnsafeMutablePointer<wlr_input_device>] = []
+    private var startupInputListener: UnsafeMutablePointer<tw_listener>?
 
     /// Which backend to run on.
     ///
@@ -228,6 +232,18 @@ public final class WlrootsSession {
             let s = Unmanaged<WlrootsSession>.fromOpaque(ctx).takeUnretainedValue()
             s.outputs.append(data.assumingMemoryBound(to: wlr_output.self))
         }, me)
+        // **And inputs, for the same reason** (PHASE4 §5.11). libinput announces
+        // every device present at start from inside `wlr_backend_start`, and
+        // `Seat` — which registers its own `new_input` listener — is built
+        // later. Without this, the first metal boot on DRM had a dead keyboard:
+        // libinput added it, and nobody heard. The mouse only worked because
+        // its driver loaded after the session was up, as a hot-plug. The VM
+        // never shows this: the harness's devices are virtual, created later.
+        startupInputListener = tw_listen(&b.pointee.events.new_input, { ctx, data in
+            guard let ctx, let data else { return }
+            let s = Unmanaged<WlrootsSession>.fromOpaque(ctx).takeUnretainedValue()
+            s.startupInputs.append(data.assumingMemoryBound(to: wlr_input_device.self))
+        }, me)
 
         guard wlr_backend_start(b) else {
             wl_display_destroy(d)
@@ -291,7 +307,17 @@ public final class WlrootsSession {
         }
     }
 
+    /// The devices announced before `Seat` existed, handed over once; from
+    /// then on `Seat`'s own `new_input` listener sees every device.
+    public func takeStartupInputs() -> [UnsafeMutablePointer<wlr_input_device>] {
+        tw_listener_free(startupInputListener)
+        startupInputListener = nil
+        defer { startupInputs = [] }
+        return startupInputs
+    }
+
     deinit {
+        tw_listener_free(startupInputListener)
         tw_listener_free(newOutputListener)
         wl_display_destroy(display)
     }
@@ -326,7 +352,8 @@ public final class WlrootsOutput: Output {
     /// commit_seq → the vblank we aimed that commit at, so a present event can
     /// be matched to its target. Small and fixed: only a few frames are ever in
     /// flight, and a map that could grow has no place near the present path.
-    private var targets = [(seq: UInt32, target: UInt64)](repeating: (0, 0), count: 16)
+    private var targets = [(seq: UInt32, target: UInt64, committed: UInt64)](
+        repeating: (0, 0, 0), count: 16)
     private var targetSlot = 0
 
     public private(set) var periodHintNs: UInt64
@@ -443,8 +470,9 @@ public final class WlrootsOutput: Output {
 
         guard wlr_output_commit_state(output, &state) else { return }
         // Remember what this commit was aiming at, so its present event can be
-        // judged on time.
-        targets[targetSlot] = (output.pointee.commit_seq, target)
+        // judged on time — and when the commit returned, which is what the
+        // flip's `done` means (PHASE4 §5.11: see `pollFlip`).
+        targets[targetSlot] = (output.pointee.commit_seq, target, Mono.now())
         targetSlot = (targetSlot &+ 1) % targets.count
     }
 
@@ -460,9 +488,21 @@ public final class WlrootsOutput: Output {
         guard let e = events.pop() else { return nil }
         if e.hardwareClock { sawHardwareClock = true }
         var target = e.whenNs
-        for t in targets where t.seq == e.commitSeq { target = t.target }
+        // **`done` is when the commit returned, not when the frame lit up.**
+        // `Flip.done` is "when the backend finished executing the frame", and the
+        // metronome's commit term is `done` minus when the frame was started
+        // (`target - margin`). This used to pass the present event's time, which
+        // headless makes the commit time and a real display makes the *vblank*
+        // — so on DRM every on-time frame reported a "commit latency" of the
+        // whole margin, the margin grew to cover it, and the next sample grew
+        // with it: a loop that ratchets to its ceiling and stays there. It is
+        // what P4.5's first breakdown on metal reported as "margin dominated by
+        // display commit (30 ms)" (PHASE4 §5.11). A present with no recorded
+        // commit (none should happen) falls back to its own timestamp.
+        var done = e.whenNs
+        for t in targets where t.seq == e.commitSeq { target = t.target; done = t.committed }
         let vblank = snapToGrid(e)
-        return Flip(target: target, vblank: vblank, done: e.whenNs,
+        return Flip(target: target, vblank: vblank, done: done,
                     missed: e.presented && vblank > target)
     }
 
