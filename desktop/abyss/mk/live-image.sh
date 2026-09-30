@@ -354,6 +354,10 @@ say "== staging root: $stage"
 # of /var and /usr/bin, so `rm -rf` reports "Directory not empty" and explains
 # nothing — a rebuild script without this line works exactly once (HANDOFF §2.43).
 sudo chflags -R noschg "$stage" 2>/dev/null || true
+# A kept stage may have had a devfs mounted in it (live-medium-browser.sh
+# chroots there); `rm -rf` through a mounted devfs fails, and would stack the
+# next one on top. Unmount whatever is there first, however many times.
+while mount | grep -q " $stage/dev "; do sudo umount -f "$stage/dev" || die "cannot unmount $stage/dev"; done
 sudo rm -rf "$stage"
 sudo mkdir -p "$stage"
 
@@ -513,6 +517,71 @@ else
   say "            stack and will come up blank on real hardware."
 fi
 sudo rm -rf "$gpudir"
+
+say "== the browser"
+# **Firefox ESR, because most people need a browser (PHASE15 P15.3b, §6.5).**
+# Copied from this machine's installed port rather than fetched, for the same
+# reason the libraries are: what goes beside it must be the build it was linked
+# against, and the builder's /usr/local is where both come from.
+#
+# `ldd` is not its closure (the Mesa lesson, twice over). What it maps at
+# runtime and `ldd` cannot reach was *measured* — `live-firefox.sh` with
+# ABYSS_FF_MAPS, after rendering a page and going through the portal — and is
+# named here: NSS's modules (no HTTPS without them), GTK's image loaders and
+# Wayland input module (reached through their `.cache` indexes, which are read
+# and closed and so never appear as mappings), and FFmpeg's `libavcodec` for
+# H.264 and AAC — most of the web's video (VP9, AV1 and Opus Firefox decodes
+# itself). Audio needs nothing: with no PulseAudio, JACK or sndio here, cubeb
+# falls back to OSS, which is sound(4) itself.
+FIREFOX_DIR=/usr/local/lib/firefox
+[ -x "$FIREFOX_DIR/firefox" ] \
+  || die "firefox-esr is not installed on this machine, so the medium would have no browser (pkg install firefox-esr)"
+sudo mkdir -p "$de/usr/local/lib" "$de/usr/local/bin" "$de/usr/local/share/applications" "$de/usr/local/share/pixmaps"
+sudo cp -Rp "$FIREFOX_DIR" "$de/usr/local/lib/"
+sudo ln -sf ../lib/firefox/firefox "$de/usr/local/bin/firefox"
+sudo cp -p /usr/local/share/applications/firefox.desktop "$de/usr/local/share/applications/"
+sudo cp -p /usr/local/share/pixmaps/firefox.png "$de/usr/local/share/pixmaps/"
+ff_roots="$FIREFOX_DIR/firefox $(ls "$FIREFOX_DIR"/*.so)
+          /usr/local/lib/libfreebl3.so /usr/local/lib/libfreeblpriv3.so
+          /usr/local/lib/libsoftokn3.so /usr/local/lib/libnssckbi.so
+          $(ls /usr/local/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.so /usr/local/lib/gtk-3.0/3.0.0/immodules/*.so 2>/dev/null)"
+av=$(ls /usr/local/lib/libavcodec.so.[0-9]* 2>/dev/null | grep -E '\.so\.[0-9]+$' | head -1)
+if [ -n "$av" ]; then
+  ff_roots="$ff_roots $av $(ls /usr/local/lib/libavutil.so.[0-9]* | grep -E '\.so\.[0-9]+$' | head -1)"
+else
+  say "   WARNING: no libavcodec here (pkg install ffmpeg) — the browser will not play H.264 or AAC"
+fi
+for r in $ff_roots; do
+  [ -e "$r" ] || die "$r is missing on this machine — measured as needed by Firefox"
+done
+ff_libs=""
+for r in $ff_roots; do
+  case "$r" in "$FIREFOX_DIR"/*) ;; *) ff_libs="$ff_libs
+$r" ;; esac
+  ff_libs="$ff_libs
+$(ldd "$r" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/' | grep -v "^$FIREFOX_DIR/" || true)"
+  # (`|| true`: the `firefox` launcher links nothing in /usr/local, and under
+  # pipefail an empty grep would end the build without a word.)
+done
+ff_libs=$(echo "$ff_libs" | sort -u | grep .)
+ff_new=0
+for lib in $ff_libs; do
+  [ -e "$de$lib" ] && continue
+  sudo mkdir -p "$de$(dirname "$lib")"
+  sudo cp -p "$lib" "$de$lib"
+  ff_new=$((ff_new + 1))
+done
+# The loaders' and modules' indexes, and the data Firefox read by path.
+for d in /usr/local/lib/gdk-pixbuf-2.0 /usr/local/lib/gtk-3.0 /usr/local/share/glib-2.0/schemas \
+         /usr/local/share/mime /usr/local/share/icons/hicolor /usr/local/share/icons/Adwaita \
+         /usr/local/share/icons/AdwaitaLegacy; do
+  [ -d "$d" ] || die "$d is missing on this machine — measured as read by Firefox"
+  sudo mkdir -p "$de$(dirname "$d")"
+  sudo cp -R "$d" "$de$(dirname "$d")/"
+done
+# (`-A`, apparent size: on ZFS, `du` right after the copy counts only what has
+# reached the disk, and reported 20K for 338M.)
+say "   Firefox $(sed -n 's/^Version=//p' "$FIREFOX_DIR/application.ini" | head -1): $(sudo du -shA "$de$FIREFOX_DIR" | awk '{print $1}'), and $ff_new more shared objects ($(echo "$ff_libs" | grep -c .) in its closure)$([ -n "$av" ] && echo ", H.264 through $(basename "$av")")"
 
 say "== the desktop"
 for b in $BINARIES; do

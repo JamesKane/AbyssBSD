@@ -220,4 +220,12 @@ done
 grep -q "handing over $docs/Chosen file.txt" "$work/portal.log" || fail "the portal did not hand over the chosen file"
 echo "ok: 4. the file picked in the Finder reached the page, which read the secret in it"
 
+# ABYSS_FF_MAPS=FILE: every object mapped into Firefox's processes, now that it
+# has rendered and been through the portal — what the medium must carry,
+# including what Firefox `dlopen`s and `ldd` cannot see (P15.3b). FreeBSD.
+if [ -n "${ABYSS_FF_MAPS:-}" ] && command -v procstat >/dev/null 2>&1; then
+  for p in $(pgrep -f "$work/profile"); do procstat -v "$p" 2>/dev/null; done \
+    | awk '$NF ~ /^\// {print $NF}' | sort -u > "$ABYSS_FF_MAPS"
+fi
+
 echo "all green (the browser: Firefox through its bundle, on undertow, with the Finder as its file chooser)."

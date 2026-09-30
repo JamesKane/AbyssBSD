@@ -153,11 +153,31 @@ through screencopy; a file picked in the Finder reaches the page.
   §6.3, seen: Firefox owns only its remoting name
   (`org.mozilla.firefox.<profile>`) — no `org.gtk.Menus`, no dbusmenu — so its
   menu bar stays its own, and ours shows the standard menus.
-- **(b) on the medium — §6.5, measured.** `firefox-esr` is 338 MiB, and its
-  `ldd` closure adds 44 libraries (33 MB, GTK 3 and friends) the desktop does
-  not already carry: about 0.4 GB on an image that holds ~1.2 GB in 3 GB, so
-  the medium does not have to grow. What `ldd` cannot see is what Firefox
-  `dlopen`s (GL, audio, GTK's modules and schemas).
+- **(b) ✅ Done 2026-09-30 — on the medium (§6.5, decided by the user: "most
+  users will need a browser").** `live-image.sh`'s new "the browser" step
+  copies the builder's installed `firefox-esr` — the build its libraries are
+  linked against, like everything else there — and closes over it. What
+  `ldd` cannot see was **measured, not guessed**: `live-firefox.sh` with
+  `ABYSS_FF_MAPS` lists every object mapped into Firefox's processes after a
+  page and a portal round trip, and the difference from `ldd` was NSS's
+  modules (freebl3, freeblpriv3, softokn3, nssckbi), GTK's pixbuf loaders and
+  `im-wayland` (reached through `.cache` indexes, read and closed, so never
+  mapped), the GSettings schemas, the MIME database and three icon themes.
+  Also carried: FFmpeg's `libavcodec.so.63` + `libavutil` for H.264/AAC
+  (Firefox 153 knows `.63`; VP9, AV1 and Opus it decodes itself). Audio needs
+  nothing — with no PulseAudio, JACK or sndio, cubeb uses OSS. The result:
+  Firefox 338 MiB plus 94 more shared objects; `abyss.tzst` 92 → 243 MB, the
+  image 1.0 → 1.3 GB, still in 3 GB — and the installed system gets the browser
+  too, since the set is the same collection. **Checked without booting:**
+  `live-medium-browser.sh` chroots into the kept staging root (base plus only
+  what the medium carries), makes Firefox's bundle from the medium's own entry,
+  and renders a page on a headless undertow there, then asserts NSS and
+  `im-wayland` were loaded. That last assertion earns its place: with
+  `libsoftokn3.so` removed, **Firefox still starts and paints** — only the
+  mapping check fails. Not yet seen on metal; and the Dock pins Firefox by
+  default only once `abyss-appgen` has written its bundle, which at a first
+  login can land after the Dock has looked (it looks again when a window opens
+  or closes).
 
 **P15.4 — Terminal (L), in three.** (a) `Pty`: spawn a shell on a
 pseudo-terminal (`openpty` + `Spawn`), resize (`TIOCSWINSZ`), and a pure VT
