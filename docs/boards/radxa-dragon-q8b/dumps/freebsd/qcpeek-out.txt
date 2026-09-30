@@ -1,0 +1,138 @@
+epss0: en 00000003 state 3b80147f dcvs 00000531 intr_clr 0000000f
+epss0: perf 00000014 00000014 00000014 00000014 00000000 00000000 00000000 00000000
+epss0: lut[ 0] 0004000f src 0 lval  15 cores 4 -> 300000 kHz, volt 0000023c (572 mV)
+epss0: lut[ 1] 40040015 src 1 lval  21 cores 4 -> 403200 kHz, volt 0001023c (572 mV)
+epss0: lut[ 2] 4004001a src 1 lval  26 cores 4 -> 499200 kHz, volt 0002023c (572 mV)
+epss0: lut[ 3] 4004001f src 1 lval  31 cores 4 -> 595200 kHz, volt 0003023c (572 mV)
+epss0: lut[ 4] 40040024 src 1 lval  36 cores 4 -> 691200 kHz, volt 0004023c (572 mV)
+epss0: lut[ 5] 4004002a src 1 lval  42 cores 4 -> 806400 kHz, volt 00050250 (592 mV)
+epss0: lut[ 6] 4004002f src 1 lval  47 cores 4 -> 902400 kHz, volt 00060264 (612 mV)
+epss0: lut[ 7] 40040035 src 1 lval  53 cores 4 -> 1017600 kHz, volt 0007027c (636 mV)
+epss0: lut[ 8] 4004003a src 1 lval  58 cores 4 -> 1113600 kHz, volt 00080284 (644 mV)
+epss0: lut[ 9] 4004003f src 1 lval  63 cores 4 -> 1209600 kHz, volt 00090298 (664 mV)
+epss0: lut[10] 40040045 src 1 lval  69 cores 4 -> 1324800 kHz, volt 000a02b0 (688 mV)
+epss0: lut[11] 4004004b src 1 lval  75 cores 4 -> 1440000 kHz, volt 000b02c4 (708 mV)
+epss0: lut[12] 40040051 src 1 lval  81 cores 4 -> 1555200 kHz, volt 000c0320 (800 mV)
+epss0: lut[13] 40040057 src 1 lval  87 cores 4 -> 1670400 kHz, volt 000d0320 (800 mV)
+epss0: lut[14] 4004005d src 1 lval  93 cores 4 -> 1785600 kHz, volt 000e0320 (800 mV)
+epss0: lut[15] 40040062 src 1 lval  98 cores 4 -> 1881600 kHz, volt 000f0324 (804 mV)
+epss0: lut[16] 40040068 src 1 lval 104 cores 4 -> 1996800 kHz, volt 00100344 (836 mV)
+epss0: lut[17] 4004006e src 1 lval 110 cores 4 -> 2112000 kHz, volt 00110360 (864 mV)
+epss0: lut[18] 40040074 src 1 lval 116 cores 4 -> 2227200 kHz, volt 00120380 (896 mV)
+epss0: lut[19] 4004007a src 1 lval 122 cores 4 -> 2342400 kHz, volt 0013039c (924 mV)
+epss0: lut[20] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[21] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[22] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[23] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[24] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[25] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[26] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[27] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[28] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[29] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[30] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[31] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[32] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[33] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[34] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[35] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[36] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[37] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[38] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss0: lut[39] 4004007f src 1 lval 127 cores 4 -> 2438400 kHz, volt 001403b8 (952 mV)
+epss1: en 00000003 state 43c0149c dcvs 00000531 intr_clr 0000000f
+epss1: perf 00000008 00000014 00000014 00000014 00000000 00000000 00000000 00000000
+epss1: lut[ 0] 4004002b src 1 lval  43 cores 4 -> 825600 kHz, volt 00000238 (568 mV)
+epss1: lut[ 1] 40040031 src 1 lval  49 cores 4 -> 940800 kHz, volt 0001024c (588 mV)
+epss1: lut[ 2] 40040037 src 1 lval  55 cores 4 -> 1056000 kHz, volt 00020260 (608 mV)
+epss1: lut[ 3] 4004003d src 1 lval  61 cores 4 -> 1171200 kHz, volt 00030270 (624 mV)
+epss1: lut[ 4] 40040043 src 1 lval  67 cores 4 -> 1286400 kHz, volt 00040284 (644 mV)
+epss1: lut[ 5] 40040049 src 1 lval  73 cores 4 -> 1401600 kHz, volt 00050294 (660 mV)
+epss1: lut[ 6] 4004004f src 1 lval  79 cores 4 -> 1516800 kHz, volt 000602ac (684 mV)
+epss1: lut[ 7] 40040055 src 1 lval  85 cores 4 -> 1632000 kHz, volt 000702c0 (704 mV)
+epss1: lut[ 8] 4004005b src 1 lval  91 cores 4 -> 1747200 kHz, volt 000802cc (716 mV)
+epss1: lut[ 9] 40040061 src 1 lval  97 cores 4 -> 1862400 kHz, volt 000902e4 (740 mV)
+epss1: lut[10] 40040067 src 1 lval 103 cores 4 -> 1977600 kHz, volt 000a02f8 (760 mV)
+epss1: lut[11] 4004006c src 1 lval 108 cores 4 -> 2073600 kHz, volt 000b0304 (772 mV)
+epss1: lut[12] 40040071 src 1 lval 113 cores 4 -> 2169600 kHz, volt 000c0314 (788 mV)
+epss1: lut[13] 40040077 src 1 lval 119 cores 4 -> 2284800 kHz, volt 000d0340 (832 mV)
+epss1: lut[14] 4004007d src 1 lval 125 cores 4 -> 2400000 kHz, volt 000e036c (876 mV)
+epss1: lut[15] 40040082 src 1 lval 130 cores 4 -> 2496000 kHz, volt 000f038c (908 mV)
+epss1: lut[16] 40040087 src 1 lval 135 cores 4 -> 2592000 kHz, volt 001003ac (940 mV)
+epss1: lut[17] 4004008c src 1 lval 140 cores 4 -> 2688000 kHz, volt 001103d0 (976 mV)
+epss1: lut[18] 40040092 src 1 lval 146 cores 4 -> 2803200 kHz, volt 001203f8 (1016 mV)
+epss1: lut[19] 40040097 src 1 lval 151 cores 4 -> 2899200 kHz, volt 0013041c (1052 mV)
+epss1: lut[20] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[21] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[22] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[23] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[24] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[25] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[26] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[27] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[28] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[29] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[30] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[31] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[32] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[33] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[34] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[35] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[36] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[37] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[38] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+epss1: lut[39] 4004009c src 1 lval 156 cores 4 -> 2995200 kHz, volt 0014043c (1084 mV)
+tsens0: ver 30000000 ctrl 9d61fff9
+tsens0: int_en 00000000 trdy 00000008
+tsens0: s0  0020012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens0: s1  00600133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens0: s2  00a0012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens0: s3  00e00129 valid 1 temp 29.7 C thr 007ff800 crit 000007ff
+tsens0: s4  01200133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens0: s5  01600141 valid 1 temp 32.1 C thr 007ff800 crit 000007ff
+tsens0: s6  01a00151 valid 1 temp 33.7 C thr 007ff800 crit 000007ff
+tsens0: s7  01e0013a valid 1 temp 31.4 C thr 007ff800 crit 000007ff
+tsens0: s8  02200141 valid 1 temp 32.1 C thr 007ff800 crit 000007ff
+tsens0: s9  0260013a valid 1 temp 31.4 C thr 007ff800 crit 000007ff
+tsens0: s10 02a00130 valid 1 temp 30.4 C thr 007ff800 crit 000007ff
+tsens0: s11 02e00133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens0: s12 0320013d valid 1 temp 31.7 C thr 007ff800 crit 000007ff
+tsens0: s13 03600129 valid 1 temp 29.7 C thr 007ff800 crit 000007ff
+tsens1: ver 30000000 ctrl 9d67fff9
+tsens1: int_en 00000000 trdy 00000008
+tsens1: s0  0020012b valid 1 temp 29.9 C thr 007ff800 crit 000007ff
+tsens1: s1  0060012f valid 1 temp 30.3 C thr 007ff800 crit 000007ff
+tsens1: s2  00a00132 valid 1 temp 30.6 C thr 007ff800 crit 000007ff
+tsens1: s3  00e0012f valid 1 temp 30.3 C thr 007ff800 crit 000007ff
+tsens1: s4  0120012f valid 1 temp 30.3 C thr 007ff800 crit 000007ff
+tsens1: s5  01600139 valid 1 temp 31.3 C thr 007ff800 crit 000007ff
+tsens1: s6  01a0015a valid 1 temp 34.6 C thr 007ff800 crit 000007ff
+tsens1: s7  01e0013c valid 1 temp 31.6 C thr 007ff800 crit 000007ff
+tsens1: s8  0220013f valid 1 temp 31.9 C thr 007ff800 crit 000007ff
+tsens1: s9  0260013c valid 1 temp 31.6 C thr 007ff800 crit 000007ff
+tsens1: s10 02a00128 valid 1 temp 29.6 C thr 007ff800 crit 000007ff
+tsens1: s11 02e0012b valid 1 temp 29.9 C thr 007ff800 crit 000007ff
+tsens1: s12 03200139 valid 1 temp 31.3 C thr 007ff800 crit 000007ff
+tsens1: s13 03600121 valid 1 temp 28.9 C thr 007ff800 crit 000007ff
+tsens1: s14 03a00139 valid 1 temp 31.3 C thr 007ff800 crit 000007ff
+tsens1: s15 03e0012f valid 1 temp 30.3 C thr 007ff800 crit 000007ff
+tsens2: ver 30000000 ctrl 9d603ff9
+tsens2: int_en 00000000 trdy 00000008
+tsens2: s0  00200130 valid 1 temp 30.4 C thr 007ff800 crit 000007ff
+tsens2: s1  00600129 valid 1 temp 29.7 C thr 007ff800 crit 000007ff
+tsens2: s2  00a00126 valid 1 temp 29.4 C thr 007ff800 crit 000007ff
+tsens2: s3  00e00126 valid 1 temp 29.4 C thr 007ff800 crit 000007ff
+tsens2: s4  0120012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens2: s5  01600137 valid 1 temp 31.1 C thr 007ff800 crit 000007ff
+tsens2: s6  01a0012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens2: s7  01e00133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens2: s8  02200133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens2: s9  02600130 valid 1 temp 30.4 C thr 007ff800 crit 000007ff
+tsens2: s10 02a0012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens3: ver 30000000 ctrl 9d6000f9
+tsens3: int_en 00000000 trdy 00000008
+tsens3: s0  00200133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens3: s1  0060012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens3: s2  00a0012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff
+tsens3: s3  00e00133 valid 1 temp 30.7 C thr 007ff800 crit 000007ff
+tsens3: s4  0120012d valid 1 temp 30.1 C thr 007ff800 crit 000007ff

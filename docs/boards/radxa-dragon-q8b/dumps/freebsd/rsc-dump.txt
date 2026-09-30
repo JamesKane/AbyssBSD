@@ -1,0 +1,28 @@
+cmddb: version 1 magic db 30 03 0c
+cmddb: 46 BCMs: MC0=50000 MC1=500e0 SH0=50004 SH1=50008 SH2=5000c SH3=500f0 SN0=50010 SN1=50014 SN2=50048 SN3=50018 SN4=5001c SN5=50020 SN6=50024 SN7=50028 SN8=5002c SN9=50030 SN10=50050 MM0=50034 MM1=50038 CN0=5003c CN1=50040 CN2=50044 CN3=5004c CE0=50054 IP0=50058 QUP0=5005c QUP1=50060 QUP2=50064 NSA0=50068 NSA1=500b4 NSA2=50070 PCI0=50074 PCI1=500b0 PCI2=5007c PCI3=50080 PCI4=50084 PCI5=50088 PCI6=5008c PCI7=50090 NSB0=50094 NSB1=500b8 NSB2=5009c PKA0=500a0 HK0=500a4 ALC=500a8 ACV=500ac
+rsc drv2: id reg 0x00020400 -> v2.4 layout 2.7
+tcs0: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+  cmd0     addr 50000 MC0      data 61bd6bf8 (valid 1 commit 1 x 1781 y 11256) msgid 10108 st 0
+  cmd1     addr 5000c SH2      data 20004a43 (valid 1 commit 0 x 1 y 2627) msgid 10008 st 0
+  cmd2     addr 50004 SH0      data 60cfd485 (valid 1 commit 1 x 831 y 5253) msgid 10108 st 0
+  cmd3     addr 50020 SN5      data 23b444f1 (valid 1 commit 0 x 3793 y 1265) msgid 10008 st 0
+  cmd4     addr 50010 SN0      data 63b444f1 (valid 1 commit 1 x 3793 y 1265) msgid 10108 st 0
+  cmd5     addr 5003c CN0      data 200042cb (valid 1 commit 0 x 1 y 715) msgid 10008 st 0
+  cmd6     addr 50040 CN1      data 60004b2a (valid 1 commit 1 x 1 y 2858) msgid 10108 st 0
+  cmd7     addr 500ac ACV      data 60000008 (valid 1 commit 1 x 0 y 8) msgid 10108 st 0
+  cmd8     addr 50068 NSA0     data 40000000 (valid 0 commit 1 x 0 y 0) msgid 10008 st 0
+  cmd9     addr 50074 PCI0     data 60c7c190 (valid 1 commit 1 x 799 y 400) msgid 10008 st 0
+  cmd10    addr 500b8 NSB1     data 00000000 (valid 0 commit 0 x 0 y 0) msgid 10008 st 0
+  cmd11    addr 50094 NSB0     data 40000000 (valid 0 commit 1 x 0 y 0) msgid 10008 st 0
+  cmd12    addr 500ac ACV      data 60000008 (valid 1 commit 1 x 0 y 8) msgid 10008 st 0
+  cmd13    addr 50038 MM1      data 00000000 (valid 0 commit 0 x 0 y 0) msgid 10008 st 0
+  cmd14    addr 50034 MM0      data 61e29047 (valid 1 commit 1 x 1930 y 4167) msgid 10008 st 0
+  cmd15    addr 5004c CN3      data 40000000 (valid 0 commit 1 x 0 y 0) msgid 10008 st 0
+tcs1: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs2: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs3: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs4: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs5: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs6: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs7: control 0x00000000 status 0x00000001 cmd_enable 0x0000
+tcs8: control 0x00000000 status 0x00000000 cmd_enable 0x0000

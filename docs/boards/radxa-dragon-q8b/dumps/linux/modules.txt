@@ -1,0 +1,113 @@
+Module                  Size  Used by
+q6prm_clocks           12288  14
+q6apm_lpass_dais       16384  1
+snd_q6dsp_common       49152  2 q6apm_lpass_dais,q6prm_clocks
+q6apm_dai              24576  1
+q6prm                  12288  1 q6prm_clocks
+rfkill                 36864  3
+dwmac_tc956x           16384  0
+stmmac                290816  3 dwmac_tc956x
+pcs_xpcs               36864  2 dwmac_tc956x,stmmac
+gpio_tc956x            12288  0
+zram                   61440  1
+842_decompress         20480  1 zram
+842_compress           24576  1 zram
+lz4hc_compress         20480  1 zram
+lz4_compress           24576  1 zram
+vfat                   20480  2
+binfmt_misc            24576  1
+fat                    94208  1 vfat
+qcom_iris             176128  0
+qcom_spmi_temp_alarm    20480  0
+v4l2_mem2mem           45056  1 qcom_iris
+snd_soc_sc8280xp       12288  5
+iio_rescale            20480  0
+snd_soc_qcom_sdw       12288  1 snd_soc_sc8280xp
+qcom_spmi_adc_tm5      28672  0
+qcom_spmi_adc5         45056  0
+snd_soc_qcom_common    16384  1 snd_soc_sc8280xp
+videobuf2_dma_contig    24576  1 qcom_iris
+videobuf2_memops       16384  1 videobuf2_dma_contig
+videobuf2_v4l2         36864  2 qcom_iris,v4l2_mem2mem
+qcom_vadc_common       16384  2 qcom_spmi_adc_tm5,qcom_spmi_adc5
+videodev              352256  3 qcom_iris,videobuf2_v4l2,v4l2_mem2mem
+at24                   32768  0
+videobuf2_common       81920  5 qcom_iris,videobuf2_dma_contig,videobuf2_v4l2,v4l2_mem2mem,videobuf2_memops
+snd_soc_hdmi_codec     24576  3
+mc                     81920  4 videodev,videobuf2_v4l2,videobuf2_common,v4l2_mem2mem
+snd_q6apm              53248  4 q6apm_dai,q6prm,q6apm_lpass_dais
+snd_soc_wcd938x       106496  1
+snd_soc_wcd938x_sdw    20480  1 snd_soc_wcd938x
+snd_soc_wcd_classh     24576  1 snd_soc_wcd938x
+snd_soc_wcd_common     12288  2 snd_soc_wcd938x_sdw,snd_soc_wcd938x
+snd_soc_wcd_mbhc       32768  1 snd_soc_wcd938x
+regmap_sdw             12288  1 snd_soc_wcd938x_sdw
+soundwire_qcom         40960  2
+snd_soc_lpass_rx_macro   110592  2
+snd_soc_lpass_va_macro    57344  3
+snd_soc_lpass_tx_macro    98304  2
+soundwire_bus        1183744  6 regmap_sdw,snd_soc_wcd_common,snd_soc_wcd938x_sdw,snd_soc_qcom_sdw,snd_soc_wcd938x,soundwire_qcom
+slimbus                32768  1 soundwire_qcom
+snd_soc_lpass_macro_common    12288  3 snd_soc_lpass_va_macro,snd_soc_lpass_rx_macro,snd_soc_lpass_tx_macro
+radxa_svc_glink        36864  0
+snd_soc_core          348160  14 snd_q6apm,q6apm_dai,snd_soc_sc8280xp,snd_soc_qcom_common,q6apm_lpass_dais,snd_soc_hdmi_codec,snd_soc_qcom_sdw,snd_soc_lpass_va_macro,snd_soc_wcd938x,snd_soc_wcd_mbhc,snd_soc_lpass_rx_macro,soundwire_qcom,snd_soc_lpass_tx_macro,snd_soc_wcd_classh
+platform_profile       20480  1 radxa_svc_glink
+snd_compress           32768  1 snd_soc_core
+ac97_bus               12288  1 snd_soc_core
+snd_pcm_dmaengine      16384  1 snd_soc_core
+snd_pcm               147456  7 q6apm_dai,q6apm_lpass_dais,snd_soc_hdmi_codec,snd_compress,snd_soc_core,snd_soc_lpass_rx_macro,snd_pcm_dmaengine
+fastrpc                45056  0
+snd_timer              45056  1 snd_pcm
+qcom_rng               12288  0
+snd                   122880  16 snd_soc_qcom_common,snd_soc_hdmi_codec,snd_timer,snd_compress,snd_soc_core,snd_pcm
+soundcore              16384  1 snd
+qcom_scm_storage       12288  0
+iio_hwmon              12288  0
+qcomtee                36864  0
+mousedev               28672  0
+joydev                 28672  0
+ledtrig_default_on     12288  0
+ledtrig_netdev         20480  0
+libcomposite           86016  0
+ledtrig_heartbeat      12288  0
+ledtrig_pattern        12288  0
+ledtrig_timer          12288  0
+fuse                  217088  5
+ipv6                  679936  168
+crc_ccitt              12288  1 ipv6
+autofs4                53248  4
+btrfs                1818624  0
+xor                    12288  1 btrfs
+xor_neon               16384  1 xor
+libblake2b             16384  1 btrfs
+raid6_pq              106496  1 btrfs
+rpmsg_ctrl             12288  0
+qrtr_smd               16384  0
+rpmsg_char             24576  1 rpmsg_ctrl
+qcom_pd_mapper         28672  0
+msm                  1286144  20
+rtc_ds1307             45056  0
+ubwc_config            24576  2 qcom_iris,msm
+qcom_q6v5_pas          49152  0
+qcom_pil_info          12288  1 qcom_q6v5_pas
+ocmem                  20480  1 msm
+qcom_common            16384  1 qcom_q6v5_pas
+drm_gpuvm              40960  1 msm
+qcom_glink_smem        12288  1 qcom_common
+tc956x_pci             12288  3 dwmac_tc956x
+qcom_pon               12288  0
+videocc_sm8350         24576  4
+drm_exec               12288  2 msm,drm_gpuvm
+i2c_qcom_geni          32768  0
+camcc_sc8280xp         69632  0
+qcom_refgen_regulator    12288  0
+gpu_sched              61440  1 msm
+lpasscc_sc8280xp       12288  2
+pinctrl_sc8280xp_lpass_lpi    16384  0
+qcom_q6v5              16384  1 qcom_q6v5_pas
+qcom_wdt               12288  0
+pinctrl_lpass_lpi      16384  7 pinctrl_sc8280xp_lpass_lpi
+qcom_sysmon            24576  2 qcom_q6v5_pas,qcom_q6v5
+mdt_loader             12288  3 qcom_iris,msm,qcom_q6v5_pas
+ucsi_glink             16384  0
+typec_ucsi             61440  1 ucsi_glink

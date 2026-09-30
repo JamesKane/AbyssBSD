@@ -1,0 +1,1161 @@
+FreeBSD q8b-freebsd 16.0-CURRENT FreeBSD 16.0-CURRENT #0 radxa-dragon-q8b-050683bb8e13-dirty: Sun Sep 27 07:15:43 CDT 2026     jkane@Jamess-Mac-Studio.local:/private/tmp/claude-501/-Users-jkane-Projects-OS-freebsd-src/0ae0fc29-f517-4055-b807-fab58e03fafb/scratchpad/fbobj/Users/jkane/Projects/OS/freebsd-src/arm64.aarch64/sys/GENERIC arm64
+---<<BOOT>>---
+GDB: debug ports: uart
+GDB: current port: uart
+KDB: debugger backends: ddb gdb
+KDB: current backend: ddb
+                   Type     Physical      Virtual   #Pages Attr
+     ConventionalMemory 000080600000 000000000000 00000100 UC WC WT WB WP 
+               Reserved 0000808a0000 000000000000 00000010 UC WC WT WB WP 
+     ConventionalMemory 0000808c0000 000000000000 00000030 UC WC WT WB WP 
+     ConventionalMemory 000080c00000 000000000000 00001b00 UC WC WT WB WP 
+     ConventionalMemory 00008e400000 000000000000 0000f7cd UC WC WT WB WP 
+       BootServicesCode 00009dbcd000 000000000000 00000033 UC WC WT WB WP 
+       BootServicesData 00009dc00000 000000000000 00001900 UC WC WT WB WP 
+     ConventionalMemory 00009f500000 000000000000 0000000c UC WC WT WB WP 
+       BootServicesData 00009f50c000 000000000000 000000c4 UC WC WT WB WP 
+    RuntimeServicesData 00009f5f7000 00009f5f7000 00000009 UC WC WT WB WP RUNTIME
+       BootServicesData 00009f600000 000000000000 00000a00 UC WC WT WB WP 
+     ConventionalMemory 0000a0000000 000000000000 0000eb00 UC WC WT WB WP 
+               Reserved 0000aeb00000 000000000000 00011500 UC WC WT WB WP 
+     ConventionalMemory 0000c8600000 000000000000 0001f1c9 UC WC WT WB WP 
+             LoaderCode 0000e77c9000 000000000000 00004000 UC WC WT WB WP 
+             LoaderData 0000eb7c9000 000000000000 000047e9 UC WC WT WB WP 
+       BootServicesCode 0000effb2000 000000000000 000000ba UC WC WT WB WP 
+     ConventionalMemory 0000f006c000 000000000000 00000009 UC WC WT WB WP 
+             LoaderData 0000f0075000 000000000000 00000001 UC WC WT WB WP 
+     ConventionalMemory 0000f0076000 000000000000 0000030b UC WC WT WB WP 
+             LoaderCode 0000f0381000 000000000000 000000dd UC WC WT WB WP 
+     ConventionalMemory 0000f045e000 000000000000 0000adfa UC WC WT WB WP 
+       BootServicesData 0000fb258000 000000000000 00003c66 UC WC WT WB WP 
+     ConventionalMemory 0000feebe000 000000000000 00000008 UC WC WT WB WP 
+       BootServicesCode 0000feec6000 000000000000 00000bb0 UC WC WT WB WP 
+    RuntimeServicesCode 0000ffa76000 0000ffa76000 00000190 UC WC WT WB WP RUNTIME
+    RuntimeServicesData 0000ffc06000 0000ffc06000 000002bc UC WC WT WB WP RUNTIME
+               Reserved 0000ffec2000 000000000000 00000010 UC WC WT WB WP 
+          ACPIMemoryNVS 0000ffed2000 000000000000 00000050 UC WC WT WB WP 
+      ACPIReclaimMemory 0000fff22000 000000000000 000000dc UC WC WT WB WP 
+       BootServicesData 0000ffffe000 000000000000 00000001 UC WC WT WB WP 
+     ConventionalMemory 0000fffff000 000000000000 00300001 UC WC WT WB WP 
+     ConventionalMemory 000800000000 000000000000 00080000 UC WC WT WB WP 
+         MemoryMappedIO 00000c264000 00000c264000 00000001 UC RUNTIME
+               Reserved 000080860000 000000000000 00000020 UC 
+               Reserved 000080880000 000000000000 00000020 WC 
+               Reserved 000080900000 000000000000 00000200 UC 
+               Reserved 000082700000 000000000000 0000bd00 UC 
+               Reserved 0000c6200000 000000000000 00002400 UC WC WT WB WP 
+Physical memory chunk(s):
+  0x80600000 - 0x806fffff,     1 MB (    256 pages)
+  0x808c0000 - 0x808effff,     0 MB (     48 pages)
+  0x80c00000 - 0x826fffff,    27 MB (   6912 pages)
+  0x8e400000 - 0x9f5cffff,   273 MB (  70096 pages)
+  0x9f5f7000 - 0xaeafffff,   245 MB (  62729 pages)
+  0xc8600000 - 0xffec1fff,   888 MB ( 227522 pages)
+  0xfff22000 - 0x3ffffffff, 12288 MB (3145950 pages)
+  0x800000000 - 0x87fffffff,  2048 MB ( 524288 pages)
+Excluded memory regions:
+  0x80000000 - 0x80bfffff,    12 MB (   3072 pages) NoAlloc NoDump
+  0x83b00000 - 0x851fffff,    23 MB (   5888 pages) NoAlloc NoDump
+  0x85b00000 - 0x866fffff,    12 MB (   3072 pages) NoAlloc NoDump
+  0x86c00000 - 0x8bf01fff,    83 MB (  21250 pages) NoAlloc NoDump
+  0x8c600000 - 0x8ccfffff,     7 MB (   1792 pages) NoAlloc NoDump
+  0x9f5f7000 - 0x9f5fffff,     0 MB (      9 pages) NoAlloc 
+  0xaeb00000 - 0xc50fffff,   358 MB (  91648 pages) NoAlloc NoDump
+  0xc6200000 - 0xc69e8fff,     7 MB (   2025 pages) NoAlloc 
+  0xe7800000 - 0xe8ecffff,    22 MB (   5840 pages) NoAlloc 
+  0xffa76000 - 0xffec1fff,     4 MB (   1100 pages) NoAlloc 
+  0xfff22000 - 0x100230fff,     3 MB (    783 pages) NoAlloc 
+Found 8 CPUs in the ACPI tables
+Copyright (c) 1992-2026 The FreeBSD Project.
+Copyright (c) 1979, 1980, 1983, 1986, 1988, 1989, 1991, 1992, 1993, 1994
+	The Regents of the University of California. All rights reserved.
+FreeBSD is a registered trademark of The FreeBSD Foundation.
+FreeBSD 16.0-CURRENT #0 radxa-dragon-q8b-050683bb8e13-dirty: Sun Sep 27 07:15:43 CDT 2026
+    jkane@Jamess-Mac-Studio.local:/private/tmp/claude-501/-Users-jkane-Projects-OS-freebsd-src/0ae0fc29-f517-4055-b807-fab58e03fafb/scratchpad/fbobj/Users/jkane/Projects/OS/freebsd-src/arm64.aarch64/sys/GENERIC arm64
+Homebrew clang version 23.1.2
+WARNING: WITNESS option enabled, expect reduced performance.
+WITNESS configuration requests 2856 KiB of startup allocations with witness_count=1536, lock_order_data_count=2048, lock_order_hash_size=1021
+VT(efifb): resolution 1920x1080
+Preloaded elf kernel "/boot/kernel/kernel" at 0xffff0000016bf000.
+Preloaded boot_entropy_platform "efi_rng_seed" at 0xffff0000016c8888.
+Preloaded TSLOG data "TSLOG" at 0xffff0000016c88e0.
+real memory  = 16538832896 (15772 MB)
+Physical memory chunk(s):
+0x00000080c00000 - 0x000000826fffff, 28311552 bytes (6912 pages)
+0x0000008e400000 - 0x0000009f5cffff, 287113216 bytes (70096 pages)
+0x0000009f600000 - 0x000000aeafffff, 256901120 bytes (62720 pages)
+0x000000c8600000 - 0x000000e77fffff, 522190848 bytes (127488 pages)
+0x000000e8ed0000 - 0x000000ffa75fff, 381313024 bytes (93094 pages)
+0x00000100231000 - 0x000003eb082fff, 12530819072 bytes (3059282 pages)
+0x00000800000000 - 0x0000087fffffff, 2147483648 bytes (524288 pages)
+avail memory = 16149168128 (15401 MB)
+Starting CPU 1 (100)
+Starting CPU 2 (200)
+Starting CPU 3 (300)
+Starting CPU 4 (400)
+Starting CPU 5 (500)
+Starting CPU 6 (600)
+Starting CPU 7 (700)
+FreeBSD/SMP: Multiprocessor System Detected: 8 CPUs
+Enabling IDC ICache sync
+random: no preloaded entropy cache
+random: read 2048 bytes from platform bootloader
+random: unblocking device.
+VIMAGE (virtualized network stack) enabled
+hostuuid: using 00000000-0000-0000-0000-000000000000
+ULE: setup cpu 0
+ULE: setup cpu 1
+ULE: setup cpu 2
+ULE: setup cpu 3
+ULE: setup cpu 4
+ULE: setup cpu 5
+ULE: setup cpu 6
+ULE: setup cpu 7
+random: entropy device external interface
+firmware: 'tegra210_xusb_fw' version 0: 132608 bytes loaded at 0xffff000000c5b7bc
+MAP 9f5f7000 mode 2 pages 9
+MAP ffa76000 mode 2 pages 400
+MAP ffc06000 mode 2 pages 700
+MAP c264000 mode 4 pages 1
+EFI runtime driver, fw spec 2.4.6
+kbd0 at kbdmux0
+mem: <memory>
+null: <full device, null device, zero device>
+openfirm: <Open Firmware control device>
+sound_global_init: snd_unit=-1 snd_vchans_enable=1 latency=2 feeder_rate_min=1 feeder_rate_max=2016000 feeder_rate_round=25
+tcp_log: tcp_log device
+crypto: <crypto core>
+ACPI: RSDP 0x00000000FFFFD000 000024 (v02 QCOM  )
+ACPI: XSDT 0x00000000FFFFC000 00008C (v01 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: FACP 0x00000000FFFCB000 000114 (v05 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: DSDT 0x00000000FFFCC000 020501 (v02 QCOMM  SDM8280  00000003 MSFT 05000000)
+ACPI: FACS 0x00000000FFF21000 000040
+ACPI: BGRT 0x00000000FFFFB000 000038 (v01 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: CSRT 0x00000000FFFEE000 00C876 (v00 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: DBG2 0x00000000FFFED000 00041A (v01 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: GTDT 0x00000000FFFCA000 00009C (v02 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: IORT 0x00000000FFFC8000 00189C (v00 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: APIC 0x00000000FFFC7000 0002E9 (v05 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: MCFG 0x00000000FFFC6000 00009C (v01 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: PPTT 0x00000000FFFC5000 00019E (v01 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: SPCR 0x00000000FFFC4000 000050 (v02 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: TPM2 0x00000000FFFC3000 000054 (v03 QCOM   QCOMEDK2 00008280 QCOM 00000001)
+ACPI: BGRT 0x00000000FFFC2000 000038 (v01 QCOM   QCOMEDK2 00000001 QCOM 00000001)
+ACPI: FPDT 0x00000000FFFC1000 000034 (v01 QCOM   QCOMEDK2 00000001 QCOM 00000001)
+ram0: reserving memory region:   80c00000-82700000
+ram0: reserving memory region:   8e400000-9f5d0000
+ram0: reserving memory region:   9f600000-aeb00000
+ram0: reserving memory region:   c8600000-e7800000
+ram0: reserving memory region:   e8ed0000-ffa76000
+ram0: reserving memory region:   100231000-400000000
+ram0: reserving memory region:   800000000-880000000
+acpi0: <QCOM QCOMEDK2>
+acpi0: Not installing Darwin OSI on unsupported platform: Radxa Computer Co., Ltd.
+ACPI: 1 ACPI AML tables successfully acquired and loaded
+ACPI Error: AE_NOT_FOUND, While resolving a named reference package element - \134_SB_.DMMY (20260408/dspkginit-605)
+acpi0: Power Button (fixed)
+acpi0: Sleep Button (fixed)
+Firmware Error (ACPI): AE_AML_BUFFER_LIMIT, Field [CDW3] at bit offset/length 64/32 exceeds size of target Buffer (64 bits) (20260408/dsopcode-356)
+ACPI Error: Aborting method \134_SB._OSC due to previous error (AE_AML_BUFFER_LIMIT) (20260408/psparse-689)
+acpi0: _OSC failed: AE_AML_BUFFER_LIMIT
+ACPI Warning: \134_SB.GPU0._CLS: Return Package is too small - found 1 elements, expected 3 (20260408/nsprepkg-511)
+can't fetch resources for \134_SB_.ADC1 - AE_AML_INVALID_RESOURCE_TYPE
+acpi0: Could not update all GPEs: AE_NOT_CONFIGURED
+psci0: <ARM Power State Co-ordination Interface Driver> on acpi0
+psci0: PSCI version 0.2 compatible
+Found SMCCC version 1.1
+smccc0: <ARM SMCCC v1.1> on psci0
+acpi0: No GICv5 IRS
+gic0: <ARM Generic Interrupt Controller v3.0> iomem 0x17a00000-0x17a0ffff,0x17a60000-0x17b5ffff on acpi0
+gic0: SPIs: 992, IDs: 65535
+gic0: Start searching for Re-Distributor
+gic0: CPU0 Re-Distributor has been found
+gic0: CPU0 Re-Distributor woke up
+gic0: CPU0 enabled CPU interface via system registers
+its0: <ARM GIC Interrupt Translation Service> mem 0x17a40000-0x17a5ffff on gic0
+gic0: using PENDBASE of 0x100260000 on cpu 0
+generic_timer0: <ARM Generic Timer> irq 182,183,184,185 on acpi0
+generic_timer0: allocated irq for 'sec-phys'
+generic_timer0: allocated irq for 'phys'
+generic_timer0: allocated irq for 'virt'
+generic_timer0: allocated irq for 'hyp-phys'
+generic_timer0: could not allocate irq for optional interrupt 'hyp-virt'
+Timecounter "ARM MPCore Timecounter" frequency 19200000 Hz quality 1000
+Event timer "ARM MPCore Eventtimer" frequency 19200000 Hz quality 1000
+efirtc0: cannot read EFI realtime clock, error 78
+smbios0: <System Management BIOS>
+smbios0: Entry point: v2.1 (32-bit), Version: 3.3
+smbios0: Entry Point Revision: 0
+apei0: <ACPI Platform Error Interface> on acpi0
+pmu0: <Performance Monitoring Unit> on acpi0
+pmu0: MADT: cpu 0 (mpidr 0) irq 23 level-triggered
+pmu0: MADT: cpu 1 (mpidr 256) irq 23 level-triggered
+pmu0: MADT: cpu 2 (mpidr 512) irq 23 level-triggered
+pmu0: MADT: cpu 3 (mpidr 768) irq 23 level-triggered
+pmu0: MADT: cpu 4 (mpidr 1024) irq 23 level-triggered
+pmu0: MADT: cpu 5 (mpidr 1280) irq 23 level-triggered
+pmu0: MADT: cpu 6 (mpidr 1536) irq 23 level-triggered
+pmu0: MADT: cpu 7 (mpidr 1792) irq 23 level-triggered
+acpi_spmc0: <System Power Management Controller> irq 2,3,4,5,6,7,8,9,10,11,12,13,14 on acpi0
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+Firmware Warning (ACPI): Possibly buggy BIOS with ACPI_TYPE_INTEGER for function enumeration
+ (20260408/ACPI-3222)
+acpi_spmc0: No DSM supported!device_attach: acpi_spmc0 attach returned 6
+uart0: <Qualcomm GENI UART> iomem 0x884000-0x887fff irq 22 on acpi0
+uart0: console (115200,n,8,1)
+uart0: fast interrupt
+uart0: PPS capture mode: DCD
+pcib0: <Generic PCI host controller> on acpi0
+pcib0: Bus is cache-coherent
+pcib0: ECAM for bus 0-255 at mem 500000000-50fffffff
+pcib0: PCI addr: 0x40000000, CPU addr: 0x510000000, Size: 0x10000000, Type: memory
+pcib0: PCI addr: 0x520000000, CPU addr: 0x520000000, Size: 0x20000000, Type: memory
+pci0: <ACPI PCI bus> on pcib0
+pci0: domain=2, physical bus=0
+found->	vendor=0x17cb, dev=0x010e, revid=0x00
+	domain=2, bus=0, slot=0, func=0
+	class=06-04-00, hdrtype=0x01, mfdev=0
+	cmdreg=0x0003, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	powerspec 3  supports D0 D3  current D0
+	MSI supports 32 messages, 64 bit, vector masks
+	map[10]: type Memory, range 64, base 0x520000000, size 12, enabled
+	secbus=1, subbus=1
+pcib1: <PCI-PCI bridge> mem 0x520000000-0x520000fff at device 0.0 on pci0
+pcib1:   domain            2
+pcib1:   secondary bus     1
+pcib1:   subordinate bus   1
+pcib1:   memory decode     0x40000000-0x400fffff
+pci1: <PCI bus> on pcib1
+pcib1: allocated bus range (1-1) for rid 0 of pci1
+pci1: domain=2, physical bus=1
+found->	vendor=0x2646, dev=0x5017, revid=0x03
+	domain=2, bus=1, slot=0, func=0
+	class=01-08-02, hdrtype=0x00, mfdev=0
+	cmdreg=0x0006, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=a, irq=255
+	powerspec 3  supports D0 D3  current D0
+	MSI supports 8 messages, 64 bit, vector masks
+	MSI-X supports 16 messages in map 0x10
+	map[10]: type Memory, range 64, base 0x40000000, size 14, enabled
+pcib1: allocated memory range (0x40000000-0x40003fff) for rid 10 of pci2:1:0:0
+nvme0: <Generic NVMe Device> mem 0x40000000-0x40003fff at device 0.0 on pci1
+nvme0: attempting to allocate 9 MSI-X vectors (16 supported)
+nvme0: using IRQs 194-202 for MSI-X
+nvme0: CapLo: 0xf00100ff: MQES 255, CQR, TO 240
+nvme0: CapHi: 0x00100030: DSTRD 0, NSSRS, CSS 1, CPS 0, MPSMIN 0, MPSMAX 1
+nvme0: Version: 0x00010400: 1.4
+pcib2: <Generic PCI host controller> on acpi0
+pcib2: Bus is cache-coherent
+pcib2: ECAM for bus 0-255 at mem 480000000-48fffffff
+pcib2: PCI addr: 0x40000000, CPU addr: 0x490000000, Size: 0x10000000, Type: memory
+pcib2: PCI addr: 0x4a0000000, CPU addr: 0x4a0000000, Size: 0x20000000, Type: memory
+pci2: <ACPI PCI bus> on pcib2
+pci2: domain=4, physical bus=0
+found->	vendor=0x17cb, dev=0x010e, revid=0x00
+	domain=4, bus=0, slot=0, func=0
+	class=06-04-00, hdrtype=0x01, mfdev=0
+	cmdreg=0x0003, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	powerspec 3  supports D0 D3  current D0
+	MSI supports 32 messages, 64 bit, vector masks
+	map[10]: type Memory, range 64, base 0x4a0000000, size 12, enabled
+	secbus=1, subbus=3
+pcib3: <PCI-PCI bridge> mem 0x4a0000000-0x4a0000fff at device 0.0 on pci2
+pcib3:   domain            4
+pcib3:   secondary bus     1
+pcib3:   subordinate bus   3
+pcib3:   memory decode     0x40000000-0x405fffff
+pci3: <PCI bus> on pcib3
+pcib3: allocated bus range (1-1) for rid 0 of pci3
+pci3: domain=4, physical bus=1
+found->	vendor=0x1179, dev=0x0623, revid=0x00
+	domain=4, bus=1, slot=0, func=0
+	class=06-04-00, hdrtype=0x01, mfdev=0
+	cmdreg=0x0003, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=a, irq=255
+	powerspec 3  supports D0 D3  current D0
+	MSI supports 1 message, 64 bit
+	secbus=2, subbus=3
+pcib3: allocated bus range (2-3) for rid 0 of pci4:1:0:0
+pcib4: <PCI-PCI bridge> at device 0.0 on pci3
+pcib3: allocated memory range (0x40000000-0x405fffff) for rid 20 of pcib4
+pcib4:   domain            4
+pcib4:   secondary bus     2
+pcib4:   subordinate bus   3
+pcib4:   memory decode     0x40000000-0x405fffff
+pci4: <PCI bus> on pcib4
+pcib4: allocated bus range (2-2) for rid 0 of pci4
+pci4: domain=4, physical bus=2
+found->	vendor=0x1179, dev=0x0623, revid=0x00
+	domain=4, bus=2, slot=3, func=0
+	class=06-04-00, hdrtype=0x01, mfdev=0
+	cmdreg=0x0003, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=a, irq=255
+	powerspec 3  supports D0 D3  current D0
+	MSI supports 1 message, 64 bit
+	secbus=3, subbus=3
+pcib4: allocated bus range (3-3) for rid 0 of pci4:2:3:0
+pcib5: <PCI-PCI bridge> at device 3.0 on pci4
+pcib4: allocated memory range (0x40000000-0x405fffff) for rid 20 of pcib5
+pcib5:   domain            4
+pcib5:   secondary bus     3
+pcib5:   subordinate bus   3
+pcib5:   memory decode     0x40000000-0x405fffff
+pci5: <PCI bus> on pcib5
+pcib5: allocated bus range (3-3) for rid 0 of pci5
+pci5: domain=4, physical bus=3
+found->	vendor=0x1179, dev=0x0220, revid=0x00
+	domain=4, bus=3, slot=0, func=0
+	class=02-00-00, hdrtype=0x00, mfdev=1
+	cmdreg=0x0006, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=a, irq=255
+	powerspec 3  supports D0 D1 D3  current D0
+	MSI supports 32 messages, 64 bit, vector masks
+	map[10]: type Memory, range 64, base 0x40500000, size 14, enabled
+pcib5: allocated memory range (0x40500000-0x40503fff) for rid 10 of pci4:3:0:0
+	map[18]: type Memory, range 64, base 0x40400000, size 19, enabled
+pcib5: allocated memory range (0x40400000-0x4047ffff) for rid 18 of pci4:3:0:0
+	map[20]: type Memory, range 64, base 0x40000000, size 21, enabled
+pcib5: allocated memory range (0x40000000-0x401fffff) for rid 20 of pci4:3:0:0
+found->	vendor=0x1179, dev=0x0220, revid=0x00
+	domain=4, bus=3, slot=0, func=1
+	class=02-00-00, hdrtype=0x00, mfdev=1
+	cmdreg=0x0006, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=b, irq=255
+	powerspec 3  supports D0 D1 D3  current D0
+	MSI supports 32 messages, 64 bit, vector masks
+	map[10]: type Memory, range 64, base 0x40504000, size 14, enabled
+pcib5: allocated memory range (0x40504000-0x40507fff) for rid 10 of pci4:3:0:1
+	map[18]: type Memory, range 64, base 0x40480000, size 19, enabled
+pcib5: allocated memory range (0x40480000-0x404fffff) for rid 18 of pci4:3:0:1
+	map[20]: type Memory, range 64, base 0x40200000, size 21, enabled
+pcib5: allocated memory range (0x40200000-0x403fffff) for rid 20 of pci4:3:0:1
+pci5: <network, ethernet> at device 0.0 (no driver attached)
+pci5: <network, ethernet> at device 0.1 (no driver attached)
+xhci0: <Generic USB 3.0 controller> iomem 0xa400000-0xa4ffffe irq 164,165,166,167,168,169,170,171,172,173,174,175,176,177 on acpi0
+xhci0: 64 bytes context size, 64-bit DMA
+xhci0: xECP capabilities <LEGACY,PROTO,PROTO,PROTO>
+usbus0 on xhci0
+xhci0: usbpf: Attached
+cpu0: <ACPI CPU> on acpi0
+cpu0: switching to generic Cx mode
+cpu1: <ACPI CPU> on acpi0
+cpu2: <ACPI CPU> on acpi0
+cpu3: <ACPI CPU> on acpi0
+cpu4: <ACPI CPU> on acpi0
+cpu5: <ACPI CPU> on acpi0
+cpu6: <ACPI CPU> on acpi0
+cpu7: <ACPI CPU> on acpi0
+crypto: assign cryptosoft0 driver id 0, flags 0x6000000
+armv8crypto0: <AES-CBC,AES-XTS,AES-GCM>
+crypto: assign armv8crypto0 driver id 1, flags 0xe000000
+AcpiOsExecute: task queue not started
+Enabling LSE atomics in the kernel
+Device configuration finished.
+procfs registered
+Timecounters tick every 1.000 msec
+vlan: initialized, using hash tables with chaining
+lo0: bpf attached
+IPsec: Initialized Security Association Processing.
+tcp_init: net.inet.tcp.tcbhashsize auto tuned to 131072
+AcpiOsExecute: enqueue 1 pending tasks
+usbus0: 5.0Gbps Super Speed USB v3.0
+nvme0: Allocated 64MB host memory buffer
+ugen0.1: <Generic XHCI root HUB> at usbus0
+uhub0 on usbus0
+uhub0: <Generic XHCI root HUB, class 9/0, rev 3.00/1.00, addr 1> on usbus0
+nvme_sim0: <nvme cam> on nvme0
+pci0: driver added
+pci1: driver added
+pci2: driver added
+pci3: driver added
+pci4: driver added
+pci5: driver added
+found->	vendor=0x1179, dev=0x0220, revid=0x00
+	domain=4, bus=3, slot=0, func=0
+	class=02-00-00, hdrtype=0x00, mfdev=1
+	cmdreg=0x0006, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=a, irq=255
+	powerspec 3  supports D0 D1 D3  current D0
+	MSI supports 32 messages, 64 bit, vector masks
+pci4:3:0:0: reprobing on driver added
+found->	vendor=0x1179, dev=0x0220, revid=0x00
+	domain=4, bus=3, slot=0, func=1
+	class=02-00-00, hdrtype=0x00, mfdev=1
+	cmdreg=0x0006, statreg=0x0010, cachelnsz=0 (dwords)
+	lattimer=0x00 (0 ns), mingnt=0x00 (0 ns), maxlat=0x00 (0 ns)
+	intpin=b, irq=255
+	powerspec 3  supports D0 D1 D3  current D0
+	MSI supports 32 messages, 64 bit, vector masks
+pci4:3:0:1: reprobing on driver added
+CPU  0: ARM Cortex-A78C r0p0 affinity:  0  0
+                   Cache Type = <IDC,64 byte CWG,64 byte ERG,64 byte D-cacheline,PIPT I-cache,64 byte I-cacheline>
+ Instruction Set Attributes 0 = <CondM-8.4,DP,RDM,Atomic,CRC32,SHA2,SHA1,AES+PMULL>
+Trying to mount root from ufs:/dev/gpt/rootfs [rw]...
+ Instruction Set Attributes 1 = <GPA,RCPC-8.4,APA EPAC2,DCPoP>
+ Instruction Set Attributes 2 = <>
+         Processor Features 0 = <CSV3,CSV2,RAS,GIC,AdvSIMD+HP,FP+HP,EL3,EL2,EL1,EL0 32>
+         Processor Features 1 = <MTE_frac,PSTATE.SSBS>
+         Processor Features 2 = <>
+      Memory Model Features 0 = <TGran4,TGran64,TGran16,SNSMem,BigEnd,16bit ASID,1TB PA>
+      Memory Model Features 1 = <XNX,PAN+ATS1E1,LO,HPD+TTPBHA,VH,16bit VMID,HAF+DS>
+      Memory Model Features 2 = <AT,32bit CCIDX,48bit VA,IESB,UAO,CnP>
+      Memory Model Features 3 = <>
+      Memory Model Features 4 = <>
+             Debug Features 0 = <DoubleLock,SPE,2 CTX BKPTs,4 Watchpoints,6 Breakpoints,PMUv3p1,Debugv8p2>
+             Debug Features 1 = <>
+         Auxiliary Features 0 = <>
+         Auxiliary Features 1 = <>
+AArch32 Instruction Set Attributes 5 = <RDM,CRC32,SHA2,SHA1,AES+VMULL,SEVL>
+AArch32 Media and VFP Features 0 = <FPRound,FPSqrt,FPDivide,DP VFPv3+v4,SP VFPv3+v4,AdvSIMD>
+AArch32 Media and VFP Features 1 = <SIMDFMAC,FPHP Arith,SIMDHP Arith,SIMDSP,SIMDInt,SIMDLS,FPDNaN,FPFtZ>
+ L1 cache: 32KB (instruction)
+ L2 cache: 512KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  1: ARM Cortex-A78C r0p0 affinity:  1  0
+ L1 cache: 32KB (instruction)
+ L2 cache: 512KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  2: ARM Cortex-A78C r0p0 affinity:  2  0
+ L1 cache: 32KB (instruction)
+ L2 cache: 512KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  3: ARM Cortex-A78C r0p0 affinity:  3  0
+ L1 cache: 32KB (instruction)
+ L2 cache: 512KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  4: ARM Cortex-X1C r0p0 affinity:  4  0
+ L1 cache: 64KB (instruction)
+ L2 cache: 1024KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  5: ARM Cortex-X1C r0p0 affinity:  5  0
+ L1 cache: 64KB (instruction)
+ L2 cache: 1024KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  6: ARM Cortex-X1C r0p0 affinity:  6  0
+ L1 cache: 64KB (instruction)
+ L2 cache: 1024KB (unified)
+ L3 cache: 8192KB (unified)
+CPU  7: ARM Cortex-X1C r0p0 affinity:  7  0
+ L1 cache: 64KB (instruction)
+ L2 cache: 1024KB (unified)
+ L3 cache: 8192KB (unified)
+gic0: using for IPIs
+Release APs...gic0: Start searching for Re-Distributor
+gic0: Start searching for Re-Distributor
+gic0: Start searching for Re-Distributor
+gic0: Start searching for Re-Distributor
+gic0: Start searching for Re-Distributor
+gic0: Start searching for Re-Distributor
+gic0: Start searching for Re-Distributor
+gic0: CPU4 Re-Distributor has been found
+gic0: CPU5 Re-Distributor has been found
+gic0: CPU1 Re-Distributor has been found
+gic0: CPU3 Re-Distributor has been found
+gic0: CPU1 Re-Distributor woke up
+gic0: CPU6 Re-Distributor has been found
+gic0: CPU1 enabled CPU interface via system registers
+gic0: CPU7 Re-Distributor has been found
+gic0: CPU3 Re-Distributor woke up
+gic0: CPU2 Re-Distributor has been found
+gic0: CPU3 enabled CPU interface via system registers
+gic0: CPU6 Re-Distributor woke up
+gic0: CPU2 Re-Distributor woke up
+gic0: using PENDBASE of 0x100270000 on cpu 1
+gic0: CPU4 Re-Distributor woke up
+gic0: CPU7 Re-Distributor woke up
+gic0: CPU4 enabled CPU interface via system registers
+gic0: using PENDBASE of 0x106550000 on cpu 3
+gic0: CPU7 enabled CPU interface via system registers
+gic0: CPU5 Re-Distributor woke up
+gic0: CPU2 enabled CPU interface via system registers
+gic0: CPU6 enabled CPU interface via system registers
+gic0: using PENDBASE of 0x100290000 on cpu 7
+gic0: CPU5 enabled CPU interface via system registers
+gic0: using PENDBASE of 0x100280000 on cpu 6
+gic0: using PENDBASE of 0x106570000 on cpu 5
+gic0: using PENDBASE of 0x106560000 on cpu 4
+gic0: using PENDBASE of 0x106540000 on cpu 2
+done
+Enabling CnP
+nda0 at nvme0 bus 0 scbus0 target 0 lun 1
+nda0: <KINGSTON SNV2S1000G SBM02106 <redacted>>
+nda0: Serial Number <redacted>
+nda0: nvme version 1.4
+nda0: 953869MB (1953525168 512 byte sectors)
+TCP_ratelimit: Is now initialized
+GEOM: new disk nda0
+pass0 at nvme0 bus 0 scbus0 target 0 lun 1
+pass0: <KINGSTON SNV2S1000G SBM02106 <redacted>>
+pass0: Serial Number <redacted>WARNING: WITNESS option enabled, expect reduced performance.
+86B8A07B
+pass0: nvme version 1.4
+regulator: shutting down unused regulators
+uhub0: 6 ports with 6 removable, self powered
+ugen0.2: <Kingston DataTraveler SE9> at usbus0
+umass0 on uhub0
+umass0: <Kingston DataTraveler SE9, class 0/0, rev 2.00/1.00, addr 1> on usbus0
+umass0:  SCSI over Bulk-Only; quirks = 0xc000<NO_SYNCHRONIZE_CACHE,NO_PREVENT_ALLOW>
+umass0:1:0: Attached to scbus1
+Root mount waiting for:pass1 at umass-sim0 bus 0 scbus1 target 0 lun 0
+pass1: <Kingston DataTraveler SE9 PMAP> Removable Direct Access SPC-2 SCSI devi usbus0ce
+pass1: Serial Number <redacted>
+pass1: 40.000MB/s transfers
+
+da0 at umass-sim0 bus 0 scbus1 target 0 lun 0
+da0: <Kingston DataTraveler SE9 PMAP> Removable Direct Access SPC-2 SCSI device
+da0: Serial Number <redacted>
+da0: 40.000MB/s transfers
+da0: 14887MB (30489408 512 byte sectors)
+da0: quirks=0x2<NO_6_BYTE>
+(da0:umass-sim0:0:0:0): CACHE PAGE TOO SHORT data len 3 desc len 0
+(da0:umass-sim0:0:0:0): Mode page 8 missing, disabling SYNCHRONIZE CACHE
+da0: Delete methods: <NONE(*),ZERO>
+GEOM: new disk da0
+GEOM: da0: the secondary GPT header is not in the last LBA.
+GEOM: diskid/DISK-<redacted>: the secondary GPT header is not in the last LBA.
+ugen0.3: <vendor 0x1a86 USB HUB> at usbus0
+uhub1 on uhub0
+uhub1: <vendor 0x1a86 USB HUB, class 9/0, rev 2.00/17.20, addr 2> on usbus0
+uhub1: MTT enabled
+uhub1: 4 ports with 4 removable, self powered
+Root mount waiting for: usbus0
+ugen0.4: <SEM USB Keyboard> at usbus0
+usbhid0 on uhub1
+usbhid0: <SEM USB Keyboard, class 0/0, rev 1.10/1.11, addr 3> on usbus0
+hidbus0: <HID bus> on usbhid0
+hkbd0: <SEM USB Keyboard> on hidbus0
+kbd: new array size 4
+kbd1 at hkbd0
+kbd1: hkbd0, generic (0), config:0x0, flags:0x3d0000
+usbhid1 on uhub1
+usbhid1: <SEM USB Keyboard, class 0/0, rev 1.10/1.11, addr 3> on usbus0
+hidbus1: <HID bus> on usbhid1
+ugen0.5: <vendor 0x30fa USB OPTICAL MOUSE> at usbus0
+usbhid2 on uhub0
+usbhid2: <vendor 0x30fa USB OPTICAL MOUSE, class 0/0, rev 1.10/1.00, addr 4> on usbus0
+hidbus2: <HID bus> on usbhid2
+Warning: no time-of-day clock registered, system time will not be set accurately
+Dual Console: Serial Primary, Video Secondary
+start_init: trying /sbin/init
+Setting hostuuid: 3d8cd73e-74ed-cc32-03cd-4e40345c9854.
+Setting hostid: 0x459717ac.
+Starting file system checks:
+GEOM: diskid/DISK-<redacted>: the secondary GPT header is not in the last LBA.
+/dev/gpt/rootfs: FILE SYSTEM CLEAN; SKIPPING CHECKS
+/dev/gpt/rootfs: clean, 451868 free (4 frags, 56483 blocks, 0.0% fragmentation)
+GEOM: diskid/DISK-<redacted>: the secondary GPT header is not in the last LBA.
+Mounting local filesystems:.
+Autoloading modules: hcons hms hsctrl.
+hcons0: <SEM USB Keyboard Consumer Control> on hidbus1
+hsctrl0: <SEM USB Keyboard System Control> on hidbus1
+hms0: <vendor 0x30fa USB OPTICAL MOUSE> on hidbus2
+hms0: 5 buttons and [XYW] coordinates ID=0
+ELF ldconfig path: /lib /usr/lib /usr/lib/compat
+32-bit compatibility ldconfig path: /usr/lib32
+Setting hostname: q8b-freebsd.
+Setting up harvesting: RANDOMDEV,[CALLOUT],[UMA],[FS_ATIME],SWI,INTERRUPT,NET_NG,[NET_ETHER],NET_TUN,MOUSE,KEYBOARD,ATTACH,CACHED
+Feeding entropy: .
+lo0: link state changed to UP
+Starting Network: lo0.
+lo0: flags=1008049<UP,LOOPBACK,RUNNING,MULTICAST,LOWER_UP> metric 0 mtu 16384
+	options=680003<RXCSUM,TXCSUM,LINKSTATE,RXCSUM_IPV6,TXCSUM_IPV6>
+	inet 127.0.0.1 netmask 0xff000000
+	inet6 ::1 prefixlen 128
+	inet6 fe80::1%lo0 prefixlen 64 scopeid 0x1
+	groups: lo
+	nd6 options=21<PERFORMNUD,AUTO_LINKLOCAL>
+Starting devd.
+Starting event2 moused.
+Autoloading modules: hcons.
+Autoloading modules: hsctrl.
+Autoloading modules: hms.
+Starting event3 moused.
+Starting event4 moused.
+Starting event5 moused.
+add net fe80::: gateway ::1
+add net ff02::: gateway ::1
+add net ::ffff:0.0.0.0: gateway ::1
+add net ::0.0.0.0: gateway ::1
+Creating and/or trimming log files.
+Clearing /tmp (X related).
+Updating motd:.
+Updating /var/run/os-release done.
+Starting syslogd.
+Mounting late filesystems:.
+Starting cron.
+Starting background file system checks in 60 seconds.
+
+Sun Sep 27 14:58:25 UTC 2026
+Sep 27 15:00:16 q8b-freebsd login[4939]: ROOT LOGIN (root) ON ttyv0
+---
+pcib1@pci2:0:0:0:	class=0x060400 rev=0x00 hdr=0x01 vendor=0x17cb device=0x010e subvendor=0x0000 subdevice=0x0000
+    vendor     = 'Qualcomm Technologies, Inc'
+    device     = 'SC8280XP PCI Express Root Port'
+    class      = bridge
+    subclass   = PCI-PCI
+nvme0@pci2:1:0:0:	class=0x010802 rev=0x03 hdr=0x00 vendor=0x2646 device=0x5017 subvendor=0x2646 subdevice=0x5017
+    vendor     = 'Kingston Technology Company, Inc.'
+    device     = 'NV2 NVMe SSD [SM2267XT] (DRAM-less)'
+    class      = mass storage
+    subclass   = NVM
+pcib3@pci4:0:0:0:	class=0x060400 rev=0x00 hdr=0x01 vendor=0x17cb device=0x010e subvendor=0x0000 subdevice=0x0000
+    vendor     = 'Qualcomm Technologies, Inc'
+    device     = 'SC8280XP PCI Express Root Port'
+    class      = bridge
+    subclass   = PCI-PCI
+pcib4@pci4:1:0:0:	class=0x060400 rev=0x00 hdr=0x01 vendor=0x1179 device=0x0623 subvendor=0x0000 subdevice=0x0000
+    vendor     = 'Toshiba Corporation'
+    class      = bridge
+    subclass   = PCI-PCI
+pcib5@pci4:2:3:0:	class=0x060400 rev=0x00 hdr=0x01 vendor=0x1179 device=0x0623 subvendor=0x0000 subdevice=0x0000
+    vendor     = 'Toshiba Corporation'
+    class      = bridge
+    subclass   = PCI-PCI
+none0@pci4:3:0:0:	class=0x020000 rev=0x00 hdr=0x00 vendor=0x1179 device=0x0220 subvendor=0x1179 subdevice=0x0001
+    vendor     = 'Toshiba Corporation'
+    class      = network
+    subclass   = ethernet
+none1@pci4:3:0:1:	class=0x020000 rev=0x00 hdr=0x00 vendor=0x1179 device=0x0220 subvendor=0x1179 subdevice=0x0001
+    vendor     = 'Toshiba Corporation'
+    class      = network
+    subclass   = ethernet
+---
+nexus0
+  acpi0 <QCOM QCOMEDK2>
+    unknown pnpinfo _HID=QCOM24A5 _UID=0 _CID=none at handle=\_SB_.UFS0 (disabled)
+    unknown pnpinfo _HID=QCOM2466 _UID=1 _CID=none at handle=\_SB_.SDC2
+        I/O memory addresses:
+            0x8804000-0x8804fff
+    unknown pnpinfo _HID=QCOM0427 _UID=0 _CID=none at handle=\_SB_.ABD_
+    unknown pnpinfo _HID=QCOM062B _UID=0 _CID=PNP0CA3 at handle=\_SB_.PMIC
+    unknown pnpinfo _HID=QCOM06D3 _UID=0 _CID=none at handle=\_SB_.PML0 (disabled)
+    unknown pnpinfo _HID=QCOM062D _UID=1 _CID=none at handle=\_SB_.PM01
+    unknown pnpinfo _HID=QCOM062C _UID=0 _CID=none at handle=\_SB_.PMAP
+    unknown pnpinfo _HID=ACPI000E _UID=0 _CID=none at handle=\_SB_.PRTC (disabled)
+    unknown pnpinfo _HID=QCOM062A _UID=0 _CID=none at handle=\_SB_.PMBM (disabled)
+    unknown pnpinfo _HID=QCOM0677 _UID=0 _CID=none at handle=\_SB_.BCL1 (disabled)
+    unknown pnpinfo _HID=QCOM068E _UID=0 _CID=none at handle=\_SB_.PMGK
+    unknown pnpinfo _HID=QCOM0617 _UID=0 _CID=PNP0D80 at handle=\_SB_.PEP0
+    unknown pnpinfo _HID=QCOM06D0 _UID=0 _CID=none at handle=\_SB_.WLDS
+    unknown pnpinfo _HID=QCOM060A _UID=1 _CID=none at handle=\_SB_.BAM1
+        I/O memory addresses:
+            0x1dc4000-0x1de7fff
+    unknown pnpinfo _HID=QCOM060A _UID=5 _CID=none at handle=\_SB_.BAM5
+        I/O memory addresses:
+            0x3a84000-0x3ab5fff
+    unknown pnpinfo _HID=QCOM060A _UID=13 _CID=none at handle=\_SB_.BAMD
+        I/O memory addresses:
+            0xa904000-0xa91afff
+    unknown pnpinfo _HID=QCOM060A _UID=14 _CID=none at handle=\_SB_.BAME
+        I/O memory addresses:
+            0x6064000-0x6078fff
+    unknown pnpinfo _HID=QCOM060A _UID=15 _CID=none at handle=\_SB_.BAMF
+        I/O memory addresses:
+            0xa704000-0xa71afff
+    unknown pnpinfo _HID=QCOM0616 _UID=3 _CID=none at handle=\_SB_.UAR3
+        I/O memory addresses:
+            0x988000-0x98bfff
+    unknown pnpinfo _HID=QCOM0610 _UID=13 _CID=QCOMFFEA at handle=\_SB_.IC13
+        I/O memory addresses:
+            0xa90000-0xa93fff
+    uart0 <Qualcomm GENI UART> pnpinfo _HID=QCOM0616 _UID=18 _CID=none at handle=\_SB_.UARD
+        I/O memory addresses:
+            0x884000-0x887fff
+        Interrupts:
+            0x16
+    unknown pnpinfo _HID=QCOM06E1 _UID=0 _CID=none at handle=\_SB_.RPEN
+    unknown pnpinfo _HID=QCOM06E0 _UID=0 _CID=none at handle=\_SB_.PILC
+    unknown pnpinfo _HID=QCOM062F _UID=0 _CID=none at handle=\_SB_.CDI_
+    unknown pnpinfo _HID=QCOM061F _UID=0 _CID=none at handle=\_SB_.SCSS (disabled)
+    unknown pnpinfo _HID=QCOM061B _UID=0 _CID=none at handle=\_SB_.ADSP
+    unknown pnpinfo _HID=QCOM0620 _UID=0 _CID=none at handle=\_SB_.SSDD
+    unknown pnpinfo _HID=QCOM06DF _UID=0 _CID=none at handle=\_SB_.PDSR
+    unknown pnpinfo _HID=QCOM06B0 _UID=0 _CID=QCOMFFE7 at handle=\_SB_.NSP0
+    unknown pnpinfo _HID=QCOM06C3 _UID=0 _CID=QCOMFFE0 at handle=\_SB_.CSW0
+    unknown pnpinfo _HID=QCOM06E5 _UID=0 _CID=none at handle=\_SB_.SBTD
+    unknown pnpinfo _HID=QCOM068D _UID=0 _CID=none at handle=\_SB_.SPSS
+        I/O memory addresses:
+            0x188101c-0x188101f
+            0x1881024-0x1881027
+            0x1881028-0x188102b
+            0x188103c-0x188103f
+            0x188200c-0x188200f
+    unknown pnpinfo _HID=QCOM06DC _UID=0 _CID=none at handle=\_SB_.TFTP
+    unknown pnpinfo _HID=QCOM06AC _UID=0 _CID=none at handle=\_SB_.QCSK
+    unknown pnpinfo _HID=QCOM0683 _UID=0 _CID=none at handle=\_SB_.LLC_
+        I/O memory addresses:
+            0x1fc8088-0x1fc808b
+            0x9600000-0x964ffff
+    unknown pnpinfo _HID=QCOM0609 _UID=0 _CID=none at handle=\_SB_.MMU0
+        I/O memory addresses:
+            0x15000000-0x150fffff
+    unknown pnpinfo _HID=QCOM0609 _UID=1 _CID=none at handle=\_SB_.MMU1
+        I/O memory addresses:
+            0x3da0000-0x3dbffff
+    unknown pnpinfo _HID=QCOM068F _UID=0 _CID=none at handle=\_SB_.IMM0
+    unknown pnpinfo _HID=QCOM068F _UID=1 _CID=none at handle=\_SB_.IMM1
+    unknown pnpinfo _HID=QCOM0636 _UID=0 _CID=none at handle=\_SB_.GPU0
+        I/O memory addresses:
+            0x3d00000-0x3d3f00f
+            0x3d60000-0x3d9efff
+            0x3de0000-0x3deffff
+            0x88e0000-0x8913fff
+            0xaa00000-0xabfffff
+            0xae00000-0xaffffff
+            0xb290000-0xb29ffff
+            0xb490000-0xb49ffff
+            0xc200000-0xc20fffe
+    unknown pnpinfo _HID=QCOM04DD _UID=0 _CID=none at handle=\_SB_.SCM0
+    unknown pnpinfo _HID=QCOM06E4 _UID=0 _CID=none at handle=\_SB_.TLOG
+    unknown pnpinfo _HID=QCOM04DE _UID=0 _CID=QCOMFFEC at handle=\_SB_.TREE
+        I/O memory addresses:
+            0x8089e000-0x8089ffff
+    unknown pnpinfo _HID=QCOM060B _UID=1 _CID=PNP0CA2 at handle=\_SB_.SPMI
+        I/O memory addresses:
+            0xc400000-0xebfffff
+    unknown pnpinfo _HID=QCOM060C _UID=0 _CID=QCOMFFE3 at handle=\_SB_.GIO0
+        I/O memory addresses:
+            0xf100000-0xf3fffff
+    unknown pnpinfo _HID=QCOM06C2 _UID=0 _CID=QCOMFFE2 at handle=\_SB_.IPCC
+    unknown pnpinfo _HID=PNP0A08 _UID=0 _CID=PNP0A03 at handle=\_SB_.PCI0 (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P0RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R0RR
+    unknown pnpinfo _HID=QCOM0696 _UID=0 _CID=QCOMFFE4 at handle=\_SB_.QPPX
+        I/O memory addresses:
+            0x1fca044-0x1fca047
+            0x1fcf024-0x1fcf027
+    unknown pnpinfo _HID=PNP0A08 _UID=1 _CID=PNP0A03 at handle=\_SB_.PCI1 (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P1RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R1RR
+    pcib0 <Generic PCI host controller> pnpinfo _HID=PNP0A08 _UID=2 _CID=PNP0A03 at handle=\_SB_.PCI2
+        I/O memory addresses:
+            0x500000000-0x50fffffff
+            0x510000000-0x51fffffff
+            0x520000000-0x53fffffff
+      pci0 <ACPI PCI bus>
+          PCI domain 2 bus numbers:
+              0
+        pcib1 <PCI-PCI bridge> pnpinfo vendor=0x17cb device=0x010e subvendor=0x0000 subdevice=0x0000 class=0x060400 at slot=0 function=0 dbsf=pci2:0:0:0 handle=\_SB_.PCI2.RP1_
+            pcib0 memory window:
+                0x40000000-0x400fffff
+                0x520000000-0x520000fff
+            PCI domain 2 bus numbers:
+                1
+          pci1 <PCI bus>
+              pcib1 bus numbers:
+                  1
+            nvme0 <Generic NVMe Device> pnpinfo vendor=0x2646 device=0x5017 subvendor=0x2646 subdevice=0x5017 class=0x010802 at slot=0 function=0 dbsf=pci2:1:0:0
+                Interrupts:
+                    0xc2
+                    0xc3
+                    0xc4
+                    0xc5
+                    0xc6
+                    0xc7
+                    0xc8
+                    0xc9
+                    0xca
+                pcib1 memory window:
+                    0x40000000-0x40003fff
+              nvme_sim0 <nvme cam>
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P2RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R2RR
+    unknown pnpinfo _HID=PNP0A08 _UID=3 _CID=PNP0A03 at handle=\_SB_.PCI3 (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P3RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R3RR
+    pcib2 <Generic PCI host controller> pnpinfo _HID=PNP0A08 _UID=4 _CID=PNP0A03 at handle=\_SB_.PCI4
+        I/O memory addresses:
+            0x480000000-0x48fffffff
+            0x490000000-0x49fffffff
+            0x4a0000000-0x4bfffffff
+      pci2 <ACPI PCI bus>
+          PCI domain 4 bus numbers:
+              0
+        pcib3 <PCI-PCI bridge> pnpinfo vendor=0x17cb device=0x010e subvendor=0x0000 subdevice=0x0000 class=0x060400 at slot=0 function=0 dbsf=pci4:0:0:0 handle=\_SB_.PCI4.RP1_
+            pcib2 memory window:
+                0x40000000-0x405fffff
+                0x4a0000000-0x4a0000fff
+            PCI domain 4 bus numbers:
+                1-3
+          pci3 <PCI bus>
+              pcib3 bus numbers:
+                  1
+            pcib4 <PCI-PCI bridge> pnpinfo vendor=0x1179 device=0x0623 subvendor=0x0000 subdevice=0x0000 class=0x060400 at slot=0 function=0 dbsf=pci4:1:0:0
+                pcib3 bus numbers:
+                    2-3
+                pcib3 memory window:
+                    0x40000000-0x405fffff
+              pci4 <PCI bus>
+                  pcib4 bus numbers:
+                      2
+                pcib5 <PCI-PCI bridge> pnpinfo vendor=0x1179 device=0x0623 subvendor=0x0000 subdevice=0x0000 class=0x060400 at slot=3 function=0 dbsf=pci4:2:3:0
+                    pcib4 bus numbers:
+                        3
+                    pcib4 memory window:
+                        0x40000000-0x405fffff
+                  pci5 <PCI bus>
+                      pcib5 bus numbers:
+                          3
+                    unknown pnpinfo vendor=0x1179 device=0x0220 subvendor=0x1179 subdevice=0x0001 class=0x020000 at slot=0 function=0 dbsf=pci4:3:0:0
+                        pcib5 memory window:
+                            0x40000000-0x401fffff
+                            0x40400000-0x4047ffff
+                            0x40500000-0x40503fff
+                    unknown pnpinfo vendor=0x1179 device=0x0220 subvendor=0x1179 subdevice=0x0001 class=0x020000 at slot=0 function=1 dbsf=pci4:3:0:1
+                        pcib5 memory window:
+                            0x40200000-0x403fffff
+                            0x40480000-0x404fffff
+                            0x40504000-0x40507fff
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P4RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R4RR
+    unknown pnpinfo _HID=PNP0A08 _UID=5 _CID=PNP0A03 at handle=\_SB_.PCI5 (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P5RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R5RR
+    unknown pnpinfo _HID=PNP0A08 _UID=6 _CID=PNP0A03 at handle=\_SB_.PCI6 (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.P6RR
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.R6RR
+    unknown pnpinfo _HID=QCOM060D _UID=0 _CID=none at handle=\_SB_.IPC0
+    unknown pnpinfo _HID=QCOM0684 _UID=0 _CID=none at handle=\_SB_.GLNK
+    unknown pnpinfo _HID=QCOM065C _UID=0 _CID=none at handle=\_SB_.ARPC
+    unknown pnpinfo _HID=QCOM0682 _UID=0 _CID=none at handle=\_SB_.ARPD
+    unknown pnpinfo _HID=QCOM0613 _UID=0 _CID=none at handle=\_SB_.QDIG
+    unknown pnpinfo _HID=QCOM0614 _UID=0 _CID=none at handle=\_SB_.SSM_ (disabled)
+    unknown pnpinfo _HID=ACPI0010 _UID=1048576 _CID=none at handle=\_SB_.SYSM
+    unknown pnpinfo _HID=ACPI0010 _UID=16 _CID=none at handle=\_SB_.SYSM.CLUS
+    cpu0 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=0 _CID=none at handle=\_SB_.SYSM.CLUS.CPU0
+    cpu1 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=1 _CID=none at handle=\_SB_.SYSM.CLUS.CPU1
+    cpu2 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=2 _CID=none at handle=\_SB_.SYSM.CLUS.CPU2
+    cpu3 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=3 _CID=none at handle=\_SB_.SYSM.CLUS.CPU3
+    cpu4 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=4 _CID=none at handle=\_SB_.SYSM.CLUS.CPU4
+    cpu5 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=5 _CID=none at handle=\_SB_.SYSM.CLUS.CPU5
+    cpu6 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=6 _CID=none at handle=\_SB_.SYSM.CLUS.CPU6
+    cpu7 <ACPI CPU> pnpinfo _HID=ACPI0007 _UID=7 _CID=none at handle=\_SB_.SYSM.CLUS.CPU7
+    unknown pnpinfo _HID=QCOM0688 _UID=0 _CID=none at handle=\_SB_.QGP0
+        I/O memory addresses:
+            0x904000-0x953fff
+    unknown pnpinfo _HID=QCOM0688 _UID=1 _CID=none at handle=\_SB_.QGP1
+        I/O memory addresses:
+            0xa04000-0xa53fff
+    unknown pnpinfo _HID=QCOM0688 _UID=2 _CID=none at handle=\_SB_.QGP2
+        I/O memory addresses:
+            0x804000-0x853fff
+    unknown pnpinfo _HID=QCOM06A8 _UID=0 _CID=none at handle=\_SB_.CSEC
+    unknown pnpinfo _HID=QCOM06DD _UID=0 _CID=none at handle=\_SB_.SOCP
+    unknown pnpinfo _HID=QCOM0656 _UID=0 _CID=none at handle=\_SB_.QDSS (disabled)
+    unknown pnpinfo _HID=QCOM0687 _UID=0 _CID=none at handle=\_SB_.QCSP
+    unknown pnpinfo _HID=QCOM06DE _UID=0 _CID=none at handle=\_SB_.QCDB
+    unknown pnpinfo _HID=QCOM04B2 _UID=0 _CID=none at handle=\_SB_.SERB (disabled)
+    unknown pnpinfo _HID=QCOM0695 _UID=0 _CID=none at handle=\_SB_.RMNT (disabled)
+    unknown pnpinfo _HID=QCOM0607 _UID=0 _CID=none at handle=\_SB_.MBRG (disabled)
+    unknown pnpinfo _HID=QCOM0608 _UID=0 _CID=none at handle=\_SB_.RMAT (disabled)
+    unknown pnpinfo _HID=QCOM0670 _UID=0 _CID=none at handle=\_SB_.DPLB (disabled)
+    unknown pnpinfo _HID=QCOM06CD _UID=0 _CID=none at handle=\_SB_.DSBY (disabled)
+    unknown pnpinfo _HID=QCOM06DB _UID=0 _CID=ACPIQCOM06DB at handle=\_SB_.SSVC (disabled)
+    unknown pnpinfo _HID=QCOM0668 _UID=0 _CID=none at handle=\_SB_.HWN0 (disabled)
+    unknown pnpinfo _HID=QCOM06D5 _UID=0 _CID=QCOMFFE0 at handle=\_SB_.WLTM (disabled)
+    unknown pnpinfo _HID=QCOM06D8 _UID=0 _CID=none at handle=\_SB_.SSGS
+    unknown pnpinfo _HID=QCOM0632 _UID=27 _CID=none at handle=\_SB_.CAMP (disabled)
+    unknown pnpinfo _HID=QCOM0626 _UID=21 _CID=none at handle=\_SB_.CAMS (disabled)
+    unknown pnpinfo _HID=QCOM0606 _UID=26 _CID=none at handle=\_SB_.CAMF
+    unknown pnpinfo _HID=QCOM0699 _UID=28 _CID=none at handle=\_SB_.CAMI
+    unknown pnpinfo _HID=QCOM06CE _UID=29 _CID=none at handle=\_SB_.CAMT (disabled)
+    unknown pnpinfo _HID=QCOM06CF _UID=30 _CID=none at handle=\_SB_.CAMU (disabled)
+    unknown pnpinfo _HID=QCOM0627 _UID=25 _CID=none at handle=\_SB_.FLSH
+    unknown pnpinfo _HID=QCOM0698 _UID=24 _CID=none at handle=\_SB_.MPCS
+        I/O memory addresses:
+            0xac5a000-0xac5bfff
+            0xac5c000-0xac5dfff
+            0xac65000-0xac66fff
+            0xac67000-0xac68fff
+            0xacf5000-0xacf51ff
+            0xacf5200-0xacf53ff
+            0xacf5400-0xacf55ff
+            0xacf5600-0xacf57ff
+    unknown pnpinfo _HID=QCOM0633 _UID=23 _CID=none at handle=\_SB_.JPGE
+        I/O memory addresses:
+            0xac4e000-0xac51fff
+            0xac52000-0xac55fff
+    unknown pnpinfo _HID=QCOM0625 _UID=22 _CID=none at handle=\_SB_.VFE0
+    unknown pnpinfo _HID=QCOM0693 _UID=0 _CID=QCOM0667 at handle=\_SB_.SEN2
+    unknown pnpinfo _HID=QCOM0694 _UID=0 _CID=QCOM0667 at handle=\_SB_.SEN3
+    unknown pnpinfo _HID=QCOM06E3 _UID=0 _CID=none at handle=\_SB_.AOCV (disabled)
+    unknown pnpinfo _HID=QCOM06D9 _UID=0 _CID=none at handle=\_SB_.HPS0 (disabled)
+    unknown pnpinfo _HID=ACPI000E _UID=1 _CID=none at handle=\_SB_.IRTC
+    unknown pnpinfo _HID=QCOM068B _UID=0 _CID=PNP0CA1 at handle=\_SB_.URS0
+        I/O memory addresses:
+            0xa600000-0xa6ffffe
+    unknown pnpinfo _HID=QCOM068C _UID=1 _CID=PNP0CA1 at handle=\_SB_.URS1
+        I/O memory addresses:
+            0xa800000-0xa8ffffe
+    xhci0 <Generic USB 3.0 controller> pnpinfo _HID=QCOM06A1 _UID=2 _CID=PNP0D15 at handle=\_SB_.USB2
+        I/O memory addresses:
+            0xa400000-0xa4ffffe
+        Interrupts:
+            0xa4
+      usbus0
+        uhub0 <Generic XHCI root HUB, class 9/0, rev 3.00/1.00, addr 1>
+          umass0 <Kingston DataTraveler SE9, class 0/0, rev 2.00/1.00, addr 1> pnpinfo vendor=0x0930 product=0x6545 devclass=0x00 devsubclass=0x00 devproto=0x00 sernum="<redacted>" release=0x0100 mode=host intclass=0x08 intsubclass=0x06 intprotocol=0x50 at bus=0 hubaddr=1 port=1 devaddr=2 interface=0 ugen=ugen0.2
+          uhub1 <vendor 0x1a86 USB HUB, class 9/0, rev 2.00/17.20, addr 2> pnpinfo vendor=0x1a86 product=0x8091 devclass=0x09 devsubclass=0x00 devproto=0x02 sernum="" release=0x1720 mode=host intclass=0x09 intsubclass=0x00 intprotocol=0x02 at bus=0 hubaddr=1 port=3 devaddr=3 interface=0 ugen=ugen0.3
+            usbhid0 <SEM USB Keyboard, class 0/0, rev 1.10/1.11, addr 3> pnpinfo vendor=0x1a2c product=0x506f devclass=0x00 devsubclass=0x00 devproto=0x00 sernum="" release=0x0111 mode=host intclass=0x03 intsubclass=0x01 intprotocol=0x01 at bus=0 hubaddr=3 port=1 devaddr=4 interface=0 ugen=ugen0.4
+              hidbus0 <HID bus>
+                hkbd0 <SEM USB Keyboard> pnpinfo page=0x0001 usage=0x0006 bus=0x03 vendor=0x1a2c product=0x506f version=0x0111 at index=0
+            usbhid1 <SEM USB Keyboard, class 0/0, rev 1.10/1.11, addr 3> pnpinfo vendor=0x1a2c product=0x506f devclass=0x00 devsubclass=0x00 devproto=0x00 sernum="" release=0x0111 mode=host intclass=0x03 intsubclass=0x00 intprotocol=0x00 at bus=0 hubaddr=3 port=1 devaddr=4 interface=1 ugen=ugen0.4
+              hidbus1 <HID bus>
+                hcons0 <SEM USB Keyboard Consumer Control> pnpinfo page=0x000c usage=0x0001 bus=0x03 vendor=0x1a2c product=0x506f version=0x0111 at index=0
+                hsctrl0 <SEM USB Keyboard System Control> pnpinfo page=0x0001 usage=0x0080 bus=0x03 vendor=0x1a2c product=0x506f version=0x0111 at index=1
+          usbhid2 <vendor 0x30fa USB OPTICAL MOUSE, class 0/0, rev 1.10/1.00, addr 4> pnpinfo vendor=0x30fa product=0x0300 devclass=0x00 devsubclass=0x00 devproto=0x00 sernum="" release=0x0100 mode=host intclass=0x03 intsubclass=0x01 intprotocol=0x02 at bus=0 hubaddr=1 port=4 devaddr=5 interface=0 ugen=ugen0.5
+            hidbus2 <HID bus>
+              hms0 <vendor 0x30fa USB OPTICAL MOUSE> pnpinfo page=0x0001 usage=0x0002 bus=0x03 vendor=0x30fa product=0x0300 version=0x0100 at index=0
+    unknown pnpinfo _HID=QCOM066D _UID=0 _CID=none at handle=\_SB_.UBF0 (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=ACPI0015 at handle=\_SB_.UBF0.PRT0
+        I/O memory addresses:
+            0x15640000-0x156ffffe
+    unknown pnpinfo _HID=none _UID=0 _CID=ACPI0015 at handle=\_SB_.UBF0.PRT1
+        I/O memory addresses:
+            0x15740000-0x157ffffe
+    unknown pnpinfo _HID=USBC000 _UID=3 _CID=PNP0CA0 at handle=\_SB_.UCSI (disabled)
+    unknown pnpinfo _HID=QCOM06A4 _UID=0 _CID=QCOMFFE5 at handle=\_SB_.UCS0
+        I/O memory addresses:
+            0x808a0040-0x808a005f
+    unknown pnpinfo _HID=QCOM04B4 _UID=0 _CID=none at handle=\_SB_.MPA_ (disabled)
+    unknown pnpinfo _HID=QCOM04B5 _UID=0 _CID=none at handle=\_SB_.MPA1 (disabled)
+    unknown pnpinfo _HID=QCOM04B6 _UID=0 _CID=none at handle=\_SB_.MBJ0 (disabled)
+    unknown pnpinfo _HID=QCOM04B7 _UID=0 _CID=none at handle=\_SB_.MBJ1 (disabled)
+    unknown pnpinfo _HID=QCOM04B8 _UID=0 _CID=none at handle=\_SB_.MBJ2 (disabled)
+    unknown pnpinfo _HID=QCOM04B9 _UID=0 _CID=none at handle=\_SB_.MBJ3 (disabled)
+    unknown pnpinfo _HID=QCOM04BA _UID=0 _CID=none at handle=\_SB_.MBS0 (disabled)
+    unknown pnpinfo _HID=QCOM04BB _UID=0 _CID=none at handle=\_SB_.MBS1 (disabled)
+    unknown pnpinfo _HID=QCOM04BC _UID=0 _CID=none at handle=\_SB_.MBS2 (disabled)
+    unknown pnpinfo _HID=QCOM04BD _UID=0 _CID=none at handle=\_SB_.MBS3 (disabled)
+    unknown pnpinfo _HID=QCOM04BE _UID=0 _CID=none at handle=\_SB_.MSKN (disabled)
+    unknown pnpinfo _HID=QCOM04BF _UID=0 _CID=none at handle=\_SB_.MJCT (disabled)
+    unknown pnpinfo _HID=QCOM06D4 _UID=0 _CID=none at handle=\_SB_.MBCL (disabled)
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ51
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ58
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ59
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ61
+    unknown pnpinfo _HID=ACPI000C _UID=0 _CID=none at handle=\_SB_.AGR0
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ0_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ1_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ2_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ3_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ5_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ6_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ7_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ8_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ9_
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ10
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ11
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ12
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ13
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ14
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ15
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ16
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ17
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ18
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ20
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ99
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ31
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ32
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ33
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ34
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ35
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ36
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ37
+    unknown pnpinfo _HID=none _UID=0 _CID=none at handle=\_SB_.TZ38
+    unknown pnpinfo _HID=QCOM0669 _UID=1 _CID=none at handle=\_SB_.HWN1 (disabled)
+    unknown pnpinfo _HID=ACPI0011 _UID=0 _CID=none at handle=\_SB_.BTNS
+    unknown pnpinfo _HID=QCOM0612 _UID=0 _CID=none at handle=\_SB_.QDCI (disabled)
+    unknown pnpinfo _HID=QCOM0C6B _UID=0 _CID=none at handle=\_SB_.BTH0 (disabled)
+    unknown pnpinfo _HID=QCOM0611 _UID=0 _CID=none at handle=\_SB_.ADC1
+    psci0 <ARM Power State Co-ordination Interface Driver> pnpinfo unknown
+      smccc0 <ARM SMCCC v1.1>
+    gic0 <ARM Generic Interrupt Controller v3.0> pnpinfo unknown
+        I/O memory addresses:
+            0x17a00000-0x17a0ffff
+            0x17a60000-0x17b5ffff
+      its0 <ARM GIC Interrupt Translation Service>
+          I/O memory addresses:
+              0x17a40000-0x17a5ffff
+      vgic0
+    generic_timer0 <ARM Generic Timer> pnpinfo unknown
+        Interrupts:
+            0xb6
+            0xb7
+            0xb8
+            0xb9
+    apei0 <ACPI Platform Error Interface> pnpinfo unknown
+    pmu0 <Performance Monitoring Unit> pnpinfo unknown
+        Interrupts:
+            0xba
+            0xbb
+            0xbc
+            0xbd
+            0xbe
+            0xbf
+            0xc0
+            0xc1
+  ram0 <System RAM>
+      I/O memory addresses:
+          0x80c00000-0x826fffff
+          0x8e400000-0x9f5cffff
+          0x9f600000-0xaeafffff
+          0xc8600000-0xe77fffff
+          0xe8ed0000-0xffa75fff
+          0x100231000-0x3ffffffff
+          0x800000000-0x87fffffff
+  efirtc0
+  smbios0 <System Management BIOS>
+  cryptosoft0 <software crypto>
+  armv8crypto0 <AES-CBC,AES-XTS,AES-GCM>
+---
+hw.acpi.cpu.cx_lowest: C1
+hw.acpi.handle_reboot: 0
+hw.acpi.disable_on_reboot: 0
+hw.acpi.verbose: 1
+hw.acpi.s4bios_supported: 0
+hw.acpi.button_replay_window: 5
+hw.acpi.sleep_delay: 1
+hw.acpi.standby_state: NONE
+hw.acpi.suspend_state: NONE
+hw.acpi.lid_switch_state: NONE
+hw.acpi.sleep_button_state: NONE
+hw.acpi.power_button_state: NONE
+hw.acpi.supported_sleep_state: 
+dev.uart.0.rclk: 0
+dev.uart.0.rx_overruns: 0
+dev.uart.0.pps_mode: 2
+dev.uart.0.%iommu: 
+dev.uart.0.%parent: acpi0
+dev.uart.0.%pnpinfo: _HID=QCOM0616 _UID=18 _CID=none
+dev.uart.0.%location: handle=\_SB_.UARD
+dev.uart.0.%driver: uart
+dev.uart.0.%desc: Qualcomm GENI UART
+dev.uart.%parent: 
+---
+=>        34  1953525101  nda0  GPT  (932G)
+          34       32734        - free -  (16M)
+       32768       32768     1  linux-data  (16M)
+       65536     2097152     2  efi  (1.0G)
+     2162688    59789279     3  linux-data  (29G)
+    61951967  1891573168        - free -  (902G)
+
+=>        34  1953525101  diskid/DISK-<redacted>  GPT  (932G)
+          34       32734                                - free -  (16M)
+       32768       32768                             1  linux-data  (16M)
+       65536     2097152                             2  efi  (1.0G)
+     2162688    59789279                             3  linux-data  (29G)
+    61951967  1891573168                                - free -  (902G)
+
+=>     34  6422528  da0  GPT  (15G) [CORRUPT]
+       34   131072    1  efi  (64M)
+   131106  6291456    2  freebsd-ufs  (3.0G)
+
+<KINGSTON SNV2S1000G SBM02106>     at scbus0 target 0 lun 1 (pass0,nda0)
+<Kingston DataTraveler SE9 PMAP>   at scbus1 target 0 lun 0 (da0,pass1)
+ugen0.1: <XHCI root HUB Generic> at usbus0, cfg=0 md=HOST spd=SUPER (5.0Gbps) pwr=SAVE (0mA)
+ugen0.2: <Kingston DataTraveler 102/2.0 / HEMA Flash Drive 2 GB / PNY Attache 4GB Stick Toshiba Corp.> at usbus0, cfg=0 md=HOST spd=HIGH (480Mbps) pwr=ON (200mA)
+ugen0.3: <USB HUB QinHeng Electronics> at usbus0, cfg=0 md=HOST spd=HIGH (480Mbps) pwr=SAVE (100mA)
+ugen0.4: <USB Keyboard China Resource Semico Co., Ltd> at usbus0, cfg=0 md=HOST spd=LOW (1.5Mbps) pwr=ON (98mA)
+ugen0.5: <USB OPTICAL MOUSE vendor 0x30fa> at usbus0, cfg=0 md=HOST spd=LOW (1.5Mbps) pwr=ON (100mA)

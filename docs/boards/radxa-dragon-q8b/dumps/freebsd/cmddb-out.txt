@@ -1,0 +1,25 @@
+     160
+cx.lvl   addr 0x30000 type 3 len 32
+mx.lvl   addr 0x30010 type 3 len 32
+ebi.lvl  addr 0x30020 type 3 len 32
+lcx.lvl  addr 0x30030 type 3 len 32
+lmx.lvl  addr 0x30040 type 3 len 32
+gfx.lvl  addr 0x30050 type 3 len 32
+mss.lvl  addr 0x30060 type 3 len 32
+ddr.lvl  addr 0x30070 type 3 len 32
+mmcx.lvl addr 0x30080 type 3 len 32
+qphy.lvl addr 0x30090 type 3 len 32
+mxc.lvl  addr 0x300a0 type 3 len 32
+nsp.lvl  addr 0x300b0 type 3 len 32
+xo.lvl   addr 0x300c0 type 3 len 32
+MC0      addr 0x50000 type 5 len 8
+SH0      addr 0x50004 type 5 len 8
+cmddbtest: ready 0
+cmddbtest: gfx.lvl  addr 0x30050 type 3 aux 32: 0 64 128 192 224 256 320 384 416 0 0 0 0 0 0 0
+cmddbtest: cx.lvl   addr 0x30000 type 3 aux 32: 0 16 64 128 192 256 384 416 480 0 0 0 0 0 0 0
+cmddbtest: mx.lvl   addr 0x30010 type 3 aux 32: 0 16 128 192 224 256 320 384 416 480 0 0 0 0 0 0
+cmddbtest: mxc.lvl  addr 0x300a0 type 3 aux 32: 0 16 128 192 224 256 320 384 416 480 0 0 0 0 0 0
+cmddbtest: ebi.lvl  addr 0x30020 type 3 aux 32: 0 16 128 384 0 0 0 0 0 0 0 0 0 0 0 0
+cmddbtest: SH0      addr 0x50004 type 5 aux 8: 21568 137 128 1
+cmddbtest: nosuch   addr 0000000 type -1 aux 0:
+unloaded

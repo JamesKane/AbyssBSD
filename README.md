@@ -46,6 +46,7 @@ The work is in progress. The design is argued in
 
 | Path | What |
 |------|------|
+| `docs/` | [building on Linux](docs/BUILDING.md), [board notes](docs/boards/radxa-dragon-q8b/README.md), [upstreaming](docs/UPSTREAMING.md) |
 | `desktop/` | the Swift desktop, its session, and its build/test VM harness |
 | `kmod/drm-msm/` | the DRM driver for Qualcomm Adreno GPUs |
 | `ports/` | a poudriere overlay: `poudriere bulk -O abyss ...` |
@@ -53,6 +54,6 @@ The work is in progress. The design is argued in
 | `kmod/drm/` | submodule: the drm-kmod fork |
 | `firmware/` | submodule: the drm-kmod-firmware fork |
 
-`git submodule update --init src kmod/drm` fetches the source trees. Leave
-`firmware/` out on a case-insensitive filesystem (macOS's default): it holds
-files whose names differ only by case.
+`git submodule update --init src kmod/drm firmware` fetches the source trees.
+Develop on a case-sensitive filesystem: `firmware/` holds files whose names
+differ only by case. See [docs/BUILDING.md](docs/BUILDING.md).

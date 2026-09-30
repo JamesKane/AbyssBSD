@@ -1,0 +1,14 @@
+lrwxrwxrwx 1 root root 0 Jan  1  1970 /sys/class/tty/ttyMSM0 -> ../../devices/platform/soc@0/8c0000.geniqup/884000.serial/884000.serial:0/884000.serial:0.0/tty/ttyMSM0
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:
+0: uart:MSM mmio:0x00884000 irq:218 tx:74 rx:0 RTS|CTS|DTR|DSR|CD
+serinfo:1.0 driver revision:
+1: uart:MSM mmio:0x00988000 irq:220 tx:0 rx:0 CTS|DSR|CD
+serinfo:1.0 driver revision:
+serinfo:1.0 driver revision:

@@ -1,0 +1,5 @@
+-[0002:00]---00.0-[01-ff]----00.0  Kingston Technology Company, Inc. NV2 NVMe SSD [SM2267XT] (DRAM-less) [2646:5017]
+-[0004:00]---00.0-[01-ff]----00.0-[02-03]----03.0-[03]--+-00.0  Toshiba Corporation Device [1179:0220]
+                                                        \-00.1  Toshiba Corporation Device [1179:0220]
+-[0005:00]---00.0-[01-ff]--
+-[0006:00]---00.0-[01-ff]--

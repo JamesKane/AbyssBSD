@@ -1,0 +1,3 @@
+Cannot open directory - /sys/firmware/acpi/tables
+Could not get ACPI tables, AE_NOT_FOUND
+(exit 255)

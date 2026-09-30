@@ -1,0 +1,7 @@
+# Build trees, images and VM disks belong outside the monorepo; these catch
+# the defaults that still land here (see docs/MIGRATION.md §4).
+/abyss-swift-vm/
+/abyss-live.img
+*.img
+*.qcow2
+.DS_Store

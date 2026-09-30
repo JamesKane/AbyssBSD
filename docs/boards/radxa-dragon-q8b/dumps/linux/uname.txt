@@ -1,0 +1,1 @@
+Linux radxa-dragon-q8b 7.0.11-7-qcom #7 SMP PREEMPT_DYNAMIC Thu Sep 17 13:05:55 UTC 2026 aarch64 GNU/Linux

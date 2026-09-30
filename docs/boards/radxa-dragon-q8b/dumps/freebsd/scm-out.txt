@@ -1,0 +1,10 @@
+qcom_scm0: <Qualcomm Secure Channel Manager> on acpi0
+scmtest: available 1
+scmtest: info.is_call_avail       1
+scmtest: boot.set_remote_state    1
+scmtest: pil.init_image           1
+scmtest: pil.mem_setup            1
+scmtest: pil.auth_and_reset       1
+scmtest: pil.shutdown             1
+scmtest: pil.is_supported         1
+scmtest: bogus 0x7f.0x7f          0

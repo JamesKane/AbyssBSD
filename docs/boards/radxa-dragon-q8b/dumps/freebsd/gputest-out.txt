@@ -1,0 +1,7 @@
+gputest0: resource allocation failed (0xffffa00086511880 0)
+gputest0: resource allocation failed (0 0xffffa00086511880)
+gputest0: gmu rid 3
+gputest0: cx_enable: 0
+gputest0: gmu sysreset 0x1 general_7 0 -> 0xa5a54321
+gputest0: re-enable: 0, general_7 0
+gputest0: detached

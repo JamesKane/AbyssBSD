@@ -1,0 +1,2 @@
+ACPI20=0xffffd000
+SMBIOS=0xffed1000

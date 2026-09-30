@@ -1,0 +1,20 @@
+/:  Bus 001.Port 001: Dev 001, Class=root_hub, Driver=xhci-hcd/1p, 480M
+    ID 1d6b:0002 Linux Foundation 2.0 root hub
+/:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=xhci-hcd/1p, 10000M
+    ID 1d6b:0003 Linux Foundation 3.0 root hub
+/:  Bus 003.Port 001: Dev 001, Class=root_hub, Driver=xhci-hcd/4p, 480M
+    ID 1d6b:0002 Linux Foundation 2.0 root hub
+    |__ Port 003: Dev 002, If 0, Class=Hub, Driver=hub/4p, 480M
+        ID 1a86:8091 QinHeng Electronics 
+        |__ Port 001: Dev 004, If 0, Class=Human Interface Device, Driver=usbhid, 1.5M
+            ID 30fa:0300  
+    |__ Port 004: Dev 003, If 0, Class=Human Interface Device, Driver=usbhid, 1.5M
+        ID 1a2c:506f China Resource Semico Co., Ltd 
+    |__ Port 004: Dev 003, If 1, Class=Human Interface Device, Driver=usbhid, 1.5M
+        ID 1a2c:506f China Resource Semico Co., Ltd 
+/:  Bus 004.Port 001: Dev 001, Class=root_hub, Driver=xhci-hcd/2p, 10000M
+    ID 1d6b:0003 Linux Foundation 3.0 root hub
+/:  Bus 005.Port 001: Dev 001, Class=root_hub, Driver=xhci-hcd/1p, 480M
+    ID 1d6b:0002 Linux Foundation 2.0 root hub
+/:  Bus 006.Port 001: Dev 001, Class=root_hub, Driver=xhci-hcd/1p, 10000M
+    ID 1d6b:0003 Linux Foundation 3.0 root hub

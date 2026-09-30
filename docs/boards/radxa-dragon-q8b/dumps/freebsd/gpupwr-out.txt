@@ -1,0 +1,23 @@
+gpupwr: gcc gpll0 vote 00a1857f
+gpupwr: gcc gpu_cfg_ahb 71004 = 00000009
+gpupwr: gcc ddrss_gpu_axi 7115c = 00300001
+gpupwr: TIMEOUT gpu_memnoc_gfx (71010 = 80004221)
+gpupwr: power up failed
+gpupwr: down: cx gdscr 00222001 hw_ctrl 00005ff4 gcc vote 00a0057f
+gpupwr: gcc gpll0 vote 00a1857f
+gpupwr: gcc gpu_cfg_ahb 71004 = 00000009
+gpupwr: gcc ddrss_gpu_axi 7115c = 00300001
+gpupwr: cx_gdsc gdscr f8282800 hw_ctrl 80001fe0
+gpupwr: rcg gmu_clk_src cmd 80000000 cfg 00000602
+gpupwr: rcg hub_clk_src cmd 00000000 cfg 00000505
+gpupwr: gcc gpu_memnoc_gfx 71010 = 00004221
+gpupwr: gpucc cb 01170 = 00000001
+gpupwr: gpucc cxo 0109c = 00000001
+gpupwr: gpucc ahb 01078 = 00000000
+gpupwr: gpucc cx_gmu 01098 = 00006221
+gpupwr: gpucc hub_cx_int 01204 = 00000001
+gpupwr: gpucc hlos1_vote_gpu_smmu 05000 = 00000001
+gpupwr: gmu cm3_sysreset 00000001 boot_config 00000000 fw_init 00000000
+gpupwr: gmu rpmh_power_state 0000000f hfi_ctrl_status 00000000
+gpupwr: gmu general_7 was 00000000, wrote 5a5a1234, read 5a5a1234
+gpupwr: down: cx gdscr 00282001 hw_ctrl 00005ff4 gcc vote 00a0057f

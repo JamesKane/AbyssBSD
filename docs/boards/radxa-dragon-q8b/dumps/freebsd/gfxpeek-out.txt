@@ -1,0 +1,58 @@
+efifb: addr 0xc6200000 size 0x7e9000 1920x1080 stride 1920 masks r 00ff0000 g 0000ff00 b 000000ff
+gcc: gpu_memnoc_gfx           71010 = 80004221 off
+gcc: gpu_snoc_dvm_gfx         71020 = 80000001 off
+gcc: gpu_tcu_throttle_ahb     71008 = 8000000a off
+gcc: gpu_tcu_throttle         71018 = 80000000 off
+gcc: disp_hf_axi              27010 = 00000221 ON
+gcc: disp_sf_axi              27018 = 00000221 ON
+gcc: disp1_hf_axi             bb010 = 80000220 off
+gcc: gpu_gpll0_en             52000 = 00a0057f (gpll0 vote bits 15/16)
+gpucc: cx_gdsc                  0106c = 00222001 collapsed
+gpucc: gx_gdsc                  0100c = 00222001 collapsed
+gpucc: pll0 mode 00000000 l 00000000  pll1 mode 00000000 l 00000000
+gpucc: gmu_rcg cmd 80000000 cfg 00000000  hub_rcg cmd 00000000 cfg 00000000
+gpucc: ahb                      01078 = 00000000 ON
+gpucc: crc_ahb                  0107c = 00000000 ON
+gpucc: cx_gmu                   01098 = 80006221 off
+gpucc: cx_snoc_dvm              0108c = 80000000 off
+gpucc: cxo_aon                  01004 = 00000000 ON
+gpucc: gx_gmu                   01064 = 80000000 off
+gpucc: hlos1_vote_gpu_smmu      05000 = 80000000 off
+gpucc: hub_aon                  01178 = 00000001 ON
+gpucc: hub_cx_int               01204 = 80000001 off
+gpucc: sleep                    01090 = 80000000 off
+dispcc0: mdss_gdsc                03000 = f822f000 PWR_ON
+dispcc0: mdss_int2_gdsc           0a000 = 0022f001 collapsed
+dispcc0: mdss_ahb                 020bc = 00000001 ON
+dispcc0: mdss_mdp                 0200c = 00000221 ON
+dispcc0: mdss_dptx2_pixel0        0207c = 00000001 ON
+mdp: hw_rev 80000000
+mdp: intf0 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf1 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf2 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf3 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf4 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf5 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf6 en 00000001 cfg 00800000 hctl 044b008c vs 0000c1e8 ve 0012e1fb fmt 00002100 frame 0000b46c line 00000327
+mdp: intf7 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: intf8 en 00000000 cfg 00800000 hctl 00000000 vs 00000000 ve 00000000 fmt 00002100 frame 00000000 line 00000000
+mdp: ctl0 layer0-5 00000000 00000000 00000000 00000000 00000000 00000000 top f0000000 flush 00000000 intf_act 00000000 fetch_act 00000000
+mdp: ctl1 layer0-5 00000000 00000000 00000000 00000000 00000000 00000000 top f0000000 flush 00000000 intf_act 00000000 fetch_act 00000000
+mdp: ctl2 layer0-5 00000000 00000000 01000140 00000000 00000000 00000000 top f0000000 flush 20000000 intf_act 00000040 fetch_act 00040000
+mdp: ctl3 layer0-5 00000000 00000000 00000000 00000000 00000000 00000000 top f0000000 flush 00000000 intf_act 00000000 fetch_act 00000000
+mdp: ctl4 layer0-5 00000000 00000000 00000000 00000000 00000000 00000000 top f0000000 flush 00000000 intf_act 00000000 fetch_act 00000000
+mdp: ctl5 layer0-5 00000000 00000000 00000000 00000000 00000000 00000000 top f0000000 flush 00000000 intf_act 00000000 fetch_act 00000000
+mdp: sspp@04000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: sspp@06000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: sspp@08000 src_size 04380780 src_xy 00000000 out_size 04380780 addr0 c6200000 ystride0 00001e00 fmt 000237ff unpack 03020001
+mdp: sspp@0a000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: sspp@24000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: sspp@26000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: sspp@28000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: sspp@2a000 src_size 00000000 src_xy 00000000 out_size 00000000 addr0 00000000 ystride0 00000000 fmt 00000000 unpack 00000000
+mdp: lm0 op 00000000 out_size 00000000 border 00000000
+mdp: lm1 op 00000000 out_size 00000000 border 00000000
+mdp: lm2 op 00000000 out_size 04380780 border 00000000
+mdp: lm3 op 00000000 out_size 00000000 border 00000000
+mdp: lm4 op 00000000 out_size 00000000 border 00000000
+mdp: lm5 op 00000000 out_size 00000000 border 00000000
