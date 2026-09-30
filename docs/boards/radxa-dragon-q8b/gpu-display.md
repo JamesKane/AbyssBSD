@@ -6,19 +6,111 @@ The goal is an accelerated Wayland desktop. The stack as it stands:
 Mesa freedreno (GL ES 3.2) / Turnip (Vulkan 1.3)
         │  libdrm (patched: platform devices on FreeBSD)
         ▼
-msm.ko (Linux msm, ported: kmod/drm-msm) ──► renderD128        sysfbdrm.ko ──► card0
-        │ LinuxKPI + drm-kmod core                               (UEFI framebuffer KMS)
+msm.ko: the GPU (Linux msm, ported) ──► card1, renderD128
+        msmfb (display KMS, ours)  ──► card0
+        │ LinuxKPI + drm-kmod core
         ▼
 qcom_gpucc  qcom_scm  qcom_cmd_db  qcom_smmu   (BSD libraries in src/sys/dev)
 ```
 
-wlroots/sway uses sysfbdrm as the display device and msm as the render
-device (Mesa's kmsro). GBM buffers are sysfbdrm dumb buffers that msm
-renders into through PRIME. sysfbdrm copies the damaged parts to the UEFI
-framebuffer. Plain `sway` with no environment variables picks this set-up
-by itself.
+wlroots/sway uses msmfb as the display device and msm's GPU as the render
+device (Mesa's kmsro). GBM buffers are msmfb dumb buffers that the GPU
+renders into through PRIME, and the display scans them out directly. Plain
+`sway` with no environment variables picks this set-up by itself. msm.ko
+autoloads through devmatch. sysfbdrm (below) is the fallback when msm isn't
+loaded.
 
-## Display: sysfbdrm (`kmod/drm/sysfbdrm`)
+## Display: msmfb (`kmod/drm-msm/freebsd/msm_freebsd_fb.c`)
+
+A native (BSD-2) KMS driver inside msm.ko, on a glue platform device. It
+takes over the pipeline UEFI leaves running, rather than porting Linux's
+DPU and DP drivers, which would need the common clock and PHY frameworks
+in LinuxKPI first.
+
+**The pipeline and its registers** (offsets from MDSS `0xae00000`; ACPI
+`GPU0` memory resource 0 covers it all, 2 MB):
+
+- MDP `+0x1000`; from it: SSPP VIG2 `+0x8000`, LM2 `+0x46000`, CTL2
+  `+0x17000`, INTF6 `+0x3a000`. DP2 controller `+0x9a000` (AHB `+0`, AUX
+  `+0x200`, link `+0x400`, P0 `+0x1000`); its PHY's TX blocks `+0xc2200`
+  and `+0xc2600`; the DPTX2 pixel clock RCG in dispcc0 `+0x102208`.
+- The MDSS interrupt is ACPI irq resource 0 (GSIV 115). `MDSS_HW_INTR_STATUS`
+  bit 14 is DP2 (hotplug); the MDP interrupt's bit 17 is INTF6's vsync.
+- The display's SMMU streams are in bypass, and SSPP address registers are
+  32-bit. So scan-out buffers are physically contiguous, below 4 GB
+  (`alloc_pages(GFP_DMA32)`), and write-combining.
+
+**What it does**, stage by stage:
+
+- **A, flips.** A flip writes `SSPP_SRC0_ADDR`/`YSTRIDE0` and `CTL_FLUSH`
+  bit 2. It takes effect at vsync, which is when the flush bit clears.
+  Vsync drives vblank. With no client, or when the DRM master goes, the pipe
+  shows the UEFI framebuffer (`0xc6200000`) and the console again. vt(4) is
+  frozen while a master holds the display, as with sysfbdrm.
+- **B1, the sink.** Polled AUX transfers (msm's `dp_aux.c` sequence, with
+  the controller's AUX interrupts left masked) read the DPCD and the
+  monitor's EDID. A failed transfer resets the AUX block and is retried, as
+  msm and the DRM helpers do.
+- **B3a, hotplug.** HPD events (mask `0xf` at AUX `+0x0c`) run a task that
+  reads the DPCD sink count and the EDID and sends a DRM hotplug event. The
+  CH7218A keeps HPD high while it is there, and reports its HDMI monitor
+  coming and going with IRQ_HPD pulses and the sink count.
+- **B3b, link training on reconnect**, as msm does on every plug: TPS1 clock
+  recovery, then TPS4/3/2 equalization, adjusting swing and pre-emphasis
+  from Linux's `phy-qcom-edp.c` DP tables (PHY `DRV_LVL` `+0x14`,
+  `EMP_POST1` `+0x04`). After a replug the bridge shows the picture again
+  without it, but its DPCD lane status stays 0 until trained. It settles at
+  swing 2, pre-emphasis 1, which is what UEFI's training reached.
+- **B3c, modes.** The connector offers the EDID's modes that one layer mixer
+  (≤ 2560 wide) and the link carry. Interlaced and odd horizontal timings
+  are rejected, because the INTF's wide bus carries 2 pixels per clock. A
+  mode change follows msm's disable-then-enable order:
+  1. push the idle pattern and wait for `IDLE_PATTERN_SENT`, which needs
+     the stream still running;
+  2. stop the INTF's timing engine and wait out its vsync;
+  3. turn the main link off;
+  4. program the pixel RCG's M/N/D, the DP stream timing, MSA and transfer
+     unit, the SSPP and LM sizes, and the INTF timing, all computed with
+     Linux's own code (`msm_freebsd_dp_calc.c`, GPL);
+  5. reset and enable the main link, train it, and send video;
+  6. flush the CTL (active-CTL scheme: `CTL_INTF_FLUSH` bit 6 plus
+     `CTL_FLUSH` bits 2, 8, 17 and 31) and restart the INTF.
+
+  The PHY and the link's rate and lanes stay as UEFI set them. The DP
+  controller is not software-reset as Linux does, because that would wipe
+  UEFI's AUX, HPD and lane setup, which msmfb doesn't reprogram. UEFI's
+  registers are saved at probe and written back when the master goes and at
+  detach, so the console returns in UEFI's own mode. That mode, read back
+  from those registers, is identical to the monitor's preferred EDID mode,
+  so a client asking for it causes no mode change at all.
+
+**UEFI's link and mode:**
+- 4 lanes at **HBR3 (8.1 Gb/s)**, enhanced framing, 8 bpc RGB, CEA 1080p60,
+  wide bus on.
+- The CH7218A's DPCD (1.2) advertises only 5.4 Gb/s, yet it locks at HBR3.
+  msmfb keeps UEFI's rate, while Linux would train at the advertised
+  maximum. Every mode tried works at HBR3, down to 640×480 (under 3% of the
+  link).
+- UEFI's transfer-unit values differ from Linux's algorithm (1080p: TU 33,
+  valid 5, against Linux's TU 41, valid 6 with moderation); both work.
+  UEFI's MSA Mvid/Nvid differ from msm's too, with the same ratio.
+- The pixel RCG runs at half the pixel clock (wide bus) from the PHY's
+  1350 MHz (8.1 GHz / 6): 1080p is M/N 11/200. Linux's
+  `clk_rcg2_dp_set_rate` reproduces UEFI's M, N and D exactly.
+
+**Monitor under test:** Dell ST2421L behind the CH7218A. All 20 of its EDID
+modes are offered. Tested at 1920×1080 60/59.94/50 Hz, 1280×1024@75, 1280×720,
+1024×768, 800×600 and 640×480 at 60 Hz, plus custom timings.
+
+**Not done:**
+- PHY and link-rate changes (Linux's `phy-qcom-edp` PLL programming). They'd
+  only matter for a sink UEFI trained differently, or one that needs more
+  than HBR3×4.
+- Cursor and overlay planes, scaling, DSC, YUV 4:2:0, and other DP outputs.
+- Taking over when UEFI left the display off: msmfb then declines to probe.
+- MDP clock or bandwidth votes for modes beyond UEFI's.
+
+## Display fallback: sysfbdrm (`kmod/drm/sysfbdrm`)
 
 - UEFI scans out the EFI framebuffer at `0xc6200000` (1920×1080 XRGB,
   stride 7680) through MDSS:
@@ -36,8 +128,8 @@ by itself.
   the user mmap fixed it. LinuxKPI's fault path takes the page memattr from
   `vm_page_prot`, so the two must match. There's an uncommitted experiment
   using cacheable buffers plus a clean before the copy: see MIGRATION.md §3.
-- The real display driver (DPU/DP KMS) isn't started. Linux's DPU and DP
-  code is the reference; OpenBSD's `qcdrm(4)` does display only, on FDT.
+- msmfb (above) replaces it whenever msm is loaded. OpenBSD's `qcdrm(4)`
+  does display only, on FDT.
 
 ## GPU: Adreno 690
 
@@ -160,7 +252,8 @@ Also needed:
     `fd_gettid()`.
 - Test programs in `kmod/drm-msm/tools`: `msmtest`, `msmfault`, `egltest`,
   `vktest`.
-- `vulkaninfo` aborts on `VK_KHR_display`: the msm node has no KMS.
+- `vulkaninfo` aborts on `VK_KHR_display`: the msm GPU node has no KMS
+  (msmfb is a separate DRM device).
 
 ## Performance (2026-09-29)
 
@@ -187,7 +280,8 @@ Also needed:
 - One boot with `kld_list="sysfbdrm"` froze the console and sshd never
   started; the cause is unknown. Three later boots were fine. The board
   doesn't set it at present.
-- libdrm assumes `cardN` ↔ `renderD(128+N)`. With sysfbdrm as card0 and msm
-  as card1/renderD128 the mapping is wrong, but Mesa still works.
+- libdrm assumed `cardN` ↔ `renderD(128+N)`, which is wrong with the display
+  as card0 and msm as card1/renderD128. Our libdrm patch matches nodes by
+  `dev.drm.N.busid` instead.
 - Upstream Linux fixes to send: hangcheck `timer_delete_sync` on cleanup,
   freeing `pwrup_reglist`, and the `recover_worker` skip.

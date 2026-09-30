@@ -32,9 +32,10 @@ What it stands for:
 
 **New hardware, upstream-bound.** Board support starts with the Radxa Dragon
 Q8B (Qualcomm SC8280XP): the serial console, Ethernet, USB, thermal sensors,
-CPU frequency scaling and deep idle, plus an accelerated GPU. The GPU uses
-Linux's msm DRM driver ported to FreeBSD, with Mesa's freedreno for OpenGL ES
-and Turnip for Vulkan. The board work goes to FreeBSD, drm-kmod, libdrm and
+CPU frequency scaling and deep idle, plus an accelerated GPU and a native
+display driver with the monitor's modes and hotplug. The GPU uses Linux's
+msm DRM driver ported to FreeBSD, with Mesa's freedreno for OpenGL ES and
+Turnip for Vulkan. The board work goes to FreeBSD, drm-kmod, libdrm and
 Mesa over time. This fork is where it gets shipped first.
 
 The work is in progress. The design is argued in

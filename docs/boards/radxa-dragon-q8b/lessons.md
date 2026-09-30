@@ -43,6 +43,22 @@ dump** is written.
 - **A LinuxKPI platform IRQ lookup under a shared bus lock** self-deadlocked
   inside probe and hung boot. It now takes the lock exclusive.
 
+## Display pitfalls
+
+- **Follow Linux's teardown order exactly.** The first msmfb mode changes
+  stopped the INTF before pushing the DP idle pattern. The controller then
+  waited for a frame end that never came. Training patterns never
+  started, the monitor lost the signal, and it looked like the bridge
+  couldn't take sparse streams at HBR3. That theory was wrong. Linux's
+  atomic disable runs the bridge (push idle) before the encoder (INTF off).
+  In that order, every mode works.
+- **The monitor may lag a test.** Tell the watcher before each run, give
+  each mode several seconds, and leave gaps. A 30-second four-mode sweep
+  once "showed nothing" only because it had ended before anyone looked.
+- **Scan-out captures need a cache clean.** `fbshot` mmaps the framebuffer
+  cacheable, so it cleans and invalidates the range before reading, or it
+  shows stale lines.
+
 ## Method
 
 - **Read before experimenting.** On a hang or crash, list every

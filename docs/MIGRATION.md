@@ -9,13 +9,14 @@ Mac. Tick items off, and delete this file once they're all done.
 The monorepo was assembled from a Phase B snapshot, before Phase C (the
 LinuxKPI platform bus, the component framework, runtime PM and platform IRQs).
 
-- [ ] `src` → freebsd-src `radxa-dragon-q8b` **`4bb3dfdfb5`** (pinned: `9fbc25e3a1`).
-      Kernel `__FreeBSD_version` 1600031.
-- [ ] `kmod/drm-msm` → drm-msm-kmod **`1431e4e`** (imported up to `02f48c0`;
-      missing `a96a592`, `d7a4a4a`, `dc01631`, `1431e4e`). The msm code at
-      `02f48c0` won't run against the Phase C kernel.
-- [ ] `ports/` → freebsd-ports `freedreno` **`581c64463`** (copied from
-      `d80cb373e`): drm-msm-kmod at `1431e4e`, PORTREVISION 6.
+- [ ] `src` → freebsd-src `radxa-dragon-q8b` **`5fcf853ccb`** (pinned: `9fbc25e3a1`).
+      Kernel `__FreeBSD_version` 1600032 (arm64 write-combining).
+- [ ] `kmod/drm-msm` → drm-msm-kmod **`349d5ea`** (imported up to `02f48c0`;
+      missing everything since: Phase C, then the msmfb display driver
+      `fc3e136`..`349d5ea`). The msm code at `02f48c0` won't run against the
+      Phase C kernel.
+- [ ] `ports/` → freebsd-ports `freedreno` **`83b3c204e`** (copied from
+      `d80cb373e`): drm-msm-kmod at `349d5ea`, PORTREVISION 10.
 - [ ] Decide which copy of msm is canonical: `kmod/drm-msm`, or the
       standalone `JamesKane/drm-msm-kmod` repo that the port still fetches.
       Retire the other copy.

@@ -11,7 +11,7 @@ directory records what we found, so nobody has to find it again.
 | [ethernet-tc956x.md](ethernet-tc956x.md) | the `tcx(4)` driver and the chip |
 | [usb.md](usb.md) | xHCI on ACPI, USB-C role-switch devices, the DWC3 throughput fix |
 | [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, `_LPI` deep idle |
-| [gpu-display.md](gpu-display.md) | sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
+| [gpu-display.md](gpu-display.md) | msmfb (display KMS), sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
 | [lessons.md](lessons.md) | **read first**: things that reset the SoC, debugging method, gotchas |
 
 ## Decisions
@@ -43,9 +43,9 @@ directory records what we found, so nobody has to find it again.
 | Thermal sensors (46) | Works; critical-temperature shutdown untested | `sys/dev/qcom_tsens` |
 | CPU frequency, 2 domains | Works; per-domain powerd | `sys/dev/qcom_epss`, `usr.sbin/powerd` |
 | Deep idle (PSCI power-down, C3) | Works, enabled by 2 sysctls | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c` |
-| Firmware framebuffer KMS | Works (`sysfbdrm`), sway on HDMI | `kmod/drm/sysfbdrm` |
+| Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480); sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
+| Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery | `kmod/drm-msm`, `sys/dev/qcom_*` |
-| Display controller (DPU/DP) KMS | Not started; scan-out is the UEFI framebuffer | — |
 | SD card | No ACPI SDHC driver | — |
 | RTC | None (no driver; ntpd sets the clock) | — |
 | I²C (EEPROM MACs, TC9563 setup) | No ACPI GENI I²C driver; not needed yet | — |
