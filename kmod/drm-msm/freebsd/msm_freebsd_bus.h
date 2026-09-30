@@ -1,0 +1,54 @@
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2026 James Kane
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*
+ * The FreeBSD side of the glue (msm_freebsd_bus.c), which uses bus
+ * resources, and so cannot share a file with LinuxKPI's struct resource.
+ */
+#ifndef _MSM_FREEBSD_BUS_H_
+#define	_MSM_FREEBSD_BUS_H_
+
+#include <sys/types.h>
+#include <sys/bus.h>
+
+struct qcom_smmu;
+
+#define	MSM_FBSD_MAX_IRQS	4
+
+/* msm_freebsd_bus.c */
+int	msm_fbsd_bus_irq_alloc(int gsiv, int acpi_rid, void (*fn)(void *),
+	    void *arg, bool enable);
+void	msm_fbsd_bus_irq_free(int handle);
+int	msm_fbsd_bus_irq_enable(int handle);
+void	msm_fbsd_bus_irq_disable(int handle);
+
+/* msm_freebsd.c: create and delete the platform devices. */
+bool	msm_fbsd_linux_soc(int i, const char **pep_hid, uint64_t *gpucc_pa);
+int	msm_fbsd_linux_attach(device_t dev, int soc, struct qcom_smmu *smmu);
+void	msm_fbsd_linux_detach(void);
+
+#endif
