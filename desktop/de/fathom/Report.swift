@@ -215,6 +215,7 @@ public func probeFrameContract(runOutput: String?) -> ProbeResult {
         let terms = [("waking late", fields["margin-wake-us"]),
                      ("compositing", fields["margin-cost-us"]),
                      ("display commit", fields["margin-commit-us"]),
+                     ("vblank prediction", fields["margin-vblank-us"]),
                      ("unattributed", fields["margin-safety-us"])]
             .compactMap { name, v -> (String, Int)? in
                 guard let v, let n = Int(v) else { return nil }

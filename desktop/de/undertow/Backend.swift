@@ -358,6 +358,23 @@ public final class WlrootsOutput: Output {
     /// Commits that reached the backend, and commits it refused (PHASE4 §5.12).
     public private(set) var commitsMade = 0
     public private(set) var commitsRefused = 0
+    /// Present events heard more than a millisecond / half a period after the
+    /// flip they report, and the worst delay seen (hardware clock only).
+    public private(set) var deliveriesLate1ms = 0
+    public private(set) var deliveriesLateHalfPeriod = 0
+    public private(set) var deliveryWorstNs: UInt64 = 0
+    public private(set) var deliveries = 0
+    func noteDelivery(_ ns: UInt64) {
+        deliveries &+= 1
+        if ns > 1_000_000 { deliveriesLate1ms &+= 1 }
+        if ns > periodHintNs / 2 { deliveriesLateHalfPeriod &+= 1 }
+        if ns > deliveryWorstNs { deliveryWorstNs = ns }
+    }
+    /// Refused commits not yet reported by `pollFlip`, as their targets. A
+    /// fixed ring, like `targets`: nothing on the present path allocates.
+    private var refused = [UInt64](repeating: 0, count: 16)
+    private var refusedHead = 0
+    private var refusedPending = 0
 
     public private(set) var periodHintNs: UInt64
     private var frameColour: Float = 0
@@ -404,6 +421,11 @@ public final class WlrootsOutput: Output {
                 whenNs: UInt64(when.tv_sec) &* 1_000_000_000 &+ UInt64(when.tv_nsec),
                 presented: ev.pointee.presented,
                 hardwareClock: hwClock))
+            // How long after the flip we heard of it (PHASE4 §5.13): wlroots
+            // keeps the output "flip pending" until this event is read, so a
+            // late delivery refuses the next commit however early it comes.
+            let whenNs = UInt64(when.tv_sec) &* 1_000_000_000 &+ UInt64(when.tv_nsec)
+            if hwClock { o.noteDelivery(Mono.since(whenNs, Mono.now())) }
         }, me)
     }
 
@@ -476,6 +498,12 @@ public final class WlrootsOutput: Output {
             // the previous frame has not reached the screen yet. A frame lost
             // here never produces a present event, so nothing else counts it.
             commitsRefused &+= 1
+            // Tell the loop, which otherwise never hears of it: no present
+            // event will ever come for this frame.
+            if refusedPending < refused.count {
+                refused[(refusedHead &+ refusedPending) % refused.count] = target
+                refusedPending &+= 1
+            }
             return
         }
         commitsMade &+= 1
@@ -495,6 +523,13 @@ public final class WlrootsOutput: Output {
         // this only drains what already arrived. (Measured: moving the dispatch
         // out of here is what took 240Hz from collapsing at 24 hostile clients
         // to surviving them — PHASE6.md P6.5.)
+        if refusedPending > 0 {
+            let target = refused[refusedHead]
+            refusedHead = (refusedHead &+ 1) % refused.count
+            refusedPending &-= 1
+            return Flip(target: target, vblank: target, done: Mono.now(),
+                        missed: true, refused: true)
+        }
         guard let e = events.pop() else { return nil }
         if e.hardwareClock { sawHardwareClock = true }
         var target = e.whenNs
@@ -703,9 +738,23 @@ public final class WlrootsOutput: Output {
             // a flood cannot hold us inside one long blocking dispatch.
             session.dispatchPending()
             if Mono.now() >= deadlineNs &- reserveNs { continue }
-            // Nothing pending: block for the remainder rather than spinning.
-            session.dispatch(timeoutMs: Int32(min((remainingNs &- reserveNs) / 1_000_000 + 1,
-                                                  1000)))
+            // Nothing pending: block for the remainder rather than spinning —
+            // **and wake before the reserve, never after it** (PHASE4 §5.13).
+            // The event loop's timeout is whole milliseconds and was rounded
+            // *up* (+1), and FreeBSD may fire a timer up to
+            // `kern.timecounter.alloweddeviation` (5%) late on top: together the
+            // 1.4 ms of wake lateness that was the largest term left in the latch
+            // margin on metal — which real-time priority could not touch, because
+            // nothing was competing for the CPU. Round down, leave a sixteenth of
+            // the wait for the slop, and when less than a millisecond would be
+            // left, finish with the precise sleep instead.
+            let slopNs = remainingNs / 16
+            let ms = (remainingNs &- reserveNs &- min(slopNs, remainingNs &- reserveNs)) / 1_000_000
+            if ms == 0 {
+                Mono.sleep(untilNs: deadlineNs &- reserveNs)
+                continue
+            }
+            session.dispatch(timeoutMs: Int32(min(ms, 1000)))
         }
     }
 }

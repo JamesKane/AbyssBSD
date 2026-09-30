@@ -11,6 +11,7 @@
 // shell harness runs it and does not have to know what a percentile is.
 
 import CAllocProbe
+import CPlatform
 import Undertow
 import AquaDraw
 
@@ -65,6 +66,12 @@ var extraOutputs: [(width: Int32, height: Int32, at: (Int32, Int32)?)] = []
 var verbose = false
 var capturePath: String? = nil
 var tracePath: String? = nil
+/// rtprio(2)'s scale: 0 is the highest real-time priority, 31 the lowest. Any
+/// real-time priority runs ahead of every timeshared process; the middle leaves
+/// room above for anything that must pre-empt a compositor.
+let realtimePriority: Int32 = 16
+/// `--no-realtime`: measure without it, for C1 with and without (PHASE4 P4.5).
+var wantRealtime = true
 var captureEarlyPath: String? = nil
 var assertWindows: Int? = nil
 var assertSurfaces: Int? = nil
@@ -124,6 +131,7 @@ while i < args.count {
     case "--verbose": verbose = true
     case "--capture": capturePath = value("--capture")
     case "--trace": tracePath = value("--trace")
+    case "--no-realtime": wantRealtime = false
     case "--capture-early": captureEarlyPath = value("--capture-early")
     case "--assert-windows": assertWindows = Int(value("--assert-windows"))
     case "--assert-surfaces": assertSurfaces = Int(value("--assert-surfaces"))
@@ -510,6 +518,24 @@ case "run":
          + " on \(compositor.socketName)")
     // Every display and where it sits, on stdout for a harness (P14.7a).
     out("outputs \(compositor.layout.summary)")
+    // **Real-time priority, if this user may have it** (PHASE4 §5.13). The
+    // largest term left in the latch margin on metal was the OS waking us late;
+    // a real-time process is woken ahead of every timeshared one. FreeBSD grants
+    // it to root, or to group `realtime` with mac_priority(4) loaded — which is
+    // how the medium's session gets it. Refused is not an error: it is the
+    // default everywhere else, and the loop's margin covers the difference.
+    if !wantRealtime {
+        out("realtime=declined")
+    } else if ap_request_realtime(realtimePriority) == 0 {
+        emit(2, "undertow: real-time priority \(realtimePriority)")
+        out("realtime=granted")
+    } else {
+        let why = errno == EPERM
+            ? "not permitted (root, or group realtime with mac_priority loaded)"
+            : String(cString: strerror(errno))
+        emit(2, "undertow: running without real-time priority — \(why)")
+        out("realtime=refused")
+    }
 
     // An unbounded session cannot size its recorder from a frame count, and must
     // not grow one without bound either — so it keeps a rolling window. Ten
@@ -788,6 +814,7 @@ case "run":
     out("margin-wake-us=\(metronome.margin.wakeHighNs / 1000)")
     out("margin-cost-us=\(metronome.margin.costHighNs / 1000)")
     out("margin-commit-us=\(metronome.margin.commitHighNs / 1000)")
+    out("margin-vblank-us=\(metronome.margin.vblankHighNs / 1000)")
     out("margin-safety-us=\(metronome.margin.safetyNs / 1000)")
     out("margin-pinned=\(metronome.margin.marginNs >= metronome.margin.ceilNs ? "yes" : "no")")
     out("period-us=\(output.periodHintNs / 1000)")
@@ -798,6 +825,8 @@ case "run":
     // Frames that never reached the screen because the backend refused the
     // commit — invisible to the recorder, which only hears presents.
     out("commits-refused=\(output.commitsRefused) of \(output.commitsMade + output.commitsRefused)")
+    out("present-delivery late>1ms=\(output.deliveriesLate1ms) late>half-period=\(output.deliveriesLateHalfPeriod)"
+        + " of \(output.deliveries), worst=\(output.deliveryWorstNs / 1000)us")
     if let tracePath { writeTrace(recorder, to: tracePath) }
     // Every other display's own contract: its misses against its own vblank.
     for (i, o) in outs.enumerated().dropFirst() {

@@ -104,13 +104,18 @@ public struct VblankPredictor: Equatable, Sendable {
 /// A frame is late if **any** of three things ran long, so the margin is the sum
 /// of three separately *measured* quantities plus a small feedback term:
 ///
-///   margin = wakeHigh + costHigh + commitHigh + safety
+///   margin = wakeHigh + costHigh + commitHigh + vblankHigh + safety
 ///
 ///   - `wakeHigh`   — how late the OS actually woke us past the deadline. On a
 ///                    non-RT thread this dominates, and it is the term Phase 4's
 ///                    `rtprio` is meant to collapse.
 ///   - `costHigh`   — how long the composite took.
 ///   - `commitHigh` — how long the display took to execute a submitted frame.
+///   - `vblankHigh` — how far a vblank landed from where the predictor said it
+///                    would. Zero on a synthetic grid; on metal the hardware
+///                    timestamps jitter by several hundred µs, and a commit
+///                    aimed at a prediction that is late by that much reaches
+///                    the kernel too close to the real vblank (PHASE4 §5.13).
 ///   - `safety`     — the unmeasured remainder, grown on a miss.
 ///
 /// The first version had only `costHigh` and a blind `safety` absorbing the other
@@ -123,6 +128,7 @@ public struct LatchMargin: Equatable, Sendable {
     public private(set) var wakeHighNs: UInt64 = 0
     public private(set) var costHighNs: UInt64 = 0
     public private(set) var commitHighNs: UInt64 = 0
+    public private(set) var vblankHighNs: UInt64 = 0
     public private(set) var safetyNs: UInt64
     public let floorNs: UInt64
     public let ceilNs: UInt64
@@ -135,7 +141,7 @@ public struct LatchMargin: Equatable, Sendable {
 
     /// What the loop should subtract from the target vblank.
     public var marginNs: UInt64 {
-        let want = wakeHighNs &+ costHighNs &+ commitHighNs &+ safetyNs
+        let want = wakeHighNs &+ costHighNs &+ commitHighNs &+ vblankHighNs &+ safetyNs
         return min(max(want, floorNs), ceilNs)
     }
 
@@ -165,6 +171,11 @@ public struct LatchMargin: Equatable, Sendable {
     /// Fold in a measured commit latency, from flip feedback.
     public mutating func observeCommit(latencyNs: UInt64) {
         commitHighNs = LatchMargin.decayMax(commitHighNs, latencyNs)
+    }
+
+    /// Fold in how far a vblank landed from its prediction, either way.
+    public mutating func observeVblankError(_ errorNs: UInt64) {
+        vblankHighNs = LatchMargin.decayMax(vblankHighNs, errorNs)
     }
 }
 
@@ -246,7 +257,15 @@ public struct Metronome<O: Output, S: FrameSink> {
         // "fall to the next period" — defined and logged, never a stall.
         if !config.freeRun {
             let period = predictor.periodNs
-            while target < entry &+ m || target <= lastTarget { target &+= period }
+            // **Never the same vblank twice** (PHASE4 §5.13). The predictor
+            // re-estimates each vblank as flips arrive, so the one we last aimed
+            // at can come back a few hundred µs later — and `target <= lastTarget`,
+            // nanosecond against nanosecond, let it through. On metal that was a
+            // second commit for one vblank, ~1 ms after the first, refused as
+            // "a page-flip is already pending": a lost frame every ~60. A vblank
+            // within half a period of the last target *is* the last target.
+            let floor = lastTarget == 0 ? 0 : lastTarget &+ period / 2
+            while target < entry &+ m || target < floor { target &+= period }
         }
         let deadline = target > m ? target &- m : entry
         return Plan(entry: entry, target: target, deadline: config.freeRun ? entry : deadline, marginNs: m)
@@ -279,8 +298,25 @@ public struct Metronome<O: Output, S: FrameSink> {
         // 3. Drain flip feedback BEFORE latching, so the prediction that
         //    produced this frame is the freshest one available.
         while let flip = output.pollFlip() {
+            // A refused commit is a frame that never reached the screen: a miss,
+            // for the recorder and for the margin's safety term — which is how
+            // the loop learns a margin too small for the GPU and flip pipeline,
+            // the one latency it cannot time directly. It has no vblank, so the
+            // predictor and the commit term skip it (PHASE4 §5.13).
+            if flip.refused {
+                r.missed = true
+                continue
+            }
             predictor.observe(flip)
             margin.observeCommit(latencyNs: Mono.since(flip.target &- m, flip.done))
+            // How wrong the prediction was, for a frame that landed on the vblank
+            // it aimed at. A late one is a miss, not an error in the estimate —
+            // and its distance, a whole period, would pin the margin for ever.
+            if !flip.missed {
+                let err = flip.vblank > flip.target ? flip.vblank &- flip.target
+                                                    : flip.target &- flip.vblank
+                margin.observeVblankError(err)
+            }
             r.actualVblank = flip.vblank
             if flip.missed { r.missed = true }
         }

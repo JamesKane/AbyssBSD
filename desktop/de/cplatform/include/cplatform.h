@@ -103,4 +103,18 @@ int ap_peer_uid(int sock, unsigned int *uid);
  */
 int ap_crypt_sha512(const char *password, char *out, size_t len);
 
+/*
+ * Ask for real-time scheduling for this process (PHASE4 §5.13) — the
+ * compositor's present loop, whose largest remaining margin term on metal was
+ * the OS waking it late.
+ *
+ * FreeBSD: rtprio(2), RTP_PRIO_REALTIME at `priority` (0 is highest, 31
+ * lowest). Permitted to root, and to members of group `realtime` when
+ * mac_priority(4) is loaded — no kernel patch. Linux: SCHED_FIFO, which needs
+ * CAP_SYS_NICE; `priority` counts down from the highest FIFO priority.
+ *
+ * Returns 0, or -1 with errno set (EPERM when not permitted).
+ */
+int ap_request_realtime(int priority);
+
 #endif /* ABYSS_CPLATFORM_H */

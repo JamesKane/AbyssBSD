@@ -234,3 +234,21 @@ int ap_crypt_sha512(const char *password, char *out, size_t len) {
     memcpy(out, hash, n + 1);
     return 0;
 }
+
+#if defined(__FreeBSD__)
+#include <sys/rtprio.h>
+int ap_request_realtime(int priority) {
+    struct rtprio rtp;
+    rtp.type = RTP_PRIO_REALTIME;
+    rtp.prio = (u_short)priority;
+    return rtprio(RTP_SET, 0, &rtp);
+}
+#else
+#include <sched.h>
+int ap_request_realtime(int priority) {
+    struct sched_param sp;
+    memset(&sp, 0, sizeof sp);
+    sp.sched_priority = sched_get_priority_max(SCHED_FIFO) - priority;
+    return sched_setscheduler(0, SCHED_FIFO, &sp);
+}
+#endif

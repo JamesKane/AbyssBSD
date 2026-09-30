@@ -723,7 +723,12 @@ abyss_settings_enable="NO"
 # not build in; devmatch never offered it for the bring-up machine's mouse, so
 # the first 16-CURRENT boot had a keyboard and a dead pointer. Like amdgpu, it
 # loads harmlessly where there is nothing for it.
-kld_list="amdgpu hms"
+#
+# **And `mac_priority`**, which lets group `realtime` (the live user is in it,
+# below) ask for real-time scheduling without being root: undertow asks, and on
+# metal the OS waking it late was the largest term left in the latch margin
+# (PHASE4 §5.13).
+kld_list="amdgpu hms mac_priority"
 seatd_enable="YES"
 RC
 
@@ -1054,6 +1059,9 @@ GRP
 sudo sed -i '' 's|^video:\*:44:.*|video:*:44:abyss|' "$stage/etc/group" 2>/dev/null || true
 grep -q '^video:' "$stage/etc/group" 2>/dev/null \
   || sudo sh -c "echo 'video:*:44:abyss' >> $stage/etc/group"
+# `realtime`, with mac_priority loaded (kld_list), lets the session's
+# compositor ask for real-time priority (PHASE4 §5.13).
+sudo sed -i '' 's|^realtime:\*:47:.*|realtime:*:47:abyss|' "$stage/etc/group" 2>/dev/null || true
 # And `audio`: from FreeBSD 16 the sound devices are root:audio 0660, so a
 # session outside the group has no mixer (HANDOFF §2.95).
 sudo sed -i '' 's|^audio:\*:43:.*|audio:*:43:abyss|' "$stage/etc/group" 2>/dev/null || true

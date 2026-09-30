@@ -930,6 +930,55 @@ left in the margin is real: wake lateness 1.4 ms (the OS, which `rtprio` is for)
 commit 1.8 ms, composite 25 µs. **C1 holds on this machine**; the second row
 (§6.7) is still owed before these numbers replace PHASE6's.
 
+### 5.13 The margin, term by term, down to what the hardware costs (2026-09-30)
+
+§5.12's pass left 0 of 600 missed with a 3.3 ms margin, 1.4 ms of it waking
+late. Chasing that term uncovered four more things only a real vblank shows,
+each measured before and after on the 12700KF:
+
+1. **Real-time priority is available without a kernel patch**, and did nothing
+   here. `mac_priority(4)` lets group `realtime` call `rtprio(2)`; `undertow run`
+   now asks (`realtime=granted|refused|declined`, `--no-realtime` to compare) and
+   the medium loads the module and puts its user in the group. With and without
+   it: identical wake lateness, because an idle machine has nothing competing
+   for the CPU. It is kept for a machine that is busy.
+2. **The wake lateness was our own rounding plus the kernel's timer slop.** The
+   wait before a frame blocks in the event loop with a whole-millisecond timeout,
+   which was rounded *up* (+1 ms), and FreeBSD may fire a timer up to
+   `kern.timecounter.alloweddeviation` (5%) late. Rounded down, with a sixteenth
+   of the wait left for the slop and the last stretch done by `clock_nanosleep`:
+   **1440 µs → ~50 µs** at p99.
+3. **A refused commit is a lost frame nobody counted.** With the margin down to
+   1 ms, 66–78 of 675 commits came back "a page-flip is already pending" —
+   frames that never reached the screen, invisible to the recorder because no
+   present event ever comes for them. `WlrootsOutput` now reports each as a
+   `Flip(refused: true)`: missed for the recorder and the margin's safety term,
+   skipped by the predictor, which must learn only from real vblanks.
+4. **The planner could aim at one vblank twice.** The predictor re-estimates a
+   vblank as flips arrive, and `target <= lastTarget` let a re-estimate a few
+   hundred µs later through as a *new* vblank: a second commit ~1 ms after the
+   first, refused. Same class as §5.12's miss rule — a vblank within half a
+   period of the last target is the last target.
+5. **The margin had no term for being wrong about when the vblank is.** This
+   card's vblank timestamps jitter by several hundred µs (single steps of
+   15.9–17.5 ms at 60 Hz); a commit aimed at a prediction that is late by that
+   much reaches the kernel too close to the real vblank, the flip slips a frame,
+   and the next commit is refused. `vblankHigh` — the decaying maximum of
+   |flip − prediction| for frames that landed on time — joins wake, cost, commit
+   and safety, and `fathom` names it.
+
+Result, twice: **0 of 1800 missed, margin ~2 ms** (commit 0.7–0.9 ms, vblank
+prediction ~1 ms, wake ~50 µs, safety at its floor), 2 refused commits in 2025,
+both in warm-up. Also found by the new `present-delivery` line: DRM flip events
+reach userspace within a millisecond except about one in a thousand (13 ms).
+
+And the one-minute checks: `vulkaninfo` reports RADV on the RX 6750 XT, Vulkan
+1.4, Mesa 26.2.2, **with** `VK_EXT_external_memory_host` (BACKLOG §3 guessed
+absent), plus dma-buf import, DRM format modifiers and present-wait. The stick's
+root had to be remounted `async` for `pkg install` to finish: `makefs` builds UFS
+without soft updates, and SQLite's synchronous truncates on USB 2 flash ran for
+minutes (worth fixing in the medium: soft updates, or `async` on a dev stick).
+
 ## 6. Risks / open decisions
 
 **6.1 The frame contract's metric is headless-or-DRM, and nesting is neither.**

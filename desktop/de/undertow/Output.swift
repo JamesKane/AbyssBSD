@@ -25,12 +25,18 @@ public struct Flip: Equatable, Sendable {
     public var done: UInt64
     /// It landed later than the vblank it was aimed at.
     public var missed: Bool
+    /// **It never landed**: the backend refused the commit (on DRM, a flip was
+    /// still pending). A lost frame, so it counts as missed — but it carries no
+    /// real vblank, so the predictor must not learn from it (PHASE4 §5.13).
+    public var refused: Bool
 
-    public init(target: UInt64, vblank: UInt64, done: UInt64, missed: Bool) {
+    public init(target: UInt64, vblank: UInt64, done: UInt64, missed: Bool,
+                refused: Bool = false) {
         self.target = target
         self.vblank = vblank
         self.done = done
         self.missed = missed
+        self.refused = refused
     }
 }
 

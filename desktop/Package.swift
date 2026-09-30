@@ -498,7 +498,7 @@ let package = Package(
             // name and the seat needs an XKB layout (HANDOFF §2.70). `Install`
             // depends on nothing, so this links no new library.
             dependencies: ["CWlroots", "PoolConfig", "CXkb", "AquaDraw", "CCairo", "MenuModel",
-                           "Install", "Spawn", "CPixman"],
+                           "Install", "Spawn", "CPixman", "CPlatform"],
             path: "de/undertow"
         ),
         .executableTarget(
