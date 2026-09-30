@@ -355,6 +355,9 @@ public final class WlrootsOutput: Output {
     private var targets = [(seq: UInt32, target: UInt64, committed: UInt64)](
         repeating: (0, 0, 0), count: 16)
     private var targetSlot = 0
+    /// Commits that reached the backend, and commits it refused (PHASE4 §5.12).
+    public private(set) var commitsMade = 0
+    public private(set) var commitsRefused = 0
 
     public private(set) var periodHintNs: UInt64
     private var frameColour: Float = 0
@@ -468,7 +471,14 @@ public final class WlrootsOutput: Output {
         }
         _ = wlr_render_pass_submit(pass)
 
-        guard wlr_output_commit_state(output, &state) else { return }
+        guard wlr_output_commit_state(output, &state) else {
+            // Refused: on DRM, most often "a page-flip is already pending" —
+            // the previous frame has not reached the screen yet. A frame lost
+            // here never produces a present event, so nothing else counts it.
+            commitsRefused &+= 1
+            return
+        }
+        commitsMade &+= 1
         // Remember what this commit was aiming at, so its present event can be
         // judged on time — and when the commit returned, which is what the
         // flip's `done` means (PHASE4 §5.11: see `pollFlip`).
@@ -502,8 +512,18 @@ public final class WlrootsOutput: Output {
         var done = e.whenNs
         for t in targets where t.seq == e.commitSeq { target = t.target; done = t.committed }
         let vblank = snapToGrid(e)
+        // **Late means a later vblank, not a later nanosecond** (PHASE4 §5.12).
+        // `target` is the predictor's estimate of the vblank this frame aimed
+        // at; a hardware clock's timestamp for that same vblank lands a few µs
+        // either side of it. `vblank > target` called every frame that landed
+        // 1 µs after its estimate "missed" — about half of them on metal, every
+        // one of which reached the screen on time — and each false miss doubled
+        // the margin's safety term until it sat at its ceiling. A frame is late
+        // when it landed at least one whole period after the vblank it aimed at.
+        // (Headless snaps to its own grid, where the two are exactly equal.)
+        let late = periodHintNs > 0 ? vblank > target &+ periodHintNs / 2 : vblank > target
         return Flip(target: target, vblank: vblank, done: done,
-                    missed: e.presented && vblank > target)
+                    missed: e.presented && late)
     }
 
     /// Which backend this output actually landed on.

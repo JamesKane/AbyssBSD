@@ -64,6 +64,7 @@ var height: Int32 = 1080
 var extraOutputs: [(width: Int32, height: Int32, at: (Int32, Int32)?)] = []
 var verbose = false
 var capturePath: String? = nil
+var tracePath: String? = nil
 var captureEarlyPath: String? = nil
 var assertWindows: Int? = nil
 var assertSurfaces: Int? = nil
@@ -122,6 +123,7 @@ while i < args.count {
         extraOutputs.append((w, h, at))
     case "--verbose": verbose = true
     case "--capture": capturePath = value("--capture")
+    case "--trace": tracePath = value("--trace")
     case "--capture-early": captureEarlyPath = value("--capture-early")
     case "--assert-windows": assertWindows = Int(value("--assert-windows"))
     case "--assert-surfaces": assertSurfaces = Int(value("--assert-surfaces"))
@@ -793,6 +795,10 @@ case "run":
     // And **whose** clock, which `vblank-source` alone cannot say: a nested
     // backend reports real timestamps from the host's vblank (§2.48).
     out("backend=\(output.backendName)")
+    // Frames that never reached the screen because the backend refused the
+    // commit — invisible to the recorder, which only hears presents.
+    out("commits-refused=\(output.commitsRefused) of \(output.commitsMade + output.commitsRefused)")
+    if let tracePath { writeTrace(recorder, to: tracePath) }
     // Every other display's own contract: its misses against its own vblank.
     for (i, o) in outs.enumerated().dropFirst() {
         out("output \(o.name) missed=\(recorders[i].missedCount) of \(recorders[i].retained)"
@@ -829,4 +835,26 @@ case "run":
 
 default:
     usage()
+}
+
+
+/// One CSV line per frame the recorder kept, times in µs from the first latch
+/// (PHASE4 §5.12). `vblank` and `missed` are from the flip drained when that
+/// frame fired — an *earlier* frame's — which is how the recorder stores them.
+func writeTrace(_ r: FlightRecorder, to path: String) {
+    let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+    guard fd >= 0 else { out("trace: cannot write \(path)"); return }
+    defer { close(fd) }
+    func put(_ s: String) { s.withCString { _ = write(fd, $0, strlen($0)) } }
+    put("seq,latch,composite_end,submit,predicted_vblank,flip_vblank,margin,cost,wake_late,missed\n")
+    guard r.retained > 0 else { return }
+    let t0 = r.retainedRecord(0).latch
+    func rel(_ t: UInt64) -> String { t == 0 ? "" : String(Int64(bitPattern: t &- t0) / 1000) }
+    for i in 0..<r.retained {
+        let f = r.retainedRecord(i)
+        put("\(f.seq),\(rel(f.latch)),\(rel(f.compositeEnd)),\(rel(f.submit)),"
+            + "\(rel(f.predictedVblank)),\(rel(f.actualVblank)),\(f.marginNs / 1000),"
+            + "\(f.costNs / 1000),\(f.wakeLateNs / 1000),\(f.missed ? 1 : 0)\n")
+    }
+    out("trace: \(r.retained) frames to \(path)")
 }

@@ -905,6 +905,31 @@ Also answered: no Wi-Fi device is recognised (PHASE14 §6.5); the 12700KF's P an
 E cores are visible only as cache topology (0–15 in SMT pairs, 16–19 one
 shared-L2 group), with no flag the scheduler acts on.
 
+### 5.12 C1 holds on metal: the misses were the measurement's (2026-09-30)
+
+§5.11 left 100 of 300 "missed" with the margin pinned and nothing to attribute
+it to. Two instruments settled it: `undertow run --trace PATH` (one CSV line per
+frame: latch, submit, predicted and flip vblank, margin, cost, wake lateness) and
+a count of commits the backend refused (`commits-refused=`).
+
+- **Refused commits were not it**: 2 of 337. The "page-flip is already pending"
+  errors are real and rare.
+- **Every frame reached the screen on the vblank it aimed at.** Flips landed
+  exactly one period apart, 298 of 298, and each frame's flip timestamp matched
+  its predicted target to a few microseconds — *either side*.
+- **That "either side" was the bug.** A flip was judged late when
+  `vblank > target`, nanosecond against nanosecond. On a synthetic grid the two
+  are equal; against a hardware clock the predictor is a few µs off in both
+  directions, so every frame that landed 1 µs after its estimate "missed". Each
+  false miss doubled the margin's safety term, which is why it sat at its
+  ceiling. Late now means a later vblank: `vblank > target + period/2`.
+
+Re-measured: **0 of 600 missed**, the margin not pinned and converging (8 ms at
+start, 3.3 ms at the end and still falling), safety at its 50 µs floor. What is
+left in the margin is real: wake lateness 1.4 ms (the OS, which `rtprio` is for),
+commit 1.8 ms, composite 25 µs. **C1 holds on this machine**; the second row
+(§6.7) is still owed before these numbers replace PHASE6's.
+
 ## 6. Risks / open decisions
 
 **6.1 The frame contract's metric is headless-or-DRM, and nesting is neither.**
