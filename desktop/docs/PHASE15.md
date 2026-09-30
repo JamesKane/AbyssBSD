@@ -247,6 +247,32 @@ after known input), a selection pasted elsewhere arrives intact.
   `live-appgen` (a `Terminal=true` fixture becomes `Top.app`, which opens a
   Terminal running `top`). Goldens moved on purpose: the Dock scenes (a fourth
   tile) and the icon sheets (a new icon), on both platforms.
+- **(c) ✅ Done 2026-09-30 — scrollback, selection, the clipboard.** The model
+  (tested): every line addressable across scrollback and screen (`TextPoint`),
+  the text of a selection with a **wrapped line joined back into one** — the
+  row's last cell carries `wrapsToNext`, so scrolling, insert/delete and
+  scrollback move the flag with the text and erasing clears it — word and line
+  ranges, Clear Scrollback, and `Paste.bytes` (newlines as Return; bracketed
+  when the program asked, `CSI ?2004h`, with an end marker inside the text
+  removed so a paste cannot break out and run commands). The window: the view
+  scrolls into the history (wheel; Page Up/Down, Home, End as Mac Terminal —
+  Shift sends them to the program, and on the alternate screen they always go
+  to it), stays on what is being read while output arrives, and returns to the
+  live screen on typing; drag selects, double-click a word (dragging by
+  words), triple-click a line, drawn in Jaguar's highlight; an Edit menu —
+  Copy ⌘C (only with a selection, so Ctrl-C is still interrupt), Paste ⌘V,
+  Select All ⌘A, Clear Scrollback ⌘K. A paste of this process's own copy uses
+  what it copied (the clipboard will not read back a selection its own process
+  owns). `live-terminal.sh` claims 6–8, both platforms: `seq 1 300` and the
+  wheel reaches history, typing returns; **a 200-character line wrapped over
+  two rows, dragged and ⌘C'd, is ⌘V'd into a second Terminal *process*
+  running `cat > pasted.txt`, and the file holds exactly those 200 characters
+  on one line** (the pass's verification); ⌘K leaves the wheel nowhere to go.
+  The test's own lessons: `vkeyboard` cannot type `;`, and a zoomed window's
+  place is only in undertow's exit summary (it fills the output from 0,0).
+
+**P15.4 ✅ complete 2026-09-30.** §6.4 stands: `TERM=xterm` until the parser
+is measured against vttest.
 
 **P15.5 — TextEdit (L).** The toolkit's multi-line text view (it is a toolkit
 piece, not TextEdit's: every later editor uses it), then TextEdit on it: open

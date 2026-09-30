@@ -14,8 +14,15 @@
 #      and `dd :wq` changes the file ON DISK;
 #   5. the zoom button enlarges the window, and `stty size` in the shell says
 #      the new rows and columns the grid now has;
-#   6. ⌘N opens a second window with its own shell;
-#   7. `exit` in each window closes it, and the last one quits Terminal.
+#   6. the scrollback: after `seq 1 300`, the wheel scrolls the view back into
+#      history, and typing returns it to the live screen;
+#   7. a selection pasted elsewhere arrives intact: a 200-character line,
+#      wrapped over two rows, dragged across and copied with ⌘C, pasted with
+#      ⌘V into a SECOND Terminal process (across the Wayland clipboard) running
+#      `cat > pasted.txt` — the file holds the 200 characters, one line;
+#   8. ⌘K clears the scrollback: the wheel then has nowhere to go;
+#   9. ⌘N opens a second window with its own shell;
+#  10. `exit` in each window closes it, and the last one quits Terminal.
 #
 # Usage: abyss/tests/live-terminal.sh
 set -eu
@@ -34,7 +41,7 @@ W=1024; H=768
 work=$(mktemp -d /tmp/abyss-term.XXXXXX)
 cleanup() {
   exec 3>&- 4>&- 2>/dev/null || true
-  for p in ${vp_pid:-} ${vk_pid:-} ${term_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  for p in ${vp_pid:-} ${vk_pid:-} ${term2_pid:-} ${term_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
   pkill -f "$work" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -42,6 +49,8 @@ trap cleanup EXIT INT TERM HUP
 fail() {
   exec 1>&2
   echo "FAIL: $1"
+  # ABYSS_TEST_KEEP=DIR keeps the logs of a failed run for reading.
+  [ -n "${ABYSS_TEST_KEEP:-}" ] && { rm -rf "$ABYSS_TEST_KEEP"; cp -r "$work" "$ABYSS_TEST_KEEP"; }
   [ -s "$work/term.log" ] && grep 'Terminal:' "$work/term.log" | tail -40 | sed 's/^/  term| /'
   exit 1
 }
@@ -176,17 +185,98 @@ sleep 0.3
 b=$(count "|$size|")
 type_line 'stty size'
 await "|$size|" "$b" "stty size does not say the zoomed grid ($size)"
+# Zoomed, the window fills the output from its corner (undertow reports that
+# only in its exit summary: `window … 0,0 1024x768 max`).
+wx=0; wy=0
 echo "ok: 5. zoom enlarged the window to ${size#* }x${size% *}, and stty size in the shell says '$size'"
 
-# ------------------------------------------------------------ 6. ⌘N
+# ------------------------------------------------------------ 6. scrollback
+b=$(count '|300|')
+type_line 'seq 1 300'
+await '|300|' "$b" "seq 1 300 did not finish"
+sleep 0.3
+cx=$((wx + 200)); cy=$((wy + 150))
+b=$(count 'Terminal: view back ')
+printf 'm %s %s\na -30\n' $cx $cy >&3
+await 'Terminal: view back ' "$b" "the wheel did not scroll the view back"
+back=$(grep 'Terminal: view back ' "$log" | tail -1)
+n=$(echo "$back" | sed -n 's/.*view back \([0-9]*\) .*/\1/p'); top=$(echo "$back" | sed -n 's/.*top |\([0-9]*\)|.*/\1/p')
+[ -n "$top" ] && [ "$top" -lt 262 ] || fail "scrolled back $n lines, and the top line is '$top', not earlier history"
+b=$(count 'Terminal: view back 0 ')
+printf 't x\n' >&4
+await 'Terminal: view back 0 ' "$b" "typing did not return the view to the live screen"
+printf 'k 14\n' >&4                                              # Backspace the x
+echo "ok: 6. the wheel scrolled $n lines back into history (top line: $top), and typing came back to the live screen"
+
+# ------------------------------------------------------------ 7. copy, and paste elsewhere
+long=$(awk 'BEGIN { for (i = 0; i < 20; i++) printf "%d-abcdefgh", i % 10 }')          # 200 characters
+b=$(count 'Terminal: row ')
+type_line clear; sleep 0.4                                      # (vkeyboard cannot type ';')
+type_line "echo $long"
+i=0; until grep -q "|${long%"${long#?????????????????????????????????????????}"}" "$log" 2>/dev/null && grep -q 'Terminal: row 3 |\$|' "$log"; do
+  [ $i -ge 80 ] && fail "the long line was not echoed"; sleep 0.1; i=$((i + 1)); done
+sleep 0.4
+cols=$(grep 'Terminal: size ' "$log" | tail -1 | sed -n 's/.*size \([0-9]*\)x.*/\1/p')
+# The output's first row is exactly the line's first `cols` characters (the
+# command's own echo starts with "$ echo "); the next row holds the rest.
+orow=$(row_of "$(printf '%s' "$long" | cut -c1-"$cols")")
+[ -n "$orow" ] || fail "no row holds the first $cols characters of the line"
+rest=$((200 - cols))
+x0=$(awk -v wx="$wx" -v gx="$gx" -v cw="$cw" 'BEGIN { printf "%d", wx + gx + cw / 2 }')
+y0=$(awk -v wy="$wy" -v gy="$gy" -v ch="$ch" -v r="$orow" 'BEGIN { printf "%d", wy + gy + (r - 1) * ch + ch / 2 }')
+x1=$(awk -v wx="$wx" -v gx="$gx" -v cw="$cw" -v c="$rest" 'BEGIN { printf "%d", wx + gx + (c - 1) * cw + cw / 2 }')
+y1=$(awk -v wy="$wy" -v gy="$gy" -v ch="$ch" -v r="$orow" 'BEGIN { printf "%d", wy + gy + r * ch + ch / 2 }')
+printf 'm %s %s\np\n' "$x0" "$y0" >&3; sleep 0.2
+printf 'm %s %s\n' "$x1" "$y1" >&3; sleep 0.2
+printf 'r\n' >&3; sleep 0.3
+b=$(count 'Terminal: copied ')
+printf 'c 64 46\n' >&4                                           # ⌘C
+await 'Terminal: copied ' "$b" "⌘C copied nothing"
+grep 'Terminal: copied ' "$log" | tail -1 | grep -q 'copied 200 characters' \
+  || fail "the copy was not the 200 characters: $(grep 'Terminal: copied ' "$log" | tail -1)"
+# A second Terminal process: the paste crosses the Wayland clipboard.
+wbefore=$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)
+env WAYLAND_DISPLAY="$wd" HOME="$work/home" SHELL=/bin/sh ABYSS_TERMINAL_DUMP=1 AQUA_SCENE=terminal \
+    "$aqua" -e sh -c 'cat > "$HOME/pasted.txt"' > "$work/term2.log" 2>&1 &
+term2_pid=$!
+i=0; until [ "$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)" -gt "$wbefore" ]; do
+  [ $i -ge 150 ] && fail "the second Terminal never mapped"; sleep 0.1; i=$((i + 1)); done
+# Its `window … X,Y WxH [max]` line: the position is the field shaped X,Y.
+w2=$(grep '^window org.abyssbsd.terminal/' "$work/ut.out" | tail -1 | tr ' ' '\n' | grep -E '^[0-9]+,[0-9]+$' | tail -1)
+sleep 0.8
+printf 'm %s %s\np\nr\n' $((${w2%,*} + 200)) $((${w2#*,} + 120)) >&3; sleep 0.5   # focus it
+printf 'c 64 47\n' >&4                                           # ⌘V
+i=0; until grep -q 'Terminal: pasted 200 characters' "$work/term2.log"; do
+  [ $i -ge 50 ] && fail "⌘V in the second Terminal pasted nothing: $(grep 'Terminal:' "$work/term2.log" | tail -3)"; sleep 0.1; i=$((i + 1)); done
+printf 'k 28\n' >&4; sleep 0.2; printf 'c 4 32\n' >&4            # Return, then Ctrl-D: cat ends
+i=0; while kill -0 "$term2_pid" 2>/dev/null; do
+  [ $i -ge 50 ] && fail "cat did not end, so the second Terminal did not close"; sleep 0.1; i=$((i + 1)); done
+term2_pid=""
+[ "$(cat "$work/home/pasted.txt")" = "$long" ] \
+  || fail "what arrived is not what was selected: $(head -c 80 "$work/home/pasted.txt")…"
+[ "$(wc -l < "$work/home/pasted.txt" | tr -d ' ')" = 1 ] || fail "the wrapped line arrived as more than one line"
+echo "ok: 7. a 200-character line wrapped over two rows, dragged and ⌘C'd, arrived intact in another Terminal process's cat via ⌘V — one line"
+printf 'm %s %s\np\nr\n' $((wx + 200)) $((wy + 150)) >&3; sleep 0.4   # back to the first window
+
+# ------------------------------------------------------------ 8. clear scrollback
+b=$(count 'Terminal: scrollback cleared')
+printf 'c 64 37\n' >&4                                           # ⌘K
+await 'Terminal: scrollback cleared' "$b" "⌘K did not clear the scrollback"
+b=$(count 'Terminal: view back ')
+printf 'm %s %s\na -30\n' $cx $cy >&3; sleep 0.6
+[ "$(count 'Terminal: view back ')" = "$b" ] || fail "after ⌘K the wheel still scrolled into history"
+echo "ok: 8. ⌘K cleared the scrollback, and the wheel had nowhere to go"
+
+# ------------------------------------------------------------ 9. ⌘N
 b=$(count 'Terminal: window: /bin/sh')
+wbefore=$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)
 printf 'c 64 49\n' >&4                                          # ⌘N
 await 'Terminal: window: /bin/sh' "$b" "⌘N opened no second window"
-i=0; until [ "$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out")" -ge 2 ]; do
+i=0; until [ "$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)" -gt "$wbefore" ]; do
   [ $i -ge 100 ] && fail "the second window never mapped"; sleep 0.1; i=$((i + 1)); done
-echo "ok: 6. ⌘N opened a second window with its own shell ($(grep 'Terminal: window: ' "$log" | tail -1 | sed 's/.*(pid \([0-9]*\)).*/pid \1/'))"
+echo "ok: 9. ⌘N opened a second window with its own shell ($(grep 'Terminal: window: ' "$log" | tail -1 | sed 's/.*(pid \([0-9]*\)).*/pid \1/'))"
 
-# ------------------------------------------------------------ 7. exit
+# ------------------------------------------------------------ 10. exit
 sleep 0.8
 b=$(count 'Terminal: the shell exited')
 type_line 'exit'
@@ -199,6 +289,6 @@ i=0; while kill -0 "$term_pid" 2>/dev/null; do
   [ $i -ge 50 ] && fail "the last window's shell exited and Terminal did not quit"; sleep 0.1; i=$((i + 1)); done
 grep -q 'Terminal: the last window closed' "$log" || fail "Terminal quit without closing its last window"
 term_pid=""
-echo "ok: 7. exit closed each window, and the last one quit Terminal"
+echo "ok: 10. exit closed each window, and the last one quit Terminal"
 
 echo "all green (Terminal: a shell in a window)."

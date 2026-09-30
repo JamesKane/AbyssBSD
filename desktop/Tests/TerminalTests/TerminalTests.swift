@@ -213,4 +213,48 @@ final class TerminalTests: XCTestCase {
         XCTAssertEqual(key(KeyEncoder.Sym.f1 + 4), "\u{1B}[15~", "F5")
         XCTAssertEqual(key(KeyEncoder.Sym.f1 + 11, "", .shift), "\u{1B}[24;2~", "Shift-F12")
     }
+
+    // MARK: Selection, scrollback, paste (P15.4c)
+
+    /// A line longer than the terminal wraps; copied, it is one line again —
+    /// and a line that ended in a newline keeps it, without trailing spaces.
+    func testACopiedWrappedLineIsOneLine() {
+        var sc = Screen(rows: 4, cols: 10)
+        sc.feed("abcdefghijKLMNO\r\nnext   \r\n")
+        XCTAssertEqual(sc.lines, ["abcdefghij", "KLMNO", "next", ""])
+        XCTAssertTrue(sc.cell(0, 9).wrapsToNext)
+        XCTAssertFalse(sc.cell(1, 9).wrapsToNext)
+        let t = sc.text(from: TextPoint(line: 0, col: 0), to: TextPoint(line: 2, col: 9))
+        XCTAssertEqual(t, "abcdefghijKLMNO\nnext")
+        XCTAssertEqual(sc.text(from: TextPoint(line: 1, col: 3), to: TextPoint(line: 0, col: 8)), "ijKLMN",
+                       "either order; a range inside a wrapped line")
+    }
+
+    func testSelectionReachesIntoScrollback() {
+        var sc = Screen(rows: 2, cols: 8)
+        sc.feed("one\r\ntwo\r\nthree\r\nfour")
+        XCTAssertEqual(sc.totalLines, 4)
+        XCTAssertEqual(sc.text(from: TextPoint(line: 0, col: 0), to: TextPoint(line: 3, col: 7)), "one\ntwo\nthree\nfour")
+        sc.clearScrollback()
+        XCTAssertEqual(sc.totalLines, 2)
+        XCTAssertEqual(sc.lines, ["three", "four"], "clearing history leaves the screen")
+    }
+
+    func testDoubleAndTripleClickRanges() {
+        var sc = Screen(rows: 2, cols: 30)
+        sc.feed("ls /usr/local/bin; echo ok")
+        let (a, b) = sc.wordRange(at: TextPoint(line: 0, col: 8))
+        XCTAssertEqual(sc.text(from: a, to: b), "/usr/local/bin", "a path is one word")
+        let (c, d) = sc.wordRange(at: TextPoint(line: 0, col: 17))
+        XCTAssertEqual(c, d, "a semicolon is a word of its own")
+        let (e, f) = sc.lineRange(at: TextPoint(line: 0, col: 3))
+        XCTAssertEqual(sc.text(from: e, to: f), "ls /usr/local/bin; echo ok")
+    }
+
+    func testPasteIsReturnsAndBracketedWhenAsked() {
+        XCTAssertEqual(Paste.bytes("a\nb\r\nc", bracketed: false), Array("a\rb\rc".utf8))
+        XCTAssertEqual(String(decoding: Paste.bytes("ls\n", bracketed: true), as: UTF8.self), "\u{1B}[200~ls\r\u{1B}[201~")
+        XCTAssertEqual(String(decoding: Paste.bytes("x\u{1B}[201~rm -rf ~\n", bracketed: true), as: UTF8.self),
+                       "\u{1B}[200~xrm -rf ~\r\u{1B}[201~", "an end marker inside the text cannot end the bracket")
+    }
 }

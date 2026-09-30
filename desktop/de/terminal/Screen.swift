@@ -32,6 +32,11 @@ public struct CellAttributes: Equatable, Hashable, Sendable {
 public struct Cell: Equatable, Sendable {
     public var scalar: Unicode.Scalar
     public var attrs: CellAttributes
+    /// On a row's last cell: the text went on to the next row because it did
+    /// not fit, not because of a newline (P15.4c). Kept in the cell so every
+    /// line move — scrolling, insert, delete, scrollback — carries it, and
+    /// erasing or overwriting the cell clears it, as xterm's flag behaves.
+    public var wrapsToNext = false
     public init(_ scalar: Unicode.Scalar = " ", _ attrs: CellAttributes = CellAttributes()) {
         self.scalar = scalar; self.attrs = attrs
     }
@@ -179,6 +184,8 @@ public struct Screen: Sendable {
         var s = scalar
         if (shifted ? g1Graphics : g0Graphics), let g = Screen.decGraphics[s] { s = g }
         if pendingWrap && autowrap {
+            let r = cursorRow, last = cols - 1
+            modifyGrid { g in g[r][last].wrapsToNext = true }
             cursorCol = 0
             lineFeed()
         }

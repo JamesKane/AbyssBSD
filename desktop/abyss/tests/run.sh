@@ -332,8 +332,10 @@ if [ "$live" -eq 1 ]; then
   # VT parser and the screen, asserted on with no display — and vi's edit on disk.
   echo "== programs on a pty =="
   quiet "$root/abyss/tests/live-vt.sh"
-  # Terminal (P15.4b): a shell in a window on undertow — typed and drawn,
-  # Ctrl-C, vi with arrow keys, zoom resizing the shell, ⌘N, exit.
+  # Terminal (P15.4b–c): a shell in a window on undertow — typed and drawn,
+  # Ctrl-C, vi with arrow keys, zoom resizing the shell, the scrollback, a
+  # wrapped line copied and pasted into another Terminal process intact,
+  # Clear Scrollback, ⌘N, exit.
   echo "== Terminal =="
   quiet "$root/abyss/tests/live-terminal.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;

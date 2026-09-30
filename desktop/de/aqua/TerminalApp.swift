@@ -35,6 +35,10 @@ public enum TerminalVerb {
     public static let newWindow = "shell.new-window"
     public static let close = "window.close"
     public static let minimize = "window.minimize"
+    public static let copy = "edit.copy"
+    public static let paste = "edit.paste"
+    public static let selectAll = "edit.select-all"
+    public static let clearScrollback = "edit.clear-scrollback"
 }
 
 public func terminalMenuBar() -> MenuBarModel {
@@ -46,6 +50,13 @@ public func terminalMenuBar() -> MenuBarModel {
             c(TerminalVerb.about, "About Terminal", nil, "Show Terminal's version."),
             .separator,
             c(TerminalVerb.quit, "Quit Terminal", .cmd("q"), "Close every Terminal window."),
+        ]),
+        Menu("Edit", [
+            c(TerminalVerb.copy, "Copy", .cmd("c"), "Copy the selected text."),
+            c(TerminalVerb.paste, "Paste", .cmd("v"), "Type the clipboard's text into the shell."),
+            c(TerminalVerb.selectAll, "Select All", .cmd("a"), "Select everything, history too."),
+            .separator,
+            c(TerminalVerb.clearScrollback, "Clear Scrollback", .cmd("k"), "Forget the lines scrolled away."),
         ]),
         Menu("Shell", [
             c(TerminalVerb.newWindow, "New Window", .cmd("n"), "Open another window with a new shell."),
@@ -68,6 +79,8 @@ public enum TerminalStyle {
     public static let foreground = Color(hex: 0x000000)
     public static let background = Color(hex: 0xFFFFFF)
     public static let caret = Color(hex: 0x3875D7)
+    /// Jaguar's text highlight.
+    public static let selection = Color(hex: 0xB5D5FF)
 
     /// xterm's sixteen, then its 6×6×6 cube and 24 greys.
     public static func color(_ c: TermColor, default d: Color) -> Color {
@@ -110,7 +123,8 @@ public func terminalGridRect(w: Double, h: Double) -> Rect {
 /// Paint a screen: chrome, cells, caret. Pure but for cairo, so the golden
 /// scene can draw one from a fed `Screen`.
 public func paintTerminal(_ cr: OpaquePointer, w: Double, h: Double, title: String,
-                          screen: Screen, caretOn: Bool, focused: Bool) {
+                          screen: Screen, caretOn: Bool, focused: Bool,
+                          viewOffset: Int = 0, selection: (TextPoint, TextPoint)? = nil) {
     paintWindowChrome(cr, w: w, h: h, title: title)
     let grid = terminalGridRect(w: w, h: h)
     Draw.setColor(cr, TerminalStyle.background)
@@ -131,16 +145,28 @@ public func paintTerminal(_ cr: OpaquePointer, w: Double, h: Double, title: Stri
         return (fg, bg)
     }
     let rows = min(screen.rows, Int(grid.h / ch)), cols = min(screen.cols, Int(grid.w / cw))
+    // The first line shown: the screen's first, or that many lines back into
+    // the scrollback (P15.4c).
+    let top = screen.scrollback.count - min(max(0, viewOffset), screen.scrollback.count)
+    let sel = selection.map { $0.0 <= $0.1 ? ($0.0, $0.1) : ($0.1, $0.0) }
+    func selected(_ line: Int, _ col: Int) -> Bool {
+        guard let (a, b) = sel else { return false }
+        let p = TextPoint(line: line, col: col)
+        return a <= p && p <= b
+    }
     for r in 0..<rows {
-        let line = screen.grid[r]
+        let absolute = top + r
+        var line = screen.line(absolute)
+        if line.count < cols { line += Array(repeating: Cell(), count: cols - line.count) }
         let y = grid.y + Double(r) * ch
         var c = 0
         while c < cols {
             // A run: the cells from here with the same attributes.
-            let attrs = line[c].attrs
+            let attrs = line[c].attrs, isSelected = selected(absolute, c)
             var end = c + 1
-            while end < cols && line[end].attrs == attrs { end += 1 }
-            let (fg, bg) = colors(attrs)
+            while end < cols && line[end].attrs == attrs && selected(absolute, end) == isSelected { end += 1 }
+            var (fg, bg) = colors(attrs)
+            if isSelected { bg = TerminalStyle.selection; if attrs.inverse { fg = TerminalStyle.foreground } }
             let x = grid.x + Double(c) * cw
             if bg != TerminalStyle.background {
                 Draw.setColor(cr, bg)
@@ -172,7 +198,7 @@ public func paintTerminal(_ cr: OpaquePointer, w: Double, h: Double, title: Stri
 
     // The caret: a block when the window has focus and the blink is on, an
     // outline when it does not — where the next character goes.
-    if screen.cursorVisible, screen.cursorRow < rows, screen.cursorCol < cols {
+    if viewOffset == 0, screen.cursorVisible, screen.cursorRow < rows, screen.cursorCol < cols {
         let x = grid.x + Double(screen.cursorCol) * cw, y = grid.y + Double(screen.cursorRow) * ch
         if focused {
             if caretOn {
@@ -237,6 +263,13 @@ final class TerminalWindow: WindowDelegate {
     private var currentTitle = ""
     /// The window size last said (`size`, and `chrome` with ABYSS_TERMINAL_DUMP).
     private var announced: (Int, Int) = (0, 0)
+    /// How many lines back into the scrollback the view is (0: the live screen).
+    private(set) var viewOffset = 0
+    /// The selection: where the press was, and where the pointer is now.
+    private(set) var selection: (TextPoint, TextPoint)?
+    private var selecting = false
+    private var lastPress: (at: UInt64, point: TextPoint, count: Int)?
+    private var gridRect = Rect(0, 0, 0, 0)
 
     init?(display: Display, app: TerminalApp, command: [String]) {
         self.display = display
@@ -278,7 +311,13 @@ final class TerminalWindow: WindowDelegate {
     private func ptyReadable() {
         guard let bytes = pty.read() else { shellExited(); return }
         guard !bytes.isEmpty else { return }
+        let before = screen.scrollback.count
         screen.feed(bytes)
+        // Scrolled back, the view stays on the lines being read while new
+        // ones arrive below.
+        if viewOffset > 0 {
+            viewOffset = min(screen.scrollback.count, viewOffset + max(0, screen.scrollback.count - before))
+        }
         if !screen.responses.isEmpty { pty.write(screen.responses); screen.responses = [] }
         caretOn = true
         updateTitle()
@@ -322,8 +361,10 @@ final class TerminalWindow: WindowDelegate {
         // The window's size is the shell's: rows and columns that fit.
         let (cw, ch) = terminalCellSize()
         let g = terminalGridRect(w: w, h: h)
+        gridRect = g
         let cols = max(2, Int(g.w / cw)), rows = max(1, Int(g.h / ch))
         if rows != screen.rows || cols != screen.cols {
+            selection = nil; viewOffset = 0
             screen.resize(rows: rows, cols: cols)
             pty.resize(rows: rows, cols: cols)
             updateTitle()
@@ -349,33 +390,146 @@ final class TerminalWindow: WindowDelegate {
         cairo_save(cr); cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR); cairo_paint(cr); cairo_restore(cr)
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         paintTerminal(cr, w: w, h: h, title: currentTitle, screen: screen,
-                      caretOn: caretOn, focused: window?.isActivated ?? true)
+                      caretOn: caretOn, focused: window?.isActivated ?? true,
+                      viewOffset: viewOffset, selection: selection)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
     }
 
-    func pointerMoved(x: Double, y: Double) { pointerX = x; pointerY = y }
+    func pointerMoved(x: Double, y: Double) {
+        pointerX = x; pointerY = y
+        guard selecting, let (a, _) = selection else { return }
+        let p = point(x, y)
+        if lastPress?.count == 2 {
+            // A double-click drag grows by words.
+            let (s0, e0) = screen.wordRange(at: a), (s1, e1) = screen.wordRange(at: p)
+            selection = p < a ? (e0, s1) : (s0, e1)
+        } else {
+            selection = (a, p)
+        }
+        window?.setNeedsDisplay()
+    }
+
+    /// The text position under a window point: its row in the view, its column.
+    private func point(_ x: Double, _ y: Double) -> TextPoint {
+        let (cw, ch) = terminalCellSize()
+        let col = min(max(0, Int((x - gridRect.x) / cw)), screen.cols - 1)
+        let row = min(max(0, Int((y - gridRect.y) / ch)), screen.rows - 1)
+        let top = screen.scrollback.count - viewOffset
+        return TextPoint(line: top + row, col: col)
+    }
 
     func pointerButton(_ button: UInt32, pressed: Bool) {
-        guard pressed, let w = window else { return }
+        guard let w = window else { return }
+        if !pressed {
+            if dump, selecting, let (a, b) = selection {
+                TerminalApp.log("selection \(a.line):\(a.col)-\(b.line):\(b.col) (\(screen.text(from: a, to: b).unicodeScalars.count) characters)")
+            }
+            if selecting, let (a, b) = selection, a == b, lastPress?.count == 1 { selection = nil }
+            selecting = false
+            window?.setNeedsDisplay()
+            return
+        }
         let size = w.size
         switch windowChromeHit(x: pointerX, y: pointerY, w: Double(size.width), h: Double(size.height)) {
-        case .close: close()
-        case .minimize: _ = w.minimize()
-        case .zoom: w.setMaximized(!w.isMaximized)
-        case .depth: _ = w.lower()
-        case .title: w.beginMove()
-        case .resize(let e): w.beginResize(e)
+        case .close: close(); return
+        case .minimize: _ = w.minimize(); return
+        case .zoom: w.setMaximized(!w.isMaximized); return
+        case .depth: _ = w.lower(); return
+        case .title: w.beginMove(); return
+        case .resize(let e): w.beginResize(e); return
         case .pill, .content: break
         }
+        guard button == 0x110 else { return }                   // BTN_LEFT
+        // Clicks within half a second on the same place count up: a word, a line.
+        let p = point(pointerX, pointerY)
+        let now = TerminalApp.nowMs()
+        var count = 1
+        if let last = lastPress, now &- last.at < 500, last.point.line == p.line, abs(last.point.col - p.col) <= 1 {
+            count = last.count % 3 + 1
+        }
+        lastPress = (now, p, count)
+        switch count {
+        case 2: selection = screen.wordRange(at: p)
+        case 3: selection = screen.lineRange(at: p)
+        default: selection = (p, p)
+        }
+        selecting = true
+        if count > 1, dump, let (a, b) = selection {
+            TerminalApp.log("selected \(count == 2 ? "word" : "line") |\(screen.text(from: a, to: b))|")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    func pointerAxis(_ axis: UInt32, value: Double) {
+        // Vertical only, and only where there is history: the alternate screen
+        // (vi, less) has none.
+        guard axis == 0, !screen.usingAlternate else { return }
+        let lines = Int((value / 10 * 3).rounded())
+        guard lines != 0 else { return }
+        scrollView(to: viewOffset - lines)
+    }
+
+    /// Move the view back into the scrollback (or toward the live screen).
+    func scrollView(to offset: Int) {
+        let n = min(max(0, offset), screen.scrollback.count)
+        guard n != viewOffset else { return }
+        viewOffset = n
+        if dump {
+            let top = screen.scrollback.count - n
+            let text = String(String.UnicodeScalarView(screen.line(top).map(\.scalar)))
+            TerminalApp.log("view back \(n) top |\(text.trimmingSpacesAtEnd())|")
+        }
+        window?.setNeedsDisplay()
+    }
+
+    // MARK: Edit
+
+    var selectedText: String? {
+        guard let (a, b) = selection else { return nil }
+        let t = screen.text(from: a, to: b)
+        return t.isEmpty ? nil : t
+    }
+
+    func selectAll() {
+        let last = max(0, screen.totalLines - 1)
+        selection = (TextPoint(line: 0, col: 0), TextPoint(line: last, col: max(0, screen.line(last).count - 1)))
+        window?.setNeedsDisplay()
+    }
+
+    func paste(_ text: String) {
+        pty.write(Paste.bytes(text, bracketed: screen.bracketedPaste))
+        scrollView(to: 0)
+        if dump { TerminalApp.log("pasted \(text.unicodeScalars.count) characters\(screen.bracketedPaste ? " (bracketed)" : "")") }
+    }
+
+    func clearScrollback() {
+        screen.clearScrollback()
+        viewOffset = 0; selection = nil
+        TerminalApp.log("scrollback cleared")
+        window?.setNeedsDisplay()
     }
 
     func keyEvent(_ event: KeyEvent) {
         guard event.pressed else { return }
         if event.modifiers.contains(.command) {
-            if let press = keyEquivalent(event), let verb = TerminalApp.menuBar.verb(for: press) {
-                _ = app?.perform(verb, in: self)
+            if let press = keyEquivalent(event), let verb = TerminalApp.menuBar.verb(for: press),
+               case .refused(let why)? = app?.perform(verb, in: self) {
+                TerminalApp.log("\(verb) refused: \(why)")
             }
             return
+        }
+        // Mac Terminal: Page Up/Down, Home and End move through the history;
+        // with Shift they go to the program. Where there is no history (the
+        // alternate screen: vi, less) they always go to the program.
+        if !screen.usingAlternate, !event.modifiers.contains(.shift) {
+            let page = max(1, screen.rows - 1)
+            switch event.keysym {
+            case KeySym.pageUp: scrollView(to: viewOffset + page); return
+            case KeySym.pageDown: scrollView(to: viewOffset - page); return
+            case KeySym.home: scrollView(to: screen.scrollback.count); return
+            case KeySym.end: scrollView(to: 0); return
+            default: break
+            }
         }
         var mods: KeyEncoder.Modifiers = []
         if event.modifiers.contains(.shift) { mods.insert(.shift) }
@@ -389,6 +543,7 @@ final class TerminalWindow: WindowDelegate {
         }
         guard !bytes.isEmpty else { return }
         pty.write(bytes)
+        scrollView(to: 0)                                        // typing returns to the live screen
         caretOn = true
         window?.setNeedsDisplay()
     }
@@ -407,6 +562,10 @@ public final class TerminalApp: MenuProvider {
     private var blinkTimer: Int32 = -1
     private let command: [String]
     public var onQuit: () -> Void = { exit(0) }
+    /// What this process last copied. The clipboard will not read back a
+    /// selection its own process owns (the answer would have to come from the
+    /// process that is waiting for it), so a paste of our own copy uses this.
+    private var lastCopied: String?
 
     public static let menuBar = terminalMenuBar()
 
@@ -458,8 +617,35 @@ public final class TerminalApp: MenuProvider {
         for w in windows { w.blink() }
     }
 
+    static func nowMs() -> UInt64 {
+        var ts = timespec()
+        clock_gettime(CLOCK_MONOTONIC, &ts)
+        return UInt64(ts.tv_sec) &* 1000 &+ UInt64(ts.tv_nsec) / 1_000_000
+    }
+
+    private func clipboardText() -> String? {
+        guard let clip = display.clipboard else { return lastCopied }
+        if clip.ownsSelection { return lastCopied }
+        return clip.readText()
+    }
+
     func perform(_ verb: String, in w: TerminalWindow?) -> CommandResult {
+        let front = w ?? windows.last
         switch verb {
+        case TerminalVerb.copy:
+            guard let t = front?.selectedText else { return .refused("nothing is selected") }
+            guard display.clipboard?.writeText(t) == true else { return .refused("the clipboard would not take it") }
+            lastCopied = t
+            TerminalApp.log("copied \(t.unicodeScalars.count) characters")
+            return .ok("")
+        case TerminalVerb.paste:
+            guard let f = front, let t = clipboardText(), !t.isEmpty else { return .refused("the clipboard holds no text") }
+            f.paste(t)
+            return .ok("")
+        case TerminalVerb.selectAll:
+            front?.selectAll(); return .ok("")
+        case TerminalVerb.clearScrollback:
+            front?.clearScrollback(); return .ok("")
         case TerminalVerb.quit: onQuit(); return .ok("")
         case TerminalVerb.newWindow: return openWindow() ? .ok("") : .refused("no new shell could be started")
         case TerminalVerb.close:
@@ -480,7 +666,14 @@ public final class TerminalApp: MenuProvider {
         switch command.verb {
         case TerminalVerb.about: return .disabled("Terminal has no About box yet")
         case TerminalVerb.quit, TerminalVerb.newWindow: return .enabled
-        case TerminalVerb.close, TerminalVerb.minimize: return windows.isEmpty ? .disabled("no window") : .enabled
+        case TerminalVerb.close, TerminalVerb.minimize, TerminalVerb.selectAll, TerminalVerb.clearScrollback:
+            return windows.isEmpty ? .disabled("no window") : .enabled
+        case TerminalVerb.copy:
+            let front = windows.first { $0.window?.isActivated ?? false } ?? windows.last
+            return front?.selectedText == nil ? .disabled("nothing is selected") : .enabled
+        case TerminalVerb.paste:
+            let has = display.clipboard?.offers([ClipboardMIME.text]) == true || lastCopied != nil
+            return has ? .enabled : .disabled("the clipboard holds no text")
         default: return .disabled("Terminal has no verb \(command.verb)")
         }
     }
@@ -489,5 +682,13 @@ public final class TerminalApp: MenuProvider {
         if case .disabled(let why) = menuValidate(command) { return .refused(why) }
         let front = windows.first { $0.window?.isActivated ?? false }
         return perform(command.verb, in: front)
+    }
+}
+
+extension String {
+    func trimmingSpacesAtEnd() -> String {
+        var s = self
+        while s.last == " " { s.removeLast() }
+        return s
     }
 }
