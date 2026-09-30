@@ -139,12 +139,12 @@ Before this work, FreeBSD/arm64 only ever executed WFI.
   was allowed to power down and there were 0 stalls in 280 logins. The
   shipped code still keeps CPU 0 awake.
 
-**Enabling it** (both sysctls; it's off by default):
-
-```
-kern.eventtimer.timer="ARM MMIO Timer"
-hw.acpi.cpu.cx_lowest=C3
-```
+**Enabling it:** nothing to do. The `balanced` power profile (below) sets
+`hw.acpi.cpu.cx_lowest=C3`. Since `98360d8bfc`, the kernel then moves to an
+event timer that keeps running in C3 by itself, and back when C3 is no
+longer allowed (`cpu_c3_timer()` in `kern_clocksource.c`, called by
+`acpi_cpu`). A timer named in `kern.eventtimer.timer` is left alone, so
+don't set it.
 
 **Results:**
 - Idle cores spend 85–99% of their time in C3.
@@ -160,6 +160,37 @@ hw.acpi.cpu.cx_lowest=C3
   Mapping it yourself first double-maps it to the wrong SPI.
 - `cpuset -x` takes INTRNG's `ie_irq`, not dmesg's "irq N", so rebinding
   interrupts from the shell is awkward.
+
+## Power profiles (`rc.d/power_profile`)
+
+The user's choice, as on Linux desktops (power-profiles-daemon): set
+`power_profile` in `rc.conf`, then run `service power_profile start` to
+apply it now. It's also applied at boot. The default is `balanced`.
+
+| | power-saver | balanced | performance |
+|---|---|---|---|
+| CPU idle (`cx_lowest`) | Cmax | C3 | C1 |
+| powerd (when `powerd_flags` is empty) | adaptive | hiadaptive (adaptive on battery) | maximum (hiadaptive on battery) |
+| GPU (msm hook) | devfreq | devfreq | pinned at 690 MHz |
+
+- Hooks: executables in `/etc/power_profile.d` and
+  `/usr/local/etc/power_profile.d` run with the profile's name. The
+  drm-msm-kmod port installs `msm` there; it sets `hw.msm.devfreq`, and
+  its kernel environment for when msm loads later.
+- While a profile is set, AC-line events leave it alone.
+  `power_profile=NONE` brings back FreeBSD's `performance_*`/`economy_*`
+  behaviour.
+- glmark2 at 1080p without pinned clocks (refract / effect2d / texture /
+  pulsar), two runs each:
+  - power-saver 298–318 / 1952–2155 / 2342–2492 / 2204–2220;
+  - balanced 333–358 / 2807–2827 / 4096–4288 / 3939–4002;
+  - performance 368–374 / 3214–3228 / 4402–4484 / 4164–4183.
+
+  So balanced is within 5–13% of performance. powerd's old default
+  (adaptive, now power-saver) was 20–47% behind.
+- The desktop's Energy Saver pane should offer the three choices through
+  `abyss-settings` (`sysrc power_profile=…` then
+  `service power_profile start`). See the desktop BACKLOG.
 
 **Ideas raised for later:** energy-aware scheduling (ULE has none), and a
 machine-independent "stay awake" CPU mask in `kern_clocksource` to replace

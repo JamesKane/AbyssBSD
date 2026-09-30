@@ -10,7 +10,7 @@ directory records what we found, so nobody has to find it again.
 | [firmware-acpi-boot.md](firmware-acpi-boot.md) | UEFI, ACPI tables, boot media, root on NVMe, console, recovery |
 | [ethernet-tc956x.md](ethernet-tc956x.md) | the `tcx(4)` driver and the chip |
 | [usb.md](usb.md) | xHCI on ACPI, USB-C role-switch devices, the DWC3 throughput fix |
-| [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, GPU devfreq, `_LPI` deep idle |
+| [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, GPU devfreq, `_LPI` deep idle, power profiles |
 | [gpu-display.md](gpu-display.md) | msmfb (display KMS), sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
 | [lessons.md](lessons.md) | **read first**: things that reset the SoC, debugging method, gotchas |
 
@@ -42,7 +42,8 @@ directory records what we found, so nobody has to find it again.
 | USB-C ×2 (host) | Works at 112 MB/s; SuperSpeed only in one plug orientation | `generic_xhci_acpi.c` |
 | Thermal sensors (46) | Works; critical-temperature shutdown untested | `sys/dev/qcom_tsens` |
 | CPU frequency, 2 domains | Works; per-domain powerd | `sys/dev/qcom_epss`, `usr.sbin/powerd` |
-| Deep idle (PSCI power-down, C3) | Works, enabled by 2 sysctls | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c` |
+| Deep idle (PSCI power-down, C3) | Works, on by default (`balanced` power profile; the kernel picks the always-on timer) | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c`, `kern_clocksource.c` |
+| Power profiles (power-saver/balanced/performance) | Works: CPU idle, powerd mode, GPU clock; live switch | `libexec/rc/rc.d/power_profile` |
 | Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480); sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |

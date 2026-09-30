@@ -37,6 +37,7 @@ or more.
 | ~~P14.8~~ | ✅ **2026-09-28. Energy** — `energy.ini` (`EnergyPrefs`, for Phase 16), Energy Saver pane (sleep sliders, powerd via the helper, battery), `live-energy-pane.sh` | S | | done, both platforms; the battery row waits for metal |
 | ~~P14.5~~ | ✅ **2026-09-28. Network, Wi-Fi** — `wtap` backported to the guest (upstream d4de0a69a92) with three panic fixes; join/forget through the helper by rc's own path; the passphrase never leaves the pane; Wi-Fi on the Network pane (HANDOFF §2.80; `live-wifi*.sh`) | M | | done: the join verified in the harness |
 | ~~P14.9~~ | ✅ **2026-09-29. The phase gate** — `--live` 404 s, `--vm --live --full` 1423 s, green; **Phase 14 complete** (HANDOFF §2.81) | S | | done |
+| P14.8b | **Energy Saver: power profile** — a three-way choice, Power Saver / Balanced / Performance, as on GNOME and KDE. The base system has it since src `cb82fd75a7`: an `EnergyPlan` step `sysrc power_profile=power-saver\|balanced\|performance`, then `service power_profile start` to apply it live (CPU idle depth, powerd mode, and hooks such as the GPU's clock). The default is `balanced`. Read the current profile with `service power_profile status` or `sysrc -n power_profile`. See docs/boards/radxa-dragon-q8b/power-thermal-idle.md | S | the knob exists; only the pane is missing | `live-energy-pane.sh` |
 
 ---
 
