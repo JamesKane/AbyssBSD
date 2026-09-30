@@ -585,6 +585,27 @@ final class AquaTests: XCTestCase {
                        "an application not installed has no tile but keeps its place in the list")
     }
 
+    /// Recent Items (P15.2c): most recent first, once each, ten at most; kept
+    /// in the pool where the Finder, the Dock and the bar all reach it.
+    func testRecentItemsAreTheLastTenApplicationsOpened() {
+        XCTAssertEqual(RecentItems.adding("/A/K.app", to: ["/A/F.app", "/A/K.app", "/A/T.app"]),
+                       ["/A/K.app", "/A/F.app", "/A/T.app"], "opened again: moved to the top, not doubled")
+        let many = (0..<10).map { "/A/\($0).app" }
+        XCTAssertEqual(RecentItems.adding("/A/new.app", to: many).count, 10)
+        XCTAssertEqual(RecentItems.adding("/A/new.app", to: many).last, "/A/8.app")
+
+        XCTAssertEqual(RecentItems.submenu(["/Applications/KCalc.app", "/u/Applications/Firefox Web Browser.app"])
+                        .commands.map(\.title), ["KCalc", "Firefox Web Browser", "Clear Menu"])
+        XCTAssertEqual(RecentItems.submenu([]).commands.map(\.verb), ["system.recent.clear"])
+
+        let dir = makeScratchDir("recent")
+        defer { removeTree(dir) }
+        let list = (0..<12).map { "/A/\($0).app" }
+        RecentItems.save(list, configDir: dir)
+        XCTAssertEqual(RecentItems.load(configDir: dir), Array(list.prefix(10)), "read back in order, ten kept")
+        XCTAssertEqual(RecentItems.load(configDir: dir + "/nowhere"), [])
+    }
+
     func testTheDesktopsMenuIsItsOwnFewCommands() {
         XCTAssertEqual(Wallpaper.contextMenu.commands.map(\.verb),
                        ["desktop.new-folder", "desktop.change-background"])

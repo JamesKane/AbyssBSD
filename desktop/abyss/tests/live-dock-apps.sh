@@ -19,7 +19,10 @@
 #   8. a bundle dragged out of the Finder onto a tile is pinned before that
 #      tile, and saved;
 #   9. a document dropped on an application's tile opens with it (the bundle's
-#      launcher is given the file).
+#      launcher is given the file);
+#  10. the Apple menu's Recent Items lists what the Dock opened, choosing it
+#      opens it again (on the ordinary display, from the privileged bar), and
+#      Clear Menu empties it.
 #
 # Usage: abyss/tests/live-dock-apps.sh
 set -eu
@@ -37,7 +40,7 @@ command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, 
 work=$(mktemp -d /tmp/abyss-dockapps.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
-  for p in ${vp_pid:-} ${finder_pid:-} ${dock_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  for p in ${vp_pid:-} ${bar_pid:-} ${finder_pid:-} ${dock_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
   pkill -f "$work" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -51,12 +54,16 @@ fail() {  # to stderr: it may run where stdout is captured or thrown away
 
 # ------------------------------------------------------------ the bundle
 home="$work/home"; mkdir -p "$home" "$work/entries" "$work/cfg"
+# The program notes the display each copy was started on: the bar launches on
+# the privileged socket's behalf, and must never hand a child that socket.
+printf '#!/bin/sh\necho "$WAYLAND_DISPLAY" >> "%s/displays"\nAQUA_SCENE=window exec "%s" "$@"\n' "$work" "$aqua" > "$work/aquawin"
+chmod +x "$work/aquawin"
 cat > "$work/entries/org.abyssbsd.window.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Aqua Window
 StartupWMClass=org.abyssbsd.aquademo
-Exec=env AQUA_SCENE=window "$aqua"
+Exec="$work/aquawin" %F
 EOF
 "$appgen" --from "$work/entries" --to "$home/Applications" > "$work/gen.out" 2>&1 || fail "abyss-appgen: $(cat "$work/gen.out")"
 printf '[dock]\napps = finder; Aqua Window; sysprefs\n' > "$work/cfg/dock.ini"
@@ -65,7 +72,9 @@ printf '[dock]\napps = finder; Aqua Window; sysprefs\n' > "$work/cfg/dock.ini"
 # `--config-dir`: no window position remembered from another run moves the
 # Finder out from under claim 8's aim.
 mkdir -p "$work/ut-cfg"
+priv="abyss-dockapps-priv-$$"
 env -u WAYLAND_DISPLAY "$undertow" run --frames 0 --width 800 --height 600 --config-dir "$work/ut-cfg" \
+    --privileged-socket "$priv" \
     > "$work/ut.out" 2> "$work/ut.err" &
 ut_pid=$!
 wd=""; i=0
@@ -224,5 +233,53 @@ grep -q "Dock: opened $home/Applications/Note.txt with Aqua Window" "$work/dock.
 i=0; until [ "$(grep -c '^window org.abyssbsd.aquademo/' "$work/ut.out" || true)" -gt "$w" ]; do
   [ $i -ge 150 ] && fail "no window mapped for the opened document"; sleep 0.1; i=$((i + 1)); done
 echo "ok: 9. a document dropped on the application's tile opened with it"
+
+# ------------------------------------------------------------ 10. Recent Items
+# The bar, on the privileged socket, launching onto the ordinary one.
+env WAYLAND_DISPLAY="$priv" HOME="$home" ABYSS_CONFIG_DIR="$work/cfg" AQUA_SCENE=menubar \
+    ABYSS_APP_WAYLAND_DISPLAY="$wd" "$aqua" > "$work/bar.log" 2>&1 &
+bar_pid=$!
+i=0; until grep -q 'MenuBar: titles ' "$work/bar.log" 2>/dev/null; do
+  [ $i -ge 80 ] && fail "the bar never said where its titles are: $(tail -3 "$work/bar.log")"; sleep 0.25; i=$((i + 1)); done
+grep -q "^0 *= *$home/Applications/Aqua Window.app$" "$work/cfg/recent.ini" 2>/dev/null \
+  || fail "the Dock's launches were not recorded: $(cat "$work/cfg/recent.ini" 2>&1)"
+title_at() { grep -F 'MenuBar: titles ' "$work/bar.log" | tail -1 | tr ' ' '\n' | grep "^$1@" | head -1 | cut -d@ -f2 | tr ',' ' '; }
+item_line() {  # item_line MENU TITLE — the row TITLE after the last "opened MENU"
+  awk -v m="MenuBar: opened $1" 'index($0, m) { buf = ""; on = 1; next }
+       on && /MenuBar: item / { buf = buf $0 "\n"; next }
+       on { on = 0 } END { printf "%s", buf }' "$work/bar.log" | grep -F "'$2'" | tail -1
+}
+xy_of() { printf '%s' "$1" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p"; }
+bar_count() { grep -c -- "$1" "$work/bar.log" 2>/dev/null || true; }
+recent_open() {  # open System ▸ Recent Items
+  n=$(bar_count 'MenuBar: opened System$'); s=$(bar_count 'MenuBar: opened submenu System > Recent Items')
+  printf 'm %s\np\nr\n' "$(title_at System)" >&3; sleep 0.6
+  [ "$(bar_count 'MenuBar: opened System$')" -gt "$n" ] || fail "the System menu did not open"
+  r=$(item_line System "Recent Items")
+  case "$r" in *" enabled submenu") ;; *) fail "Recent Items is not an enabled submenu: '$r'" ;; esac
+  printf 'm %s\n' "$(xy_of "$r")" >&3; sleep 0.6
+  [ "$(bar_count 'MenuBar: opened submenu System > Recent Items')" -gt "$s" ] || fail "hovering Recent Items opened nothing"
+  ry=$(xy_of "$r"); ry=${ry#* }
+}
+choose_recent() {  # choose_recent TITLE — across level with the row, then down to TITLE
+  row=$(item_line "submenu System > Recent Items" "$1")
+  [ -n "$row" ] || fail "Recent Items has no '$1': $(grep 'MenuBar: item' "$work/bar.log" | tail -4)"
+  set -- $(xy_of "$row")
+  printf 'm %s %s\n' "$1" "$ry" >&3; sleep 0.3
+  printf 'm %s %s\np\nr\n' "$1" "$2" >&3; sleep 0.8
+}
+recent_open
+w=$(grep -c '^window org.abyssbsd.aquademo/' "$work/ut.out" || true)
+choose_recent "Aqua Window"
+grep -q "chose System > Recent Items > Aqua Window (system.recent.0) → ok $home/Applications/Aqua Window.app" "$work/bar.log" \
+  || fail "choosing Aqua Window: $(grep 'chose' "$work/bar.log" | tail -1)"
+i=0; until [ "$(grep -c '^window org.abyssbsd.aquademo/' "$work/ut.out" || true)" -gt "$w" ]; do
+  [ $i -ge 150 ] && fail "Recent Items launched nothing that mapped"; sleep 0.1; i=$((i + 1)); done
+recent_open
+choose_recent "Clear Menu"
+[ "$(tail -1 "$work/displays")" = "$wd" ] || fail "Recent Items launched on '$(tail -1 "$work/displays")', not the ordinary display $wd"
+grep -q 'chose System > Recent Items > Clear Menu (system.recent.clear) → ok' "$work/bar.log" || fail "Clear Menu did not run"
+grep -q '=' "$work/cfg/recent.ini" 2>/dev/null && fail "Clear Menu left: $(cat "$work/cfg/recent.ini")"
+echo "ok: 10. Recent Items listed what the Dock opened, opened it again on the ordinary display, and Clear Menu emptied it"
 
 echo "all green (the Dock carries installed applications)."

@@ -121,8 +121,9 @@ public enum Launcher {
             guard let exe = bundleExecutable(path) else {
                 return .failed("\(path) has no executable in Contents/MacOS")
             }
-            return launchDetached([exe]) ? .launchedApp(exe)
-                                         : .failed("could not start \(exe)")
+            guard launchDetached([exe]) else { return .failed("could not start \(exe)") }
+            RecentItems.record(path)   // the Apple menu's Recent Items (P15.2c)
+            return .launchedApp(exe)
         }
         if isExecutableFile(path) {
             return launchDetached([path]) ? .ranExecutable(path)

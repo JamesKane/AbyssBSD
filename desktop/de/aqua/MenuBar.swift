@@ -173,6 +173,9 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var target: String?
     /// Enablement pulled when the open menu opened (PHASE10 §6.4).
     private var enablement: [String: Enablement] = [:]
+    /// The recent applications the open system menu was built from: its
+    /// `system.recent.N` means entry N of this (P15.2c).
+    private var recentShown: [String] = []
     /// The held `subscribe` connection to `service`, folded into the run loop.
     private var changesFd: Int32 = -1
     /// The titles moved; say where, once they have been laid out.
@@ -401,6 +404,10 @@ public final class MenuBar: LayerSurfaceDelegate {
             return forceQuitTarget == nil ? .disabled("no application is frontmost") : .enabled
         case "system.sleep", "system.restart", "system.shut-down":
             return .disabled("needs a privileged helper this desktop does not have yet")
+        case "system.recent.clear":
+            return recentShown.isEmpty ? .disabled("nothing has been opened yet") : .enabled
+        case _ where verb.hasPrefix("system.recent."):
+            return .enabled
         default:
             return .disabled("not available yet")
         }
@@ -434,8 +441,7 @@ public final class MenuBar: LayerSurfaceDelegate {
             // force-quit anything. Found by P10.8's own test. An application
             // goes on the ordinary display, which anchor tells us; not knowing
             // it is a refusal, never a fallback to ours.
-            guard let display = getenv("ABYSS_APP_WAYLAND_DISPLAY").map({ String(cString: $0) }),
-                  !display.isEmpty else {
+            guard let display = MenuBar.appDisplay else {
                 return .refused("the bar does not know the ordinary display to launch on")
             }
             let exe = getenv("ABYSS_APP_BINARY").map { String(cString: $0) }
@@ -449,6 +455,26 @@ public final class MenuBar: LayerSurfaceDelegate {
                 return .refused("the compositor cannot be asked to force quit")
             }
             return .ok(app)
+        case "system.recent.clear":
+            RecentItems.save([])
+            return .ok(nil)
+        case _ where verb.hasPrefix("system.recent."):
+            // The same rule as System Preferences: the ordinary display, never ours.
+            guard let i = Int(verb.dropFirst("system.recent.".count)), recentShown.indices.contains(i) else {
+                return .refused("no such recent item")
+            }
+            let bundle = recentShown[i]
+            guard let exe = Launcher.bundleExecutable(bundle) else {
+                return .refused("\(bundle) is not there any more")
+            }
+            guard let display = MenuBar.appDisplay else {
+                return .refused("the bar does not know the ordinary display to launch on")
+            }
+            guard Launcher.launchDetached([exe], extraEnv: ["WAYLAND_DISPLAY": display]) else {
+                return .refused("could not start \(exe)")
+            }
+            RecentItems.record(bundle)
+            return .ok(bundle)
         case "system.log-out":
             var m = Msg(); m.set("method", "quit")
             guard (try? Current.call("anchor", m))?.bool("ok") == true else {
@@ -458,6 +484,25 @@ public final class MenuBar: LayerSurfaceDelegate {
         default:
             return .refused("not available yet")
         }
+    }
+
+    /// The display applications go on — anchor's, not the bar's privileged one.
+    private static var appDisplay: String? {
+        guard let d = getenv("ABYSS_APP_WAYLAND_DISPLAY").map({ String(cString: $0) }), !d.isEmpty else { return nil }
+        return d
+    }
+
+    /// The system menu with Recent Items filled in from `recent.ini`, read now:
+    /// the Finder and the Dock write it (P15.2c).
+    private func systemMenuNow() -> Menu {
+        recentShown = RecentItems.load()
+        let sys = MenuBar.systemMenu
+        return Menu(sys.title, sys.items.map { item in
+            if case .command(let c) = item, c.verb == "system.recent" {
+                return .submenu(RecentItems.submenu(recentShown))
+            }
+            return item
+        })
     }
 
     /// Run a command the person chose, and say what came of it.
@@ -640,7 +685,7 @@ public final class MenuBar: LayerSurfaceDelegate {
         // Force Quit names what it would quit — the frontmost application,
         // which Jaguar's dialog would have preselected.
         let shown = m.isSystem
-            ? m.menu.retitled(["system.force-quit":
+            ? systemMenuNow().retitled(["system.force-quit":
                 forceQuitTarget.map { "Force Quit \($0.split(separator: ".").last.map(String.init) ?? $0)" }
                     ?? "Force Quit"])
             : m.menu

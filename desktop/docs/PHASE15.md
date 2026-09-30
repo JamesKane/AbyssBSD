@@ -80,7 +80,7 @@ Finder opens `/Applications`, a double-click maps kcalc's window.
 Dock's tiles become a list of bundles (defaults: Finder, the browser, Terminal,
 System Preferences), editable by dragging a bundle on and off; the Apple menu's
 Recent Items. *Verified:* a tile launches its application and shows it running.
-In three:
+✅ **Done 2026-09-30**, in three:
 
 - **(a) ✅ Done 2026-09-30 — the tiles are bundles.** `abyss-appgen` writes
   `Contents/app-id`: the app_ids a window of the application may carry —
@@ -116,8 +116,19 @@ In three:
   6–9: Keep, Remove and Quit through the tile menu; a bundle dragged out of the
   Finder and onto System Preferences lands before it; a text file dropped on
   the application's tile opens a window.
-- **(c) the Apple menu's Recent Items:** the applications launched from the Dock,
-  the Finder and the menu, most recent first.
+- **(c) ✅ Done 2026-09-30 — the Apple menu's Recent Items.** The applications
+  opened from the Dock (a click, or a document dropped on a tile), the Finder
+  and the desktop (`Launcher.open`), and the menu itself — most recent first,
+  once each, ten at most — kept in the pool's `recent` domain (`recent.ini`),
+  since three processes write it and a fourth reads it; the last writer wins a
+  race, and the pool's atomic write means a race never tears the file. The bar
+  reads it as the system menu opens: Recent Items is a submenu of bundle names
+  and Clear Menu (disabled when empty), and a choice launches on the ordinary
+  display, never the bar's privileged one — the System Preferences rule.
+  `live-dock-apps.sh` claim 10: the Dock's launches are listed, choosing one
+  opens it again on the ordinary display (the fixture records which), and Clear
+  Menu empties it. The Finder's half of the recording is `Launcher.open`, which
+  no live test drives on a bundle yet — the unit test covers the list.
 
 **P15.3 — the browser (M).** Firefox ESR installed on the medium and in the
 guest; a generated `Firefox.app`; rendering under `undertow` (the §4.2 spike);

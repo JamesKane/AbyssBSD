@@ -39,6 +39,8 @@ public struct DockItem: Sendable {
     /// The `dock.ini` entry that pinned this tile (`finder`, `KCalc`, a path);
     /// nil for a tile that is only there because its application is running.
     public let pinToken: String?
+    /// The bundle an installed application's tile opens, for Recent Items.
+    public let bundle: String?
     public let isTrash: Bool
     /// What to run when the tile isn't already running. argv, plus environment
     /// to add — nil for a tile we can't launch (yet).
@@ -47,9 +49,10 @@ public struct DockItem: Sendable {
 
     public init(icon: DockIcon, label: String, appID: String?, isTrash: Bool = false,
                 command: [String]? = nil, environment: [String: String] = [:], appIDs: [String] = [],
-                pinToken: String? = nil) {
+                pinToken: String? = nil, bundle: String? = nil) {
         self.icon = icon; self.label = label; self.appID = appID; self.isTrash = isTrash
         self.command = command; self.environment = environment; self.pinToken = pinToken
+        self.bundle = bundle
         self.appIDs = appIDs.isEmpty ? (appID.map { [$0] } ?? []) : appIDs
     }
 
@@ -57,7 +60,8 @@ public struct DockItem: Sendable {
     public init(app: InstalledApp, pinToken: String? = nil) {
         self.init(icon: .bundle(app.icon ?? ""), label: app.name,
                   appID: app.appIDs.first ?? app.name, command: app.executable.map { [$0] },
-                  appIDs: app.appIDs.isEmpty ? [app.name] : app.appIDs, pinToken: pinToken)
+                  appIDs: app.appIDs.isEmpty ? [app.name] : app.appIDs, pinToken: pinToken,
+                  bundle: app.bundle)
     }
 
     /// An installed application's own tile — not the desktop's Finder or System
@@ -446,6 +450,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             // The bundle's launcher passes its arguments on as the files to
             // open (P15.1's `"$@"`).
             if Launcher.launchDetached(command + [path], extraEnv: item.environment) {
+                if let b = item.bundle { RecentItems.record(b) }
                 Dock.log("opened \(path) with \(item.label)")
             } else {
                 Dock.log("failed to open \(path) with \(item.label)")
@@ -510,7 +515,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             // and name when it has one.
             if let app = AppLibrary.owner(of: t.appID, in: library) {
                 items.append(DockItem(icon: .bundle(app.icon ?? ""), label: app.name, appID: t.appID,
-                                      command: app.executable.map { [$0] }, appIDs: [t.appID]))
+                                      command: app.executable.map { [$0] }, appIDs: [t.appID],
+                                      bundle: app.bundle))
             } else {
                 let label = t.title.isEmpty ? (t.appID.isEmpty ? "App" : t.appID) : t.title
                 items.append(DockItem(icon: .genericApp, label: label, appID: t.appID))
@@ -735,6 +741,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             return
         }
         if Launcher.launchDetached(command, extraEnv: item.environment) {
+            if let b = item.bundle { RecentItems.record(b) }
             Dock.log("launched \(appID)")
         } else {
             Dock.log("launch failed for \(appID)")
