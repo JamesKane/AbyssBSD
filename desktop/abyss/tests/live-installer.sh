@@ -281,7 +281,9 @@ cp "$work/frame.ppm" "${ABYSS_INSTALLER_SHOT:-$work/keep.ppm}" 2>/dev/null || tr
 # frame being pale Aqua chrome is the difference between "a window mapped" and
 # "a window was drawn".
 hdr_len=$(printf 'P6\n%s %s\n255\n' "$W" "$H" | wc -c | tr -d ' ')
-off=$(( hdr_len + (((H / 2) * W) + (W / 2)) * 3 ))
+# 40 px left of the exact middle: the pointer may rest there, drawn as the
+# theme's arrow since U.7 (HANDOFF §2.85).
+off=$(( hdr_len + (((H / 2) * W) + (W / 2 - 40)) * 3 ))
 mid=$(dd if="$work/frame.ppm" bs=1 skip="$off" count=3 2>/dev/null | od -An -v -tu1 | awk '{print $1, $2, $3}')
 [ "$mid" != "61 102 161" ] \
   || fail "the captured frame is bare output — the installer was not drawn on it"

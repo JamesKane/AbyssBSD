@@ -1018,7 +1018,10 @@ loop can carry it; `live-viewport.sh` asserts each arrives exactly once.
 Two things caught the test itself out:
 - **The pointer now rests mid-display as a black arrow** (U.7), and a
   centred window's middle is exactly there. Sample captures away from the
-  centre.
+  centre. The full gate of 2026-09-29 met this again in `live-medium.sh`: its
+  "the installer's panel is in the middle" check read the arrow's grey tip
+  (130 130 130) and failed. The white rectangle it replaced was light enough
+  to pass. Both it and `live-installer.sh` now sample 40 px left of centre.
 - **undertow prints two kinds of `window <app-id>` line:** the box
   (`X,Y WxH`) and the placement (`at X,Y`). Match the box's shape, not just
   the app id.

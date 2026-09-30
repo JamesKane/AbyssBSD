@@ -381,8 +381,10 @@ lightness() { echo "$1" | awk '{print int(($1 + $2 + $3) / 3)}'; }
 
 # The middle of the screen is the installer's panel: pale Aqua chrome, and
 # emphatically not undertow's fallback blue, which is what an output with
-# nothing composited on it looks like.
-panel=$(pixel $((W / 2)) $((H / 2)))
+# nothing composited on it looks like. Sampled 40 px left of the exact middle:
+# the pointer rests there, and since U.7 it is drawn as the theme's arrow —
+# its antialiased tip is grey (HANDOFF §2.85's trap, met again here).
+panel=$(pixel $((W / 2 - 40)) $((H / 2)))
 [ "$panel" != "61 102 161" ] \
   || fail "the middle of the frame is bare output — nothing was drawn on it"
 [ "$(lightness "$panel")" -gt 150 ] \
