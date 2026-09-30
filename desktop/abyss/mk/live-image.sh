@@ -24,7 +24,9 @@ set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 
-out="$root/../abyss-live.img"
+# In the home directory, where live-medium.sh looks for it: beside the tree
+# would now be inside the monorepo, which keeps images out.
+out="/home/$(id -un)/abyss-live.img"
 dist="${ABYSS_DIST_DIR:-/home/$(id -un)/dist}"
 stage="${TMPDIR:-/tmp}/abyss-live-stage"
 builddir="$root/.build/debug"

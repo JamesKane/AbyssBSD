@@ -3,7 +3,7 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-09-29. **Phases 0–3, 5–11 and 14 are complete.** The Jaguar desktop
+Last updated: 2026-09-30. **Phases 0–3, 5–11 and 14 are complete.** The Jaguar desktop
 runs on our own compositor, which holds its frame contract (headless) under eleven hostile
 processes; the portals hand out descriptors; **one command boots a desktop
 where an unmodified GTK 3 application opens a file through the Finder**;
@@ -29,14 +29,19 @@ on every run of the harness, nested twice over, with no hardware and no human.
 the stick boots, `amdgpu` binds, and **the Aqua installer is on screen**. Its one
 open result is a failure — **the frame contract does not hold on real hardware**
 (PHASE4 §5.7). **Phase 12 (`Fathom`) was pulled forward** and P12.1–P12.5 are in.
-[PLAN.md](PLAN.md) runs to **Phase 18, ordered by dependency**; **Phase 14, preferences that
-write, is next** (it needed 9, 10 and 11). See [What's next](#whats-next).
+[PLAN.md](PLAN.md) runs to **Phase 18, ordered by dependency**. After Phase 14,
+[BACKLOG.md](BACKLOG.md) §1–§2 closed the compositor gaps Phase 15's applications need
+(U.1–U.10, U.3b, U.7b) and the installer's keyboard items (T.1–T.3); its §2 is empty.
+**On 2026-09-30 this tree became the monorepo's `desktop/`**, and the distribution's
+base moved to FreeBSD `main` with the Radxa Dragon Q8B (aarch64) as its first board;
+what that leaves for the desktop is in [../../docs/MIGRATION.md](../../docs/MIGRATION.md).
+See [What's next](#whats-next).
 
 ## What this is
 
 A FreeBSD fork whose desktop environment is written in **Swift 6**, styled as a
-faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, on **Wayland**. Sibling project
-`../AbyssBSD` (Rust DE) is the **design source we rewrite from** — its compositor
+faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, on **Wayland**. The earlier Rust DE,
+checked out beside the monorepo as `AbyssBSD-old`, is the **design source we rewrite from** — its compositor
 (`tide`), IPC (`current`), config (`pool`) and helpers are reference
 implementations to read, not code to link. **The product is Swift**, dropping to
 C only where Swift can't reach (system-library shims like `de/cwayland`).
@@ -446,14 +451,17 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Phases 0–3 and 5–11 are complete. Phase 4 is in flight on metal (paused: the
-machine's USB is in use elsewhere); Phase 12 is done but for P12.3's Aqua view;
-Phase 14 is in progress.** **The working order is [BACKLOG.md](BACKLOG.md)**
-(2026-09-28): the three open `undertow` defects from the API-study review, and presentation-time, first
-([API-STUDY.md](API-STUDY.md)), then P14.2 onwards. The list below is the
-context.
+**Phases 0–3, 5–11 and 14 are complete. Phase 4 is in flight on metal (paused: the
+metal target is moving to the Radxa Dragon Q8B, whose bring-up is done elsewhere);
+Phase 12 is done but for P12.3's Aqua view.** **The working order is
+[BACKLOG.md](BACKLOG.md)**: §1 and §2 are done (the API-study `undertow` defects,
+Phase 14, and U.5–U.10, U.3b, U.7b, T.1–T.3, all green on both platforms), so what
+remains is §2's toolchain items (S.0, S.1, …), then Phase 15, with the monorepo's
+[MIGRATION.md](../../docs/MIGRATION.md) §5 alongside (a 16-CURRENT build VM,
+wlroots 0.20). The list below is the context; item 1 is kept as the record of how
+Phase 14 went.
 
-1. **Phase 14 — preferences that write** ([PLAN.md](PLAN.md)): System Preferences
+1. **Phase 14 — preferences that write — COMPLETE 2026-09-29** ([PLAN.md](PLAN.md)): System Preferences
    stops being a painting. Network first (`ifconfig`, `wpa_supplicant`,
    `dhclient`, `rc.conf` written for you), then sound, displays and energy, all
    through the installer's split — an unprivileged pane sends a plan over
@@ -461,8 +469,8 @@ context.
    **Scoped in [PHASE14.md](PHASE14.md)** (P14.1–P14.9, spiked on the guest);
    its §6 recommendations adopted, all but §6.5 (does the bring-up machine have
    Wi-Fi?). **P14.1 is done** — System Preferences is an application (panes,
-   honest pages, keyboard, its menu vocabulary; `live-prefs.sh`). **Next:
-   P14.2**, the Appearance pane and live theme switching. Still open:
+   honest pages, keyboard, its menu vocabulary; `live-prefs.sh`), and P14.2–P14.9
+   followed ([PHASE14.md](PHASE14.md)). Still open:
    **the PHASE11 §6 decisions want confirming** (the menu-bar rule and the
    proposed layer 5, refuse/warn, icons as data, `calc()` operands).
    *Done just before it:* **Phase 11, the theme system** ([PHASE11.md](PHASE11.md))

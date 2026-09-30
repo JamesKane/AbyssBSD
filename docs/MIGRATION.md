@@ -104,14 +104,19 @@ macOS deletes old files in /tmp):**
 
 ## 4. Monorepo fixes made necessary by the move
 
-- [ ] The desktop VM harness defaults `ABYSS_VM_HOME` to inside the monorepo
+- [x] The desktop VM harness defaults `ABYSS_VM_HOME` to inside the monorepo
       (`desktop/..`), and `live-image.sh` defaults its output there too. The
-      root `.gitignore` catches them, but change the defaults.
-- [ ] `desktop/README.md` and `desktop/docs/STATUS.md` still call
+      root `.gitignore` catches them, but change the defaults. *Done: the VM
+      home is `../abyss-swift-vm` beside the monorepo, and a guest-built
+      medium defaults to `~/abyss-live.img`, where `live-medium.sh` reads it.*
+- [x] `desktop/README.md` and `desktop/docs/STATUS.md` still call
       "`../AbyssBSD` (a Rust DE)" the design source. That path is now the
-      monorepo; the Rust sibling needs a new name or path.
-- [ ] `desktop/docs/STATUS.md` says both "Phase 14 is complete" and "Phase 14
+      monorepo; the Rust sibling needs a new name or path. *Done: it is
+      checked out as `AbyssBSD-old` beside the monorepo.*
+- [x] `desktop/docs/STATUS.md` says both "Phase 14 is complete" and "Phase 14
       is next". The U.x and T.x work is recorded only in `API-STUDY.md`.
+      *Done: STATUS points at `desktop/docs/BACKLOG.md`, where U.x and T.x
+      are recorded, and at §5 here.*
 
 ## 5. Not yet started, needed to ship
 
