@@ -1,0 +1,7 @@
+// libwayland-server, via pkg-config. Phase 1-3 only ever needed the *client*
+// half; a compositor is the other side of the same socket.
+module CWaylandServer [system] {
+    header "shim.h"
+    link "wayland-server"
+    export *
+}

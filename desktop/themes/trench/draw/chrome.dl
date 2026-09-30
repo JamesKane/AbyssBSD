@@ -1,0 +1,110 @@
+# Trench — the window frame (PHASE11 P11.9). Plan Neo's materials: raised keys,
+# sunken wells, brushed metal, anodized panels, glow on focus and selection
+# ($gk). No Swift knows this theme; these lists are all it is.
+
+# Square corners: Amiga's frame, not Aqua's.
+list window.shape
+  rect 0 0 w h
+end
+
+# An anodized body under a brushed-metal title bar; the active window's bar
+# is underlined in cyan, glowing (the study's .win.active .titlebar::after).
+list window
+  rect 0 0 w h
+  fill vertical stops 0 mix(contentBackground, #ffffff, 0.08) 1 contentBackground
+  fill noise 7 0.07
+  rect 0 0 w @titleBarHeight
+  fill vertical stops 0 titleBarTop 1 titleBarBottom
+  fill stripes 0 1 #ffffff/0.035 2 #ffffff/0
+  fill stripes 0 2 #000000/0.06 5 #000000/0
+  path 0 @titleBarHeight-0.5 w @titleBarHeight-0.5
+  stroke windowBorder 1
+  when active rect 0 @titleBarHeight-1 w 1
+  when active glow glowFocus 10 $gk
+  when active fill glowFocus
+end
+
+# Chakra Petch, uppercase, tracked (the chrome role); lit only on the active window.
+list window.title
+  unless active text $label $x h/2 center bold size=@chrome.titleSize role=chrome color=secondaryText
+  when active text $label $x h/2 center bold size=@chrome.titleSize role=chrome color=titleText halo=glowFocus/0.8 halor=10*$gk
+end
+
+list window.title.bold
+  unless active text $label $x h/2 center bold size=@chrome.titleSize role=chrome color=secondaryText
+  when active text $label $x h/2 center bold size=@chrome.titleSize role=chrome color=titleText halo=glowFocus/0.8 halor=10*$gk
+end
+
+# A hard black edge, lit inside from the top left.
+list window.frame
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect 1 1 w-2 h-2
+  bevel $bevel bevelLight #000000/0
+end
+
+list window.inactive
+  rect 0 0 w @titleBarHeight
+  fill inactiveFrameWash
+end
+
+# Amiga gadgets: raised keys with square glyphs (the study's g-close,
+# g-zoom, g-depth). The rect is the gadget.
+list gadget.close
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect (w-12)/2+0.5 (h-12)/2+0.5 11 11
+  stroke close/0.75 1
+  rect (w-12)/2+4 (h-12)/2+4 4 4
+  fill close
+end
+
+list gadget.zoom
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect (w-12)/2+0.5 (h-12)/2+0.5 11 11
+  stroke zoom/0.75 1
+  rect (w-12)/2+2.5 (h-12)/2+2.5 4.5 4.5
+  stroke zoom 1
+end
+
+list gadget.depth
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect (w-12)/2+0.5 (h-12)/2+0.5 7 7
+  stroke close/0.75 1
+  rect (w-12)/2+4 (h-12)/2+4 7.5 7.5
+  fill close
+  stroke windowBorder 1
+end
+
+# Not in Trench's [chrome]; here for a person who adds it.
+list gadget.minimize
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect (w-12)/2+0.5 (h-12)/2+0.5 11 11
+  stroke minimize/0.75 1
+  rect (w-12)/2+3 (h-12)/2+8 6 1.5
+  fill minimize
+end
+
+# Not in Trench's [chrome] either (the study has no toolbar toggle).
+list gadget.pill
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end

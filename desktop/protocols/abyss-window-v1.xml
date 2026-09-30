@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="abyss_window_v1">
+  <copyright>
+    AbyssBSD Swift DE. Same terms as the rest of the tree.
+  </copyright>
+
+  <description summary="window operations xdg-shell does not have">
+    xdg-shell lets a client ask to be moved, resized, maximized, minimized
+    and made fullscreen, and never to be sent behind other windows — the
+    depth gadget a window frame may carry (PHASE11.md P11.6). A client that
+    draws its own frame asks undertow here; a frame undertow draws for a
+    client acts directly.
+
+    The compositor decides. A request is a request: a compositor may ignore
+    it, and a client must not assume its window moved.
+  </description>
+
+  <interface name="abyss_window_manager_v1" version="1">
+    <description summary="window operations">
+      A global with no events. Bind it, and ask.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="unbind the manager"/>
+    </request>
+
+    <request name="lower">
+      <description summary="send a toplevel to the back">
+        Put the toplevel behind every other window. If it had the keyboard,
+        the window now in front gets it: a window put away is not the one
+        being typed into. The toplevel must be one of this client's.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+    </request>
+  </interface>
+</protocol>

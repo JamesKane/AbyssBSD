@@ -1,0 +1,49 @@
+# Trench — the installer (PHASE11 P11.9). Plan Neo's materials: raised keys,
+# sunken wells, brushed metal, anodized panels, glow on focus and selection
+# ($gk). No Swift knows this theme; these lists are all it is.
+
+list installer
+  rect 0 0 w h
+  fill vertical stops 0 mix(contentBackground, #ffffff, 0.08) 1 contentBackground
+  fill noise 7 0.07
+  rect 0 0 w 40
+  fill vertical stops 0 titleBarTop 1 titleBarBottom
+  fill stripes 0 1 #ffffff/0.035 2 #ffffff/0
+  fill stripes 0 2 #000000/0.06 5 #000000/0
+  rect 0 39.5 w 1
+  fill windowBorder
+end
+
+list installer.spoke
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+# Still wanting an answer: an amber edge.
+list installer.spoke.attention
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect 0 0 3 h
+  glow ledWarn 6 $gk
+  fill ledWarn
+end
+
+list installer.row
+  unless disabled rect 0 0 w h
+  unless disabled glow glowSelect/0.7 16 $gk
+  unless disabled fill vertical stops 0 mix(menuHighlight, #ffffff, 0.15) 1 menuHighlight
+  unless disabled bevel $bevel #ffffff/0.45 #000000/0.45
+  when disabled rect 0 0 w h
+  when disabled fill secondaryText/0.3
+end
+
+list installer.veil
+  rect 0 0 w h
+  fill disabledVeil
+end

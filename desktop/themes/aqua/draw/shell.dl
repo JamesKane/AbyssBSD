@@ -1,0 +1,158 @@
+# Aqua — the desktop shell's paint: the menu bar, toasts, the Dock, the
+# wallpaper (PHASE11 P11.5). Like aqua.dl, each list is the Swift it replaced,
+# op for op, held to the golden gate; the text on these surfaces is still drawn
+# by the toolkit's text calls until type comes by role (P11.7).
+
+# The menu bar's background.
+#
+# The pinstripe's first hairline is stroked TOGETHER with the bar's outline:
+# the gradient was filled with fill_preserve, so the bar's rectangle was still
+# the path when the pinstripe began (HANDOFF §2.67). So the bar is outlined, 1 px,
+# in the pinstripe's colour, and that is what `and` below reproduces.
+list menubar
+  rect 0 0 w h
+  fill vertical stops 0 menuBarTop 1 menuBarBottom
+  and path 0 1.5 w 1.5
+  stroke menuBarBottom/0.5 1
+  rect 0 0 w h
+  rules across 5.5 4 menuBarBottom/0.5 1
+  path 0 h-0.5 w h-0.5
+  stroke menuBarBorder 1
+end
+
+# The clock: a readout, in its slot at the bar's right ($size the bar's type).
+list menubar.clock
+  text $label 2 h-6.5 left baseline size=$size role=readout color=menuBarText
+end
+
+# An open title's highlight; the rect is the title's slot, full height.
+list menubar.highlight
+  rect 0 0 w h
+  fill menuHighlight
+end
+
+# The system menu's mark: an original water drop, a bulb under a point — not
+# Apple's apple. Selected while its menu is open.
+list menubar.system
+  circle w/2 h*0.62 w*0.42
+  and path w/2 h*0.08 w/2+w*0.42*0.92 h*0.62 w/2-w*0.42*0.92 h*0.62 close
+  unless selected fill menuBarText
+  when selected fill menuTextOnHighlight
+end
+
+# A notification toast's panel.
+#
+# There is no border: the Swift stroked toastBorder along a path the pinstripe
+# had already stroked and so consumed — deleting that stroke moved no pixel.
+# What outlines the panel is the pinstripe's first hairline, stroked with the
+# kept outline (§2.67), clipped to the panel. toastBorder is a token nothing
+# draws, until the look is changed on purpose.
+list toast
+  rect 1 2 w h @toast.corner
+  fill toastShadow
+  rect 0 0 w h @toast.corner
+  push
+  clip
+  fill vertical stops 0 toastTop 1 toastBottom
+  and path 0 1.5 w 1.5
+  stroke toastPinstripe 1
+  rect 0 0 w h
+  rules across 5.5 4 toastPinstripe 1
+  pop
+end
+
+# The drop that marks a toast as the system's, 13 × 13.
+list toast.mark
+  path w/2 0 curve w/2+w*0.55 h*0.45 w/2+w*0.5 h w/2 h curve w/2-w*0.5 h w/2-w*0.55 h*0.45 w/2 0 close
+  fill systemMark
+end
+
+# The menu bar's volume item: a speaker, and one arc per third of the range —
+# none when muted, which is the point of arcs rather than a fixed glyph. One
+# list per level (a list cannot count); the toolkit picks by level. $color is
+# the bar's text colour.
+list status.volume.0
+  path 0 h/2-h*0.18 w*0.32 h/2-h*0.18 w*0.32*2.1 0 w*0.32*2.1 h w*0.32 h/2+h*0.18 0 h/2+h*0.18 close
+  fill $color
+end
+
+list status.volume.1
+  path 0 h/2-h*0.18 w*0.32 h/2-h*0.18 w*0.32*2.1 0 w*0.32*2.1 h w*0.32 h/2+h*0.18 0 h/2+h*0.18 close
+  fill $color
+  arc w*0.32*2.1 h/2 w*(0.30+0.16*0) -0.9 0.9
+  stroke $color 1.2
+end
+
+list status.volume.2
+  path 0 h/2-h*0.18 w*0.32 h/2-h*0.18 w*0.32*2.1 0 w*0.32*2.1 h w*0.32 h/2+h*0.18 0 h/2+h*0.18 close
+  fill $color
+  arc w*0.32*2.1 h/2 w*(0.30+0.16*0) -0.9 0.9
+  stroke $color 1.2
+  arc w*0.32*2.1 h/2 w*(0.30+0.16*1) -0.9 0.9
+  stroke $color 1.2
+end
+
+list status.volume.3
+  path 0 h/2-h*0.18 w*0.32 h/2-h*0.18 w*0.32*2.1 0 w*0.32*2.1 h w*0.32 h/2+h*0.18 0 h/2+h*0.18 close
+  fill $color
+  arc w*0.32*2.1 h/2 w*(0.30+0.16*0) -0.9 0.9
+  stroke $color 1.2
+  arc w*0.32*2.1 h/2 w*(0.30+0.16*1) -0.9 0.9
+  stroke $color 1.2
+  arc w*0.32*2.1 h/2 w*(0.30+0.16*2) -0.9 0.9
+  stroke $color 1.2
+end
+
+# The battery item: an outline, a terminal nub, a fill of $charge (0…1), and,
+# active while charging, a bolt cut out of it. $color is the bar's text colour.
+list status.battery
+  rect 0.5 0.5 w-1 h-1
+  stroke $color 1
+  rect w h*0.3 1.5 h*0.4
+  fill $color
+  rect 2 2 (w-2*2)*$charge h-2*2
+  fill $color
+  when active path w*0.52 1 w*0.36 h*0.55 w*0.50 h*0.55 w*0.42 h-1 w*0.64 h*0.45 w*0.50 h*0.45 close
+  when active fill statusGlyphCutout
+end
+
+# A desktop icon's selection: a translucent plate behind the icon. (Its label
+# sits on iconlabel.selected, as a Finder icon's does — aqua.dl.)
+list desktop.selection
+  rect -3 -3 w+6 h+6 6
+  fill menuHighlight/0.35
+end
+
+# The built-in "Aqua Blue" backdrop: a light sky top deepening to ocean blue,
+# with a broad soft sheen high and left of centre. (A flat colour, gradient or
+# picture chosen in desktop.ini is the person's, not the theme's, and is drawn
+# by the toolkit.)
+list wallpaper
+  rect 0 0 w h
+  fill vertical stops 0 desktopTop 0.55 desktopMiddle 1 desktopBottom
+  fill radial w*0.42 h*0.30 max(w,h)*0.75 stops 0 desktopGlow 1 desktopGlow/0
+end
+
+# The Dock: its translucent shelf (the rect), the separator before the Trash
+# ($x across the shelf), the running mark under a tile (its rect, 6 × 4), and
+# the hovered tile's label plate.
+list dock.shelf
+  rect 0 0 w h h/4
+  fill vertical stops 0 dockShelfTop 1 dockShelfBottom
+  stroke dockShelfBorder 1
+end
+
+list dock.separator
+  path $x 6 $x h-6
+  stroke dockSeparator 1
+end
+
+list dock.running
+  path 0 h w h w/2 0 close
+  fill dockRunningMark
+end
+
+list dock.label
+  rect 0 0 w h 5
+  fill dockLabelBackground
+end

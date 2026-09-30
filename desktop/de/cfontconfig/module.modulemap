@@ -1,0 +1,7 @@
+// pkg-config "fontconfig" supplies CText's include dir and -lfontconfig (P11.7:
+// font families are found by name). Not imported from Swift.
+module CFontconfig [system] {
+    header "shim.h"
+    link "fontconfig"
+    export *
+}

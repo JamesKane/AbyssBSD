@@ -1,0 +1,8 @@
+// pkg-config "freetype2" supplies CText's include dir and -lfreetype. This
+// module is not imported from Swift (CText's C includes the FreeType headers
+// directly); it exists so SwiftPM propagates the flags portably.
+module CFreeType [system] {
+    header "shim.h"
+    link "freetype"
+    export *
+}

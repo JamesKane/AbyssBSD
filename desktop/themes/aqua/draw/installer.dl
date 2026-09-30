@@ -1,0 +1,39 @@
+# Aqua — the installer's paint (PHASE11 P11.5). Its text is the toolkit's.
+
+# The window body: Aqua's pale, the pinstripe along the top 40 px the way a
+# Jaguar utility window wears it, and the separator under it.
+list installer
+  rect 0 0 w h
+  fill contentBackground
+  rect 0 0 w 40
+  rules across 1.5 4 pinstripe 1
+  rect 0 39.5 w 1
+  fill separator
+end
+
+# A hub row: done, or (the .attention variant) still wanting an answer.
+list installer.spoke
+  rect 0 0 w h 6
+  fill rowBackground
+  stroke separator 1
+end
+
+list installer.spoke.attention
+  rect 0 0 w h 6
+  fill attentionBackground
+  stroke separator 1
+end
+
+# A picker row, selected. Disabled is a disk that cannot be used: it is still
+# shown, greyed, with its reason — never hidden.
+list installer.row
+  rect 0 0 w h
+  unless disabled fill menuHighlight
+  when disabled fill trafficInactive
+end
+
+# A control that is present but cannot be used.
+list installer.veil
+  rect 0 0 w h h/2
+  fill disabledVeil
+end

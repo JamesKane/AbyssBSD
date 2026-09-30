@@ -1,0 +1,15 @@
+Fathom: what this machine is
+========================================
+Machine         [ok]  Micro-Star International Co., Ltd. MS-7D25
+CPU             [ok]  12th Gen Intel(R) Core(TM) i7-12700KF (20 cores)
+Memory          [ok]  127.8 GiB
+Boot            [ok]  UEFI
+Modules         [ok]  amdgpu, drm loaded
+GPU             [ok]  card0 (+ renderD128)
+Network         [ok]  igc0
+Wi-Fi           [--]  no wireless device recognised
+Audio           [ok]  pcm0, pcm1, pcm2, pcm3, pcm4, pcm5, pcm6, pcm7
+Power           [--]  no battery, mains only
+Frame contract  [ok]  58 of 300 missed (193 per mille), composite p99 12us, period 16680us [hardware clock, DRM]
+----------------------------------------
+9 present, 2 absent

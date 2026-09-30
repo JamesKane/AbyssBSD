@@ -1,0 +1,8 @@
+// pkg-config "harfbuzz" supplies CText's include dir and -lharfbuzz. Not
+// imported from Swift (CText's C includes the HarfBuzz headers directly); it
+// exists so SwiftPM propagates the flags portably.
+module CHarfBuzz [system] {
+    header "shim.h"
+    link "harfbuzz"
+    export *
+}

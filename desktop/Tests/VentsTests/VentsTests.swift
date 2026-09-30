@@ -1,0 +1,249 @@
+// Vents tests — the parsing and encoding, which are pure and run anywhere, plus
+// the sysctl bridge where the platform actually has one.
+//
+// The devd fixtures are **real lines captured from the build VM** (triggered
+// with `mdconfig -a -t malloc`), not invented ones — including the CAM error
+// with quoted, space-bearing values that a naive whitespace split would mangle.
+
+import XCTest
+@testable import Vents
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+final class VentsTests: XCTestCase {
+
+    // MARK: - devd event parsing
+
+    func testAttachAndDetachCarryTheDeviceName() {
+        let attach = Vents.Event("+ugen0.2 at port=2 ... on uhub0")
+        XCTAssertEqual(attach.kind, .attach)
+        XCTAssertEqual(attach.device, "ugen0.2")
+        XCTAssertEqual(attach.summary, "attach ugen0.2")
+
+        let detach = Vents.Event("-ugen0.2 at port=2 on uhub0")
+        XCTAssertEqual(detach.kind, .detach)
+        XCTAssertEqual(detach.device, "ugen0.2")
+    }
+
+    func testNotifyFieldsFromRealDevfsEvents() {
+        // Captured from the VM when a malloc-backed md(4) disk was created.
+        let e = Vents.Event("!system=DEVFS subsystem=CDEV type=CREATE cdev=md0")
+        XCTAssertEqual(e.kind, .notify)
+        XCTAssertEqual(e.value("system"), "DEVFS")
+        XCTAssertEqual(e.value("subsystem"), "CDEV")
+        XCTAssertEqual(e.value("type"), "CREATE")
+        XCTAssertEqual(e.value("cdev"), "md0")
+        XCTAssertNil(e.value("nope"))
+        // An attach/detach question asked of a notify gets an honest nil.
+        XCTAssertNil(e.device)
+    }
+
+    func testQuotedValuesWithSpacesSurvive() {
+        // Also real: a CAM error, whose CDB value contains spaces inside quotes.
+        // Splitting on whitespace alone chops this into nonsense and loses the
+        // field entirely.
+        let line = #"!system=CAM subsystem=periph type=error device=cd0 serial="QM00005" cam_status="0x4cc" scsi_status=2 scsi_sense="70 02 3a 00" CDB="00 00 00 00 00 00 ""#
+        let e = Vents.Event(line)
+        XCTAssertEqual(e.kind, .notify)
+        XCTAssertEqual(e.value("device"), "cd0")
+        XCTAssertEqual(e.value("serial"), "QM00005")
+        XCTAssertEqual(e.value("scsi_sense"), "70 02 3a 00")
+        XCTAssertEqual(e.value("CDB"), "00 00 00 00 00 00 ")
+        XCTAssertEqual(e.value("scsi_status"), "2")
+    }
+
+    func testNomatchAndUnknownLines() {
+        let nomatch = Vents.Event("? at bus=0 on pci0")
+        XCTAssertEqual(nomatch.kind, .nomatch)
+        let odd = Vents.Event("something devd never sends")
+        XCTAssertEqual(odd.kind, .unknown)
+        // An unknown line keeps its first character — it wasn't a type byte.
+        XCTAssertEqual(odd.raw, "something devd never sends")
+    }
+
+    func testLineEndingsAndEmptyInput() {
+        XCTAssertEqual(Vents.Event("+md0 at\r\n").device, "md0")
+        XCTAssertEqual(Vents.Event("").kind, .unknown)
+        XCTAssertEqual(Vents.Event("").raw, "")
+        // A notify with no fields is fine, not a crash.
+        XCTAssertEqual(Vents.Event("!").fields.count, 0)
+    }
+
+    // MARK: - Volume encoding (OSS packs stereo into one int)
+
+    func testVolumeEncodingRoundTripsAndClamps() {
+        let v = Vents.VolumeLevel(left: 42, right: 73)
+        XCTAssertEqual(Vents.VolumeLevel(encoded: v.encoded), v)
+        XCTAssertEqual(Vents.VolumeLevel(left: 10, right: 20).encoded, 10 | (20 << 8))
+        // Out-of-range levels clamp rather than wrapping into the other channel,
+        // which is what makes the byte packing dangerous.
+        let loud = Vents.VolumeLevel(left: 200, right: 150)
+        XCTAssertEqual(loud, Vents.VolumeLevel(left: 100, right: 100))
+        XCTAssertEqual(Vents.VolumeLevel(66).mono, 66)
+    }
+
+    func testVolumeDecodeIgnoresHigherBits() {
+        // The kernel may return more than the two channel bytes; only the low
+        // two are the master level.
+        let decoded = Vents.VolumeLevel(encoded: 0x00FF_3264)
+        XCTAssertEqual(decoded.left, 100)     // 0x64 = 100
+        XCTAssertEqual(decoded.right, 50)     // 0x32 = 50
+    }
+
+    // MARK: - Battery
+
+    func testBatteryLabelIsHonestAboutNotKnowing() {
+        XCTAssertEqual(Vents.Battery(percent: 84, minutesRemaining: 120,
+                                     isCharging: false).label, "84%")
+        // The kernel reports -1 while it doesn't yet know; we show a dash rather
+        // than a confident 0%.
+        XCTAssertEqual(Vents.Battery(percent: nil, minutesRemaining: nil,
+                                     isCharging: true).label, "—")
+    }
+
+    // MARK: - sysctl (real, where the platform has it)
+
+    func testSysctlReadsRealKernelValues() throws {
+        guard Vents.Sysctl.isSupported else {
+            // On Linux the bridge is a stub, and must say so rather than
+            // pretending — that is what keeps the status items honest.
+            XCTAssertNil(Vents.Sysctl.string("kern.ostype"))
+            XCTAssertNil(Vents.Sysctl.int("hw.ncpu"))
+            return
+        }
+        XCTAssertEqual(Vents.Sysctl.string("kern.ostype"), "FreeBSD")
+        let ncpu = try XCTUnwrap(Vents.Sysctl.int("hw.ncpu"))
+        XCTAssertGreaterThan(ncpu, 0)
+        XCTAssertGreaterThan(try XCTUnwrap(Vents.Sysctl.int("hw.physmem")), 0)
+        // A name that doesn't exist is nil, not a crash or a zero.
+        XCTAssertNil(Vents.Sysctl.string("abyss.no.such.sysctl"))
+    }
+
+    /// A string sysctl must not be printed as an integer.
+    ///
+    /// `kern.ostype` is "FreeBSD\0" — *exactly eight bytes* — so a display path
+    /// that checks "is it a number?" first renders it as 19231843050418758.
+    /// That is precisely what the live test caught on the first run.
+    func testDisplayPrefersTextOverAPlausibleInteger() throws {
+        guard Vents.Sysctl.isSupported else {
+            XCTAssertNil(Vents.Sysctl.display("kern.ostype"))
+            return
+        }
+        XCTAssertEqual(Vents.Sysctl.display("kern.ostype"), "FreeBSD")
+        // A genuine integer still displays as one.
+        let ncpu = try XCTUnwrap(Vents.Sysctl.display("hw.ncpu"))
+        XCTAssertNotNil(Int(ncpu))
+        XCTAssertNil(Vents.Sysctl.display("abyss.no.such.sysctl"))
+    }
+
+    func testAbsentFacilitiesReturnNilRatherThanFakeReadings() {
+        // Neither the dev box nor the build VM has a mixer; a machine that does
+        // will simply exercise the other branch. Either way the contract is the
+        // same: nil means "no such thing", never a made-up level.
+        if let mixer = Vents.Mixer(path: "/nonexistent/mixer") {
+            XCTFail("opened a mixer that doesn't exist: \(mixer)")
+        }
+        XCTAssertNil(Vents.Devd(path: "/nonexistent/devd.pipe"))
+    }
+
+    // MARK: - The network (P14.4)
+
+    /// `route -n get default` on FreeBSD 15, captured.
+    func testTheDefaultRouteIsReadFromRouteGet() {
+        let out = """
+           route to: default
+        destination: default
+               mask: default
+            gateway: 10.0.2.2
+                fib: 0
+          interface: vtnet0
+              flags: <UP,GATEWAY,DONE,STATIC>
+        """
+        XCTAssertEqual(Vents.Network.parseRouteGet(out)?.address, "10.0.2.2")
+        XCTAssertEqual(Vents.Network.parseRouteGet(out)?.interface, "vtnet0")
+        XCTAssertNil(Vents.Network.parseRouteGet("route: route has not been found\n"),
+                     "no default route is none, not an empty one")
+    }
+
+    /// `/proc/net/route` on Linux: the gateway is little-endian hex.
+    func testTheDefaultRouteIsReadFromProcNetRoute() {
+        let table = """
+        Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask
+        enp77s0\t0000A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF
+        enp77s0\t00000000\t0100A8C0\t0003\t0\t0\t100\t00000000
+        """
+        XCTAssertEqual(Vents.Network.parseProcRoute(table)?.address, "192.168.0.1")
+        XCTAssertEqual(Vents.Network.parseProcRoute(table)?.interface, "enp77s0")
+        XCTAssertNil(Vents.Network.parseProcRoute("Iface\tDestination\tGateway\n"))
+    }
+
+    func testNameServersAreReadInOrderAndNothingElse() {
+        let conf = "# generated\nsearch example.org\nnameserver 10.0.2.3\nnameserver\t9.9.9.9\noptions edns0\n"
+        XCTAssertEqual(Vents.Network.parseResolvConf(conf), ["10.0.2.3", "9.9.9.9"])
+        XCTAssertEqual(Vents.Network.parseResolvConf(""), [])
+    }
+
+    /// Real, on both platforms: every machine has a loopback holding 127.0.0.1/8.
+    func testTheLoopbackIsFoundWithItsAddress() {
+        let lo = Vents.Network.interfaces().first { $0.loopback }
+        XCTAssertNotNil(lo, "no loopback among \(Vents.Network.interfaces().map(\.name))")
+        XCTAssertTrue(lo?.up ?? false)
+        XCTAssertTrue(lo?.ipv4.contains(Vents.Network.Address(address: "127.0.0.1", prefix: 8)) ?? false,
+                      "\(lo?.ipv4 ?? [])")
+        XCTAssertNotNil(Vents.Network.Watch(), "no routing socket to watch")
+    }
+
+    // MARK: - Sound (P14.6)
+
+    /// The lines CVents flattens /dev/sndstat's nvlist into, as the guest's
+    /// snd_dummy gives them with two players open.
+    func testSndstatGivesDevicesAndWhoIsPlaying() {
+        let text = """
+        dev\t0\tpcm0\tDummy Audio Device\tdsp0\t1\t1\t0
+        chan\t0\tdsp0.play.0\t-1\t<UNUSED>\t45\t45
+        chan\t0\tdsp0.virtual_play.0\t31118\tplayer\t30\t30
+        chan\t0\tdsp0.virtual_play.1\t31119\tmpv\t80\t75
+        chan\t0\tdsp0.record.0\t-1\t<UNUSED>\t45\t45
+        chan\t0\tdsp0.virtual_record.0\t4242\tobs\t50\t50
+        dev\t1\tpcm1\tUSB Headset\tdsp1\t1\t0\t0
+        dev\t-1\tvdsp\tVirtual OSS\tvdsp\t1\t1\t1
+        """
+        let d = Vents.Sound.parseSndstat(text)
+        XCTAssertEqual(d.map(\.name), ["pcm0", "pcm1"], "a device with no sound(4) unit (a user-space one) is not a pcm")
+        XCTAssertEqual(d[0].description, "Dummy Audio Device")
+        XCTAssertTrue(d[0].playback && d[0].recording)
+        XCTAssertFalse(d[1].recording)
+        XCTAssertEqual(d[0].channels.count, 5)
+        XCTAssertEqual(d[0].playing.map(\.command), ["player", "mpv"], "unused channels and a recorder are not 'playing'")
+        XCTAssertEqual(d[0].playing[1].pid, 31119)
+        XCTAssertEqual(d[0].playing[1].left, 80)
+        XCTAssertEqual(d[0].playing[1].right, 75)
+        XCTAssertNil(d[0].channels[0].pid)
+        XCTAssertEqual(d[1].channels, [])
+        XCTAssertEqual(Vents.Sound.parseSndstat(""), [])
+    }
+
+    func testMixerControlsWithLevelsAndMute() {
+        let c = Vents.Sound.parseControls("ctl\tvol\t75\t70\t0\t0\nctl\tpcm\t40\t40\t1\t0\nctl\trec\t75\t75\t0\t1\ngarbage\n")
+        XCTAssertEqual(c.map(\.name), ["vol", "pcm", "rec"])
+        XCTAssertEqual(c[0].level, 75, "a slider shows the louder side")
+        XCTAssertTrue(c[1].muted)
+        XCTAssertTrue(c[2].recordable)
+        XCTAssertFalse(c[0].recordable)
+    }
+
+    /// Real, on Linux: there is no OSS, and the bridge says none rather than guessing.
+    func testNoOSSMeansNoDevices() throws {
+        #if os(Linux)
+        XCTAssertEqual(Vents.Sound.devices(), [])
+        XCTAssertEqual(Vents.Sound.controls(unit: 0), [])
+        XCTAssertNotNil(Vents.Sound.set(unit: 0, control: "vol", left: 50, right: 50), "a set must fail, not pretend")
+        #else
+        throw XCTSkip("the guest's sound is live-vents.sh's, against mixer(8)")
+        #endif
+    }
+}

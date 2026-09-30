@@ -1,0 +1,52 @@
+# wtap(4) teardown and re-creation fixes (PHASE14 P14.5), on top of
+# wtap-sta-hostap.patch. Each was a kernel panic in the build guest:
+#  - deinit_hal destroyed its mutex with the TSF callout still armed;
+#    after kldunload it fired on freed memory (softclock, mtx_lock);
+#  - wtap_vap_delete stopped the beacon callout without draining it;
+#  - an AP vap entering RUN with a bss on IEEE80211_CHAN_ANYC built a
+#    beacon from it (ieee80211_getcapinfo, chan=0xffff).
+# Upstreamable: the same code is in FreeBSD main.
+--- a/if_wtap.c	2026-09-28 21:15:08.386230453 -0500
++++ b/if_wtap.c	2026-09-28 21:15:08.416302026 -0500
+@@ -307,6 +307,16 @@
+ 			 */
+ 			callout_stop(&avp->av_swba);
+ 
++			/*
++			 * A bss with no channel yet has no beacon to build:
++			 * ieee80211_beacon_alloc would read the capabilities of
++			 * IEEE80211_CHAN_ANYC and fault (seen when radios are
++			 * created again in one boot).
++			 */
++			if (ni->ni_chan == IEEE80211_CHAN_ANYC) {
++				error = EINVAL;
++				goto bad;
++			}
+ 			error = wtap_beacon_alloc(sc, ni);
+ 			if (error != 0)
+ 				goto bad;
+@@ -411,7 +421,8 @@
+ 
+ 	DWTAP_PRINTF("%s\n", __func__);
+ 	destroy_dev(avp->av_dev);
+-	callout_stop(&avp->av_swba);
++	/* Wait for a beacon callout already running, not only future ones. */
++	callout_drain(&avp->av_swba);
+ 	ieee80211_vap_detach(vap);
+ 	free(avp, M_80211_VAP);
+ }
+--- a/wtap_hal/hal.c	2026-09-28 21:15:08.386792242 -0500
++++ b/wtap_hal/hal.c	2026-09-28 21:15:08.416242096 -0500
+@@ -97,6 +97,12 @@
+ {
+ 
+ 	DWTAP_PRINTF("%s\n", __func__);
++	/*
++	 * The TSF timer reschedules itself for ever once a beaconing vap has
++	 * reset it; drain it before its mutex goes, or it fires on freed memory
++	 * after the module is unloaded (a panic in softclock's mtx_lock).
++	 */
++	callout_drain(&hal->hw.timer_intr);
+ 	deinit_medium(hal->hal_md);
+ 	free(hal->hal_md, M_WTAP);
+ 	mtx_destroy(&hal->hal_mtx);

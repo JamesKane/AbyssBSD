@@ -1,0 +1,1578 @@
+// Finder — the AbyssBSD file browser, in Jaguar dress. Unlike the desktop, menu
+// bar and Dock (wlr-layer-shell shell components), the Finder is an ordinary
+// xdg-shell application: it reuses Surface.Window and the whole Aqua toolkit.
+//
+// Fidelity note: the 10.2 Finder is a *browser* by default — a toolbar with
+// Back and a view switch, folders opening in place. Clicking the title bar's
+// pill hides the toolbar, and that is exactly what turns it **spatial**: each
+// folder then gets its own window, and re-opening a folder that already has one
+// raises it (via xdg-activation) instead of making a second. Both modes live
+// here, switched by `toolbarVisible`. (This reuses `paintWindowChrome` because the
+// pinstriped/white Aqua window is the only window we ship — brushed metal and
+// every successor texture are excluded on taste. PLAN.md decision 2.) The Rust
+// sibling's `reef-fm` was spatial-only and GNOME-2 flavoured, so only its
+// structure carries over, not its behaviour.
+//
+// One process owns every window: `FinderApp` holds them and routes
+// open/raise/close, while each `FinderWindow` owns one directory's view. Input
+// reaches the right one because `Display` routes by wl_surface (the pointer and
+// keyboard `enter` events name it).
+//
+// Everything geometric lives in FinderModel.swift as pure functions, so the
+// painter below and the pointer/keyboard handlers hit-test identical rects.
+//
+// File operations follow the Mac's verbs, not a PC file manager's: **Return
+// renames** the selection (⌘O or ⌘↓ opens it — double-click still does too),
+// ⌘⇧N makes a new folder and drops straight into renaming it, ⌘D duplicates,
+// ⌘C/⌘X/⌘V copy/cut/paste through a clipboard shared by every window, and ⌘⌫
+// moves to the Trash (~/.Trash — nothing here unlinks what you asked to delete).
+// The naming rules ("untitled folder 2", "Read Me copy.txt") and the syscall
+// layer live in FinderOps.swift.
+//
+// Config (domain `finder`, ~/.config/abyss/finder.ini):
+//   view        = icon | list
+//   show_hidden = true | false
+//   toolbar     = true | false   (false = spatial; remembered across launches)
+// Start directory: $ABYSS_FINDER_DIR, else $HOME, else "/".
+
+import Surface
+import PoolConfig
+import CCairo
+import MenuWire
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+private let kBtnLeft: UInt32 = 0x110
+private let kBtnRight: UInt32 = 0x111
+private let kDoubleClickMs: Int64 = 450
+
+/// Everything the painter needs — a value, so the PNG preview can render a
+/// synthetic listing and the live window renders the real one.
+public struct FinderState {
+    public var path: String
+    public var entries: [FinderEntry]
+    public var selection: Int?
+    public var scroll: Double
+    public var view: FinderView
+    public var canGoBack: Bool
+    public var freeBytes: UInt64
+    public var backPressed: Bool
+    /// Toolbar shown = browser mode; hidden = spatial (one window per folder).
+    public var toolbarVisible: Bool
+    /// Non-nil while an item's name is being edited in place.
+    public var edit: FinderEdit?
+    /// Set when this window is a portal's file picker, so the title bar says
+    /// what the window is *for* rather than which folder it happens to show.
+    public var pickerTitle: String?
+
+    public init(path: String, entries: [FinderEntry], selection: Int? = nil,
+                scroll: Double = 0, view: FinderView = .icon,
+                canGoBack: Bool = false, freeBytes: UInt64 = 0,
+                backPressed: Bool = false, toolbarVisible: Bool = true,
+                edit: FinderEdit? = nil, pickerTitle: String? = nil) {
+        self.path = path
+        self.entries = entries
+        self.selection = selection
+        self.scroll = scroll
+        self.view = view
+        self.canGoBack = canGoBack
+        self.freeBytes = freeBytes
+        self.backPressed = backPressed
+        self.toolbarVisible = toolbarVisible
+        self.edit = edit
+        self.pickerTitle = pickerTitle
+    }
+}
+
+/// An in-progress inline rename: which item, the text so far, and how many
+/// leading characters are still *selected*. The Finder opens a rename with the
+/// base name selected (the extension left out of it), so the first thing you
+/// type replaces the name rather than appending to it.
+public struct FinderEdit: Equatable, Sendable {
+    public var index: Int
+    public var text: String
+    public var selectedPrefix: Int
+
+    public init(index: Int, text: String, selectedPrefix: Int = 0) {
+        self.index = index
+        self.text = text
+        self.selectedPrefix = selectedPrefix
+    }
+
+    /// The edit that starts a rename of `name`: base selected, extension kept.
+    public static func renaming(_ index: Int, name: String) -> FinderEdit {
+        FinderEdit(index: index, text: name,
+                   selectedPrefix: finderSplitExtension(name).base.count)
+    }
+
+    /// Replace the selected prefix with `typed` (or append when nothing is
+    /// selected). Returns the edit after the keystroke.
+    public func typing(_ typed: String) -> FinderEdit {
+        guard selectedPrefix > 0 else {
+            return FinderEdit(index: index, text: text + typed, selectedPrefix: 0)
+        }
+        return FinderEdit(index: index, text: typed + String(text.dropFirst(selectedPrefix)),
+                          selectedPrefix: 0)
+    }
+
+    /// Backspace: clears the selection if there is one, else deletes a character.
+    public func deletingBackward() -> FinderEdit {
+        if selectedPrefix > 0 {
+            return FinderEdit(index: index, text: String(text.dropFirst(selectedPrefix)),
+                              selectedPrefix: 0)
+        }
+        return FinderEdit(index: index, text: String(text.dropLast()), selectedPrefix: 0)
+    }
+}
+
+/// Height of the list view's column header (0 in icon view).
+public let finderListHeaderHeight = 17.0
+
+/// The scrolling item area: the content rect, less the list-view column header.
+/// Paint and hit-test both go through this so they agree.
+public func finderItemViewport(_ L: FinderLayout, view: FinderView) -> Rect {
+    guard view == .list else { return L.content }
+    return Rect(L.content.x, L.content.y + finderListHeaderHeight,
+                L.content.w, max(0, L.content.h - finderListHeaderHeight))
+}
+
+// MARK: - Painting
+
+/// Paint a Finder window and return its layout (which the caller keeps for
+/// hit-testing — the layout is the truth for both).
+@discardableResult
+public func paintFinder(_ cr: OpaquePointer, w: Double, h: Double,
+                        state: FinderState) -> FinderLayout {
+    paintWindowChrome(cr, w: w, h: h, title: state.pickerTitle
+                      ?? finderDisplayName(state.path))
+    let L = finderLayout(w: w, h: h, toolbarVisible: state.toolbarVisible)
+
+    // A small folder proxy icon to the left of the centred title, as the Finder
+    // shows for the folder a window represents.
+    // Measured as the title is drawn — the chrome role, in the title's weight
+    // — or a theme whose chrome type is wider puts the proxy on the title.
+    let titleW = Draw.textWidth(cr, finderDisplayName(state.path), size: Theme.current.chromeTitleSize,
+                                style: Theme.current.titleBold ? .bold : .regular, role: .chrome)
+    drawFinderIcon(cr, .folder,
+                   Rect(w / 2 - titleW / 2 - 19, (Theme.titleBarHeight - 14) / 2, 14, 14))
+
+    paintFinderToolbar(cr, L, state: state)
+
+    let viewport = finderItemViewport(L, view: state.view)
+    let count = state.entries.count
+    let contentH = finderContentHeight(count: count, view: state.view, viewport: viewport)
+    let maxScroll = max(0, contentH - viewport.h)
+    let scroll = max(0, min(state.scroll, maxScroll))
+
+    // The item well: white, clipped, scrolled.
+    Draw.paint("listview", cr, L.content)
+
+    if state.view == .list { paintFinderListHeader(cr, L) }
+
+    cairo_save(cr)
+    cairo_rectangle(cr, viewport.x, viewport.y, viewport.w, viewport.h)
+    cairo_clip(cr)
+    for (i, entry) in state.entries.enumerated() {
+        let cell = finderItemRect(i, view: state.view, viewport: viewport, scroll: scroll)
+        guard cell.y + cell.h >= viewport.y, cell.y <= viewport.y + viewport.h else { continue }
+        let selected = state.selection == i
+        let editing = state.edit?.index == i ? state.edit : nil
+        switch state.view {
+        case .icon:
+            paintFinderIconCell(cr, entry, cell, selected: selected, editing: editing)
+        case .list:
+            paintFinderListRow(cr, entry, cell, selected: selected, editing: editing)
+        }
+    }
+    cairo_restore(cr)
+
+    // Well border (drawn over the content edge, under the scrollbar).
+    Draw.paint("finder.welledge", cr, Rect(L.content.x, L.content.y, L.content.w, 1))
+
+    // Scrollbar: track, thumb (hidden when everything fits), paired arrows.
+    Draw.scrollTrack(cr, L.track, vertical: true)
+    if let thumb = thumbRect(track: L.track, offset: scroll,
+                             viewportH: viewport.h, contentH: contentH) {
+        Draw.scrollThumb(cr, thumb, vertical: true)
+    }
+    Draw.scrollArrow(cr, L.upArrow, .up, enabled: scroll > 0.5)
+    Draw.scrollArrow(cr, L.downArrow, .down, enabled: scroll < maxScroll - 0.5)
+
+    paintFinderStatusBar(cr, L, count: count, freeBytes: state.freeBytes)
+    return L
+}
+
+private func paintFinderToolbar(_ cr: OpaquePointer, _ L: FinderLayout,
+                                state: FinderState) {
+    let bar = L.toolbar
+    guard bar.h > 0 else { return }
+    Draw.paint("finder.toolbar", cr, bar)   // finder.dl
+
+    drawBackButton(cr, L.backButton, enabled: state.canGoBack,
+                   pressed: state.backPressed)
+    drawViewSwitch(cr, L.viewControl, view: state.view)
+}
+
+/// The toolbar's Back control: a white gel capsule with a left-pointing glyph,
+/// greyed out at the top of the history.
+private func drawBackButton(_ cr: OpaquePointer, _ r: Rect, enabled: Bool,
+                            pressed: Bool) {
+    var st: DrawState = pressed && enabled ? .pressed : []
+    if !enabled { st.insert(.disabled) }
+    Draw.paint("finder.back", cr, r, st)
+}
+
+/// The icon/list view switch: a two-segment Aqua control with glyphs instead of
+/// labels (a 2×2 grid of tiles, and a stack of lines).
+private func drawViewSwitch(_ cr: OpaquePointer, _ r: Rect, view: FinderView) {
+    let selected = view == .icon ? 0 : 1
+    Draw.segmentedControl(cr, r, labels: ["", ""], selected: selected)
+    Draw.paint("finder.viewswitch", cr, r, selected == 1 ? .selected : [])
+}
+
+private func paintFinderListHeader(_ cr: OpaquePointer, _ L: FinderLayout) {
+    let hdr = Rect(L.content.x, L.content.y, L.content.w, finderListHeaderHeight)
+    Draw.paint("finder.header", cr, hdr)
+    let cols = finderListColumns(hdr)
+    for (i, c) in cols.enumerated() where i > 0 {
+        Draw.paint("finder.header.divider", cr, hdr, parameters: ["x": c.x - hdr.x])
+    }
+    let titles = ["Name", "Size", "Kind"]
+    for (i, c) in cols.enumerated() {
+        Draw.textLeft(cr, titles[i], x: c.x + 6, baselineY: hdr.y + hdr.h - 5,
+                      color: Theme.bodyText.with(a: 0.8), size: 10)
+    }
+}
+
+/// Name / Size / Kind column rects for a list-view row (or the header).
+private func finderListColumns(_ row: Rect) -> [Rect] {
+    let sizeW = 70.0, kindW = 90.0
+    let nameW = max(60, row.w - sizeW - kindW)
+    return [
+        Rect(row.x, row.y, nameW, row.h),
+        Rect(row.x + nameW, row.y, sizeW, row.h),
+        Rect(row.x + nameW + sizeW, row.y, kindW, row.h),
+    ]
+}
+
+private func paintFinderIconCell(_ cr: OpaquePointer, _ entry: FinderEntry,
+                                 _ cell: Rect, selected: Bool,
+                                 editing: FinderEdit? = nil) {
+    let size = FinderMetrics.iconSize
+    let icon = Rect(cell.x + (cell.w - size) / 2, cell.y + 4, size, size)
+    if selected {
+        // Jaguar tints the selected icon with a soft blue wash.
+        Draw.paint("finder.selection", cr, icon)
+    }
+    drawFinderIcon(cr, entry, icon)
+
+    if let edit = editing {
+        // The name is being edited: a white field with the Aqua focus ring, in
+        // place of the label.
+        let tw = Draw.textWidth(cr, edit.text, size: 11)
+        let fw = max(46, min(cell.w + 16, tw + 16))
+        let field = Rect(cell.x + cell.w / 2 - fw / 2, icon.y + size + 2, fw, 16)
+        drawFinderNameField(cr, field, edit: edit, size: 11)
+        return
+    }
+
+    let label = finderTruncated(cr, entry.name, maxWidth: cell.w - 8, size: 11)
+    let tw = Draw.textWidth(cr, label, size: 11)
+    let labelY = icon.y + size + 4
+    if selected {
+        Draw.paint("iconlabel.selected", cr, Rect(cell.x + cell.w / 2 - tw / 2 - 4, labelY, tw + 8, 14))
+    }
+    Draw.text(cr, label, centerX: cell.x + cell.w / 2, centerY: labelY + 7,
+              color: selected ? Theme.menuTextOnHighlight : Theme.bodyText, size: 11)
+}
+
+private func paintFinderListRow(_ cr: OpaquePointer, _ entry: FinderEntry,
+                                _ row: Rect, selected: Bool,
+                                editing: FinderEdit? = nil) {
+    if selected { Draw.paint("listview.selection", cr, row) }
+    let fg = selected ? Theme.menuTextOnHighlight : Theme.bodyText
+    let cols = finderListColumns(row)
+    let iconSide = FinderMetrics.listIcon
+    let icon = Rect(cols[0].x + 4, row.y + (row.h - iconSide) / 2, iconSide, iconSide)
+    drawFinderIcon(cr, entry, icon)
+
+    let baseline = row.y + row.h - 5
+    let nameX = icon.x + iconSide + 5
+    if let edit = editing {
+        let fw = max(60, min(cols[0].w - (nameX - cols[0].x) - 6,
+                             Draw.textWidth(cr, edit.text, size: 11) + 16))
+        drawFinderNameField(cr, Rect(nameX - 2, row.y + 1, fw, row.h - 2),
+                            edit: edit, size: 11)
+    } else {
+        let name = finderTruncated(cr, entry.name,
+                                   maxWidth: cols[0].w - (nameX - cols[0].x) - 6,
+                                   size: 11)
+        Draw.textLeft(cr, name, x: nameX, baselineY: baseline, color: fg, size: 11)
+    }
+    let sizeText = entry.isContainer || entry.kind == .application
+        ? "--" : finderFormatBytes(entry.size)
+    Draw.textLeft(cr, sizeText, x: cols[1].x + 6, baselineY: baseline, color: fg, size: 11)
+    Draw.textLeft(cr, finderKindLabel(entry.kind), x: cols[2].x + 6, baselineY: baseline,
+                  color: fg, size: 11)
+}
+
+/// The inline rename field: a white well, the Aqua focus ring, the selected
+/// prefix on a blue highlight, and a caret at the end (editing replaces the
+/// selection, then appends/backspaces — no cursor motion yet).
+private func drawFinderNameField(_ cr: OpaquePointer, _ r: Rect, edit: FinderEdit,
+                                 size: Double) {
+    let text = edit.text
+    let inset = 4.0
+    let shown = finderTruncated(cr, text, maxWidth: r.w - 2 * inset - 2, size: size)
+    let selW = edit.selectedPrefix > 0
+        ? Draw.textWidth(cr, String(shown.prefix(edit.selectedPrefix)), size: size) : 0
+    Draw.paint("finder.namefield", cr, r, edit.selectedPrefix > 0 ? .selected : [],
+               parameters: ["sel": selW])
+    Draw.textLeft(cr, shown, x: r.x + inset, baselineY: r.y + r.h - 4,
+                  color: Theme.fieldText, size: size)
+    if edit.selectedPrefix > 0 {
+        // Redraw the selected run in the highlight's text colour.
+        let selected = String(shown.prefix(edit.selectedPrefix))
+        Draw.textLeft(cr, selected, x: r.x + inset, baselineY: r.y + r.h - 4,
+                      color: Theme.menuTextOnHighlight, size: size)
+    }
+    let caretX = min(r.x + r.w - 3, r.x + inset + Draw.textWidth(cr, shown, size: size) + 1)
+    Draw.paint("finder.namefield.caret", cr, r, parameters: ["caret": caretX - r.x])
+}
+
+public func finderKindLabel(_ kind: FinderItemKind) -> String {
+    switch kind {
+    case .folder:      return "Folder"
+    case .application: return "Application"
+    case .document:    return "Document"
+    case .disk:        return "Volume"
+    }
+}
+
+/// Shorten `s` with an ellipsis until it fits `maxWidth`.
+private func finderTruncated(_ cr: OpaquePointer, _ s: String, maxWidth: Double,
+                             size: Double) -> String {
+    guard maxWidth > 0, Draw.textWidth(cr, s, size: size) > maxWidth else { return s }
+    var out = s
+    while !out.isEmpty, Draw.textWidth(cr, out + "…", size: size) > maxWidth {
+        out.removeLast()
+    }
+    return out + "…"
+}
+
+private func paintFinderStatusBar(_ cr: OpaquePointer, _ L: FinderLayout,
+                                  count: Int, freeBytes: UInt64) {
+    let bar = L.status
+    Draw.paint("finder.status", cr, bar)
+    Draw.text(cr, finderStatusText(count: count, freeBytes: freeBytes),
+              centerX: bar.x + bar.w / 2, centerY: bar.y + bar.h / 2,
+              color: Theme.bodyText.with(a: 0.75), size: 10)
+}
+
+// MARK: - Procedural item icons (original glyphs, not Apple artwork)
+
+public func drawFinderIcon(_ cr: OpaquePointer, _ kind: FinderItemKind, _ r: Rect) {
+    // The theme's icon set (themes/aqua/icons/finder.dl, P11.8).
+    switch kind {
+    case .folder:      Draw.icon("icon.folder", cr, r)
+    case .application: Draw.icon("icon.application", cr, r)
+    case .document:    Draw.icon("icon.document", cr, r)
+    case .disk:        Draw.icon("icon.disk", cr, r)
+    }
+}
+
+/// An entry's icon: the bundle's own artwork when it has some, else the
+/// procedural glyph for its kind. Everything that draws a listed item goes
+/// through here, so the Finder and the desktop agree.
+public func drawFinderIcon(_ cr: OpaquePointer, _ entry: FinderEntry, _ r: Rect) {
+    if let path = entry.iconPath, AppIcon.draw(cr, path: path, r) { return }
+    drawFinderIcon(cr, entry.kind, r)
+}
+
+// MARK: - Type-ahead selection
+
+/// Finder type-select: the index of the next entry whose name starts with
+/// `prefix` (case-insensitive), searching forward from `after` and wrapping.
+public func finderTypeSelect(_ entries: [FinderEntry], prefix: String,
+                             after: Int?) -> Int? {
+    guard !prefix.isEmpty, !entries.isEmpty else { return nil }
+    let needle = prefix.lowercased()
+    let start = (after.map { $0 + 1 } ?? 0) % entries.count
+    for k in 0..<entries.count {
+        let i = (start + k) % entries.count
+        if entries[i].name.lowercased().hasPrefix(needle) { return i }
+    }
+    return nil
+}
+
+// MARK: - The application (one process, many windows)
+
+/// Owns every Finder window and the mode they share. In browser mode there is
+/// normally one window that navigates in place; in spatial mode each folder gets
+/// its own, and asking for a folder that already has one raises it.
+public final class FinderApp {
+    let display: Display
+    private var windows: [FinderWindow] = []
+    private let width: Int32
+    private let height: Int32
+
+    /// Browser (toolbar shown) vs spatial (hidden). Windows inherit this and a
+    /// toggle in any window updates it — the Finder remembers the mode.
+    public private(set) var toolbarVisible: Bool
+
+    /// What we ourselves last put on the clipboard.
+    ///
+    /// **A cache, not the clipboard** (P9.2). It used to be the whole of it: a
+    /// field on this object, so ⌘C in one Finder window and ⌘V in another
+    /// worked, and nothing crossed a process boundary — copy in the Finder and
+    /// paste in a GTK application was not merely unimplemented, it was
+    /// unreachable. The desktop's Edit menu has listed Cut/Copy/Paste since
+    /// P2.4, wired to nothing.
+    ///
+    /// It stays because `cut` has no representation on the wire: the selection
+    /// carries a path, and whether the person meant *move* is ours to remember.
+    /// The path itself now comes from the seat.
+    private(set) var clipboard: (path: String, cut: Bool)?
+
+    /// Put a path on the **system** clipboard, and remember whether it was a cut.
+    ///
+    /// Offered as `text/uri-list` (a `file://` URI, which is what another file
+    /// manager reads) and `text/plain` (the bare path, which is what everything
+    /// else does).
+    func setClipboard(path: String, cut: Bool) {
+        clipboard = (path, cut)
+        if let clip = display.clipboard {
+            // The serial comes from the ⌘C that caused this — see
+            // `Display.lastInputSerial`. A copy nobody asked for has no serial
+            // and is refused, which is the protocol's guard and not ours.
+            let uri = finderFileURI(path)
+            let ok = clip.write(Array(uri.utf8),
+                                types: [ClipboardMIME.uriList, ClipboardMIME.text])
+            FinderWindow.log("\(cut ? "cut" : "copied") \(path)"
+                             + (ok ? " — offered to the desktop" : " — locally only"))
+        } else {
+            // A compositor with no data device is a real case; the Finder still
+            // copies between its own windows rather than refusing to work.
+            FinderWindow.log("\(cut ? "cut" : "copied") \(path) — locally only")
+        }
+    }
+
+    func clearClipboard() { clipboard = nil }
+
+    /// Is there anything Paste could paste? Cheap — nothing is read.
+    var hasClipboard: Bool {
+        clipboard != nil
+            || display.clipboard?.offers([ClipboardMIME.uriList, ClipboardMIME.text]) == true
+    }
+
+    /// The path to paste: **what is on the seat**, falling back to our own cache.
+    ///
+    /// The seat wins because somebody else may have copied since we did — that
+    /// is the whole point of a system clipboard. The cache answers when the
+    /// selection is not something we can read, and carries the `cut` flag either
+    /// way, since only we know whether our own copy meant move.
+    func clipboardPath() -> (path: String, cut: Bool)? {
+        // Our own copy is answered from the cache — reading it off the wire
+        // would be this process asking itself for bytes while blocked waiting
+        // for them (`Clipboard.ownsSelection`). `read` returns nil in that case
+        // anyway; asking first keeps the intent visible.
+        if display.clipboard?.ownsSelection == true { return clipboard }
+        if let r = display.clipboard?.read(preferring: [ClipboardMIME.uriList,
+                                                        ClipboardMIME.text]) {
+            // The same parser a drop uses: a uri-list may carry several lines
+            // and CRLF endings, and its entries are percent-encoded, so the
+            // Finder takes the first and decodes it (`finderDroppedPath`).
+            if let s = finderDroppedPath(r.bytes) {
+                // Ours, if it is the same path — so a cut we made stays a cut.
+                if let c = clipboard, c.path == s { return c }
+                return (s, false)
+            }
+        }
+        return clipboard
+    }
+
+    /// Re-read every window showing `directory` (a file operation in one window
+    /// must show up in the others looking at the same folder).
+    func refreshWindows(showing directory: String, selecting name: String? = nil) {
+        for w in windows where w.directory == directory {
+            w.refresh(selecting: name)
+        }
+    }
+
+    /// Whether closing the last window ends the process. True when the Finder is
+    /// the app being run; false when something else hosts it (the Desktop opens
+    /// Finder windows but must outlive them).
+    private let quitsWithLastWindow: Bool
+
+    public init(display: Display, width: Int32 = 520, height: Int32 = 400,
+                quitsWithLastWindow: Bool = true) {
+        self.display = display
+        self.width = width
+        self.height = height
+        self.quitsWithLastWindow = quitsWithLastWindow
+        let config = (try? Pool.load("finder")) ?? Config()
+        toolbarVisible = config.bool("finder", "toolbar") ?? true
+        publishMenus()
+    }
+
+    // MARK: the vocabulary (PHASE10.md P10.2)
+
+    private var menuService: MenuService?
+    /// The window a command from outside means: the one the compositor last
+    /// said was active, else the newest.
+    private weak var keyWindow: FinderWindow?
+
+    /// Serve the Finder's menus on the control plane, as `menus.finder.<pid>`.
+    ///
+    /// **Not when this Finder is a portal's picker.** A picker acts for the
+    /// application that asked, and its only output is the file the *person*
+    /// chose; a vocabulary would let any process on the plane choose for them —
+    /// `abyssmenu run … file.open` on a picker is a confused deputy with a
+    /// command line. The picker's commands still work from its own keys.
+    private func publishMenus() {
+        guard !FinderPicker.isPicking else { return }
+        let name = MenuWire.serviceName(app: "Finder", pid: getpid())
+        do {
+            let service = try MenuService(name: name, provider: self)
+            display.addFileDescriptor(service.fd) { [weak service] in
+                service?.serviceReadable()
+            }
+            menuService = service
+            FinderWindow.log("menus on \(name)")
+        } catch {
+            FinderWindow.log("no menu service (\(error))")
+        }
+    }
+
+    func windowBecameKey(_ w: FinderWindow) {
+        guard keyWindow !== w else { return }
+        keyWindow = w
+        // Another window is key, so Undo may be called something else.
+        menusChanged()
+    }
+
+    /// What the menus say may have changed — Undo's title, most often.
+    func menusChanged() { menuService?.changed() }
+
+    /// Where this Finder's menus are published, or nil when it publishes none.
+    var menuServiceName: String? { menuService?.name }
+
+    fileprivate var targetWindow: FinderWindow? { keyWindow ?? windows.last }
+
+    /// Verbs that need no window: the Finder can do them with none open, which
+    /// on the desktop — where the Finder outlives its windows — is often.
+    private static let windowless: Set<FinderVerb> = [.emptyTrash, .newWindow]
+
+    func validate(_ verb: FinderVerb) -> Enablement {
+        if let w = targetWindow { return w.validate(verb) }
+        guard verb.isImplemented else { return .disabled("the Finder cannot do this yet") }
+        guard FinderApp.windowless.contains(verb) else {
+            return .disabled("no Finder window is open")
+        }
+        if verb == .emptyTrash, finderTrashContents().isEmpty {
+            return .disabled("the Trash is empty")
+        }
+        return .enabled
+    }
+
+    func perform(_ verb: FinderVerb, arguments: [String: String]) -> CommandResult {
+        if let w = targetWindow { return w.perform(verb, arguments: arguments) }
+        if case .disabled(let why) = validate(verb) { return .refused(why) }
+        switch verb {
+        case .emptyTrash: return FinderWindow.emptyTrash()
+        case .newWindow:
+            openFolder(FinderWindow.startDirectory())
+            return .ok(FinderWindow.startDirectory())
+        default: return .refused("no Finder window is open")
+        }
+    }
+
+    /// Open the window the app starts with. Returns false if the window can't be
+    /// created (no compositor surface).
+    @discardableResult
+    public func openInitialWindow(path: String? = nil) -> Bool {
+        guard let first = FinderWindow(display: display, app: self,
+                                       path: path ?? FinderWindow.startDirectory(),
+                                       toolbarVisible: toolbarVisible,
+                                       width: width, height: height)
+        else { return false }
+        windows.append(first)
+        acceptDrops()
+        return true
+    }
+
+    /// Take files dropped on any of our windows.
+    ///
+    /// **One handler for the application, not one per window**, because the
+    /// clipboard belongs to the connection: `wl_data_device` is per seat, and
+    /// the drop event says *where* it landed rather than *which window* took it.
+    /// The window is found from the `wl_surface` the drag entered — see
+    /// `Clipboard.dragSurface` for why the pointer cannot answer this.
+    private func acceptDrops() {
+        guard let clip = display.clipboard else { return }
+        clip.acceptedDragTypes = [ClipboardMIME.uriList, ClipboardMIME.text]
+        clip.onDrop = { [weak self] _, bytes, _, _ in
+            guard let self else { return }
+            guard let s = finderDroppedPath(bytes), finderExists(s) else { return }
+            // The window the drag was over is the one that was dropped on. A
+            // drop on a surface that is not one of our windows is not ours.
+            let surf = clip.dragSurface
+            guard let target = self.windows.first(where: { $0.surface == surf })
+            else { return }
+            target.receiveDrop(of: s)
+        }
+    }
+
+    /// Open (or raise) a window for `path` — what the Desktop calls when an icon
+    /// is double-clicked.
+    public func openFolder(_ path: String) {
+        if let existing = windows.first(where: { $0.directory == path }) {
+            FinderWindow.log("raised \(path)")
+            existing.raise()
+            return
+        }
+        guard let w = FinderWindow(display: display, app: self, path: path,
+                                   toolbarVisible: toolbarVisible,
+                                   width: width, height: height) else { return }
+        windows.append(w)
+        FinderWindow.log("new window \(path) (\(windows.count) open)")
+    }
+
+    /// Spatial mode's defining behaviour: a folder opens in its own window, or
+    /// raises the window it already has.
+    func open(path: String, from: FinderWindow) { openFolder(path) }
+
+    /// Close one window; the last one out ends the process.
+    func close(_ w: FinderWindow) {
+        windows.removeAll { $0 === w }
+        if keyWindow === w { keyWindow = nil; menusChanged() }
+        w.tearDown()
+        FinderWindow.log("closed \(w.directory) (\(windows.count) open)")
+        if windows.isEmpty, quitsWithLastWindow { display.stop() }
+    }
+
+    /// A window switched mode: apply it everywhere and remember it.
+    func setToolbarVisible(_ visible: Bool) {
+        toolbarVisible = visible
+        for w in windows { w.applyToolbarVisible(visible) }
+        FinderWindow.log(visible ? "toolbar shown (browser mode)"
+                                 : "toolbar hidden (spatial mode)")
+        var config = (try? Pool.load("finder")) ?? Config()
+        _ = config.set("finder", "toolbar", bool: visible)
+        try? config.store("finder")
+    }
+
+    public var windowCount: Int { windows.count }
+}
+
+extension FinderApp: MenuProvider {
+    /// The Finder's menus, with Undo and Redo named for what the key window
+    /// would undo — one definition, one piece of state, derived (§6.3).
+    public var menuModel: MenuBarModel {
+        guard let w = targetWindow else { return FinderWindow.menuBar }
+        return FinderWindow.menuBar.retitled([FinderVerb.undo.rawValue: w.undo.undoTitle,
+                                              FinderVerb.redo.rawValue: w.undo.redoTitle])
+    }
+
+    public func menuValidate(_ command: Command) -> Enablement {
+        guard let v = FinderVerb(rawValue: command.verb) else {
+            return .disabled("the Finder has no verb \(command.verb)")
+        }
+        return validate(v)
+    }
+
+    public func menuPerform(_ command: Command, arguments: [String: String]) -> CommandResult {
+        guard let v = FinderVerb(rawValue: command.verb) else {
+            return .refused("the Finder has no verb \(command.verb)")
+        }
+        return perform(v, arguments: arguments)
+    }
+}
+
+// MARK: - The live window
+
+public final class FinderWindow: WindowDelegate {
+    private var window: Window?
+    private weak var app: FinderApp?
+    private var toolbarVisible: Bool
+    private var path: String
+    private var entries: [FinderEntry] = []
+    private var selection: Int?
+    private var scroll = 0.0
+    private var view: FinderView
+    private let showHidden: Bool
+    private var freeBytes: UInt64 = 0
+    private var backStack: [String] = []
+    private var layout = FinderLayout()
+
+    private var pointerX = 0.0
+    private var pointerY = 0.0
+    private var draggingThumb = false
+    /// The row a press landed on, until it becomes a click or a drag.
+    private var pressedRow: Int?
+    private var pressAtX = 0.0
+    private var pressAtY = 0.0
+    private var thumbGrabDy = 0.0
+    private var backPressed = false
+    private var lastClickIndex: Int?
+    private var lastClickMs: Int64 = 0
+    // Non-nil while renaming an item in place.
+    private var edit: FinderEdit?
+    /// The open contextual menu, if any (P10.8).
+    private var context: ContextMenu?
+    /// This window's undo (P10.5): per window, held rather than owned, so a
+    /// document model can take it over later without changing a command.
+    let undo = UndoStack()
+
+    /// Where a Finder window opens: $ABYSS_FINDER_DIR, else $HOME, else "/".
+    public static func startDirectory() -> String {
+        if let d = getenv("ABYSS_FINDER_DIR") {
+            let s = String(cString: d)
+            if !s.isEmpty { return s }
+        }
+        if let h = getenv("HOME") {
+            let s = String(cString: h)
+            if !s.isEmpty { return s }
+        }
+        return "/"
+    }
+
+    init?(display: Display, app: FinderApp, path: String,
+          toolbarVisible: Bool, width: Int32, height: Int32) {
+        let config = (try? Pool.load("finder")) ?? Config()
+        showHidden = config.bool("finder", "show_hidden") ?? false
+        view = config.string("finder", "view") == "list" ? .list : .icon
+        self.app = app
+        self.toolbarVisible = toolbarVisible
+        self.path = path
+
+        let (scale, auto) = FinderWindow.scaleConfig()
+        guard let win = Window(display: display,
+                               title: finderDisplayName(path),
+                               appID: "org.abyssbsd.finder",
+                               width: width, height: height,
+                               scale: scale, autoScale: auto, delegate: self)
+        else { return nil }
+        window = win
+        // What Undo is called changes as this stack does, and the bar must be
+        // told — the first real customer of `subscribe` (P10.2).
+        undo.onChange = { [weak app] in app?.menusChanged() }
+        // Tell the compositor where this window's menus are (P10.3), so the
+        // bar shows them when it is focused — bound to the surface, not the
+        // app_id, which any client could claim.
+        if let name = app.menuServiceName, win.publishMenus(at: name) {
+            FinderWindow.log("window publishes its menus at \(name)")
+        }
+        reload()
+    }
+
+    /// The directory this window shows (FinderApp matches on it to raise).
+    var directory: String { path }
+
+    /// Whether folders open in a new window rather than in place.
+    private var isSpatial: Bool { !toolbarVisible }
+
+    /// Bring this window forward (xdg-activation).
+    func raise() {
+        if window?.activate() != true {
+            FinderWindow.log("raise unavailable (no xdg-activation)")
+        }
+    }
+
+    func applyToolbarVisible(_ visible: Bool) {
+        guard visible != toolbarVisible else { return }
+        toolbarVisible = visible
+        scroll = 0
+        window?.setNeedsDisplay()
+    }
+
+    /// Re-read this window's directory (after a file operation, possibly one
+    /// made in another window), keeping `name` selected if it's still there.
+    func refresh(selecting name: String? = nil) {
+        let keep = name ?? selection.map { $0 < entries.count ? entries[$0].name : "" }
+        let savedScroll = scroll
+        reload(selecting: keep)
+        scroll = min(savedScroll, maxScroll)
+        revealSelection()
+        window?.setNeedsDisplay()
+    }
+
+    /// Destroy this window's surface (called by FinderApp).
+    func tearDown() {
+        window?.close()
+        window = nil
+    }
+
+    private static func scaleConfig() -> (scale: Int32, auto: Bool) {
+        if let s = getenv("AQUA_SCALE"), let v = Int32(String(cString: s)), v > 0 {
+            return (v, false)
+        }
+        return (1, true)
+    }
+
+    static func log(_ msg: String) {
+        let line = "Finder: \(msg)\n"
+        line.withCString { _ = write(2, $0, strlen($0)) }
+    }
+
+    // MARK: navigation
+
+    /// Re-read the current directory. `selecting` names the entry to leave
+    /// selected — the Finder highlights the folder you just came out of.
+    private func reload(selecting name: String? = nil) {
+        entries = readDirectory(path, showHidden: showHidden)
+        freeBytes = finderFreeSpace(path)
+        selection = name.flatMap { n in entries.firstIndex { $0.name == n } }
+        scroll = 0
+        revealSelection()
+        window?.setTitle(finderDisplayName(path))
+        FinderWindow.log("listed \(path) (\(entries.count) items)")
+        window?.setNeedsDisplay()
+    }
+
+    /// Open `dest` in this window, remembering where we came from (the 10.2
+    /// Finder browses in place; Back returns).
+    private func navigate(to dest: String, selecting name: String? = nil) {
+        backStack.append(path)
+        path = dest
+        FinderWindow.log("opened \(dest)")
+        reload(selecting: name)
+    }
+
+    private func goBack() {
+        guard let prev = backStack.popLast() else { return }
+        let leaving = finderDisplayName(path)
+        path = prev
+        FinderWindow.log("back to \(prev)")
+        reload(selecting: leaving)
+    }
+
+    private func goUp() {
+        guard let parent = finderParent(path) else { return }
+        if isSpatial {
+            app?.open(path: parent, from: self)
+        } else {
+            navigate(to: parent, selecting: finderDisplayName(path))
+        }
+    }
+
+    /// Activate an item. A folder opens in place (browser mode) or in its own
+    /// window (spatial mode); a file is launched — or, when this Finder is
+    /// running as a portal's picker, *chosen* (PHASE7.md P7.1). A file dialog
+    /// that launched what you clicked would be both surprising and a way to make
+    /// the picker run things on the requesting app's behalf.
+    private func activate(_ i: Int) {
+        guard i >= 0, i < entries.count else { return }
+        switch finderActivation(entry: entries[i], in: path,
+                                picking: FinderPicker.isPicking) {
+        case .choose(let full):
+            FinderWindow.log("picked \(full)")
+            FinderPicker.chose(full)
+        case .launch(let full):
+            // An app bundle, an executable, or the opener command (Launcher).
+            FinderWindow.log(Launcher.open(full).description + " (\(full))")
+        case .navigate(let full):
+            if isSpatial {
+                app?.open(path: full, from: self)
+            } else {
+                navigate(to: full)
+            }
+        }
+    }
+
+    /// The pill in the title bar: show/hide the toolbar, which is what switches
+    /// between browser and spatial behaviour (as in 10.2).
+    private func toggleToolbar() {
+        app?.setToolbarVisible(!toolbarVisible)
+    }
+
+    /// The red traffic light. In spatial mode windows come and go constantly, so
+    /// this closes just this one; the last one out stops the display.
+    private func closeWindow() {
+        if let app {
+            app.close(self)
+        } else {
+            window?.close()
+            window?.stopDisplay()
+        }
+    }
+
+    // MARK: scrolling
+
+    private var viewport: Rect { finderItemViewport(layout, view: view) }
+
+    private var maxScroll: Double {
+        finderMaxScroll(count: entries.count, view: view, viewport: viewport)
+    }
+
+    private func scrollBy(_ dy: Double) {
+        let old = scroll
+        scroll = max(0, min(scroll + dy, maxScroll))
+        if scroll != old { window?.setNeedsDisplay() }
+    }
+
+    private func revealSelection() {
+        guard let s = selection else { return }
+        scroll = finderScrollToShow(s, scroll: scroll, count: entries.count,
+                                    view: view, viewport: viewport)
+    }
+
+    private func select(_ i: Int?) {
+        selection = i
+        if let i, i >= 0, i < entries.count {
+            FinderWindow.log("selected \(entries[i].name)")
+        }
+        revealSelection()
+        window?.setNeedsDisplay()
+    }
+
+    private func setView(_ v: FinderView) {
+        guard v != view else { return }
+        view = v
+        scroll = 0
+        revealSelection()
+        FinderWindow.log("view -> \(v == .icon ? "icon" : "list")")
+        window?.setNeedsDisplay()
+    }
+
+    // MARK: file operations
+
+    /// Does `name` already exist in this directory?
+    private func exists(_ name: String) -> Bool {
+        finderExists(finderJoin(path, name))
+    }
+
+    private var selectedEntry: FinderEntry? {
+        guard let s = selection, s >= 0, s < entries.count else { return nil }
+        return entries[s]
+    }
+
+    // MARK: undo (P10.5)
+
+    /// Move `src` to `dst`, as an undo or redo — refused, with the reason, if
+    /// the world has moved since (§6.3).
+    private func undoMove(_ src: String, to dst: String) -> CommandResult {
+        guard finderExists(src) else {
+            return .refused("\(finderDisplayName(src)) is not where it was any more")
+        }
+        guard !finderExists(dst) else {
+            return .refused("something called \(finderDisplayName(dst)) is in the way")
+        }
+        guard finderRenameEntry(from: src, to: dst) else {
+            return .refused("could not move \(finderDisplayName(src)) back")
+        }
+        FinderWindow.log("moved \(src) -> \(dst)")
+        refreshAround(src, dst, selecting: finderDisplayName(dst))
+        return .ok(dst)
+    }
+
+    private func refreshAround(_ a: String, _ b: String, selecting name: String? = nil) {
+        for dir in Set([finderParent(a), finderParent(b)].compactMap { $0 }) {
+            if let app { app.refreshWindows(showing: dir, selecting: dir == finderParent(b) ? name : nil) }
+            else if dir == path { refresh(selecting: name) }
+        }
+    }
+
+    /// Something moved from `a` to `b`: undo moves it back.
+    private func pushMove(_ name: String, from a: String, to b: String) {
+        undo.push(UndoEntry(name,
+            undo: { [weak self] in self?.undoMove(b, to: a) ?? .refused("the window has closed") },
+            redo: { [weak self] in self?.undoMove(a, to: b) ?? .refused("the window has closed") }))
+    }
+
+    /// Something was made at `made`: undo puts it in the Trash, never deletes
+    /// it, as the Finder does; redo takes it back out.
+    private func pushCreation(_ name: String, made: String) {
+        var trashed: String?
+        undo.push(UndoEntry(name,
+            undo: { [weak self] in
+                guard let self else { return .refused("the window has closed") }
+                guard finderExists(made) else {
+                    return .refused("\(finderDisplayName(made)) is not there any more")
+                }
+                guard let t = finderMoveToTrash(made) else {
+                    return .refused("could not move \(finderDisplayName(made)) to the Trash")
+                }
+                trashed = t
+                FinderWindow.log("undid \(name): \(made) -> \(t)")
+                self.refreshAround(made, made)
+                return .ok(t)
+            },
+            redo: { [weak self] in
+                guard let self, let t = trashed else { return .refused("the window has closed") }
+                return self.undoMove(t, to: made)
+            }))
+    }
+
+    /// ⌘⇧N: make "untitled folder" and go straight into renaming it, as the
+    /// Finder does.
+    private func newFolder() -> CommandResult {
+        let name = finderNewFolderName(exists: exists)
+        let full = finderJoin(path, name)
+        guard finderCreateDirectory(full) else {
+            FinderWindow.log("could not create \(name) in \(path)")
+            return .refused("could not create \(name) in \(path)")
+        }
+        FinderWindow.log("new folder \(full)")
+        pushCreation("New Folder", made: full)
+        app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+        beginRename()
+        return .ok(full)
+    }
+
+    /// Return: edit the selected item's name in place.
+    private func beginRename() {
+        guard let s = selection, let entry = selectedEntry else { return }
+        edit = FinderEdit.renaming(s, name: entry.name)
+        window?.setNeedsDisplay()
+    }
+
+    private func cancelRename() {
+        guard edit != nil else { return }
+        edit = nil
+        window?.setNeedsDisplay()
+    }
+
+    private func commitRename() {
+        guard let e = edit, e.index < entries.count else { return cancelRename() }
+        let old = entries[e.index].name
+        let new = e.text
+        edit = nil
+        guard new != old else { window?.setNeedsDisplay(); return }
+        guard finderIsValidName(new), !exists(new) else {
+            FinderWindow.log("rename refused: '\(new)' is taken or not a valid name")
+            window?.setNeedsDisplay()
+            return
+        }
+        guard finderRenameEntry(from: finderJoin(path, old),
+                               to: finderJoin(path, new)) else {
+            FinderWindow.log("rename failed: \(old) -> \(new)")
+            window?.setNeedsDisplay()
+            return
+        }
+        FinderWindow.log("renamed \(old) -> \(new) in \(path)")
+        pushMove("Rename", from: finderJoin(path, old), to: finderJoin(path, new))
+        app?.refreshWindows(showing: path, selecting: new) ?? refresh(selecting: new)
+    }
+
+    /// ⌘D: copy the selection beside itself ("Read Me copy.txt").
+    private func duplicateSelection() -> CommandResult {
+        guard let entry = selectedEntry else { return .refused("nothing is selected") }
+        let name = finderCopyName(entry.name, exists: exists)
+        guard finderCopyPath(from: finderJoin(path, entry.name),
+                             to: finderJoin(path, name)) else {
+            FinderWindow.log("duplicate failed: \(entry.name)")
+            return .refused("could not duplicate \(entry.name)")
+        }
+        FinderWindow.log("duplicated \(entry.name) -> \(name) in \(path)")
+        pushCreation("Duplicate", made: finderJoin(path, name))
+        app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+        return .ok(finderJoin(path, name))
+    }
+
+    /// ⌘C / ⌘X.
+    private func clipSelection(cut: Bool) -> CommandResult {
+        guard let entry = selectedEntry else { return .refused("nothing is selected") }
+        let full = finderJoin(path, entry.name)
+        app?.setClipboard(path: full, cut: cut)
+        return .ok(full)
+    }
+
+    /// ⌘V: copy (or move, after a cut) the clipboard item into this folder.
+    private func paste() -> CommandResult {
+        guard let clip = app?.clipboardPath() else { return .refused("the clipboard is empty") }
+        let source = clip.path
+        guard finderExists(source) else {
+            FinderWindow.log("paste failed: \(source) is gone")
+            app?.clearClipboard()
+            return .refused("\(source) is gone")
+        }
+        let sourceDir = finderParent(source) ?? ""
+        let name = finderPasteName(finderDisplayName(source), exists: exists)
+        let dest = finderJoin(path, name)
+        let ok = clip.cut ? finderRenameEntry(from: source, to: dest)
+                          : finderCopyPath(from: source, to: dest)
+        guard ok else {
+            FinderWindow.log("paste failed: \(source) -> \(dest)")
+            return .refused("could not paste \(source) into \(path)")
+        }
+        FinderWindow.log("pasted \(source) -> \(dest)")
+        if clip.cut { pushMove("Move", from: source, to: dest) }
+        else { pushCreation("Paste", made: dest) }
+        if clip.cut {
+            app?.clearClipboard()
+            // A move empties the source folder's view too.
+            if sourceDir != path { app?.refreshWindows(showing: sourceDir) }
+        }
+        app?.refreshWindows(showing: path, selecting: name) ?? refresh(selecting: name)
+        return .ok(dest)
+    }
+
+    /// ⌘⌫: move the selection to ~/.Trash (never an unlink).
+    private func trashSelection() -> CommandResult {
+        guard let entry = selectedEntry else { return .refused("nothing is selected") }
+        let source = finderJoin(path, entry.name)
+        guard let dest = finderMoveToTrash(source) else {
+            FinderWindow.log("could not move \(source) to the Trash")
+            return .refused("could not move \(source) to the Trash")
+        }
+        FinderWindow.log("trashed \(source) -> \(dest)")
+        pushMove("Move to Trash", from: source, to: dest)
+        app?.refreshWindows(showing: path) ?? refresh()
+        return .ok(dest)
+    }
+
+    private func nowMs() -> Int64 {
+        var ts = timespec()
+        clock_gettime(CLOCK_MONOTONIC, &ts)
+        return Int64(ts.tv_sec) * 1000 + Int64(ts.tv_nsec) / 1_000_000
+    }
+
+    // MARK: WindowDelegate
+
+    public func render(_ buffer: PixelBuffer) {
+        Text.renderScale = buffer.scale
+        let w = Double(buffer.width / buffer.scale)
+        let h = Double(buffer.height / buffer.scale)
+        let cs = cairo_image_surface_create_for_data(
+            buffer.data.assumingMemoryBound(to: UInt8.self),
+            CAIRO_FORMAT_ARGB32, buffer.width, buffer.height, buffer.stride)
+        guard let cr = cairo_create(cs) else { cairo_surface_destroy(cs); return }
+        cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
+        cairo_save(cr)
+        cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR)
+        cairo_paint(cr)
+        cairo_restore(cr)
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
+
+        scroll = max(0, min(scroll, maxScroll))
+        let state = FinderState(path: path, entries: entries, selection: selection,
+                                scroll: scroll, view: view,
+                                canGoBack: !backStack.isEmpty, freeBytes: freeBytes,
+                                backPressed: backPressed,
+                                toolbarVisible: toolbarVisible, edit: edit,
+                                pickerTitle: FinderPicker.isPicking ? "Choose a File" : nil)
+        layout = paintFinder(cr, w: w, h: h, state: state)
+
+        cairo_surface_flush(cs)
+        cairo_destroy(cr)
+        cairo_surface_destroy(cs)
+    }
+
+    public func pointerMoved(x: Double, y: Double) {
+        pointerX = x
+        pointerY = y
+        if draggingThumb {
+            dragThumb(to: y - thumbGrabDy)
+            window?.setNeedsDisplay()
+        }
+        // **A drag begins when a press turns into movement**, not when the
+        // button goes down: a click that happens to wobble by a pixel is still
+        // a click, and starting a drag on every press would make selecting a
+        // file impossible. Four pixels is the usual threshold and is far enough
+        // that nobody reaches it by accident.
+        if let idx = pressedRow, !draggingThumb {
+            let dx = x - pressAtX, dy = y - pressAtY
+            if dx * dx + dy * dy > 16 { beginDrag(of: idx) }
+        }
+    }
+
+    /// Hand a file to the rest of the desktop.
+    private func beginDrag(of index: Int) {
+        pressedRow = nil                       // one drag per press
+        guard entries.indices.contains(index), let surface = window?.surface,
+              let clip = app?.display.clipboard else { return }
+        let path = finderJoin(directory, entries[index].name)
+        let uri = finderFileURI(path)
+        // The serial is the pointer press that started this — the compositor
+        // checks it (`validate_pointer_grab_serial`), which is what stops a
+        // program starting a drag nobody initiated.
+        let ok = clip.startDrag(Array(uri.utf8), from: surface,
+                                serial: app?.display.lastPointerSerial ?? 0,
+                                types: [ClipboardMIME.uriList, ClipboardMIME.text])
+        FinderWindow.log(ok ? "dragging \(path)" : "could not start a drag of \(path)")
+    }
+
+    private func dragThumb(to thumbTopY: Double) {
+        let vp = viewport
+        let contentH = finderContentHeight(count: entries.count, view: view, viewport: vp)
+        guard let thumb = thumbRect(track: layout.track, offset: scroll,
+                                    viewportH: vp.h, contentH: contentH) else { return }
+        let travel = layout.track.h - thumb.h
+        guard travel > 0 else { return }
+        let t = max(0, min(1, (thumbTopY - layout.track.y) / travel))
+        scroll = t * maxScroll
+    }
+
+    public func pointerAxis(_ axis: UInt32, value: Double) {
+        guard axis == 0 else { return }
+        scrollBy(value * 2)
+    }
+
+    public func pointerButton(_ button: UInt32, pressed: Bool) {
+        if button == kBtnRight, pressed { openContextMenu(); return }
+        guard button == kBtnLeft else { return }
+        if pressed, edit != nil { commitRename() }
+        guard pressed else {
+            draggingThumb = false
+            pressedRow = nil
+            if backPressed {
+                backPressed = false
+                if layout.backButton.contains(pointerX, pointerY) { goBack() }
+                window?.setNeedsDisplay()
+            }
+            return
+        }
+
+        // The chrome: the same rule every Aqua window uses (P9.4). The pill is
+        // the Finder's own — it toggles the toolbar (browser ⇄ spatial) — and
+        // the rest are requests to the compositor, because a client can neither
+        // move nor resize nor zoom its own window.
+        let size = window?.size ?? (width: 0, height: 0)
+        switch windowChromeHit(x: pointerX, y: pointerY,
+                               w: Double(size.width), h: Double(size.height)) {
+        case .pill:  toggleToolbar(); return
+        case .close: closeWindow(); return
+        case .minimize: window?.minimize(); return
+        case .zoom: window?.setMaximized(!(window?.isMaximized ?? false)); return
+        case .depth: window?.lower(); return
+        case .title: window?.beginMove(); return
+        case .resize(let edge): window?.beginResize(edge); return
+        case .content: break
+        }
+
+        if toolbarVisible {
+            if layout.backButton.contains(pointerX, pointerY) {
+                if !backStack.isEmpty { backPressed = true; window?.setNeedsDisplay() }
+                return
+            }
+            let segs = Draw.segmentRects(layout.viewControl, count: 2)
+            if segs.count == 2 {
+                if segs[0].contains(pointerX, pointerY) { setView(.icon); return }
+                if segs[1].contains(pointerX, pointerY) { setView(.list); return }
+            }
+        }
+
+        // Scrollbar: thumb drag, arrows, page-toward-click.
+        let vp = viewport
+        let contentH = finderContentHeight(count: entries.count, view: view, viewport: vp)
+        if let thumb = thumbRect(track: layout.track, offset: scroll,
+                                 viewportH: vp.h, contentH: contentH),
+           thumb.contains(pointerX, pointerY) {
+            draggingThumb = true
+            thumbGrabDy = pointerY - thumb.y
+            return
+        }
+        if layout.upArrow.contains(pointerX, pointerY) { scrollBy(-FinderMetrics.rowHeight * 2); return }
+        if layout.downArrow.contains(pointerX, pointerY) { scrollBy(FinderMetrics.rowHeight * 2); return }
+        if layout.track.contains(pointerX, pointerY) {
+            if let thumb = thumbRect(track: layout.track, offset: scroll,
+                                     viewportH: vp.h, contentH: contentH) {
+                scrollBy(pointerY < thumb.y ? -vp.h * 0.9 : vp.h * 0.9)
+            }
+            return
+        }
+
+        // The item well: click selects, a second click on the same item within
+        // the double-click window opens it.
+        guard vp.contains(pointerX, pointerY) else { return }
+        let hit = finderIndex(atX: pointerX, y: pointerY, count: entries.count,
+                              view: view, viewport: vp, scroll: scroll)
+        let now = nowMs()
+        if let hit {
+            let isDouble = hit == lastClickIndex && now - lastClickMs <= kDoubleClickMs
+            lastClickIndex = hit
+            lastClickMs = now
+            if isDouble {
+                lastClickIndex = nil    // don't chain a third click into another open
+                activate(hit)
+            } else {
+                select(hit)
+                // Armed, not started: `pointerMoved` decides whether this press
+                // was a click or the beginning of a drag.
+                pressedRow = hit
+                pressAtX = pointerX
+                pressAtY = pointerY
+            }
+        } else {
+            lastClickIndex = nil
+            select(nil)                 // click in empty space deselects
+        }
+    }
+
+    /// This window's `wl_surface` — how a drop is matched back to a window.
+    var surface: OpaquePointer? { window?.surface }
+
+    /// A file was dropped here: copy it in, exactly as ⌘V would.
+    func receiveDrop(of path: String) {
+        let name = finderPasteName(finderDisplayName(path), exists: exists)
+        let dest = finderJoin(directory, name)
+        guard finderCopyPath(from: path, to: dest) else {
+            FinderWindow.log("drop failed: \(path) -> \(dest)")
+            return
+        }
+        FinderWindow.log("dropped \(path) -> \(dest)")
+        app?.refreshWindows(showing: directory, selecting: name) ?? refresh(selecting: name)
+    }
+
+    /// Right-click: select what is under the pointer — as the Finder does, so
+    /// the menu's commands mean *that* item — and open the item's menu, or the
+    /// folder's when the click was on nothing (P10.8).
+    private func openContextMenu() {
+        context?.close(); context = nil
+        if edit != nil { commitRename() }
+        let hit = finderIndex(atX: pointerX, y: pointerY, count: entries.count, view: view,
+                              viewport: viewport, scroll: scroll)
+        guard viewport.contains(pointerX, pointerY) else { return }
+        select(hit)
+        let verbs = hit == nil ? FinderContext.background : FinderContext.item
+        let menu = FinderContext.menu(verbs, in: FinderWindow.menuBar)
+        let (ax, ay) = (Int32(pointerX), Int32(pointerY))
+        context = ContextMenu.open(
+            menu, name: hit == nil ? "folder" : "item",
+            enablement: { [weak self] c in
+                guard let self, let v = FinderVerb(rawValue: c.verb) else { return .disabled("?") }
+                return self.validate(v)
+            },
+            log: { FinderWindow.log($0) },
+            open: { [weak self] w, h, am in
+                self?.window?.openPopup(anchorX: ax, anchorY: ay, anchorW: 1, anchorH: 1,
+                                        width: w, height: h, delegate: am)
+            },
+            choose: { [weak self] c in
+                guard let self, let v = FinderVerb(rawValue: c.verb) else { return }
+                switch self.perform(v) {
+                case .ok(let x):      FinderWindow.log("context chose \(c.title) (\(c.verb)) → ok" + (x.map { " \($0)" } ?? ""))
+                case .refused(let w): FinderWindow.log("context chose \(c.title) (\(c.verb)) → refused: \(w)")
+                }
+            },
+            onClose: { [weak self] in self?.context = nil })
+    }
+
+    /// The compositor says which window is active; a command from outside the
+    /// process (P10.2) goes to that one.
+    public func windowStateChanged(_ window: Window) {
+        if window.isActivated { app?.windowBecameKey(self) }
+        self.window?.setNeedsDisplay()
+    }
+
+    public func windowShouldClose(_ window: Window) {
+        // Closing a picker is declining it: exit non-zero so the portal can tell
+        // "the user cancelled" from "the picker chose something".
+        if FinderPicker.isPicking { FinderPicker.cancelled() }
+        closeWindow()
+    }
+
+    /// The ASCII letter a keysym stands for, lowercased (X11 keysyms for ASCII
+    /// *are* the ASCII values), so ⌘N and ⌘⇧N match the same case.
+    /// ⌘S in a save picker: choose `<the folder on screen>/<suggested name>`.
+    /// A save dialog must be able to name a file that does not exist yet, which
+    /// picking from a listing cannot express (see FinderPicker.saveName).
+    private func saveHere() {
+        guard let name = FinderPicker.saveName() else { return }
+        let full = finderJoin(path, name)
+        FinderWindow.log("picked \(full)")
+        FinderPicker.chose(full)
+    }
+
+    /// Keys while an inline rename is up: the field owns the keyboard.
+    private func editKey(_ event: KeyEvent, _ e: FinderEdit) {
+        switch event.keysym {
+        case KeySym.enter:
+            commitRename()
+        case KeySym.escape:
+            cancelRename()
+        case KeySym.backspace:
+            guard !e.text.isEmpty else { return }
+            edit = e.deletingBackward()
+            window?.setNeedsDisplay()
+        default:
+            guard !event.text.isEmpty, !event.modifiers.contains(.command) else { return }
+            edit = e.typing(event.text)
+            window?.setNeedsDisplay()
+        }
+    }
+
+    // MARK: commands (PHASE10.md P10.1)
+
+    /// The Finder's commands, shared by every window: the key handler below and
+    /// the menu bar both read this, so they cannot disagree.
+    static let menuBar = finderMenuBar()
+
+    /// Whether `verb` can run in this window now, and why not. Asked before a
+    /// key runs a command, and (P10.4) before the bar draws a menu.
+    func validate(_ verb: FinderVerb) -> Enablement {
+        guard verb.isImplemented else { return .disabled("the Finder cannot do this yet") }
+        let needsSelection: Set<FinderVerb> = [.open, .duplicate, .moveToTrash, .cut, .copy]
+        if needsSelection.contains(verb), selectedEntry == nil {
+            return .disabled("nothing is selected")
+        }
+        switch verb {
+        case .undo: return undo.undoEnablement
+        case .redo: return undo.redoEnablement
+        case .emptyTrash:
+            return finderTrashContents().isEmpty ? .disabled("the Trash is empty") : .enabled
+        case .saveHere:
+            return FinderPicker.isSaving ? .enabled : .disabled("this is not a save dialog")
+        case .paste:
+            return app?.hasClipboard == true ? .enabled : .disabled("the clipboard is empty")
+        case .back:
+            return backStack.isEmpty ? .disabled("there is nowhere to go back to") : .enabled
+        case .enclosingFolder:
+            return finderParent(path) == nil ? .disabled("this is the top of the disk") : .enabled
+        case .applications:
+            return finderIsDirectory(FinderWindow.applicationsDirectory)
+                ? .enabled : .disabled("there is no Applications folder")
+        default:
+            return .enabled
+        }
+    }
+
+    /// Run `verb` in this window. The only place a Finder command is carried
+    /// out — a key and a menu choice both land here.
+    ///
+    /// **No `default:`**, so a verb added to `FinderVerb` does not compile until
+    /// this says what it does (§2.51's rule, applied to commands).
+    @discardableResult
+    func perform(_ verb: FinderVerb, arguments: [String: String] = [:]) -> CommandResult {
+        if case .disabled(let why) = validate(verb) {
+            FinderWindow.log("refused \(verb.rawValue): \(why)")
+            return .refused(why)
+        }
+        FinderWindow.log("command \(verb.rawValue)")
+        switch verb {
+        case .emptyTrash:    return FinderWindow.emptyTrash()
+        case .newWindow:
+            app?.openFolder(FinderWindow.startDirectory())
+            return .ok(FinderWindow.startDirectory())
+        case .newFolder:     return newFolder()
+        case .open:          if let s = selection { activate(s) }
+        case .closeWindow:   closeWindow()
+        case .duplicate:     return duplicateSelection()
+        case .moveToTrash:   return trashSelection()
+        case .saveHere:      saveHere()
+        case .cut:           return clipSelection(cut: true)
+        case .copy:          return clipSelection(cut: false)
+        case .paste:         return paste()
+        case .asIcons:       setView(.icon)
+        case .asList:        setView(.list)
+        case .toggleToolbar: toggleToolbar()
+        case .back:          goBack()
+        case .enclosingFolder: goUp()
+        case .goToFolder:
+            // From a script this is the whole command; from a key or the menu
+            // it would open a sheet to type the path into, and there is no
+            // sheet yet — so it says what it needs rather than doing nothing.
+            guard let dest = arguments["path"] else {
+                return .refused("Go to Folder needs a path, and there is no dialog to type one into yet")
+            }
+            guard finderIsDirectory(dest) else { return .refused("\(dest) is not a folder") }
+            go(to: dest)
+            return .ok(dest)
+        case .computer:      go(to: "/")
+        case .home:          go(to: FinderWindow.homeDirectory)
+        case .applications:  go(to: FinderWindow.applicationsDirectory)
+        case .undo:          return undo.undo()
+        case .redo:          return undo.redo()
+        case .minimize:      window?.minimize()
+        case .zoom:          window?.setMaximized(!(window?.isMaximized ?? false))
+        case .about, .preferences, .hide, .hideOthers, .showAll, .getInfo,
+             .makeAlias, .find, .selectAll, .asColumns, .help:
+            // Unreachable: `validate` refuses what is not implemented. Listed
+            // rather than defaulted so implementing one is a visible edit here.
+            return .refused("the Finder cannot do this yet")
+        }
+        return .ok(nil)
+    }
+
+    /// Empty the Trash: the one command that is the same from any window, or
+    /// from none.
+    static func emptyTrash() -> CommandResult {
+        let r = finderEmptyTrash()
+        FinderWindow.log("emptied the Trash (\(r.removed) removed, \(r.failed) failed)")
+        return r.failed == 0 ? .ok("\(r.removed) removed")
+                             : .refused("\(r.failed) items could not be removed")
+    }
+
+    /// Go somewhere from the Go menu: in place when browsing, a window of its
+    /// own when spatial — the same rule as opening a folder.
+    private func go(to dest: String) {
+        guard dest != path else { return }
+        if isSpatial { app?.open(path: dest, from: self) } else { navigate(to: dest) }
+    }
+
+    static var homeDirectory: String {
+        if let h = getenv("HOME") {
+            let s = String(cString: h)
+            if !s.isEmpty { return s }
+        }
+        return "/"
+    }
+
+    static var applicationsDirectory: String { finderJoin(homeDirectory, "Applications") }
+
+    /// A key that is a command. Returns false if the model binds nothing to it.
+    private func commandKey(_ event: KeyEvent) -> Bool {
+        guard let press = keyEquivalent(event),
+              let name = FinderWindow.menuBar.verb(for: press),
+              let verb = FinderVerb(rawValue: name) else { return false }
+        perform(verb)
+        return true
+    }
+
+    public func keyEvent(_ event: KeyEvent) {
+        guard event.pressed else { return }
+        // An open rename field takes everything.
+        if let e = edit { editKey(event, e); return }
+        if event.modifiers.contains(.command), commandKey(event) { return }
+
+        let vp = viewport
+        switch event.keysym {
+        case KeySym.enter:
+            // Mac verbs: Return renames, ⌘O / ⌘↓ (and double-click) open.
+            beginRename()
+        case KeySym.backspace:
+            goUp()
+        case KeySym.escape:
+            // In a picker, Escape is Cancel — the dialog convention. It still
+            // clears the selection first, so one Escape deselects and a second
+            // declines, which is what a Mac file dialog does.
+            if FinderPicker.isPicking && selection == nil { FinderPicker.cancelled() }
+            select(nil)
+        case KeySym.left:
+            select(finderMove(from: selection, dx: -1, dy: 0, count: entries.count,
+                              view: view, viewport: vp))
+        case KeySym.right:
+            select(finderMove(from: selection, dx: 1, dy: 0, count: entries.count,
+                              view: view, viewport: vp))
+        case KeySym.up:
+            select(finderMove(from: selection, dx: 0, dy: -1, count: entries.count,
+                              view: view, viewport: vp))
+        case KeySym.down:
+            select(finderMove(from: selection, dx: 0, dy: 1, count: entries.count,
+                              view: view, viewport: vp))
+        case KeySym.home:
+            select(entries.isEmpty ? nil : 0)
+        case KeySym.end:
+            select(entries.isEmpty ? nil : entries.count - 1)
+        case KeySym.pageUp:
+            scrollBy(-vp.h * 0.9)
+        case KeySym.pageDown:
+            scrollBy(vp.h * 0.9)
+        case KeySym.tab:
+            setView(view == .icon ? .list : .icon)
+        default:
+            // Type-ahead: a printable character jumps to the next matching name.
+            guard !event.text.isEmpty, event.text != " ",
+                  !event.modifiers.contains(.command),
+                  !event.modifiers.contains(.control) else { return }
+            if let i = finderTypeSelect(entries, prefix: event.text, after: selection) {
+                select(i)
+            }
+        }
+    }
+}

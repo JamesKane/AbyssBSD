@@ -1,0 +1,365 @@
+# Trench — the controls (PHASE11 P11.9). Plan Neo's materials: raised keys,
+# sunken wells, brushed metal, anodized panels, glow on focus and selection
+# ($gk). No Swift knows this theme; these lists are all it is.
+
+# Focus is a cyan ring. (It is drawn over the control, and a glow is a
+# filled shape blurred, so it would wash the control; where a ring is drawn
+# first — the text field — it glows.)
+list focusring
+  rect -2 -2 w+4 h+4
+  stroke glowFocus 2
+end
+
+# The study has no pinstripe: a hairline texture in its place.
+list pinstripe
+  rect 0 0 w h
+  fill stripes 0 1 $color/0.4 2 #ffffff/0
+end
+
+# A bevelled key (the study's .pbtn): Chakra Petch, uppercase; pressed, a well.
+list button
+  unless pressed rect 0 0 w h
+  unless pressed fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  unless pressed bevel $bevel bevelLight bevelShade
+  when pressed rect 0 0 w h
+  when pressed fill fieldBackground
+  when pressed bevel $bevel bevelShade bevelLight
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  text $label w/2 h/2 center bold size=12 role=chrome color=buttonTextOnWhite
+end
+
+# The default key says so in cyan, glowing.
+list button.default
+  unless pressed rect 0 0 w h
+  unless pressed fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  unless pressed bevel $bevel bevelLight bevelShade
+  when pressed rect 0 0 w h
+  when pressed fill fieldBackground
+  when pressed bevel $bevel bevelShade bevelLight
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  text $label w/2 h/2 center bold size=12 role=chrome color=buttonTextOnBlue halo=glowFocus/0.7 halor=8*$gk
+end
+
+# A sunken well; focused, ringed in cyan.
+list textfield
+  when focused rect -2 -2 w+4 h+4
+  when focused glow glowFocus 8 $gk
+  when focused stroke glowFocus 2
+  rect 0 0 w h
+  fill fieldBackground
+  bevel $bevel bevelShade bevelLight
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  rect 4 0 w-8 h
+  clip
+  text $label 6 h/2+@fontSize*0.35 left baseline color=fieldText placeholder=fieldPlaceholder
+  when focused path 6+textw(@fontSize)+1 5 6+textw(@fontSize)+1 h-5
+  when focused stroke fieldCaret 1.5
+  pop
+end
+
+# A raised key with a cyan tick (the study's .chk).
+list checkbox
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  when selected path w*0.28 h*0.5 w*0.44 h*0.68 w*0.74 h*0.26
+  when selected stroke controlGlyph 2 round
+end
+
+list radio
+  circle $r $r $r
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  stroke windowBorder 1
+  circle $r $r-0.5 $r-1.5
+  stroke bevelLight 1
+  when selected circle $r $r $r*0.4
+  when selected glow glowFocus 6 $gk
+  when selected fill glowFocus
+end
+
+# A sunken groove filled magenta to the thumb, and a grooved metal thumb.
+list slider
+  rect 0 h/2-4 w 8
+  fill fieldBackground
+  bevel $bevel bevelShade bevelLight
+  rect 1 h/2-3 $thumb 6
+  glow glowSelect/0.4 8 $gk
+  fill menuHighlight
+  rect $thumb-12 h/2-9 24 18
+  fill vertical stops 0 titleBarTop 1 titleBarBottom
+  stroke windowBorder 1
+  bevel 1 bevelLight #000000/0
+  path $thumb-3.5 h/2-6 $thumb-3.5 h/2+6
+  and path $thumb+0.5 h/2-6 $thumb+0.5 h/2+6
+  stroke bevelShade 1
+  path $thumb-2.5 h/2-6 $thumb-2.5 h/2+6
+  and path $thumb+1.5 h/2-6 $thumb+1.5 h/2+6
+  stroke bevelLight 1
+end
+
+# MUI's cycle gadget: an arrow segment, then the value.
+list popup
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  path 26 1 26 h-1
+  stroke bevelShade 1
+  path 27 1 27 h-1
+  stroke bevelLight 1
+  arc 13 h/2 4.5 -0.7 4.5
+  stroke bodyText 1.6
+  path 13+3 h/2-5.5 13+6 h/2-3.2 13+2.8 h/2-2.3 close
+  fill bodyText
+  text $label 38 h/2 left color=bodyText
+end
+
+# A sunken well filling with magenta; no candy stripe.
+list progress
+  rect 0 0 w h
+  fill fieldBackground
+  bevel $bevel bevelShade bevelLight
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  rect 1 1 $fill-2 h-2
+  glow glowSelect/0.45 8 $gk
+  fill vertical stops 0 mix(menuHighlight, #ffffff, 0.2) 1 menuHighlight
+end
+
+list scrolltrack
+  rect 0 0 w h
+  fill windowBorder
+  rect 1 1 w-2 h-2
+  fill fieldBackground
+end
+
+list scrollthumb
+  rect 1 1 w-2 h-2
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+end
+
+list scrollarrow.up
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  path w/2 h/2-3 w/2+4 h/2+2 w/2-4 h/2+2 close
+  unless disabled fill secondaryText
+  when disabled fill secondaryText/0.35
+end
+
+list scrollarrow.down
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  path w/2 h/2+3 w/2+4 h/2-2 w/2-4 h/2-2 close
+  unless disabled fill secondaryText
+  when disabled fill secondaryText/0.35
+end
+
+list scrollarrow.left
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  path w/2-3 h/2 w/2+2 h/2-4 w/2+2 h/2+4 close
+  unless disabled fill secondaryText
+  when disabled fill secondaryText/0.35
+end
+
+list scrollarrow.right
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  path w/2+3 h/2 w/2-2 h/2-4 w/2-2 h/2+4 close
+  unless disabled fill secondaryText
+  when disabled fill secondaryText/0.35
+end
+
+# A row of keys; the chosen one pressed in.
+list segmented.segment
+  unless selected rect $x 0 $w h
+  unless selected fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  unless selected bevel $bevel bevelLight bevelShade
+  when selected rect $x 0 $w h
+  when selected fill fieldBackground
+  when selected bevel $bevel bevelShade bevelLight
+end
+
+list segmented.gloss
+  rect 0 0 w h
+  fill #ffffff/0
+end
+
+list segmented.divider
+  path $x+0.5 0 $x+0.5 h
+  stroke windowBorder 1
+end
+
+list segmented.frame
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+list segmented.label
+  unless selected text $label $x+$w/2 h/2 center bold size=11 role=chrome color=bodyText
+  when selected text $label $x+$w/2 h/2 center bold size=11 role=chrome color=glowFocus halo=glowFocus/0.7 halor=8*$gk
+end
+
+list tabpane
+  rect 0 0 w h
+  fill vertical stops 0 mix(contentBackground, #ffffff, 0.08) 1 contentBackground
+  fill noise 7 0.07
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+list tab
+  unless selected rect 0 2 w h-2
+  unless selected fill tabUnselectedTop
+  unless selected bevel $bevel bevelLight bevelShade
+  when selected rect 0 0 w h
+  when selected fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  when selected bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h
+  stroke windowBorder 1
+  unless selected text $label w/2 h/2+1 center bold size=11 role=chrome color=secondaryText
+  when selected text $label w/2 h/2 center bold size=11 role=chrome color=tabText
+end
+
+list tab.merge
+  rect 1 $pane-1 w-2 2
+  fill tabPaneBackground
+end
+
+# MUI's framed group: the title set into the border, centred.
+list groupbox
+  rect 0 0 w h
+  stroke groupBoxBorder 1
+  rect 1 1 w-2 h-2
+  stroke bevelLight 1
+  rect w/2-textw(10.5, chrome)/2-8 -6 textw(10.5, chrome)+16 12
+  fill contentBackground
+  text $label w/2 0 center bold size=10.5 role=chrome color=secondaryText
+end
+
+list listview
+  rect 0 0 w h
+  fill listBackground
+end
+
+list listview.stripe
+  rect 0 0 w h
+  fill listStripe
+end
+
+list listview.frame
+  rect 0 0 w h
+  bevel $bevel bevelShade bevelLight
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+list listview.selection
+  rect 0 0 w h
+  glow glowSelect/0.7 16 $gk
+  fill vertical stops 0 mix(menuHighlight, #ffffff, 0.15) 1 menuHighlight
+  bevel $bevel #ffffff/0.45 #000000/0.45
+end
+
+list iconlabel.selected
+  rect 0 0 w h
+  glow glowSelect/0.7 16 $gk
+  fill vertical stops 0 mix(menuHighlight, #ffffff, 0.15) 1 menuHighlight
+  bevel $bevel #ffffff/0.45 #000000/0.45
+end
+
+list sheet.dim
+  rect 0 0 w h
+  fill fade(sheetDim, $progress)
+end
+
+list sheet
+  rect 0 3 w h
+  fill sheetShadow
+  rect 0 0 w h
+  fill vertical stops 0 mix(contentBackground, #ffffff, 0.08) 1 contentBackground
+  fill noise 7 0.07
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+# A menu: bevelled keys on a black ground (the study's NeXT menus).
+list menu
+  rect 0 0 w h
+  fill windowBorder
+  rect 1 1 w-2 h-2
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+end
+
+list menu.frame
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+end
+
+list menu.separator
+  rect 1 0 w-2 h
+  fill windowBorder
+end
+
+list menu.highlight
+  rect 1 0 w-2 h
+  glow glowSelect/0.7 16 $gk
+  fill vertical stops 0 mix(menuHighlight, #ffffff, 0.15) 1 menuHighlight
+  bevel $bevel #ffffff/0.45 #000000/0.45
+end
+
+list menu.check
+  path 8 h/2+1 8+3 h/2+4 8+8 h/2-4
+  stroke glowFocus 2 round
+end
+
+list menu.submenu
+  path w-@menu.rightInset-6 h/2-4 w-@menu.rightInset h/2 w-@menu.rightInset-6 h/2+4 close
+  fill $color/0.8
+end
+
+list prefs.toolbar
+  rect 0 0 w h
+  fill vertical stops 0 titleBarTop 1 titleBarBottom
+  fill stripes 0 1 #ffffff/0.035 2 #ffffff/0
+  fill stripes 0 2 #000000/0.06 5 #000000/0
+  path 0 h-0.5 w h-0.5
+  stroke windowBorder 1
+end
+
+list prefs.toolbar.divider
+  path $x 10 $x h-10
+  stroke bevelShade 1
+  path $x+1 10 $x+1 h-10
+  stroke bevelLight 1
+end
+
+list rule
+  path 0 0.5 w 0.5
+  stroke bevelShade 1
+  path 0 1.5 w 1.5
+  stroke bevelLight 1
+end

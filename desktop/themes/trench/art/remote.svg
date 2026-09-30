@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench icon "remote" (PHASE11 P11.9): from the Plan Neo chrome study
+     (claude.ai/artifact/M4LEDkHLwxppcSSk6gsR7E), the "neon" scheme's values
+     written in for its CSS variables, and imported with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="gGlobe" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#9ff4ff"/><stop offset=".5" stop-color="#2a8fd6"/><stop offset="1" stop-color="#1c2466"/></radialGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/><circle cx="16" cy="15" r="11" fill="url(#gGlobe)" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M5.2 15.5c4 2.2 17.6 2.2 21.6 0M16 4c-4.6 5-4.6 17 0 22M16 4c4.6 5 4.6 17 0 22M7.3 9c4.4 1.8 13 1.8 17.4 0" fill="none" stroke="#e6fbff" stroke-opacity=".75" stroke-width=".9"/><ellipse cx="11.5" cy="9.5" rx="3.6" ry="2.2" fill="#fff" opacity=".45" transform="rotate(-30 11.5 9.5)"/>
+</svg>

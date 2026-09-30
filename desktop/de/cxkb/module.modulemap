@@ -1,0 +1,8 @@
+// pkg-config "xkbcommon" supplies the include dir and -lxkbcommon. Unlike
+// CFreeType/CHarfBuzz, this module IS imported from Swift (Surface's keyboard
+// path calls xkb_* directly to turn keycodes into keysyms + UTF-8).
+module CXkb [system] {
+    header "shim.h"
+    link "xkbcommon"
+    export *
+}

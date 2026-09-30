@@ -1,0 +1,401 @@
+# Aqua — Jaguar's controls as draw lists (PHASE11 P11.4).
+#
+# Each list is the Swift recipe it replaced in de/aquadraw/Drawing.swift, op for
+# op, and is proved byte-identical to it (Tests/AquaTests/DrawParityTests). Where
+# the Swift did something odd, the list does it too, and says so: the gate for
+# this pass is that nothing moves. Fixing what looks wrong is a change to the
+# look, made later, on purpose, with the goldens updated.
+#
+# Coordinates are the widget's own (0 0 its top-left). See DrawList.swift for
+# the format.
+
+# The keyboard-focus halo, just outside a control. $radius is the control's.
+list focusring
+  rect -1.5 -1.5 w+3 h+3 $radius+1.5
+  stroke fieldFocusRing 2.5
+end
+
+# Hairlines every 4 px, from 1.5 down (title bar, menu bar, toasts). $color.
+list pinstripe
+  rect 0 0 w h
+  rules across 1.5 4 $color 1
+end
+
+# The white gel push button.
+list button
+  rect 0 0 w h h/2
+  unless pressed fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  when pressed fill vertical stops 0 shift(buttonWhiteTop, -0.08) 1 shift(buttonWhiteBottom, -0.08)
+  stroke buttonWhiteBorder 1
+  rect 1.5 1.5 w-3 h*0.45 h*0.45/2
+  fill linear 0 1.5 0 1.5+h*0.45 stops 0 #ffffff/0.75 1 #ffffff/0.05
+  text $label w/2 h/2 center color=buttonTextOnWhite
+end
+
+# The default (blue gel) push button.
+list button.default
+  rect 0 0 w h h/2
+  unless pressed fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+  when pressed fill vertical stops 0 shift(buttonBlueTop, -0.08) 0.5 shift(buttonBlueMid, -0.08) 1 shift(buttonBlueBottom, -0.08)
+  stroke buttonBlueBorder 1
+  rect 1.5 1.5 w-3 h*0.45 h*0.45/2
+  fill linear 0 1.5 0 1.5+h*0.45 stops 0 #ffffff/0.75 1 #ffffff/0.05
+  text $label w/2 h/2 center color=buttonTextOnBlue
+end
+
+# A text field: the label is its text, the placeholder shows when that is
+# empty, and focused means it has the caret.
+list textfield
+  when focused rect -1.5 -1.5 w+3 h+3 4.5
+  when focused stroke fieldFocusRing 2.5
+  rect 0 0 w h 3
+  fill fieldBackground
+  innershadow fieldInsetShadow 4 5
+  stroke fieldBorder 1
+  push
+  rect 4 0 w-8 h
+  clip
+  text $label 6 h/2+@fontSize*0.35 left baseline color=fieldText placeholder=fieldPlaceholder
+  when focused path 6+textw(@fontSize)+1 5 6+textw(@fontSize)+1 h-5
+  when focused stroke fieldCaret 1
+  pop
+end
+
+# A checkbox; selected is checked.
+#
+# Checked, the gloss gradient fills the WHOLE box, not the 42% capsule it was
+# drawn for: the Swift filled the body with fill_preserve and then added the
+# capsule to the path it had kept, so the gloss filled both — `and`, below. The
+# one-byte difference between "body" and "body and capsule" is why `and` exists.
+# That is how it has always looked, so that is what this draws.
+list checkbox
+  rect 0 0 w h 3
+  unless selected fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  unless selected innershadow controlInsetShadow 3 4
+  unless selected stroke controlBorder 1
+  when selected fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+  when selected and rect 1 1 w-2 h*0.42 2
+  when selected fill linear 0 1 0 1+h*0.42 stops 0 #ffffff/0.6 1 #ffffff/0.05
+  when selected rect 0 0 w h 3
+  when selected stroke buttonBlueBorder 1
+  when selected path w*0.24 h*0.52 w*0.43 h*0.72 w*0.78 h*0.28
+  when selected stroke controlGlyph 1.8 round
+end
+
+# A radio button: the rect is its bounding square, $r its radius.
+list radio
+  circle $r $r $r
+  unless selected fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  when selected fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+  unless selected stroke controlBorder 1
+  when selected stroke buttonBlueBorder 1
+  circle $r $r-$r*0.35 $r*0.62
+  unless selected fill linear 0 0 0 $r stops 0 #ffffff/0.7 1 #ffffff/0
+  when selected fill linear 0 0 0 $r stops 0 #ffffff/0.5 1 #ffffff/0
+  when selected circle $r $r $r*0.34
+  when selected fill controlGlyph
+end
+
+# A horizontal slider; the rect is the whole track, $thumb the thumb's centre.
+list slider
+  rect 0 (h-5)/2 w 5 5/2
+  fill sliderTrack
+  push
+  clip
+  rect 0 (h-5)/2 w 1.5
+  fill sliderTrackEdge
+  pop
+  rect 0 (h-5)/2 w 5 5/2
+  stroke controlBorder/0.6 1
+  circle $thumb h/2 8
+  fill vertical stops 0 controlWhiteTop 1 #c8c8c8
+  stroke controlBorder 1
+  circle $thumb h/2-8*0.3 8*0.6
+  fill linear 0 h/2-8 0 h/2 stops 0 #ffffff/0.85 1 #ffffff/0
+end
+
+# A pop-up button: a white well with a blue cap on the right.
+#
+# The cap's gloss, like the checkbox's, fills the whole cap (fill_preserve).
+list popup
+  rect 0 0 w h 4
+  fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  innershadow controlInsetShadow 3 4
+  stroke controlBorder 1
+  push
+  clip
+  rect w-h 0 h h
+  fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+  and rect w-h 1 h h*0.42
+  fill linear 0 1 0 1+h*0.42 stops 0 #ffffff/0.5 1 #ffffff/0.02
+  pop
+  path w-h+0.5 1 w-h+0.5 h-1
+  stroke buttonBlueBorder 1
+  path w-h+h/2-3 h/2-2.5 w-h+h/2 h/2-5 w-h+h/2+3 h/2-2.5
+  stroke controlGlyph 1.3 round
+  path w-h+h/2-3 h/2+2.5 w-h+h/2 h/2+5 w-h+h/2+3 h/2+2.5
+  stroke controlGlyph 1.3 round
+  text $label (w-h)/2 h/2 center color=fieldText
+  rect 0 0 w h 4
+  stroke controlBorder 1
+end
+
+# A determinate progress bar. $fill is how far the blue runs (0 for none).
+list progress
+  rect 0 0 w h h/2
+  fill progressTrack
+  push
+  clip
+  rect 0 0 w 1.5
+  fill controlInsetShadow
+  pop
+  push
+  rect 0 0 w h h/2
+  clip
+  rect 0 0 $fill h
+  fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+  clip
+  rect 0 0 w h
+  rules slant -h 9 $fill #ffffff/0.2 3.5
+  pop
+  rect 0 0 w h h/2
+  stroke controlBorder 1
+end
+
+# A scrollbar's channel.
+#
+# The inset shadow meant for the leading edge darkens the WHOLE channel by 10%:
+# the Swift added the edge's rectangle to the gradient's kept path and filled
+# both. Which edge it meant (left when vertical, top when not) cannot be seen
+# under the wash, so this is one list for both.
+list scrolltrack
+  rect 0 0 w h
+  fill vertical stops 0 #dedede 1 #eaeaea
+  and rect 0 0 1.5 h
+  fill #000000/0.1
+  rect 0.5 0.5 w-1 h-1
+  stroke controlBorder/0.55 1
+end
+
+# The blue gel thumb. Its gloss fills the whole thumb (fill_preserve).
+list scrollthumb
+  rect 0 0 w h min(w,h)/2
+  fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+  and rect 1.5 1.5 w-3 h*0.42 min(w-3,h*0.42)/2
+  fill linear 0 1.5 0 1.5+h*0.42 stops 0 #ffffff/0.65 1 #ffffff/0.05
+  rect 0 0 w h min(w,h)/2
+  stroke buttonBlueBorder 1
+end
+
+# The scrollbar's arrow buttons; disabled when there is no travel left.
+list scrollarrow.up
+  rect 0 0 w h 2
+  fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  innershadow controlInsetShadow 3 4
+  stroke controlBorder 1
+  path w/2 h/2-min(w,h)*0.26 w/2+min(w,h)*0.26 h/2+min(w,h)*0.26 w/2-min(w,h)*0.26 h/2+min(w,h)*0.26 close
+  unless disabled fill buttonBlueMid
+  when disabled fill controlBorder
+end
+
+list scrollarrow.down
+  rect 0 0 w h 2
+  fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  innershadow controlInsetShadow 3 4
+  stroke controlBorder 1
+  path w/2 h/2+min(w,h)*0.26 w/2+min(w,h)*0.26 h/2-min(w,h)*0.26 w/2-min(w,h)*0.26 h/2-min(w,h)*0.26 close
+  unless disabled fill buttonBlueMid
+  when disabled fill controlBorder
+end
+
+list scrollarrow.left
+  rect 0 0 w h 2
+  fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  innershadow controlInsetShadow 3 4
+  stroke controlBorder 1
+  path w/2-min(w,h)*0.26 h/2 w/2+min(w,h)*0.26 h/2-min(w,h)*0.26 w/2+min(w,h)*0.26 h/2+min(w,h)*0.26 close
+  unless disabled fill buttonBlueMid
+  when disabled fill controlBorder
+end
+
+list scrollarrow.right
+  rect 0 0 w h 2
+  fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  innershadow controlInsetShadow 3 4
+  stroke controlBorder 1
+  path w/2+min(w,h)*0.26 h/2 w/2-min(w,h)*0.26 h/2-min(w,h)*0.26 w/2-min(w,h)*0.26 h/2+min(w,h)*0.26 close
+  unless disabled fill buttonBlueMid
+  when disabled fill controlBorder
+end
+
+# A segmented control is drawn in passes, because a list cannot iterate over
+# its segments: each segment's body, the strip's gloss, the dividers, the
+# frame, then each label. Every pass's rect is the whole control; $x and $w
+# are one segment's offset and width.
+list segmented.segment
+  rect 0 0 w h 4
+  clip
+  rect $x 0 $w h
+  unless selected fill vertical stops 0 controlWhiteTop 1 controlWhiteBottom
+  when selected fill vertical stops 0 buttonBlueTop 0.5 buttonBlueMid 1 buttonBlueBottom
+end
+
+list segmented.gloss
+  rect 0 0 w h 4
+  clip
+  rect 0 0 w h*0.45
+  fill linear 0 0 0 h*0.45 stops 0 #ffffff/0.55 1 #ffffff/0.03
+end
+
+list segmented.divider
+  path $x+0.5 1 $x+0.5 h-1
+  stroke controlBorder/0.55 1
+end
+
+list segmented.frame
+  rect 0 0 w h 4
+  stroke controlBorder 1
+end
+
+list segmented.label
+  unless selected text $label $x+$w/2 h/2 center color=fieldText
+  when selected text $label $x+$w/2 h/2 center color=buttonTextOnBlue
+end
+
+# A tab view's content pane.
+list tabpane
+  rect 0 0 w h 6
+  fill tabPaneBackground
+  stroke tabBorder 1
+end
+
+# A tab on the pane's top edge; selected is the front one.
+list tab
+  rect 0 0 w h 6 top
+  unless selected fill vertical stops 0 tabUnselectedTop 1 tabUnselectedBottom
+  when selected fill vertical stops 0 tabSelectedTop 1 tabSelectedBottom
+  stroke tabBorder 1
+  text $label w/2 h/2+0.5 center color=tabText
+end
+
+# A titled group box: the title is notched into its top-left.
+list groupbox
+  rect 0 0 w h 5
+  stroke groupBoxBorder 1
+  rect 10 -6 textw(11)+8 12
+  fill contentBackground
+  text $label 14 4 left baseline size=11 color=controlLabel/0.75
+end
+
+# A list view's paper, its alternate-row stripe, and its frame (the scroll
+# demo's list; the Finder's list view).
+list listview
+  rect 0 0 w h
+  fill listBackground
+end
+
+list listview.stripe
+  rect 0 0 w h
+  fill listStripe
+end
+
+list listview.frame
+  rect 0.5 0.5 w-1 h-1
+  stroke controlBorder 1
+end
+
+# The selected tab merges into its pane: the pane's border under it is
+# painted out. The rect is the tab; $pane is the pane's top, from the tab's.
+list tab.merge
+  rect 1 $pane-1 w-2 2
+  fill tabPaneBackground
+end
+
+# A sheet. The window body under the title bar dims as it comes out
+# ($progress 0…1); the panel hangs from the title bar with a soft shadow.
+list sheet.dim
+  rect 0 0 w h
+  fill fade(sheetDim, $progress)
+end
+
+list sheet
+  rect 0 2 w h 8 bottom
+  fill sheetShadow
+  rect 0 0 w h 8 bottom
+  fill sheetBackground
+  stroke windowBorder 1
+end
+
+# A pop-up menu: the paper, and the frame drawn over the items last. The rect
+# is the whole menu surface.
+list menu
+  rect 0.5 0.5 w-1 h-1 5
+  fill menuBackground
+end
+
+list menu.frame
+  rect 0.5 0.5 w-1 h-1 5
+  stroke menuBorder 1
+end
+
+# A separator: the rect is one pixel-snapped line across the menu.
+list menu.separator
+  rect 1 0 w-2 h
+  fill menuSeparator
+end
+
+# An item's parts; the rect is the item's row across the menu, $color the
+# colour its text is drawn in (on the highlight, enabled, or not).
+list menu.highlight
+  rect 3 0 w-6 h 3
+  fill menuHighlight
+end
+
+list menu.check
+  path 8 h/2+1 8+3 h/2+4 8+8 h/2-4
+  stroke $color 1.6 round
+end
+
+list menu.submenu
+  path w-@menu.rightInset-5 h/2-4.5 w-@menu.rightInset h/2 w-@menu.rightInset-5 h/2+4.5 close
+  fill $color
+end
+
+# System Preferences' toolbar: its band, the separator along its foot, and the
+# dotted divider after Show All ($x its position).
+#
+# The band's rectangle is stroked in the separator's colour along with the
+# separator line, and so is outlined: the gradient was filled with
+# fill_preserve and the line added to the kept path (HANDOFF §2.67).
+list prefs.toolbar
+  rect 0 0 w h
+  fill vertical stops 0 prefsToolbarTop 1 prefsToolbarBottom
+  and path 0 h-0.5 w h-0.5
+  stroke separator 1
+end
+
+list prefs.toolbar.divider
+  path $x 10 $x h-10
+  stroke toolbarSeparator 1 dash=1,2
+end
+
+# A selected icon's name, on the highlight (the Finder's icon view, the
+# desktop); the rect is the label's, padded.
+list iconlabel.selected
+  rect 0 0 w h 3
+  fill menuHighlight
+end
+
+# A list view's selected row.
+list listview.selection
+  rect 0 0 w h
+  fill menuHighlight
+end
+
+# A horizontal rule between groups; the rect is its run, one line high. (Held
+# back in P11.5: Sharing's folder icon leaked its path, and this stroke
+# outlined it. The icons are data since P11.8 and leak nothing.)
+list rule
+  path 0 0.5 w 0.5
+  stroke separator 1
+end
