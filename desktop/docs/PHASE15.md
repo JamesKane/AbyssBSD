@@ -58,7 +58,11 @@ session; wiring it to `pkg` as a hook is delivery's.
 
 In the order that pays soonest, each with its own live test (§5).
 
-**P15.1 — `.desktop` → `.app` (M).** A pure `AppBundles` target (parse a Desktop
+**P15.1 — `.desktop` → `.app` (M).** ✅ **Done 2026-09-30:** `AppBundles` +
+`abyss-appgen`, run by `anchor` at login into `~/Applications`, shipped on the
+medium; `live-appgen.sh` (kcalc's real entry in the guest). The guest's 15
+entries make 6 applications in 1.4 s, and removing a bundle read its marker
+after deleting it — fixed before it shipped. A pure `AppBundles` target (parse a Desktop
 Entry, decide whether it becomes an application, choose its icon, describe the
 bundle) and an `abyss-appgen` tool that writes them. Rules from §4.1:
 `Type=Application` only; `NoDisplay=true` and `Hidden=true` skipped; `Exec`'s
@@ -187,11 +191,13 @@ apps are bundles that open a Firefox window on the site — honest, but a browse
 window, not an app; (b) Chromium for web apps only (503 MiB) — **not
 recommended**; (c) defer web apps. **Recommendation: (a) now, and say so on the
 bundle** — revisit if WebKitGTK's port moves and Epiphany comes back.
+**Decided (user, 2026-09-30): (a).**
 
 **6.2 Where bundles go.** `/Applications` is root's; a session cannot write it
 until the `pkg` hook exists. **Recommendation:** the generator writes
 `/Applications` when run as root (the medium's build, Phase 17's hook) and
 `~/Applications` when run by the session; the Finder and Dock read both.
+**Decided (user, 2026-09-30): as recommended.**
 
 **6.3 Foreign menus in our bar.** Firefox does not export `org.gtk.Menus` or
 dbusmenu on Wayland by default; its menu bar is its own. The bar will show the

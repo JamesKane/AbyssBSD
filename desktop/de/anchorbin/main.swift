@@ -155,6 +155,20 @@ if let dir = try? Current.runtimeDir() {
     for (k, v) in cursorEnvironment(runtimeDir: dir, environment: env) { setenv(k, v, 1) }
 }
 
+// **Every installed port as an application (PHASE15 P15.1).** The ports'
+// desktop entries become bundles in ~/Applications, where the Finder's Go ▸
+// Applications looks — regenerated at every login, so a port installed or
+// removed since the last one is seen. Detached: the desktop does not wait for
+// a walk of the icon themes, and a bundle that arrives a second later is fine.
+// /Applications is root's, for the medium's build and Phase 17's pkg hook
+// (PHASE15 §6.2).
+do {
+    let appgen = (selfDirectory() ?? ".") + "/abyss-appgen"
+    if access(appgen, X_OK) == 0, let home = getenv("HOME") {
+        _ = Spawn.detached([appgen, "--to", String(cString: home) + "/Applications"])
+    }
+}
+
 // Resolve the shell binary once, here, so a child never has to search $PATH
 // after forking.
 let shellBinary: String = binary ?? {

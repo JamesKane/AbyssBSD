@@ -306,6 +306,12 @@ if [ "$live" -eq 1 ]; then
   # later than the computer; powerd through a write-only helper in the guest.
   echo "== Energy Saver =="
   quiet "$root/abyss/tests/live-energy-pane.sh"
+  # Every installed port as an application (PHASE15 P15.1): desktop entries to
+  # bundles, the ones that are not applications skipped with why, only our own
+  # bundles replaced or removed, and a generated launcher mapping its window —
+  # kcalc's real one too, where it is installed.
+  echo "== the installed ports, as applications =="
+  quiet "$root/abyss/tests/live-appgen.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="
