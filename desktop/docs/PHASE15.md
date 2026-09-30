@@ -137,6 +137,28 @@ its file chooser answered by our portal (the P8.4 path, with Firefox's
 publishes them (it may not — §6.3). *Verified:* a local page's colour read back
 through screencopy; a file picked in the Finder reaches the page.
 
+- **(a) ✅ Done 2026-09-30 — the browser in the session.** `live-firefox.sh`, on
+  both platforms (Fedora's Firefox 156.0.1 on Linux, `firefox-esr` 153.4 in the 16
+  guest): the port's real entry becomes a bundle whose app-ids match its window
+  (`firefox`, which `firefox-esr` matches; Fedora's is `org.mozilla.firefox`);
+  launched **through that bundle** with a fresh profile and nothing set but what
+  the session sets, Firefox picks Wayland itself and its page's colour is read
+  back through screencopy; clicking a file input opens **the Finder**, through
+  `OpenFile` on the session bus; the file picked there reaches the page, which
+  reads its contents. Firefox names no starting folder, so the picker opens on
+  the home directory. What made it work in a real session: **`anchor` now
+  exports `GTK_USE_PORTAL=1`** while the bridge is in the plan
+  (`SessionPlan.applicationEnvironment`) — Firefox's file-picker pref defaults
+  to following it, as GTK 3 does; without it both draw GTK's own dialog.
+  §6.3, seen: Firefox owns only its remoting name
+  (`org.mozilla.firefox.<profile>`) — no `org.gtk.Menus`, no dbusmenu — so its
+  menu bar stays its own, and ours shows the standard menus.
+- **(b) on the medium — §6.5, measured.** `firefox-esr` is 338 MiB, and its
+  `ldd` closure adds 44 libraries (33 MB, GTK 3 and friends) the desktop does
+  not already carry: about 0.4 GB on an image that holds ~1.2 GB in 3 GB, so
+  the medium does not have to grow. What `ldd` cannot see is what Firefox
+  `dlopen`s (GL, audio, GTK's modules and schemas).
+
 **P15.4 — Terminal (L), in three.** (a) `Pty`: spawn a shell on a
 pseudo-terminal (`openpty` + `Spawn`), resize (`TIOCSWINSZ`), and a pure VT
 parser — an xterm subset: printable text, C0 controls, CSI cursor movement,

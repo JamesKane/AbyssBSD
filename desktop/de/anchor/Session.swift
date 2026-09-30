@@ -56,6 +56,20 @@ public struct SessionPlan: Equatable, Sendable {
     /// no file chooser for foreign apps is the failure this phase exists to fix.
     public let notes: [String]
 
+    /// Exported to every child, with `busAddress`: what applications this
+    /// session starts — not only its own components — need to know about it.
+    ///
+    /// `GTK_USE_PORTAL=1` while the bridge answers the file-chooser portal
+    /// (PHASE15 P15.3): outside a sandbox, GTK 3 applications — and Firefox,
+    /// whose file-picker pref defaults to following it — ask the portal, and so
+    /// the Finder, only when told to. Without it, they draw GTK's own dialog.
+    public var applicationEnvironment: [String: String] {
+        var env: [String: String] = [:]
+        if let a = busAddress { env["DBUS_SESSION_BUS_ADDRESS"] = a }
+        if components.contains(where: { $0.name == "bridge" }) { env["GTK_USE_PORTAL"] = "1" }
+        return env
+    }
+
     public init(components: [ComponentSpec], busAddress: String?, notes: [String]) {
         self.components = components
         self.busAddress = busAddress

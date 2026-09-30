@@ -237,6 +237,16 @@ final class AnchorTests: XCTestCase {
         XCTAssertTrue(bus?.argv.contains("--session") == true)
     }
 
+    /// What applications inherit (P15.3): the bus, and — only while the bridge
+    /// answers the portal — `GTK_USE_PORTAL=1`, so GTK and Firefox ask for the
+    /// Finder. Without a bridge, asking would get no answer, and GTK's own
+    /// dialog is better than none.
+    func testApplicationsAreToldToUseThePortalOnlyWhenItIsThere() {
+        XCTAssertEqual(plan().applicationEnvironment,
+                       ["DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/abyss/bus", "GTK_USE_PORTAL": "1"])
+        XCTAssertEqual(plan(dbusDaemon: nil).applicationEnvironment, [:])
+    }
+
     func testAConfigFileReplacesTheSystemSessionConfig() {
         let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo",
                                serviceDirectory: "/opt/abyss",

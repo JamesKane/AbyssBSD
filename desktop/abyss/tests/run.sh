@@ -318,6 +318,11 @@ if [ "$live" -eq 1 ]; then
   # the Finder edit dock.ini, and a document dropped on a tile opens with it.
   echo "== the Dock carries installed applications =="
   quiet "$root/abyss/tests/live-dock-apps.sh"
+  # The browser (P15.3): Firefox through its generated bundle, on undertow, its
+  # page on screen, and its file chooser the Finder through our portal. Skips
+  # where there is no Firefox.
+  echo "== the browser =="
+  quiet "$root/abyss/tests/live-firefox.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="

@@ -222,9 +222,7 @@ if explicitComponents.isEmpty {
     // Exported before anything is spawned, so **every** child inherits it —
     // including the applications the shell itself launches later, which is the
     // whole reason the bus comes first (de/anchor/Session.swift).
-    if let addr = plan.busAddress {
-        setenv("DBUS_SESSION_BUS_ADDRESS", addr, 1)
-    }
+    for (k, v) in plan.applicationEnvironment { setenv(k, v, 1) }
     for note in plan.notes {
         let b = Array("anchor: \(note)\n".utf8)
         _ = b.withUnsafeBufferPointer { write(2, $0.baseAddress, b.count) }
