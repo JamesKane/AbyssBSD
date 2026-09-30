@@ -979,6 +979,14 @@ root had to be remounted `async` for `pkg install` to finish: `makefs` builds UF
 without soft updates, and SQLite's synchronous truncates on USB 2 flash ran for
 minutes (worth fixing in the medium: soft updates, or `async` on a dev stick).
 
+**A GPU client, and what a client is told.** `vkcube` ran 600 frames on RADV
+through the live session's Wayland WSI in 11.5 s — 10 s at 60 Hz plus start-up —
+the path that segfaulted before `linux-dmabuf` (U.3). The `present` client
+(`abyss/tests/present.c`) on the real display: 120 presented, 0 discarded,
+refresh 16 680 288 ns (the mode's; headless reports 0), flags 0x7
+(VSYNC|HW_CLOCK|HW_COMPLETION), sequence counter 0 — FreeBSD's DRM does not pass
+an MSC through.
+
 ## 6. Risks / open decisions
 
 **6.1 The frame contract's metric is headless-or-DRM, and nesting is neither.**
