@@ -824,6 +824,11 @@ nothing and still count.
 signals whose data changed, and grep for `let data` on each** — the compiler
 checks field names and types, and a signal's payload is neither.
 
+**And clear `.build` on both platforms after changing the pin.** SwiftPM kept
+the old version's include paths for `CWlrootsSys` across a `pkgConfig:` change:
+the first build of the merged tree compiled 0.20 code against 0.19's headers on
+Linux *and* in the guest, and failed on the renamed signals (§2.66's family).
+
 ### 2.93 Swift cannot take a C global's address — a release build passes a copy
 (S.1. The 2026-09-28 spike proved Swift calls libwayland's `static inline`
 requests; it never bound a global, and binding is where it goes wrong.)

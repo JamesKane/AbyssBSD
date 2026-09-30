@@ -123,17 +123,23 @@ macOS deletes old files in /tmp):**
 
 - [x] **Base version: FreeBSD `main`** (16.0-CURRENT), decided 2026-09-30.
       `src/` and the Q8B image already use it. What's left:
-  - [ ] The desktop VM harness (`desktop/abyss/vm/config.sh`) boots a
+  - [x] The desktop VM harness (`desktop/abyss/vm/config.sh`) boots a
         15.0-RELEASE amd64 cloud image. Move it to a 16.0-CURRENT snapshot
-        VM image, or to one built from `src/`.
-  - [ ] `desktop/docs/PLAN.md` still says "a FreeBSD `releng/15.0` fork".
+        VM image, or to one built from `src/`. *Done 2026-09-30: a pinned
+        upstream snapshot (20260928, `main-n289650`), its sets fetched and
+        checksummed, the base held there; `--vm --live --full` green on it.
+        An image built from `src/` is Phase 17's pipeline.*
+  - [x] `desktop/docs/PLAN.md` still says "a FreeBSD `releng/15.0` fork".
   - [ ] Check that `lang/swift6` builds and runs on 16-CURRENT, on both
-        amd64 and aarch64.
-- [ ] **wlroots.** The desktop binds `wlroots-0.19` (`desktop/Package.swift`,
+        amd64 and aarch64. *amd64 done: ports' `swift6` 6.3.3 builds and tests
+        the desktop on the 16 guest. aarch64 remains — the port is
+        `ONLY_FOR_ARCHS=amd64`.*
+- [x] **wlroots.** The desktop binds `wlroots-0.19` (`desktop/Package.swift`,
       `de/cwlrootssys/module.modulemap`, the VM seed's `wlroots019`). Ports
       and the Q8B are on wlroots 0.20 (sway 1.12). Upgrade `undertow` to
       0.20, check the 0.19 → 0.20 API changes, and update the Linux dev
-      host to match.
+      host to match. *Done 2026-09-30: 0.20.2 on both platforms; the one
+      change the compiler could not see is desktop HANDOFF §2.94.*
 - [ ] A release pipeline: `buildworld` + `buildkernel` from `src/`, a
       poudriere jail made from that world, the bulk build of the overlay,
       and images for arm64 (Q8B) and amd64. Today's Q8B image uses a stock

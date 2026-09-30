@@ -118,7 +118,10 @@ gradient title bar, pinstriped content, a lickable blue gel button, HiDPI-crisp)
   (S.0, 2026-09-30; the guest has ports' `swift6` 6.3.3 too); all client-side C libs are
   present (wayland-client, xkbcommon, cairo, freetype2, harfbuzz, libpng).
   `sway` (1.11) and `grim` are installed for live testing; `labwc` and `libjpeg`
-  are not.
+  are not. `undertow` builds against **wlroots 0.20.2** (`wlroots-devel`, beside
+  `wlroots0.19`, which sway still uses). The build guest is **FreeBSD
+  16.0-CURRENT**, a pinned snapshot (`abyss/vm/README.md`); the 15.0 box is kept
+  until it is retired.
 - Build: `swift build`. Tests: `swift test` (197 green — Aqua toolkit + desktop
   config + menu-bar layout + Dock magnification + the Finder's listing/geometry
   model + file ops, emptying the Trash, bundle-icon lookup and `.icns`
