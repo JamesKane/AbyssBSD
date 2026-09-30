@@ -118,6 +118,11 @@ public final class Toplevel {
                 // — on a small display, a window that fits.
                 let u = t.compositor.usableArea
                 _ = wlr_xdg_toplevel_set_bounds(t.xdgToplevel, u.width, u.height)
+                // And what the window asked for before this commit, which its
+                // request handlers could not answer then (PHASE15 §4.2).
+                let asked = t.xdgToplevel.pointee.requested
+                if asked.fullscreen { t.compositor.setFullscreen(t, true) }
+                else if asked.maximized { t.compositor.setMaximized(t, true) }
             }
             // **A window nobody can see drew anyway** (T.3): counted, so a test
             // can hold a client to xdg-shell's `suspended`.
@@ -164,16 +169,24 @@ public final class Toplevel {
             // "unmaximize" event; both requests arrive here and the answer is in
             // `requested.maximized`. Answering with a configure is mandatory
             // even when we refuse, or the client waits for ever.
+            // **Not before the first commit** (as P9.6's decorations): a
+            // configure scheduled then is an assertion inside wlroots, and the
+            // initial commit answers what was requested (below).
+            guard t.xdgToplevel.pointee.base.pointee.initialized else { return }
             t.compositor.setMaximized(t, t.xdgToplevel.pointee.requested.maximized)
         }, me))
         listeners.append(tw_listen(&toplevel.pointee.events.request_minimize, { ctx, _ in
             guard let ctx else { return }
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            guard t.xdgToplevel.pointee.base.pointee.initialized else { return }
             t.compositor.setMinimized(t, t.xdgToplevel.pointee.requested.minimized)
         }, me))
         listeners.append(tw_listen(&toplevel.pointee.events.request_fullscreen, { ctx, _ in
             guard let ctx else { return }
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
+            // Firefox's `--kiosk` asks for fullscreen before its first commit,
+            // and this took undertow down (PHASE15 §4.2).
+            guard t.xdgToplevel.pointee.base.pointee.initialized else { return }
             t.compositor.setFullscreen(t, t.xdgToplevel.pointee.requested.fullscreen)
         }, me))
         // A window that renames itself must rename its Dock tile too.

@@ -730,6 +730,26 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.98 A window's early requests wait for its first commit
+(PHASE15 §4.2, 2026-09-30: the first real browser under `undertow`.)
+
+Firefox `--kiosk` asks for fullscreen before its window's first commit, and
+`undertow` answered `request_fullscreen` by configuring at once — which is an
+**assertion inside wlroots**, not an error return:
+`wlr_xdg_surface_schedule_configure: Assertion (surface->initialized)`. The
+compositor died, and with it every window on the desktop. P9.6 had met exactly
+this for decoration requests and guarded them (Decorations.swift); maximize,
+minimize and fullscreen had no guard, because none of our own clients asks
+before committing.
+
+The fix is the same shape: a request handler does nothing until
+`base.initialized`, and the initial-commit handler answers what the client
+asked for — wlroots keeps it in `toplevel.requested` — alongside the size,
+capabilities, decoration mode and bounds it already sends. **Rule: anything
+that can schedule a configure is gated on `initialized`**, and the first commit
+is where a window's early wishes are granted. A test client that behaves
+nicely proves nothing here; a real application is the test.
+
 ### 2.97 A client whose compositor is leaving has not failed
 (MIGRATION §5, 2026-09-30, the fourth 16-CURRENT gate.)
 
