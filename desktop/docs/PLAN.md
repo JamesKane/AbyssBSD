@@ -34,12 +34,22 @@ rewrite of the Rust `pool`, sharing only the on-disk format — is the pattern.)
 xkbcommon, cairo, FreeType/HarfBuzz, libnv) or a shim over one, exactly as `de/cwayland`
 and `de/ctext` already do. It does not mean linking Rust crates.
 
+**One foreign toolkit: GTK** (decided 2026-09-30). Beside our own `Aqua`,
+AbyssBSD depends on GTK or on Qt — not both — and it is GTK: Firefox, the
+browser the medium carries, is GTK-only on FreeBSD, and FreeBSD's `qt6-base`
+pulls in `gtk3` anyway, so choosing Qt would still ship GTK. The Qt work of
+P10.7 (`org_kde_kwin_appmenu` in undertow, the `com.canonical.dbusmenu` half of
+`abyss-dbus`, `live-menus-qt.sh`) was removed, and no Qt or KDE package is on
+the medium, in the build guest, or in a test. A Qt application a person
+installs still runs — as any Wayland client, with Aqua decorations — but its
+menus stay in its window. Phase history below keeps its Qt passes as written.
+
 ### Where this stands (2026-09-30)
 
 **Phases 0–3, 5–12 and 14 are complete** (Phase 12 but for `Fathom`'s Aqua view).
-The Jaguar desktop runs on our own Swift compositor on Linux and FreeBSD; GTK and
-Qt applications put their menus in our bar and get the Finder through our
-portals; the look is data, with a second theme to prove it; System Preferences
+The Jaguar desktop runs on our own Swift compositor on Linux and FreeBSD; GTK
+applications put their menus in our bar and get the Finder through our
+portals (one foreign toolkit, GTK: Qt support was removed 2026-09-30); the look is data, with a second theme to prove it; System Preferences
 changes the machine through a privileged helper; and a blank disk becomes a
 machine running all of it. Every piece is proven by `abyss/tests/run.sh --vm
 --live` on both platforms, with no hardware and no human in the loop. Between
@@ -734,7 +744,7 @@ that the surface is a vocabulary and not a drawing routine.
 > lists, chrome, type roles, icons and cursors are data; Jaguar is re-expressed
 > byte-identical under the golden gate; `Trench` comes out of the same
 > interpreter; the legibility floor is enforced at load. Layer 4 waits on Phase 4;
-> the generated GTK/Qt theme is still to do; PHASE11 §6's proposals want the
+> the generated GTK theme is still to do; PHASE11 §6's proposals want the
 > user's confirmation.
 
 **Needs:** 1. ***Before*** **15** — and that timing is the whole argument for
@@ -795,7 +805,7 @@ early, made by the tree itself.
   contrast, minimum hit-target size. We have no accessibility story at all, and
   this is the cheapest down payment on one. A theme changes how things look; it
   may not change whether they are reachable.
-- **The generated GTK/Qt theme** falls out of the same tokens and is emitted
+- **The generated GTK theme** falls out of the same tokens and is emitted
   through `PortalSettings`, which today reports one key (`color-scheme`). It
   deletes work we would otherwise do by hand, and it is what makes the foreign
   applications of Phase 15 — the browser above all — tolerable to look at.
@@ -1108,7 +1118,7 @@ ours, and boot environments are what make that survivable.
   give thesis 5 its breadth for nothing — tens of thousands of ports, a
   security-advisory pipeline, and mirrors we do not run — but on `main` they come
   from the *latest* branch only, so a port can move under us any day. **The
-  overlay carries what we wrote** — the desktop, the generated GTK/Qt theme, the
+  overlay carries what we wrote** — the desktop, the generated GTK theme, the
   `.desktop` → `.app` generator and its `pkg` hook, `Fathom` — **plus the minimum
   patched upstream needed to make what we wrote work, and nothing else.** It
   already exists in the monorepo (`ports/`), carrying Mesa, libdrm and drm-kmod
@@ -1187,7 +1197,7 @@ Finder is a claim nobody else can make.
   the menu bar and a script consume (PRODUCT.md §5.5). If Phase 10 shipped as
   menus-only this phase pays for a second surface — which is the reason that
   constraint is written into Phase 10 eight phases early. `abyss-dbus` extends
-  the same vocabulary to GTK and Qt applications. **Pixels** (`screencopy`,
+  the same vocabulary to GTK applications. **Pixels** (`screencopy`,
   already in `Surface`) are the documented fallback for an application that
   cannot describe itself, and stop being used the day it can.
 - **A local model is the default backend** (decided 2026-09-30, PRODUCT §4.4). An

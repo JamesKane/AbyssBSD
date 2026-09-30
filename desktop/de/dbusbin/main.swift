@@ -5,7 +5,7 @@
 // Owns `org.freedesktop.portal.Desktop` and answers
 // `org.freedesktop.portal.FileChooser.OpenFile` / `SaveFile` by asking
 // `abyss-portal` — the same portal, the same Finder, the same picker our own
-// apps get. A stock GTK or Qt application talks to this and never learns there
+// apps get. A stock GTK application talks to this and never learns there
 // is anything unusual underneath.
 //
 // This is a **legacy adapter and nothing more**. It is the only process in the
@@ -99,17 +99,10 @@ if menus {
     }
     // What it watches and what it pushes (P10.9), for the log a test reads.
     bridge.log = { emit(1, "menus-dbus: \($0)") }
-    // Qt exports its menus only if this name is owned (P10.7).
-    let registrar: AppMenuRegistrar
-    do { registrar = try AppMenuRegistrar(connection: conn) } catch {
-        die("cannot own \(AppMenuRegistrar.busName): \(error)")
-    }
     emit(1, "ready (menus: \(GtkMenuBridge.serviceName))")
-    withExtendedLifetime(registrar) {
-        while true {
-            do { try bridge.step(timeoutMs: 1000) } catch {
-                die("the bus connection failed: \(error)")
-            }
+    while true {
+        do { try bridge.step(timeoutMs: 1000) } catch {
+            die("the bus connection failed: \(error)")
         }
     }
 }

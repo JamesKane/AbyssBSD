@@ -5,7 +5,6 @@
 #include "abyss-window-v1-protocol.h"
 #include <wlr/types/wlr_xdg_shell.h>
 #include "gtk-shell-protocol.h"
-#include "kde-appmenu-protocol.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -22,7 +21,6 @@ struct tw_menus {
     struct wl_global *window_global;      /* P11.6 */
     struct wl_global *menubar_global;
     struct wl_global *gtk_shell_global;   /* P10.6 */
-    struct wl_global *kde_appmenu_global; /* P10.7 */
     uint32_t gtk_capabilities;            /* sent on bind */
     struct wl_list menubars;        /* wl_resource links */
     struct wl_list privileged;      /* struct privileged_client */
@@ -313,52 +311,6 @@ void tw_gtk_set_global_menus(struct tw_menus *m, bool on) {
     m->gtk_capabilities = on ? (1u << 0) | (1u << 1) : 0;
 }
 
-/* ------------------------------------------- org_kde_kwin_appmenu (P10.7) */
-/* The Qt/KDE way of saying where a window's menus are: a com.canonical.dbusmenu
- * service and object path, per surface. The same shape as abyss_menu_v1 — which
- * was modelled on it. */
-
-static void km_release(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
-
-static void km_set_address(struct wl_client *client, struct wl_resource *resource,
-                           const char *service_name, const char *object_path) {
-    (void)client;
-    struct tw_gtk_surface *k = wl_resource_get_user_data(resource);   /* same pair */
-    if (!k || !k->menus || !k->menus->hooks.set_dbusmenu_address) return;
-    struct wlr_surface *s = wlr_surface_from_resource(k->surface);
-    if (!s) return;
-    k->menus->hooks.set_dbusmenu_address(k->menus->hooks.ctx, s,
-        service_name ? service_name : "", object_path ? object_path : "");
-}
-
-static const struct org_kde_kwin_appmenu_interface kde_appmenu_impl = {
-    .set_address = km_set_address,
-    .release = km_release,
-};
-
-static void km_create(struct wl_client *client, struct wl_resource *resource,
-                      uint32_t id, struct wl_resource *surface) {
-    struct tw_gtk_surface *k = calloc(1, sizeof(*k));
-    if (!k) { wl_client_post_no_memory(client); return; }
-    k->menus = wl_resource_get_user_data(resource);
-    k->surface = surface;
-    struct wl_resource *r = wl_resource_create(client, &org_kde_kwin_appmenu_interface,
-                                               wl_resource_get_version(resource), id);
-    if (!r) { free(k); wl_client_post_no_memory(client); return; }
-    wl_resource_set_implementation(r, &kde_appmenu_impl, k, gtk_surface_destroyed);
-}
-
-static const struct org_kde_kwin_appmenu_manager_interface kde_appmenu_manager_impl = {
-    .create = km_create,
-};
-
-static void kde_appmenu_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id) {
-    struct wl_resource *r = wl_resource_create(client, &org_kde_kwin_appmenu_manager_interface,
-                                               (int)version, id);
-    if (!r) { wl_client_post_no_memory(client); return; }
-    wl_resource_set_implementation(r, &kde_appmenu_manager_impl, data, NULL);
-}
-
 /* --------------------------------------------------------------------------- setup */
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *h) {
@@ -376,10 +328,7 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
     m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 2,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
-    m->kde_appmenu_global = wl_global_create(display, &org_kde_kwin_appmenu_manager_interface,
-                                             1, m, kde_appmenu_bind);
-    if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global
-        || !m->kde_appmenu_global) {
+    if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global) {
         tw_menus_destroy(m); return NULL;
     }
     wl_display_set_global_filter(display, global_filter, m);
@@ -393,7 +342,6 @@ void tw_menus_destroy(struct tw_menus *m) {
     if (m->window_global) wl_global_destroy(m->window_global);
     if (m->menubar_global) wl_global_destroy(m->menubar_global);
     if (m->gtk_shell_global) wl_global_destroy(m->gtk_shell_global);
-    if (m->kde_appmenu_global) wl_global_destroy(m->kde_appmenu_global);
     if (m->privileged_source) wl_event_source_remove(m->privileged_source);
     if (m->privileged_fd >= 0) { close(m->privileged_fd); unlink(m->privileged_path); }
     /* Detach whatever outlives us: resources and clients free their own

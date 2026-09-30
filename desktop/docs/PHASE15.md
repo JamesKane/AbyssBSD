@@ -44,7 +44,7 @@ session; wiring it to `pkg` as a hook is delivery's.
 |---|---|---|
 | Application bundles | The Finder launches `Foo.app/Contents/MacOS/Foo` and draws `Contents/Resources/*.png|icns` (`Launcher`, `AppIcon`, P2.11). No Info.plist, no LaunchServices | A generator that writes bundles from `.desktop` files |
 | Icons | PNG and `.icns` decoding | Icon-theme lookup (hicolor, then the others), SVG through `rsvg-convert` at generation time |
-| Foreign apps | GTK and Qt menus in our bar, portals, SSDs, the XCursor theme | — (Phase 8–11 and U.* did it) |
+| Foreign apps | GTK menus in our bar, portals, SSDs, the XCursor theme (Qt's removed: §6.6) | — (Phase 8–11 and U.* did it) |
 | Browser | nothing | Firefox ESR, adopted: installed, launched as a bundle, rendering, its file chooser through our portal |
 | Text | single-line `TextField` | a multi-line text view: caret, selection, scrolling, undo (P10), clipboard (P9) |
 | Terminal | no pty code; the `mono` type role (P11.7) | pty spawn (`openpty`), a VT parser, a character-grid view, scrollback, selection |
@@ -60,7 +60,7 @@ In the order that pays soonest, each with its own live test (§5).
 
 **P15.1 — `.desktop` → `.app` (M).** ✅ **Done 2026-09-30:** `AppBundles` +
 `abyss-appgen`, run by `anchor` at login into `~/Applications`, shipped on the
-medium; `live-appgen.sh` (kcalc's real entry in the guest). The guest's 15
+medium; `live-appgen.sh` (kcalc's real entry in the guest — galculator's since §6.6). The guest's 15
 entries make 6 applications in 1.4 s, and removing a bundle read its marker
 after deleting it — fixed before it shipped. A pure `AppBundles` target (parse a Desktop
 Entry, decide whether it becomes an application, choose its icon, describe the
@@ -88,7 +88,7 @@ Recent Items. *Verified:* a tile launches its application and shows it running.
   matches one of them, or the program's name with a `-variant` suffix. That last
   rule is Firefox ESR's: `firefox.desktop`, `Exec=firefox`, and a window that
   says `firefox-esr`. `AppLibrary` reads `~/Applications` then `/Applications`
-  (the person's shadows root's); `dock.ini`'s `apps = finder; KCalc; sysprefs`
+  (the person's shadows root's); `dock.ini`'s `apps = finder; Galculator; sysprefs`
   pins, by bundle name or path; without it the Dock is the Finder, the browser
   if one is installed, and System Preferences. The Browser, Mail and Music
   placeholders — tiles that launched nothing — are gone (Terminal joins in
@@ -302,4 +302,18 @@ parser is measured against `vttest`.
 
 **6.5 The browser is the biggest thing on the medium.** Firefox ESR and its
 dependencies are hundreds of megabytes on a 3 GB image; the medium grows, or
-the browser is installed on first use. Measured in P15.3.
+the browser is installed on first use. Measured in P15.3. **Decided (user, 2026-09-30): on the medium** (P15.3b).
+
+**6.6 One foreign toolkit: GTK.** Found during P15.3: the build guest carried
+Qt 6 and KDE Frameworks (kcalc, for P10.7's menus and P15.1's real port) beside
+the GTK that Firefox brings. **Decided (user, 2026-09-30): GTK or Qt, not both
+— and it is GTK**, since Firefox is GTK-only on FreeBSD and `qt6-base` requires
+`gtk3` anyway. Removed: `org_kde_kwin_appmenu` in undertow (focus kind 3
+retired, never reused), the `com.canonical.dbusmenu` half of `abyss-dbus` with
+its registrar, `QtMenus` and its tests, `live-menus-qt.sh`, and kcalc,
+`qt6-wayland` and 43 orphaned Qt/KDE packages from the guest (the seed installs
+`galculator`, `firefox-esr` and `ffmpeg` instead). `live-appgen`'s real port is
+galculator: `Galculator.app` with a 256 px icon from its hicolor SVG, mapping
+its window. The medium never carried Qt. Verified: unit tests (684), goldens,
+and the GTK menu, submenu, context, portal, session, palette, appgen, Firefox
+and Dock tests, green on Linux and in the guest.

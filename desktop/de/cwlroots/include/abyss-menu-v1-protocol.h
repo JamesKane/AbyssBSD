@@ -147,10 +147,6 @@ enum abyss_menubar_v1_kind {
 	 * a GTK application's bus name and menu paths (P10.6)
 	 */
 	ABYSS_MENUBAR_V1_KIND_GTK = 2,
-	/**
-	 * a com.canonical.dbusmenu service and path (P10.7)
-	 */
-	ABYSS_MENUBAR_V1_KIND_DBUSMENU = 3,
 };
 #endif /* ABYSS_MENUBAR_V1_KIND_ENUM */
 
@@ -171,8 +167,6 @@ abyss_menubar_v1_kind_is_valid(uint32_t value, uint32_t version) {
 	case ABYSS_MENUBAR_V1_KIND_ABYSS:
 		return version >= 1;
 	case ABYSS_MENUBAR_V1_KIND_GTK:
-		return version >= 1;
-	case ABYSS_MENUBAR_V1_KIND_DBUSMENU:
 		return version >= 1;
 	default:
 		return false;

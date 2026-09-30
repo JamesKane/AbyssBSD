@@ -26,7 +26,8 @@ import Darwin
 public final class Menus {
     /// `abyss_menubar_v1.kind`.
     public enum Kind: UInt32, Sendable {
-        case none = 0, abyss = 1, gtk = 2, dbusmenu = 3
+        // 3 was Qt's dbusmenu, retired with Qt support (one toolkit); never reused.
+        case none = 0, abyss = 1, gtk = 2
     }
 
     /// What the bar is told: which kind, where, and whose.
@@ -80,14 +81,6 @@ public final class Menus {
             // GTK says this for every window, menus or not; only one with
             // something to read is worth pointing the bar at.
             m.setAddress(a.hasMenus ? a.encoded : "", for: surface, kind: .gtk)
-        }
-        hooks.set_dbusmenu_address = { ctx, surface, service, path in
-            guard let ctx, let surface else { return }
-            let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
-            let svc = service.map { String(cString: $0) } ?? ""
-            let p = path.map { String(cString: $0) } ?? ""
-            // "service\npath" — the dbusmenu kind's address (P10.7).
-            m.setAddress(svc.isEmpty || p.isEmpty ? "" : svc + "\n" + p, for: surface, kind: .dbusmenu)
         }
         hooks.force_quit = { ctx, appID in
             guard let ctx, let appID else { return }
@@ -206,7 +199,7 @@ extension Menus.Focus {
     var describe: String {
         switch kind {
         case .none: return appID.isEmpty ? "nothing" : "\(appID), which publishes no menus"
-        case .gtk, .dbusmenu:  return "\(appID) at \(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [\(kind)]"
+        case .gtk:  return "\(appID) at \(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [\(kind)]"
         default:    return "\(appID) at \(address) [\(kind)]"
         }
     }

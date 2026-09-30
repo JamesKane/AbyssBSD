@@ -158,10 +158,6 @@ struct tw_menu_hooks {
                                const char *menubar_path, const char *window_object_path,
                                const char *application_object_path,
                                const char *unique_bus_name);
-    /* A Qt/KDE client said where a surface's com.canonical.dbusmenu is
-     * (org_kde_kwin_appmenu.set_address, P10.7). */
-    void (*set_dbusmenu_address)(void *ctx, struct wlr_surface *surface,
-                                 const char *service_name, const char *object_path);
     /* The menu bar asked to force-quit an application (abyss_menubar_v1 v2,
      * P10.8). Only a privileged client can have sent it. */
     void (*force_quit)(void *ctx, const char *app_id);

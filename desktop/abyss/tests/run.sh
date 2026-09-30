@@ -309,7 +309,7 @@ if [ "$live" -eq 1 ]; then
   # Every installed port as an application (PHASE15 P15.1): desktop entries to
   # bundles, the ones that are not applications skipped with why, only our own
   # bundles replaced or removed, and a generated launcher mapping its window —
-  # kcalc's real one too, where it is installed.
+  # galculator's real one too, where it is installed.
   echo "== the installed ports, as applications =="
   quiet "$root/abyss/tests/live-appgen.sh"
   # The Dock carries them (P15.2): dock.ini pins a bundle by name, its tile
@@ -367,11 +367,6 @@ if [ "$live" -eq 1 ]; then
   # keyboard, through undertow; the chain closed children first.
   echo "== submenus =="
   quiet "$root/abyss/tests/live-submenus.sh"
-  # And a Qt/KDE application's: stock kcalc, org_kde_kwin_appmenu in
-  # undertow, com.canonical.dbusmenu through the same bridge (P10.7). Skips,
-  # loudly, on a box without kcalc.
-  echo "== Qt's menus in our bar =="
-  sh "$root/abyss/tests/live-menus-qt.sh"
   # The menus the desktop owns: right-click menus built from the menu bar's
   # commands, and a system menu whose items do what they say (P10.8).
   echo "== the desktop's own menus =="

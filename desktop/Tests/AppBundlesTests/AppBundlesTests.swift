@@ -5,22 +5,24 @@ import XCTest
 @testable import AppBundles
 
 final class AppBundlesTests: XCTestCase {
-    let kcalc = """
+    let galculator = """
     [Desktop Entry]
-    Name=KCalc
-    Name[fr]=KCalc (fr)
-    Exec=kcalc
-    Icon=accessories-calculator
+    Version=1.0
+    Name=Galculator
+    Name[fr]=Galculator (fr)
+    Comment=Perform simple and scientific calculations
+    Exec=galculator
+    Icon=galculator
+    Terminal=false
     Type=Application
-    Comment=Scientific Calculator
     """
 
     func testAnEntryIsReadAndItsLocalisedKeysAreNotTheDefault() throws {
-        let e = try XCTUnwrap(DesktopEntry.parse(kcalc))
-        XCTAssertEqual(e.name, "KCalc")
-        XCTAssertEqual(e.icon, "accessories-calculator")
+        let e = try XCTUnwrap(DesktopEntry.parse(galculator))
+        XCTAssertEqual(e.name, "Galculator")
+        XCTAssertEqual(e.icon, "galculator")
         XCTAssertNil(e.skipReason())
-        XCTAssertEqual(e.command()?.argv, ["kcalc"])
+        XCTAssertEqual(e.command()?.argv, ["galculator"])
         XCTAssertEqual(e.command()?.takesFiles, false)
         XCTAssertNil(DesktopEntry.parse("Name=nothing\n"), "no [Desktop Entry] group, no entry")
     }
@@ -32,7 +34,7 @@ final class AppBundlesTests: XCTestCase {
         }
         XCTAssertEqual(why("NoDisplay=true\n"), "NoDisplay (a handler or a service, not an application)")
         XCTAssertEqual(why("Hidden=true\n"), "Hidden")
-        XCTAssertEqual(why("OnlyShowIn=KDE;GNOME;\n"), "only for KDE, GNOME")
+        XCTAssertEqual(why("OnlyShowIn=XFCE;GNOME;\n"), "only for XFCE, GNOME")
         XCTAssertEqual(why("NotShowIn=AbyssBSD;\n"), "not for AbyssBSD")
         XCTAssertEqual(why("Terminal=true\n"), "needs a terminal, and there is none yet (P15.4)")
         XCTAssertNil(DesktopEntry.parse("[Desktop Entry]\nName=X\nExec=x\nType=Application\nTerminal=true\n")?
@@ -48,10 +50,10 @@ final class AppBundlesTests: XCTestCase {
         [Desktop Entry]
         Type=Application
         Name=Geo
-        Exec=kde-geo-uri-handler --query-template "https://maps/?q=<Q> \\"x\\"" --pct 100%% %u %F %i
+        Exec=geo-uri-handler --query-template "https://maps/?q=<Q> \\"x\\"" --pct 100%% %u %F %i
         """))
         let cmd = try XCTUnwrap(e.command())
-        XCTAssertEqual(cmd.argv, ["kde-geo-uri-handler", "--query-template", "https://maps/?q=<Q> \"x\"",
+        XCTAssertEqual(cmd.argv, ["geo-uri-handler", "--query-template", "https://maps/?q=<Q> \"x\"",
                                   "--pct", "100%", DesktopEntry.filesMarker])
         XCTAssertTrue(cmd.takesFiles)
         XCTAssertNil(DesktopEntry.parse("[Desktop Entry]\nType=Application\nName=Q\nExec=a \"unterminated\n")?.command())
@@ -64,17 +66,22 @@ final class AppBundlesTests: XCTestCase {
                                    source: "/usr/local/share/applications/designer.desktop")
         XCTAssertTrue(s.hasPrefix("#!/bin/sh\n"))
         XCTAssertTrue(s.hasSuffix("exec designer6 --style 'it'\\''s' \"$@\"\n"))
-        XCTAssertEqual(AppBundle.directoryName("Qt Widgets Designer"), "Qt Widgets Designer.app")
+        XCTAssertEqual(AppBundle.directoryName("Firefox Web Browser"), "Firefox Web Browser.app")
         XCTAssertEqual(AppBundle.directoryName("a/b"), "a-b.app")
         XCTAssertEqual(AppBundle.directoryName(".hidden"), "hidden.app")
     }
 
-    /// Which running windows are this application's (P15.2): kcalc by its
-    /// desktop-file ID, Firefox ESR by its program's name and a suffix.
+    /// Which running windows are this application's (P15.2): galculator by its
+    /// desktop-file ID (which is also its program), Firefox ESR by its
+    /// program's name and a suffix, and Fedora's Firefox by its reverse-DNS ID.
     func testARunningWindowIsMatchedToItsApplication() throws {
-        let k = try XCTUnwrap(DesktopEntry.parse(kcalc)).appIDs(desktopFile: "/usr/local/share/applications/org.kde.kcalc.desktop")
-        XCTAssertEqual(k, ["org.kde.kcalc", "kcalc"])
-        XCTAssertTrue(AppBundle.matches(appID: "org.kde.kcalc", candidates: k))
+        let g = try XCTUnwrap(DesktopEntry.parse(galculator)).appIDs(desktopFile: "/usr/local/share/applications/galculator.desktop")
+        XCTAssertEqual(g, ["galculator"], "the same name twice is one candidate")
+        XCTAssertTrue(AppBundle.matches(appID: "galculator", candidates: g))
+        let fedora = try XCTUnwrap(DesktopEntry.parse("[Desktop Entry]\nType=Application\nName=Firefox\nExec=firefox %u\n"))
+            .appIDs(desktopFile: "/usr/share/applications/org.mozilla.firefox.desktop")
+        XCTAssertEqual(fedora, ["org.mozilla.firefox", "firefox"])
+        XCTAssertTrue(AppBundle.matches(appID: "org.mozilla.firefox", candidates: fedora))
         let ff = try XCTUnwrap(DesktopEntry.parse("[Desktop Entry]\nType=Application\nName=Firefox Web Browser\nExec=firefox %U\n"))
             .appIDs(desktopFile: "firefox.desktop")
         XCTAssertEqual(ff, ["firefox"])
@@ -86,14 +93,13 @@ final class AppBundlesTests: XCTestCase {
         XCTAssertEqual(w, ["org.x.W", "w", "wprog"])
     }
 
-    /// kcalc's icon on the guest: small PNGs in one theme, an SVG in another.
-    /// 48 px is too small for the Dock, so the SVG is rasterised.
+    /// galculator's icon on the guest: a 48 px PNG and a scalable SVG in
+    /// hicolor. 48 px is too small for the Dock, so the SVG is rasterised.
     func testTheIconIsABigEnoughPNGElseAnSVGElseTheBiggestPNG() {
-        let kcalc = ["/i/AdwaitaLegacy/16x16/apps/accessories-calculator.png",
-                     "/i/AdwaitaLegacy/48x48/apps/accessories-calculator.png",
-                     "/i/breeze/apps/48/accessories-calculator.svg",
-                     "/i/Adwaita/symbolic/apps/accessories-calculator-symbolic.svg"]
-        XCTAssertEqual(IconLookup.choose(from: kcalc), .svg("/i/breeze/apps/48/accessories-calculator.svg", size: 256))
+        let galculator = ["/i/hicolor/48x48/apps/galculator.png",
+                          "/i/hicolor/scalable/apps/galculator.svg",
+                          "/i/Adwaita/symbolic/apps/galculator-symbolic.svg"]
+        XCTAssertEqual(IconLookup.choose(from: galculator), .svg("/i/hicolor/scalable/apps/galculator.svg", size: 256))
         let demo = ["/i/hicolor/48x48/apps/gtk3-demo.png", "/i/hicolor/256x256/apps/gtk3-demo.png"]
         XCTAssertEqual(IconLookup.choose(from: demo), .png("/i/hicolor/256x256/apps/gtk3-demo.png"))
         XCTAssertEqual(IconLookup.choose(from: ["/i/x/32x32/apps/a.png", "/i/x/64x64@2x/apps/a.png"]),

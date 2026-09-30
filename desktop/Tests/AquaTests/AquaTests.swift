@@ -568,20 +568,20 @@ final class AquaTests: XCTestCase {
                        ["dock.quit", "dock.keep", "dock.show-in-finder"])
 
         let t = ["finder", "Firefox", "sysprefs"]
-        XCTAssertEqual(Dock.pinning("KCalc", before: "sysprefs", in: t), ["finder", "Firefox", "KCalc", "sysprefs"])
-        XCTAssertEqual(Dock.pinning("KCalc", before: nil, in: t), t + ["KCalc"])
+        XCTAssertEqual(Dock.pinning("Galculator", before: "sysprefs", in: t), ["finder", "Firefox", "Galculator", "sysprefs"])
+        XCTAssertEqual(Dock.pinning("Galculator", before: nil, in: t), t + ["Galculator"])
         XCTAssertEqual(Dock.pinning("sysprefs", before: "Firefox", in: t), ["finder", "sysprefs", "Firefox"],
                        "pinned again: moved, not doubled")
 
-        let lib = [InstalledApp(name: "KCalc", bundle: "/Applications/KCalc.app", executable: nil, icon: nil, appIDs: []),
+        let lib = [InstalledApp(name: "Galculator", bundle: "/Applications/Galculator.app", executable: nil, icon: nil, appIDs: []),
                    InstalledApp(name: "Firefox", bundle: "/home/u/Applications/Firefox.app", executable: nil, icon: nil,
                                 appIDs: ["firefox"])]
-        XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/KCalc.app", library: lib), "KCalc")
+        XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/Galculator.app", library: lib), "Galculator")
         XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/Firefox.app", library: lib), "/Applications/Firefox.app",
                        "shadowed by the person's own Firefox: only the path means this one")
         XCTAssertEqual(Dock.pinTokens(setting: nil, library: lib), ["finder", "Firefox", "sysprefs"])
-        XCTAssertEqual(Dock.pinTokens(setting: " finder ;Gone; KCalc;", library: lib), ["finder", "Gone", "KCalc"])
-        XCTAssertEqual(Dock.items(tokens: ["finder", "Gone", "KCalc"], library: lib).map(\.label), ["Finder", "KCalc"],
+        XCTAssertEqual(Dock.pinTokens(setting: " finder ;Gone; Galculator;", library: lib), ["finder", "Gone", "Galculator"])
+        XCTAssertEqual(Dock.items(tokens: ["finder", "Gone", "Galculator"], library: lib).map(\.label), ["Finder", "Galculator"],
                        "an application not installed has no tile but keeps its place in the list")
     }
 
@@ -594,8 +594,8 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(RecentItems.adding("/A/new.app", to: many).count, 10)
         XCTAssertEqual(RecentItems.adding("/A/new.app", to: many).last, "/A/8.app")
 
-        XCTAssertEqual(RecentItems.submenu(["/Applications/KCalc.app", "/u/Applications/Firefox Web Browser.app"])
-                        .commands.map(\.title), ["KCalc", "Firefox Web Browser", "Clear Menu"])
+        XCTAssertEqual(RecentItems.submenu(["/Applications/Galculator.app", "/u/Applications/Firefox Web Browser.app"])
+                        .commands.map(\.title), ["Galculator", "Firefox Web Browser", "Clear Menu"])
         XCTAssertEqual(RecentItems.submenu([]).commands.map(\.verb), ["system.recent.clear"])
 
         let dir = makeScratchDir("recent")

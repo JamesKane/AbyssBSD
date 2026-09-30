@@ -516,6 +516,8 @@ the real session), `live-menus.sh`, `live-vocabulary.sh`, `live-undo.sh` and
 P10.6 has run on FreeBSD yet. `--full` is owed at the end of the phase.
 
 **P10.7 — Qt's, if the spike says so. ✅ done — the spike said so (§4.5).**
+**Removed 2026-09-30** with the one-toolkit rule (PLAN; PHASE15 §6.6): AbyssBSD's
+foreign toolkit is GTK. What follows is the history of the pass, not the tree.
 `org_kde_kwin_appmenu_manager` in undertow, `abyss-dbus` owning
 `com.canonical.AppMenu.Registrar`, and a `com.canonical.dbusmenu` translation.
 **Gated on its own spike** (§4.2): Qt's side is read out of the library's

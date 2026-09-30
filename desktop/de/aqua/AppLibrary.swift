@@ -58,7 +58,7 @@ public enum AppLibrary {
         return out
     }
 
-    /// The bundle a name means: `KCalc`, `KCalc.app`, or a path to one.
+    /// The bundle a name means: `Galculator`, `Galculator.app`, or a path to one.
     public static func find(_ name: String, in apps: [InstalledApp]) -> InstalledApp? {
         if name.hasPrefix("/") { return apps.first { $0.bundle == name } }
         let n = name.hasSuffix(".app") ? String(name.dropLast(4)) : name

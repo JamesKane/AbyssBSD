@@ -223,7 +223,7 @@ public final class Seat {
         }, me))
 
         // **The primary selection (U.9)**: X11's other clipboard — select
-        // text, middle-click to paste it — which every GTK and Qt application
+        // text, middle-click to paste it — which every GTK application
         // offers and Linux users reach for without thinking. The same rule as
         // the clipboard: wlroots checks the serial, and we accept.
         _ = wlr_primary_selection_v1_device_manager_create(compositor.session.display)

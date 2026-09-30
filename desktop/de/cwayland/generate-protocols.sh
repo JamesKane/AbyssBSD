@@ -86,6 +86,5 @@ gen_theirs() {
 }
 
 gen_theirs gtk-shell
-gen_theirs kde-appmenu
 
 echo "done."

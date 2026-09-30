@@ -36,7 +36,7 @@ public struct DockItem: Sendable {
     /// Every app_id this tile's windows may carry (P15.2): a bundle's
     /// `Contents/app-id`, or just `appID`. `owns` is the one test.
     public let appIDs: [String]
-    /// The `dock.ini` entry that pinned this tile (`finder`, `KCalc`, a path);
+    /// The `dock.ini` entry that pinned this tile (`finder`, `Galculator`, a path);
     /// nil for a tile that is only there because its application is running.
     public let pinToken: String?
     /// The bundle an installed application's tile opens, for Recent Items.
@@ -237,7 +237,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
 
     /// The tiles `dock.ini`'s `apps` names, in order (P15.2): `finder` and
     /// `sysprefs` are the desktop's own; anything else is an installed bundle,
-    /// by name (`KCalc`) or path. Without the key: the Finder, the browser if
+    /// by name (`Galculator`) or path. Without the key: the Finder, the browser if
     /// one is installed, and System Preferences — no placeholder tile that
     /// launches nothing (the Browser, Mail and Music tiles until P15.2).
     public static func pinned(setting: String?, library: [InstalledApp]) -> [DockItem] {

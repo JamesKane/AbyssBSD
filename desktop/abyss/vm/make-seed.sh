@@ -74,10 +74,12 @@ runcmd:
   # What the harness grew into after the seed was written, installed by hand
   # on the 15.0 box and recorded here so a rebuilt guest is the same guest:
   # nested bhyve's firmware for the --full installs (P5), gdb for the wtap
-  # vmcores (P14.5), a Qt and a GTK application whose menus our bar has to show
-  # (kcalc, qt6-wayland, zenity — P10.7, U.5), and an independent
+  # vmcores (P14.5), GTK applications for the bar's menus and a real port's
+  # bundle (zenity, galculator — U.5, P15.1; one toolkit, GTK: no Qt), the
+  # browser the medium carries and its H.264 (firefox-esr, ffmpeg — P15.3), and
+  # an independent
   # wlr-output-management client (P14.7).
-  - pkg install -y edk2-bhyve gdb kcalc qt6-wayland zenity wlr-randr || true
+  - pkg install -y edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr || true
   # Swift toolchain. FreeBSD is not an *official* swift.org target, but ports
   # carries one: the package is \`swift6\` (\`swift\` alone matches nothing, which
   # is why this line used to report a false negative). Confirmed 2026-07-28:
@@ -92,7 +94,7 @@ runcmd:
   # Every install above is best-effort (|| true) so one missing port can't wedge
   # first boot — which means a silent miss would otherwise look like success.
   # Record what actually landed; abyss/vm/check.sh asserts on this file.
-  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb kcalc qt6-wayland zenity wlr-randr swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
+  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
   - touch /home/$ABYSS_SSH_USER/.cloud-init-done
   - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
 EOF

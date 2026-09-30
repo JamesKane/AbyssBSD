@@ -3,7 +3,7 @@
 #
 # `abyss-appgen` turns desktop entries into bundles the Finder and the Dock
 # understand. Claims, on fixture entries written here and — where the machine
-# has it — on a real port's (kcalc, in the FreeBSD guest):
+# has it — on a real port's (galculator, in the FreeBSD guest):
 #
 #   1. an application becomes `<Name>.app`: a launcher that execs its command,
 #      an icon (an SVG rasterised to 256 px), and the marker that makes it ours;
@@ -13,8 +13,9 @@
 #   3. an entry that goes away takes its generated bundle with it — and only it;
 #   4. the generated launcher, run as the Finder runs it, puts the application's
 #      window on our compositor (undertow reports it mapped);
-#   5. FreeBSD, with kcalc installed: its real entry becomes KCalc.app with a
-#      256 px icon from breeze's SVG, and running it maps kcalc's window.
+#   5. FreeBSD, with galculator installed: its real entry becomes
+#      Galculator.app with a 256 px icon from its hicolor SVG, and running it
+#      maps galculator's window.
 #
 # Usage: abyss/tests/live-appgen.sh
 set -eu
@@ -128,17 +129,17 @@ echo "ok: 4. the generated launcher, run as the Finder runs it, mapped the appli
 
 # ------------------------------------------------------------ 5. a real port
 kd=/usr/local/share/applications
-if [ "$(uname -s)" = FreeBSD ] && [ -f "$kd/org.kde.kcalc.desktop" ]; then
+if [ "$(uname -s)" = FreeBSD ] && [ -f "$kd/galculator.desktop" ]; then
   "$appgen" --from "$kd" --to "$work/Ports" > "$work/gen.out" 2>&1 || fail "abyss-appgen over the real entries failed"
-  k="$work/Ports/KCalc.app"
-  grep -q "^made KCalc.app from $kd/org.kde.kcalc.desktop (icon: .*accessories-calculator.svg at 256px)" "$work/gen.out" \
-    || fail "kcalc's entry did not become KCalc.app with its breeze icon"
-  env WAYLAND_DISPLAY="$wd" QT_QPA_PLATFORM=wayland "$k/Contents/MacOS/KCalc" > "$work/kcalc.log" 2>&1 &
+  k="$work/Ports/Galculator.app"
+  grep -q "^made Galculator.app from $kd/galculator.desktop (icon: .*galculator.svg at 256px)" "$work/gen.out" \
+    || fail "galculator's entry did not become Galculator.app with its SVG icon"
+  env WAYLAND_DISPLAY="$wd" GDK_BACKEND=wayland "$k/Contents/MacOS/Galculator" > "$work/galculator.log" 2>&1 &
   app_pid=$!
-  mapped org.kde.kcalc || fail "KCalc.app mapped no window: $(tail -3 "$work/kcalc.log")"
-  echo "ok: 5. kcalc's real entry became KCalc.app (icon from breeze's SVG), and it runs"
+  mapped galculator || fail "Galculator.app mapped no window: $(tail -3 "$work/galculator.log") (undertow: $(grep -h '^window ' "$work/ut.out" | tr '\n' ' '))"
+  echo "ok: 5. galculator's real entry became Galculator.app (icon from its SVG), and it runs"
 else
-  echo "ok: 5. (no kcalc here; the FreeBSD guest runs this half)"
+  echo "ok: 5. (no galculator here; the FreeBSD guest runs this half)"
 fi
 
 echo "all green (the installed ports, as applications)."

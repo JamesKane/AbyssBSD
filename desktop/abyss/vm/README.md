@@ -74,7 +74,7 @@ below.
   cairo, freetype2, harfbuzz, png, jpeg-turbo, a font), wlroots + seatd +
   **sway** + **grim** so the shell runs and the live tests can capture it, and
   what the harness grew into: `edk2-bhyve` for the nested installs, `gdb` for
-  vmcores, `kcalc`/`qt6-wayland`/`zenity` as foreign applications, `wlr-randr`.
+  vmcores, `zenity`/`galculator` as foreign (GTK) applications, `firefox-esr` + `ffmpeg` for the medium's browser, `wlr-randr`.
   No Rust: the engine is a Swift *rewrite*, not a reuse of the sibling's crates.
 - **Stop the VM**: `kill $(cat ../../../../abyss-swift-vm/qemu.pid)` (daemon mode),
   or `Ctrl-A X` in the foreground console.

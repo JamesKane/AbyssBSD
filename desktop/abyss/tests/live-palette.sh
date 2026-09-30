@@ -1,7 +1,7 @@
 #!/bin/sh
 # AbyssBSD Swift DE — the portal tells foreign toolkits the loaded theme (P11.10).
 #
-# GTK and Qt ask org.freedesktop.portal.Settings how the desktop looks —
+# GTK asks org.freedesktop.portal.Settings how the desktop looks —
 # color-scheme, accent-color, contrast — and until P11.10 abyss-dbus answered
 # Aqua's values in literals whatever the theme was. It now runs
 # `abyss-theme palette` and answers from the theme that is loaded, with the

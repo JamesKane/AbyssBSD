@@ -1,13 +1,16 @@
-// GtkMenuBridge — foreign applications' menus, served as MenuWire (PHASE10.md
-// P10.6 for GTK, P10.7 for Qt/KDE).
+// GtkMenuBridge — GTK applications' menus, served as MenuWire (PHASE10.md
+// P10.6).
 //
 // The bar speaks one protocol. When the compositor says the frontmost window is
-// a GTK application's (focus kind `gtk`) or a Qt one's (`dbusmenu`), the bar
-// sends its ordinary MenuWire requests to **one** service, `menus-dbus`, with
-// the address as `target`; this answers them by asking the application over
-// the session bus — `org.gtk.Menus`/`org.gtk.Actions` for GTK,
-// `com.canonical.dbusmenu` for Qt. `abyss-dbus` is where
-// PLAN.md put the translation, and it is the only process that touches D-Bus.
+// a GTK application's (focus kind `gtk`), the bar sends its ordinary MenuWire
+// requests to **one** service, `menus-dbus`, with the address as `target`; this
+// answers them by asking the application over the session bus —
+// `org.gtk.Menus`/`org.gtk.Actions`. `abyss-dbus` is where PLAN.md put the
+// translation, and it is the only process that touches D-Bus.
+//
+// **GTK only.** P10.7 served Qt's `com.canonical.dbusmenu` here too; that was
+// removed when AbyssBSD settled on one toolkit, GTK (PHASE15, 2026-09-30) —
+// Firefox needs it, and FreeBSD's Qt pulls it in anyway.
 //
 // **A process of its own** (`abyss-dbus --menus`), not a second job for the
 // portal bridge: that one blocks while a file dialog is open (PHASE8 §6.7), and
@@ -21,14 +24,9 @@
 // own applications' bars do with theirs, and is told `changed` when the
 // application's menus change under it: GTK's `org.gtk.Menus.Changed` (sent only
 // to a watcher that has called `Start` and not `End`, so the bridge holds a
-// `Start` on every group while anyone watches) and dbusmenu's `LayoutUpdated` /
-// `ItemsPropertiesUpdated`. A signal only marks the application dirty; after a
-// short quiet the bridge reads the menus itself and says `changed` only if the
-// model is different. That filters the noise — and the echo: reading a Qt menu
-// asks its lazy submenus to fill (`AboutToShow`), which can make Qt announce a
-// new layout, which would have the bar read it again, for ever. A
-// `LayoutUpdated` no newer than the revision the bridge just read is its own
-// echo, and is dropped.
+// `Start` on every group while anyone watches). A signal only marks the
+// application dirty; after a short quiet the bridge reads the menus itself and
+// says `changed` only if the model is different, which filters the noise.
 
 import CurrentIPC
 import DBus
@@ -51,9 +49,6 @@ final class MenuWatch {
     var model: MenuBarModel?
     /// A signal arrived; read again once things are quiet.
     var dirtySince: UInt64?
-    /// dbusmenu: the layout revision last read. A LayoutUpdated no newer is
-    /// the echo of our own reading.
-    var revision: UInt32 = 0
     /// GTK: the groups held with Start, by object path, to End when done.
     var held: [String: [UInt32]] = [:]
     init(target: String) { self.target = target }
@@ -124,7 +119,7 @@ public final class GtkMenuBridge {
 
     private func subscribe(_ request: Msg, _ c: Int32) {
         guard let t = request.string("target"),
-              GtkMenuAddress(encoded: t) != nil || DBusMenuAddress(encoded: t) != nil else {
+              GtkMenuAddress(encoded: t) != nil else {
             try? Current.send(MenuWire.errorReply("subscribe needs a target: the address the compositor reported"), on: c)
             close(c)
             return
@@ -148,14 +143,7 @@ public final class GtkMenuBridge {
     /// Start listening: the match rules, GTK's held groups, and the model as
     /// it is now — what "changed" will be measured against.
     private func watch(_ w: MenuWatch) throws {
-        if let q = DBusMenuAddress(encoded: w.target) {
-            let rule = "type='signal',sender='\(q.service)',path='\(q.path)',interface='com.canonical.dbusmenu'"
-            try conn.addMatch(rule)
-            w.rules = [rule]
-            let r = try readQt(q)
-            w.model = r.model
-            w.revision = r.revision
-        } else if let a = GtkMenuAddress(encoded: w.target) {
+        if let a = GtkMenuAddress(encoded: w.target) {
             for path in [a.menubarPath, a.appMenuPath] where !path.isEmpty {
                 let rule = "type='signal',sender='\(a.busName)',path='\(path)',interface='org.gtk.Menus',member='Changed'"
                 try conn.addMatch(rule)
@@ -203,13 +191,7 @@ public final class GtkMenuBridge {
     private func signal(_ m: DBusMessage) {
         guard m.type == .signal, let sender = m.sender, let path = m.path else { return }
         for w in watches.values {
-            if let q = DBusMenuAddress(encoded: w.target), q.service == sender, q.path == path,
-               m.interface == "com.canonical.dbusmenu" {
-                // Our own reading's echo: a layout no newer than the one read.
-                if m.member == "LayoutUpdated", case .uint32(let rev)? = m.body.first, rev <= w.revision { continue }
-                guard m.member == "LayoutUpdated" || m.member == "ItemsPropertiesUpdated" else { continue }
-                if w.dirtySince == nil { w.dirtySince = GtkMenuBridge.nowNs() }
-            } else if let a = GtkMenuAddress(encoded: w.target), a.busName == sender,
+            if let a = GtkMenuAddress(encoded: w.target), a.busName == sender,
                       path == a.menubarPath || path == a.appMenuPath, m.member == "Changed" {
                 if w.dirtySince == nil { w.dirtySince = GtkMenuBridge.nowNs() }
             }
@@ -224,10 +206,7 @@ public final class GtkMenuBridge {
             guard let since = w.dirtySince, now &- since >= GtkMenuBridge.quietNs else { continue }
             w.dirtySince = nil
             let fresh: MenuBarModel?
-            if let q = DBusMenuAddress(encoded: w.target), let r = try? readQt(q) {
-                fresh = r.model
-                w.revision = max(w.revision, r.revision)
-            } else if let a = GtkMenuAddress(encoded: w.target), let m = try? read(a) {
+            if let a = GtkMenuAddress(encoded: w.target), let m = try? read(a) {
                 fresh = m
                 try? hold(w, a)
             } else { fresh = nil }
@@ -256,15 +235,11 @@ public final class GtkMenuBridge {
     }
 
     private func name(_ t: String) -> String {
-        if let q = DBusMenuAddress(encoded: t) { return q.applicationID }
         if let a = GtkMenuAddress(encoded: t) { return a.applicationID }
         return t
     }
 
     func handle(_ request: Msg) -> Msg {
-        if let t = request.string("target"), let q = DBusMenuAddress(encoded: t) {
-            return handleQt(request, q)
-        }
         guard let t = request.string("target"), let a = GtkMenuAddress(encoded: t) else {
             return MenuWire.errorReply("menus-dbus needs a target: the address the compositor reported")
         }
@@ -357,80 +332,5 @@ public final class GtkMenuBridge {
             member: "Activate",
             body: [.string(name), .array("v", []), .array("{sv}", [])]), timeoutMs: 1000)
         return .ok(nil)
-    }
-
-    // MARK: - Qt / KDE (P10.7)
-
-    func handleQt(_ request: Msg, _ a: DBusMenuAddress) -> Msg {
-        do {
-            let r = try readQt(a)
-            let enablement: (Command) -> Enablement = { c in
-                guard let on = r.enabled[c.verb] else {
-                    return .disabled("the application has no item \(c.verb)")
-                }
-                return on ? .enabled : .disabled("the application has disabled it")
-            }
-            switch request.string("method") {
-            case "describe": return MenuWire.describeReply(r.model, enablement: enablement)
-            case "validate": return MenuWire.validateReply(r.model, enablement: enablement)
-            case "activate":
-                guard let verb = request.string("verb") else {
-                    return MenuWire.errorReply("activate needs a verb")
-                }
-                // The id is looked up NOW, from a fresh layout: Qt renumbers
-                // its items when it rebuilds a menu (§4.5).
-                guard let id = r.ids[verb] else {
-                    return MenuWire.resultReply(.refused("\(r.model.appName) has no item \(verb)"))
-                }
-                if case .disabled(let why) = enablement(Command(verb, verb, summary: "")) {
-                    return MenuWire.resultReply(.refused(why))
-                }
-                _ = try conn.call(.methodCall(
-                    destination: a.service, path: a.path, interface: "com.canonical.dbusmenu",
-                    member: "Event",
-                    body: [.int32(id), .string("clicked"), .variant(.int32(0)), .uint32(0)]),
-                    timeoutMs: 1000)
-                return MenuWire.resultReply(.ok(nil))
-            default:
-                return MenuWire.errorReply("unknown method \(request.string("method") ?? "(none)")")
-            }
-        } catch {
-            return MenuWire.errorReply("\(a.applicationID): \(error)")
-        }
-    }
-
-    /// The whole layout, with every lazy submenu asked to fill itself first.
-    func readQt(_ a: DBusMenuAddress) throws
-        -> (model: MenuBarModel, ids: [String: Int32], enabled: [String: Bool], revision: UInt32) {
-        var revision: UInt32 = 0
-        func layout() throws -> DBusMenuNode {
-            let reply = try conn.call(.methodCall(
-                destination: a.service, path: a.path, interface: "com.canonical.dbusmenu",
-                member: "GetLayout", body: [.int32(0), .int32(-1), .array("s", [])]),
-                timeoutMs: 1000)
-            guard let root = QtMenus.root(fromGetLayout: reply.body) else {
-                throw DBusError("GetLayout returned no layout")
-            }
-            if case .uint32(let r)? = reply.body.first { revision = max(revision, r) }
-            return root
-        }
-        var root = try layout()
-        // A lazy submenu fills in after AboutToShow. Two rounds cover a lazy
-        // menu inside a lazy menu; more would be an application that never
-        // fills them, and the bar shows what there is.
-        var asked: Set<Int32> = []
-        for _ in 0..<2 {
-            let lazy = QtMenus.lazySubmenus(root).filter { !asked.contains($0) }
-            guard !lazy.isEmpty else { break }
-            for id in lazy.prefix(32) {
-                asked.insert(id)
-                _ = try? conn.call(.methodCall(
-                    destination: a.service, path: a.path, interface: "com.canonical.dbusmenu",
-                    member: "AboutToShow", body: [.int32(id)]), timeoutMs: 1000)
-            }
-            root = try layout()
-        }
-        let m = QtMenus.model(appName: QtMenus.appName(a.applicationID), root: root)
-        return (m.model, m.ids, m.enabled, revision)
     }
 }

@@ -109,7 +109,7 @@ public struct DesktopEntry: Equatable, Sendable {
 
     /// The app_ids a running window of this application may carry (P15.2): the
     /// entry's `StartupWMClass`, then its desktop-file ID (the Wayland
-    /// convention: `org.kde.kcalc.desktop` → `org.kde.kcalc`), then the name of
+    /// convention: `org.mozilla.firefox.desktop` → `org.mozilla.firefox`), then the name of
     /// the program it runs. None of them is guaranteed — Firefox ESR's entry is
     /// `firefox.desktop`, runs `firefox`, and its window says `firefox-esr` —
     /// so `AppBundle.matches` also takes the program's name with a suffix.

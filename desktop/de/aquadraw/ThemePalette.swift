@@ -1,6 +1,6 @@
 // ThemePalette — what a foreign toolkit is told about the look (P11.10).
 //
-// GTK and Qt draw their own widgets; what they can be told is a colour scheme,
+// GTK draws its own widgets; what they can be told is a colour scheme,
 // an accent, a contrast preference — `org.freedesktop.appearance`, through the
 // portal's Settings (P8.3) — and, for anything that asks, a palette. Until now
 // the portal said Aqua's answer in literals whatever the theme was. This makes

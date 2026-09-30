@@ -62,7 +62,8 @@
       <entry name="none" value="0" summary="the focused window publishes no menus, or nothing is focused"/>
       <entry name="abyss" value="1" summary="a MenuWire service name"/>
       <entry name="gtk" value="2" summary="a GTK application's bus name and menu paths (P10.6)"/>
-      <entry name="dbusmenu" value="3" summary="a com.canonical.dbusmenu service and path (P10.7)"/>
+      <!-- 3 was "dbusmenu", a Qt application's com.canonical.dbusmenu (P10.7).
+           Retired with Qt support (one toolkit: GTK); never reuse the value. -->
     </enum>
 
     <request name="destroy" type="destructor">

@@ -287,22 +287,13 @@ public final class MenuBar: LayerSurfaceDelegate {
         unsubscribe()
         enablement = [:]
         switch f.kind {
-        case .abyss, .gtk, .dbusmenu:
-            // Our own applications serve their menus themselves; a GTK or Qt
+        case .abyss, .gtk:
+            // Our own applications serve their menus themselves; a GTK
             // application's are served by the bridge, told which by target.
             let svc: String, tgt: String?, from: String
             switch f.kind {
             case .gtk:
                 (svc, tgt, from) = ("menus-dbus", f.address, "menus-dbus (GTK)")
-            case .dbusmenu:
-                guard let q = DBusMenuAddress(focusAddress: f.address, applicationID: f.appID) else {
-                    MenuBar.log("an unreadable dbusmenu address: \(f.address)")
-                    show(nameOnly: f.appID)
-                    titlesDirty = true
-                    layer?.setNeedsDisplay()
-                    return
-                }
-                (svc, tgt, from) = ("menus-dbus", q.encoded, "menus-dbus (Qt)")
             default:
                 (svc, tgt, from) = (f.address, nil, f.address)
             }
@@ -316,7 +307,7 @@ public final class MenuBar: LayerSurfaceDelegate {
                             + "(\(d.model.commands.count) commands, described in "
                             + "\(MenuBar.nowUs() - t0) us)")
                 // Told when they change: our own applications say so
-                // themselves, the bridge for a GTK or Qt one (P10.9).
+                // themselves, the bridge for a GTK one (P10.9).
                 subscribe(svc, target: tgt)
             } catch {
                 // An address nobody answers — the application is going, or

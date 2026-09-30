@@ -11,7 +11,8 @@ import CWayland
 public final class MenuBarFocus {
     /// `abyss_menubar_v1.kind`, as the compositor sends it.
     public enum Kind: UInt32, Sendable {
-        case none = 0, abyss = 1, gtk = 2, dbusmenu = 3
+        // 3 was Qt's dbusmenu, retired with Qt support (one toolkit); never reused.
+        case none = 0, abyss = 1, gtk = 2
     }
 
     public struct Focus: Equatable, Sendable {

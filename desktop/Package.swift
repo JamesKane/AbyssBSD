@@ -48,8 +48,7 @@ let package = Package(
             name: "CAbyssProtocols",
             dependencies: ["CWaylandClient"],
             path: "de/cabyssprotocols",
-            sources: ["abyss-menu-v1-protocol.c", "abyss-window-v1-protocol.c", "xdg-shell-protocol.c", "gtk-shell-protocol.c",
-                      "kde-appmenu-protocol.c"],
+            sources: ["abyss-menu-v1-protocol.c", "abyss-window-v1-protocol.c", "xdg-shell-protocol.c", "gtk-shell-protocol.c"],
             publicHeadersPath: "include"
         ),
         .target(
@@ -519,7 +518,7 @@ let package = Package(
             path: "de/dbusprobe"
         ),
         // `org.freedesktop.portal.Desktop`, hosted by us: the legacy adapter
-        // that gets a stock GTK or Qt app the Finder as its file chooser.
+        // that gets a stock GTK app the Finder as its file chooser.
         .executableTarget(
             name: "abyss-dbus",
             dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC", "Spawn", "PoolConfig"],

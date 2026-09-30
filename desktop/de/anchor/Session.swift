@@ -175,7 +175,7 @@ public func defaultSession(shellBinary: String,
             components.append(ComponentSpec(name: "bus", argv: argv, env: shared))
         } else {
             notes.append("no dbus-daemon on $PATH — this session has no bus, so a"
-                         + " foreign (GTK/Qt) app gets no file chooser from us."
+                         + " foreign (GTK) app gets no file chooser from us."
                          + " Our own apps are unaffected.")
         }
     }

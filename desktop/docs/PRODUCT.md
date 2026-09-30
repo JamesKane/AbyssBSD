@@ -107,13 +107,13 @@ ship Jaguar as the product**, and a second theme only as proof the format is one
 | Client runtime | `Surface`: xdg-shell v6, layer shell, popups and submenus, keyboard + xkb, pointer + scroll, per-output HiDPI, clipboard and drag-and-drop, foreign-toplevel, xdg-activation, screencopy, output management |
 | Toolkit | `Aqua` over `AquaDraw`: the 10.2 widget set, drawn from **theme data** (tokens, draw lists, chrome, fonts, icons, cursors — Phase 11), FreeType/HarfBuzz text, focus traversal, sheets, menus, undo |
 | Control plane | `CurrentIPC`, `PoolConfig`, `Anchor` (supervisor, session plan), `Vents` (sysctl, sound, battery, devd, network), `Spawn` (the one async-signal-safe way to start a process) |
-| Menus | the menu protocol: an application publishes its **vocabulary**, the bar is its first consumer; GTK (`org.gtk.Menus`) and Qt (`dbusmenu`) applications appear in the same bar through `abyss-dbus` (Phase 10) |
+| Menus | the menu protocol: an application publishes its **vocabulary**, the bar is its first consumer; GTK (`org.gtk.Menus`) applications appear in the same bar through `abyss-dbus` (Phase 10). **One foreign toolkit, GTK** — Qt's `dbusmenu` path was removed 2026-09-30 (PLAN: one toolkit) |
 | Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus` (`org.freedesktop.portal.*`, including the theme's palette) |
 | Privileged helpers | `abyss-install` and `abyss-settings`: an unprivileged GUI sends a typed plan, a root service checks who is asking and does the writing |
 | Delivery | a live medium that boots, runs `Fathom`, and installs onto an empty disk |
 
 **Shell — present and wired.** Desktop with icons, a menu bar that shows the
-frontmost application's menus (ours or GTK's or Qt's) with status items and a real
+frontmost application's menus (ours or GTK's) with status items and a real
 volume control, a Dock with magnification and a working Trash, the Finder (browser
 + spatial, real file operations, contextual menus), notifications, `Launcher`.
 
@@ -163,7 +163,7 @@ heard of us.
 
 | | Where it landed |
 |---|---|
-| Menus in the bar | ✅ **The menu protocol** (Phase 10): an application publishes its vocabulary over `CurrentIPC`, the bar routes activation back, submenus open by pointer and keyboard. GTK and Qt menus arrive through `abyss-dbus` and follow the application's own changes (P10.6–P10.9) |
+| Menus in the bar | ✅ **The menu protocol** (Phase 10): an application publishes its vocabulary over `CurrentIPC`, the bar routes activation back, submenus open by pointer and keyboard. GTK menus arrive through `abyss-dbus` and follow the application's own changes (P10.6–P10.9); Qt's were removed with the one-toolkit rule |
 | Global key bindings | ✅ the keybind table in `undertow`, config-driven (P9) |
 | Copy and paste | ✅ `wl_data_device` in `Surface`, the selection arbitrated in `undertow` (P9). *It had been broken for everyone, foreign apps included — PHASE9 §4.1* |
 | Drag and drop | ✅ to the Trash, a Finder window, a Dock tile (P9) |
@@ -181,7 +181,7 @@ heard of us.
 | Interactive move and resize | ✅ the title-bar drag sends `move`, the frame's edges send `resize`, and `undertow` answers both (P9.4). *Until then no Aqua window could be dragged by its title bar* |
 | Zoom / minimize / fullscreen | ✅ handled (P9.4); a minimised window keeps a 1 Hz clock and is told it is suspended (U.2, T.3) |
 | Remembered positions | ✅ `WindowPlaces` |
-| **Decorations for foreign windows** | ✅ server-side decorations with the Aqua frame (P9.5) — every GTK and Qt window is Mac-shaped |
+| **Decorations for foreign windows** | ✅ server-side decorations with the Aqua frame (P9.5) — every foreign window is Mac-shaped |
 | Multi-monitor | ✅ several outputs, `wlr-output-management`, the Displays pane (P14.7). Mirroring and display-off are not offered |
 | Snapping | ✅ drag-to-edge halves — the one tiling affordance worth offering |
 | **Islands, Shoals, Ebb** | **Phase 13.** Workspaces, window sets, an Exposé equivalent — the largest piece here, and the part of thesis 3 that beats tiling; §7. **M–L** |
@@ -442,7 +442,7 @@ now: the portal reports the **active theme's** scheme, accent and contrast, plus
 the full palette as `org.abyssbsd.palette`, and follows a theme switch live
 (P11.10, P14.2); foreign applications get **our cursors** as an XCursor theme
 (U.7b); and every foreign window gets the **Aqua frame** (P9.5). What remains is
-the widgets inside that frame: a *generated* GTK/Qt theme rather than a
+the widgets inside that frame: a *generated* GTK theme rather than a
 hand-written Aqua one, emitted from whatever tokens are active, so a user's own
 theme re-skins foreign apps too (§8).
 
@@ -499,8 +499,8 @@ Two things fall out, both free:
   version of this — the toolkit's named gadgets *are* the vocabulary — is the
   same observation about a different toolkit.
 - **`abyss-dbus` serves it for foreign applications too.** §4.2 already has us
-  translating `org.gtk.Menus`/`org.gtk.Actions` and `com.canonical.dbusmenu` into
-  our bar (P10.6–P10.9). That is a vocabulary for every GTK and Qt application on
+  translating `org.gtk.Menus`/`org.gtk.Actions` into our bar (P10.6–P10.9).
+  That is a vocabulary for every GTK application on
   the machine, through the bridge the bar already uses. **One bridge, two consumers** — the
   menu bar and the agent — which is a better return than either justifies alone.
 
@@ -564,7 +564,7 @@ gets its breadth for nothing: tens of thousands of ports, a security-advisory
 pipeline, mirrors we do not run. The **overlay** (`ports/` in the monorepo,
 `poudriere bulk -O abyss`) carries what is ours — the desktop itself (`undertow`,
 `anchor`, `abyss-portal`, `abyss-dbus`, `abyss-settings`, the Aqua applications,
-the installer), the generated GTK/Qt theme (§5.3, §8), the `.desktop` → `.app`
+the installer), the generated GTK theme (§5.3, §8), the `.desktop` → `.app`
 generator and its `pkg` hook (§6.1), and `Fathom` (§6.4).
 
 **The overlay's discipline is unchanged: what we wrote, plus the minimum patched
@@ -845,7 +845,7 @@ data — with Jaguar re-expressed byte-identical under the golden gate, `Trench`
 drawn by the same interpreter, and the legibility floor enforced at load. A theme
 switches while the desktop runs (P14.2). **Still open:** layer 4 (effects, which
 wait on a real vblank — Phase 4), layer 5 (the shell presenting menus another way),
-and the generated GTK/Qt widget theme (§5.3). The rest of this section is the
+and the generated GTK widget theme (§5.3). The rest of this section is the
 argument it was built from; its numbers are the ones that justified doing it
 early.
 
@@ -952,7 +952,7 @@ may never delay a commit.**
 
 ### 8.6 Cost, risk, timing
 
-*Status: every row below is done except layer 4 and the generated GTK/Qt theme.*
+*Status: every row below is done except layer 4 and the generated GTK theme.*
 
 | Piece | Size |
 |---|---|
@@ -960,7 +960,7 @@ may never delay a commit.**
 | Declarative format + loader over `PoolConfig` | **M** |
 | `Draw`'s 26 primitives → interpreters of it | **M** |
 | Re-express Aqua *in* the format, gated by golden-image diff | **M** — the pass that proves the design |
-| Generated GTK/Qt theme + settings-portal wiring (§5) | **S–M**, and it deletes work we would do by hand |
+| Generated GTK theme + settings-portal wiring (§5) | **S–M**, and it deletes work we would do by hand |
 | Layer 4: effect declarations, budget arbitration, the recorder line | **M**, waits for Phase 4's real vblank |
 
 **Risks.** *Fidelity* — a tokenised, interpreted Aqua must stay pixel-identical;
