@@ -7,7 +7,7 @@
 // another, and nothing crosses a process boundary. This is the wire under it.
 //
 // `wl_data_device` is core wayland — no protocol XML, no scanner line — but its
-// requests are static inlines, so they arrive through `aw_*` (§2.1), and **every
+// requests are static inlines, which Swift calls directly (§2.1), and **every
 // listener slot is filled** (§2.3): a nil in one of these is a crash the first
 // time a compositor exercises it, and the drag events fire on any desktop where
 // somebody drags a file over your window whether you asked for drag or not.
@@ -101,7 +101,7 @@ public final class Clipboard {
     public private(set) var ownsSelection = false
 
     init?(display: Display, manager: OpaquePointer, seat: OpaquePointer) {
-        guard let d = opt(aw_data_device_manager_get_data_device(raw(manager), raw(seat)))
+        guard let d = wl_data_device_manager_get_data_device(manager, seat)
         else { return nil }
         self.display = display
         self.manager = manager
@@ -140,12 +140,12 @@ public final class Clipboard {
             // destination that stays silent is one the person is told they may
             // not drop on, so this has to happen on enter and not on drop.
             let mime = c.dragTypes.first { c.acceptedDragTypes.contains($0) }
-            if let mime { aw_data_offer_accept(raw(offer), serial, mime) }
-            else { aw_data_offer_accept(raw(offer), serial, nil) }
+            if let mime { wl_data_offer_accept(offer, serial, mime) }
+            else { wl_data_offer_accept(offer, serial, nil) }
             // Copy, always: a file manager dragging within one desktop means
             // copy unless it says otherwise, and `move` is a decision P9.4 and
             // the Finder's own cut semantics own rather than the protocol.
-            aw_data_offer_set_actions(raw(offer), 1, 1)   // COPY, COPY
+            wl_data_offer_set_actions(offer, 1, 1)   // COPY, COPY
         }
         dl.leave = { data, _ in
             guard let data else { return }
@@ -168,8 +168,8 @@ public final class Clipboard {
     }
 
     deinit {
-        if let s = ownedSource { aw_data_source_destroy(raw(s)) }
-        if let o = currentOffer { aw_data_offer_destroy(raw(o)) }
+        if let s = ownedSource { wl_data_source_destroy(s) }
+        if let o = currentOffer { wl_data_offer_destroy(o) }
         for b in boxes { b.deallocate() }
     }
 
@@ -200,7 +200,7 @@ public final class Clipboard {
     }
 
     private func adoptSelection(_ offer: OpaquePointer?) {
-        if let old = currentOffer, old != offer { aw_data_offer_destroy(raw(old)) }
+        if let old = currentOffer, old != offer { wl_data_offer_destroy(old) }
         currentOffer = offer
         if offer == nil { offeredTypes = [] }
         // A selection arriving while we still hold a live source is ours: the
@@ -239,7 +239,7 @@ public final class Clipboard {
 
         var fds: [Int32] = [0, 0]
         guard pipe(&fds) == 0 else { return nil }
-        aw_data_offer_receive(raw(offer), mime, fds[1])
+        wl_data_offer_receive(offer, mime, fds[1])
         // **Flush before reading, and close our copy of the write end.** The
         // request is buffered in libwayland: without the flush the source never
         // hears the ask, and without the close the read never sees EOF because
@@ -260,7 +260,7 @@ public final class Clipboard {
     }
 
     private func releaseDrag() {
-        if let o = dragOffer { aw_data_offer_destroy(raw(o)) }
+        if let o = dragOffer { wl_data_offer_destroy(o) }
         dragOffer = nil
         dragTypes = []
         dragSurface = nil
@@ -283,7 +283,7 @@ public final class Clipboard {
         // The offer is still finished properly, so the source sees a completed
         // drag rather than a cancelled one.
         if dragSource != nil {
-            aw_data_offer_finish(raw(offer))
+            wl_data_offer_finish(offer)
             display.flush()
             cb(mime, dragBytes, dragX, dragY)
             releaseDrag()
@@ -292,7 +292,7 @@ public final class Clipboard {
 
         var fds: [Int32] = [0, 0]
         guard pipe(&fds) == 0 else { releaseDrag(); return }
-        aw_data_offer_receive(raw(offer), mime, fds[1])
+        wl_data_offer_receive(offer, mime, fds[1])
         display.flush()
         close(fds[1])
         var out: [UInt8] = []
@@ -306,7 +306,7 @@ public final class Clipboard {
         // **`finish` before destroy, and only after reading.** It tells the
         // source the transfer is done so it can release its side; sending it
         // early ends the drag while we are still reading from it.
-        aw_data_offer_finish(raw(offer))
+        wl_data_offer_finish(offer)
         display.flush()
         cb(mime, out, dragX, dragY)
         releaseDrag()
@@ -324,10 +324,10 @@ public final class Clipboard {
     public func startDrag(_ bytes: [UInt8], from origin: OpaquePointer,
                           serial: UInt32,
                           types: [String] = ClipboardMIME.offered) -> Bool {
-        guard let source = opt(aw_data_device_manager_create_data_source(raw(manager)))
+        guard let source = wl_data_device_manager_create_data_source(manager)
         else { return false }
         dragBytes = bytes
-        if let old = dragSource { aw_data_source_destroy(raw(old)) }
+        if let old = dragSource { wl_data_source_destroy(old) }
         dragSource = source
 
         let me = Unmanaged.passUnretained(self).toOpaque()
@@ -351,7 +351,7 @@ public final class Clipboard {
             let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
             guard let mine = c.dragSource,
                   UnsafeRawPointer(mine) == UnsafeRawPointer(source) else { return }
-            aw_data_source_destroy(UnsafeMutableRawPointer(mine))
+            wl_data_source_destroy(mine)
             c.dragSource = nil
         }
         sl.target = { _, _, _ in }
@@ -361,18 +361,18 @@ public final class Clipboard {
             let c = Unmanaged<Clipboard>.fromOpaque(data).takeUnretainedValue()
             guard let mine = c.dragSource,
                   UnsafeRawPointer(mine) == UnsafeRawPointer(source) else { return }
-            aw_data_source_destroy(UnsafeMutableRawPointer(mine))
+            wl_data_source_destroy(mine)
             c.dragSource = nil
         }
         sl.action = { _, _, _ in }
         display.addListener(to: source, listener: sl, data: me)
 
-        for t in types { aw_data_source_offer(raw(source), t) }
-        aw_data_source_set_actions(raw(source), 1)     // COPY
+        for t in types { wl_data_source_offer(source, t) }
+        wl_data_source_set_actions(source, 1)     // COPY
         // No icon surface: the compositor draws nothing extra and the cursor is
         // the feedback. A real icon is a surface per drag, which is Phase 11's
         // business once the toolkit can render one out of band.
-        aw_data_device_start_drag(raw(device), raw(source), raw(origin), nil, serial)
+        wl_data_device_start_drag(device, source, origin, nil, serial)
         display.flush()
         return true
     }
@@ -386,9 +386,9 @@ public final class Clipboard {
     /// never received.
     @discardableResult
     public func write(_ bytes: [UInt8], types: [String] = ClipboardMIME.offered) -> Bool {
-        guard let source = opt(aw_data_device_manager_create_data_source(raw(manager)))
+        guard let source = wl_data_device_manager_create_data_source(manager)
         else { return false }
-        if let old = ownedSource { aw_data_source_destroy(raw(old)) }
+        if let old = ownedSource { wl_data_source_destroy(old) }
         ownedSource = source
         ownedBytes = bytes
         ownsSelection = true
@@ -420,7 +420,7 @@ public final class Clipboard {
             // old one was cancelled would clear a clipboard somebody just set.
             guard let mine = c.ownedSource,
                   UnsafeRawPointer(mine) == UnsafeRawPointer(source) else { return }
-            aw_data_source_destroy(UnsafeMutableRawPointer(mine))
+            wl_data_source_destroy(mine)
             c.ownedSource = nil
             c.ownedBytes = []
             c.ownsSelection = false
@@ -432,8 +432,8 @@ public final class Clipboard {
         sl.action = { _, _, _ in }
         display.addListener(to: source, listener: sl, data: me)
 
-        for t in types { aw_data_source_offer(raw(source), t) }
-        aw_data_device_set_selection(raw(device), raw(source), display.lastInputSerial)
+        for t in types { wl_data_source_offer(source, t) }
+        wl_data_device_set_selection(device, source, display.lastInputSerial)
         display.flush()
         return true
     }

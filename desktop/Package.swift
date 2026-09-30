@@ -63,7 +63,7 @@ let package = Package(
                       "xdg-activation-v1-protocol.c",
                       "wlr-screencopy-unstable-v1-protocol.c",
                       "wlr-output-management-unstable-v1-protocol.c",
-                      "cwayland_shm.c", "cwayland_shim.c"],
+                      "cwayland_shm.c"],
             publicHeadersPath: "include"
         ),
         // System cairo (software 2D backend for the Aqua toolkit; cairo-ft

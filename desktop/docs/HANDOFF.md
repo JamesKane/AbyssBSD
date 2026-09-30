@@ -377,7 +377,7 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 
 | § | Trap |
 |---|---|
-| 2.1 | libwayland's requests are `static inline` — Swift can't call them; use the `aw_*` shim |
+| 2.1 | libwayland's requests are `static inline` — and Swift calls them directly; the `aw_*` shim is retired (S.1), and binds go through `wlBind` (§2.93) |
 | 2.2 | Listener structs must outlive the proxy; owner passed via `Unmanaged` |
 | 2.3 | A NULL listener slot **aborts** the client — fill every event of the bound version |
 | 2.4 | Swift 6 rejects `stderr`-style mutable globals; `write(2, …)` instead |
@@ -456,6 +456,14 @@ this index is in numeric order. Each entry is a mistake that actually cost time.
 > never re-tested. The wrappers still work; retiring them is
 > [SWIFT-6.4.md](SWIFT-6.4.md) S.1. What follows is kept as the record of why
 > they exist.
+>
+> **Retired, 2026-09-30 (S.1).** `cwayland_shim.c` is gone: Swift calls
+> `wl_surface_commit`, `xdg_toplevel_set_title`, `wl_seat_add_listener` and
+> the rest by their own names, with `OpaquePointer` handles and no conversion.
+> The one exception is binding a global: `wlBind(registry, name,
+> wl_seat_iface, version)`, fed by an `*_iface` pointer from `cwayland.h`,
+> because Swift cannot take a C global's address (§2.93). A listener whose
+> type is generic goes through `wl_proxy_add_listener` (`Display.addListener`).
 
 Every libwayland request (`wl_surface_commit`, `wl_registry_bind`, …) **and**
 every `*_add_listener` is a `static inline` in the generated headers. Swift's C
@@ -720,7 +728,30 @@ The standalone clang linter flags `'cairo.h' file not found` etc. because it
 doesn't know SwiftPM injects `-Iinclude` / pkg-config flags. Ignore those;
 trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
-never imports the generated symbol, only our `aw_*` shims. `swift build` is green.)
+imports the function with its parameter renamed. `swift build` is green.)
+
+### 2.93 Swift cannot take a C global's address — a release build passes a copy
+(S.1. The 2026-09-28 spike proved Swift calls libwayland's `static inline`
+requests; it never bound a global, and binding is where it goes wrong.)
+
+`wl_registry_bind(registry, name, &wl_seat_interface, version)` hands libwayland
+a pointer it **keeps** as the new proxy's interface: marshalling reads it for
+every request, and so does `wl_proxy_get_class`. From Swift there is no `&` on
+an imported C `const` global. The spelling that compiles,
+`withUnsafePointer(to: wl_seat_interface) { … }`, **gives the real address in a
+debug build and a pointer to a stack copy in a release build**. A probe
+compared it with a C function's `&wl_compositor_interface`: equal under `-c
+debug`, a stack address under `-c release`, for libwayland's globals and for a
+table in one of our own C targets alike. Every debug test would pass, and the
+shipped build would bind with a dangling interface.
+
+A pointer *value* survives: a `static const struct wl_interface *const` in a
+header, or a `static inline` function returning `&…_interface`, read back equal
+in both configurations. So `cwayland.h` lists one `*_iface` pointer per global
+the toolkit binds, and `wlBind` (`Display.swift`) is the only caller of
+`wl_registry_bind`. This is why the typed `aw_bind_*` wrappers were right all
+along, and the other ~80 wrappers were not. **Rule: a C global whose address
+matters crosses into Swift as a pointer value, never as the struct.**
 
 ### 2.92 An Aqua window hears xdg-shell v6
 (T.3. The toolkit bound v2, so it heard none of v4–v6. U.2 had made undertow
@@ -3629,7 +3660,7 @@ some other machine will show, it is not finished until something has done it.
 
 | Path | What |
 |---|---|
-| `de/cwayland` | libwayland + generated protocols + the `aw_*` shim (§2.1) |
+| `de/cwayland` | libwayland + generated protocols + the `*_iface` pointers `wlBind` takes (§2.1, §2.93) |
 | `de/surface` | the client runtime: `Display`, `Window`, `LayerSurface`, `Popup`, `Keyboard`, `ForeignToplevels`, `Activation`, `Screencopy` |
 | `de/aqua` | the toolkit + the shell: `Theme`/`Draw`/`Text`/`Icons`, `Wallpaper`+`DesktopIcons`, `MenuBar`, `Dock`, `Finder`(+`FinderModel`/`FinderOps`), `Launcher` |
 | `de/poolconfig` | config read/write/watch (`CPoolWatch` is the platform fork) |
@@ -3665,8 +3696,9 @@ some other machine will show, it is not finished until something has done it.
 
 **Adding a Wayland protocol** is mechanical: drop the XML in `protocols/`, add a
 `gen` line to `generate-protocols.sh`, list the generated `.c` in
-`Package.swift`, add one-line `aw_*` wrappers (§2.1), and fill **every** listener
-slot (§2.3). **`wlr-screencopy` (P7.5) is the most recent worked example**, and
+`Package.swift`, add one `*_iface` line to `cwayland.h` for each global you bind
+(§2.93) — the requests need nothing, Swift calls them directly (§2.1) — and fill
+**every** listener slot (§2.3). **`wlr-screencopy` (P7.5) is the most recent worked example**, and
 the most complete one — it binds a manager, creates a per-request object, fills
 all seven of its events, and has a version fallback (`buffer_done` is v3+, so
 below that the `buffer` event stands alone). Regenerating also proved the other

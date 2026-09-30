@@ -131,8 +131,8 @@ public final class DisplayConfigurator {
         installListeners()
         guard let reg = wl_display_get_registry(d) else { wl_display_disconnect(d); return nil }
         registry = reg
-        _ = aw_add_listener(UnsafeMutableRawPointer(reg), UnsafeRawPointer(registryListener),
-                            Unmanaged.passUnretained(self).toOpaque())
+        _ = wl_registry_add_listener(reg, registryListener,
+                                     Unmanaged.passUnretained(self).toOpaque())
         _ = wl_display_roundtrip(d)
         guard manager != nil,
               pumpWayland(d, until: { batches > 0 }, timeoutMs: timeoutMs) else {
@@ -187,8 +187,8 @@ public final class DisplayConfigurator {
         guard let config = zwlr_output_manager_v1_create_configuration(manager, serial) else { return .failed }
         defer { zwlr_output_configuration_v1_destroy(config); wl_display_flush(wl) }
         outcome = nil
-        _ = aw_add_listener(UnsafeMutableRawPointer(config), UnsafeRawPointer(configListener),
-                            Unmanaged.passUnretained(self).toOpaque())
+        _ = zwlr_output_configuration_v1_add_listener(config, configListener,
+                                                     Unmanaged.passUnretained(self).toOpaque())
         for s in settings {
             guard let h = heads.first(where: { $0.name == s.name }),
                   let ch = zwlr_output_configuration_v1_enable_head(config, h.proxy) else { continue }
@@ -222,11 +222,10 @@ public final class DisplayConfigurator {
                 guard let iface, String(cString: iface) == "zwlr_output_manager_v1" else { return }
                 let c = DisplayConfigurator.me(data)
                 guard c.manager == nil, let reg,
-                      let raw = aw_bind_output_manager(UnsafeMutableRawPointer(reg), name, min(version, 4))
+                      let m = wlBind(reg, name, zwlr_output_manager_v1_iface, min(version, 4))
                 else { return }
-                let m = OpaquePointer(raw)
                 c.manager = m
-                _ = aw_add_listener(raw, UnsafeRawPointer(c.managerListener), data)
+                _ = zwlr_output_manager_v1_add_listener(m, c.managerListener, data)
             },
             global_remove: { _, _, _ in }))
 
@@ -235,7 +234,7 @@ public final class DisplayConfigurator {
                 guard let h else { return }
                 let c = DisplayConfigurator.me(data)
                 c.heads.append(HeadState(h))
-                _ = aw_add_listener(UnsafeMutableRawPointer(h), UnsafeRawPointer(c.headListener), data)
+                _ = zwlr_output_head_v1_add_listener(h, c.headListener, data)
             },
             done: { data, _, serial in
                 let c = DisplayConfigurator.me(data)
@@ -255,7 +254,7 @@ public final class DisplayConfigurator {
                 let c = DisplayConfigurator.me(data)
                 c.head(h)?.modes.append(m)
                 c.modes[m] = ModeState()
-                _ = aw_add_listener(UnsafeMutableRawPointer(m), UnsafeRawPointer(c.modeListener), data)
+                _ = zwlr_output_mode_v1_add_listener(m, c.modeListener, data)
             },
             enabled: { data, h, on in DisplayConfigurator.me(data).head(h)?.enabled = on != 0 },
             current_mode: { data, h, m in DisplayConfigurator.me(data).head(h)?.current = m },

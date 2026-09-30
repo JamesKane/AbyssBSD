@@ -109,7 +109,7 @@ public final class LayerSurface {
     @discardableResult
     public func publishMenus(at address: String) -> Bool {
         guard let m = display.menuManager else { return false }
-        aw_menu_manager_set_address(raw(m), raw(surface), address)
+        abyss_menu_manager_v1_set_address(m, surface, address)
         display.flush()
         return true
     }
@@ -122,7 +122,7 @@ public final class LayerSurface {
                  scale: Int32 = 1, autoScale: Bool = true,
                  delegate: LayerSurfaceDelegate) {
         guard let compositor = display.compositor, let shell = display.layerShell,
-              let surf = opt(aw_compositor_create_surface(raw(compositor)))
+              let surf = wl_compositor_create_surface(compositor)
         else { return nil }
         self.display = display
         self.surface = surf
@@ -134,17 +134,17 @@ public final class LayerSurface {
         self.delegate = delegate
 
         guard let ls = namespace.withCString({ ns in
-            opt(aw_layer_shell_get_layer_surface(
-                raw(shell), raw(surf), nil, layer.rawValue, ns))
+            zwlr_layer_shell_v1_get_layer_surface(
+                shell, surf, nil, layer.rawValue, ns)
         }) else { return nil }
         layerSurface = ls
 
-        aw_layer_surface_set_size(raw(ls), UInt32(max(0, width)), UInt32(max(0, height)))
-        aw_layer_surface_set_anchor(raw(ls), anchor.rawValue)
-        aw_layer_surface_set_exclusive_zone(raw(ls), exclusiveZone)
-        aw_layer_surface_set_keyboard_interactivity(raw(ls), keyboard.rawValue)
+        zwlr_layer_surface_v1_set_size(ls, UInt32(max(0, width)), UInt32(max(0, height)))
+        zwlr_layer_surface_v1_set_anchor(ls, anchor.rawValue)
+        zwlr_layer_surface_v1_set_exclusive_zone(ls, exclusiveZone)
+        zwlr_layer_surface_v1_set_keyboard_interactivity(ls, keyboard.rawValue)
         if margin != (0, 0, 0, 0) {
-            aw_layer_surface_set_margin(raw(ls), margin.top, margin.right,
+            zwlr_layer_surface_v1_set_margin(ls, margin.top, margin.right,
                                         margin.bottom, margin.left)
         }
 
@@ -179,7 +179,7 @@ public final class LayerSurface {
         display.addListener(to: surf, listener: sl, data: me)
 
         display.layerSurface = self
-        aw_surface_commit(raw(surf))  // no buffer yet — triggers the first configure
+        wl_surface_commit(surf)  // no buffer yet — triggers the first configure
         wl_display_flush(display.display)
     }
 
@@ -193,8 +193,8 @@ public final class LayerSurface {
         if display.layerSurface === self { display.layerSurface = nil }
         for b in buffers { b.destroy() }
         buffers.removeAll()
-        aw_layer_surface_destroy(raw(layerSurface))
-        aw_surface_destroy(raw(surface))
+        zwlr_layer_surface_v1_destroy(layerSurface)
+        wl_surface_destroy(surface)
         wl_display_flush(display.display)
     }
 
@@ -215,7 +215,7 @@ public final class LayerSurface {
             configuredH = newH
             allocateBuffers()
         }
-        aw_layer_surface_ack_configure(raw(layerSurface), serial)
+        zwlr_layer_surface_v1_ack_configure(layerSurface, serial)
         if !didMap {
             didMap = true
             // First configure means the compositor accepted and placed us — the
@@ -281,10 +281,10 @@ public final class LayerSurface {
                                      height: buf.height, stride: buf.stride,
                                      scale: scale))
         buf.busy = true
-        aw_surface_attach(raw(surface), raw(buf.wlBuffer), 0, 0)
-        aw_surface_set_buffer_scale(raw(surface), scale)
-        aw_surface_damage_buffer(raw(surface), 0, 0, buf.width, buf.height)
-        if let cb = opt(aw_surface_frame(raw(surface))) {
+        wl_surface_attach(surface, buf.wlBuffer, 0, 0)
+        wl_surface_set_buffer_scale(surface, scale)
+        wl_surface_damage_buffer(surface, 0, 0, buf.width, buf.height)
+        if let cb = wl_surface_frame(surface) {
             var cl = wl_callback_listener()
             cl.done = { data, _, _ in
                 guard let data else { return }
@@ -296,7 +296,7 @@ public final class LayerSurface {
             framePending = true
         }
         needsRedraw = false
-        aw_surface_commit(raw(surface))
+        wl_surface_commit(surface)
         wl_display_flush(display.display)
     }
 

@@ -33,9 +33,9 @@ final class ActivationRequest {
 
     func finish(token string: UnsafePointer<CChar>?) {
         if let string, let activation = display.activation {
-            aw_xdg_activation_activate(raw(activation), string, raw(target))
+            xdg_activation_v1_activate(activation, string, target)
         }
-        aw_xdg_activation_token_destroy(raw(token))
+        xdg_activation_token_v1_destroy(token)
         wl_display_flush(display.display)
     }
 }
@@ -49,16 +49,16 @@ public extension Display {
     @discardableResult
     func activate(surface: OpaquePointer) -> Bool {
         guard let activation,
-              let token = opt(aw_xdg_activation_get_token(raw(activation)))
+              let token = xdg_activation_v1_get_activation_token(activation)
         else { return false }
 
         // Tie the request to the most recent input serial we saw: compositors
         // reject (or deprioritise) activation that isn't rooted in real input.
-        if let seat { aw_xdg_activation_token_set_serial(raw(token), lastPointerSerial, raw(seat)) }
+        if let seat { xdg_activation_token_v1_set_serial(token, lastPointerSerial, seat) }
         // The surface the request comes *from* — the compositor uses it to
         // decide whether the focus hand-off is legitimate.
         if let from = activationSourceSurface {
-            aw_xdg_activation_token_set_surface(raw(token), raw(from))
+            xdg_activation_token_v1_set_surface(token, from)
         }
 
         let request = ActivationRequest(display: self, token: token, target: surface)
@@ -71,7 +71,7 @@ public extension Display {
         }
         addListener(to: token, listener: tl,
                     data: Unmanaged.passRetained(request).toOpaque())
-        aw_xdg_activation_token_commit(raw(token))
+        xdg_activation_token_v1_commit(token)
         wl_display_flush(display)
         return true
     }

@@ -187,10 +187,10 @@ public extension Display {
             .allocate(capacity: 1)
         defer { listener.deinitialize(count: 1); listener.deallocate() }
 
-        guard let frame = opt(aw_screencopy_capture_output(
-            raw(manager), overlayCursor ? 1 : 0, raw(output)))
+        guard let frame = zwlr_screencopy_manager_v1_capture_output(
+            manager, overlayCursor ? 1 : 0, output)
         else { throw ScreencopyError.failed("the compositor refused to open a frame") }
-        defer { aw_screencopy_frame_destroy(raw(frame)) }
+        defer { zwlr_screencopy_frame_v1_destroy(frame) }
 
         // Passed unretained: `session` is a strong local for the whole function,
         // and the frame is destroyed before it returns — so the owner outlives
@@ -227,7 +227,7 @@ public extension Display {
                 .failure = "the compositor could not copy that output"
         }
         listener.initialize(to: fl)
-        _ = aw_add_listener(raw(frame), UnsafeRawPointer(listener),
+        _ = zwlr_screencopy_frame_v1_add_listener(frame, listener,
                             Unmanaged.passUnretained(session).toOpaque())
 
         // 1. Wait to be told which buffer to make. Below v3 there is no
@@ -254,7 +254,7 @@ public extension Display {
                                      format: session.format)
         else { throw ScreencopyError.failed("could not allocate the capture buffer") }
         defer { buffer.destroy() }
-        aw_screencopy_frame_copy(raw(frame), raw(buffer.wlBuffer))
+        zwlr_screencopy_frame_v1_copy(frame, buffer.wlBuffer)
 
         // 3. Wait for the copy.
         guard pump(until: { session.settled }, timeoutMs: timeoutMs) else {

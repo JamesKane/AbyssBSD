@@ -92,8 +92,8 @@ public final class Popup {
 
         // Grab input using the serial of the click that opened us, so the
         // compositor dismisses on an outside click.
-        aw_xdg_popup_grab(raw(xdgPopup), raw(seat), display.lastPointerSerial)
-        aw_surface_commit(raw(surface))  // triggers the initial configure
+        xdg_popup_grab(xdgPopup, seat, display.lastPointerSerial)
+        wl_surface_commit(surface)  // triggers the initial configure
         wl_display_flush(display.display)
 
         display.popupOpened(self)
@@ -108,12 +108,12 @@ public final class Popup {
                   display: display, anchorX: anchorX, anchorY: anchorY,
                   anchorW: anchorW, anchorH: anchorH, width: width, height: height)
         else { return nil }
-        guard let pop = opt(aw_xdg_surface_get_popup(
-            raw(xs), raw(parent.xdgSurface), raw(pos))) else {
-            aw_xdg_positioner_destroy(raw(pos))
+        guard let pop = xdg_surface_get_popup(
+            xs, parent.xdgSurface, pos) else {
+            xdg_positioner_destroy(pos)
             return nil
         }
-        aw_xdg_positioner_destroy(raw(pos))
+        xdg_positioner_destroy(pos)
         self.init(display: display, surface: surf, xdgSurface: xs, xdgPopup: pop,
                   seat: seat, scale: parent.scale, width: width, height: height,
                   delegate: delegate)
@@ -131,12 +131,12 @@ public final class Popup {
                   display: display, anchorX: anchorX, anchorY: anchorY,
                   anchorW: anchorW, anchorH: anchorH, width: width, height: height)
         else { return nil }
-        guard let pop = opt(aw_xdg_surface_get_popup_no_parent(raw(xs), raw(pos))) else {
-            aw_xdg_positioner_destroy(raw(pos))
+        guard let pop = xdg_surface_get_popup(xs, nil, pos) else {
+            xdg_positioner_destroy(pos)
             return nil
         }
-        aw_xdg_positioner_destroy(raw(pos))
-        aw_layer_surface_get_popup(raw(layerParent.layerSurface), raw(pop))
+        xdg_positioner_destroy(pos)
+        zwlr_layer_surface_v1_get_popup(layerParent.layerSurface, pop)
         self.init(display: display, surface: surf, xdgSurface: xs, xdgPopup: pop,
                   seat: seat, scale: layerParent.scale, width: width, height: height,
                   delegate: delegate)
@@ -154,15 +154,15 @@ public final class Popup {
                   display: display, anchorX: 0, anchorY: anchorY,
                   anchorW: parent.logicalW, anchorH: anchorH, width: width, height: height)
         else { return nil }
-        aw_xdg_positioner_set_anchor(raw(pos), kAnchorTopRight)
-        aw_xdg_positioner_set_gravity(raw(pos), kGravityBottomRight)
-        aw_xdg_positioner_set_offset(raw(pos), 0, -offsetY)
-        aw_xdg_positioner_set_constraint_adjustment(raw(pos), kConstraintFlipX | kConstraintSlideY)
-        guard let pop = opt(aw_xdg_surface_get_popup(raw(xs), raw(parent.xdgSurface), raw(pos))) else {
-            aw_xdg_positioner_destroy(raw(pos))
+        xdg_positioner_set_anchor(pos, kAnchorTopRight)
+        xdg_positioner_set_gravity(pos, kGravityBottomRight)
+        xdg_positioner_set_offset(pos, 0, -offsetY)
+        xdg_positioner_set_constraint_adjustment(pos, kConstraintFlipX | kConstraintSlideY)
+        guard let pop = xdg_surface_get_popup(xs, parent.xdgSurface, pos) else {
+            xdg_positioner_destroy(pos)
             return nil
         }
-        aw_xdg_positioner_destroy(raw(pos))
+        xdg_positioner_destroy(pos)
         self.init(display: display, surface: surf, xdgSurface: xs, xdgPopup: pop,
                   seat: seat, scale: parent.scale, width: width, height: height,
                   delegate: delegate)
@@ -177,22 +177,22 @@ public final class Popup {
         anchorH: Int32, width: Int32, height: Int32
     ) -> (surface: OpaquePointer, xdgSurface: OpaquePointer, positioner: OpaquePointer)? {
         guard let compositor = display.compositor, let wmBase = display.wmBase,
-              let surf = opt(aw_compositor_create_surface(raw(compositor))),
-              let xs = opt(aw_xdg_wm_base_get_xdg_surface(raw(wmBase), raw(surf))),
-              let pos = opt(aw_xdg_wm_base_create_positioner(raw(wmBase)))
+              let surf = wl_compositor_create_surface(compositor),
+              let xs = xdg_wm_base_get_xdg_surface(wmBase, surf),
+              let pos = xdg_wm_base_create_positioner(wmBase)
         else { return nil }
-        aw_xdg_positioner_set_size(raw(pos), width, height)
-        aw_xdg_positioner_set_anchor_rect(raw(pos), anchorX, anchorY, anchorW, anchorH)
-        aw_xdg_positioner_set_anchor(raw(pos), kAnchorBottomLeft)
-        aw_xdg_positioner_set_gravity(raw(pos), kGravityBottomRight)
-        aw_xdg_positioner_set_constraint_adjustment(
-            raw(pos), kConstraintSlideX | kConstraintSlideY | kConstraintFlipY)
+        xdg_positioner_set_size(pos, width, height)
+        xdg_positioner_set_anchor_rect(pos, anchorX, anchorY, anchorW, anchorH)
+        xdg_positioner_set_anchor(pos, kAnchorBottomLeft)
+        xdg_positioner_set_gravity(pos, kGravityBottomRight)
+        xdg_positioner_set_constraint_adjustment(
+            pos, kConstraintSlideX | kConstraintSlideY | kConstraintFlipY)
         return (surf, xs, pos)
     }
 
     private func applyConfigure(serial: UInt32) {
         if buffers.isEmpty { allocateBuffers() }
-        aw_xdg_surface_ack_configure(raw(xdgSurface), serial)
+        xdg_surface_ack_configure(xdgSurface, serial)
         needsRedraw = true
         if !framePending { renderAndCommit() }
     }
@@ -222,10 +222,10 @@ public final class Popup {
                                      height: buf.height, stride: buf.stride,
                                      scale: scale))
         buf.busy = true
-        aw_surface_attach(raw(surface), raw(buf.wlBuffer), 0, 0)
-        aw_surface_set_buffer_scale(raw(surface), scale)
-        aw_surface_damage_buffer(raw(surface), 0, 0, buf.width, buf.height)
-        if let cb = opt(aw_surface_frame(raw(surface))) {
+        wl_surface_attach(surface, buf.wlBuffer, 0, 0)
+        wl_surface_set_buffer_scale(surface, scale)
+        wl_surface_damage_buffer(surface, 0, 0, buf.width, buf.height)
+        if let cb = wl_surface_frame(surface) {
             var cl = wl_callback_listener()
             cl.done = { data, _, _ in
                 guard let data else { return }
@@ -238,7 +238,7 @@ public final class Popup {
             framePending = true
         }
         needsRedraw = false
-        aw_surface_commit(raw(surface))
+        wl_surface_commit(surface)
         wl_display_flush(display.display)
     }
 
@@ -267,9 +267,9 @@ public final class Popup {
         display.popupClosed(self)
         for b in buffers { b.destroy() }
         buffers.removeAll()
-        aw_xdg_popup_destroy(raw(xdgPopup))
-        aw_xdg_surface_destroy(raw(xdgSurface))
-        aw_surface_destroy(raw(surface))
+        xdg_popup_destroy(xdgPopup)
+        xdg_surface_destroy(xdgSurface)
+        wl_surface_destroy(surface)
         wl_display_flush(display.display)
     }
 

@@ -95,15 +95,15 @@ final class ShmBuffer {
         let map = mmap(nil, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
         let failed = UnsafeMutableRawPointer(bitPattern: -1)
         guard let map, map != failed else { close(fd); return nil }
-        guard let pool = opt(aw_shm_create_pool(raw(shm), fd, Int32(length))) else {
+        guard let pool = wl_shm_create_pool(shm, fd, Int32(length)) else {
             munmap(map, length); close(fd); return nil
         }
-        guard let buf = opt(aw_shm_pool_create_buffer(
-            raw(pool), 0, width, height, stride, format)) else {
-            aw_shm_pool_destroy(raw(pool)); munmap(map, length); close(fd)
+        guard let buf = wl_shm_pool_create_buffer(
+            pool, 0, width, height, stride, format) else {
+            wl_shm_pool_destroy(pool); munmap(map, length); close(fd)
             return nil
         }
-        aw_shm_pool_destroy(raw(pool))
+        wl_shm_pool_destroy(pool)
         close(fd)  // compositor holds its own mapping
 
         self.wlBuffer = buf
@@ -126,7 +126,7 @@ final class ShmBuffer {
     }
 
     func destroy() {
-        aw_buffer_destroy(raw(wlBuffer))
+        wl_buffer_destroy(wlBuffer)
         munmap(data, length)
     }
 }
@@ -204,7 +204,7 @@ public final class Window {
                  width: Int32, height: Int32, scale: Int32 = 1,
                  autoScale: Bool = true, delegate: WindowDelegate) {
         guard let compositor = display.compositor, let wmBase = display.wmBase,
-              let surf = opt(aw_compositor_create_surface(raw(compositor)))
+              let surf = wl_compositor_create_surface(compositor)
         else { return nil }
         self.display = display
         self.surface = surf
@@ -216,10 +216,10 @@ public final class Window {
         self.pendingH = height
         self.delegate = delegate
 
-        guard let xs = opt(aw_xdg_wm_base_get_xdg_surface(raw(wmBase), raw(surf)))
+        guard let xs = xdg_wm_base_get_xdg_surface(wmBase, surf)
         else { return nil }
         xdgSurface = xs
-        guard let tl = opt(aw_xdg_surface_get_toplevel(raw(xs))) else { return nil }
+        guard let tl = xdg_surface_get_toplevel(xs) else { return nil }
         xdgToplevel = tl
 
         let me = Unmanaged.passUnretained(self).toOpaque()
@@ -286,10 +286,10 @@ public final class Window {
         }
         display.addListener(to: surf, listener: sl, data: me)
 
-        title.withCString { aw_xdg_toplevel_set_title(raw(tl), $0) }
-        appID.withCString { aw_xdg_toplevel_set_app_id(raw(tl), $0) }
+        title.withCString { xdg_toplevel_set_title(tl, $0) }
+        appID.withCString { xdg_toplevel_set_app_id(tl, $0) }
 
-        aw_surface_commit(raw(surf))  // triggers the initial configure
+        wl_surface_commit(surf)  // triggers the initial configure
         display.register(window: self)
     }
 
@@ -311,9 +311,9 @@ public final class Window {
         // the compositor is behaving correctly, which is why this survived
         // every close test the project has: they all asked whether the client
         // closed the window (P9.3).
-        aw_xdg_toplevel_destroy(raw(xdgToplevel))
-        aw_xdg_surface_destroy(raw(xdgSurface))
-        aw_surface_destroy(raw(surface))
+        xdg_toplevel_destroy(xdgToplevel)
+        xdg_surface_destroy(xdgSurface)
+        wl_surface_destroy(surface)
         wl_display_flush(display.display)
     }
 
@@ -369,7 +369,7 @@ public final class Window {
             logicalH = pendingH
             allocateBuffers()
         }
-        aw_xdg_surface_ack_configure(raw(xdgSurface), serial)
+        xdg_surface_ack_configure(xdgSurface, serial)
         needsRedraw = true
         if !framePending { renderAndCommit() }
     }
@@ -438,7 +438,7 @@ public final class Window {
         if isSuspended {
             if needsRedraw { redrawsHeld += 1 }
             needsRedraw = true
-            aw_surface_commit(raw(surface))
+            wl_surface_commit(surface)
             wl_display_flush(display.display)
             return
         }
@@ -450,11 +450,11 @@ public final class Window {
                                      height: buf.height, stride: buf.stride,
                                      scale: scale))
         buf.busy = true
-        aw_surface_attach(raw(surface), raw(buf.wlBuffer), 0, 0)
-        aw_surface_set_buffer_scale(raw(surface), scale)
-        aw_surface_damage_buffer(raw(surface), 0, 0, buf.width, buf.height)
+        wl_surface_attach(surface, buf.wlBuffer, 0, 0)
+        wl_surface_set_buffer_scale(surface, scale)
+        wl_surface_damage_buffer(surface, 0, 0, buf.width, buf.height)
 
-        if let cb = opt(aw_surface_frame(raw(surface))) {
+        if let cb = wl_surface_frame(surface) {
             var cl = wl_callback_listener()
             cl.done = { data, _, _ in
                 guard let data else { return }
@@ -466,7 +466,7 @@ public final class Window {
             framePending = true
         }
         needsRedraw = false
-        aw_surface_commit(raw(surface))
+        wl_surface_commit(surface)
         wl_display_flush(display.display)
     }
 
@@ -529,14 +529,14 @@ public final class Window {
     /// (§4.2), which is what stops a program grabbing the pointer out of turn.
     public func beginMove() {
         guard !tornDown, let seat = display.seat else { return }
-        aw_xdg_toplevel_move(raw(xdgToplevel), raw(seat), display.lastPointerSerial)
+        xdg_toplevel_move(xdgToplevel, seat, display.lastPointerSerial)
         display.flush()
     }
 
     /// The same, for a resize from `edge` — see `ResizeEdge`.
     public func beginResize(_ edge: ResizeEdge) {
         guard !tornDown, let seat = display.seat else { return }
-        aw_xdg_toplevel_resize(raw(xdgToplevel), raw(seat),
+        xdg_toplevel_resize(xdgToplevel, seat,
                                display.lastPointerSerial, edge.rawValue)
         display.flush()
     }
@@ -547,8 +547,8 @@ public final class Window {
     public func setMaximized(_ on: Bool) {
         guard !tornDown else { return }
         guard canMaximize else { Window.log("not zooming: the compositor does not maximise"); return }
-        if on { aw_xdg_toplevel_set_maximized(raw(xdgToplevel)) }
-        else { aw_xdg_toplevel_unset_maximized(raw(xdgToplevel)) }
+        if on { xdg_toplevel_set_maximized(xdgToplevel) }
+        else { xdg_toplevel_unset_maximized(xdgToplevel) }
         display.flush()
     }
 
@@ -559,7 +559,7 @@ public final class Window {
     @discardableResult
     public func publishMenus(at address: String) -> Bool {
         guard let m = display.menuManager else { return false }
-        aw_menu_manager_set_address(raw(m), raw(surface), address)
+        abyss_menu_manager_v1_set_address(m, surface, address)
         display.flush()
         return true
     }
@@ -573,7 +573,7 @@ public final class Window {
     public func minimize() -> Bool {
         guard !tornDown else { return false }
         guard canMinimize else { Window.log("not minimising: the compositor does not"); return false }
-        aw_xdg_toplevel_set_minimized(raw(xdgToplevel))
+        xdg_toplevel_set_minimized(xdgToplevel)
         display.flush()
         return true
     }
@@ -584,20 +584,20 @@ public final class Window {
     @discardableResult
     public func lower() -> Bool {
         guard !tornDown, let m = display.windowManager else { return false }
-        aw_window_manager_lower(raw(m), raw(xdgToplevel))
+        abyss_window_manager_v1_lower(m, xdgToplevel)
         display.flush()
         return true
     }
 
     public func setFullscreen(_ on: Bool) {
         guard !tornDown else { return }
-        if on { aw_xdg_toplevel_set_fullscreen(raw(xdgToplevel), nil) }
-        else { aw_xdg_toplevel_unset_fullscreen(raw(xdgToplevel)) }
+        if on { xdg_toplevel_set_fullscreen(xdgToplevel, nil) }
+        else { xdg_toplevel_unset_fullscreen(xdgToplevel) }
         display.flush()
     }
 
     public func setTitle(_ title: String) {
-        title.withCString { aw_xdg_toplevel_set_title(raw(xdgToplevel), $0) }
+        title.withCString { xdg_toplevel_set_title(xdgToplevel, $0) }
     }
 
     /// Logical (surface) size, useful to the toolkit for layout.

@@ -30,7 +30,7 @@ public final class MenuBarFocus {
     /// when this process is not the menu bar's.
     public init?(display: Display) {
         guard let g = display.menubarGlobal,
-              let p = opt(aw_bind_menubar(raw(display.registry), g.name, g.version))
+              let p = wlBind(display.registry, g.name, abyss_menubar_v1_iface, g.version)
         else { return nil }
         self.display = display
         proxy = p
@@ -56,12 +56,12 @@ public final class MenuBarFocus {
     @discardableResult
     public func forceQuit(appID: String) -> Bool {
         guard version >= 2, let p = proxy else { return false }
-        aw_menubar_force_quit(raw(p), appID)
+        abyss_menubar_v1_force_quit(p, appID)
         display.flush()
         return true
     }
 
     deinit {
-        if let p = proxy { aw_menubar_destroy(raw(p)) }
+        if let p = proxy { abyss_menubar_v1_destroy(p) }
     }
 }

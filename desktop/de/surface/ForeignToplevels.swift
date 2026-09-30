@@ -39,8 +39,7 @@ public final class ForeignToplevels {
     /// compositor doesn't offer it.
     public init?(display: Display, delegate: ForeignToplevelsDelegate? = nil) {
         guard let (name, version) = display.foreignToplevelManager,
-              let mgr = opt(aw_bind_foreign_toplevel_manager(
-                  raw(display.registry), name, version))
+              let mgr = wlBind(display.registry, name, zwlr_foreign_toplevel_manager_v1_iface, version)
         else { return nil }
         self.display = display
         self.manager = mgr
@@ -65,7 +64,7 @@ public final class ForeignToplevels {
     public func activate(appID: String) -> Bool {
         guard let seat = display.seat,
               let info = toplevels.first(where: { $0.appID == appID }) else { return false }
-        aw_foreign_toplevel_handle_activate(raw(info.handle), raw(seat))
+        zwlr_foreign_toplevel_handle_v1_activate(info.handle, seat)
         return true
     }
 
@@ -75,7 +74,7 @@ public final class ForeignToplevels {
     @discardableResult
     public func close(appID: String) -> Int {
         let mine = toplevels.filter { $0.appID == appID }
-        for info in mine { aw_foreign_toplevel_handle_close(raw(info.handle)) }
+        for info in mine { zwlr_foreign_toplevel_handle_v1_close(info.handle) }
         display.flush()
         return mine.count
     }
@@ -83,7 +82,7 @@ public final class ForeignToplevels {
     /// Activate a specific tracked toplevel.
     public func activate(_ info: ToplevelInfo) {
         guard let seat = display.seat else { return }
-        aw_foreign_toplevel_handle_activate(raw(info.handle), raw(seat))
+        zwlr_foreign_toplevel_handle_v1_activate(info.handle, seat)
     }
 
     // MARK: handle bookkeeping
@@ -144,7 +143,7 @@ public final class ForeignToplevels {
     private func removeToplevel(_ handle: OpaquePointer) {
         guard let i = toplevels.firstIndex(where: { $0.handle == handle }) else { return }
         toplevels.remove(at: i)
-        aw_foreign_toplevel_handle_destroy(raw(handle))
+        zwlr_foreign_toplevel_handle_v1_destroy(handle)
         notify()
     }
 

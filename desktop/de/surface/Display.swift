@@ -4,10 +4,9 @@
 // (compositor, shm, seat, xdg_wm_base) plus the pointer. It runs the dispatch
 // loop. Window (Window.swift) layers xdg-shell + shm buffers + rendering on top.
 //
-// libwayland's request/add_listener functions are static-inline; we reach them
-// through the aw_* wrappers in the CWayland shim. Opaque wl_* handles are
-// carried as OpaquePointer; the shim takes/returns void* (raw pointers), so we
-// convert at the boundary with the raw()/opt() helpers below.
+// libwayland's requests and add_listener functions are static-inline, and Swift
+// calls them directly (HANDOFF §2.1); opaque wl_* handles are OpaquePointer.
+// Binding a global is the exception, and goes through wlBind below.
 
 import CWayland
 
@@ -17,11 +16,14 @@ import Glibc
 import Darwin
 #endif
 
-@inline(__always) func raw(_ p: OpaquePointer) -> UnsafeMutableRawPointer {
-    UnsafeMutableRawPointer(p)
-}
-@inline(__always) func opt(_ p: UnsafeMutableRawPointer?) -> OpaquePointer? {
-    p.map(OpaquePointer.init)
+/// `wl_registry_bind`, for one of the interfaces CWayland lists as `*_iface`.
+/// Never pass `&some_interface` or `withUnsafePointer(to: some_interface)`: in
+/// a release build that is a pointer to a copy, and libwayland keeps it as the
+/// proxy's interface for the life of the connection (cwayland.h).
+@inline(__always) func wlBind(_ registry: OpaquePointer, _ name: UInt32,
+                              _ interface: UnsafePointer<wl_interface>,
+                              _ version: UInt32) -> OpaquePointer? {
+    wl_registry_bind(registry, name, interface, version).map(OpaquePointer.init)
 }
 
 // wl_seat_capability bits (avoids importing the C enum).
@@ -184,7 +186,7 @@ public final class Display {
     public init?() {
         guard let d = wl_display_connect(nil) else { return nil }
         display = d
-        guard let reg = opt(aw_display_get_registry(raw(d))) else {
+        guard let reg = wl_display_get_registry(d) else {
             wl_display_disconnect(d)
             return nil
         }
@@ -259,25 +261,28 @@ public final class Display {
         let p = UnsafeMutablePointer<L>.allocate(capacity: 1)
         p.initialize(to: listener)
         listenerStorage.append(UnsafeMutableRawPointer(p))
-        _ = aw_add_listener(raw(proxy), UnsafeRawPointer(p), data)
+        // The generic form every generated `*_add_listener` forwards to.
+        _ = UnsafeMutableRawPointer(p).withMemoryRebound(
+            to: (@convention(c) () -> Void)?.self, capacity: 1) {
+            wl_proxy_add_listener(proxy, $0, data)
+        }
     }
 
     private func handleGlobal(name: UInt32, interface: String, version: UInt32) {
         let me = Unmanaged.passUnretained(self).toOpaque()
         switch interface {
         case "wl_compositor":
-            compositor = opt(aw_bind_compositor(raw(registry), name, min(version, 4)))
+            compositor = wlBind(registry, name, wl_compositor_iface, min(version, 4))
         case "wl_shm":
-            shm = opt(aw_bind_shm(raw(registry), name, 1))
+            shm = wlBind(registry, name, wl_shm_iface, 1)
         case "wl_data_device_manager":
             // v3 is where drag actions live (P9.3); the selection half works at
             // any version, and asking for more than the compositor has is an
             // error rather than a downgrade.
-            dataDeviceManager = opt(aw_bind_data_device_manager(raw(registry), name,
-                                                                min(version, 3)))
+            dataDeviceManager = wlBind(registry, name, wl_data_device_manager_iface, min(version, 3))
             attachClipboardIfReady()
         case "wl_seat":
-            guard let s = opt(aw_bind_seat(raw(registry), name, min(version, 5)))
+            guard let s = wlBind(registry, name, wl_seat_iface, min(version, 5))
             else { return }
             seat = s
             var sl = wl_seat_listener()
@@ -297,43 +302,42 @@ public final class Display {
             // (don't ask for what is not served) and `configure_bounds` (the
             // most room there is). Every one of their listener slots is
             // filled in Window — libwayland aborts on an event with none.
-            guard let b = opt(aw_bind_xdg_wm_base(raw(registry), name, min(version, 6)))
+            guard let b = wlBind(registry, name, xdg_wm_base_iface, min(version, 6))
             else { return }
             wmBase = b
             var bl = xdg_wm_base_listener()
             bl.ping = { data, _, serial in
                 guard let data else { return }
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
-                aw_xdg_wm_base_pong(raw(d.wmBase!), serial)
+                xdg_wm_base_pong(d.wmBase!, serial)
             }
             addListener(to: b, listener: bl, data: me)
         case "zwlr_layer_shell_v1":
             // v4 brings keyboard on_demand + since-4 configure semantics; the
             // menu bar/Dock will want it. It has no events, so no listener.
-            layerShell = opt(aw_bind_layer_shell(raw(registry), name, min(version, 4)))
+            layerShell = wlBind(registry, name, zwlr_layer_shell_v1_iface, min(version, 4))
         case "zwlr_foreign_toplevel_manager_v1":
             foreignToplevelManager = (name, min(version, 3))
         case "abyss_menu_manager_v1":
-            menuManager = opt(aw_bind_menu_manager(raw(registry), name, 1))
+            menuManager = wlBind(registry, name, abyss_menu_manager_v1_iface, 1)
         case "abyss_window_manager_v1":
-            windowManager = opt(aw_bind_window_manager(raw(registry), name, 1))
+            windowManager = wlBind(registry, name, abyss_window_manager_v1_iface, 1)
         case "abyss_menubar_v1":
             menubarGlobal = (name, min(version, 2))
         case "xdg_activation_v1":
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.
-            activation = opt(aw_bind_xdg_activation(raw(registry), name, min(version, 1)))
+            activation = wlBind(registry, name, xdg_activation_v1_iface, min(version, 1))
         case "zwlr_screencopy_manager_v1":
             // v3 adds buffer_done, which is what says "I've told you every
             // buffer type I take — now send copy". Below it, the wl_shm buffer
             // event is guaranteed and stands alone (Screencopy.swift). The
             // manager has no events, so it binds with no listener.
             screencopyVersion = min(version, 3)
-            screencopy = opt(aw_bind_screencopy_manager(raw(registry), name,
-                                                        screencopyVersion))
+            screencopy = wlBind(registry, name, zwlr_screencopy_manager_v1_iface, screencopyVersion)
         case "wl_output":
             // v2 is where the `scale` event lands (and `done` batches props).
-            guard let o = opt(aw_bind_output(raw(registry), name, min(version, 2)))
+            guard let o = wlBind(registry, name, wl_output_iface, min(version, 2))
             else { return }
             outputs.append(OutputInfo(name: name, proxy: o))
             var ol = wl_output_listener()
@@ -397,7 +401,7 @@ public final class Display {
             bindKeyboard(seat)
         }
         if caps & kSeatCapabilityPointer != 0, pointer == nil {
-            guard let p = opt(aw_seat_get_pointer(raw(seat))) else { return }
+            guard let p = wl_seat_get_pointer(seat) else { return }
             pointer = p
             let me = Unmanaged.passUnretained(self).toOpaque()
             var pl = wl_pointer_listener()
@@ -529,7 +533,7 @@ public final class Display {
     }
 
     private func bindKeyboard(_ seat: OpaquePointer) {
-        guard let k = opt(aw_seat_get_keyboard(raw(seat))) else { return }
+        guard let k = wl_seat_get_keyboard(seat) else { return }
         keyboard = k
         let me = Unmanaged.passUnretained(self).toOpaque()
         var kl = wl_keyboard_listener()

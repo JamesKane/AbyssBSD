@@ -442,9 +442,10 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
   library (or vendored C), not a SwiftPM registry dep. See `CWayland`/`CCairo`.
 - **Wrap in phase 1, rewrite in Swift later.** e.g. cairo now; a Swift/GPU
   renderer later.
-- **The static-inline trap:** every `wl_*` request and `*_add_listener` is
-  `static inline` and invisible to Swift — add a one-line `aw_*` wrapper in
-  `de/cwayland/cwayland_shim.c` (and a decl in `cwayland.h`) and call that.
+- **The static-inline non-trap:** every `wl_*` request and `*_add_listener` is
+  `static inline`, and Swift calls them directly (HANDOFF §2.1; the `aw_*` shim
+  was retired in S.1). Binding a global is the exception: `wlBind` with an
+  `*_iface` pointer from `cwayland.h`, never the interface struct (§2.93).
 - **Listener lifetime:** libwayland keeps the listener pointer; `Display`
   heap-allocates each listener struct and frees them in `deinit`. Pass the owner
   via `Unmanaged.passUnretained(...).toOpaque()` as the `data` arg.
