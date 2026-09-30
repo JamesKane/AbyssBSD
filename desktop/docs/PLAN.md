@@ -2,21 +2,25 @@
 
 ## Context
 
-We are starting **AbyssBSD**, a FreeBSD `releng/15.0` fork whose headline feature is a
+**AbyssBSD** is a fork of FreeBSD `main` whose headline feature is a
 **new desktop environment written in Swift 6**, styled as a faithful clone of
 **Mac OS X 10.2 "Jaguar" Aqua**, running on **Wayland**, with a Fedora/Anaconda-style
 graphical installer. The bring-up target was the **Mac Pro 2013 (MacPro6,1)**;
 since 2026-09-05 it is an **Intel i7-12700KF with an AMD Radeon RX 6750 XT**
-(PHASE4 §1.1), with the Mac Pro kept as the matrix's second row.
+(PHASE4 §1.1), with the Mac Pro kept as the matrix's second row. The desktop lives
+in the AbyssBSD monorepo as `desktop/`, beside the FreeBSD fork (`src/`), the
+drm-kmod fork and the ports overlay. *(This roadmap began as a `releng/15.0`
+fork; the base moved to `main` on 2026-09-30 — decision 5.)*
 
-This supersedes the sibling project at `/home/jkane/Projects/OS/AbyssBSD` (Rust DE),
+This supersedes the earlier Rust desktop, checked out beside the monorepo as
+`AbyssBSD-old`,
 which is being **abandoned as the product** but is an invaluable source of design and
 working code. That sibling already contains a complete, *software-rendered, headless*
 Wayland DE in Rust (31 crates, ~27.5k LOC, 49/53 tests green): a performance-gated
 compositor (`tide`), a shell (`reef`), brokerless IPC (`current`), daemon-free config
 (`pool`), a hot-path ring (`shmring`), FreeBSD helpers (`vents`), a session supervisor
 (`anchor`), and an image codec (`abyss-image`). Its architecture is documented in
-`AbyssBSD/abyss/docs/{DESKTOP,SEAMS,STATUS,KERNEL-READINESS}.md`.
+`AbyssBSD-old/abyss/docs/{DESKTOP,SEAMS,STATUS,KERNEL-READINESS}.md`.
 
 **The product is Swift.** The whole desktop — toolkit, shell, apps, *and* the engine
 underneath — gets written in Swift 6; we drop to C (or C++) only where Swift genuinely
@@ -30,35 +34,36 @@ rewrite of the Rust `pool`, sharing only the on-disk format — is the pattern.)
 xkbcommon, cairo, FreeType/HarfBuzz, libnv) or a shim over one, exactly as `de/cwayland`
 and `de/ctext` already do. It does not mean linking Rust crates.
 
-### Where this stands (2026-09-05)
+### Where this stands (2026-09-30)
 
-**Phases 0–3 and 5–8 are complete; Phase 4 is in flight, on the machine.** The
-Jaguar desktop runs on FreeBSD on our own Swift compositor, foreign GTK apps get
-the Finder through a D-Bus bridge we wrote, and a blank disk becomes a machine
-running that desktop — all of it proven by `abyss/tests/run.sh --vm --live` on
-both platforms, with no hardware and no human in the loop. The medium now boots
-on the Mac Pro itself: its ESP is FAT16 because Apple's firmware would not read
-the FAT32 one, and `hw.pci.enable_pcie_hp="0"` stops the machine burying its own
-installer under a power-fault it re-logs forever.
+**Phases 0–3, 5–12 and 14 are complete** (Phase 12 but for `Fathom`'s Aqua view).
+The Jaguar desktop runs on our own Swift compositor on Linux and FreeBSD; GTK and
+Qt applications put their menus in our bar and get the Finder through our
+portals; the look is data, with a second theme to prove it; System Preferences
+changes the machine through a privileged helper; and a blank disk becomes a
+machine running all of it. Every piece is proven by `abyss/tests/run.sh --vm
+--live` on both platforms, with no hardware and no human in the loop. Between
+Phases 14 and 15, [BACKLOG.md](BACKLOG.md) closed what Phase 15's applications
+would need from the compositor (U.1–U.10), the installer's keyboard items
+(T.1–T.3) and the toolchain passes (S.0–S.3; Swift 6.3.3 on both platforms).
 
-**And then the target moved** (PHASE4 §1.1). Bring-up is now an i7-12700KF with
-an RX 6750 XT — a machine already running FreeBSD 15.0-RELEASE-p12 with a MATE
-desktop on it. That **retires the project's biggest risk by evidence rather than
-argument**: Navi 22 needs no `si_support`, and `amdgpu` binding this card is not
-a prediction. It also buys what the Mac Pro could never offer — **a positive
-control**, since every layer below ours is demonstrably working, so a black
-screen there means us (PHASE4 §1.2). The Mac Pro keeps its accommodations and
-becomes a row of the matrix instead of the gate on a phase.
+**Phase 4 is in flight and paused.** On the i7-12700KF / RX 6750 XT the medium
+boots, `amdgpu` binds and the Aqua installer is on screen (PHASE4 §5 steps 1–5),
+but nothing is installed on metal — the machine's one disk is its positive
+control — and **C1 fails there**: 58 of 300 frames missed, with the breakdown
+that would say why still unrun (PHASE4 §5.7). The machine's USB is in use
+elsewhere for now.
 
-**And Phase 4 is no longer the last phase.** [PRODUCT.md](PRODUCT.md) is why:
-this tree is engine and shell, its application layer is two programs, and the
-five theses that decide what fills it — GUI over TUI, WIMP over tiling,
-traditional window management, jailed agents, hardware breadth — are argued there
-with a gap map. **That gap map is now on this roadmap as Phases 9–18**, and the
-whole document has been re-ordered so that a phase never appears before something
-it needs: see [The dependency order](#the-dependency-order). Note that **every
-C1–C5 number in [PHASE6.md](PHASE6.md) is provisional** until P4.5 re-measures it
-against a real vblank.
+**Next is Phase 15, the application layer**, with the monorepo move's leftovers
+alongside it ([MIGRATION.md §5](../../docs/MIGRATION.md): a 16-CURRENT build VM,
+and `undertow` on wlroots 0.20). Phases 13 and 16–18 have not started.
+
+*History.* On 2026-09-05 this section recorded the medium booting on the Mac Pro
+(a FAT16 ESP for Apple's firmware, `hw.pci.enable_pcie_hp="0"` against a
+power-fault storm), the retarget to the 12700KF that retired `si_support` by
+evidence, and [PRODUCT.md](PRODUCT.md)'s gap map arriving here as Phases 9–18.
+**Every C1–C5 number in [PHASE6.md](PHASE6.md) is still provisional** until P4.5
+re-measures it against a real vblank.
 
 ### Decisions locked in (from planning Q&A)
 
@@ -68,8 +73,8 @@ against a real vblank.
    works against any wlroots compositor; the compositor itself is then written in
    Swift over a wlroots C binding (the `wlsys` discipline), with Rust `tide` as the
    design reference for its `arrange()`/exclusive-zone logic and its C1–C5 frame
-   contract. Until it exists, development runs on **stock sway/labwc** — on FreeBSD
-   as on Linux, both being in ports. The hard part stays hard: the allocation-free
+   contract. Until it existed, development ran on **stock sway/labwc**; since
+   Phase 6 it is `undertow`, and sway stays in the harness as a second opinion. The hard part stays hard: the allocation-free
    real-time present path is where ARC is a genuine risk, and it is the one place
    we'd reach for Embedded Swift or a C shim (risk 4 below).
 2. **Aqua fidelity: 10.2 is an *aesthetic* target, not a functional one.**
@@ -106,6 +111,16 @@ against a real vblank.
    for fast iteration, then bring Swift up on FreeBSD and run the same way there.
 4. **This document: full phased roadmap.** Phase 0–1 are executable detail; later phases
    are milestone sketches to be expanded when reached.
+5. **A fork of FreeBSD, and likely always one** (2026-09-30). Upstreaming is worth
+   doing and slower than we move, so the fork is where our work ships first. The
+   base is FreeBSD `main`; the fork carries what we wrote plus the minimum change
+   FreeBSD needs, and tracks `main` rather than drifting ([PRODUCT.md §6.3](PRODUCT.md)).
+6. **The desktop's metal target is the i7-12700KF / RX 6750 XT** (reaffirmed
+   2026-09-30). The monorepo's Radxa Dragon Q8B (aarch64) is a second
+   architecture, not far enough along to host the desktop; it becomes a row when
+   it can run Swift and drive a display ([PRODUCT.md §4.5](PRODUCT.md)).
+7. **Agents default to a local model** (2026-09-30); a person may choose any
+   provider. Phase 18 has the reasoning.
 
 ### Inheriting the sibling's standing policies (adapted to Swift)
 
@@ -130,12 +145,17 @@ against a real vblank.
 | `Aqua` | The Aqua toolkit: 2D drawing, text, the 10.2 widget set + theme | `reef-wl::canvas` |
 | `CurrentIPC` | Swift control plane: unix sockets, typed messages, fd-passing | `ipc/current` |
 | `PoolConfig` | Swift reimpl of `pool` (mmap read / atomic-rename write / kqueue watch) | `ipc/pool` |
-| `Dock`, `MenuBar`, `Finder`, `Desktop`, `LoginWindow`, `SystemPrefs` | the shell | `reef-*` |
+| `AquaDraw` | the theme interpreter: tokens, draw lists, chrome, text — linked by the compositor too | — (new) |
+| `Dock`, `MenuBar`, `Finder`, `Desktop`, `SystemPreferences` | the shell | `reef-*` |
+| `LoginWindow` | the login window — Phase 16, not built | `reef-*` |
 | `Anchor` / `anchor` | session supervisor: pollable child descriptors, control service | `anchor` |
 | `Vents` | hardware bridges: sysctl, OSS volume, battery, devd | `vents` |
 | `undertow` | the compositor — Swift rewrite, Phase 6 ([PHASE6.md](PHASE6.md)) | `tide` |
 | `Installer` | Fedora-style graphical installer (Aqua app), Phase 5 ([PHASE5.md](PHASE5.md)) | — (new) |
 | `abyss-install` | the installer's privileged half: a plan in, a partitioned disk out | — (new) |
+| `abyss-settings` | System Preferences' privileged half: a typed plan in, `rc.conf` and friends written whole | — (new) |
+| `fathom` | the medium's report on the machine, Phase 12 ([PHASE12.md](PHASE12.md)) | — (new) |
+| `Spawn` | the one async-signal-safe way to start a process | — (new) |
 | `abyss-dbus` | the D-Bus bridge: `org.freedesktop.portal.*` for legacy apps, Phase 8 ([PHASE8.md](PHASE8.md)) | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
@@ -163,24 +183,22 @@ needs.** Two consequences worth saying out loud:
 ```
 built ───────────────────────────────────────────────────────────────────
   0 ─► 1 ─► 2 ─► 3 ─┬─► 7 ─┐
-                    │      ├─► 8 ─► 5 ─► 4     ◄── in flight, steps 0–6 only:
-                    └─► 6 ─┘                │      one disk, so no install
-                          │                 │
-next ─────────────────────┼─────────────────┼────────────────────────────
-                          │                 ├──► 12  Fathom  ◄── NEXT, and it
-                          │                 │        │           feeds 4 back
-                          │                 │        └───────────┘
-                          └─► 9  substrate ─┴──────────────► 13  Islands,
-                                 │                               Shoals, Ebb
+                    │      ├─► 8 ─► 5 ─► 4     ◄── in flight, paused: steps 1–5
+                    └─► 6 ─┘             │         pass, C1 fails, no install
+                          │              └─► 12  Fathom  (and feeds 4 back)
+                          │
+                          └─► 9  substrate
                                  ├─► 10  menus ──┐
                                  └─► 11  theme ──┴─► 14  preferences
                                                         │
-                                                        ├─► 15  applications
+next ───────────────────────────────────────────────────┼────────────────
+                                                        ├─► 15  applications  ◄── NEXT
                                                         │        └─► 17  delivery
                                                         ├─► 16  the session
                                                         └─► 18  confinement,
                                                                  then agents
                                                                  ▲ and 10, direct
+  9 and 4 ─► 13  Islands, Shoals, Ebb   (C6 needs 4's real vblank)
 ```
 
 Read an arrow as "needs". **13 needs both 9 and 4**, which is the only place two
@@ -208,16 +226,16 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 6 | `undertow`, the Swift compositor | 2 | 4, 5, 8, 9, 13, 16 | ✅ |
 | 8 | The D-Bus bridge — portals for everyone else | 6, 7 | 10's foreign half, 15 | ✅ |
 | 5 | The installer — a machine with an empty disk | 6, 8 | 4, 12, 17 | ✅ |
-| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — paused while the machine's USB is elsewhere ([BACKLOG](BACKLOG.md) §3) |
-| 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | ✅ |
+| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — steps 1–5 pass, C1 fails; paused while the machine's USB is elsewhere ([BACKLOG](BACKLOG.md) §3) |
+| 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | ✅ 2026-09-06 |
 | 10 | The menu protocol | 3, 8; *before* 15 | 15, **18**, and thesis 2 at all | ✅ 2026-09-25 |
 | 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | ✅ 2026-09-25 |
-| 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | P12.1–12.5 ✅ |
-| 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | |
-| 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | **in flight** (P14.1 ✅) |
-| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | |
-| 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | |
-| 17 | Delivery — the overlay, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | |
+| 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | ✅ 2026-09-05, but its Aqua view |
+| 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | C6 waits on Phase 4 |
+| 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | ✅ 2026-09-29 |
+| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | **next** |
+| 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | idle done early (BACKLOG U.9) |
+| 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | the overlay exists, for the board |
 | 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | |
 
 **Phases 9–12 are mutually independent** — 9, 10 and 11 need nothing from each
@@ -242,9 +260,15 @@ weaker than it looked, too: steps 0–6 have been specified since PHASE4 §5 was
 written, and three of them have been run.
 
 **Where an edge is soft, it is marked *before* and not *needs*.** Phase 11 could
-follow Phase 15; there are 192 `Theme.` call sites across 14 files today and
-every application adds more, so it would simply cost several times as much. That
-is an argument, not a blocker, and it is written as one.
+have followed Phase 15; there were 192 `Theme.` call sites across 14 files when
+this was written and every application adds more, so it would simply have cost
+several times as much. That was an argument, not a blocker, and it was written
+as one. *(It ran at 253 call sites across 16 files, on 2026-09-25.)*
+
+**How the order played out:** 12 ran first, as argued above, then 9, 10 and 11,
+then 14, then the BACKLOG's compositor and toolchain passes. 13 is the one
+branch left behind on purpose: its C6 number means nothing until Phase 4 has a
+real vblank.
 
 ---
 
@@ -537,6 +561,14 @@ with a working GPU.
 
 ## Phase 4 — first metal: real graphics, real input, real numbers
 
+> **In flight, paused** (2026-09-30). On the i7-12700KF / RX 6750 XT — still the
+> desktop's metal target (decision 6) — PHASE4 §5 steps 1–5 pass: the medium
+> boots, `amdgpu` binds, `undertow` finds the output and the Aqua installer is on
+> screen. **C1 fails** (58 of 300 frames missed, margin pinned at 8 ms), and the
+> per-term breakdown that would say why has not been run (`metal.sh report` on an
+> `--ssh-key` medium, PHASE4 §5.7). The install is deferred: the machine's one
+> disk is its positive control. Resuming waits on the machine's USB.
+
 **Needs:** 5 — the installer is not a convenience here, it is the delivery mechanism. **Unblocks:** 12, Phase 13's C6, and Phase 16's power work.
 
 **Goal:** real graphics and real hardware — what a GPU present path needs (the
@@ -585,6 +617,12 @@ does, so a miss count measured there is measured against somebody else's clock
 ---
 
 ## Phase 9 — the interaction substrate
+
+> **COMPLETE 2026-09-06** ([PHASE9.md](PHASE9.md), P9.1–P9.7): the clipboard and
+> drag-and-drop work for everyone, windows move, resize, zoom, minimise and snap,
+> the keybind table is in `undertow`, foreign windows get the Aqua frame, and
+> XWayland is decided against. Five of the seven passes found something already
+> broken (HANDOFF §2.55–§2.59).
 
 **Needs:** 6. **Unblocks:** 10, 11, 13, 14, 15 — everything below it.
 
@@ -637,6 +675,12 @@ its edge; a stock GTK application wearing an Aqua frame.
 
 ## Phase 10 — the menu protocol
 
+> **COMPLETE 2026-09-25** ([PHASE10.md](PHASE10.md)): applications publish a
+> vocabulary and the bar is its first consumer; GTK and Qt menus arrive through
+> `abyss-dbus`; undo is per window. Contextual menus and submenus followed on
+> 2026-09-29 (P10.8), and the bar now follows a foreign application's menu
+> changes (P10.9).
+
 **Needs:** 3 (`CurrentIPC`), 8 (`abyss-dbus`). **Unblocks: 18** — thesis 4 acts
 through the vocabulary this phase publishes, so a hard edge, not a preference
 ([PRODUCT.md §5.5](PRODUCT.md)). ***Before*** **15** — every application built
@@ -685,6 +729,13 @@ that the surface is a vocabulary and not a drawing routine.
 ---
 
 ## Phase 11 — the theme system, layers 1–3
+
+> **COMPLETE 2026-09-25** ([PHASE11.md](PHASE11.md), P11.1–P11.10): tokens, draw
+> lists, chrome, type roles, icons and cursors are data; Jaguar is re-expressed
+> byte-identical under the golden gate; `Trench` comes out of the same
+> interpreter; the legibility floor is enforced at load. Layer 4 waits on Phase 4;
+> the generated GTK/Qt theme is still to do; PHASE11 §6's proposals want the
+> user's confirmation.
 
 **Needs:** 1. ***Before*** **15** — and that timing is the whole argument for
 where this sits.
@@ -791,6 +842,11 @@ straight-line cairo (risk 7).
 ---
 
 ## Phase 12 — `Fathom`: the medium measures the machine
+
+> **COMPLETE 2026-09-05 but for its Aqua view** ([PHASE12.md](PHASE12.md),
+> P12.1–P12.5): the medium runs `fathom`, the report survives on the console and
+> leaves the machine on the ESP, and `docs/reports/` holds the first row, from the
+> 12700KF.
 
 **Needs:** 5, and Phase 4 steps 0–6 (specified, three of them run).
 **Unblocks:** the hardware support matrix, every hardware pass after it — **and
@@ -1013,25 +1069,28 @@ the thing rather than on the run (§2.43, §2.46).
 **Needs:** 6, 12, 14. **Unblocks:** a machine somebody else can use.
 
 **Goal:** `LoginWindow` was named in this document's Phase 2 list and never
-built; there is no `ext-session-lock`, no idle notifier and no suspend. PHASE4
-§6.5 already noticed it starting to matter on a real machine.
+built; there is no `ext-session-lock` and no suspend. PHASE4 §6.5 already
+noticed it starting to matter on a real machine. **Idle arrived early**
+(BACKLOG U.9, 2026-09-29): `undertow` sleeps the displays after
+`energy.ini`'s delay, honours idle-inhibit, and serves ext-idle-notify, so the
+lock screen below has its trigger already.
 
 - **Login window and multi-user sessions**, with `anchor` per user.
-- **Screen lock** over `ext-session-lock` and **idle blanking** over the
-  idle-notify protocol — both compositor work, which is why this waits on nothing
-  but Phase 14 once the compositor is ours.
+- **Screen lock** over `ext-session-lock`, started by the idle clock that
+  already exists — compositor work, which is why this waits on nothing but Phase
+  14 once the compositor is ours.
 - **Suspend, lid and power.** A laptop that does not sleep is not a desktop that
   just works — and Phase 12 is what tells us which machines sleep, which is why
   it comes first.
 - **First run.** Jaguar had a Setup Assistant; we boot into a bare desktop. The
   installer's hub-and-spoke (P5.4) is the shape to reuse.
 
-**Verify:** lock and unlock live; a suspend/resume cycle on the Mac Pro; two
-users, two sessions, one machine.
+**Verify:** lock and unlock live; a suspend/resume cycle on the bring-up machine;
+two users, two sessions, one machine.
 
 ---
 
-## Phase 17 — delivery: the overlay, and `abyss update`
+## Phase 17 — delivery: the overlay, a release pipeline, and `abyss update`
 
 **Needs:** 5, 14 (a network), 15 (something to hook). **Unblocks:** shipping to
 anyone who is not us.
@@ -1041,15 +1100,21 @@ anyone who is not us.
 a rolling upstream means an update can break the desktop through no change of
 ours, and boot environments are what make that survivable.
 
-- **Packages: FreeBSD's repositories with an Abyss overlay**, and we do not
-  become a distribution until we choose to. FreeBSD's repos give thesis 5 its
-  breadth for nothing — tens of thousands of ports, a security-advisory pipeline,
-  and mirrors we do not run. **The overlay carries what we wrote** — the desktop,
-  the generated GTK/Qt theme, the `.desktop` → `.app` generator and its `pkg`
-  hook, `Fathom` — **plus the minimum patched upstream needed to make what we
-  wrote work, and nothing else.** Every rebuilt upstream port is a maintenance
-  obligation that does not end. Cost: a poudriere builder, a signing key, and
-  somewhere to host — real, bounded, and not the cost of owning a base system.
+- **Packages: FreeBSD's ports with an Abyss overlay, on our own base.** We are
+  a fork of FreeBSD `main` (decision 5), so this phase owns what release
+  engineering used to do for us: **a release pipeline** — `buildworld` and
+  `buildkernel` from `src/`, a poudriere jail made from that world, the overlay's
+  bulk build, images for amd64 and arm64 (MIGRATION §5). FreeBSD's ports still
+  give thesis 5 its breadth for nothing — tens of thousands of ports, a
+  security-advisory pipeline, and mirrors we do not run — but on `main` they come
+  from the *latest* branch only, so a port can move under us any day. **The
+  overlay carries what we wrote** — the desktop, the generated GTK/Qt theme, the
+  `.desktop` → `.app` generator and its `pkg` hook, `Fathom` — **plus the minimum
+  patched upstream needed to make what we wrote work, and nothing else.** It
+  already exists in the monorepo (`ports/`), carrying Mesa, libdrm and drm-kmod
+  patched for the Q8B; the desktop itself is not packaged yet. Every rebuilt
+  upstream port is a maintenance obligation that does not end. Cost: the
+  pipeline, a signing key, and somewhere to host.
 - **`abyss update` is a boot environment.** We already install to
   `zroot/ROOT/default` and set `bootfs` (`de/install/Steps.swift`), so **boot
   environments work on every machine we install**, and `bectl` is in base: clone
@@ -1064,7 +1129,8 @@ ours, and boot environments are what make that survivable.
 - **Run the bundle generator as a `pkg` post-install hook** and the desktop stays
   current by itself.
 
-**Verify:** an update applied to a clone in the harness, activated and rebooted
+**Verify:** an image built by the pipeline from `src/` and the overlay boots in
+the harness and installs; an update applied to a clone, activated and rebooted
 into; and a deliberately broken update rolled back, with the machine still
 booting the environment it had.
 
@@ -1183,7 +1249,8 @@ that has never failed is a comment.
   them look and behave like they belong, which is Phases 11 and 15.
 - **A TUI for anything.** The terminal is the one exception, and it is not a TUI.
 - **An inference engine.** Phase 18 runs a model from ports behind one wire
-  format. Same rule as the browser: adopt engines, do not write them.
+  format — locally by default. Same rule as the browser: adopt engines, do not
+  write them.
 - **An agent that cannot be removed.** Off is one file, and the rest of the
   desktop does not know the difference.
 - **A second automation surface.** Phase 10 publishes a vocabulary once; the menu
@@ -1206,18 +1273,24 @@ that has never failed is a comment.
   `CurrentIPC`, the session supervisor (`anchor`), the compositor (`undertow`), the
   D-Bus bridge, the `Vents` hardware bridges and the installer all exist. The image
   codec is the last thing on this list still to come.
-- **Drop to C only where Swift can't reach:** shims over C system libraries (the
-  `aw_*`/`at_*` pattern), and — if measurement demands it — the compositor's
-  real-time present path.
+- **Drop to C only where Swift can't reach:** shims over C system libraries
+  (`at_*` over FreeType and HarfBuzz, `tw_*` over wlroots' listeners and server internals), and — if measurement
+  demands it — the compositor's real-time present path. *The ~95 `aw_*` wrappers
+  over libwayland are gone (S.1): Swift calls its `static inline` requests
+  directly, and only a global's interface pointer still crosses from C
+  (HANDOFF §2.93).*
 
 ## Top risks (track explicitly)
 
 1. ~~**Swift on FreeBSD**~~ — **CLOSED 2026-07-28 (P3.2).** FreeBSD is still not
    an official swift.org target, but ports carries `swift6-6.3.2` (newer than our
    Linux 6.3.1), and it builds this repo and passes all 62 tests in the VM at a
-   cost of one `Package.swift` change. See docs/SWIFT-ON-FREEBSD.md. The residual
-   risk is ordinary: a ports toolchain can go stale, and the cross-SDK route
-   stays documented as the fallback.
+   cost of one `Package.swift` change. See docs/SWIFT-ON-FREEBSD.md. Both
+   platforms are on 6.3.3 since S.0. The residual risk is ordinary — a ports
+   toolchain can go stale (6.4 has no FreeBSD build yet, SWIFT-6.4.md) — **and one
+   new one**: the base moved to `main`, and `lang/swift6` has not been checked on
+   16-CURRENT; it is also amd64-only, which is what keeps the Q8B off the matrix
+   (MIGRATION §5).
 2. ~~**Mac Pro GCN 1.0 GPU**~~ — **DOWNGRADED 2026-09-05 by retarget, not by
    argument.** It was the biggest risk in the project and the only one that could
    end a phase. Bring-up moved to an RX 6750 XT (Navi 22, RDNA 2), which `amdgpu`
@@ -1252,17 +1325,19 @@ that has never failed is a comment.
    stops being a Phase 4 footnote and becomes thesis 5's hardest promise at
    Phase 14, where a Network pane has to have something to configure — and at
    Phase 12, where `Fathom` has to report honestly on a machine whose wifi is
-   not recognised.
+   not recognised. *Phase 14 built the Wi-Fi half against a simulated radio
+   (`wtap`, backported); no real radio has joined a network through it yet.*
 6. **A stale browser engine** — Phase 15's default, and the first real test of
-   §6.3's "overlay, not a fork" discipline. Verified against the build VM's own
-   FreeBSD 15.0 repo: `gtk4` is 4.20.4 and `mesa-dri` 26.1.3, but `webkit2-gtk_*`
+   PRODUCT §6.3's overlay discipline. Verified against the build VM's own
+   FreeBSD 15.0 repo (re-check on `main`'s *latest* packages before choosing): `gtk4` is 4.20.4 and `mesa-dri` 26.1.3, but `webkit2-gtk_*`
    is at **2.46.6** and `epiphany` at 47.7 — the toolkit is current and the engine
    is about two years behind. **A lagging browser engine is a security liability,
    and for a system promising "it just works" that outweighs chrome fidelity.**
    Re-check the port's cadence before committing; if it has not improved, the
    default is **Firefox ESR**, an independent engine with a real security-support
    model. Rebuilding WebKit ourselves is the move that would make us own WebKit's
-   security response, which is exactly the line §6.3 refuses to cross casually.
+   security response, which is exactly the line PRODUCT §6.3 refuses to cross
+   casually.
 7. **The theme system's fidelity and its cost** — Phase 11. A tokenised,
    interpreted Aqua must stay pixel-identical, and the golden-image gate is the
    only reason it is safe to attempt at all; `Trench` (§11.1) is the other half of
@@ -1277,6 +1352,12 @@ that has never failed is a comment.
    not us installs this. That is the point where the project stops being a tree
    and starts being something people depend on, and it should be entered
    deliberately rather than drifted into.
+9. **Owning a fork of FreeBSD `main`** — decision 5, and permanent. CURRENT
+   moves daily and has no quarterly package branch, so the fork must keep
+   rebasing rather than drift, the overlay builds against our own world, and a
+   release pipeline that FreeBSD used to run for us is now ours (Phase 17). The
+   mitigations are the fork's discipline (carry the minimum, upstream what can
+   be) and PRODUCT §6.2's boot environments, which make a bad update survivable.
 
 ## Overall verification strategy
 
