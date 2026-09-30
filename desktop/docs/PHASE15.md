@@ -210,6 +210,33 @@ after known input), a selection pasted elsewhere arrives intact.
   **on disk**; top draws its header and table and `q` quits it. Found on the
   way: FreeBSD's termcap `xterm` has no `ti`/`te`, so nvi draws on the main
   screen — correct, and what a real xterm shows.
+- **(b) ✅ Done 2026-09-30 — the application.** `TerminalApp` (`AQUA_SCENE=
+  terminal`, app_id `org.abyssbsd.terminal`; `-e PROGRAM ARGS…` runs a program
+  instead of the shell, as xterm's does): a window per shell, 80×24 from the
+  `mono` role's cell, its own Aqua chrome, the grid drawn run by run with
+  xterm's palette on Jaguar Terminal's black-on-white, bold as bright, inverse,
+  dim, underline and strike, the light box characters drawn edge to edge
+  rather than from the font (a glyph is shorter than a cell, and a box of them
+  had gaps), a blinking block caret (an outline when the window is not
+  active), the window's size given to the shell (TIOCSWINSZ → SIGWINCH), the
+  title `program — cols×rows` or the program's own (OSC 0/2), menus (Terminal,
+  Shell: New Window ⌘N / Close Window ⌘W, Window), and a window that closes
+  when its shell exits — the last one quits. `KeyEncoder` (pure, tested): text,
+  Control folding (from the keysym when the toolkit gives no text — Surface
+  does not, for a control character), Option as Meta, DECCKM, xterm's
+  modified cursor and function keys. `live-terminal.sh`, both platforms: the
+  window maps 80×24; typed text runs and is **drawn** (dark pixels on the row
+  the model holds, none on a blank one, through screencopy); Ctrl-C stops
+  `sleep 30`; vi opens a file, **Down** moves in it and `dd :wq` changes it on
+  disk; the zoom button (pressed where the log says it was drawn) enlarges the
+  window and `stty size` agrees; ⌘N opens a second shell; `exit` closes each
+  window and the last quits. **Found by that test:** Ctrl-C reached the tty
+  and stopped nothing — the Terminal had been started by a non-interactive
+  shell's `&`, which ignores SIGINT, and an ignored signal survives `exec`
+  into the shell and everything it runs. The pty child now resets every
+  signal to its default and clears the mask before `execve`, as xterm does.
+  Golden: `terminal` and `terminal@2x`, a fixed transcript through the real
+  model.
 
 **P15.5 — TextEdit (L).** The toolkit's multi-line text view (it is a toolkit
 piece, not TextEdit's: every later editor uses it), then TextEdit on it: open

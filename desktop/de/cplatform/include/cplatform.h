@@ -127,11 +127,14 @@ int ap_request_realtime(int priority);
  * from posix_openpt, which is in libc on both FreeBSD and Linux (openpty is in
  * libutil on one and libc on the other).
  *
- * `path` must be absolute; `argv` and `envp` are NULL-terminated. The master is
+ * `path` must be absolute; `argv` and `envp` are NULL-terminated; `cwd`, when
+ * not NULL, is where the program starts (chdir is async-signal-safe; a
+ * directory that cannot be entered is not an error — the program starts where
+ * this process is, as a login shell falls back to /). The master is
  * returned close-on-exec and non-blocking. Returns the child's pid, or -1 with
  * errno set (and no child).
  */
-int ap_pty_spawn(const char *path, char *const argv[], char *const envp[],
+int ap_pty_spawn(const char *path, char *const argv[], char *const envp[], const char *cwd,
                  unsigned short rows, unsigned short cols, int *master_out);
 
 /* Tell the terminal its size (TIOCSWINSZ); the kernel sends the foreground

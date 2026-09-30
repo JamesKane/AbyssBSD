@@ -180,4 +180,37 @@ final class TerminalTests: XCTestCase {
         XCTAssertEqual(sc.lines, ["3", "4", ""])
         XCTAssertEqual(sc.cols, 12)
     }
+
+    // MARK: Keys (P15.4b)
+
+    private func key(_ sym: UInt32, _ text: String = "", _ m: KeyEncoder.Modifiers = [], app: Bool = false) -> String {
+        String(decoding: KeyEncoder.encode(keysym: sym, text: text, mods: m, appCursor: app), as: UTF8.self)
+    }
+
+    func testKeysBecomeWhatXtermSends() {
+        XCTAssertEqual(key(0x61, "a"), "a")
+        XCTAssertEqual(key(0xe9, "é"), "é")
+        XCTAssertEqual(key(0x63, "c", .control), "\u{03}", "Ctrl-C is ETX")
+        XCTAssertEqual(key(0x63, "", .control), "\u{03}", "and still ETX when the toolkit gives no text")
+        XCTAssertEqual(key(0x5b, "[", .control), "\u{1B}", "Ctrl-[ is ESC")
+        XCTAssertEqual(key(0x62, "b", .option), "\u{1B}b", "Option is Meta: ESC b is a shell's word back")
+        XCTAssertEqual(key(KeyEncoder.Sym.backspace), "\u{7F}")
+        XCTAssertEqual(key(KeyEncoder.Sym.enter), "\r")
+        XCTAssertEqual(key(KeyEncoder.Sym.tab, "", .shift), "\u{1B}[Z")
+        XCTAssertEqual(key(KeyEncoder.Sym.escape), "\u{1B}")
+        XCTAssertEqual(key(0xffe1), "", "a modifier on its own sends nothing")
+    }
+
+    /// DECCKM: vi and less ask for application cursor keys, and get SS3.
+    func testCursorKeysFollowTheProgramsMode() {
+        XCTAssertEqual(key(KeyEncoder.Sym.up), "\u{1B}[A")
+        XCTAssertEqual(key(KeyEncoder.Sym.up, app: true), "\u{1B}OA")
+        XCTAssertEqual(key(KeyEncoder.Sym.right, "", .control), "\u{1B}[1;5C", "xterm's modified cursor key")
+        XCTAssertEqual(key(KeyEncoder.Sym.home), "\u{1B}[H")
+        XCTAssertEqual(key(KeyEncoder.Sym.pageDown), "\u{1B}[6~")
+        XCTAssertEqual(key(KeyEncoder.Sym.delete), "\u{1B}[3~")
+        XCTAssertEqual(key(KeyEncoder.Sym.f1), "\u{1B}OP")
+        XCTAssertEqual(key(KeyEncoder.Sym.f1 + 4), "\u{1B}[15~", "F5")
+        XCTAssertEqual(key(KeyEncoder.Sym.f1 + 11, "", .shift), "\u{1B}[24;2~", "Shift-F12")
+    }
 }

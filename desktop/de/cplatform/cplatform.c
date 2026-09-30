@@ -256,6 +256,7 @@ int ap_request_realtime(int priority) {
 /* ------------------------------------------------ pseudo-terminals (P15.4a) */
 #include <fcntl.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 
@@ -267,7 +268,7 @@ int ap_pty_resize(int master, unsigned short rows, unsigned short cols) {
     return ioctl(master, TIOCSWINSZ, &ws);
 }
 
-int ap_pty_spawn(const char *path, char *const argv[], char *const envp[],
+int ap_pty_spawn(const char *path, char *const argv[], char *const envp[], const char *cwd,
                  unsigned short rows, unsigned short cols, int *master_out) {
     int master = posix_openpt(O_RDWR | O_NOCTTY);
     if (master < 0) return -1;
@@ -284,7 +285,20 @@ int ap_pty_spawn(const char *path, char *const argv[], char *const envp[],
     pid_t pid = fork();
     if (pid < 0) { int e = errno; close(master); errno = e; return -1; }
     if (pid == 0) {
-        /* The child: async-signal-safe calls only. */
+        /* The child: async-signal-safe calls only.
+         *
+         * Every signal back to its default, and none blocked: an ignored
+         * disposition survives exec, and whatever started this process may
+         * have ignored some — a background job of a non-interactive shell has
+         * SIGINT and SIGQUIT ignored (POSIX), and a shell that inherits them
+         * ignored cannot un-ignore them, so Ctrl-C would reach the tty and
+         * stop nothing. Found by live-terminal.sh; xterm does the same. */
+        for (int sig = 1; sig < NSIG; sig++) {
+            if (sig != SIGKILL && sig != SIGSTOP) (void)signal(sig, SIG_DFL);
+        }
+        sigset_t none;
+        sigemptyset(&none);
+        (void)sigprocmask(SIG_SETMASK, &none, NULL);
         if (setsid() < 0) _exit(126);
         int s = open(slave, O_RDWR);   /* the first tty a session leader opens */
         if (s < 0) _exit(126);
@@ -294,6 +308,7 @@ int ap_pty_spawn(const char *path, char *const argv[], char *const envp[],
         if (dup2(s, 0) < 0 || dup2(s, 1) < 0 || dup2(s, 2) < 0) _exit(126);
         if (s > 2) close(s);
         close(master);
+        if (cwd) (void)chdir(cwd);
         execve(path, argv, envp);
         _exit(127);
     }

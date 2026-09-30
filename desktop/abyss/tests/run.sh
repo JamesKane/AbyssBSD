@@ -332,6 +332,10 @@ if [ "$live" -eq 1 ]; then
   # VT parser and the screen, asserted on with no display — and vi's edit on disk.
   echo "== programs on a pty =="
   quiet "$root/abyss/tests/live-vt.sh"
+  # Terminal (P15.4b): a shell in a window on undertow — typed and drawn,
+  # Ctrl-C, vi with arrow keys, zoom resizing the shell, ⌘N, exit.
+  echo "== Terminal =="
+  quiet "$root/abyss/tests/live-terminal.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="

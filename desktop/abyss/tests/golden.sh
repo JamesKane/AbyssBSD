@@ -85,6 +85,8 @@ menubar-muted@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_MUTED=1 ABYSS_FAKE_BATT
 dock|dock|
 dock-running@2x|dock|AQUA_DOCK_RUNNING=1 AQUA_SCALE=2
 notify|notify|
+terminal|terminal|
+terminal@2x|terminal|AQUA_SCALE=2
 menu|menu|
 menu@2x|menu|AQUA_SCALE=2
 menu-marks|menu|AQUA_MENU_MARKS=1

@@ -28,7 +28,9 @@ public final class Pty {
 
     /// Start `argv` on a new pseudo-terminal of `rows` × `cols`. `environment`
     /// is added to this process's, after `TERM`.
-    public init?(_ argv: [String], rows: Int, cols: Int, environment: [String: String] = [:]) {
+    /// `directory`, if given, is where it starts.
+    public init?(_ argv: [String], rows: Int, cols: Int, environment: [String: String] = [:],
+                 directory: String? = nil) {
         guard let first = argv.first, let exe = Spawn.resolveExecutable(first) else { return nil }
         var env = ["TERM": Pty.term, "COLUMNS": String(cols), "LINES": String(rows)]
         env.merge(environment) { $1 }
@@ -38,7 +40,7 @@ public final class Pty {
         var master: Int32 = -1
         let child = args.withUnsafeMutableBufferPointer { a in
             envp.withUnsafeMutableBufferPointer { e in
-                ap_pty_spawn(exe, a.baseAddress, e.baseAddress,
+                ap_pty_spawn(exe, a.baseAddress, e.baseAddress, directory,
                              UInt16(clamping: rows), UInt16(clamping: cols), &master)
             }
         }

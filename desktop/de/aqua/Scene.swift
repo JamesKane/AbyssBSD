@@ -13,6 +13,7 @@
 import CCairo
 import Surface
 import Vents
+import Terminal
 
 #if canImport(Glibc)
 import Glibc
@@ -33,6 +34,7 @@ public enum SceneKind: Sendable {
     case notify      // notification toasts (a layer-shell OVERLAY client live)
     case finder      // the file browser (an ordinary xdg-shell toplevel)
     case installer   // the guided installer (PHASE5 P5.4)
+    case terminal    // Terminal (PHASE15 P15.4b)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -211,6 +213,14 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
+    case .terminal:
+        // A fixed transcript through the real screen model: a prompt, colours,
+        // bold, inverse, a line-drawing box, and the caret on the last line.
+        var s = Screen(rows: 20, cols: 70)
+        s.feed("$ ls --color\r\n\u{1B}[1;34mDocuments\u{1B}[0m  \u{1B}[1;32mbuild.sh\u{1B}[0m  notes.txt  \u{1B}[7m inverse \u{1B}[m\r\n")
+        s.feed("$ printf '\\e(0lqqqk\\nx   x\\nmqqqj\\e(B\\n'\r\n\u{1B}(0lqqqk\r\nx   x\r\nmqqqj\u{1B}(B\r\n")
+        s.feed("\u{1B}[31mred\u{1B}[m \u{1B}[42;30m green bg \u{1B}[m \u{1B}[4munderlined\u{1B}[m \u{1B}[38;5;208m208\u{1B}[m\r\n$ ")
+        paintTerminal(cr, w: cw, h: ch, title: "sh — 70×20", screen: s, caretOn: true, focused: true)
     case .finder:
         // A fixed synthetic home folder, so the preview is reproducible on any
         // machine (the live FinderWindow reads the real filesystem).

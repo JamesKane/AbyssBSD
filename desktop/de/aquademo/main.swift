@@ -71,6 +71,10 @@ case "installer":
     // what a disk is, and tall enough that the hub does not scroll — a summary
     // you have to scroll is not a summary.
     scene = .installer; title = "Install AbyssBSD"; width = 620; height = 460
+case "terminal":
+    // Terminal (PHASE15 P15.4b). Live, it sizes its window to 80×24 itself;
+    // this is the golden scene's size.
+    scene = .terminal; title = "Terminal"; width = 500; height = 340
 case "finder":
     // The file browser — an ordinary xdg-shell toplevel, not a shell surface.
     // Starts in $ABYSS_FINDER_DIR (else $HOME).
@@ -182,6 +186,18 @@ if scene == .wallpaper {
     }
     installerSay("AquaDemo: System Preferences is up (\(PrefCatalogue.all.count) panes)")
     withExtendedLifetime(prefs) { display.run() }
+} else if scene == .terminal {
+    // `-e PROGRAM ARGS…` runs that instead of the shell, as xterm's does —
+    // how a bundle whose entry says Terminal=true opens (PHASE15 P15.4).
+    let args = CommandLine.arguments
+    let command = args.firstIndex(of: "-e").map { Array(args[($0 + 1)...]) }
+    let terminal = TerminalApp(display: display, command: command)
+    guard terminal.openWindow() else {
+        print("AquaDemo: failed to open a Terminal window.")
+        exit(1)
+    }
+    installerSay("AquaDemo: Terminal is up.")
+    withExtendedLifetime(terminal) { display.run() }
 } else if scene == .finder {
     // FinderApp owns the windows (spatial mode opens one per folder); this
     // strong reference is what keeps them — and their listeners — alive.
