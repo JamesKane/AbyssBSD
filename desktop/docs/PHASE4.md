@@ -987,6 +987,17 @@ refresh 16 680 288 ns (the mode's; headless reports 0), flags 0x7
 (VSYNC|HW_CLOCK|HW_COMPLETION), sequence counter 0 — FreeBSD's DRM does not pass
 an MSC through.
 
+**And GL.** FreeBSD's `mesa-demos` 9.0 has only X11 gears, and `glmark2` wanted
+2 GB, so `abyss/tests/glclient.c` is the smallest Wayland GLES2 client that
+says which renderer it got: **`AMD Radeon RX 6750 XT (radeonsi, navi22, ACO,
+DRM 3.61, 16.0-CURRENT)`**, 600 frames in 10 006 ms — hardware, not llvmpipe,
+paced exactly at 60 Hz by `undertow`'s frame callbacks.
+
+**Room on the stick.** The image's root is 3 GB on a 15 GB stick; it was grown
+in place (`gpart resize`, `growfs` on the mounted root), and developer media
+now set `growfs_enable` so the next one does it at boot. Every medium is built
+with soft updates (`makefs -o softupdates=1`).
+
 ## 6. Risks / open decisions
 
 **6.1 The frame contract's metric is headless-or-DRM, and nesting is neither.**

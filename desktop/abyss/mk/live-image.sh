@@ -739,6 +739,10 @@ if [ -n "$sshkey" ]; then
   sudo sh -c "cat >> $stage/etc/rc.conf" <<'RCSSH'
 # Developer build (--ssh-key). Not present on a medium built without it.
 sshd_enable="YES"
+# A developer stick is updated in place and gets packages installed on it
+# (metal.sh push, PHASE4 §5.13): grow the root to fill the stick at boot,
+# rather than live inside the image's 3 GB.
+growfs_enable="YES"
 RCSSH
 
   # **Keys only, and say so three times.** `PermitRootLogin without-password`
@@ -1140,7 +1144,11 @@ sudo makefs -t msdos \
             -o fat_type=16,media_descriptor=248,OEM_string=MSWIN4.1 \
             -o sectors_per_cluster=4,volume_label=EFISYS \
             -s 40m "$esp" "$espdir" > /dev/null
-sudo makefs -t ffs -o label=ABYSSLIVE -o version=2 -b 10% -f 10% \
+# Soft updates on, as FreeBSD's own installs have them: makefs defaults to off,
+# and on USB 2 flash every metadata write then waits for the stick — `pkg
+# install` onto a developer medium ran for minutes in synchronous truncates
+# (PHASE4 §5.13).
+sudo makefs -t ffs -o label=ABYSSLIVE -o version=2 -o softupdates=1 -b 10% -f 10% \
             -s "$size" "$ufs" "$stage" > /dev/null
 
 sudo rm -f "$out"

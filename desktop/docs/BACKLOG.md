@@ -96,10 +96,9 @@ with `abyss/mk/metal.sh push` (PHASE4 §5.11–§5.13):
 2. ~~**P4.5's margin breakdown**~~ ✅ — **C1 holds: 0 of 1800 missed at a ~2 ms
    margin.** Five fixes, all measured on metal (§5.12–§5.13). `rtprio` via
    `mac_priority` is in and made no difference on an idle machine.
-3. **A GPU client under `undertow`** — ✅ Vulkan: `vkcube` on RADV through the
-   live session, 600 frames paced at 60 Hz. GL still owed: FreeBSD's
-   `mesa-demos` 9.0 ships no Wayland gears (only X11); a Wayland GLES client
-   (`glmark2`, `weston-simple-egl`) would do.
+3. ~~**A GPU client under `undertow`**~~ ✅ — Vulkan: `vkcube` on RADV, 600
+   frames at 60 Hz; GL: `abyss/tests/glclient.c` (FreeBSD's `mesa-demos` has no
+   Wayland gears) on `radeonsi, navi22, ACO`, 600 frames in 10 006 ms.
 4. ~~**Two one-minute checks**~~ ✅ — `VK_EXT_external_memory_host` is
    **present**; P/E cores visible only as cache topology.
 5. ~~**The Wi-Fi question**~~ ✅ — no wireless device on this machine.
@@ -107,9 +106,10 @@ with `abyss/mk/metal.sh push` (PHASE4 §5.11–§5.13):
    flags VSYNC|HW_CLOCK|HW_COMPLETION; the sequence counter is 0 (not passed
    through by FreeBSD's DRM).
 7. **P4.5's second row** is still owed (PHASE4 §6.7).
-8. **New:** the medium's UFS has no soft updates, so package installs on the
-   stick crawl (§5.13); and an installed system sets no `kld_list` or `video`
-   group (PHASE4 §6.10, §6.11) — fix with an install on metal.
+8. **New:** ~~the medium's UFS had no soft updates~~ (on now, and developer
+   media grow to fill the stick at boot); an installed system sets no
+   `kld_list` or `video` group (PHASE4 §6.10, §6.11) — fix with an install on
+   metal.
 
 ---
 
