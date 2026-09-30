@@ -73,7 +73,7 @@ rm -f "$ABYSS_MONO/.case-probe"
 # As fresh as that checkout's last fetch — a warning, not a check.
 unpushed() { # dir branch
   d="$ABYSS_SIBLINGS/$1"
-  [ -d "$d/.git" ] || return 0
+  [ -e "$d/.git" ] || return 0  # a worktree's .git is a file
   git -C "$d" rev-parse --verify -q "$2" >/dev/null || return 0
   n=$(git -C "$d" rev-list --count "$2" --not --remotes --)
   [ "$n" -eq 0 ] || warn "$1: $n commit(s) on $2 are not pushed and will not be in the result"
@@ -142,13 +142,30 @@ git -C "$p" fetch -q --filter=blob:none --no-tags "$ABYSS_PORTS_UPSTREAM" main
 ptip=$(git -C "$p" rev-parse "$ABYSS_PORTS_BRANCH")
 pbase=$(git -C "$p" merge-base FETCH_HEAD "$ptip")
 changed=$(git -C "$p" diff --name-only "$pbase" "$ptip")
-# An overlay carries ports, so a change above a port (Mk/, a category's
-# Makefile) cannot be carried. Category Makefiles only list SUBDIRs, which
-# poudriere does not read; anything else would be a change the overlay drops.
-infra=$(echo "$changed" | awk -F/ 'NF < 3 && $2 != "Makefile"')
+# An overlay carries ports, so a change outside one (Mk/, Mk/Uses/, Tools/, a
+# category's Makefile) cannot be carried. Category Makefiles only list
+# SUBDIRs, which poudriere does not read; anything else would be a change the
+# overlay drops. A port is a category/name directory with a Makefile, at the
+# fork's tip or, for one it removes, at the base: Mk/Uses/ is two deep too.
+# rev-parse reads trees only, so no blob is fetched to decide.
+isport() { # dir
+  git -C "$p" rev-parse -q --verify "$ptip:$1/Makefile" >/dev/null \
+    || git -C "$p" rev-parse -q --verify "$pbase:$1/Makefile" >/dev/null
+}
+classified=$(printf '%s\n' "$changed" | while IFS= read -r f; do
+  case $f in
+    '') ;;
+    */*/*)
+      d=${f%"/${f#*/*/}"}
+      if isport "$d"; then echo "port $d"; else echo "infra $f"; fi ;;
+    */Makefile) ;;
+    *) echo "infra $f" ;;
+  esac
+done)
+infra=$(echo "$classified" | sed -n 's/^infra //p')
 [ -z "$infra" ] || die "the ports fork changes more than ports, which an overlay cannot carry:
 $infra"
-ports=$(echo "$changed" | awk -F/ 'NF >= 3 { print $1 "/" $2 }' | sort -u)
+ports=$(echo "$classified" | sed -n 's/^port //p' | sort -u)
 mkdir -p ports
 for port in $ports; do
   if git -C "$p" cat-file -e "$ptip:$port" 2>/dev/null; then
@@ -161,13 +178,25 @@ done
 # overlay, where that port is not unless it is carried too: drm-msm-kmod
 # includes ../drm-latest-kmod/Makefile.version. So the ports those references
 # name are carried as the fork has them, until no reference is left unmet.
-# Both spellings are resolved to a category/port origin: ${.CURDIR}/../name
-# against the referring port's category, ${.CURDIR:H:H}/cat/name as it is.
+# Each spelling is resolved to a category/port origin: ${.CURDIR}/../name and
+# ${.CURDIR:H}/name against the referring port's category,
+# ${.CURDIR}/../../cat/name and ${.CURDIR:H:H}/cat/name as they are.
+# Every reference on a line counts, not just the last.
 refs() {
   for mk in ports/*/*/Makefile*; do
+    [ -f "$mk" ] || continue
     cat=$(echo "$mk" | cut -d/ -f2)
-    sed -nE -e "s|.*\\$\\{\\.CURDIR\\}/\\.\\./([A-Za-z0-9._+-]+)/.*|$cat/\\1|p" \
-      -e 's|.*\$\{\.CURDIR:H:H\}/([A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+)/.*|\1|p' "$mk"
+    c='[A-Za-z0-9_+-][A-Za-z0-9._+-]*'
+    grep -oE "\\\$\\{\\.CURDIR(:H|:H:H)?\\}(/\\.\\.){0,2}(/$c){1,2}" "$mk" |
+    while IFS= read -r r; do
+      case $r in
+        '${.CURDIR}/../../'*/*) r=${r#'${.CURDIR}/../../'}; echo "$r" ;;
+        '${.CURDIR:H:H}/'*/*) r=${r#'${.CURDIR:H:H}/'}; echo "$r" ;;
+        '${.CURDIR}/../../'*|'${.CURDIR:H:H}/'*) ;;  # a category, not a port
+        '${.CURDIR}/../'*) r=${r#'${.CURDIR}/../'}; echo "$cat/${r%%/*}" ;;
+        '${.CURDIR:H}/'*) r=${r#'${.CURDIR:H}/'}; echo "$cat/${r%%/*}" ;;
+      esac
+    done
   done | sort -u
 }
 carried=""
