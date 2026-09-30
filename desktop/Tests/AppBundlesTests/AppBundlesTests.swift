@@ -69,6 +69,23 @@ final class AppBundlesTests: XCTestCase {
         XCTAssertEqual(AppBundle.directoryName(".hidden"), "hidden.app")
     }
 
+    /// Which running windows are this application's (P15.2): kcalc by its
+    /// desktop-file ID, Firefox ESR by its program's name and a suffix.
+    func testARunningWindowIsMatchedToItsApplication() throws {
+        let k = try XCTUnwrap(DesktopEntry.parse(kcalc)).appIDs(desktopFile: "/usr/local/share/applications/org.kde.kcalc.desktop")
+        XCTAssertEqual(k, ["org.kde.kcalc", "kcalc"])
+        XCTAssertTrue(AppBundle.matches(appID: "org.kde.kcalc", candidates: k))
+        let ff = try XCTUnwrap(DesktopEntry.parse("[Desktop Entry]\nType=Application\nName=Firefox Web Browser\nExec=firefox %U\n"))
+            .appIDs(desktopFile: "firefox.desktop")
+        XCTAssertEqual(ff, ["firefox"])
+        XCTAssertTrue(AppBundle.matches(appID: "firefox-esr", candidates: ff))
+        XCTAssertFalse(AppBundle.matches(appID: "firefoxy", candidates: ff))
+        XCTAssertFalse(AppBundle.matches(appID: "", candidates: ff))
+        let w = try XCTUnwrap(DesktopEntry.parse("[Desktop Entry]\nType=Application\nName=W\nStartupWMClass=org.x.W\nExec=env A=1 /opt/bin/wprog\n"))
+            .appIDs(desktopFile: "w.desktop")
+        XCTAssertEqual(w, ["org.x.W", "w", "wprog"])
+    }
+
     /// kcalc's icon on the guest: small PNGs in one theme, an SVG in another.
     /// 48 px is too small for the Dock, so the SVG is rasterised.
     func testTheIconIsABigEnoughPNGElseAnSVGElseTheBiggestPNG() {

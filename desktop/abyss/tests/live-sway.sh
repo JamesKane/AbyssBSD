@@ -576,11 +576,13 @@ if [ "$click" = "--click" ]; then
     # The Dock started with a seeded Trash, so the tile shows the full glyph.
     grep -q 'Dock: Trash full' "$app_log" \
       || { echo "FAIL: the Dock didn't notice a full Trash"; cat "$app_log"; exit 1; }
-    # Right-click the Trash tile. Its position depends on magnification (tiles
-    # are re-laid-out around the pointer), so hover first and aim at where the
-    # magnified tile then sits: pointer 540 puts the Trash tile across 501..592,
-    # and the shelf's icons run to y=588 on an 800x600 output.
-    printf 'm 540 550\n' >&3
+    # Right-click the Trash tile, where the Dock says it is (P15.2: its tiles
+    # are no longer the six this was once measured for). Hovering a tile's own
+    # centre magnifies it in place.
+    tx=$(grep 'Dock: tiles ' "$app_log" | tail -1 | tr ' ' '\n' | sed -n 's/^Trash=\([0-9]*\),.*/\1/p')
+    ty=$(grep 'Dock: tiles ' "$app_log" | tail -1 | tr ' ' '\n' | sed -n 's/^Trash=[0-9]*,\([0-9]*\)/\1/p')
+    [ -n "$tx" ] || { echo "FAIL: the Dock did not say where the Trash is"; cat "$app_log"; exit 1; }
+    printf 'm %s %s\n' "$tx" "$((600 - ty))" >&3
     sleep 0.5
     printf 'P\nR\n' >&3
     sleep 0.8
@@ -591,7 +593,7 @@ if [ "$click" = "--click" ]; then
     WAYLAND_DISPLAY="$wd" grim "$out"; captured=1
     # The menu flips *above* the tile (no room below): 48px tall, its rows are
     # "Open" then "Empty Trash". Click the second row.
-    printf 'm 560 483\n' >&3
+    printf 'm %s 483\n' "$((tx + 20))" >&3
     sleep 0.3
     printf 'p\nr\n' >&3
     sleep 1.0
@@ -637,7 +639,11 @@ if [ "$click" = "--click" ]; then
     sleep 0.6
     printf 'm 320 560\n' >&3
     sleep 0.3
-    printf 'm 265 560\n' >&3
+    # The Finder tile, where the Dock says it is (P15.2).
+    fx=$(grep 'Dock: tiles ' "$app_log" | tail -1 | tr ' ' '\n' | sed -n 's/^Finder=\([0-9]*\),.*/\1/p')
+    fy=$(grep 'Dock: tiles ' "$app_log" | tail -1 | tr ' ' '\n' | sed -n 's/^Finder=[0-9]*,\([0-9]*\)/\1/p')
+    [ -n "$fx" ] || { echo "FAIL: the Dock did not say where the Finder tile is"; cat "$app_log"; exit 1; }
+    printf 'm %s %s\n' "$fx" "$((600 - fy))" >&3
     sleep 0.4
     printf 'p\nr\n' >&3
     sleep 1.2

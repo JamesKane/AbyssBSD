@@ -80,6 +80,31 @@ Finder opens `/Applications`, a double-click maps kcalc's window.
 Dock's tiles become a list of bundles (defaults: Finder, the browser, Terminal,
 System Preferences), editable by dragging a bundle on and off; the Apple menu's
 Recent Items. *Verified:* a tile launches its application and shows it running.
+In three:
+
+- **(a) ✅ Done 2026-09-30 — the tiles are bundles.** `abyss-appgen` writes
+  `Contents/app-id`: the app_ids a window of the application may carry —
+  `StartupWMClass`, the desktop-file ID, the program's name — and a window
+  matches one of them, or the program's name with a `-variant` suffix. That last
+  rule is Firefox ESR's: `firefox.desktop`, `Exec=firefox`, and a window that
+  says `firefox-esr`. `AppLibrary` reads `~/Applications` then `/Applications`
+  (the person's shadows root's); `dock.ini`'s `apps = finder; KCalc; sysprefs`
+  pins, by bundle name or path; without it the Dock is the Finder, the browser
+  if one is installed, and System Preferences. The Browser, Mail and Music
+  placeholders — tiles that launched nothing — are gone (Terminal joins in
+  P15.4). A tile draws its bundle's icon, a running unpinned application wears
+  its bundle's name and icon, and the library is reread as windows come and go,
+  since at first login appgen may still be writing it. The Dock logs where its
+  tiles are (`Dock: tiles Finder=346,36 …`); `live-dnd` and `live-sway`'s Trash
+  and Finder clicks aim there instead of at x-positions measured once for six
+  tiles. The Dock's three goldens moved, on purpose, on both platforms.
+  `live-dock-apps.sh`: pinned by name, launched by a click, the running window
+  matched to its tile (no second tile), a second click activates rather than
+  launches, and an unpinned running application wears its bundle's name.
+- **(b) editing:** a bundle dropped on the Dock is pinned there, and the tile
+  menu's "Remove from Dock" unpins; both write `dock.ini`.
+- **(c) the Apple menu's Recent Items:** the applications launched from the Dock,
+  the Finder and the menu, most recent first.
 
 **P15.3 — the browser (M).** Firefox ESR installed on the medium and in the
 guest; a generated `Firefox.app`; rendering under `undertow` (the §4.2 spike);

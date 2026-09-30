@@ -158,11 +158,13 @@ grep -q '^drags-started=1' "$work/ut.out" \
     serial check refused it: $(grep -i drag "$work/ut.err" | tail -2)"
 echo "ok: undertow started the drag (the serial came from the press that caused it)"
 
-# Onto the Trash: the last tile, which magnification puts across x 501..592 on
-# an 800-wide shelf whose icons sit above y=588. The drag drives that
-# magnification the same way a hover does — the tile the person watched grow is
-# the tile that takes the drop.
-printf 'm 540 550\n' >&3
+# Onto the Trash: the last tile, where the Dock says it is (P15.2). The drag
+# drives magnification the same way a hover does — the tile the person watched
+# grow is the tile that takes the drop.
+tx=$(grep 'Dock: tiles ' "$work/dock.log" | tail -1 | tr ' ' '\n' | sed -n 's/^Trash=\([0-9]*\),.*/\1/p')
+ty=$(grep 'Dock: tiles ' "$work/dock.log" | tail -1 | tr ' ' '\n' | sed -n 's/^Trash=[0-9]*,\([0-9]*\)/\1/p')
+[ -n "$tx" ] || fail "the Dock did not say where the Trash is: $(cat "$work/dock.log")"
+printf 'm %s %s\n' "$tx" "$((600 - ty))" >&3
 sleep 0.8
 printf 'r\n' >&3
 sleep 1.5
@@ -282,7 +284,9 @@ grep -q 'Finder: selected Pictures' "$work/finder.log" \
   || fail "the press did not land on Pictures: $(tail -3 "$work/finder.log")"
 printf 'm 458 176\n' >&3
 sleep 0.6
-printf 'm 265 550\n' >&3
+fx=$(grep 'Dock: tiles ' "$work/dock.log" | tail -1 | tr ' ' '\n' | sed -n 's/^Finder=\([0-9]*\),.*/\1/p')
+[ -n "$fx" ] || fail "the Dock did not say where the Finder tile is"
+printf 'm %s %s\n' "$fx" "$((600 - ty))" >&3
 sleep 0.8
 printf 'r\n' >&3
 sleep 2

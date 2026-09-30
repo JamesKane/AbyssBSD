@@ -11,6 +11,7 @@
 
 import Surface
 import PoolConfig
+import AppBundles
 import CCairo
 
 #if canImport(Glibc)
@@ -24,12 +25,17 @@ private let kBtnRight: UInt32 = 0x111
 
 public enum DockIcon: Sendable {
     case finder, browser, mail, music, prefs, genericApp, trash, trashFull
+    /// An installed application's own icon: its bundle's PNG (P15.2).
+    case bundle(String)
 }
 
 public struct DockItem: Sendable {
     public let icon: DockIcon
     public let label: String
     public let appID: String?   // matches a running toplevel's app_id; nil for Trash
+    /// Every app_id this tile's windows may carry (P15.2): a bundle's
+    /// `Contents/app-id`, or just `appID`. `owns` is the one test.
+    public let appIDs: [String]
     public let isTrash: Bool
     /// What to run when the tile isn't already running. argv, plus environment
     /// to add — nil for a tile we can't launch (yet).
@@ -37,9 +43,22 @@ public struct DockItem: Sendable {
     public let environment: [String: String]
 
     public init(icon: DockIcon, label: String, appID: String?, isTrash: Bool = false,
-                command: [String]? = nil, environment: [String: String] = [:]) {
+                command: [String]? = nil, environment: [String: String] = [:], appIDs: [String] = []) {
         self.icon = icon; self.label = label; self.appID = appID; self.isTrash = isTrash
         self.command = command; self.environment = environment
+        self.appIDs = appIDs.isEmpty ? (appID.map { [$0] } ?? []) : appIDs
+    }
+
+    /// An installed application's tile.
+    public init(app: InstalledApp) {
+        self.init(icon: .bundle(app.icon ?? ""), label: app.name,
+                  appID: app.appIDs.first ?? app.name, command: app.executable.map { [$0] },
+                  appIDs: app.appIDs.isEmpty ? [app.name] : app.appIDs)
+    }
+
+    /// Whether a running window is this tile's.
+    public func owns(_ runningAppID: String) -> Bool {
+        !isTrash && AppBundle.matches(appID: runningAppID, candidates: appIDs)
     }
 }
 
@@ -167,6 +186,11 @@ private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
     case .genericApp: name = "genericApp"
     case .trash: name = "trash"
     case .trashFull: name = "trashFull"
+    case .bundle(let path):
+        // The application's own icon; the generic one if it has none or it
+        // cannot be read — a tile never goes blank.
+        if !path.isEmpty, AppIcon.draw(cr, path: path, r) { return }
+        name = "genericApp"
     }
     Draw.icon("dock.icon." + name, cr, r)
 }
@@ -174,7 +198,11 @@ private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
 public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var layer: LayerSurface?
     private var toplevels: ForeignToplevels?
-    private let pinned: [DockItem]
+    private var pinned: [DockItem]
+    private let pinnedSetting: String?
+    /// The installed bundles, reread when windows come and go — at first login
+    /// `abyss-appgen` may still be writing them (P15.1).
+    private var library: [InstalledApp] = []
     private let tileSize: Double
     private let magnify: Bool
 
@@ -194,29 +222,52 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var menu: AquaMenu?
     private var popup: Popup?
 
-    public static func defaultPinned() -> [DockItem] {
-        // The two tiles that map to something real launch another copy of this
-        // binary in the right scene; the rest are placeholders until there are
-        // apps behind them.
+    /// The tiles `dock.ini`'s `apps` names, in order (P15.2): `finder` and
+    /// `sysprefs` are the desktop's own; anything else is an installed bundle,
+    /// by name (`KCalc`) or path. Without the key: the Finder, the browser if
+    /// one is installed, and System Preferences — no placeholder tile that
+    /// launches nothing (the Browser, Mail and Music tiles until P15.2).
+    public static func pinned(setting: String?, library: [InstalledApp]) -> [DockItem] {
         let selfExe = Launcher.selfExecutable()
-        return [
-            DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
-                     command: selfExe.map { [$0] },
-                     environment: ["AQUA_SCENE": "finder"]),
-            DockItem(icon: .browser, label: "Browser", appID: "org.abyssbsd.browser"),
-            DockItem(icon: .mail,    label: "Mail",    appID: "org.abyssbsd.mail"),
-            DockItem(icon: .music,   label: "Music",   appID: "org.abyssbsd.music"),
-            DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
-                     command: selfExe.map { [$0] },
-                     environment: ["AQUA_SCENE": "sysprefs"]),
-        ]
+        let finder = DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
+                              command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "finder"])
+        let prefs = DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
+                             command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "sysprefs"])
+        guard let setting else {
+            var out = [finder]
+            if let browser = library.first(where: { $0.matches(appID: "firefox") || $0.name.hasPrefix("Firefox") }) {
+                out.append(DockItem(app: browser))
+            }
+            out.append(prefs)
+            return out
+        }
+        return setting.split(separator: ";").compactMap { token -> DockItem? in
+            let t = token.trimmingWhitespaceForDock()
+            switch t {
+            case "": return nil
+            case "finder": return finder
+            case "sysprefs": return prefs
+            default:
+                guard let app = AppLibrary.find(t, in: library) else {
+                    Dock.log("dock.ini names \(t), which is not installed")
+                    return nil
+                }
+                return DockItem(app: app)
+            }
+        }
     }
+
+    /// For the golden scene and anything else that wants the stock Dock.
+    public static func defaultPinned() -> [DockItem] { pinned(setting: nil, library: []) }
 
     public init?(display: Display) {
         let config = (try? Pool.load("dock")) ?? Config()
         tileSize = Double(config.uint64("dock", "tile_size") ?? 48)
         magnify = config.bool("dock", "magnify") ?? true
-        pinned = Dock.defaultPinned()
+        pinnedSetting = config.string("dock", "apps")
+        library = AppLibrary.all()
+        pinned = Dock.pinned(setting: pinnedSetting, library: library)
+        Dock.log("pinned " + pinned.map(\.label).joined(separator: ", "))
 
         let height = Int32(DockMetrics.surfaceHeight(tileSize: tileSize))
         guard let ls = LayerSurface(
@@ -259,8 +310,17 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     // MARK: ForeignToplevelsDelegate
 
     public func toplevelsChanged(_ tops: [ToplevelInfo]) {
-        let pinnedIDs = Set(pinned.compactMap { $0.appID })
-        extras = tops.filter { !pinnedIDs.contains($0.appID) }
+        // Bundles written since the last look (a login's appgen, a new port).
+        let now = AppLibrary.all()
+        if now != library {
+            library = now
+            pinned = Dock.pinned(setting: pinnedSetting, library: library)
+            Dock.log("pinned " + pinned.map(\.label).joined(separator: ", "))
+        }
+        var seen = Set<String>()
+        extras = tops.filter { t in
+            !pinned.contains { $0.owns(t.appID) } && seen.insert(t.appID).inserted
+        }
         for t in tops {
             Dock.log("running \(t.appID.isEmpty ? "?" : t.appID) '\(t.title)'")
         }
@@ -350,12 +410,19 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     }
 
     private func rebuild() {
-        let runningIDs = Set((toplevels?.current ?? []).map { $0.appID })
+        let current = toplevels?.current ?? []
         var items = pinned
-        var flags = pinned.map { item in item.appID.map { runningIDs.contains($0) } ?? false }
+        var flags = pinned.map { item in current.contains { item.owns($0.appID) } }
         for t in extras {
-            let label = t.title.isEmpty ? (t.appID.isEmpty ? "App" : t.appID) : t.title
-            items.append(DockItem(icon: .genericApp, label: label, appID: t.appID))
+            // A running application that is not pinned wears its bundle's icon
+            // and name when it has one.
+            if let app = AppLibrary.owner(of: t.appID, in: library) {
+                items.append(DockItem(icon: .bundle(app.icon ?? ""), label: app.name, appID: t.appID,
+                                      command: app.executable.map { [$0] }, appIDs: [t.appID]))
+            } else {
+                let label = t.title.isEmpty ? (t.appID.isEmpty ? "App" : t.appID) : t.title
+                items.append(DockItem(icon: .genericApp, label: label, appID: t.appID))
+            }
             flags.append(true)
         }
         items.append(DockItem(icon: trashFull ? .trashFull : .trash, label: "Trash",
@@ -385,9 +452,26 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         frames = paintDock(cr, w: w, h: h, items: displayItems, running: running,
                            pointerX: pointerX, tileSize: tileSize, magnify: magnify)
+        logTiles(width: w)
         cairo_surface_flush(cs)
         cairo_destroy(cr)
         cairo_surface_destroy(cs)
+    }
+
+    /// Where each tile is, unmagnified, when the set changes (P15.2): its centre
+    /// x — the Dock spans the output, so that is the output's x — and its
+    /// centre's height above the output's bottom edge. Tests aim here instead of
+    /// at coordinates measured once for one set of tiles; hovering a tile's own
+    /// centre magnifies it in place, so the aim holds while it grows.
+    private var lastTiles = ""
+    private func logTiles(width w: Double) {
+        let base = dockMagnify(count: displayItems.count, baseSize: tileSize, gap: DockMetrics.gap,
+                               centerX: w / 2, pointerX: nil, maxScale: 1, range: 1)
+        let up = Int(DockMetrics.bottomMargin + DockMetrics.panelPadV + tileSize / 2)
+        let line = zip(displayItems, base).map { "\($0.label)=\(Int($1.centerX)),\(up)" }.joined(separator: " ")
+        guard line != lastTiles else { return }
+        lastTiles = line
+        Dock.log("tiles " + line)
     }
 
     public func pointerMoved(x: Double, y: Double) {
@@ -434,8 +518,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     }
 
     private func isRunning(_ item: DockItem) -> Bool {
-        guard let id = item.appID else { return false }
-        return toplevels?.current.contains { $0.appID == id } ?? false
+        toplevels?.current.contains { item.owns($0.appID) } ?? false
     }
 
     /// A tile's contextual menu. The Trash's was the only one until P10.8 —
@@ -470,7 +553,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
                 case "dock.empty-trash": self.emptyTrash()
                 case "dock.open":        self.activate(item)
                 case "dock.quit":
-                    let n = self.toplevels?.close(appID: item.appID ?? "") ?? 0
+                    let ids = Set((self.toplevels?.current ?? []).map(\.appID).filter { item.owns($0) })
+                    let n = ids.reduce(0) { $0 + (self.toplevels?.close(appID: $1) ?? 0) }
                     Dock.log("asked \(item.label) to quit (\(n) window\(n == 1 ? "" : "s"))")
                 default: break
                 }
@@ -529,8 +613,9 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         if item.isTrash { openTrash(); return }
         guard let appID = item.appID else { return }
         // Running: raise it. Not running: launch it, if the tile knows how.
-        if toplevels?.activate(appID: appID) == true {
-            Dock.log("activated \(appID)")
+        if let t = toplevels?.current.first(where: { item.owns($0.appID) }) {
+            toplevels?.activate(t)
+            Dock.log("activated \(t.appID)")
             return
         }
         guard let command = item.command else {
@@ -542,5 +627,11 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         } else {
             Dock.log("launch failed for \(appID)")
         }
+    }
+}
+
+extension Substring {
+    func trimmingWhitespaceForDock() -> String {
+        String(drop(while: { $0 == " " || $0 == "\t" }).reversed().drop(while: { $0 == " " || $0 == "\t" }).reversed())
     }
 }

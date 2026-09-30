@@ -26,6 +26,7 @@ public struct DesktopEntry: Equatable, Sendable {
     public var hidden = false
     public var terminal = false
     public var tryExec = ""
+    public var startupWMClass = ""
     public var onlyShowIn: [String] = []
     public var notShowIn: [String] = []
 
@@ -59,6 +60,7 @@ public struct DesktopEntry: Equatable, Sendable {
             case "Hidden": e.hidden = value == "true"
             case "Terminal": e.terminal = value == "true"
             case "TryExec": e.tryExec = value
+            case "StartupWMClass": e.startupWMClass = value
             case "OnlyShowIn": e.onlyShowIn = list(value)
             case "NotShowIn": e.notShowIn = list(value)
             default: break
@@ -103,6 +105,26 @@ public struct DesktopEntry: Equatable, Sendable {
             }
         }
         return words.first == DesktopEntry.filesMarker ? nil : (words, takesFiles)
+    }
+
+    /// The app_ids a running window of this application may carry (P15.2): the
+    /// entry's `StartupWMClass`, then its desktop-file ID (the Wayland
+    /// convention: `org.kde.kcalc.desktop` → `org.kde.kcalc`), then the name of
+    /// the program it runs. None of them is guaranteed — Firefox ESR's entry is
+    /// `firefox.desktop`, runs `firefox`, and its window says `firefox-esr` —
+    /// so `AppBundle.matches` also takes the program's name with a suffix.
+    public func appIDs(desktopFile: String) -> [String] {
+        var ids: [String] = []
+        func add(_ s: String) { if !s.isEmpty && !ids.contains(s) { ids.append(s) } }
+        add(startupWMClass)
+        let base = desktopFile.split(separator: "/").last.map(String.init) ?? desktopFile
+        add(base.hasSuffix(".desktop") ? String(base.dropLast(8)) : base)
+        if let argv = command()?.argv {
+            // `env VAR=x prog` runs prog.
+            let prog = argv.first == "env" ? argv.dropFirst().first(where: { !$0.contains("=") }) : argv.first
+            if let p = prog { add(p.split(separator: "/").last.map(String.init) ?? p) }
+        }
+        return ids
     }
 
     /// Where the files go in `command().argv`.
@@ -173,6 +195,20 @@ public enum AppBundle {
     /// The marker that says a bundle is ours to replace or remove: the entry it
     /// came from. A bundle without one was put there by somebody else.
     public static let marker = "Contents/abyss-appgen"
+
+    /// The app_ids its windows may carry, one per line (`DesktopEntry.appIDs`),
+    /// so the Dock can show a running application on its tile.
+    public static let appIDFile = "Contents/app-id"
+
+    /// Whether a window's app_id is this application's: one of its candidates,
+    /// or the program's name with a variant after a dash (`firefox-esr`,
+    /// `firefox-nightly`) — the last candidate is the program's name.
+    public static func matches(appID: String, candidates: [String]) -> Bool {
+        guard !appID.isEmpty else { return false }
+        if candidates.contains(appID) { return true }
+        guard let prog = candidates.last, !prog.isEmpty else { return false }
+        return appID.hasPrefix(prog + "-")
+    }
 
     static func shellQuote(_ s: String) -> String {
         if !s.isEmpty, s.allSatisfy({ $0.isLetter || $0.isNumber || "-_./=:,+@%".contains($0) }) { return s }

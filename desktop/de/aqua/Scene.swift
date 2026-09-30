@@ -153,9 +153,11 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
             cairo_translate(cr, 0, Double(height) - dockH)
             // Pointer near a tile to show the magnification curve in the preview.
             paintDock(cr, w: Double(width), h: dockH, items: items,
-                      // AQUA_DOCK_RUNNING: every other tile running, so the
-                      // running mark is pictured (P11.5).
-                      running: items.indices.map { getenv("AQUA_DOCK_RUNNING") != nil && $0 % 2 == 0 },
+                      // AQUA_DOCK_RUNNING: every other application running, so
+                      // the running mark is pictured (P11.5) — never the Trash,
+                      // which cannot run and which the old placeholders hid.
+                      running: items.indices.map {
+                          getenv("AQUA_DOCK_RUNNING") != nil && $0 % 2 == 0 && !items[$0].isTrash },
                       pointerX: Double(width) * 0.42, tileSize: 48, magnify: true)
             cairo_restore(cr)
         }

@@ -312,6 +312,11 @@ if [ "$live" -eq 1 ]; then
   # kcalc's real one too, where it is installed.
   echo "== the installed ports, as applications =="
   quiet "$root/abyss/tests/live-appgen.sh"
+  # The Dock carries them (P15.2): dock.ini pins a bundle by name, its tile
+  # launches it, and the running window is matched back to the tile through the
+  # bundle's app-ids — pinned or not.
+  echo "== the Dock carries installed applications =="
+  quiet "$root/abyss/tests/live-dock-apps.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="

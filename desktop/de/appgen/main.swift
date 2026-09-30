@@ -169,7 +169,9 @@ for p in planned {
     guard mkdir(tmp, 0o755) == 0, mkdir(tmp + "/Contents", 0o755) == 0,
           mkdir(tmp + "/Contents/MacOS", 0o755) == 0, mkdir(tmp + "/Contents/Resources", 0o755) == 0,
           write(tmp + "/Contents/MacOS/" + stem, AppBundle.launcher(argv: p.argv, source: p.source), mode: 0o755),
-          write(tmp + "/" + AppBundle.marker, p.source + "\n") else {
+          write(tmp + "/" + AppBundle.marker, p.source + "\n"),
+          write(tmp + "/" + AppBundle.appIDFile,
+                p.entry.appIDs(desktopFile: p.source).joined(separator: "\n") + "\n") else {
         say("FAILED \(p.dir): could not write it"); _ = run(["rm", "-rf", tmp]); continue
     }
     let png = tmp + "/Contents/Resources/" + stem + ".png"
