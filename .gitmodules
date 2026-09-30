@@ -1,0 +1,12 @@
+[submodule "src"]
+	path = src
+	url = https://github.com/JamesKane/freebsd-src.git
+	branch = radxa-dragon-q8b
+[submodule "kmod/drm"]
+	path = kmod/drm
+	url = https://github.com/JamesKane/drm-kmod.git
+	branch = sysfbdrm
+[submodule "firmware"]
+	path = firmware
+	url = https://github.com/JamesKane/drm-kmod-firmware.git
+	branch = qcom
