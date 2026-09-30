@@ -237,6 +237,16 @@ after known input), a selection pasted elsewhere arrives intact.
   signal to its default and clears the mask before `execve`, as xterm does.
   Golden: `terminal` and `terminal@2x`, a fixed transcript through the real
   model.
+  **And in the Dock, and for ports:** a `terminal` token and tile (an icon in
+  each theme — Aqua's drawn to match its tiles, Trench's imported from its own
+  `term.svg`), so the default Dock is Finder, the browser, Terminal, System
+  Preferences, as P15.2 planned; and `abyss-appgen` no longer skips
+  `Terminal=true` entries — with the shell binary beside it, their launcher is
+  `exec env AQUA_SCENE=terminal …/AquaDemo -e COMMAND`. `live-dock-apps` claim
+  11 (the default Dock, and its Terminal tile opening Terminal) and
+  `live-appgen` (a `Terminal=true` fixture becomes `Top.app`, which opens a
+  Terminal running `top`). Goldens moved on purpose: the Dock scenes (a fourth
+  tile) and the icon sheets (a new icon), on both platforms.
 
 **P15.5 — TextEdit (L).** The toolkit's multi-line text view (it is a toolkit
 piece, not TextEdit's: every later editor uses it), then TextEdit on it: open

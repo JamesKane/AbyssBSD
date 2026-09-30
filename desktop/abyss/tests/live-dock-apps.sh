@@ -22,7 +22,10 @@
 #      launcher is given the file);
 #  10. the Apple menu's Recent Items lists what the Dock opened, choosing it
 #      opens it again (on the ordinary display, from the privileged bar), and
-#      Clear Menu empties it.
+#      Clear Menu empties it;
+#  11. with no `apps` in dock.ini, the Dock is the defaults — Finder, Terminal,
+#      System Preferences (no browser in this HOME) — and the Terminal tile
+#      opens Terminal (P15.4).
 #
 # Usage: abyss/tests/live-dock-apps.sh
 set -eu
@@ -281,5 +284,17 @@ choose_recent "Clear Menu"
 grep -q 'chose System > Recent Items > Clear Menu (system.recent.clear) → ok' "$work/bar.log" || fail "Clear Menu did not run"
 grep -q '=' "$work/cfg/recent.ini" 2>/dev/null && fail "Clear Menu left: $(cat "$work/cfg/recent.ini")"
 echo "ok: 10. Recent Items listed what the Dock opened, opened it again on the ordinary display, and Clear Menu emptied it"
+
+# ------------------------------------------------------------ 11. the defaults
+kill "$dock_pid" 2>/dev/null || true; wait "$dock_pid" 2>/dev/null || true
+rm -rf "$home/Applications"; : > "$work/cfg/dock.ini"
+start_dock "$work/dock.log"
+grep -q 'Dock: pinned Finder, Terminal, System Preferences$' "$work/dock.log" \
+  || fail "the default Dock is not Finder, Terminal, System Preferences: $(grep 'Dock: pinned' "$work/dock.log" | tail -1)"
+b=$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)
+click "Terminal"
+i=0; until [ "$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)" -gt "$b" ]; do
+  [ $i -ge 150 ] && fail "the Terminal tile opened no Terminal window"; sleep 0.1; i=$((i + 1)); done
+echo "ok: 11. the default Dock is Finder, Terminal, System Preferences, and the Terminal tile opened Terminal"
 
 echo "all green (the Dock carries installed applications)."

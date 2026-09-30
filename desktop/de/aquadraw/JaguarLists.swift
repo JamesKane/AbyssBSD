@@ -1225,6 +1225,21 @@ list dock.icon.genericApp
   fill rgba(0.4, 0.45, 0.55, 0.9)
 end
 
+list dock.icon.terminal
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #4b5058 1 #1d2025
+  rect w*0.13 w*0.15 w*0.74 w*0.6 w*0.05
+  fill vertical stops 0 #0d1f15 1 #06110b
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.18
+  path w*0.24 w*0.3 w*0.38 w*0.42 w*0.24 w*0.54
+  stroke #7dff9a w*0.055 round
+  path w*0.44 w*0.57 w*0.62 w*0.57
+  stroke #7dff9a w*0.055 round
+  rect w*0.36 w*0.8 w*0.28 w*0.055 w*0.02
+  fill #ffffff/0.45
+end
+
 list dock.icon.trash
   path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
   stroke rgba(0.78, 0.80, 0.85, 1) w*0.05

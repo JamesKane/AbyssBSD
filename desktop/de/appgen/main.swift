@@ -53,6 +53,14 @@ while let a = args.popFirst() {
     }
 }
 if froms.isEmpty { froms = ["/usr/local/share/applications", "/usr/share/applications"] }
+/// Terminal, for `Terminal=true` entries: the shell binary, installed beside
+/// this one (P15.4). Absent, those entries are skipped and say why.
+let terminalProgram: String? = {
+    guard let me = Spawn.resolveExecutable(CommandLine.arguments[0]) else { return nil }
+    let dir = me.split(separator: "/", omittingEmptySubsequences: false).dropLast().joined(separator: "/")
+    let t = (dir.isEmpty ? "." : dir) + "/AquaDemo"
+    return access(t, X_OK) == 0 ? t : nil
+}()
 let home = String(cString: getenv("HOME") ?? strdup("/"))
 let dest = to ?? (getuid() == 0 ? "/Applications" : home + "/Applications")
 let iconRoots = ["/usr/local/share/icons", "/usr/share/icons", "/usr/local/share/pixmaps", "/usr/share/pixmaps"]
@@ -134,7 +142,7 @@ for from in froms {
         guard let text = read(source), let e = DesktopEntry.parse(text) else {
             say("skip \(file): not a desktop entry"); continue
         }
-        if let why = e.skipReason() { say("skip \(file): \(why)"); continue }
+        if let why = e.skipReason(haveTerminal: terminalProgram != nil) { say("skip \(file): \(why)"); continue }
         if !e.tryExec.isEmpty, Spawn.resolveExecutable(e.tryExec) == nil {
             say("skip \(file): \(e.tryExec) is not installed"); continue
         }
@@ -168,7 +176,8 @@ for p in planned {
     _ = run(["rm", "-rf", tmp])
     guard mkdir(tmp, 0o755) == 0, mkdir(tmp + "/Contents", 0o755) == 0,
           mkdir(tmp + "/Contents/MacOS", 0o755) == 0, mkdir(tmp + "/Contents/Resources", 0o755) == 0,
-          write(tmp + "/Contents/MacOS/" + stem, AppBundle.launcher(argv: p.argv, source: p.source), mode: 0o755),
+          write(tmp + "/Contents/MacOS/" + stem, AppBundle.launcher(argv: p.argv, source: p.source,
+                                                                            terminal: p.entry.terminal ? terminalProgram : nil), mode: 0o755),
           write(tmp + "/" + AppBundle.marker, p.source + "\n"),
           write(tmp + "/" + AppBundle.appIDFile,
                 p.entry.appIDs(desktopFile: p.source).joined(separator: "\n") + "\n") else {

@@ -579,7 +579,7 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/Galculator.app", library: lib), "Galculator")
         XCTAssertEqual(Dock.pinToken(forBundle: "/Applications/Firefox.app", library: lib), "/Applications/Firefox.app",
                        "shadowed by the person's own Firefox: only the path means this one")
-        XCTAssertEqual(Dock.pinTokens(setting: nil, library: lib), ["finder", "Firefox", "sysprefs"])
+        XCTAssertEqual(Dock.pinTokens(setting: nil, library: lib), ["finder", "Firefox", "terminal", "sysprefs"])
         XCTAssertEqual(Dock.pinTokens(setting: " finder ;Gone; Galculator;", library: lib), ["finder", "Gone", "Galculator"])
         XCTAssertEqual(Dock.items(tokens: ["finder", "Gone", "Galculator"], library: lib).map(\.label), ["Finder", "Galculator"],
                        "an application not installed has no tile but keeps its place in the list")

@@ -24,7 +24,7 @@ private let kBtnLeft: UInt32 = 0x110
 private let kBtnRight: UInt32 = 0x111
 
 public enum DockIcon: Sendable {
-    case finder, browser, mail, music, prefs, genericApp, trash, trashFull
+    case finder, browser, mail, music, prefs, genericApp, trash, trashFull, terminal
     /// An installed application's own icon: its bundle's PNG (P15.2).
     case bundle(String)
 }
@@ -198,6 +198,7 @@ private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
     case .genericApp: name = "genericApp"
     case .trash: name = "trash"
     case .trashFull: name = "trashFull"
+    case .terminal: name = "terminal"
     case .bundle(let path):
         // The application's own icon; the generic one if it has none or it
         // cannot be read — a tile never goes blank.
@@ -235,11 +236,12 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var menu: AquaMenu?
     private var popup: Popup?
 
-    /// The tiles `dock.ini`'s `apps` names, in order (P15.2): `finder` and
-    /// `sysprefs` are the desktop's own; anything else is an installed bundle,
-    /// by name (`Galculator`) or path. Without the key: the Finder, the browser if
-    /// one is installed, and System Preferences — no placeholder tile that
-    /// launches nothing (the Browser, Mail and Music tiles until P15.2).
+    /// The tiles `dock.ini`'s `apps` names, in order (P15.2): `finder`,
+    /// `terminal` and `sysprefs` are the desktop's own; anything else is an
+    /// installed bundle, by name (`Galculator`) or path. Without the key: the
+    /// Finder, the browser if one is installed, Terminal (P15.4) and System
+    /// Preferences — no placeholder tile that launches nothing (the Browser,
+    /// Mail and Music tiles until P15.2).
     public static func pinned(setting: String?, library: [InstalledApp]) -> [DockItem] {
         items(tokens: pinTokens(setting: setting, library: library), library: library)
     }
@@ -251,6 +253,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             if let browser = library.first(where: { $0.matches(appID: "firefox") || $0.name.hasPrefix("Firefox") }) {
                 out.append(browser.name)
             }
+            out.append("terminal")
             out.append("sysprefs")
             return out
         }
@@ -267,6 +270,10 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             case "finder":
                 return DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
                                 command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "finder"],
+                                pinToken: t)
+            case "terminal":
+                return DockItem(icon: .terminal, label: "Terminal", appID: "org.abyssbsd.terminal",
+                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "terminal"],
                                 pinToken: t)
             case "sysprefs":
                 return DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",

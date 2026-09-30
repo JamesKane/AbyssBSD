@@ -194,6 +194,34 @@ list dock.icon.genericApp
   pop
 end
 
+list dock.icon.terminal
+  rect 0 0 w h
+  fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom
+  bevel $bevel bevelLight bevelShade
+  rect 0.5 0.5 w-1 h-1
+  stroke windowBorder 1
+  push
+  move w*0.14 h*0.12
+  scale 0.72 0.72
+  path w*0.88636 h*0.89773 curve w*0.88636 h*0.93287 w*0.72356 h*0.96136 w*0.52273 h*0.96136 curve w*0.3219 h*0.96136 w*0.15909 h*0.93287 w*0.15909 h*0.89773 curve w*0.15909 h*0.86258 w*0.3219 h*0.83409 w*0.52273 h*0.83409 curve w*0.72356 h*0.83409 w*0.88636 h*0.86258 w*0.88636 h*0.89773 close
+  fill rgba(0, 0, 0, 0.38)
+  path w*0.38636 h*0.72727 w*0.59091 h*0.70455 w*0.67045 h*0.84545 w*0.325 h*0.88636 close
+  fill rgba(0.16471, 0.12941, 0.31373, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.125 h*0.19318 w*0.79545 h*0.11364 w*0.84091 h*0.67045 w*0.18182 h*0.75682 close
+  fill linear w*0.125 h*0.11364 w*0.125 h*0.75682 stops 0 rgba(0.2902, 0.2549, 0.47059, 1) 1 rgba(0.12941, 0.10196, 0.25098, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.03409 round
+  path w*0.20455 h*0.26818 w*0.72273 h*0.20455 w*0.75682 h*0.60455 w*0.25 h*0.67045 close
+  fill rgba(0.01961, 0.01961, 0.03137, 1)
+  stroke rgba(0.0902, 0.04706, 0.17255, 1) w*0.02273
+  path w*0.56818 h*0.33024 w*0.65 h*0.32019 w*0.65 h*0.46564 w*0.56818 h*0.47569 close
+  fill rgba(0.22353, 1, 0.07843, 1)
+  path w*0.21591 h*0.27955 w*0.71136 h*0.21818
+  fill rgba(0, 0, 0, 1)
+  stroke rgba(1, 1, 1, 0.15) w*0.02273
+  pop
+end
+
 list dock.icon.trash
   rect 0 0 w h
   fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom

@@ -7,12 +7,14 @@
 #
 #   1. an application becomes `<Name>.app`: a launcher that execs its command,
 #      an icon (an SVG rasterised to 256 px), and the marker that makes it ours;
-#      a NoDisplay handler, a Hidden entry, a terminal program (no Terminal yet)
-#      and a program that is not installed (TryExec) are skipped, each with why;
+#      a NoDisplay handler, a Hidden entry and a program that is not installed
+#      (TryExec) are skipped, each with why; a terminal program (`Terminal=true`)
+#      becomes a bundle that opens it in Terminal (P15.4);
 #   2. a bundle somebody else put there, under the same name, is kept;
 #   3. an entry that goes away takes its generated bundle with it — and only it;
 #   4. the generated launcher, run as the Finder runs it, puts the application's
-#      window on our compositor (undertow reports it mapped);
+#      window on our compositor (undertow reports it mapped) — and the terminal
+#      program's opens a Terminal window running it;
 #   5. FreeBSD, with galculator installed: its real entry becomes
 #      Galculator.app with a 256 px icon from its hicolor SVG, and running it
 #      maps galculator's window.
@@ -83,12 +85,14 @@ grep -q '^exec env AQUA_SCENE=window .*AquaDemo "\$@"$' "$b/Contents/MacOS/Aqua 
 [ "$svg" = 0 ] || [ "$(od -An -tu1 -j16 -N8 "$b/Contents/Resources/Aqua Window.png" | awk '{print $3*256+$4, $7*256+$8}')" = "256 256" ] \
   || fail "the icon is not 256 px square"
 [ -s "$b/Contents/abyss-appgen" ] || fail "no marker"
-for w in "handler.desktop: NoDisplay" "hidden.desktop: Hidden" "top.desktop: needs a terminal" \
+for w in "handler.desktop: NoDisplay" "hidden.desktop: Hidden" \
          "absent.desktop: no-such-program-here is not installed"; do
   grep -q "^skip $w" "$work/gen.out" || fail "not skipped with its reason: $w"
 done
-for n in Handler Gone Top Absent; do [ -e "$apps/$n.app" ] && fail "$n.app was made"; done
-echo "ok: 1. an application became a bundle (launcher, icon $([ "$svg" = 1 ] && echo "rasterised from SVG to 256 px" || echo "copied from a PNG"), marker); four others skipped, each with why"
+for n in Handler Gone Absent; do [ -e "$apps/$n.app" ] && fail "$n.app was made"; done
+grep -q "^exec env AQUA_SCENE=terminal $demo -e top\$" "$apps/Top.app/Contents/MacOS/Top" \
+  || fail "Top.app does not open top in Terminal: $(cat "$apps/Top.app/Contents/MacOS/Top" 2>&1)"
+echo "ok: 1. an application became a bundle (launcher, icon $([ "$svg" = 1 ] && echo "rasterised from SVG to 256 px" || echo "copied from a PNG"), marker); a terminal program's opens it in Terminal; three others skipped, each with why"
 
 # ------------------------------------------------------------ 2. not ours
 grep -q "^kept Mine.app: it is not ours" "$work/gen.out" || fail "somebody else's Mine.app was not kept"
@@ -125,7 +129,13 @@ env WAYLAND_DISPLAY="$wd" "$b/Contents/MacOS/Aqua Window" > "$work/app.log" 2>&1
 app_pid=$!
 mapped org.abyssbsd.aquademo || fail "running the bundle mapped no window (undertow reported: $(grep -h "^window " "$work/ut.out" | tr "\n" " "))"
 kill "$app_pid" 2>/dev/null || true; app_pid=""
-echo "ok: 4. the generated launcher, run as the Finder runs it, mapped the application's window on undertow"
+env WAYLAND_DISPLAY="$wd" HOME="$work" ABYSS_TERMINAL_DUMP=1 "$apps/Top.app/Contents/MacOS/Top" > "$work/top.log" 2>&1 &
+app_pid=$!
+mapped org.abyssbsd.terminal || fail "Top.app mapped no Terminal window: $(tail -3 "$work/top.log")"
+i=0; until grep -q 'Terminal: window: top (pid' "$work/top.log"; do
+  [ $i -ge 50 ] && fail "Top.app's Terminal is not running top: $(grep Terminal: "$work/top.log" | head -3)"; sleep 0.1; i=$((i + 1)); done
+kill "$app_pid" 2>/dev/null || true; app_pid=""
+echo "ok: 4. the generated launcher, run as the Finder runs it, mapped the application's window on undertow; Top.app opened a Terminal running top"
 
 # ------------------------------------------------------------ 5. a real port
 kd=/usr/local/share/applications

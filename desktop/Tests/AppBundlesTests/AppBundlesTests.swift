@@ -36,7 +36,7 @@ final class AppBundlesTests: XCTestCase {
         XCTAssertEqual(why("Hidden=true\n"), "Hidden")
         XCTAssertEqual(why("OnlyShowIn=XFCE;GNOME;\n"), "only for XFCE, GNOME")
         XCTAssertEqual(why("NotShowIn=AbyssBSD;\n"), "not for AbyssBSD")
-        XCTAssertEqual(why("Terminal=true\n"), "needs a terminal, and there is none yet (P15.4)")
+        XCTAssertEqual(why("Terminal=true\n"), "needs a terminal, and Terminal was not found beside abyss-appgen")
         XCTAssertNil(DesktopEntry.parse("[Desktop Entry]\nName=X\nExec=x\nType=Application\nTerminal=true\n")?
             .skipReason(haveTerminal: true))
         XCTAssertEqual(DesktopEntry.parse("[Desktop Entry]\nName=L\nType=Link\n")?.skipReason(), "a Link, not an application")
@@ -67,6 +67,9 @@ final class AppBundlesTests: XCTestCase {
         XCTAssertTrue(s.hasPrefix("#!/bin/sh\n"))
         XCTAssertTrue(s.hasSuffix("exec designer6 --style 'it'\\''s' \"$@\"\n"))
         XCTAssertEqual(AppBundle.directoryName("Firefox Web Browser"), "Firefox Web Browser.app")
+        // Terminal=true (P15.4): the command runs in a Terminal window.
+        XCTAssertTrue(AppBundle.launcher(argv: ["top", "-s", "2"], source: "top.desktop", terminal: "/usr/local/bin/AquaDemo")
+            .hasSuffix("exec env AQUA_SCENE=terminal /usr/local/bin/AquaDemo -e top -s 2\n"))
         XCTAssertEqual(AppBundle.directoryName("a/b"), "a-b.app")
         XCTAssertEqual(AppBundle.directoryName(".hidden"), "hidden.app")
     }
