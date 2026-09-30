@@ -83,6 +83,14 @@ in LinuxKPI first.
   detach, so the console returns in UEFI's own mode. That mode, read back
   from those registers, is identical to the monitor's preferred EDID mode,
   so a client asking for it causes no mode change at all.
+- **DPMS** (`42228ff`). An inactive CRTC stops the stream the same way:
+  push idle, INTF off, link off. The monitor then goes to sleep. Going
+  active again resets the link, trains it and restarts the INTF. A mode
+  set while the output is off only loads the timing. The console restore
+  (master gone, detach) always turns the output back on. So does a client
+  exiting, since DRM's framebuffer removal disables the CRTC: about a
+  second of blank, as on Linux. Tested with the DPMS property: the monitor
+  sleeps and comes back.
 
 **UEFI's link and mode:**
 - 4 lanes at **HBR3 (8.1 Gb/s)**, enhanced framing, 8 bpc RGB, CEA 1080p60,

@@ -44,14 +44,15 @@ directory records what we found, so nobody has to find it again.
 | CPU frequency, 2 domains | Works; per-domain powerd | `sys/dev/qcom_epss`, `usr.sbin/powerd` |
 | Deep idle (PSCI power-down, C3) | Works, on by default (`balanced` power profile; the kernel picks the always-on timer) | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c`, `kern_clocksource.c` |
 | Power profiles (power-saver/balanced/performance) | Works: CPU idle, powerd mode, GPU clock; live switch | `libexec/rc/rc.d/power_profile` |
-| Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480); sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
+| Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480), DPMS; sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |
 | SD card | No ACPI SDHC driver | — |
 | RTC | None (no driver; ntpd sets the clock) | — |
 | I²C (EEPROM MACs, TC9563 setup) | No ACPI GENI I²C driver; not needed yet | — |
 | USB-C orientation, PD | Needs pmic_glink | — |
-| Audio, Wi-Fi/BT, camera, NPU | Not investigated | — |
+| Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
+| Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
 | The AbyssBSD desktop on this board | Not tried | — |
 
 ## Kernel changes (freebsd-src branch `radxa-dragon-q8b`)
@@ -65,6 +66,7 @@ directory records what we found, so nobody has to find it again.
   - `sys/dev/qcom_cmd_db/`
   - `sys/dev/qcom_gpucc/`
   - `sys/dev/qcom_smmu/`
+  - `sys/dev/qcom_adsp/` (+ `qcom_adsp.4`)
   - `sys/arm/arm/generic_timer_mem.c`
 - arm64 and ACPI:
   - `cpu_suspend.c` and `locore.S` (PSCI suspend/resume)

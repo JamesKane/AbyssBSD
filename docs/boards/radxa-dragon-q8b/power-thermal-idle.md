@@ -161,6 +161,44 @@ don't set it.
 - `cpuset -x` takes INTRNG's `ie_irq`, not dmesg's "irq N", so rebinding
   interrupts from the shell is awkward.
 
+## Fan: Radxa's service on the ADSP (`sys/dev/qcom_adsp`)
+
+The fan isn't driven by the OS. Radxa's ADSP firmware runs a fan loop from
+the 46 TSENS sensors and drives the PMC8280C's LPG PWM (channel 3, 25 kHz,
+through PMIC GPIO 8). **Without the ADSP running, the fan is at full speed
+as a hardware fail-safe.** UEFI doesn't start the ADSP; the OS must.
+
+- `qcom_adsp(4)` attaches to ACPI `\_SB.ADSP` (`QCOM061B`, which gives only
+  an interrupt). A board table keyed on SMBIOS gives the firmware, the
+  carve-out (`0x86c00000`, 32 MB, which UEFI reserves and FreeBSD doesn't
+  map) and PAS id 1.
+- Boot sequence (Linux's `qcom_q6v5_pas` and `mdt_loader`), once root is
+  mounted and `qcom_scm` has attached (module order isn't guaranteed):
+  1. PAS `init_image` with the ELF header and the hash segment;
+  2. `mem_setup` for the relocatable image (linked for
+     `0x86a00000`–`0x88a00000`);
+  3. copy the 24 loadable segments;
+  4. PAS `auth_and_reset`.
+- It needs no LCX/LMX RPMh votes, SMP2P or GLINK to run the fan; none are
+  done.
+- Firmware: `qcom/sc8280xp/radxa/dragon-q8b/qcadsp8280.mbn` from
+  linux-firmware (`ADSP.HT.5.6.c2-00037-MAKENA-1`, `LICENSE.qcom`). It's a
+  firmware(9) module, `qcom_sc8280xp_radxa_dragon_q8b_qcadsp8280_mbn`,
+  from the `qcomfw` set of our drm-kmod-firmware fork (port
+  `sysutils/qcom-dsp-firmware-kmod`). A raw file in `/boot/firmware` also
+  works, but it's over firmware(9)'s 8 MB default cap.
+- Result: the fan runs from power-on until the ADSP starts, stops before
+  the login prompt, and spins up under load.
+- The driver **won't detach while the ADSP runs**: stopping it needs the
+  SMEM stop handshake (see [lessons.md](lessons.md)).
+- The BIOS setting *Hypervisor Settings* must be `Auto` or `Disabled`
+  (Radxa's docs; `Enable` stops the service).
+- **Never enable the PMIC LPG** (Linux `pmc8280c_lpg`): a PWM driver there
+  would fight the ADSP and wind the fan to 100%.
+- Later: SMP2P crash detection and a graceful stop; GLINK
+  (`RADXA_SVC_ADSP_APPS`) for the service's fan mode and duty cycle (Linux's
+  `radxa_svc_glink` hwmon).
+
 ## Power profiles (`rc.d/power_profile`)
 
 The user's choice, as on Linux desktops (power-profiles-daemon): set

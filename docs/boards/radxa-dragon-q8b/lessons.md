@@ -29,6 +29,11 @@ dump** is written.
 - **`read(2)` on `/dev/mem` for the framebuffer** panics arm64
   ("pmap_map_io_transient: TODO: Map out of DMAP data"). `mmap` it
   read-only instead; screenshots do that.
+- **PAS `shutdown` of a running DSP** hangs the SoC (console dead, board
+  wedged; cost 1 power cycle). Linux first raises the SMEM "stop" state and
+  waits for the DSP's stop-ack interrupt, and only then calls PAS
+  `shutdown`. `qcom_adsp` therefore refuses to detach while the ADSP runs.
+  `shutdown` on a DSP that was only `init_image`d is harmless.
 - **Unloading msm within about 500 ms of a submit** hard-hangs the board
   (the fan stops, no dump). msm's hangcheck timer is a LinuxKPI callout that
   nothing drained at unload; Linux's `msm_gpu_cleanup()` never stops it

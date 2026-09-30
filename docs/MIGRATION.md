@@ -9,16 +9,18 @@ Mac. Tick items off, and delete this file once they're all done.
 The monorepo was assembled from a Phase B snapshot, before Phase C (the
 LinuxKPI platform bus, the component framework, runtime PM and platform IRQs).
 
-- [ ] `src` → freebsd-src `radxa-dragon-q8b` **`cb82fd75a7`** (pinned: `9fbc25e3a1`).
+- [ ] `src` → freebsd-src `radxa-dragon-q8b` **`23d513aa03`** (pinned: `9fbc25e3a1`).
       Kernel `__FreeBSD_version` 1600032 (arm64 write-combining), plus the
-      C3 event-timer handoff and rc power profiles.
-- [ ] `kmod/drm-msm` → drm-msm-kmod **`412bc43`** (imported up to `02f48c0`;
+      C3 event-timer handoff, rc power profiles and `qcom_adsp`.
+- [ ] `firmware` → drm-kmod-firmware `qcom` **`79f48aa`** (adds `qcomfw`,
+      the Q8B's ADSP firmware).
+- [ ] `kmod/drm-msm` → drm-msm-kmod **`42228ff`** (imported up to `02f48c0`;
       missing everything since: Phase C, the msmfb display driver
-      `fc3e136`..`349d5ea`, and GPU devfreq `412bc43`). The msm code at `02f48c0` won't run against the
+      `fc3e136`..`349d5ea` and DPMS `42228ff`, and GPU devfreq `412bc43`). The msm code at `02f48c0` won't run against the
       Phase C kernel.
-- [ ] `ports/` → freebsd-ports `freedreno` **`fab2fa0d3`** (copied from
-      `d80cb373e`): drm-msm-kmod at `412bc43`, PORTREVISION 12 (with the
-      power_profile hook).
+- [ ] `ports/` → freebsd-ports `freedreno` **`dc55f92fa`** (copied from
+      `d80cb373e`): drm-msm-kmod at `42228ff`, PORTREVISION 13 (with the
+      power_profile hook), and the new `sysutils/qcom-dsp-firmware-kmod`.
 - [ ] Decide which copy of msm is canonical: `kmod/drm-msm`, or the
       standalone `JamesKane/drm-msm-kmod` repo that the port still fetches.
       Retire the other copy.
