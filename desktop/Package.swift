@@ -309,11 +309,18 @@ let package = Package(
         // (BACKLOG S.2). No dependencies, so the compositor and the supervisor
         // can share it without the toolkit.
         .target(name: "Spawn", path: "de/spawn"),
+        // Terminal (PHASE15 P15.4): the VT parser and screen model, pure — the
+        // pseudo-terminal beside it — and a tool that runs a program through
+        // both with no display, which is how `vi` is asserted on.
+        .target(name: "Terminal", path: "de/terminal"),
+        .target(name: "Pty", dependencies: ["CPlatform", "Spawn"], path: "de/pty"),
+        .executableTarget(name: "abyss-vt", dependencies: ["Pty", "Terminal"], path: "de/vtbin"),
         // `.desktop` → `.app` (PHASE15 P15.1): the rules as values, importing
         // nothing, and the tool that walks, rasterises and writes.
         .target(name: "AppBundles", path: "de/appbundles"),
         .executableTarget(name: "abyss-appgen", dependencies: ["AppBundles", "Spawn"], path: "de/appgen"),
         .testTarget(name: "AppBundlesTests", dependencies: ["AppBundles"], path: "Tests/AppBundlesTests"),
+        .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
         // installer's shape: plans as values that import nothing, a wire the
         // pane links without the executor, the runner, and two binaries.

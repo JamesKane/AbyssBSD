@@ -252,3 +252,56 @@ int ap_request_realtime(int priority) {
     return sched_setscheduler(0, SCHED_FIFO, &sp);
 }
 #endif
+
+/* ------------------------------------------------ pseudo-terminals (P15.4a) */
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+
+int ap_pty_resize(int master, unsigned short rows, unsigned short cols) {
+    struct winsize ws;
+    memset(&ws, 0, sizeof(ws));
+    ws.ws_row = rows;
+    ws.ws_col = cols;
+    return ioctl(master, TIOCSWINSZ, &ws);
+}
+
+int ap_pty_spawn(const char *path, char *const argv[], char *const envp[],
+                 unsigned short rows, unsigned short cols, int *master_out) {
+    int master = posix_openpt(O_RDWR | O_NOCTTY);
+    if (master < 0) return -1;
+    if (grantpt(master) < 0 || unlockpt(master) < 0) { int e = errno; close(master); errno = e; return -1; }
+    /* The slave's name, copied now: ptsname's buffer is static, and the child
+     * may not call it. */
+    char slave[128];
+    const char *name = ptsname(master);
+    if (!name || strlen(name) >= sizeof(slave)) { close(master); errno = ENAMETOOLONG; return -1; }
+    strcpy(slave, name);
+    /* Its size before the program starts, so the first thing it asks is true. */
+    if (ap_pty_resize(master, rows, cols) < 0) { int e = errno; close(master); errno = e; return -1; }
+
+    pid_t pid = fork();
+    if (pid < 0) { int e = errno; close(master); errno = e; return -1; }
+    if (pid == 0) {
+        /* The child: async-signal-safe calls only. */
+        if (setsid() < 0) _exit(126);
+        int s = open(slave, O_RDWR);   /* the first tty a session leader opens */
+        if (s < 0) _exit(126);
+#ifdef TIOCSCTTY
+        (void)ioctl(s, TIOCSCTTY, 0);  /* FreeBSD needs it said; Linux took it on open */
+#endif
+        if (dup2(s, 0) < 0 || dup2(s, 1) < 0 || dup2(s, 2) < 0) _exit(126);
+        if (s > 2) close(s);
+        close(master);
+        execve(path, argv, envp);
+        _exit(127);
+    }
+    /* The parent keeps the master, private to it and never blocking. */
+    int fl = fcntl(master, F_GETFD);
+    if (fl >= 0) fcntl(master, F_SETFD, fl | FD_CLOEXEC);
+    fl = fcntl(master, F_GETFL);
+    if (fl >= 0) fcntl(master, F_SETFL, fl | O_NONBLOCK);
+    *master_out = master;
+    return (int)pid;
+}

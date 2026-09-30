@@ -189,6 +189,28 @@ selection and the clipboard, and the menu vocabulary (New Window, Copy, Paste,
 Clear). *Verified:* `vi` and `top` draw correctly (screen-model assertions
 after known input), a selection pasted elsewhere arrives intact.
 
+- **(a) ✅ Done 2026-09-30 — the pty and the model.** `ap_pty_spawn` in
+  `CPlatform` (posix_openpt, so no libutil; the child only setsid → open the
+  slave → TIOCSCTTY → dup2 → execve, async-signal-safe as `Spawn` requires) and
+  `Pty` around it; `Terminal`, pure: `VTParser` (Williams' DEC state machine cut
+  to ground/ESC/CSI/OSC/DCS-ignored, UTF-8 in ground, a control inside a broken
+  rune still acts) and `Screen` — the subset read off xterm's terminfo, not
+  guessed: CUP/CUU…/HPA/VPA, ED/EL/ECH, ICH/DCH/IL/DL, SU/SD, scroll regions
+  (IL/DL and a region's scrolling are not history), SGR with 256 and direct
+  colour, `bce`, pending wrap, tabs, DEC line drawing, `REP` (ncurses 6's
+  `rep`), the alternate screen (1049/1047/47), DECCKM, bracketed paste, OSC
+  titles, DSR/DA replies, DECSTR (FreeBSD termcap's `is`), scrollback, resize.
+  `TERM=xterm` (§6.4). Not yet: double-width characters (one column each),
+  combining marks, mouse reporting. `abyss-vt` runs a program on a pty through
+  the model with no display, typing on a script and printing the screen.
+  `TerminalTests` (16) and `live-vt.sh`, the same assertions against different
+  programs — vim and procps top on Linux, nvi and FreeBSD top in the guest: a
+  shell's echo and `stty size` (8×40, then 6×30 after a resize); vi draws the
+  file, `~` to the status line, cursor 1,1, and `j dd :wq` deletes line two
+  **on disk**; top draws its header and table and `q` quits it. Found on the
+  way: FreeBSD's termcap `xterm` has no `ti`/`te`, so nvi draws on the main
+  screen — correct, and what a real xterm shows.
+
 **P15.5 — TextEdit (L).** The toolkit's multi-line text view (it is a toolkit
 piece, not TextEdit's: every later editor uses it), then TextEdit on it: open
 and save plain text, through the file chooser (our portal, so a sandboxed

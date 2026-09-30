@@ -117,4 +117,25 @@ int ap_crypt_sha512(const char *password, char *out, size_t len);
  */
 int ap_request_realtime(int priority);
 
+/*
+ * A program on a pseudo-terminal (PHASE15 P15.4a) — Terminal's shell.
+ *
+ * In C because the child's half must be async-signal-safe (HANDOFF §2.25):
+ * after fork it only calls setsid, open, ioctl(TIOCSCTTY), dup2, close, execve
+ * and _exit. Everything it touches — the argv, the environment, the slave's
+ * path — is prepared by the caller or here before the fork. The master comes
+ * from posix_openpt, which is in libc on both FreeBSD and Linux (openpty is in
+ * libutil on one and libc on the other).
+ *
+ * `path` must be absolute; `argv` and `envp` are NULL-terminated. The master is
+ * returned close-on-exec and non-blocking. Returns the child's pid, or -1 with
+ * errno set (and no child).
+ */
+int ap_pty_spawn(const char *path, char *const argv[], char *const envp[],
+                 unsigned short rows, unsigned short cols, int *master_out);
+
+/* Tell the terminal its size (TIOCSWINSZ); the kernel sends the foreground
+ * process group SIGWINCH. Returns 0, or -1 with errno set. */
+int ap_pty_resize(int master, unsigned short rows, unsigned short cols);
+
 #endif /* ABYSS_CPLATFORM_H */
