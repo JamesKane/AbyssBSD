@@ -15,12 +15,12 @@ LinuxKPI platform bus, the component framework, runtime PM and platform IRQs).
       `qcom_geni_i2c` + `ds13rtc` for the RTC, and SD in `sdhci_acpi`.
 - [ ] `firmware` → drm-kmod-firmware `qcom` **`79f48aa`** (adds `qcomfw`,
       the Q8B's ADSP firmware).
-- [ ] `kmod/drm-msm` → drm-msm-kmod **`42228ff`** (imported up to `02f48c0`;
+- [ ] `kmod/drm-msm` → drm-msm-kmod **`0f23f29`** (imported up to `02f48c0`;
       missing everything since: Phase C, the msmfb display driver
-      `fc3e136`..`349d5ea` and DPMS `42228ff`, and GPU devfreq `412bc43`). The msm code at `02f48c0` won't run against the
+      `fc3e136`..`349d5ea` and DPMS `0f23f29`, and GPU devfreq `412bc43`). The msm code at `02f48c0` won't run against the
       Phase C kernel.
-- [ ] `ports/` → freebsd-ports `freedreno` **`dc55f92fa`** (copied from
-      `d80cb373e`): drm-msm-kmod at `42228ff`, PORTREVISION 13 (with the
+- [ ] `ports/` → freebsd-ports `freedreno` **`2e2e095be`** (copied from
+      `d80cb373e`): drm-msm-kmod at `0f23f29`, PORTREVISION 13 (with the
       power_profile hook), and the new `sysutils/qcom-dsp-firmware-kmod`.
 - [ ] Decide which copy of msm is canonical: `kmod/drm-msm`, or the
       standalone `JamesKane/drm-msm-kmod` repo that the port still fetches.
