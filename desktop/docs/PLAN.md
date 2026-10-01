@@ -77,8 +77,12 @@ toolkit: GTK** (decided 2026-09-30; the rule is in Context, above) — the Qt me
 authenticator, the lock, the idle policy, power, the login window, two users
 side by side and a Setup Assistant, all checked on the 12700KF except a resume,
 which this machine's kernel cannot do (BACKLOG §6).
-**Next is Phase 13, Islands, Shoals and Ebb — scoped 2026-10-01 in
-[PHASE13.md](PHASE13.md)** (P13.1–P13.8; its §6 decided).
+**Phase 13, Islands, Shoals and Ebb, is complete (2026-10-01)** ([PHASE13.md](PHASE13.md)):
+islands per display with a C6 switch that gates the build, the slide, Ebb in
+three scopes, Shoals and their strip, the menu bar's island menu, and an
+Islands pane. On the 12700KF, C6 holds unloaded. Under C2's adversaries it
+does not, because **C2 does not hold on metal** (HANDOFF §2.118, BACKLOG M.1),
+which is the next thing to fix.
 
 **Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
 medium boots, `amdgpu` binds, typing and the pointer work, and after five

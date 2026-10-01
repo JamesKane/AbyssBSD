@@ -374,6 +374,26 @@ Verified by `live-islands-pane.sh`, as the other panes are.
     recorder;
   - an Ebb opened and dismissed under the same load, with C1 held.
 
+✅ **P13.8, the gate, run 2026-10-01.**
+- **The harness:**
+  - `run.sh --live` green on Linux (881 s);
+  - `run.sh --vm --live --full` green in the 16 guest (2065 s), installs and
+    reboot included;
+  - the first run failed, as it should, on five goldens that P13.7 and the
+    pane removal moved; they were updated on purpose.
+- **C6 on the 12700KF** (DP-1, 2560x1440 at 60 Hz, a real vblank), measured
+  by undertow in the live session with `abyss/mk/metal-bench.sh c6`:
+  - **unloaded, it holds:** 152 switches, none over 2 frames, mean ~11 ms;
+  - **under C2's adversaries, 2–5 % of switches take 3–4 frames** in some
+    runs (none in others).
+- **The cause is C2 on metal, not islands** (HANDOFF §2.118). Run alone on
+  DRM, undertow misses 61–83 of 1800 frames with the adversaries in steady
+  state, against 0 without. The flood delays DRM's page-flip events by up to
+  70 ms, so the next commit is refused. Headless has no flip events to
+  delay, so the gating benches stay green.
+- **Phase 13 is complete** but for C6 under load on metal, which waits on
+  BACKLOG §1's "C2 on metal".
+
 ---
 
 ## 4. The spikes

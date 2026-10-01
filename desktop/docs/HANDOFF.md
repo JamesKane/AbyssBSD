@@ -730,6 +730,35 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.118 C2 does not hold on metal: a flood delays the page flip's news
+(PHASE13 P13.8, measuring C6 on the 12700KF.)
+
+C6 on DP-1, measured by undertow in the live session, with test clients built
+in the guest and run on the box over ssh:
+- **Unloaded, it holds:** 102 switches, 1 or 2 frames each, median 16 ms.
+  A real page flip makes 2 frames commoner than headless (median 9 ms there).
+- **Under C2's eleven adversaries, it does not:** 2–5 % of switches took
+  3–4 frames.
+
+The cause is below islands. undertow run alone on DRM for 1800 frames with a
+healthy window gave:
+
+| | missed | commits refused | present events late > ½ period | worst delivery |
+|---|---|---|---|---|
+| no adversaries | 0 | 2 of 2025 | 1 of 2023 | 19 ms |
+| adversaries, steady state | **61** | 45 | 63 of 1980 | **70 ms** |
+
+The flooders keep the event loop busy, and DRM's page-flip completion,
+delivered through the same loop, waits behind them. Until it is read, wlroots
+holds the output "flip pending", so the next commit is refused (PHASE4
+§5.13's mechanism, now under load). Headless has no flip events to delay,
+which is why `live-undertow-c2.sh` and `bench-islands.sh` are green while
+metal is not. **C2 as proved headless is not C2 on hardware.**
+
+The fix is undertow's: the backend's events (the DRM fd) served before a
+client's, or a client's dispatch bounded per frame. BACKLOG §1, "C2 on metal".
+`abyss/mk/metal-bench.sh c2|c6 [--no-adversaries]` measures both again.
+
 ### 2.117 A protocol's version is capped on both ends
 (PHASE13 P13.4, `abyss_menubar_v1` v3.)
 
