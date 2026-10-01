@@ -47,7 +47,7 @@ directory records what we found, so nobody has to find it again.
 | Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480), DPMS; sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |
-| SD card | Works: 50 MHz, 4-bit, 23 MB/s (PIO); hot-swap through the TLMM card-detect GPIO; no UHS, no DMA (ADMA2 only) | `sys/dev/sdhci/sdhci_acpi.c`, `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c` |
+| SD card | Works: 50 MHz, 4-bit, 24 MB/s, ADMA2 DMA; hot-swap through the TLMM card-detect GPIO; no UHS | `sys/dev/sdhci/sdhci_acpi.c`, `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c` |
 | RTC | Works: ST M41T11 on I²C bus 12, as a DS1307; sets the clock at boot | `sys/dev/iicbus/rtc/ds13rtc.c` |
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
@@ -87,14 +87,15 @@ directory records what we found, so nobody has to find it again.
   200 ms, so the card detaches when pulled and attaches when put back. One
   reinsertion of three attached the bus but found no card (probably a late
   contact bounce; sdhci debounces 0.5 s and doesn't retry);
-  `devctl detach mmc0; devctl attach mmc0` recovers it. Transfers are PIO,
-  though the apps SMMU isn't the obstacle: UEFI matches SD's stream 0x4e0
-  (SMR 2) to context bank 2 with translation off, so DMA addresses would be
-  physical. The controller's capabilities (`0x3629c8b2`) offer ADMA2 but not
-  SDMA, the only mode FreeBSD's sdhci implements, and forcing SDMA
-  (`hw.sdhci.quirk_set=2`) hangs the SoC at boot. At 50 MHz × 4 bits, PIO
-  reaches 23 MB/s, near the mode's ceiling, at one interrupt per 512-byte
-  block.
+  `devctl detach mmc0; devctl attach mmc0` recovers it. The controller's
+  capabilities (`0x3629c8b2`) offer ADMA2 but not SDMA, which was the only
+  mode FreeBSD's sdhci implemented; forcing SDMA (`hw.sdhci.quirk_set=2`)
+  hangs the SoC at boot. sdhci now uses ADMA2 on controllers without SDMA
+  (src `afe542b98a`): a `maxphys` bounce buffer below 4 GB and 32-bit
+  descriptors, one interrupt per request. UEFI matches SD's apps-SMMU stream
+  0x4e0 (SMR 2) to context bank 2 with translation off, so DMA addresses are
+  physical. Reading 256 MB takes 256 interrupts (PIO: 524,288) at the same
+  24 MB/s, the ceiling of 50 MHz × 4 bits.
 - **TLMM GPIOs (`\_SB.GIO0`, `QCOM060C`, `0xf100000`):** `qcom_tlmm_acpi`,
   228 pins, keyed on `\_SB.SOID` 449. The DSDT's GPIO consumers are
   Qualcomm's reference design (`PSUB` "QRD08280"): `acpi_gpiobus` would
