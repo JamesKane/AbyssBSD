@@ -442,7 +442,7 @@ let package = Package(
         // The supervisor itself: the Swift replacement for abyss/session.sh.
         .executableTarget(
             name: "anchor",
-            dependencies: ["Anchor", "CurrentIPC", "CPlatform", "Spawn"],
+            dependencies: ["Anchor", "CurrentIPC", "CPlatform", "Spawn", "PoolConfig"],
             path: "de/anchorbin"
         ),
         // Capsicum: entering capability mode, so the sandboxed client can prove

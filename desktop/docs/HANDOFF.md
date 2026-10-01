@@ -730,6 +730,23 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.112 A fresh config directory is a first login
+(PHASE16 P16.7, the Setup Assistant.)
+
+Every test that starts a desktop session under anchor gives it a fresh
+`ABYSS_CONFIG_DIR`, and since P16.7 that *is* an account's first login: the
+Setup Assistant opens. In `live-locksession.sh` its window covered the test's
+own blue window, and "before locking, the window is not on screen" failed.
+That is the product working. Tests that are not about the assistant pass
+`--without setup` (anchor's way of leaving a planned piece out). The live
+medium writes `setup.ini` (`how = medium`) into its account's home, because
+the stick is for trying the desktop.
+
+`setup.ini` is written when the assistant is finished or skipped, never when it
+is closed. Closing says nothing either way, so the next login asks again.
+That is a claim of `live-setup.sh`, and a fault that wrote it on close was
+caught.
+
 ### 2.111 Fast user switching — one password, and locked before it leaves
 (PHASE16 P16.6b.)
 

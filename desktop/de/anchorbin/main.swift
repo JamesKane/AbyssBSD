@@ -30,6 +30,7 @@
 // The session is controlled with `abyssctl status|quit`.
 
 import Anchor
+import PoolConfig
 import Spawn
 import CurrentIPC
 import CPlatform
@@ -61,6 +62,7 @@ func selfDirectory() -> String? {
 var compositorCmd: String?
 var display = ProcessInfoEnv("WAYLAND_DISPLAY")
 var lockSpec: ComponentSpec? = nil
+var firstRunSpec: ComponentSpec? = nil
 var menubarDisplay: String? = nil
 var explicitComponents: [(String, String)] = []
 var mode: SessionMode = .desktop
@@ -219,6 +221,7 @@ if explicitComponents.isEmpty {
                               menubarDisplay: menubarDisplay,
                               menubarSocket: menubarDisplay.flatMap(socketPath),
                               mode: mode,
+                              firstRunDone: SetupState.done(),
                               without: without)
     // Exported before anything is spawned, so **every** child inherits it —
     // including the applications the shell itself launches later, which is the
@@ -230,6 +233,7 @@ if explicitComponents.isEmpty {
     }
     specs = plan.components
     lockSpec = plan.lockScreen
+    firstRunSpec = plan.firstRun
 } else {
     for (name, cmd) in explicitComponents where !without.contains(name) {
         let argv = splitCommand(cmd)
@@ -254,5 +258,6 @@ let supervisor = Supervisor(
     compositor: compositorSpec,
     components: specs,
     lockScreen: lockSpec,
+    firstRun: firstRunSpec,
     policy: RestartPolicy(maxConsecutiveFailures: maxRestarts))
 exit(supervisor.run())

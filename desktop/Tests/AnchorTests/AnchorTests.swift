@@ -221,6 +221,21 @@ final class AnchorTests: XCTestCase {
         XCTAssertNil(p.busAddress)
     }
 
+    /// The Setup Assistant (PHASE16 P16.7): planned once, at a first login,
+    /// in a desktop session only — and not a component, so never restarted.
+    func testTheSetupAssistantIsPlannedOnlyUntilItIsDone() {
+        func p(done: Bool, mode: SessionMode = .desktop, without: Set<String> = []) -> SessionPlan {
+            defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss", dbusDaemon: nil,
+                           runtimeDir: "/run/abyss", display: "abyss-0", mode: mode, firstRunDone: done, without: without)
+        }
+        XCTAssertEqual(p(done: false).firstRun?.env["AQUA_SCENE"], "setupassistant")
+        XCTAssertFalse(p(done: false).components.contains { $0.name == "setup" }, "not a component")
+        XCTAssertNil(p(done: true).firstRun)
+        XCTAssertNil(p(done: false, mode: .greeter).firstRun, "the login window sets nothing up")
+        XCTAssertNil(p(done: false, mode: .installer).firstRun)
+        XCTAssertNil(p(done: false, without: ["setup"]).firstRun)
+    }
+
     func testTheDesktopSessionIsUnchangedByTheNewMode() {
         // The default is still what it was: a regression here is a desktop that
         // boots without its Dock.

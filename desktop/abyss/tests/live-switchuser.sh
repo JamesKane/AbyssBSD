@@ -67,7 +67,7 @@ echo \$\$ > "$work/session.\$who.pid"
 echo "\$ABYSS_SESSION_MODE \$USER run=\$ABYSS_RUNTIME_DIR" >> "$work/record"
 sock=abyss-\$who-$$
 if [ "\$ABYSS_SESSION_MODE" = greeter ]; then without=""; else
-  without="--without bus --without portal --without bridge --without menus --without dock --without menubar"; fi
+  without="--without bus --without portal --without bridge --without menus --without dock --without setup --without menubar"; fi
 exec "$bin/anchor" --mode "\$ABYSS_SESSION_MODE" --runtime-dir "\$ABYSS_RUNTIME_DIR" --binary "$bin/AquaDemo" \\
   --compositor "$bin/undertow run --hz 60 --frames 0 --width 800 --height 600 --socket \$sock --config-dir $work/cfg" \\
   --display "\$sock" \$without

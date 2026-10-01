@@ -279,6 +279,9 @@ if [ "$live" -eq 1 ]; then
   # behind the window, back to one with no password at the window.
   echo "== fast user switching =="
   quiet "$root/abyss/tests/live-switchuser.sh"
+  # The Setup Assistant (P16.7): once at a first login, then never.
+  echo "== the Setup Assistant =="
+  quiet "$root/abyss/tests/live-setup.sh"
   # Accounts (P16.6a): through the settings helper, against a scratch root,
   # and through the Accounts pane, clicked and typed.
   echo "== accounts =="

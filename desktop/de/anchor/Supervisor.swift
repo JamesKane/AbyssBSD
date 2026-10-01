@@ -57,6 +57,9 @@ public final class Supervisor {
     // (undertow keeps it so), and the new lock screen takes the abandoned lock
     // over, so the person at the desk gets a password field back.
     private let lockScreen: ComponentSpec?
+    /// The Setup Assistant (P16.7): started once after bring-up, not restarted.
+    private let firstRun: ComponentSpec?
+    private var firstRunChild = ap_child(fd: -1, pid: -1)
     private var lockChild = ap_child(fd: -1, pid: -1)
     private var lockPipe: Int32 = -1
     private var lockPending: [UInt8] = []
@@ -74,10 +77,12 @@ public final class Supervisor {
     public init(compositor: ComponentSpec?,
                 components: [ComponentSpec],
                 lockScreen: ComponentSpec? = nil,
+                firstRun: ComponentSpec? = nil,
                 policy: RestartPolicy = RestartPolicy()) {
         self.compositor = compositor
         self.components = components.map(Running.init)
         self.lockScreen = lockScreen
+        self.firstRun = firstRun
         self.policy = policy
     }
 
@@ -218,6 +223,16 @@ public final class Supervisor {
         }
         if signalFD < 0 { log("warning: no signal pipe — Ctrl-C won't tear down cleanly") }
         log("session is live (\(components.count) component(s))")
+        // The Setup Assistant, once, now that there is a desktop to set up.
+        if let spec = firstRun {
+            if spec.requires.allSatisfy({ waitForSocket($0, seconds: dependencyTimeout) }),
+               let c = try? spawn(spec) {
+                firstRunChild = c
+                log("the Setup Assistant is up (first login)")
+            } else {
+                log("the Setup Assistant could not start — the desktop runs without it")
+            }
+        }
     }
 
     /// The event loop: children, the control socket and signals all arrive as
@@ -247,6 +262,10 @@ public final class Supervisor {
                 fds.append(pollfd(fd: lockPipe, events: Int16(POLLIN), revents: 0))
                 owners.append(-5)
             }
+            if firstRunChild.fd >= 0 {
+                fds.append(pollfd(fd: firstRunChild.fd, events: exitEvents, revents: 0))
+                owners.append(-6)
+            }
             if signalFD >= 0 {
                 fds.append(pollfd(fd: signalFD, events: Int16(POLLIN), revents: 0))
                 owners.append(-3)
@@ -269,6 +288,11 @@ public final class Supervisor {
                 case -3: handleSignal(); if stopping { return }
                 case -4: lockExited(); if stopping { return }
                 case -5: drainLock()
+                case -6:
+                    // Finished, skipped or closed: it is not a component, and
+                    // is not restarted — the next login decides from setup.ini.
+                    _ = ap_child_reap(&firstRunChild, nil)
+                    log("the Setup Assistant has closed")
                 default: componentExited(components[owners[i]]); if stopping { return }
                 }
             }
@@ -487,6 +511,10 @@ public final class Supervisor {
             _ = ap_child_signal(&lockChild, SIGTERM)
             anyLive = true
         }
+        if firstRunChild.fd >= 0 {
+            _ = ap_child_signal(&firstRunChild, SIGTERM)
+            anyLive = true
+        }
         if compositorChild.fd >= 0 {
             _ = ap_child_signal(&compositorChild, SIGTERM)
             anyLive = true
@@ -496,6 +524,7 @@ public final class Supervisor {
         }
         for r in components where r.isUp { _ = ap_child_reap(&r.child, nil) }
         if lockChild.fd >= 0 { _ = ap_child_reap(&lockChild, nil) }
+        if firstRunChild.fd >= 0 { _ = ap_child_reap(&firstRunChild, nil) }
         if lockPipe >= 0 { close(lockPipe); lockPipe = -1 }
         if compositorChild.fd >= 0 { _ = ap_child_reap(&compositorChild, nil) }
         control?.shutdownAndUnlink()

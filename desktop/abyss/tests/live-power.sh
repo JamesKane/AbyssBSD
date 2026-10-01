@@ -122,7 +122,7 @@ mkfifo "$work/vp" "$work/vk"
 await "$work/vk.log" ready "vkeyboard never bound"
 
 "$bin/anchor" --display "$wd" --menubar-display "$priv" --runtime-dir "$rt" --binary "$bin/AquaDemo" \
-    --without bus --without portal --without bridge --without menus --without desktop --without dock \
+    --without bus --without portal --without bridge --without menus --without desktop --without dock --without setup \
     > "$work/session.log" 2>&1 &
 an=$!
 await "$work/session.log" 'abyss-idle: watching for the machine' "the session's agent never watched the daemon"

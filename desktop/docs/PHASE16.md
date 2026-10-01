@@ -338,6 +338,24 @@ installer's hub-and-spoke shape (§6.5). *Verified:* a fresh account sees it
 once, its choices are written where the panes read them, and the second login
 goes straight to the desktop.
 
+✅ **P16.7 done 2026-10-01.**
+- **The assistant:** `AQUA_SCENE=setupassistant` (`SetupAssistant.swift`):
+  Welcome, Network (the connection in a sentence, and Open Network
+  Preferences…, which opens System Preferences at a pane via
+  `ABYSS_PREFS_PANE`), Appearance (the installed themes; a choice is written
+  to `appearance.ini` and the session redraws), All Set. Skip Setup on every
+  page.
+- **Once:** `SetupState` (`setup.ini`, the account's own) is written on
+  finishing or skipping, **not** on closing, so a closed assistant asks again.
+  anchor plans it (`SessionPlan.firstRun`) in a desktop session until then,
+  starts it once after the session is up, and never restarts it. The live
+  medium's account has it marked done (`how = medium`): the stick is for
+  trying, not setting up.
+- **Tests:** `live-setup.sh` (5 claims), 4 unit tests, four faults injected and
+  caught. Five session tests opt out with `--without setup`; a fresh config
+  directory is a first login, and the assistant's window covered one test's
+  own.
+
 **P16.8 — the gate.** Both lanes, `--full`, and the metal checks the harness
 cannot make: a real suspend/resume, a lid, a VT switch.
 

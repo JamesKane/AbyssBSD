@@ -163,6 +163,15 @@ if let watch = appearance {
 // data pointers — alive. Discarding it (e.g. `guard let _ =`) frees the surface
 // before the first configure event and crashes in the listener callback.
 // withExtendedLifetime pins it across run().
+if sceneName == "setupassistant" {
+    // The Setup Assistant (PHASE16 P16.7): an account's first login.
+    guard let app = SetupAssistantApp(display: display) else {
+        print("AquaDemo: could not open the Setup Assistant."); exit(1)
+    }
+    app.onQuit = { display.stop() }
+    withExtendedLifetime(app) { display.run() }
+    exit(0)
+}
 if sceneName == "systemprofiler" {
     // System Profiler: what this computer is, fastfetch's report in a window.
     guard let app = SystemProfilerApp(display: display) else {

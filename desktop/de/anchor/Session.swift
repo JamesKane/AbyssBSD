@@ -65,6 +65,9 @@ public struct SessionPlan: Equatable, Sendable {
     /// display — the only one offered the session lock when there is one —
     /// and restarted by anchor if it dies while the session is locked.
     public var lockScreen: ComponentSpec?
+    /// The Setup Assistant (PHASE16 P16.7): started once, after the session
+    /// is up, at an account's first login; never restarted.
+    public var firstRun: ComponentSpec?
 
     /// Exported to every child, with `busAddress`: what applications this
     /// session starts — not only its own components — need to know about it.
@@ -150,6 +153,7 @@ public func defaultSession(shellBinary: String,
                            menubarDisplay: String? = nil,
                            menubarSocket: String? = nil,
                            mode: SessionMode = .desktop,
+                           firstRunDone: Bool = true,
                            without asked: Set<String> = []) -> SessionPlan {
     // The login window's session serves nobody: no bus, no portal, no bridge.
     let without = mode == .greeter ? asked.union(["bus", "portal", "bridge", "menus"]) : asked
@@ -286,6 +290,13 @@ public func defaultSession(shellBinary: String,
 
     var plan = SessionPlan(components: components, busAddress: busAddress, notes: notes)
     plan.lockScreen = lockScreen
+    if mode == .desktop, !firstRunDone, !without.contains("setup") {
+        var env = shared
+        env["AQUA_SCENE"] = "setupassistant"
+        env["ABYSS_APP_BINARY"] = shellBinary
+        plan.firstRun = ComponentSpec(name: "setup", argv: [shellBinary], env: env,
+                                      requires: compositorSocket.map { [$0] } ?? [])
+    }
     return plan
 }
 

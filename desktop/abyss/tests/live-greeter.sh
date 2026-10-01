@@ -65,7 +65,7 @@ echo \$\$ > "$work/session.\$ABYSS_SESSION_MODE.pid"
 echo "\$ABYSS_SESSION_MODE \$(id -un) uid=\$(id -u) run=\$ABYSS_RUNTIME_DIR owner=\$(ls -ld "\$ABYSS_RUNTIME_DIR" | awk '{print \$3}') mode=\$(ls -ld "\$ABYSS_RUNTIME_DIR" | cut -c1-10)" >> "$work/record"
 sock=abyss-\$ABYSS_SESSION_MODE-$$
 if [ "\$ABYSS_SESSION_MODE" = greeter ]; then without=""; else
-  without="--without bus --without portal --without bridge --without menus --without dock --without menubar"; fi
+  without="--without bus --without portal --without bridge --without menus --without dock --without setup --without menubar"; fi
 exec "$bin/anchor" --mode "\$ABYSS_SESSION_MODE" --runtime-dir "\$ABYSS_RUNTIME_DIR" --binary "$bin/AquaDemo" \\
   --compositor "$bin/undertow run --hz 60 --frames 0 --width 800 --height 600 --socket \$sock --config-dir $work" \\
   --display "\$sock" \$without

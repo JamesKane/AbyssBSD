@@ -474,6 +474,11 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if soundTimer >= 0 {
             display.addFileDescriptor(soundTimer) { [weak self] in self?.soundTick() }
         }
+        // ABYSS_PREFS_PANE=<id>: open at that pane — the Setup Assistant's
+        // "Open Network Preferences…" (P16.7).
+        if let id = getenv("ABYSS_PREFS_PANE").map({ String(cString: $0) }), PrefCatalogue.pane(id: id) != nil {
+            show(.pane(id))
+        }
     }
 
     static func log(_ s: String) {

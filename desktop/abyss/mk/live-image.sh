@@ -1175,6 +1175,11 @@ export ABYSS_RUNTIME_DIR
 PATH=$PATH:/usr/local/bin
 export PATH
 PROF
+# The live account is new at every boot, and is nobody's: the Setup Assistant
+# (PHASE16 P16.7) is for an installed account's first login, not for everyone
+# who tries the stick.
+sudo mkdir -p "$stage/home/abyss/.config/abyss"
+printf '[setup]\ndone = true\nhow = medium\n' | sudo tee "$stage/home/abyss/.config/abyss/setup.ini" > /dev/null
 sudo chown -R 1001:1001 "$stage/home/abyss"
 sudo pwd_mkdb -p -d "$stage/etc" "$stage/etc/master.passwd"
 
