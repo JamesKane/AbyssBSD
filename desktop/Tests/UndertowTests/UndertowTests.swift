@@ -587,6 +587,31 @@ final class UndertowTests: XCTestCase {
         }
     }
 
+    /// Ctrl-Alt-F*n* through the keymap undertow gives a keyboard: the symbol
+    /// it translates to is the VT. On the metal box it was the only way to a
+    /// command line, and the medium had no switch at all.
+    func testCtrlAltFnAsksForThatVirtualTerminal() {
+        withXKBLayout(nil) {
+            withBareKeyboard { kb in
+                Seat.giveKeymap(to: kb, rcConf: [])
+                guard let km = kb.pointee.keymap, let st = kb.pointee.xkb_state else { return XCTFail("no keymap") }
+                let ctrl = xkb_keymap_mod_get_index(km, "Control"), alt = xkb_keymap_mod_get_index(km, "Mod1")
+                let held = (UInt32(1) << ctrl) | (UInt32(1) << alt)
+                xkb_state_update_mask(st, held, 0, 0, 0, 0, 0)
+                func sym(_ evdev: UInt32) -> [UInt32] {
+                    var syms: UnsafePointer<xkb_keysym_t>? = nil
+                    let n = xkb_state_key_get_syms(st, evdev + 8, &syms)
+                    return (0..<Int(max(n, 0))).map { syms![$0] }
+                }
+                XCTAssertEqual(VTSwitch.vt(for: sym(59)), 1, "Ctrl-Alt-F1")      // KEY_F1
+                XCTAssertEqual(VTSwitch.vt(for: sym(60)), 2, "Ctrl-Alt-F2")
+                XCTAssertEqual(VTSwitch.vt(for: sym(88)), 12, "Ctrl-Alt-F12")    // KEY_F12
+                xkb_state_update_mask(st, 0, 0, 0, 0, 0, 0)
+                XCTAssertNil(VTSwitch.vt(for: sym(60)), "F2 alone is the application's")
+            }
+        }
+    }
+
     /// Run with `XKB_DEFAULT_LAYOUT` set to a value, or unset, and put back
     /// whatever was there. **The dev box's own desktop session exports
     /// `XKB_DEFAULT_LAYOUT=us`**, and it outranks rc.conf by design — so a test

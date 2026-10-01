@@ -217,6 +217,11 @@ and caught (HANDOFF §2.105). The metal cycle on the 12700KF is still to do.
 - `live-power.sh` grew to 10 claims; `live-authenticator.sh` checks the real
   daemon refuses button reports from anyone but root. Five faults injected
   and caught.
+- **Found on the 12700KF (HANDOFF §2.114):** a VT switch destroys every DRM
+  output in wlroots 0.20, and undertow aborted. It now gives up its outputs and
+  takes them up again by name. Ctrl-Alt-F*n* switches VTs (unlocked only), and
+  the live medium writes its address into `/etc/issue`, so the console on
+  Ctrl-Alt-F2 shows it. Fast user switching on metal depended on the same fix.
 - **Corrected by the `--full` gate (HANDOFF §2.113):** devd hears only a
   control-method power button (PNP0C0C). The fixed-feature button most PCs
   have tells the kernel alone, so the daemon now takes the button over only

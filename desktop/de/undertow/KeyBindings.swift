@@ -41,6 +41,24 @@ public struct KeyModifiers: OptionSet, Sendable, Hashable {
 }
 
 /// What a bound key does.
+/// Ctrl-Alt-F*n*: the virtual terminal it asks for, or nil.
+///
+/// Not a binding in the table, because it is not the desktop's to rebind: it is
+/// how a person leaves the desktop for a text console, and on the live medium
+/// it is the *only* way to a command line (the metal box had no other; the
+/// address it printed at boot was under the desktop). xkb's `pc` symbols
+/// already turn Ctrl-Alt-F*n* into `XF86Switch_VT_n`, so this is a range check
+/// on the translated symbol, and any layout that keeps those symbols works.
+public enum VTSwitch {
+    static let first: UInt32 = 0x1008FE01   // XKB_KEY_XF86Switch_VT_1
+    static let last: UInt32 = 0x1008FE0C    // XKB_KEY_XF86Switch_VT_12
+
+    public static func vt(for syms: [UInt32]) -> UInt32? {
+        for s in syms where s >= first && s <= last { return s - first + 1 }
+        return nil
+    }
+}
+
 public enum KeyAction: Equatable, Sendable {
     case nextWindow
     case previousWindow

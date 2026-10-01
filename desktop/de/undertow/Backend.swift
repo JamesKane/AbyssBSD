@@ -127,9 +127,32 @@ public final class WlrootsSession {
     let renderer: UnsafeMutablePointer<wlr_renderer>
     let allocator: UnsafeMutablePointer<wlr_allocator>
 
-    /// Outputs the backend has announced, in arrival order.
+    /// Outputs the backend has announced, in arrival order — and only the ones
+    /// that still exist.
     public private(set) var outputs: [UnsafeMutablePointer<wlr_output>] = []
     private var newOutputListener: UnsafeMutablePointer<tw_listener>?
+    /// One destroy listener per output, freed when it fires.
+    private var outputDestroyListeners: [UInt: UnsafeMutablePointer<tw_listener>] = [:]
+    /// Set once the outputs found at start are configured. After that, an
+    /// output that arrives is configured as it arrives.
+    private var started = false
+
+    /// **Outputs come and go while we run** (P16, found on metal). wlroots 0.20
+    /// destroys every DRM output when the session is paused — a VT switch,
+    /// Ctrl-Alt-F2, or fast user switching — and announces new ones when it
+    /// comes back (`backend/drm/backend.c`, `handle_session_active`). A monitor
+    /// unplugged and plugged in again is the same pair of events. undertow
+    /// assumed its outputs lived for ever, and the first VT switch on the
+    /// 12700KF aborted it in `wlr_output_finish` with its present listener
+    /// still attached.
+    ///
+    /// `onOutputRemoved` runs inside the output's destroy, **before** wlroots
+    /// finishes it: every holder lets go there. `onOutputAdded` runs once a
+    /// late output is configured and has its global.
+    public var onOutputRemoved: ((UnsafeMutablePointer<wlr_output>) -> Void)?
+    public var onOutputAdded: ((UnsafeMutablePointer<wlr_output>) -> Void)?
+    public private(set) var outputsLost = 0
+    public private(set) var outputsReturned = 0
     /// Input devices the backend announced while it started, before anything
     /// that handles input existed. `Seat` adopts them (`takeStartupInputs`).
     private var startupInputs: [UnsafeMutablePointer<wlr_input_device>] = []
@@ -230,7 +253,7 @@ public final class WlrootsSession {
         newOutputListener = tw_listen(&b.pointee.events.new_output, { ctx, data in
             guard let ctx, let data else { return }
             let s = Unmanaged<WlrootsSession>.fromOpaque(ctx).takeUnretainedValue()
-            s.outputs.append(data.assumingMemoryBound(to: wlr_output.self))
+            s.adopt(data.assumingMemoryBound(to: wlr_output.self))
         }, me)
         // **And inputs, for the same reason** (PHASE4 §5.11). libinput announces
         // every device present at start from inside `wlr_backend_start`, and
@@ -269,41 +292,145 @@ public final class WlrootsSession {
         // Give every output a renderer and a mode. Until this commit lands, an
         // output has no buffers and `begin_render_pass` has nothing to draw to.
         for (index, out) in outputs.enumerated() {
-            guard wlr_output_init_render(out, allocator, renderer) else {
-                throw BackendError.renderInitFailed
-            }
-            var state = wlr_output_state()
-            wlr_output_state_init(&state)
-            wlr_output_state_set_enabled(&state, true)
-            switch kind {
-            case .headless(let sizes, let hz):
-                let sz = sizes[min(index, sizes.count - 1)]
-                wlr_output_state_set_custom_mode(&state, sz.width, sz.height, hz)
-            case .auto:
-                // **Take the display's own preferred mode.** A custom mode is
-                // what a headless output needs and what a real one is entitled
-                // to refuse: a monitor has a native resolution and a refresh
-                // rate it was built for, and asking a panel for 1024x768 at
-                // 60.000Hz is asking it to scale. Some connectors report no
-                // modes at all (nothing plugged in, or a virtual connector), in
-                // which case there is nothing to set and the commit still
-                // enables it.
-                if let mode = wlr_output_preferred_mode(out) {
-                    wlr_output_state_set_mode(&state, mode)
-                }
-            }
-            let ok = wlr_output_commit_state(out, &state)
-            wlr_output_state_finish(&state)
-            guard ok else { throw BackendError.modeRejected }
+            try configure(out, index: index)
+        }
+        started = true
+    }
 
-            // **Advertise the output to clients.** Without this global there is
-            // no `wl_output` on the bus at all: a client asking "what displays
-            // are there?" is told none. It is easy to miss because the things
-            // that break are the things that *ask* — screencopy ("the
-            // compositor advertised no outputs"), and per-output HiDPI scale,
-            // which Phase 1 built and which would silently stay at 1x. Ordinary
-            // windows and layer surfaces never notice.
-            wlr_output_create_global(out, display)
+    /// A renderer, a mode, and a global — for an output found at start, and
+    /// for one that arrives later (a VT come back, a monitor plugged in).
+    private func configure(_ out: UnsafeMutablePointer<wlr_output>, index: Int,
+                           size: HeadlessSize? = nil) throws {
+        guard wlr_output_init_render(out, allocator, renderer) else {
+            throw BackendError.renderInitFailed
+        }
+        var state = wlr_output_state()
+        wlr_output_state_init(&state)
+        wlr_output_state_set_enabled(&state, true)
+        switch kind {
+        case .headless(let sizes, let hz):
+            let sz = size ?? sizes[min(index, sizes.count - 1)]
+            wlr_output_state_set_custom_mode(&state, sz.width, sz.height, hz)
+        case .auto:
+            // **Take the display's own preferred mode.** A custom mode is
+            // what a headless output needs and what a real one is entitled
+            // to refuse: a monitor has a native resolution and a refresh
+            // rate it was built for, and asking a panel for 1024x768 at
+            // 60.000Hz is asking it to scale. Some connectors report no
+            // modes at all (nothing plugged in, or a virtual connector), in
+            // which case there is nothing to set and the commit still
+            // enables it.
+            if let mode = wlr_output_preferred_mode(out) {
+                wlr_output_state_set_mode(&state, mode)
+            }
+        }
+        let ok = wlr_output_commit_state(out, &state)
+        wlr_output_state_finish(&state)
+        guard ok else { throw BackendError.modeRejected }
+
+        // **Advertise the output to clients.** Without this global there is
+        // no `wl_output` on the bus at all: a client asking "what displays
+        // are there?" is told none. It is easy to miss because the things
+        // that break are the things that *ask* — screencopy ("the
+        // compositor advertised no outputs"), and per-output HiDPI scale,
+        // which Phase 1 built and which would silently stay at 1x. Ordinary
+        // windows and layer surfaces never notice.
+        wlr_output_create_global(out, display)
+    }
+
+    /// Every output the backend announces, at start or later.
+    private func adopt(_ out: UnsafeMutablePointer<wlr_output>) {
+        outputs.append(out)
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        outputDestroyListeners[UInt(bitPattern: out)] = tw_listen(&out.pointee.events.destroy, { ctx, data in
+            guard let ctx, let data else { return }
+            Unmanaged<WlrootsSession>.fromOpaque(ctx).takeUnretainedValue()
+                .lose(data.assumingMemoryBound(to: wlr_output.self))
+        }, me)
+        guard started else { return }
+        // The stand-in VT's way back: the same name and size as before, as a
+        // DRM connector has when its session resumes.
+        var size: HeadlessSize? = nil
+        if !standInReturning.isEmpty {
+            let r = standInReturning.removeFirst()
+            r.name.withCString { wlr_output_set_name(out, $0) }
+            size = r.size
+        }
+        let name = String(cString: out.pointee.name)
+        do {
+            try configure(out, index: outputs.count - 1, size: size)
+        } catch {
+            Compositor.log("output \(name) arrived and could not be configured: \(error)")
+            return
+        }
+        outputsReturned &+= 1
+        onOutputAdded?(out)
+    }
+
+    /// An output going away. Runs inside wlroots' destroy signal, which allows
+    /// a listener to remove itself.
+    private func lose(_ out: UnsafeMutablePointer<wlr_output>) {
+        outputsLost &+= 1
+        onOutputRemoved?(out)
+        outputs.removeAll { $0 == out }
+        if let l = outputDestroyListeners.removeValue(forKey: UInt(bitPattern: out)) {
+            tw_listener_free(l)
+        }
+    }
+
+    // MARK: - The stand-in VT (for tests)
+
+    /// What a headless output was, so `back` can bring it back as itself.
+    private var standInAway: [(name: String, size: HeadlessSize)] = []
+    private var standInReturning: [(name: String, size: HeadlessSize)] = []
+    private var standInVTFd: Int32 = -1
+    private var standInVTSource: OpaquePointer?
+    private var standInVTBuffer: [UInt8] = []
+
+    /// `--stand-in-vt FIFO`: a line `away` does to the headless outputs what
+    /// wlroots does to DRM ones when the VT is switched away — destroys them
+    /// all — and `back` announces them again, by the same names. Headless only:
+    /// a real session has a real VT.
+    public func addStandInVT(fifo: String) -> Bool {
+        guard case .headless = kind, standInVTFd < 0 else { return false }
+        let fd = open(fifo, O_RDWR | O_NONBLOCK)   // RDWR: never sees EOF between writers
+        guard fd >= 0 else { return false }
+        standInVTFd = fd
+        standInVTSource = wl_event_loop_add_fd(eventLoop, fd, UInt32(WL_EVENT_READABLE), { _, _, data in
+            guard let data else { return 0 }
+            Unmanaged<WlrootsSession>.fromOpaque(data).takeUnretainedValue().readStandInVT()
+            return 0
+        }, Unmanaged.passUnretained(self).toOpaque())
+        return true
+    }
+
+    private func readStandInVT() {
+        var buf = [UInt8](repeating: 0, count: 256)
+        let n = read(standInVTFd, &buf, buf.count)
+        guard n > 0 else { return }
+        standInVTBuffer += buf[0..<n]
+        while let nl = standInVTBuffer.firstIndex(of: 10) {
+            let line = String(decoding: standInVTBuffer[..<nl], as: UTF8.self)
+            standInVTBuffer.removeSubrange(...nl)
+            switch line {
+            case "away":
+                guard standInAway.isEmpty else { continue }
+                for o in outputs {
+                    standInAway.append((String(cString: o.pointee.name),
+                                        HeadlessSize(o.pointee.width, o.pointee.height)))
+                }
+                Compositor.log("stand-in VT: away — every output destroyed, as DRM's are")
+                for o in outputs { wlr_output_destroy(o) }
+            case "back":
+                Compositor.log("stand-in VT: back — the outputs announced again")
+                standInReturning = standInAway
+                standInAway = []
+                for r in standInReturning {
+                    _ = wlr_headless_add_output(backend, UInt32(r.size.width), UInt32(r.size.height))
+                }
+            default:
+                continue
+            }
         }
     }
 
@@ -319,7 +446,22 @@ public final class WlrootsSession {
     deinit {
         tw_listener_free(startupInputListener)
         tw_listener_free(newOutputListener)
+        // Before the display goes, which destroys the outputs: a destroy
+        // listener firing into a session mid-deinit is §2.35 again.
+        for l in outputDestroyListeners.values { tw_listener_free(l) }
+        outputDestroyListeners = [:]
+        if let src = standInVTSource { wl_event_source_remove(src) }
+        if standInVTFd >= 0 { close(standInVTFd) }
         wl_display_destroy(display)
+    }
+
+    /// Switch to virtual terminal `vt` (Ctrl-Alt-F*n*). False with no session
+    /// to ask — headless, or nested in another compositor — which is how the
+    /// key is left to the client there instead of eaten.
+    @discardableResult
+    public func changeVT(_ vt: UInt32) -> Bool {
+        guard let session else { return false }
+        return wlr_session_change_vt(session, vt)
     }
 
     /// The output called `name`, if the backend has one.
@@ -344,7 +486,14 @@ public final class WlrootsSession {
 /// stay stable, which is the same lifetime rule as every other listener in this
 /// codebase (HANDOFF §2.2).
 public final class WlrootsOutput: Output {
-    private let output: UnsafeMutablePointer<wlr_output>
+    /// The wlroots output, while it exists. **Nil while the VT is away** (or
+    /// the monitor unplugged): wlroots has destroyed it, and this object —
+    /// which the scene, the metronome and the loop all hold — waits, drawing
+    /// nothing, for one of the same name to come back (`attach`).
+    private var output: UnsafeMutablePointer<wlr_output>?
+    /// The connector's name, which outlives any one `wlr_output` for it.
+    public let name: String
+    private var lastWidth: Int32, lastHeight: Int32
     private let session: WlrootsSession
     private let events = OutputEvents()
     private var presentListener: UnsafeMutablePointer<tw_listener>?
@@ -400,6 +549,9 @@ public final class WlrootsOutput: Output {
 
     public init(_ output: UnsafeMutablePointer<wlr_output>, session: WlrootsSession) {
         self.output = output
+        self.name = String(cString: output.pointee.name)
+        self.lastWidth = output.pointee.width
+        self.lastHeight = output.pointee.height
         self.session = session
         // wlroots reports refresh in mHz. A headless output with no mode set
         // reports 0, in which case 60Hz is the honest guess — and the predictor
@@ -407,7 +559,37 @@ public final class WlrootsOutput: Output {
         // not correctness.
         let mHz = output.pointee.refresh
         periodHintNs = mHz > 0 ? UInt64(1_000_000_000_000 / Int64(mHz)) : 16_666_666
+        listen(to: output)
+    }
 
+    /// Whether this is the object for `o`.
+    public func isBound(to o: UnsafeMutablePointer<wlr_output>) -> Bool { output == o }
+    /// Whether there is an output to draw on.
+    public var attached: Bool { output != nil }
+
+    /// Its output is being destroyed (inside wlroots' destroy signal): let go
+    /// of it, and of flips it will never report.
+    public func detach() {
+        tw_listener_free(presentListener)
+        presentListener = nil
+        output = nil
+        refusedPending = 0
+        while events.pop() != nil {}
+    }
+
+    /// One of the same name is back: draw on it. If the displays were asleep
+    /// when it went, it goes back to sleep — the new output starts enabled.
+    public func attach(_ o: UnsafeMutablePointer<wlr_output>) {
+        output = o
+        lastWidth = o.pointee.width
+        lastHeight = o.pointee.height
+        gridEpoch = 0
+        listen(to: o)
+        _ = refreshPeriod()
+        if asleep { asleep = false; setAsleep(true) }
+    }
+
+    private func listen(to output: UnsafeMutablePointer<wlr_output>) {
         let me = Unmanaged.passUnretained(self).toOpaque()
         presentListener = tw_listen(&output.pointee.events.present, { ctx, data in
             guard let ctx, let data else { return }
@@ -439,15 +621,15 @@ public final class WlrootsOutput: Output {
     /// period changed.
     @discardableResult
     public func refreshPeriod() -> Bool {
+        guard let output else { return false }
         let mHz = output.pointee.refresh
         let p = mHz > 0 ? UInt64(1_000_000_000_000 / Int64(mHz)) : periodHintNs
         defer { periodHintNs = p }
         return p != periodHintNs
     }
 
-    public var name: String { String(cString: output.pointee.name) }
-    public var width: Int32 { output.pointee.width }
-    public var height: Int32 { output.pointee.height }
+    public var width: Int32 { output?.pointee.width ?? lastWidth }
+    public var height: Int32 { output?.pointee.height ?? lastHeight }
 
     /// Off while the displays sleep (U.9). On metal that is the CRTC, and the
     /// monitor goes to standby; nothing is drawn or committed until it wakes.
@@ -459,7 +641,7 @@ public final class WlrootsOutput: Output {
         wlr_output_state_init(&state)
         defer { wlr_output_state_finish(&state) }
         wlr_output_state_set_enabled(&state, !on)
-        if !wlr_output_commit_state(output, &state) {
+        if let output, !wlr_output_commit_state(output, &state) {
             Compositor.log("\(name): could not turn \(on ? "off" : "on")")
         }
         asleep = on
@@ -468,7 +650,7 @@ public final class WlrootsOutput: Output {
     /// Render and commit a frame. Fire-and-forget: `wlr_output_commit_state`
     /// queues the flip, and `present` reports back later.
     public func submit(target: UInt64, at now: UInt64) {
-        guard !asleep else { return }
+        guard !asleep, let output else { return }
         var state = wlr_output_state()
         wlr_output_state_init(&state)
         defer { wlr_output_state_finish(&state) }
@@ -572,6 +754,7 @@ public final class WlrootsOutput: Output {
     /// distinguishes "measured against our own clock" from "measured against
     /// somebody else's".
     public var backendName: String {
+        guard let output else { return "gone" }
         if wlr_output_is_drm(output) { return "drm" }
         if wlr_output_is_wl(output) { return "nested-wayland" }
         if wlr_output_is_x11(output) { return "nested-x11" }
@@ -620,6 +803,10 @@ public final class WlrootsOutput: Output {
     /// capture is the frame we actually drew rather than a re-render into a
     /// buffer we hoped was compatible.
     public func capturePPM(path: String) -> Bool {
+        guard let output else {
+            fail("the output is gone (VT away, or unplugged)")
+            return false
+        }
         var state = wlr_output_state()
         wlr_output_state_init(&state)
         defer { wlr_output_state_finish(&state) }

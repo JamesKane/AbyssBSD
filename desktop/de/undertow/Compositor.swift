@@ -713,6 +713,43 @@ public final class Compositor {
         }
     }
 
+    /// Layer surfaces whose output went away, with the name they were on, so
+    /// they go back to it when it returns (P16: a VT switched away and back).
+    private var orphanedLayers: [(layer: LayerSurface, name: String)] = []
+
+    /// An output is being destroyed (inside wlroots' destroy signal). wlroots
+    /// takes it out of the output layout and destroys lock surfaces on it
+    /// itself; **a layer surface it leaves pointing at it**, so the menu bar,
+    /// the Dock and the desktop picture are parked — no output — until it is
+    /// back. Their clients never hear of it: the display was not unplugged
+    /// from the desktop's point of view, the VT was only switched.
+    public func outputLost(_ o: UnsafeMutablePointer<wlr_output>) {
+        let name = String(cString: o.pointee.name)
+        var parked = 0
+        for l in layers where l.handle.pointee.output == o {
+            orphanedLayers.append((l, name))
+            l.handle.pointee.output = nil
+            parked += 1
+        }
+        Compositor.log("output \(name) gone — \(parked) layer surface(s) wait for it")
+    }
+
+    /// An output of a name we had is back: where the layout has it, with the
+    /// layer surfaces that were on it.
+    public func outputReturned(_ o: UnsafeMutablePointer<wlr_output>) {
+        let name = String(cString: o.pointee.name)
+        if let ol = outputLayout, let d = layout.named(name) { _ = wlr_output_layout_add(ol, o, d.x, d.y) }
+        var back = 0
+        for e in orphanedLayers where e.name == name && layers.contains(where: { $0 === e.layer }) {
+            e.layer.handle.pointee.output = o
+            back += 1
+        }
+        orphanedLayers.removeAll { e in e.name == name || !layers.contains { $0 === e.layer } }
+        arrangeLayers()
+        outputManagement?.publish()
+        Compositor.log("output \(name) back — \(back) layer surface(s) on it again")
+    }
+
     /// A new arrangement of the displays (P14.7b): positions, sizes, scales.
     ///
     /// wlroots' layout follows (xdg-output tells clients); layers are arranged

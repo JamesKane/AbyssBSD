@@ -251,6 +251,10 @@ if [ "$live" -eq 1 ]; then
   # shown or reachable, no grab survives it, and a dead lock client keeps it.
   echo "== the session lock =="
   quiet "$root/abyss/tests/live-sessionlock.sh"
+  # A VT switched away and back (found on the 12700KF): wlroots destroys every
+  # output and announces them again; undertow keeps the session and the lock.
+  echo "== a VT switched away and back =="
+  quiet "$root/abyss/tests/live-vtswitch.sh"
   # The Aqua lock screen (P16.2b), against a stand-in authenticator: it
   # shakes, waits, unlocks only on a yes, and fails closed.
   echo "== the lock screen =="

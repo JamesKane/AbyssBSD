@@ -1197,6 +1197,16 @@ public final class Seat {
         guard e.pointee.state == WL_KEYBOARD_KEY_STATE_PRESSED else {
             return consumedKeys.remove(keycode) != nil
         }
+        // Ctrl-Alt-F*n*, before any table: leaving for a text console is not
+        // the desktop's to rebind. Only unlocked (this whole function is), so
+        // a locked session stays locked; with no session to ask, the key goes
+        // on to the client.
+        if let vt = VTSwitch.vt(for: symbols(keyboard: keyboard, keycode: keycode)),
+           compositor.session.changeVT(vt) {
+            consumedKeys.insert(keycode)
+            print("undertow: switching to VT \(vt)")
+            return true
+        }
         reloadBindingsIfStale()
         let mods = KeyModifiers(rawValue: wlr_keyboard_get_modifiers(keyboard)).normalized()
         let app = focused?.appID

@@ -46,6 +46,7 @@ func usage() -> Never {
                                     [--socket NAME] [--privileged-socket NAME]
                                     [--display-sleep SECONDS]  (else energy.ini's minutes)
                                     [--stand-in-keyboard FIFO] (a keyboard with no keymap, for tests)
+                                    [--stand-in-vt FIFO]       ("away"/"back": a VT switch, for tests)
     """)
     exit(2)
 }
@@ -80,6 +81,7 @@ var assertUsable: String? = nil
 var configDir: String? = nil
 var displaySleepSeconds: Double? = nil
 var standInKeyboard: String? = nil
+var standInVT: String? = nil
 var socketName: String?
 var privilegedSocket: String?
 /// nil means headless (the default everywhere but metal).
@@ -140,6 +142,7 @@ while i < args.count {
     case "--config-dir": configDir = value("--config-dir")
     case "--display-sleep": displaySleepSeconds = Double(value("--display-sleep"))
     case "--stand-in-keyboard": standInKeyboard = value("--stand-in-keyboard")
+    case "--stand-in-vt": standInVT = value("--stand-in-vt")
     case "--socket": socketName = value("--socket")
     case "--privileged-socket": privilegedSocket = value("--privileged-socket")
     case "--backend":
@@ -495,14 +498,56 @@ case "run":
         out(asleep ? "displays asleep" : "displays awake")
     }
     var conductor = Conductor(outputs: outs, sinks: scenes)
+    // **Retunes wait for the conductor to be free.** Both callbacks below run
+    // from inside `serveNext`'s wait, which dispatches the event loop while
+    // it holds the conductor; retuning it there is an overlapping access, and
+    // Swift's exclusivity check ends the process ("Fatal access conflict" —
+    // the first VT come back did exactly that). Queued here, applied after.
+    var retunes: [Int] = []
+    func applyRetunes() {
+        for i in retunes { conductor.retune(i, periodHintNs: outs[i].periodHintNs) }
+        retunes.removeAll()
+    }
     // A client rearranged the displays (P14.7b): each scene shows its new
     // rectangle, and an output with a new refresh rate is retuned.
     compositor.outputManagement?.onApplied = { layout in
         for (i, o) in outs.enumerated() {
             if let d = layout.named(o.name) { scenes[i].show(d) }
-            if o.refreshPeriod() { conductor.retune(i, periodHintNs: o.periodHintNs) }
+            if o.refreshPeriod() { retunes.append(i) }
         }
         out("outputs \(layout.summary)")
+    }
+    // **Outputs that go and come back** (P16, found on metal): a VT switched
+    // away destroys every DRM output and a VT switched back announces them
+    // again. The rig for each — scene, metronome, recorder — stays; only the
+    // wlroots output under it is let go and taken up again, by name.
+    session.onOutputRemoved = { o in
+        compositor.outputLost(o)
+        for x in outs where x.isBound(to: o) {
+            x.detach()
+            out("output \(x.name) gone")
+        }
+    }
+    session.onOutputAdded = { o in
+        let name = String(cString: o.pointee.name)
+        // What a person chose for it, again (P14.7b), as at start.
+        if let saved = DisplaysFile.load(configDir: configDir)[name] { _ = OutputManagement.commit(saved, to: o) }
+        var known = false
+        for (i, x) in outs.enumerated() where x.name == name {
+            x.attach(o)
+            retunes.append(i)
+            known = true
+            out("output \(name) back")
+        }
+        if known {
+            compositor.outputReturned(o)
+        } else {
+            // A display we never had: P14.7's displays are fixed at start.
+            emit(2, "undertow: a new output \(name) — not used until the next session")
+        }
+    }
+    if let fifo = standInVT, !session.addStandInVT(fifo: fifo) {
+        die("could not make a stand-in VT reading \(fifo) (headless only)")
     }
 
     // Announce the socket on stdout BEFORE the loop starts, so a harness can
@@ -553,6 +598,7 @@ case "run":
     let warmupRecorders = outs.map { _ in FlightRecorder(capacity: warmup) }
     for _ in 0..<(warmup * outs.count) {
         conductor.serveNext(recorders: warmupRecorders)
+        applyRetunes()
         compositor.endFrame()
     }
     // The early capture fires a few frames after the FIRST window maps, not at
@@ -709,6 +755,7 @@ case "run":
         // Before the frame: a display that has just gone to sleep is not drawn.
         sleep.tick()
         if conductor.serveNext(recorders: recorders) { drawn += 1 }
+        applyRetunes()
         // Which outputs each surface is on (U.10): changes only, off the
         // present path.
         compositor.updateSurfaceOutputs()

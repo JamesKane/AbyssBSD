@@ -730,6 +730,50 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.114 A VT switch destroys every output, and undertow thought outputs lived for ever
+(PHASE16, the first boot on the 12700KF. Found because the medium had no way to
+a command line.)
+
+The live medium printed its address on the console, and then the desktop covered
+the console. undertow had no Ctrl-Alt-F*n*, so the console could not be reached.
+Adding it (`VTSwitch`, `WlrootsSession.changeVT`) showed the real defect. On
+the first switch, undertow aborted in `wlr_output_finish` with its present
+listener still attached, and the installer was gone.
+
+**wlroots 0.20 destroys every DRM output when the session is paused**
+(`backend/drm/backend.c`, `handle_session_active`: "Disconnect any active
+connectors so that the client will modeset and rerender"). When the session
+resumes it announces new ones. Leaving a VT, fast user switching (P16.6b) and
+unplugging a monitor all do this. undertow configured its outputs once, at
+start, and held raw pointers to them. The VM never shows it: the headless
+backend has no session to pause.
+
+The fix keeps every rig (`WlrootsOutput`, its scene, its metronome) and swaps
+only the `wlr_output` under it:
+- the session adopts outputs as they arrive, and frees each output's destroy
+  listener when it fires;
+- `WlrootsOutput.detach()` and `attach()`: detached, it draws nothing, as an
+  asleep display does (U.9);
+- `Compositor.outputLost` parks the layer surfaces (the desktop picture, menu
+  bar and Dock). wlroots leaves their `output` field pointing at the dead
+  output. `outputReturned` puts them back, re-adds the output to the layout
+  and republishes output management.
+
+Two more found on the way:
+- **A retune inside `serveNext` is an exclusivity violation.** The callback
+  runs in the event dispatch that `serveNext`'s wait performs while it holds
+  the conductor. Swift ended the process ("Fatal access conflict"). Retunes
+  are now queued and applied after `serveNext` returns. The display-
+  configuration callback (P14.7b) had the same latent bug.
+- **Ctrl-Alt-F*n* only while unlocked.** A locked session stays locked.
+  Leaving by the key does not lock the session; "Login Window…" does.
+
+`--stand-in-vt FIFO` (`away`/`back`) does to headless outputs what DRM does,
+under the same names, and `live-vtswitch.sh` drives it: away, a window opened
+while away, back, three times, and locked across a switch. *Verified on the
+12700KF:* three round trips on DP-1 in one undertow process, and the installer
+back each time.
+
 ### 2.113 What the `--full` gate found: a hijacked variable and a power button that went deaf
 (PHASE16, the gate. Both on the installed machine, the one place only
 `live-desktop.sh` reaches.)

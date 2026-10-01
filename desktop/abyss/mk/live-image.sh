@@ -1096,14 +1096,24 @@ run() {
 # instant we ask would be worse than not printing: it is a wrong answer rather
 # than a missing one. So: poll briefly, stop the moment there is something to
 # say, and give up after ten seconds with a sentence that says which it was.
+#
+# **And into /etc/issue,** which getty prints above the console's first login
+# prompt (gettytab `if=`). rc gets here before the gettys start, so they show
+# it. On a machine with a display the desktop then covers this console, and the
+# first metal boot of P16 had no way to read the address back — no terminal in
+# the installer, no VT switch. Ctrl-Alt-F2 reaches ttyv1's getty now, and the
+# address is waiting there.
 announce_addresses() {
   _found=0
   _tries=0
+  _issue=""
   while [ "$_tries" -lt 20 ]; do
     for _if in $(ifconfig -l 2>/dev/null); do
       case "$_if" in lo*) continue ;; esac
       for _ip in $(ifconfig "$_if" inet 2>/dev/null | awk '/inet /{print $2}'); do
         echo "abyss-live: $_if $_ip"
+        _issue="$_issue  $_if $_ip
+"
         _found=1
       done
     done
@@ -1117,6 +1127,13 @@ announce_addresses() {
   elif [ -s /root/.ssh/authorized_keys ]; then
     echo "abyss-live: sshd is up for root by key (developer build) — abyss/mk/metal.sh"
   fi
+  {
+    echo "AbyssBSD live medium."
+    if [ "$_found" = 1 ]; then printf 'This machine'"'"'s network address:\n%s' "$_issue"
+    else echo "No network address yet (ifconfig, once logged in)."; fi
+    echo "Log in as root, no password. Ctrl-Alt-F1 goes back to the desktop."
+    echo
+  } > /etc/issue 2>/dev/null || true
 }
 announce_addresses
 
