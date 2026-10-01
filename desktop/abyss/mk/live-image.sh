@@ -765,6 +765,9 @@ sudo chmod 755 "$de/etc/rc.d/abyss_settings"
 sudo install -m 755 "$root/abyss/etc/rc.d/abyss_loginwindow" "$de/etc/rc.d/abyss_loginwindow"
 sudo mkdir -p "$de/etc/pam.d"
 sudo install -m 644 "$root/abyss/etc/pam.d/abyss" "$de/etc/pam.d/abyss"
+# The lid and the buttons, through devd to the daemon (PHASE16 P16.4b).
+sudo mkdir -p "$de/usr/local/etc/devd"
+sudo install -m 644 "$root/abyss/etc/devd/abyss.conf" "$de/usr/local/etc/devd/abyss.conf"
 
 say "== abyss.tzst — the desktop, as a distribution set"
 # **zstd, not xz, and the name says so.** On the build guest `tar -cJf` over

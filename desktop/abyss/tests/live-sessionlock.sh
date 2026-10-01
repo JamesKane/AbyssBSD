@@ -21,6 +21,8 @@
 #      the plain lock colour, no desktop, no input behind it;
 #   7. a new lock client takes over the abandoned lock, and unlocking shows
 #      the desktop again and gives the keys back to the window that had them;
+#   7b. every window closing while locked — the focused one last — leaves the
+#      keyboard with the lock screen (P16.4b: it did not);
 #   8. with two displays and a lock surface on only one, the other shows the
 #      lock's plain colour and nothing of the desktop — what a display plugged
 #      in while locked has until the lock client covers it.
@@ -53,7 +55,9 @@ await() {  # await FILE PATTERN WHY
   i=0; while ! grep -q -- "$2" "$1" 2>/dev/null && [ $i -lt 80 ]; do i=$((i + 1)); sleep 0.05; done
   grep -q -- "$2" "$1" 2>/dev/null || fail "$3"
 }
-count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+# 0, not nothing, when the file is not there yet: an empty count made the
+# wait's test an error, which ended the wait at once (HANDOFF §2.106).
+count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 alive() { kill -0 "$ut_pid" 2>/dev/null || fail "undertow died ($1)"; }
 # shot NAME: a screencopy of the output, as P6 PPM.
 shot() { "$grab" "$work/$1.ppm" > "$work/grab.log" 2>&1 || fail "abyssgrab: $(cat "$work/grab.log")"; }
@@ -193,6 +197,22 @@ ka=$(count '^key ' "$work/a.log"); printf 'k 35\n' >&4; sleep 0.3
 [ "$(count '^key ' "$work/a.log")" -gt "$ka" ] || fail "unlocked, the keys did not go back to window A"
 echo "ok: 7. a new lock client took the abandoned lock over and unlocked: the desktop is back, and A has the keys"
 echo "ok: undertow: $(grep '^session-lock' "$work/ut.out" | tail -1)"
+
+# ------------------------------------------------------ 7b. windows close behind the lock
+mkfifo "$work/l5"
+"$work/lockclient" lock ff2a5a2a < "$work/l5" > "$work/l5.log" 2>&1 & l2=$!; exec 8>"$work/l5"
+await "$work/l5.log" ready "lock client 5 never started"
+printf 'l\n' >&8
+await "$work/l5.log" '^locked$' "lock client 5 could not lock"
+sleep 0.3
+printf 'q\n' >&7; wait "$wb" 2>/dev/null || true; wb=""
+printf 'q\n' >&5; wait "$wa" 2>/dev/null || true; wa=""
+sleep 0.4
+k=$(count '^key ' "$work/l5.log"); printf 'k 36\n' >&4; sleep 0.3
+[ "$(count '^key ' "$work/l5.log")" -gt "$k" ] \
+  || fail "every window closed while locked, and the lock screen no longer had the keyboard"
+printf 'u\n' >&8; await "$work/l5.log" '^unlocked$' "lock client 5 could not unlock"
+echo "ok: 7b. every window closed behind the lock, and the keys still went to the lock screen"
 
 # ------------------------------------------------------ 8. a display with no lock surface
 for f in 3 4 5 6 7 8 9; do eval "exec $f>&-"; done

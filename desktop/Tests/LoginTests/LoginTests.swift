@@ -104,4 +104,15 @@ final class LoginTests: XCTestCase {
         c.acpiconf = "/tmp/stand-in"
         XCTAssertEqual(PowerPolicy.argv(.sleep, commands: c).first, "/tmp/stand-in")
     }
+
+    func testTheMachinesButtonsAreRootsAlone() {
+        for a in [PowerAction.lid, .sleepKey, .powerKey] {
+            XCTAssertTrue(PowerPolicy.may(a, uid: 0, groups: []))
+            XCTAssertFalse(PowerPolicy.may(a, uid: 1001, groups: ["wheel", "operator"]),
+                           "an administrator is not the hardware: \(a)")
+        }
+        XCTAssertEqual(PowerPolicy.argv(.lid, commands: PowerCommands()), ["/usr/sbin/acpiconf", "-s", "3"])
+        XCTAssertEqual(PowerPolicy.argv(.powerKey, commands: PowerCommands()), ["/sbin/shutdown", "-p", "now"],
+                       "the power key with nobody to ask: what the kernel would have done")
+    }
 }

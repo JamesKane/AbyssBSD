@@ -37,7 +37,11 @@ import Darwin
 
 /// Who may ask for what: pure, so it is tested without accounts.
 public enum PowerPolicy {
-    public static func may(_ action: PowerAction, uid: UInt32, groups: [String]) -> Bool {
+    public static func may(_ action: PowerAction, uid: UInt32, groups: [String], systemUID: UInt32 = 0) -> Bool {
+        // The lid and the keys are devd's — root's. Anyone else saying "the
+        // power key was pressed" could, with no session watching, shut the
+        // machine down.
+        if action.isHardware { return uid == systemUID }
         if action == .sleep || uid == 0 { return true }
         return groups.contains("wheel") || groups.contains("operator")
     }
@@ -45,9 +49,11 @@ public enum PowerPolicy {
     /// The command that does `action`.
     public static func argv(_ action: PowerAction, commands: PowerCommands) -> [String] {
         switch action {
-        case .sleep: return [commands.acpiconf, "-s", "3"]
+        case .sleep, .lid, .sleepKey: return [commands.acpiconf, "-s", "3"]
         case .restart: return [commands.shutdown, "-r", "now"]
-        case .shutDown: return [commands.shutdown, "-p", "now"]
+        // The power key with no session to ask: what the kernel's own
+        // `power_button_state=S5` would have done.
+        case .shutDown, .powerKey: return [commands.shutdown, "-p", "now"]
         }
     }
 }
@@ -84,6 +90,9 @@ public final class LoginService {
     private let say: (String) -> Void
     /// How long the sessions have to lock before a sleep is called off.
     public var lockTimeout: Double = 8
+    /// Who reports the machine's buttons: root (devd). Only a test's
+    /// stand-in, which is never shipped, names another.
+    public var systemUID: UInt32 = 0
     private var watchers: [(fd: Int32, uid: UInt32)] = []
 
     public init(server: Current.Server, authenticator: Authenticator,
@@ -166,12 +175,27 @@ public final class LoginService {
         guard let action = request.string("action").flatMap(PowerAction.init(rawValue:)) else {
             reply(client, LoginWire.error("power: no such action \(request.string("action") ?? "(none)")")); return
         }
-        guard PowerPolicy.may(action, uid: uid, groups: groupsOf(uid)) else {
-            say("loginwindow: uid \(uid): \(action.rawValue) refused — not an administrator")
-            reply(client, LoginWire.error("only an administrator can \(action == .restart ? "restart" : "shut down") this computer"))
+        guard PowerPolicy.may(action, uid: uid, groups: groupsOf(uid), systemUID: systemUID) else {
+            say("loginwindow: uid \(uid): \(action.rawValue) refused — " + (action.isHardware ? "not root" : "not an administrator"))
+            reply(client, LoginWire.error(action.isHardware ? "only the system reports the machine's buttons"
+                : "only an administrator can \(action == .restart ? "restart" : "shut down") this computer"))
             return
         }
-        if action == .sleep, let why = lockEverySession() {
+        // **The power key asks** (Jaguar's dialog: Restart, Sleep, Cancel,
+        // Shut Down) — in every watching session; it does nothing itself.
+        // With no session to ask, it shuts down, as the kernel would have.
+        if action == .powerKey, !watchers.isEmpty {
+            for w in watchers {
+                var m = Msg(); m.set("event", "power-key")
+                if (try? Current.send(m, on: w.fd)) == nil { dropWatcher(w.fd, "gone") }
+            }
+            say("loginwindow: the power key — asking \(watchers.count) session(s) what to do")
+            var ok = Msg(); ok.set("ok", true)
+            reply(client, ok)
+            return
+        }
+        let sleeps = action == .sleep || action == .lid || action == .sleepKey
+        if sleeps, let why = lockEverySession() {
             say("loginwindow: uid \(uid): sleep called off — \(why)")
             reply(client, LoginWire.error("the computer did not sleep: \(why)"))
             return
@@ -184,7 +208,7 @@ public final class LoginService {
         if !r.succeeded {
             say("loginwindow: \(argv[0]) failed (\(r.failure ?? "exit \(r.code)")): \(r.stderrText)")
         }
-        if action == .sleep {
+        if sleeps {
             // `acpiconf -s 3` returns once the machine is awake again.
             say("loginwindow: awake")
             for w in watchers {

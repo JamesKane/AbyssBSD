@@ -8,7 +8,9 @@
 # The session's privileged half (desktop/docs/PHASE16.md, P16.1): answers "is
 # this my password?" for whoever asks, about themselves, at
 # /var/run/abyss-loginwindow.sock. Root, because only root can read
-# master.passwd.
+# master.passwd. Since P16.4 it also sleeps, restarts and shuts the machine
+# down for the session, locking every session before a sleep — and owns the
+# power key while it runs (abyss/etc/devd/abyss.conf).
 
 . /etc/rc.subr
 
@@ -18,6 +20,7 @@ pidfile="/var/run/${name}.pid"
 command="/usr/sbin/daemon"
 command_args="-f -P ${pidfile} -o /var/log/abyss-loginwindow.out /usr/local/bin/abyss-loginwindow"
 start_postcmd="abyss_loginwindow_poststart"
+stop_postcmd="abyss_loginwindow_poststop"
 
 abyss_loginwindow_poststart()
 {
@@ -28,8 +31,24 @@ abyss_loginwindow_poststart()
 	done
 	if [ -S /var/run/abyss-loginwindow.sock ]; then
 		echo "abyss: the authenticator is up"
+		# The power key asks the session now (devd → the daemon): the
+		# kernel must not power off first. Kept to restore on stop.
+		state=$(sysctl -n hw.acpi.power_button_state 2>/dev/null)
+		if [ -n "$state" ] && [ "$state" != NONE ]; then
+			echo "$state" > /var/run/abyss-loginwindow.button
+			sysctl hw.acpi.power_button_state=NONE > /dev/null
+		fi
 	else
 		echo "abyss: THE AUTHENTICATOR NEVER STARTED (see /var/log/abyss-loginwindow.out)"
+	fi
+}
+
+abyss_loginwindow_poststop()
+{
+	# The daemon is gone: the power key is the kernel's again.
+	if [ -s /var/run/abyss-loginwindow.button ]; then
+		sysctl hw.acpi.power_button_state="$(cat /var/run/abyss-loginwindow.button)" > /dev/null
+		rm -f /var/run/abyss-loginwindow.button
 	fi
 }
 

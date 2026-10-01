@@ -275,6 +275,11 @@ public enum LoginClient {
 /// policy's "sleep" (P16.3), the system menu's three and the lid (P16.4).
 public enum PowerAction: String, CaseIterable, Sendable {
     case sleep, restart, shutDown = "shut-down"
+    /// The machine's own buttons, from devd (P16.4b): root's to send.
+    case lid, sleepKey = "sleep-key", powerKey = "power-key"
+
+    /// An event from the hardware rather than a person's choice.
+    public var isHardware: Bool { self == .lid || self == .sleepKey || self == .powerKey }
 }
 
 public enum PowerClient {

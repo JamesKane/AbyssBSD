@@ -1310,6 +1310,18 @@ public final class Seat {
     /// minimized, in this pass. Leaving focus on a window that is not on screen
     /// makes the desktop deaf in a way nothing on screen explains.
     public func focusTopmost() {
+        // **Locked: the keyboard is the lock screen's**, whatever closes
+        // behind it. Clearing it here — the last window closing while locked,
+        // the power dialog that asked for the sleep — left the lock screen
+        // deaf: a password typed into it went nowhere (found in P16.4b).
+        // Forget the window that went; unlocking picks the topmost then.
+        if compositor.isLocked {
+            if let f = focused, !compositor.mappedToplevels.contains(where: { $0 === f }) {
+                f.setForeignActivated(false)
+                focused = nil
+            }
+            return
+        }
         guard let t = compositor.mappedToplevels.last else {
             focused?.setForeignActivated(false)
             focused = nil

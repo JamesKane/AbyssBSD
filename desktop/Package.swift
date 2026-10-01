@@ -362,7 +362,7 @@ let package = Package(
         // ipcprobe — never shipped.
         // The session's idle policy (PHASE16 P16.3): lock when the display
         // sleeps, ask the machine to sleep after the computer's delay.
-        .executableTarget(name: "abyss-idle", dependencies: ["Surface", "CWayland", "PoolConfig", "CurrentIPC", "Login"],
+        .executableTarget(name: "abyss-idle", dependencies: ["Surface", "CWayland", "PoolConfig", "CurrentIPC", "Login", "Spawn"],
                           path: "de/idlebin"),
         .executableTarget(name: "abyss-loginstub", dependencies: ["Login", "CurrentIPC"], path: "de/loginstub"),
         .executableTarget(name: "abyss-settings",

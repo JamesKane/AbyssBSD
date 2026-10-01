@@ -235,8 +235,10 @@ public func defaultSession(shellBinary: String,
     // ordinary socket (ext-idle-notify is everyone's), waiting for it as the
     // shell does.
     if mode == .desktop, !without.contains("idle") {
+        var env = shared
+        env["ABYSS_APP_BINARY"] = shellBinary      // the power key's dialog (P16.4b)
         components.append(ComponentSpec(name: "idle", argv: [serviceDirectory + "/abyss-idle"],
-                                        env: shared, requires: compositorSocket.map { [$0] } ?? []))
+                                        env: env, requires: compositorSocket.map { [$0] } ?? []))
     }
 
     // ----------------------------------------------------------------- lock

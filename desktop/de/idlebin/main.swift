@@ -26,6 +26,7 @@ import PoolConfig
 import CurrentIPC
 import Login
 import CWayland
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -180,6 +181,14 @@ final class Policy {
             _ = try? Current.send(answer, on: watch)
         case "resumed":
             say("the machine is awake")
+        case "power-key":
+            // Jaguar's question (P16.4b), in this session: Restart, Sleep,
+            // Cancel, Shut Down. The dialog asks the daemon itself.
+            guard let exe = getenv("ABYSS_APP_BINARY").map({ String(cString: $0) }) else {
+                say("the power key: no application binary to ask with"); return
+            }
+            let ok = Spawn.detached([exe], environment: ["AQUA_SCENE": "powerdialog", "ABYSS_POWER_ASK": "power-key"])
+            say("the power key: " + (ok ? "asking what to do" : "could not open the dialog"))
         default:
             break
         }

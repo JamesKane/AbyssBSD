@@ -730,6 +730,30 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.106 A window closing behind the lock took the lock screen's keyboard
+(PHASE16 P16.4b, the power dialog and the buttons.)
+
+**`Seat.focusTopmost()` with no window left cleared keyboard focus, locked or
+not.** The power key's dialog asks the daemon to sleep, the daemon has the
+session locked, and then the dialog closes. It was the last window, so the
+keyboard was taken from the lock screen, and the password typed at wake went
+nowhere: a lock screen that cannot be unlocked until something makes it
+redraw. While locked, `focusTopmost()` now only forgets the window that went,
+and unlocking picks the topmost. `live-sessionlock.sh` claim 7b closes every
+window behind a lock and types. It fails on the old code. This belongs with
+§2.101's rule: while locked, nothing behind the lock may touch the seat.
+
+**Two test traps:**
+- **`count()` printed nothing, not 0, for a file not there yet**, so a wait's
+  `[ '' -lt 1 ]` was an error, and an error in a `while` condition ends the
+  loop. "The daemon never started" was, half the time, a log not created in
+  the first millisecond. Fixed in every test that used that `count()`
+  (`live-power`, `-idlepolicy`, `-lockscreen`, `-locksession`,
+  `-sessionlock`, `-idle`).
+- **Windows cascade**, so a dialog's position is a *new* line in undertow's
+  report. Reading the last line before that one arrived clicked where the
+  previous dialog had been. Count the lines first, then wait for one more.
+
 ### 2.105 Every sleep locks through one place — and two test traps
 (PHASE16 P16.4a, the daemon's power.)
 

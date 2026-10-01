@@ -26,6 +26,7 @@ func emit(_ s: String) {
 var socketPath = "", passwordFile = ""
 var commands = PowerCommands()
 var lockTimeout = 8.0
+var systemUID: UInt32 = 0
 var args = Array(CommandLine.arguments.dropFirst())
 while let a = args.first {
     args.removeFirst()
@@ -35,6 +36,8 @@ while let a = args.first {
     case "--acpiconf": commands.acpiconf = args.isEmpty ? "" : args.removeFirst()
     case "--shutdown": commands.shutdown = args.isEmpty ? "" : args.removeFirst()
     case "--lock-timeout": lockTimeout = Double(args.isEmpty ? "" : args.removeFirst()) ?? 8
+    // Whose word counts as devd's: a test cannot be root.
+    case "--system-uid": systemUID = UInt32(args.isEmpty ? "" : args.removeFirst()) ?? 0
     default: emit("abyss-loginstub: unknown option '\(a)'"); exit(2)
     }
 }
@@ -63,4 +66,5 @@ let auth = Authenticator(userName: { uid in
 }, check: { _, password in password == secret ? .yes : .no("not the stub's password") })
 let service = LoginService(server: server, authenticator: auth, commands: commands, log: emit)
 service.lockTimeout = lockTimeout
+service.systemUID = systemUID
 service.run()

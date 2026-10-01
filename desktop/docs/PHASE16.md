@@ -200,6 +200,28 @@ and `live-authenticator.sh` claim 7 through the real root daemon in the guest:
 an ordinary account may sleep but not restart; wheel may. Six faults injected
 and caught (HANDOFF §2.105). The metal cycle on the 12700KF is still to do.
 
+✅ **P16.4b done 2026-10-01, and with it P16.4** (but for the metal cycle).
+- **The dialog:** `AQUA_SCENE=powerdialog` (`PowerDialog.swift`) asks
+  Jaguar's questions. System > Restart… and Shut Down… open it on the ordinary
+  display: Cancel, or the default in blue (Return). The power key gets
+  Restart, Sleep, Cancel, Shut Down. A refusal shows in the dialog in the
+  daemon's words.
+- **The lid and the keys:** `abyss/etc/devd/abyss.conf` (shipped to
+  `/usr/local/etc/devd`) turns the lid and the sleep and power keys into
+  `abyss-loginctl power lid|sleep-key|power-key`, which the daemon takes from
+  root alone. The lid and the sleep key go through the sleep path, every
+  session locked first. The power key asks every watching session (its agent
+  opens the dialog). With no session watching, it shuts down, as the kernel's
+  own `power_button_state` would have, and rc.d sets that sysctl to `NONE`
+  while the daemon runs and puts it back after.
+- `live-power.sh` grew to 10 claims; `live-authenticator.sh` checks the real
+  daemon refuses button reports from anyone but root. Five faults injected
+  and caught.
+- **Found:** undertow cleared the keyboard from the lock screen when the last
+  window closed while locked (the power dialog closing after its own sleep),
+  so the password went nowhere. Fixed, with `live-sessionlock.sh` claim 7b
+  (HANDOFF §2.106).
+
 **P16.5 — the login window (L).** `abyss-loginwindow` grows its second job,
 shaped like `greetd`: at boot `rc` starts it, it starts a **greeter session** —
 `undertow` and the Aqua login window, as an unprivileged `_loginwindow` user —

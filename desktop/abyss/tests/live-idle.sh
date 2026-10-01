@@ -44,7 +44,9 @@ fail() {
   grep -m1 -E 'Assertion|Fatal|abort' "$work/ut.err" 2>/dev/null | sed 's/^/  undertow| /' || true
   exit 1
 }
-count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+# 0, not nothing, when the file is not there yet: an empty count made the
+# wait's test an error, which ended the wait at once (HANDOFF §2.106).
+count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() {  # await PATTERN FILE BEFORE SECONDS WHY
   i=0
   while [ $i -lt $(($4 * 20)) ]; do

@@ -157,6 +157,17 @@ if let watch = appearance {
 // data pointers — alive. Discarding it (e.g. `guard let _ =`) frees the surface
 // before the first configure event and crashes in the listener callback.
 // withExtendedLifetime pins it across run().
+if sceneName == "powerdialog" {
+    // "Are you sure…?" (PHASE16 P16.4b): ABYSS_POWER_ASK is restart,
+    // shut-down or power-key.
+    let ask = envString("ABYSS_POWER_ASK").flatMap(PowerAsk.init(rawValue:)) ?? .powerKey
+    guard let dialog = PowerDialog(display: display, ask: ask) else {
+        print("AquaDemo: could not open the power dialog."); exit(1)
+    }
+    dialog.onDone = { display.stop() }
+    withExtendedLifetime(dialog) { display.run() }
+    exit(0)
+}
 if sceneName == "lock" {
     // The lock screen (PHASE16 P16.2b): an ext-session-lock client, not a
     // window. It exits 0 once the authenticator said yes and the session is

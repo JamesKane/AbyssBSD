@@ -398,7 +398,7 @@ public final class MenuBar: LayerSurfaceDelegate {
             guard focus != nil else { return .disabled("the bar cannot see which application is frontmost") }
             return forceQuitTarget == nil ? .disabled("no application is frontmost") : .enabled
         case "system.restart", "system.shut-down":
-            return .disabled("asks first, and the asking is not built yet (P16.4b)")
+            return .enabled
         case "system.recent.clear":
             return recentShown.isEmpty ? .disabled("nothing has been opened yet") : .enabled
         case _ where verb.hasPrefix("system.recent."):
@@ -470,6 +470,18 @@ public final class MenuBar: LayerSurfaceDelegate {
             }
             RecentItems.record(bundle)
             return .ok(bundle)
+        case "system.restart", "system.shut-down":
+            // "…": it asks first (P16.4b) — the power dialog, on the ordinary
+            // display like any application the bar opens (P10.8), never ours.
+            guard let display = MenuBar.appDisplay else {
+                return .refused("the bar does not know the ordinary display to launch on")
+            }
+            let exe = getenv("ABYSS_APP_BINARY").map { String(cString: $0) }
+                ?? Launcher.selfExecutable() ?? "AquaDemo"
+            let ask = verb == "system.restart" ? "restart" : "shut-down"
+            return Launcher.launchDetached([exe], extraEnv: ["AQUA_SCENE": "powerdialog", "ABYSS_POWER_ASK": ask,
+                                                             "WAYLAND_DISPLAY": display])
+                ? .ok("asking") : .refused("could not open the dialog")
         case "system.sleep":
             // The root daemon sleeps the machine (P16.4a) — once every session
             // on it, this one included, has said it is locked. So the answer

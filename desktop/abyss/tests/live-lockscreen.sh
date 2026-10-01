@@ -53,7 +53,9 @@ await() {  # await FILE PATTERN WHY
   i=0; while ! grep -q -- "$2" "$1" 2>/dev/null && [ $i -lt 100 ]; do i=$((i + 1)); sleep 0.05; done
   grep -q -- "$2" "$1" 2>/dev/null || fail "$3"
 }
-count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+# 0, not nothing, when the file is not there yet: an empty count made the
+# wait's test an error, which ended the wait at once (HANDOFF §2.106).
+count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 shot() { "$grab" "$work/$1.ppm" ${2:+--output $2} > "$work/grab.log" 2>&1 || fail "abyssgrab: $(cat "$work/grab.log")"; }
 has() {
   hdr=$(head -3 "$work/$1.ppm" | wc -c | tr -d ' ')

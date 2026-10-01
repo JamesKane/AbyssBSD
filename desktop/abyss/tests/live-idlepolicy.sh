@@ -46,7 +46,9 @@ fail() { echo "FAIL: $1"
          grep -E '^session-lock' "$work/ut.out" 2>/dev/null | tail -2 | sed 's/^/  undertow| /'
          grep -E 'power' "$work/stub.log" 2>/dev/null | tail -2 | sed 's/^/  stub| /'
          exit 1; }
-count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+# 0, not nothing, when the file is not there yet: an empty count made the
+# wait's test an error, which ended the wait at once (HANDOFF §2.106).
+count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() {  # await FILE PATTERN WHY [TIMES] [TENTHS]
   i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt "${5:-120}" ]; do i=$((i + 1)); sleep 0.1; done
   [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"

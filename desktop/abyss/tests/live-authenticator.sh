@@ -22,7 +22,7 @@
 #   7. power (P16.4a), through the real daemon with stand-in acpiconf and
 #      shutdown: an ordinary account may put the machine to sleep and may not
 #      restart or shut it down — refused in words, nothing run; an account in
-#      wheel may.
+#      wheel may; and no account but root may report the lid or the keys.
 #
 # On Linux there is no PAM to ask, and the daemon must say so (the positive
 # control). Needs root in the guest (passwordless sudo, as the build VM has).
@@ -142,6 +142,10 @@ power() { sudo -u "$1" "$work/abyss-loginctl" --socket "$sock" power "$2" || tru
   || fail "an ordinary account's restart: $(power "$ua" restart)"
 [ "$(power "$ua" shut-down)" = "refused: only an administrator can shut down this computer" ] \
   || fail "an ordinary account's shut down: $(power "$ua" shut-down)"
+for k in lid sleep-key power-key; do
+  [ "$(power "$uw" "$k")" = "refused: only the system reports the machine's buttons" ] \
+    || fail "an account, even in wheel, reported the $k: $(power "$uw" "$k")"
+done
 [ "$(power "$ua" sleep)" = ok ] || fail "an ordinary account could not put the machine to sleep"
 i=0; while ! grep -q '^acpiconf -s 3$' "$work/power.log" && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
 grep -q '^acpiconf -s 3$' "$work/power.log" || fail "sleep did not run acpiconf -s 3: $(cat "$work/power.log")"
@@ -149,6 +153,6 @@ grep -q '^shutdown' "$work/power.log" && fail "shutdown ran for an ordinary acco
 [ "$(power "$uw" restart)" = ok ] || fail "an account in wheel could not restart: $(power "$uw" restart)"
 i=0; while ! grep -q '^shutdown -r now$' "$work/power.log" && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
 grep -q '^shutdown -r now$' "$work/power.log" || fail "restart did not run shutdown -r now: $(cat "$work/power.log")"
-echo "ok: 7. power: an ordinary account may sleep the machine, not restart or shut it down (refused in words); wheel may restart"
+echo "ok: 7. power: an ordinary account may sleep the machine, not restart or shut it down (refused in words); wheel may restart; nobody but root reports the lid or the keys"
 
 echo "all green (the authenticator answers each person about themselves, slowly when they guess, and writes no password down)."

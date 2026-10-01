@@ -18,7 +18,19 @@
 #      no stand-in run, and the asker told why;
 #   5. restart and shut down: run for an administrator (wheel or operator),
 #      refused in words for anyone else — whichever this account is;
-#   6. the daemon restarted: the agent watches again, and a sleep still locks.
+#   6. the daemon restarted: the agent watches again, and a sleep still locks;
+#   7. System > Restart… and Shut Down… ask first (P16.4b): Escape cancels
+#      with nothing run; Return chooses — run for an administrator, the
+#      refusal shown in the dialog for anyone else;
+#   8. the power key (devd's `power power-key`): the session asks — Restart,
+#      Sleep, Cancel, Shut Down — and Sleep, clicked, sleeps it locked;
+#   9. the lid (`power lid`) sleeps it, locked first;
+#  10. the power key with no session to ask: the machine shuts down, as the
+#      kernel's own default would have.
+#
+# The stand-in daemon takes this test's uid as devd's (`--system-uid`); that
+# anyone else's word about the buttons is refused is LoginTests', and the
+# real daemon's in live-authenticator.sh.
 #
 # Usage: abyss/tests/live-power.sh
 set -eu
@@ -48,7 +60,9 @@ fail() { echo "FAIL: $1"
          grep -E '^loginwindow' "$work/stub.log" 2>/dev/null | tail -4 | sed 's/^/  daemon| /'
          sed 's/^/  stand-in| /' "$work/power.log" 2>/dev/null | tail -3
          exit 1; }
-count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+# 0, not nothing, when the file is not there yet: an empty count made the
+# wait's test an error, which ended the wait at once (HANDOFF §2.106).
+count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() {  # await FILE PATTERN WHY [TIMES] [TENTHS]
   i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt "${5:-120}" ]; do i=$((i + 1)); sleep 0.1; done
   [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"
@@ -87,7 +101,8 @@ pw="power-sesame-$$"
 printf '%s\n' "$pw" > "$work/pw"
 start_daemon() {
   "$bin/abyss-loginstub" --socket "$work/auth.sock" --password-file "$work/pw" \
-      --acpiconf "$work/acpiconf" --shutdown "$work/shutdown" --lock-timeout 2 >> "$work/stub.log" 2>&1 &
+      --acpiconf "$work/acpiconf" --shutdown "$work/shutdown" --lock-timeout 2 --system-uid "$(id -u)" \
+      >> "$work/stub.log" 2>&1 &
   st=$!
   await "$work/stub.log" 'answering at' "the daemon never started" "$1"
 }
@@ -205,6 +220,74 @@ await "$work/power.log" '^acpiconf' "after the daemon restarted, acpiconf never 
   || fail "after the daemon restarted: $(tail -1 "$work/power.log")"
 echo "ok: 6. the daemon restarted: the agent watched again, and a sleep still locked first"
 unlock 4
+
+# ------------------------------------------------------------ 7. Restart… and Shut Down… ask
+admin=0; id -Gn | tr ' ' '\n' | grep -qx -e wheel -e operator && admin=1
+system_item() {  # system_item TITLE: open System, choose the row
+  n=$(count 'MenuBar: opened System' "$work/session.log")
+  printf 'm %s %s\np\nr\n' $(title_at System) >&3
+  await "$work/session.log" 'MenuBar: opened System' "the System menu did not open" $((n + 1))
+  line=$(item_line System "$1")
+  case "$line" in *" enabled "*) ;; *) fail "System > $1 is missing or disabled: $line" ;; esac
+  printf 'm %s %s\np\nr\n' $(echo "$line" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p") >&3
+}
+shutdowns=$(runs '^shutdown')
+system_item "Restart"
+await "$work/session.log" 'PowerDialog: up (restart)' "System > Restart… did not ask"
+sleep 0.5; printf 'k 1\n' >&4                                 # Escape
+await "$work/session.log" 'PowerDialog: chose Cancel' "Escape did not cancel the restart"
+sleep 0.3
+[ "$(runs '^shutdown')" = "$shutdowns" ] || fail "a cancelled restart ran shutdown"
+offs=$(runs '^shutdown -p')
+system_item "Shut Down"
+await "$work/session.log" 'PowerDialog: up (shut-down)' "System > Shut Down… did not ask"
+sleep 0.5; printf 'k 28\n' >&4                                # Return: the default
+if [ $admin = 1 ]; then
+  await "$work/session.log" 'PowerDialog: chose Shut Down → ok' "Return did not shut down"
+  await "$work/power.log" '^shutdown -p now' "Shut Down did not run shutdown -p" $((offs + 1))
+  echo "ok: 7. Restart… asked, and Escape ran nothing; Shut Down… asked, and Return shut down (an administrator)"
+else
+  await "$work/session.log" 'PowerDialog: chose Shut Down → refused: only an administrator' "the refusal was not shown"
+  echo "ok: 7. Restart… asked, and Escape ran nothing; Shut Down… asked, and the refusal is in the dialog"
+  printf 'k 1\n' >&4
+fi
+
+# ------------------------------------------------------------ 8. the power key
+before=$(runs '^acpiconf')
+# Dialogs cascade, so this one's window is a new line in undertow's report:
+# count them first, or the click lands where the last dialog was.
+wins=$(count '^window org.abyssbsd.power' "$work/ut.out")
+[ "$(ctl power-key)" = ok ] || fail "the power key: $(ctl power-key)"
+await "$work/session.log" 'abyss-idle: the power key: asking what to do' "the session did not hear the power key"
+await "$work/session.log" 'PowerDialog: up (power-key)' "the power key's dialog did not open"
+await "$work/session.log" 'PowerDialog: buttons .*Sleep=' "the dialog did not say where its buttons are"
+await "$work/ut.out" '^window org.abyssbsd.power' "undertow never reported the dialog's window" $((wins + 1))
+geom=$(grep '^window org.abyssbsd.power' "$work/ut.out" | tail -1 | awk '{print $(NF-1)}')
+at=$(grep 'PowerDialog: buttons ' "$work/session.log" | tail -1 | tr ' ' '\n' | sed -n 's/^Sleep=//p')
+printf 'm %s %s\np\nr\n' $(( ${geom%,*} + ${at%,*} )) $(( ${geom#*,} + ${at#*,} )) >&3
+await "$work/session.log" 'PowerDialog: chose Sleep → ok' "clicking Sleep in the power key's dialog did nothing"
+await "$work/power.log" '^acpiconf' "the power key's Sleep did not run acpiconf" $((before + 1))
+[ "$(grep '^acpiconf' "$work/power.log" | tail -1)" = "acpiconf -s 3 lock=locked" ] \
+  || fail "the power key's Sleep: $(tail -1 "$work/power.log")"
+echo "ok: 8. the power key asked (Restart, Sleep, Cancel, Shut Down); Sleep, clicked, slept the machine locked"
+unlock 5
+
+# ------------------------------------------------------------ 9. the lid
+before=$(runs '^acpiconf')
+[ "$(ctl lid)" = ok ] || fail "the lid: $(ctl lid)"
+await "$work/power.log" '^acpiconf' "the lid did not run acpiconf" $((before + 1))
+[ "$(grep '^acpiconf' "$work/power.log" | tail -1)" = "acpiconf -s 3 lock=locked" ] \
+  || fail "the lid: $(tail -1 "$work/power.log")"
+echo "ok: 9. the lid closed: the machine slept, the session locked first"
+unlock 6
+
+# ------------------------------------------------------------ 10. nobody to ask
+"$bin/abyssctl" quit > /dev/null 2>&1 || true
+await "$work/stub.log" 'stopped watching' "the session's agent did not stop watching when the session ended"
+shutdowns=$(runs '^shutdown -p')
+[ "$(ctl power-key)" = ok ] || fail "the power key with no session: $(ctl power-key)"
+await "$work/power.log" '^shutdown -p now' "with no session to ask, the power key did not shut down" $((shutdowns + 1))
+echo "ok: 10. the power key with no session to ask: shutdown -p, as the kernel would have"
 
 grep -qF -- "$pw" "$work/session.log" "$work/stub.log" && fail "the password was written down"
 echo "all green (the machine sleeps only with every session locked, whoever asks; restart and shut down are an administrator's)."

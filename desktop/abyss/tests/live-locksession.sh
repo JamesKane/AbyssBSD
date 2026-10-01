@@ -49,7 +49,9 @@ await() {  # await FILE PATTERN WHY [TIMES]
   i=0; while [ "$(grep -c -- "$2" "$1" 2>/dev/null || true)" -lt "${4:-1}" ] && [ $i -lt 120 ]; do i=$((i + 1)); sleep 0.05; done
   [ "$(grep -c -- "$2" "$1" 2>/dev/null || true)" -ge "${4:-1}" ] || fail "$3"
 }
-count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+# 0, not nothing, when the file is not there yet: an empty count made the
+# wait's test an error, which ended the wait at once (HANDOFF §2.106).
+count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 state() { grep '^session-lock' "$work/ut.out" | tail -1 | cut -d' ' -f2; }
 shot() { "$bin/abyssgrab" "$work/$1.ppm" > "$work/grab.log" 2>&1 || fail "abyssgrab: $(cat "$work/grab.log")"; }
 has() {
