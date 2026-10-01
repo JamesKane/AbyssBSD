@@ -1,0 +1,15 @@
+Fathom: what this machine is
+========================================
+Machine         [ok]  Radxa Computer Co., Ltd. Radxa Dragon Q8B
+CPU             [ok]  ARM Cortex-A78C r0p0 (8 cores)
+Memory          [ok]  15.3 GiB
+Boot            [??]  machdep.bootmethod could not be read
+Modules         [ok]  drm loaded
+GPU             [ok]  card0, card1 (+ renderD128)
+Network         [ok]  tcx0, tcx1
+Wi-Fi           [??]  net.wlan.devices could not be read
+Audio           [--]  no sound device installed
+Power           [--]  no battery, mains only
+Frame contract  [ok]  4 of 300 missed (13 per mille), composite p99 20us, period 16666us; margin dominated by unattributed (1759us) [hardware clock, DRM]
+----------------------------------------
+7 present, 2 absent, 2 COULD NOT BE ASKED

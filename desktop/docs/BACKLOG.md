@@ -147,6 +147,17 @@ From HANDOFF §5.3, still true:
   fails there. No ZFS module (`kldstat -q -m zfs` false, or a load failure)
   should mean "no pools", not a failed probe.
 
+- **`fathom` on arm64** (found 2026-10-01 on the Q8B,
+  [reports/q8b-bench-2026-10-01.md](reports/q8b-bench-2026-10-01.md)): the
+  Boot probe reads `machdep.bootmethod`, which only amd64 and i386 have, so
+  every arm64 machine reports "could not be read"; and the Wi-Fi probe reads
+  `net.wlan.devices`, which exists only once `wlan` is loaded, so a machine
+  without wireless reports "could not be asked" rather than "absent".
+- **The Q8B misses 0–5 of 300 flips at 60 Hz** where the i7 now holds 0 of
+  1800, with one present event 18–25 ms late in every run — most likely the
+  board's `msmfb` flip path; to be ruled out there before it's read as
+  `undertow`'s (same report).
+
 *Done and dropped from the list:* golden-image tests (Phase 11's gate, 70 scenes
 per platform).
 
