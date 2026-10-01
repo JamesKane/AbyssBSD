@@ -567,4 +567,33 @@ final class SettingsTests: XCTestCase {
         SettingsWire.encode(.signal(force), into: &m)
         XCTAssertEqual(try SettingsWire.decodePlan(m).get(), .signal(force))
     }
+
+    // MARK: Volumes (P15.8)
+
+    /// Names are checked strictly before anything runs; the system's own
+    /// mounts are never unmounted; each action is one zfs (or umount) call;
+    /// and the plan crosses the wire whole.
+    func testAVolumePlanChecksNamesAndCompilesToZFS() throws {
+        func why(_ a: VolumeAction) -> String? { Settings.problems(.volume(VolumePlan(a))).first?.message }
+        XCTAssertNil(why(.snapshot(dataset: "zroot/home", name: "abyss-2026-10-01-090507")))
+        XCTAssertNotNil(why(.snapshot(dataset: "zroot/../etc", name: "x")))
+        XCTAssertNotNil(why(.snapshot(dataset: "zroot/home", name: "-rf")), "a name that is an option")
+        XCTAssertNotNil(why(.snapshot(dataset: "zroot/home", name: "a b")))
+        XCTAssertNotNil(why(.rollback(snapshot: "zroot/home")), "a rollback names a snapshot")
+        XCTAssertNil(why(.rollback(snapshot: "zroot/home@a")))
+        XCTAssertNotNil(why(.unmount(path: "/")))
+        XCTAssertNotNil(why(.unmount(path: "/usr")))
+        XCTAssertNotNil(why(.unmount(path: "/media/../usr")))
+        XCTAssertNil(why(.unmount(path: "/media/stick")))
+        XCTAssertEqual(try Settings.compile(.volume(VolumePlan(.snapshot(dataset: "zroot/home", name: "s1")))),
+                       [.tool(argv: ["zfs", "snapshot", "zroot/home@s1"], mayFail: false)])
+        XCTAssertEqual(try Settings.compile(.volume(VolumePlan(.rollback(snapshot: "zroot/home@s1")))),
+                       [.tool(argv: ["zfs", "rollback", "zroot/home@s1"], mayFail: false)], "never -r")
+        for a in [VolumeAction.snapshot(dataset: "p/d", name: "n"), .rollback(snapshot: "p/d@n"), .mountDataset("p/d"),
+                  .unmountDataset("p/d"), .unmount(path: "/media/x")] {
+            var m = Msg()
+            SettingsWire.encode(.volume(VolumePlan(a)), into: &m)
+            XCTAssertEqual(try SettingsWire.decodePlan(m).get(), .volume(VolumePlan(a)))
+        }
+    }
 }

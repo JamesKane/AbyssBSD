@@ -403,6 +403,34 @@ quit from All Processes goes through the helper, which checks it and says
 and ZFS snapshots — list, create, roll back — through the settings helper as
 typed plans. *Verified:* a snapshot of a scratch dataset is made, a file is
 changed, and a rollback brings it back.
+✅ **Done 2026-10-01.** `Volumes` reads the pools with `zfs list -H -p` (no
+privilege needed to read), parsed purely and tested against output captured in
+the guest; the disks are `DiskInventory`'s, as the installer sees them. Disk
+Utility (`AQUA_SCENE=diskutility`, app_id `org.abyssbsd.diskutility`): disks
+and datasets in a sidebar; a dataset's mountpoint, space and snapshots; Mount
+or Unmount, Take Snapshot (named for when: `abyss-2026-10-01-090507`) and Roll
+Back…, which asks first (the changes since are lost). **Every change is a new
+`volume` settings plan**: the names are checked strictly before anything runs
+(no `..`, nothing starting with `-`), each action compiles to one `zfs`
+command, or to `umount`, and the system's own mounts are refused. **Rollback is
+only to a dataset's latest snapshot, and never `-r`**: rolling back past later
+snapshots would destroy them. The window refuses that, and so does the helper,
+which also checks as root that the dataset, snapshot or mount still exists.
+`abyss-settingsctl apply volume` drives it from a shell. `live-diskutility.sh`
+runs in the guest with a scratch dataset made for the test and destroyed after,
+and the helper as root, for real. Every claim is checked on the dataset:
+- Take Snapshot makes one;
+- a file changed and another added are both undone by Roll Back (asked, then
+  confirmed);
+- rolling back to the older of two snapshots is refused by the window and the
+  helper, and both remain;
+- Unmount and Mount take the dataset off its mountpoint and put it back with
+  its files.
+
+On Linux, with no ZFS, the window comes up and says why it has nothing. Goldens
+`diskutility`, `diskutility@2x`.
+
+**Phase 15 ✅ complete 2026-10-01.**
 
 ---
 

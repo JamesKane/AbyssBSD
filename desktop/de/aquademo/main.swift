@@ -71,6 +71,9 @@ case "installer":
     // what a disk is, and tall enough that the hub does not scroll — a summary
     // you have to scroll is not a summary.
     scene = .installer; title = "Install AbyssBSD"; width = 620; height = 460
+case "diskutility":
+    // Disk Utility (PHASE15 P15.8).
+    scene = .diskutility; title = "Disk Utility"; width = 700; height = 440
 case "activity":
     // Activity Monitor (PHASE15 P15.7).
     scene = .activity; title = "Activity Monitor"; width = 620; height = 360
@@ -195,6 +198,10 @@ if scene == .wallpaper {
     }
     installerSay("AquaDemo: System Preferences is up (\(PrefCatalogue.all.count) panes)")
     withExtendedLifetime(prefs) { display.run() }
+} else if scene == .diskutility {
+    guard let du = DiskUtilityApp(display: display) else { print("AquaDemo: failed to open Disk Utility."); exit(1) }
+    installerSay("AquaDemo: Disk Utility is up.")
+    withExtendedLifetime(du) { display.run() }
 } else if scene == .activity {
     guard let am = ActivityMonitorApp(display: display) else { print("AquaDemo: failed to open Activity Monitor."); exit(1) }
     installerSay("AquaDemo: Activity Monitor is up.")

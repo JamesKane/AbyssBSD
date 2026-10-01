@@ -48,6 +48,14 @@ public enum SettingsWire {
             m.set("network.dns", n.dns.map(\.description).joined(separator: " "))
         case .sound(let s):
             m.set("sound.default", "\(s.defaultUnit)")
+        case .volume(let v):
+            switch v.action {
+            case .snapshot(let ds, let name): m.set("volume.action", "snapshot"); m.set("volume.dataset", ds); m.set("volume.name", name)
+            case .rollback(let snap): m.set("volume.action", "rollback"); m.set("volume.snapshot", snap)
+            case .mountDataset(let ds): m.set("volume.action", "mount"); m.set("volume.dataset", ds)
+            case .unmountDataset(let ds): m.set("volume.action", "unmount"); m.set("volume.dataset", ds)
+            case .unmount(let path): m.set("volume.action", "unmount"); m.set("volume.path", path)
+            }
         case .signal(let s):
             m.set("signal.pid", "\(s.pid)")
             m.set("signal.force", s.force)
@@ -120,6 +128,25 @@ public enum SettingsWire {
             case let other:
                 return .failure(SettingsRefusal(other.isEmpty ? "a network plan must say DHCP or manual"
                                                              : "\(other) is not DHCP or manual"))
+            }
+        case "volume":
+            let ds = m.string("volume.dataset"), path = m.string("volume.path")
+            switch m.string("volume.action") ?? "" {
+            case "snapshot":
+                guard let ds, let name = m.string("volume.name") else { return .failure(SettingsRefusal("a snapshot needs a dataset and a name")) }
+                return .success(.volume(VolumePlan(.snapshot(dataset: ds, name: name))))
+            case "rollback":
+                guard let snap = m.string("volume.snapshot") else { return .failure(SettingsRefusal("a rollback needs a snapshot")) }
+                return .success(.volume(VolumePlan(.rollback(snapshot: snap))))
+            case "mount":
+                guard let ds else { return .failure(SettingsRefusal("a mount needs a dataset")) }
+                return .success(.volume(VolumePlan(.mountDataset(ds))))
+            case "unmount":
+                if let ds { return .success(.volume(VolumePlan(.unmountDataset(ds)))) }
+                guard let path else { return .failure(SettingsRefusal("an unmount needs a dataset or a mount point")) }
+                return .success(.volume(VolumePlan(.unmount(path: path))))
+            case let other:
+                return .failure(SettingsRefusal(other.isEmpty ? "a volume plan must say what to do" : "\(other) is not something Disk Utility does"))
             }
         case "signal":
             guard let pid = Int32(m.string("signal.pid") ?? ""), let started = Int64(m.string("signal.started") ?? "") else {

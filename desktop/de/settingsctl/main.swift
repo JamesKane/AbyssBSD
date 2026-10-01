@@ -70,7 +70,8 @@ while i < args.count {
     switch args[i] {
     case "--service": serviceName = args[i + 1]
     case "--powerd", "--ac", "--battery", "--profile", "--interface", "--address", "--netmask", "--router", "--dns", "--default",
-         "--device", "--join", "--forget", "--passphrase", "--pid", "--started", "--name":
+         "--device", "--join", "--forget", "--passphrase", "--pid", "--started", "--name",
+         "--dataset", "--snapshot", "--rollback", "--mount", "--unmount", "--unmount-path":
         fields[String(args[i].dropFirst(2))] = args[i + 1]
     default: emit(2, "abyss-settingsctl: unknown option '\(args[i])'"); exit(2)
     }
@@ -126,6 +127,22 @@ if verb != "read" && verb != "scan" {
     case "sound":
         guard let d = fields["default"] else { emit(2, "abyss-settingsctl: --default pcmN is required"); exit(2) }
         request.set("sound.default", d)       // as typed: the helper decides
+    case "volume":
+        // Disk Utility (P15.8): --snapshot NAME --dataset D | --rollback D@S |
+        // --mount D | --unmount D | --unmount-path P
+        if let d = fields["dataset"], let n = fields["snapshot"] {
+            request.set("volume.action", "snapshot"); request.set("volume.dataset", d); request.set("volume.name", n)
+        } else if let s = fields["rollback"] {
+            request.set("volume.action", "rollback"); request.set("volume.snapshot", s)
+        } else if let d = fields["mount"] {
+            request.set("volume.action", "mount"); request.set("volume.dataset", d)
+        } else if let d = fields["unmount"] {
+            request.set("volume.action", "unmount"); request.set("volume.dataset", d)
+        } else if let p = fields["unmount-path"] {
+            request.set("volume.action", "unmount"); request.set("volume.path", p)
+        } else {
+            emit(2, "abyss-settingsctl: volume needs --dataset D --snapshot NAME, --rollback D@S, --mount D, --unmount D or --unmount-path P"); exit(2)
+        }
     case "signal":
         // Quit another user's process (P15.7): which one, as the caller saw it.
         guard let pid = fields["pid"], let started = fields["started"], let name = fields["name"] else {
@@ -189,6 +206,8 @@ case "read":
         emit(1, "power profile: \(p.profile.rawValue)")
     case .success(.signal):
         emit(1, "signal: nothing to read")
+    case .success(.volume):
+        emit(1, "volume: nothing to read")
     case .success(.wifi):
         emit(2, "abyss-settingsctl: read wifi is answered separately"); exit(1)
     case .failure(let why):

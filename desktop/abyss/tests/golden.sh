@@ -93,6 +93,8 @@ grab|grab|
 grab@2x|grab|AQUA_SCALE=2
 activity|activity|
 activity@2x|activity|AQUA_SCALE=2
+diskutility|diskutility|
+diskutility@2x|diskutility|AQUA_SCALE=2
 menu|menu|
 menu@2x|menu|AQUA_SCALE=2
 menu-marks|menu|AQUA_MENU_MARKS=1

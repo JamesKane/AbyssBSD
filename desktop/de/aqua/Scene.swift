@@ -15,6 +15,8 @@ import Surface
 import Vents
 import Terminal
 import TextModel
+import Install
+import Volumes
 
 #if canImport(Glibc)
 import Glibc
@@ -39,6 +41,7 @@ public enum SceneKind: Sendable {
     case textedit    // TextEdit (PHASE15 P15.5)
     case grab        // Grab (PHASE15 P15.6)
     case activity    // Activity Monitor (PHASE15 P15.7)
+    case diskutility // Disk Utility (PHASE15 P15.8)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -217,6 +220,24 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
+    case .diskutility:
+        // A fixed machine: one disk, a pool, a dataset with two snapshots selected.
+        var v = DiskUtilityView()
+        v.disks = [Disk(name: "nvd0", bytes: 1_000_204_886_016, description: "Samsung SSD 980 PRO 1TB",
+                        mountedAt: ["/"], holdsRunningRoot: true, partitionKinds: ["efi", "freebsd-swap", "freebsd-zfs"])]
+        v.volumes.datasets = [
+            ZFSDataset(name: "zroot", used: 42_719_010_816, available: 45_561_032_704, mountpoint: "none", mounted: false),
+            ZFSDataset(name: "zroot/ROOT", used: 13_056_704_512, available: 45_561_032_704, mountpoint: "none", mounted: false),
+            ZFSDataset(name: "zroot/ROOT/default", used: 13_056_270_336, available: 45_561_032_704, mountpoint: "/", mounted: true),
+            ZFSDataset(name: "zroot/home", used: 6_774_800_384, available: 45_561_032_704, mountpoint: "/home", mounted: true),
+        ]
+        v.volumes.snapshots = [ZFSSnapshot(name: "zroot/home@abyss-2026-09-30-180000", created: 1_790_791_200, used: 1_310_720),
+                               ZFSSnapshot(name: "zroot/home@abyss-2026-10-01-090507", created: 1_790_845_507, used: 98_304)]
+        v.selected = "ds:zroot/home"
+        v.selectedSnapshot = "zroot/home@abyss-2026-10-01-090507"
+        v.status = "snapshot zroot/home@abyss-2026-10-01-090507: done."
+        v.utcDates = true
+        _ = paintDiskUtility(cr, w: cw, h: ch, view: v)
     case .activity:
         // A fixed table: names, users and numbers that do not change from run to run.
         func p(_ pid: Int32, _ name: String, _ uid: UInt32, _ rss: UInt64, _ thr: Int32, sys: Bool = false) -> Processes.Info {

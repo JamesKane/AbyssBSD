@@ -14,6 +14,7 @@ import Settings
 import SettingsWire
 import Spawn
 import Vents
+import Volumes
 
 #if canImport(Glibc)
 import Glibc
@@ -123,6 +124,49 @@ public final class SettingsService {
 
     /// What this machine refuses that the plan alone cannot know: an
     /// interface that is not here.
+    /// What exists on the machine now (P15.8): the dataset, the snapshot,
+    /// the mount — and a rollback only to a dataset's latest snapshot, since
+    /// rolling back past later ones would destroy them.
+    func volumeMachineProblems(_ v: VolumePlan) -> [SettingsRefusal] {
+        func zfs(_ args: [String]) -> (ok: Bool, out: String) {
+            let r = Spawn.run(["zfs"] + args, stderr: .merge, limit: 1 << 20)
+            return (r.succeeded, r.stdoutText)
+        }
+        func dataset(_ ds: String) -> ZFSDataset? {
+            let r = zfs(["list", "-H", "-p", "-o", "name,used,avail,mountpoint,mounted", "-t", "filesystem", ds])
+            return r.ok ? ZFSList.datasets(r.out).first : nil
+        }
+        switch v.action {
+        case .snapshot(let ds, let name):
+            guard dataset(ds) != nil else { return [SettingsRefusal("there is no dataset \(ds)")] }
+            return zfs(["list", "-H", "-t", "snapshot", "\(ds)@\(name)"]).ok
+                ? [SettingsRefusal("\(ds)@\(name) already exists")] : []
+        case .rollback(let snap):
+            let ds = String(snap.split(separator: "@").first ?? "")
+            let list = zfs(["list", "-H", "-p", "-o", "name,creation,used", "-t", "snapshot", "-d", "1", ds])
+            let snaps = list.ok ? ZFSList.snapshots(list.out) : []
+            guard snaps.contains(where: { $0.name == snap }) else { return [SettingsRefusal("there is no snapshot \(snap)")] }
+            if let latest = snaps.last, latest.name != snap {
+                return [SettingsRefusal("\(snap) is not \(ds)'s latest snapshot (\(latest.short) is): rolling back to it"
+                                        + " would destroy the snapshots after it")]
+            }
+            return []
+        case .mountDataset(let ds), .unmountDataset(let ds):
+            guard let d = dataset(ds) else { return [SettingsRefusal("there is no dataset \(ds)")] }
+            guard d.mountable else { return [SettingsRefusal("\(ds) has no mountpoint (\(d.mountpoint))")] }
+            if Settings.isSystemMount(d.mountpoint) { return [SettingsRefusal("\(ds) is the system's own (\(d.mountpoint))")] }
+            if case .mountDataset = v.action, d.mounted { return [SettingsRefusal("\(ds) is already mounted")] }
+            if case .unmountDataset = v.action, !d.mounted { return [SettingsRefusal("\(ds) is not mounted")] }
+            return []
+        case .unmount(let path):
+            let r = Spawn.run(["mount", "-p"], limit: 1 << 20)
+            let mounted = r.stdoutText.split(separator: "\n").contains { line in
+                line.split(whereSeparator: { $0 == " " || $0 == "\t" }).dropFirst().first.map(String.init) == path
+            }
+            return mounted ? [] : [SettingsRefusal("nothing is mounted at \(path)")]
+        }
+    }
+
     public func machineProblems(_ plan: SettingsPlan) -> [SettingsRefusal] {
         switch plan {
         case .energy: return []
@@ -142,6 +186,8 @@ public final class SettingsService {
             return radios().contains(w.device) ? []
                 : [SettingsRefusal("there is no wireless device \(w.device) on this machine"
                                    + " (it has: \(radios().joined(separator: ", ").isEmpty ? "none" : radios().joined(separator: ", ")))")]
+        case .volume(let v):
+            return volumeMachineProblems(v)
         case .signal(let s):
             // **The process the window showed, still.** Between the person
             // choosing it and this line its pid may have been freed and given

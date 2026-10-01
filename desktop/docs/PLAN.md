@@ -57,7 +57,7 @@ Phases 14 and 15, [BACKLOG.md](BACKLOG.md) closed what Phase 15's applications
 would need from the compositor (U.1–U.10), the installer's keyboard items
 (T.1–T.3) and the toolchain passes (S.0–S.3; Swift 6.3.3 on both platforms).
 
-**Phase 15, the application layer, is seven passes of eight done** ([PHASE15.md](PHASE15.md)).
+**Phase 15, the application layer, is complete (2026-10-01)** ([PHASE15.md](PHASE15.md)).
 Every installed port is a Mac-shaped `.app` (P15.1); the Dock carries real
 applications — pinned, dragged on and off, matched to their running windows —
 and the Apple menu has Recent Items (P15.2); **Firefox ESR is the browser**, in
@@ -69,9 +69,11 @@ the toolkit's multi-line text view, Open and Save through the portal, undo,
 find, and the Finder opening a `.txt` in it (P15.5); and **Grab** — selection,
 window (undertow says where a window is, `window_at`) and screen, saved through
 the portal (P15.6); and **Activity Monitor** — the process table, quitting
-one's own processes and, through the root helper, another user's (P15.7). **One foreign
+one's own processes and, through the root helper, another user's (P15.7); and
+**Disk Utility** — disks, datasets, and ZFS snapshots taken, rolled back (the
+latest only), mounted and unmounted through the root helper (P15.8). **One foreign
 toolkit: GTK** (decided 2026-09-30; the rule is in Context, above) — the Qt menu work of P10.7 is gone.
-**Next is P15.8, Disk Utility**, the last of the phase.
+**Next is Phase 16, the session** — login, lock, idle and power.
 
 **Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
 medium boots, `amdgpu` binds, typing and the pointer work, and after five
@@ -261,7 +263,7 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | ✅ 2026-09-05, but its Aqua view |
 | 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | C6 waits on Phase 4 |
 | 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | ✅ 2026-09-29 |
-| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | **in flight** — P15.1–P15.7 done (bundles, Dock, Firefox, Terminal, TextEdit, Grab, Activity Monitor); Disk Utility next |
+| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | ✅ 2026-10-01 |
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | idle done early (BACKLOG U.9) |
 | 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | the overlay exists, for the board |
 | 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | |
@@ -1044,7 +1046,7 @@ app's own published layout rather than constants (§2.46).
 **Needs:** 9 (clipboard), 10 (menus), 11 (theme), 14 (network). **Unblocks:**
 17's `pkg` hook, and thesis 1.
 
-**Status (2026-09-30): P15.1–P15.4 done; the passes and their evidence are in
+**Status: ✅ complete 2026-10-01 (P15.1–P15.8); the passes and their evidence are in
 [PHASE15.md](PHASE15.md).** What the scoping changed from the plan below:
 **the browser is Firefox ESR**, because WebKitGTK's port is still 2.46.6 (risk
 6); **web applications are Firefox windows** — Firefox dropped its

@@ -86,6 +86,8 @@ public enum SettingsPlan: Equatable, Sendable {
     /// Quit another user's process (P15.7, Activity Monitor): the one plan
     /// that acts on a process rather than on the machine's configuration.
     case signal(SignalPlan)
+    /// Disk Utility (P15.8): a ZFS snapshot or rollback, a mount or unmount.
+    case volume(VolumePlan)
 
     public var kind: String {
         switch self {
@@ -95,6 +97,83 @@ public enum SettingsPlan: Equatable, Sendable {
         case .sound: return "sound"
         case .wifi: return "wifi"
         case .signal: return "signal"
+        case .volume: return "volume"
+        }
+    }
+}
+
+// MARK: - Volumes (P15.8)
+
+/// One change Disk Utility may ask for. Names are checked here, strictly;
+/// whether they exist, and whether a rollback would destroy later snapshots,
+/// is the helper's to check on the machine.
+public enum VolumeAction: Equatable, Sendable {
+    case snapshot(dataset: String, name: String)
+    /// Only to a dataset's latest snapshot: `zfs rollback -r` would destroy
+    /// the ones after it, and that is not something a button does quietly.
+    case rollback(snapshot: String)
+    case mountDataset(String)
+    case unmountDataset(String)
+    /// A mounted filesystem that is not a dataset: a stick, a partition.
+    case unmount(path: String)
+}
+
+public struct VolumePlan: Equatable, Sendable {
+    public var action: VolumeAction
+    public init(_ action: VolumeAction) { self.action = action }
+}
+
+extension Settings {
+    /// A ZFS dataset name: components of letters, digits and `_ . : -`
+    /// separated by `/`, none empty, none `.` or `..`, none starting with `-`.
+    public static func isDatasetName(_ s: String) -> Bool {
+        guard !s.isEmpty, s.count <= 255 else { return false }
+        let parts = s.split(separator: "/", omittingEmptySubsequences: false)
+        return parts.allSatisfy { isZFSComponent(String($0)) }
+    }
+
+    static func isZFSComponent(_ c: String) -> Bool {
+        guard !c.isEmpty, c != ".", c != "..", c.first != "-" else { return false }
+        return c.unicodeScalars.allSatisfy { ($0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0)))
+                                             || "_.:-".unicodeScalars.contains($0) }
+    }
+
+    public static func isSnapshotName(_ s: String) -> Bool {
+        let parts = s.split(separator: "@", omittingEmptySubsequences: false)
+        return parts.count == 2 && isDatasetName(String(parts[0])) && isZFSComponent(String(parts[1]))
+    }
+
+    /// Mounts no plan unmounts: the running system's own.
+    public static let systemMounts: Set<String> = ["/", "/usr", "/var", "/boot", "/tmp", "/dev", "/proc", "/compat"]
+    public static func isSystemMount(_ path: String) -> Bool {
+        systemMounts.contains(path) || path.hasPrefix("/dev/") || path.hasPrefix("/proc/")
+    }
+
+    static func volumeProblems(_ v: VolumePlan) -> [SettingsRefusal] {
+        switch v.action {
+        case .snapshot(let ds, let name):
+            if !isDatasetName(ds) { return [SettingsRefusal("\(ds) is not a dataset's name")] }
+            if !isZFSComponent(name) { return [SettingsRefusal("\(name) is not a snapshot's name (letters, digits and _ . : -)")] }
+            return []
+        case .rollback(let snap):
+            return isSnapshotName(snap) ? [] : [SettingsRefusal("\(snap) is not a snapshot (dataset@name)")]
+        case .mountDataset(let ds), .unmountDataset(let ds):
+            return isDatasetName(ds) ? [] : [SettingsRefusal("\(ds) is not a dataset's name")]
+        case .unmount(let path):
+            guard path.hasPrefix("/"), !path.split(separator: "/").contains(".."), !path.contains("\0") else {
+                return [SettingsRefusal("\(path) is not a mount point")]
+            }
+            return isSystemMount(path) ? [SettingsRefusal("\(path) is the system's own, and is not unmounted")] : []
+        }
+    }
+
+    static func compileVolume(_ v: VolumePlan) -> [SettingsStep] {
+        switch v.action {
+        case .snapshot(let ds, let name): return [.tool(argv: ["zfs", "snapshot", "\(ds)@\(name)"], mayFail: false)]
+        case .rollback(let snap): return [.tool(argv: ["zfs", "rollback", snap], mayFail: false)]
+        case .mountDataset(let ds): return [.tool(argv: ["zfs", "mount", ds], mayFail: false)]
+        case .unmountDataset(let ds): return [.tool(argv: ["zfs", "unmount", ds], mayFail: false)]
+        case .unmount(let path): return [.tool(argv: ["umount", path], mayFail: false)]
         }
     }
 }
@@ -300,6 +379,8 @@ public enum Settings {
                                                    : "\(s.pid) is not a process")]
             }
             return s.name.isEmpty ? [SettingsRefusal("a quit must name the process it means")] : []
+        case .volume(let v):
+            return volumeProblems(v)
         }
     }
 
@@ -376,6 +457,8 @@ public enum Settings {
             return compileWifi(w)
         case .signal(let s):
             return [.tool(argv: ["kill", "-s", s.force ? "KILL" : "TERM", "\(s.pid)"], mayFail: false)]
+        case .volume(let v):
+            return compileVolume(v)
         case .sound(let s):
             // For the next boot, then for now. The kernel refuses a unit with
             // no device behind it, which fails the plan — after sysctl.conf
