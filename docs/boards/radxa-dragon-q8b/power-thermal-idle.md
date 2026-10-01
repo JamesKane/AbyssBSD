@@ -229,6 +229,15 @@ apply it now. It's also applied at boot. The default is `balanced`.
 
   So balanced is within 5–13% of performance. powerd's old default
   (adaptive, now power-saver) was 20–47% behind.
+- **Frame pacing costs C3 something.** The desktop compositor at 60 Hz on
+  DP-1 (`undertow run`, 300 frames, three runs each, 2026-10-01): with
+  `cx_lowest=C1` (per-CPU ARM timer) 0, 0, 0 flips missed; with C3 (the
+  global MMIO timer) 4, 1, 2. Its wake-ups occasionally land too late for
+  the latch, though its margin was 2.7–6.4 ms. So `performance` paces
+  frames perfectly and `balanced` misses about 1%; where C3's wake-up time
+  goes (C3 exit, or the MMIO timer's interrupt reaching the sleeping thread's
+  CPU) is still to be measured. Details:
+  `desktop/docs/reports/q8b-bench-2026-10-01.md`.
 - The desktop's Energy Saver pane should offer the three choices through
   `abyss-settings` (`sysrc power_profile=…` then
   `service power_profile start`). See the desktop BACKLOG.
