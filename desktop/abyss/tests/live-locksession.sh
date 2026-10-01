@@ -105,7 +105,7 @@ sleep 0.5; shot desk
 # unlock: type the password into the lock screen and wait for anchor to see it.
 unlock() {
   n=$(count 'the lock screen unlocked the session' "$work/session.log")
-  await "$work/session.log" '^LockScreen: locked' "the lock screen never said it had locked" "$1"
+  await "$work/session.log" 'LockScreen: locked$' "the lock screen never said it had locked" "$1"
   sleep 0.4
   printf 't %s\nk 28\n' "$pw" >&4
   await "$work/session.log" 'the lock screen unlocked the session' "the right password did not unlock" $((n + 1))
@@ -131,7 +131,7 @@ sleep 0.4; shot locked
 echo "ok: 2. abyssctl lock: anchor started the lock screen and the session locked; asked again, it already is"
 
 # ------------------------------------------------------------ 3. the lock screen killed
-await "$work/session.log" '^LockScreen: locked' "the lock screen never said it had locked"
+await "$work/session.log" 'LockScreen: locked$' "the lock screen never said it had locked"
 pid=$(grep 'lock screen up (pid' "$work/session.log" | tail -1 | sed -n 's/.*(pid \([0-9][0-9]*\)).*/\1/p')
 [ -n "$pid" ] || fail "anchor did not say which process the lock screen is: $(grep 'lock screen up' "$work/session.log" | tail -1)"
 kill -KILL "$pid"

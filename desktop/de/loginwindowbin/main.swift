@@ -27,6 +27,7 @@ func emit(_ fd: Int32, _ s: String) {
 }
 
 var socketPath = Login.defaultSocket, service = Login.defaultService, once = false
+var commands = PowerCommands()
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
 @MainActor func value(_ flag: String) -> String {
@@ -39,8 +40,11 @@ while i < args.count {
     case "--socket": socketPath = value("--socket")
     case "--pam-service": service = value("--pam-service")
     case "--once": once = true
+    // Stand-ins that record what was asked, for a test (PHASE16 §6.3).
+    case "--acpiconf": commands.acpiconf = value("--acpiconf")
+    case "--shutdown": commands.shutdown = value("--shutdown")
     case "-h", "--help":
-        emit(1, "usage: abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once]")
+        emit(1, "usage: abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once] [--acpiconf PATH] [--shutdown PATH]")
         exit(0)
     default:
         emit(2, "abyss-loginwindow: unknown option '\(args[i])'"); exit(2)
@@ -70,23 +74,7 @@ do { server = try Current.Server(path: socketPath, mode: 0o666) } catch {
 }
 emit(2, "loginwindow: answering at \(socketPath), PAM service \(service)")
 
-func now() -> UInt64 {
-    var ts = timespec()
-    clock_gettime(CLOCK_MONOTONIC, &ts)
-    return UInt64(ts.tv_sec) &* 1_000_000_000 &+ UInt64(ts.tv_nsec)
-}
-
-var auth = Authenticator.system(service: service)
-while true {
-    guard let client = try? server.accept() else { continue }
-    let uid = loginPeerUID(client)
-    if var request = try? Current.receive(on: client) {
-        let (reply, line) = auth.handle(uid: uid, request: request, now: now())
-        request = Msg()
-        try? Current.send(reply, on: client)
-        emit(2, "loginwindow: \(line)")
-    }
-    close(client)
-    if once { break }
-}
+let daemon = LoginService(server: server, authenticator: .system(service: service), commands: commands,
+                           log: { emit(2, $0) })
+daemon.run(once: once)
 server.shutdownAndUnlink()

@@ -177,6 +177,29 @@ U.9's display sleep) — and amdgpu's own resume is the metal risk (§6.3).
 *Verified in the harness* with a stand-in `acpiconf` that records the request
 (§6.3); *on metal* a real suspend/resume cycle on the 12700KF, waking locked.
 
+Split in two: **(a)** the daemon's power and the lock before sleep;
+**(b)** the Restart…/Shut Down… confirmations, the power button's dialog, and
+the lid and button through devd.
+
+✅ **P16.4a done 2026-10-01.** The daemon's loop is now `LoginService`, in
+`Login`, so the stand-in (`abyss-loginstub`) runs the real one. It answers
+`verify`, `watch` and `power`:
+- **Who may:** anyone may sleep the machine; restart and shut down need root,
+  `wheel` or `operator` (`PowerPolicy`).
+- **The commands:** `acpiconf -s 3`, `shutdown -r now`, `shutdown -p now`,
+  each overridable for a stand-in.
+- **The lock before sleep is the daemon's rule, whoever asks.** Each session's
+  `abyss-idle` watches. The daemon tells every watcher `sleep` and waits for
+  each to answer that it is locked (the compositor's word, P16.3) or needs no
+  lock. One that cannot, or does not in time, calls the sleep off. When the
+  machine wakes, the sessions are told.
+- System > Sleep is real. `abyss-loginctl power …` asks from a shell.
+
+`live-power.sh`, 6 claims (stand-ins record the session's lock as they run),
+and `live-authenticator.sh` claim 7 through the real root daemon in the guest:
+an ordinary account may sleep but not restart; wheel may. Six faults injected
+and caught (HANDOFF §2.105). The metal cycle on the 12700KF is still to do.
+
 **P16.5 — the login window (L).** `abyss-loginwindow` grows its second job,
 shaped like `greetd`: at boot `rc` starts it, it starts a **greeter session** —
 `undertow` and the Aqua login window, as an unprivileged `_loginwindow` user —

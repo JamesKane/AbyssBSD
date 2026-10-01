@@ -53,7 +53,7 @@ await() {  # await FILE PATTERN WHY [TIMES] [TENTHS]
 }
 state() { grep '^session-lock' "$work/ut.out" | tail -1 | cut -d' ' -f2; }
 locks() { grep '^session-lock' "$work/ut.out" | tail -1 | sed -n 's/.* locks=\([0-9]*\) .*/\1/p'; }
-sleeps() { count 'loginstub: power sleep' "$work/stub.log"; }
+sleeps() { count 'loginwindow: uid [0-9]*: sleep — ' "$work/stub.log"; }
 
 protos=$(pkg-config --variable=pkgdatadir wayland-protocols)
 for x in "vpointer:$root/abyss/tests/wlr-virtual-pointer-unstable-v1.xml" \
@@ -113,7 +113,7 @@ energy() {
 
 unlock() {
   n=$(count 'the lock screen unlocked the session' "$work/session.log")
-  await "$work/session.log" '^LockScreen: locked' "the lock screen never said it had locked" "$1"
+  await "$work/session.log" 'LockScreen: locked$' "the lock screen never said it had locked" "$1"
   sleep 0.3
   printf 't %s\nk 28\n' "$pw" >&4
   await "$work/session.log" 'the lock screen unlocked the session' "the right password did not unlock" $((n + 1))
@@ -124,7 +124,7 @@ unlock() {
 # ------------------------------------------------------------ 1. idle: lock, then sleep
 await "$work/session.log" 'abyss-idle: idle (the display sleeps): locking' "a second of idleness did not lock"
 await "$work/ut.out" '^session-lock locked locks=1 ' "undertow was not locked"
-await "$work/stub.log" 'loginstub: power sleep' "four seconds of idleness did not ask the machine to sleep" 1 80
+await "$work/stub.log" 'loginwindow: uid [0-9]*: sleep — ' "four seconds of idleness did not ask the machine to sleep" 1 80
 [ "$(state)" = locked ] || fail "when the machine was asked to sleep, the session was $(state)"
 [ "$(locks)" = 1 ] || fail "the sleep locked a second time ($(locks)) instead of finding it locked"
 echo "ok: 1. idle: locked when the display's time came, and the machine was asked to sleep — already locked"
@@ -141,7 +141,7 @@ echo "ok: 2. an idle inhibitor held both off (5.5 s)"
 # ------------------------------------------------------------ 3. dropped: it counts again
 printf 'I\n' >&5
 await "$work/ut.out" '^session-lock locked locks=2 ' "with the inhibitor dropped, the session did not lock" 1 40
-await "$work/stub.log" 'loginstub: power sleep' "with the inhibitor dropped, the machine was not asked to sleep" $((before + 1)) 80
+await "$work/stub.log" 'loginwindow: uid [0-9]*: sleep — ' "with the inhibitor dropped, the machine was not asked to sleep" $((before + 1)) 80
 echo "ok: 3. the inhibitor dropped: it locked, and asked to sleep"
 unlock 2
 
@@ -156,7 +156,7 @@ energy 1 4 false
 await "$work/session.log" 'abyss-idle: armed: lock after never, sleep after 4 s (no password required: no lock)' \
   "abyss-idle did not take the change to energy.ini"
 before=$(sleeps)
-await "$work/stub.log" 'loginstub: power sleep' "with no password required, the machine was not asked to sleep" $((before + 1)) 80
+await "$work/stub.log" 'loginwindow: uid [0-9]*: sleep — ' "with no password required, the machine was not asked to sleep" $((before + 1)) 80
 [ "$(locks)" = 2 ] && [ "$(state)" = unlocked ] || fail "with no password required, the session locked ($(state), locks=$(locks))"
 echo "ok: 5. no password required: no lock, and the machine was still asked to sleep"
 
@@ -165,10 +165,10 @@ energy 0 2 true
 await "$work/session.log" 'abyss-idle: armed: lock after never, sleep after 2 s$' "abyss-idle did not take the second change"
 printf 'm 420 300\n' >&3                                 # start the count from now
 before=$(sleeps)
-await "$work/stub.log" 'loginstub: power sleep' "with the display never sleeping, the machine was not asked to sleep" $((before + 1)) 80
+await "$work/stub.log" 'loginwindow: uid [0-9]*: sleep — ' "with the display never sleeping, the machine was not asked to sleep" $((before + 1)) 80
 [ "$(locks)" = 3 ] && [ "$(state)" = locked ] \
   || fail "the machine was asked to sleep and the session was not locked first ($(state), locks=$(locks))"
-grep -q 'abyss-idle: idle (the computer sleeps): locking' "$work/session.log" || fail "the sleep did not say it locked"
+grep -q 'abyss-idle: the machine is about to sleep: locking' "$work/session.log" || fail "the sleep did not say it locked"
 echo "ok: 6. the display never sleeps: the sleep itself locked the session before asking"
 unlock 3
 

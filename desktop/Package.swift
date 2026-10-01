@@ -353,7 +353,7 @@ let package = Package(
         // conversation; Login is the wire, the limiter and the client.
         .target(name: "CPAM", path: "de/cpam", sources: ["cpam.c"], publicHeadersPath: "include",
                 linkerSettings: pamLibraries),
-        .target(name: "Login", dependencies: ["CurrentIPC", "CPlatform", "CPAM"], path: "de/login"),
+        .target(name: "Login", dependencies: ["CurrentIPC", "CPlatform", "CPAM", "Spawn"], path: "de/login"),
         .executableTarget(name: "abyss-loginwindow", dependencies: ["Login", "CurrentIPC"],
                           path: "de/loginwindowbin"),
         .executableTarget(name: "abyss-loginctl", dependencies: ["Login"], path: "de/loginctl"),
@@ -362,7 +362,7 @@ let package = Package(
         // ipcprobe — never shipped.
         // The session's idle policy (PHASE16 P16.3): lock when the display
         // sleeps, ask the machine to sleep after the computer's delay.
-        .executableTarget(name: "abyss-idle", dependencies: ["Surface", "PoolConfig", "CurrentIPC", "Login"],
+        .executableTarget(name: "abyss-idle", dependencies: ["Surface", "CWayland", "PoolConfig", "CurrentIPC", "Login"],
                           path: "de/idlebin"),
         .executableTarget(name: "abyss-loginstub", dependencies: ["Login", "CurrentIPC"], path: "de/loginstub"),
         .executableTarget(name: "abyss-settings",

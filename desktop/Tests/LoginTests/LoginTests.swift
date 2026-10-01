@@ -84,4 +84,24 @@ final class LoginTests: XCTestCase {
             XCTAssertEqual(LoginWire.decode(LoginWire.reply(v)), v)
         }
     }
+
+    // MARK: Power (P16.4a)
+
+    func testAnyoneMaySleepTheMachineAndOnlyAdministratorsRestartIt() {
+        XCTAssertTrue(PowerPolicy.may(.sleep, uid: 1001, groups: []), "sleep is anyone's, as on the Mac")
+        XCTAssertFalse(PowerPolicy.may(.restart, uid: 1001, groups: ["audio"]))
+        XCTAssertFalse(PowerPolicy.may(.shutDown, uid: 1001, groups: ["video", "audio"]))
+        XCTAssertTrue(PowerPolicy.may(.restart, uid: 1001, groups: ["wheel"]))
+        XCTAssertTrue(PowerPolicy.may(.shutDown, uid: 1001, groups: ["operator"]), "shutdown(8)'s own group")
+        XCTAssertTrue(PowerPolicy.may(.shutDown, uid: 0, groups: []))
+    }
+
+    func testEachActionRunsItsCommand() {
+        var c = PowerCommands()
+        XCTAssertEqual(PowerPolicy.argv(.sleep, commands: c), ["/usr/sbin/acpiconf", "-s", "3"])
+        XCTAssertEqual(PowerPolicy.argv(.restart, commands: c), ["/sbin/shutdown", "-r", "now"])
+        XCTAssertEqual(PowerPolicy.argv(.shutDown, commands: c), ["/sbin/shutdown", "-p", "now"])
+        c.acpiconf = "/tmp/stand-in"
+        XCTAssertEqual(PowerPolicy.argv(.sleep, commands: c).first, "/tmp/stand-in")
+    }
 }

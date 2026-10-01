@@ -64,6 +64,8 @@ do {
     case "status":
         emit(1, "session: running")
         emit(1, "components: \(reply.uint64("components") ?? 0)")
+        // The lock (P16.2c/P16.3): "locked" only once the compositor said so.
+        emit(1, "lock: " + (reply.bool("locked") == true ? "locked" : reply.bool("locking") == true ? "locking" : "no"))
         if let detail = reply.string("detail"), !detail.isEmpty {
             for part in detail.split(separator: ",") { emit(1, "  \(part)") }
         }

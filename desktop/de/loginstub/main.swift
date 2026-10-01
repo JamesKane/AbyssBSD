@@ -1,6 +1,6 @@
 // abyss-loginstub — a stand-in authenticator, for tests only (PHASE16 P16.2b).
 //
-//     abyss-loginstub --socket PATH --password-file FILE
+//     abyss-loginstub --socket PATH --password-file FILE [--acpiconf PATH] [--shutdown PATH]
 //
 // The lock screen's test needs an authenticator that answers on Linux, where
 // there is no PAM, and in the guest without a throwaway account to log in as.
@@ -24,12 +24,17 @@ func emit(_ s: String) {
 }
 
 var socketPath = "", passwordFile = ""
+var commands = PowerCommands()
+var lockTimeout = 8.0
 var args = Array(CommandLine.arguments.dropFirst())
 while let a = args.first {
     args.removeFirst()
     switch a {
     case "--socket": socketPath = args.isEmpty ? "" : args.removeFirst()
     case "--password-file": passwordFile = args.isEmpty ? "" : args.removeFirst()
+    case "--acpiconf": commands.acpiconf = args.isEmpty ? "" : args.removeFirst()
+    case "--shutdown": commands.shutdown = args.isEmpty ? "" : args.removeFirst()
+    case "--lock-timeout": lockTimeout = Double(args.isEmpty ? "" : args.removeFirst()) ?? 8
     default: emit("abyss-loginstub: unknown option '\(a)'"); exit(2)
     }
 }
@@ -47,32 +52,15 @@ do { server = try Current.Server(path: socketPath, mode: 0o600) } catch {
 }
 emit("loginstub: answering at \(socketPath)")
 
-func now() -> UInt64 {
-    var ts = timespec()
-    clock_gettime(CLOCK_MONOTONIC, &ts)
-    return UInt64(ts.tv_sec) &* 1_000_000_000 &+ UInt64(ts.tv_nsec)
-}
-
-var auth = Authenticator(userName: { uid in
+// Power requests run the real service's path with stand-in commands
+// (--acpiconf, --shutdown; by default ones that fail, so nothing is asked of
+// this machine by accident).
+if commands.acpiconf == PowerCommands().acpiconf { commands.acpiconf = "/nonexistent/acpiconf" }
+if commands.shutdown == PowerCommands().shutdown { commands.shutdown = "/nonexistent/shutdown" }
+let auth = Authenticator(userName: { uid in
     guard let pw = getpwuid(uid_t(uid)), let n = pw.pointee.pw_name else { return nil }
     return String(cString: n)
 }, check: { _, password in password == secret ? .yes : .no("not the stub's password") })
-while true {
-    guard let client = try? server.accept() else { continue }
-    let uid = loginPeerUID(client)
-    if let request = try? Current.receive(on: client) {
-        // Power requests (P16.3's idle sleep; P16.4's daemon will act): the
-        // stand-in records them, as the stand-in acpiconf will (§6.3).
-        if request.string("method") == "power" {
-            var ok = Msg(); ok.set("ok", true)
-            try? Current.send(ok, on: client)
-            emit("loginstub: power \(request.string("action") ?? "?") from uid \(uid.map(String.init) ?? "?")")
-            close(client)
-            continue
-        }
-        let (reply, line) = auth.handle(uid: uid, request: request, now: now())
-        try? Current.send(reply, on: client)
-        emit("loginwindow: \(line)")
-    }
-    close(client)
-}
+let service = LoginService(server: server, authenticator: auth, commands: commands, log: emit)
+service.lockTimeout = lockTimeout
+service.run()

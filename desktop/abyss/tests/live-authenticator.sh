@@ -18,7 +18,11 @@
 #      FreeBSD's own `system` stack has it — no password, nothing to check),
 #      and the shipped stack has no pam_self, which would let a root session
 #      through on anything *whatever* root's password;
-#   6. no password appears in anything the daemon wrote.
+#   6. no password appears in anything the daemon wrote;
+#   7. power (P16.4a), through the real daemon with stand-in acpiconf and
+#      shutdown: an ordinary account may put the machine to sleep and may not
+#      restart or shut it down — refused in words, nothing run; an account in
+#      wheel may.
 #
 # On Linux there is no PAM to ask, and the daemon must say so (the positive
 # control). Needs root in the guest (passwordless sudo, as the build VM has).
@@ -49,13 +53,14 @@ sudo -n true 2>/dev/null || { echo "SKIP: no passwordless sudo here — the auth
 work=$(mktemp -d /tmp/abyss-auth.XXXXXX)
 chmod 755 "$work"
 svc="abyss-test-$$"
-ua="abyss16a$$"; ub="abyss16b$$"; uc="abyss16c$$"
+ua="abyss16a$$"; ub="abyss16b$$"; uc="abyss16c$$"; uw="abyss16w$$"
 pa="correct-horse-$$"; pb="battery-staple-$$"
 cleanup() {
   [ -n "${dpid:-}" ] && sudo kill "$dpid" 2>/dev/null || true
   sudo pw userdel "$ua" -r 2>/dev/null || true
   sudo pw userdel "$ub" -r 2>/dev/null || true
   sudo pw userdel "$uc" -r 2>/dev/null || true
+  sudo pw userdel "$uw" -r 2>/dev/null || true
   sudo rm -f "/etc/pam.d/$svc" 2>/dev/null || true
   rm -rf "$work" 2>/dev/null || true
 }
@@ -65,11 +70,19 @@ sudo install -m 644 "$root/abyss/etc/pam.d/abyss" "/etc/pam.d/$svc"
 echo "$pa" | sudo pw useradd "$ua" -m -h 0 >/dev/null || fail "could not make $ua"
 echo "$pb" | sudo pw useradd "$ub" -m -h 0 >/dev/null || fail "could not make $ub"
 sudo pw useradd "$uc" -m -w none >/dev/null || fail "could not make $uc"
+sudo pw useradd "$uw" -m -w none -G wheel >/dev/null || fail "could not make $uw"
+# Stand-ins for the machine's own commands: they record, as root, what they
+# were asked. Nothing here suspends or reboots the build VM.
+for c in acpiconf shutdown; do
+  printf '#!/bin/sh\necho "%s $*" >> "%s/power.log"\n' "$c" "$work" > "$work/$c"
+  chmod 755 "$work/$c"
+done
+: > "$work/power.log"; chmod 666 "$work/power.log"
 # The client runs as each account: a copy it can read and run.
 cp "$ctl" "$work/abyss-loginctl"; chmod 755 "$work/abyss-loginctl"
 
 sock="$work/auth.sock"
-sudo sh -c "'$daemon' --socket '$sock' --pam-service '$svc' > '$work/daemon.log' 2>&1 & echo \$! > '$work/pid'"
+sudo sh -c "'$daemon' --socket '$sock' --pam-service '$svc' --acpiconf '$work/acpiconf' --shutdown '$work/shutdown' > '$work/daemon.log' 2>&1 & echo \$! > '$work/pid'"
 i=0; while [ ! -S "$sock" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
 [ -S "$sock" ] || fail "the authenticator never bound its socket"
 dpid=$(cat "$work/pid")
@@ -122,5 +135,20 @@ for p in "$pa" "$pb" "typo-1" "typo-2"; do
 done
 grep -q "($ua): accepted" "$work/daemon.log" || fail "the log does not say who was accepted"
 echo "ok: 6. no password in anything the daemon wrote ($(grep -c 'loginwindow: uid' "$work/daemon.log") answers logged)"
+
+# ------------------------------------------------------------ 7. power
+power() { sudo -u "$1" "$work/abyss-loginctl" --socket "$sock" power "$2" || true; }
+[ "$(power "$ua" restart)" = "refused: only an administrator can restart this computer" ] \
+  || fail "an ordinary account's restart: $(power "$ua" restart)"
+[ "$(power "$ua" shut-down)" = "refused: only an administrator can shut down this computer" ] \
+  || fail "an ordinary account's shut down: $(power "$ua" shut-down)"
+[ "$(power "$ua" sleep)" = ok ] || fail "an ordinary account could not put the machine to sleep"
+i=0; while ! grep -q '^acpiconf -s 3$' "$work/power.log" && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+grep -q '^acpiconf -s 3$' "$work/power.log" || fail "sleep did not run acpiconf -s 3: $(cat "$work/power.log")"
+grep -q '^shutdown' "$work/power.log" && fail "shutdown ran for an ordinary account"
+[ "$(power "$uw" restart)" = ok ] || fail "an account in wheel could not restart: $(power "$uw" restart)"
+i=0; while ! grep -q '^shutdown -r now$' "$work/power.log" && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+grep -q '^shutdown -r now$' "$work/power.log" || fail "restart did not run shutdown -r now: $(cat "$work/power.log")"
+echo "ok: 7. power: an ordinary account may sleep the machine, not restart or shut it down (refused in words); wheel may restart"
 
 echo "all green (the authenticator answers each person about themselves, slowly when they guess, and writes no password down)."

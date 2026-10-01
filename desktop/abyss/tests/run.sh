@@ -263,6 +263,10 @@ if [ "$live" -eq 1 ]; then
   # as energy.ini says; an inhibitor or input holds it off.
   echo "== the idle policy =="
   quiet "$root/abyss/tests/live-idlepolicy.sh"
+  # Sleep, restart and shut down through the daemon (P16.4a): the machine
+  # sleeps only with every session locked, whoever asks.
+  echo "== power =="
+  quiet "$root/abyss/tests/live-power.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

@@ -730,6 +730,39 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.105 Every sleep locks through one place — and two test traps
+(PHASE16 P16.4a, the daemon's power.)
+
+**The lock before sleep is the daemon's, not each asker's.** The menu, the idle
+policy and (P16.4b) the lid all just ask the root daemon to sleep. The daemon
+asks every session's agent (`abyss-idle`, on a `watch` connection) to lock,
+and runs `acpiconf` only when every one has said "locked", or "no password
+required". So no future way of sleeping can forget the lock. Two consequences
+in the agent:
+- **Its own sleep request is asynchronous.** The daemon asks *this* process
+  to lock while that request is open, and a blocking call would sit there
+  until the daemon gave up.
+- **A late answer is not a hang-up.** An agent too slow to answer (stopped,
+  in the test) answers after the sleep was called off. The daemon reads that
+  answer and sets it aside instead of dropping the session's watch.
+
+The daemon replies `ok` **before** it runs the command: the asker is told the
+machine is going to sleep, not held until it wakes.
+
+**Test traps:**
+- **"Reply first, then run" means a test that counts the stand-in's record
+  right after the reply counts too early.** Await the record.
+- **Several processes share one session log, and some write partial lines.**
+  The app library's `skip … NoDisplay` lines arrive in pieces, and
+  `LockScreen: locked` landed mid-line, so `grep '^LockScreen: locked'` missed
+  it, intermittently in two tests and consistently in a third. Match a log
+  line's *end* (`LockScreen: locked$`), never its start, in a log that is not
+  one process's.
+- Undertow's `session-lock` report lines did not appear in a run with no
+  client window mapped. `live-power.sh` reads the lock from `abyssctl status`
+  (the compositor-confirmed state anchor keeps) instead. Why undertow's report
+  is quiet there is not yet understood: an open item, harmless to the product.
+
 ### 2.104 "A lock screen is running" is not "locked"
 (PHASE16 P16.3, the idle policy.)
 

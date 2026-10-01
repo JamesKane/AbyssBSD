@@ -18,6 +18,7 @@ import CCairo
 import CWayland
 import MenuWire
 import CurrentIPC
+import Login
 
 #if canImport(Glibc)
 import Glibc
@@ -391,13 +392,13 @@ public final class MenuBar: LayerSurfaceDelegate {
 
     private func systemEnablement(_ verb: String) -> Enablement {
         switch verb {
-        case "system.about", "system.preferences", "system.log-out", "system.lock":
+        case "system.about", "system.preferences", "system.log-out", "system.lock", "system.sleep":
             return .enabled
         case "system.force-quit":
             guard focus != nil else { return .disabled("the bar cannot see which application is frontmost") }
             return forceQuitTarget == nil ? .disabled("no application is frontmost") : .enabled
-        case "system.sleep", "system.restart", "system.shut-down":
-            return .disabled("needs a privileged helper this desktop does not have yet")
+        case "system.restart", "system.shut-down":
+            return .disabled("asks first, and the asking is not built yet (P16.4b)")
         case "system.recent.clear":
             return recentShown.isEmpty ? .disabled("nothing has been opened yet") : .enabled
         case _ where verb.hasPrefix("system.recent."):
@@ -469,6 +470,18 @@ public final class MenuBar: LayerSurfaceDelegate {
             }
             RecentItems.record(bundle)
             return .ok(bundle)
+        case "system.sleep":
+            // The root daemon sleeps the machine (P16.4a) — once every session
+            // on it, this one included, has said it is locked. So the answer
+            // comes after the lock screen is up, and is either "going to
+            // sleep" or why not.
+            do {
+                let r = try PowerClient.request(.sleep)
+                guard r.bool("ok") == true else { return .refused(r.string("error") ?? "the machine did not sleep") }
+                return .ok("going to sleep")
+            } catch {
+                return .refused("nobody to ask the machine to sleep: \(error)")
+            }
         case "system.lock":
             // anchor runs the lock screen — on the privileged display, and
             // again if it dies while locked — so the bar asks it to, rather
