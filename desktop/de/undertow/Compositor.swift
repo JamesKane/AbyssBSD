@@ -373,6 +373,8 @@ public final class Compositor {
     var activeIslands: [String: Int] = [:]
     /// Switches asked for and not yet latched, by display (C6).
     var islandInputs: [String: UInt64] = [:]
+    /// Slides in progress, by display (P13.3).
+    var islandSlides: [String: IslandSlide] = [:]
     public internal(set) var islandSwitches = 0
     private var moveDX: Double = 0
     private var moveDY: Double = 0

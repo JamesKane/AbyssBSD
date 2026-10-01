@@ -24,10 +24,19 @@ public struct IslandsConfig: Equatable, Sendable {
     public var count: Int
     /// Index 0 is island 1. A missing name is the number.
     public var names: [String]
+    /// The slide (P13.3, §6.5): on by default, 150 ms, skippable. Decoration
+    /// only — the switch is committed before the first frame of it (C6).
+    public var animate: Bool
+    /// Its length. PRODUCT §7.2 budgets ~150 ms; up to 2 s is allowed so a
+    /// test (or a person who wants to watch) can slow it down.
+    public var slideMs: Int
 
-    public init(count: Int = IslandsConfig.defaultCount, names: [String] = []) {
+    public init(count: Int = IslandsConfig.defaultCount, names: [String] = [],
+                animate: Bool = true, slideMs: Int = 150) {
         self.count = min(max(count, 1), IslandsConfig.maxCount)
         self.names = names
+        self.animate = animate
+        self.slideMs = min(max(slideMs, 0), 2000)
     }
 
     public func name(_ n: Int) -> String {
@@ -39,7 +48,9 @@ public struct IslandsConfig: Equatable, Sendable {
         var names: [String] = []
         for n in 1...maxCount { names.append(c.string("islands", "name.\(n)") ?? "") }
         while let last = names.last, last.isEmpty { names.removeLast() }
-        return IslandsConfig(count: count, names: names)
+        return IslandsConfig(count: count, names: names,
+                             animate: c.bool("islands", "animate") ?? true,
+                             slideMs: c.int64("islands", "slide_ms").map(Int.init) ?? 150)
     }
 
     public static func load(configDir: String?) -> IslandsConfig {
@@ -52,7 +63,37 @@ public struct IslandsConfig: Equatable, Sendable {
     }
 }
 
+/// A slide in progress on one display: the view moving from where it was
+/// (an island position, fractional mid-slide) to the island now shown.
+struct IslandSlide {
+    var from: Double
+    var to: Int
+    var start: UInt64
+    var durationNs: UInt64
+
+    /// Ease-out cubic: fast away, settling in — the motion reads as arriving.
+    static func ease(_ t: Double) -> Double { let u = 1 - t; return 1 - u * u * u }
+
+    /// Where the view is at `now`, or nil once it has arrived.
+    func view(at now: UInt64) -> Double? {
+        guard now > start else { return from }
+        let t = Double(now - start) / Double(durationNs)
+        guard t < 1 else { return nil }
+        return from + (Double(to) - from) * IslandSlide.ease(t)
+    }
+}
+
 extension Compositor {
+    /// Where display `d`'s view is mid-slide (an island position, fractional),
+    /// or nil when it is still. **Free when nobody is switching**: one
+    /// emptiness test, called once per display per frame by its scene.
+    func islandView(on d: String, now: UInt64) -> Double? {
+        guard !islandSlides.isEmpty, let s = islandSlides[d] else { return nil }
+        if let v = s.view(at: now) { return v }
+        islandSlides[d] = nil
+        return nil
+    }
+
     /// The island display `d` is showing (1 until somebody switches).
     public func activeIsland(on d: String) -> Int { activeIslands[d] ?? 1 }
 
@@ -105,6 +146,15 @@ extension Compositor {
     public func switchIsland(_ n: Int, on display: String? = nil) {
         let d = display ?? commandDisplay()
         guard n >= 1, n <= islands.count, activeIsland(on: d) != n else { return }
+        // The slide starts from wherever the view is — mid-slide, that is
+        // between two islands — so asking again re-targets; it never queues
+        // (PRODUCT §7.2 rule 2). Off, or zero-length: the view just is there.
+        if islands.animate, islands.slideMs > 0 {
+            let now = Mono.now()
+            let from = islandView(on: d, now: now) ?? Double(activeIsland(on: d))
+            islandSlides[d] = IslandSlide(from: from, to: n, start: now,
+                                          durationNs: UInt64(islands.slideMs) * 1_000_000)
+        }
         activeIslands[d] = n
         islandSwitches &+= 1
         // Stamped for C6: the earliest unshown request is what a person is

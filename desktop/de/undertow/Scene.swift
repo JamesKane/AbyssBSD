@@ -155,28 +155,29 @@ public final class SurfaceScene: FrameSink {
         // is what puts the shell above the apps and the wallpaper below them.
         let layers = compositor.mappedLayers
         for l in layers where l.layer <= 1 { add(layer: l) }
-        for t in compositor.mappedToplevels {
-            guard count < capacity else { break }   // bounded, never grows
-            // **The frame goes under the window it frames** (P9.6). One entry
-            // in the same arrays as everything else: the present path does not
-            // learn a second kind of thing, it just walks one more rect.
-            if t.decorated, let deco = compositor.decorations,
-               let renderer = compositor.rendererForFrames,
-               let frame = deco.texture(for: t, renderer: renderer,
-                                        active: compositor.seat?.focused === t) {
-                let box = FrameMetrics.frame(forSurfaceAt: t.x, t.y,
-                                             width: t.width, height: t.height)
-                texture[count] = frame
-                source[count] = nil                 // ours: nobody to tell
-                crop[count] = wlr_fbox()            // all of it, as drawn
-                turn[count] = WL_OUTPUT_TRANSFORM_NORMAL
-                waitTimeline[count] = nil           // drawn by us, on the CPU
-                x[count] = box.x; y[count] = box.y
-                w[count] = box.w; h[count] = box.h
-                count += 1
+        if let view = compositor.islandView(on: displayName, now: now) {
+            // **Mid-slide (P13.3)**: this display's islands within one width
+            // of the view, each shifted by its distance from it — the one
+            // being left slides off as the one asked for slides on. Input and
+            // focus already belong to the new island (C6); this is only where
+            // pixels go. Other displays' windows are drawn as ever.
+            let width = Double(outputWidth)
+            for t in compositor.toplevels {
                 guard count < capacity else { break }
+                guard t.mapped, !t.minimized, wlr_surface_has_buffer(t.surface) else { continue }
+                if t.islandDisplay == displayName {
+                    let off = (Double(t.island) - view) * width
+                    guard abs(off) < width else { continue }
+                    addWindow(t, dx: Int32(off.rounded()))
+                } else if compositor.isOnActiveIsland(t) {
+                    addWindow(t, dx: 0)
+                }
             }
-            addTree(t.surface, at: t.x, t.y)
+        } else {
+            for t in compositor.mappedToplevels {
+                guard count < capacity else { break }   // bounded, never grows
+                addWindow(t, dx: 0)
+            }
         }
         for l in layers where l.layer >= 2 { add(layer: l) }
         // Menus above everything, parent before child (P10.4).
@@ -204,6 +205,31 @@ public final class SurfaceScene: FrameSink {
             }
         }
         return FrameStats(surfaces: painted, damageArea: area, degraded: false, inputAt: inputAt)
+    }
+
+    /// A window, and the frame undertow draws for it, `dx` to the side.
+    @inline(__always)
+    private func addWindow(_ t: Toplevel, dx: Int32) {
+        // **The frame goes under the window it frames** (P9.6). One entry
+        // in the same arrays as everything else: the present path does not
+        // learn a second kind of thing, it just walks one more rect.
+        if t.decorated, let deco = compositor.decorations,
+           let renderer = compositor.rendererForFrames,
+           let frame = deco.texture(for: t, renderer: renderer,
+                                    active: compositor.seat?.focused === t) {
+            let box = FrameMetrics.frame(forSurfaceAt: t.x &+ dx, t.y,
+                                         width: t.width, height: t.height)
+            texture[count] = frame
+            source[count] = nil                 // ours: nobody to tell
+            crop[count] = wlr_fbox()            // all of it, as drawn
+            turn[count] = WL_OUTPUT_TRANSFORM_NORMAL
+            waitTimeline[count] = nil           // drawn by us, on the CPU
+            x[count] = box.x; y[count] = box.y
+            w[count] = box.w; h[count] = box.h
+            count += 1
+            guard count < capacity else { return }
+        }
+        addTree(t.surface, at: t.x &+ dx, t.y)
     }
 
     @inline(__always)

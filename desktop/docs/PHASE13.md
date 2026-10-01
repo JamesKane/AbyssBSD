@@ -160,6 +160,32 @@ judged against a number that already exists.
   - re-target and skip claims in `live-islands.sh`;
   - a golden of a mid-slide frame at a fixed clock.
 
+✅ **P13.3 done 2026-10-01.**
+- **The view.** Each display has a continuous view, an island position.
+  `switchIsland` moves only its target, from wherever it is now, so a
+  re-target mid-slide continues from there and never queues.
+- **The scene,** while a display's view moves, draws that display's islands
+  within one width of the view, each shifted by its distance from it.
+  Otherwise it draws exactly as before; the slide costs one emptiness test a
+  frame when nothing slides.
+- **Ease-out cubic, 150 ms.** `islands.ini` has `animate` and `slide_ms`
+  (clamped to 2 s, for tests and for watching it).
+- **Changed from the plan:**
+  - The alpha array moves to P13.5, its first user (dimming behind Ebb); a
+    slide needs none.
+  - The mid-slide golden became `live-islandslide.sh`'s captures, which
+    assert the same thing without a fixed clock.
+- **C6 unchanged with the slide on:** p99 2 frames on both. Medians of 9–10
+  ms with it, against 10.6–11 ms for the code before it, the same within
+  noise.
+- **Tests:** `live-islandslide.sh` (5 claims) and 2 unit tests. Four faults
+  injected and caught:
+  - a re-target queued;
+  - the keys waiting for the slide;
+  - `animate = no` ignored (claim 5 configures a 2 s slide beside it, so a
+    default 150 ms slide cannot hide the fault);
+  - the scene drawing no slide.
+
 **P13.4 — the Dock and the menu bar across islands (S–M).**
 - **The Dock.** `request_activate` on a window on another island switches
   that display to it first. A Dock click on a running application whose

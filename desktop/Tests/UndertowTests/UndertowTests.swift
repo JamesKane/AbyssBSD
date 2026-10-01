@@ -314,6 +314,39 @@ final class UndertowTests: XCTestCase {
         }
     }
 
+    // MARK: - The slide (PHASE13 P13.3)
+
+    /// From where it was to where it is going, fast then settling, and then
+    /// gone — a still view is no slide at all.
+    func testASlideMovesTheViewThenStops() {
+        let s = IslandSlide(from: 1, to: 2, start: 1_000, durationNs: 150_000_000)
+        XCTAssertEqual(s.view(at: 1_000), 1)
+        XCTAssertNil(s.view(at: 1_000 + 150_000_000), "arrived: nothing left to draw specially")
+        var last = 1.0
+        for ms in stride(from: 10, to: 150, by: 10) {
+            let v = s.view(at: 1_000 + UInt64(ms) * 1_000_000)!
+            XCTAssertGreaterThan(v, last, "monotonic"); XCTAssertLessThan(v, 2)
+            last = v
+        }
+        XCTAssertGreaterThan(s.view(at: 1_000 + 75_000_000)!, 1.5, "ease-out: past half way at half time")
+        // Backwards (Ctrl-← from 1 wraps to 4) moves the other way.
+        let b = IslandSlide(from: 4, to: 1, start: 0, durationNs: 100)
+        XCTAssertLessThan(b.view(at: 50)!, 4)
+    }
+
+    /// islands.ini: the slide on by default at 150 ms; off; and a length
+    /// clamped to what a test may slow it to.
+    func testTheSlideIsConfigurable() {
+        XCTAssertTrue(IslandsConfig().animate)
+        XCTAssertEqual(IslandsConfig().slideMs, 150)
+        var cfg = Config()
+        cfg = cfg.set("islands", "animate", "no")
+        cfg = cfg.set("islands", "slide_ms", "99999")
+        let c = IslandsConfig.from(cfg)
+        XCTAssertFalse(c.animate)
+        XCTAssertEqual(c.slideMs, 2000)
+    }
+
     // MARK: - C6 (PHASE13 P13.2)
 
     /// Frames from input to the vblank that showed it, rounded up, never 0.

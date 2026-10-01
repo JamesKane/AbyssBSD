@@ -198,6 +198,10 @@ if [ "$live" -eq 1 ]; then
   # are not drawn and are suspended; the keys of §6.4; Cmd-Tab goes there.
   echo "== islands =="
   quiet "$root/abyss/tests/live-islands.sh"
+  # The slide (P13.3): decoration after the commit — keys at once, re-targeted,
+  # never queued, skippable.
+  echo "== the island slide =="
+  quiet "$root/abyss/tests/live-islandslide.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).
