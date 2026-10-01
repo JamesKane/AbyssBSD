@@ -53,7 +53,7 @@ directory records what we found, so nobody has to find it again.
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
-| The AbyssBSD desktop on this board | Not tried | — |
+| The AbyssBSD desktop on this board | Builds and tests (680 tests: 678 pass, 1 skipped, 1 installer-probe bug); not yet run on the display | `lang/swift6` for aarch64 |
 
 ## Clock, I²C, SD and devices
 
@@ -91,6 +91,50 @@ directory records what we found, so nobody has to find it again.
 - **`/dev/drm/0`–`255`:** all 256 nodes exist. LinuxKPI's
   `register_chrdev()` creates a whole Linux major's minors up front, on
   every FreeBSD running drm-kmod. Cosmetic; not ours.
+
+## Swift 6.3.3 on aarch64 (for the desktop)
+
+`lang/swift6` was amd64-only because its bootstrap (a prebuilt 6.3.2
+toolchain from the port maintainer) exists only for amd64. Since 6.3, the
+stdlib uses macros, so the build needs a host Swift (`--bootstrapping
+hosttools`). The port's `BOOTSTRAP_MODE` can also self-bootstrap in six
+stages (much longer).
+
+What was done (2026-09-30/10-01, ports fork, not yet committed):
+- **Seed:** the community's native swift-6.3.2 for FreeBSD/aarch64
+  (github.com/networkextension/swift-freebsd, `v0.4.2-6.3.2`, sha256
+  checked). It runs on 16-CURRENT with `libuuid` installed. Repackaged as
+  `swift6-bootstrap-6.3.2-aarch64-unknown-freebsd.tar.xz`, 540 MB, sha256
+  `42ff80b7…`. It's a local distfile for now; hosting it, or making our own
+  bootstrap from the 6.3.3 package with `make-bootstrap-archive`, is open.
+- **Port changes:**
+  - `ONLY_FOR_ARCHS` adds aarch64; compat14x is amd64-only.
+  - LLVM and Swift links run two at a time (16 GB of RAM).
+  - **`bsd.cpu.mk` adds `-Wl,--fix-cortex-a53-843419` to `LDFLAGS` on
+    aarch64. `swiftc` rejects `-Wl,`**, so the first Swift link failed. The
+    port respells it `-Xlinker --fix-cortex-a53-843419`, which `clang` and
+    `swiftc` both take.
+  - The FreeBSD `Mutex` deadlock fix (upstream PR 90143: lock the umutex in
+    userspace first, as libthr does) is carried as a patch, rewritten for
+    6.3.3.
+  - 18 file-list entries are amd64-only: i386 compiler-rt, and the
+    stdlib's `.abi.json`, which needs a bootstrap with `swift-driver`.
+    The community seed has only the legacy driver.
+- **Build:** one run of about 5.5 h on the board (LLVM about 2 h). The
+  package `swift6-6.3.3.pkg` is 583 MB.
+- **Checks:** `Synchronization.Mutex` with 8 contending threads (4,000,000
+  of 4,000,000, no hang); `Foundation.Process` (20 subprocesses); SwiftPM +
+  XCTest (200 tests). swift-testing's `@Test` doesn't work: the port ships
+  no `libTestingMacros.so`, on amd64 either. The desktop uses only XCTest.
+- **The desktop** (`desktop/` at `f80b34b`, wlroots019/020 from pkg, our
+  libdrm and Mesa locked): `swift build` 31 s, no errors; `swift test` 680
+  tests, 1 skipped, 1 failure. The failure is the installer's disk probe:
+  its `zpool list` fails on a UFS-root machine (ZFS not loaded, and the
+  test runs as a normal user). See the desktop BACKLOG.
+- **Lesson:** the community tarball, untarred over `/`, re-owned `/usr`
+  and `/usr/local/lib` and dropped stray cmark-gfm files. Stage
+  third-party archives with `--no-same-owner` (see
+  [lessons.md](lessons.md)).
 
 ## Kernel changes (freebsd-src branch `radxa-dragon-q8b`)
 

@@ -136,6 +136,13 @@ From HANDOFF §5.3, still true:
 - **Dragging desktop icons** — shell work, not compositor work.
 - **One dialog at a time** in `abyss-portal` (PHASE8 §6.7).
 - **`wlr-data-control`** (PHASE9 §6.7) — when `abyssclip` wants it.
+- **The installer's disk probe fails on a machine without ZFS** (found
+  2026-10-01 on the Q8B, UFS root). `probeMachine()` runs `zpool list -H -o
+  name`, which tries to load `zfs.ko`; for a non-root caller that fails with
+  "Failed to load zfs module: Operation not permitted", and the probe
+  throws. `InstallRunTests.testTheProbeRefusesLoudlyWhereItCannotWork`
+  fails there. No ZFS module (`kldstat -q -m zfs` false, or a load failure)
+  should mean "no pools", not a failed probe.
 
 *Done and dropped from the list:* golden-image tests (Phase 11's gate, 70 scenes
 per platform).

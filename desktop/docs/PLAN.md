@@ -1328,8 +1328,9 @@ that has never failed is a comment.
    platforms are on 6.3.3 since S.0. The residual risk is ordinary — a ports
    toolchain can go stale (6.4 has no FreeBSD build yet, SWIFT-6.4.md) — **and one
    new one**: the base moved to `main`, and `lang/swift6` has not been checked on
-   16-CURRENT; it is also amd64-only, which is what keeps the Q8B off the matrix
-   (MIGRATION §5).
+   16-CURRENT; it was also amd64-only, which kept the Q8B off the matrix.
+   *2026-10-01: built for aarch64 on the Q8B (6.3.3, the port extended in
+   the ports fork); this tree builds and tests there (SWIFT-ON-FREEBSD.md).*
 2. ~~**Mac Pro GCN 1.0 GPU**~~ — **DOWNGRADED 2026-09-05 by retarget, not by
    argument.** It was the biggest risk in the project and the only one that could
    end a phase. Bring-up moved to an RX 6750 XT (Navi 22, RDNA 2), which `amdgpu`

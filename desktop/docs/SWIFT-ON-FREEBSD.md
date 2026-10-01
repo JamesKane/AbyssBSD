@@ -133,4 +133,23 @@ closed, and of the FreeBSD-specific facts that came out of it.
   6.4 anywhere for FreeBSD amd64, and `swiftly list-available` on the Linux
   box stops at 6.3.3 too. *latest* also carries `wlroots020` 0.20.2 beside
   `wlroots019` 0.19.3 (MIGRATION §5).
+- **2026-10-01 — aarch64: 6.3.3 on the Radxa Dragon Q8B.** `lang/swift6` is
+  amd64-only only because its prebuilt bootstrap is. Seeded with the
+  community's native 6.3.2 for FreeBSD/aarch64 (networkextension/
+  swift-freebsd `v0.4.2-6.3.2`), the port builds **swift6-6.3.3** on the
+  board (FreeBSD 16-CURRENT) in about 5.5 h. It needed three changes besides
+  allowing the arch:
+  - respell base's aarch64 `-Wl,--fix-cortex-a53-843419` as `-Xlinker`,
+    since `swiftc` rejects `-Wl,`;
+  - carry the FreeBSD `Synchronization.Mutex` deadlock fix (upstream PR
+    90143), which hung `Foundation.Process` and parallel tests on aarch64;
+  - mark i386 and `.abi.json` file-list entries amd64-only.
+
+  Checked: `Mutex` contention, `Process`, SwiftPM + XCTest. **This tree builds
+  in 31 s and passes 678 of 680 tests** (1 skipped). The failure is an
+  installer bug, not Swift: the disk probe's `zpool list` fails on a non-ZFS
+  machine (BACKLOG §5). swift-testing macros (`@Test`) are missing from the
+  ports toolchain on both architectures (no `libTestingMacros.so`), which
+  this XCTest-only tree doesn't notice. Details: docs/boards/
+  radxa-dragon-q8b/README.md, "Swift 6.3.3 on aarch64".
 - _(append dated findings here as the spike runs)_

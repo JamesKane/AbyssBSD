@@ -64,6 +64,18 @@ dump** is written.
   cacheable, so it cleans and invalidates the range before reading, or it
   shows stale lines.
 
+## Board hygiene
+
+- **Don't untar third-party archives over `/`.** Directory entries carry
+  their owners. A Swift toolchain tarball re-owned `/usr`, `/usr/local` and
+  `/usr/local/lib` to uid 1001, and `ldconfig` then refuses
+  `/usr/local/lib` ("ignoring directory not owned by root"). At the next
+  boot every package library would have gone. Stage with
+  `tar --no-same-owner`, and list the entries outside the intended prefix
+  first.
+- **Lock our patched graphics packages** (`pkg lock libdrm mesa-dri
+  mesa-libs`) before installing anything from the FreeBSD repos.
+
 ## Method
 
 - **Read before experimenting.** On a hang or crash, list every

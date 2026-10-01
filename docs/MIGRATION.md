@@ -137,8 +137,10 @@ macOS deletes old files in /tmp):**
   - [x] `desktop/docs/PLAN.md` still says "a FreeBSD `releng/15.0` fork".
   - [ ] Check that `lang/swift6` builds and runs on 16-CURRENT, on both
         amd64 and aarch64. *amd64 done: ports' `swift6` 6.3.3 builds and tests
-        the desktop on the 16 guest. aarch64 remains — the port is
-        `ONLY_FOR_ARCHS=amd64`.*
+        the desktop on the 16 guest. aarch64 built and tested on the Q8B
+        2026-10-01 with the port extended in our ports fork (board README,
+        "Swift 6.3.3 on aarch64"). Left: commit the port change, and host
+        the aarch64 bootstrap or make our own.*
 - [x] **wlroots.** The desktop binds `wlroots-0.19` (`desktop/Package.swift`,
       `de/cwlrootssys/module.modulemap`, the VM seed's `wlroots019`). Ports
       and the Q8B are on wlroots 0.20 (sway 1.12). Upgrade `undertow` to
@@ -151,4 +153,6 @@ macOS deletes old files in /tmp):**
       snapshot userland.
 - [ ] The desktop on the Q8B. So far it has been tested only on amd64 (VMs
       and the i7/RX 6750 XT). Check that `lang/swift6` builds for aarch64,
-      then run the desktop on the Q8B.
+      then run the desktop on the Q8B. *2026-10-01: builds and tests on the
+      Q8B (680 tests: 1 skipped, 1 installer-probe bug); running it on
+      msmfb comes next.*
