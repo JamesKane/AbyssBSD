@@ -51,7 +51,7 @@
     </request>
   </interface>
 
-  <interface name="abyss_menubar_v1" version="2">
+  <interface name="abyss_menubar_v1" version="3">
     <description summary="the menu bar's view of focus">
       Offered only to clients that connected to the compositor's privileged
       socket (PHASE10 §6.1). It says which application is frontmost and where
@@ -89,6 +89,58 @@
         itself.
       </description>
       <arg name="app_id" type="string"/>
+    </request>
+
+    <!-- Islands (PHASE13 P13.4): what each display shows, a list of every
+         island's windows when the bar's island menu opens, and the two things
+         the menu does. Here and not in a public protocol: what is on the
+         islands a person is not looking at is the desktop's to know. -->
+
+    <event name="island" since="3">
+      <description summary="a display shows an island">
+        Sent for every display on bind, and again whenever a display's island
+        changes. is_main is 1 for the display the menu bar is on.
+      </description>
+      <arg name="display" type="string"/>
+      <arg name="island" type="uint"/>
+      <arg name="name" type="string"/>
+      <arg name="count" type="uint" summary="islands that display has"/>
+      <arg name="is_main" type="uint"/>
+    </event>
+
+    <request name="list_islands" since="3">
+      <description summary="every island's windows, now">
+        Answered with a window event for every window that is mapped and not
+        minimised, bottom to top, then islands_done.
+      </description>
+    </request>
+
+    <event name="window" since="3">
+      <arg name="id" type="uint" summary="this window, for activate_window"/>
+      <arg name="display" type="string"/>
+      <arg name="island" type="uint"/>
+      <arg name="app_id" type="string"/>
+      <arg name="title" type="string"/>
+    </event>
+
+    <event name="islands_done" since="3">
+      <description summary="the list is complete">
+        With every island's name, in order, separated by tabs: island 1's
+        first. A name the person never set is the number.
+      </description>
+      <arg name="names" type="string"/>
+    </event>
+
+    <request name="switch_island" since="3">
+      <arg name="display" type="string" summary="empty: the main display"/>
+      <arg name="island" type="uint"/>
+    </request>
+
+    <request name="activate_window" since="3">
+      <description summary="go to a window, wherever it is">
+        Its island, then raised and focused: the Dock's rule.
+      </description>
+      <arg name="id" type="uint"/>
     </request>
   </interface>
 </protocol>

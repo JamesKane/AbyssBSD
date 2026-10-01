@@ -1,0 +1,49 @@
+// The menu bar's island item (PHASE13 P13.4): where you are, and every
+// island's windows — the fourth member of PRODUCT §7.3's set, with the Dock.
+// Once a window can be somewhere you are not, something on screen must always
+// know where it is; this menu is that, for every window at once.
+//
+// Pure: the bar asks the compositor for the list when the menu opens
+// (`abyss_menubar_v1.list_islands`) and builds the menu here.
+
+import MenuWire
+import Surface
+
+public enum IslandMenu {
+    /// What a chosen row asks for.
+    public enum Action: Equatable, Sendable {
+        case switchTo(Int)
+        case window(UInt32)
+    }
+
+    /// One row per island of `display`, the one shown ticked; under each, its
+    /// windows, indented. Choosing an island goes there; choosing a window
+    /// goes to it, wherever it is (the Dock's rule).
+    public static func build(display: String, active: Int, count: Int, names: [String],
+                             windows: [MenuBarFocus.IslandWindow]) -> Menu {
+        var items: [MenuItem] = []
+        for n in 1...max(count, 1) {
+            let name = n <= names.count && !names[n - 1].isEmpty ? names[n - 1] : "\(n)"
+            let title = (n == active ? "✓ " : "    ") + (name == "\(n)" ? "Island \(n)" : name)
+            items.append(.command(Command("island.switch.\(n)", title,
+                                          key: n <= 9 ? KeyEquivalent(.character(Character("\(n)")), .control) : nil,
+                                          summary: "Show island \(n) on this display.")))
+            for w in windows where w.display == display && w.island == n {
+                let label = w.title.isEmpty ? w.appID : w.title
+                items.append(.command(Command("island.window.\(w.id)", "        " + label,
+                                              summary: "Go to this window.")))
+            }
+        }
+        return Menu("Islands", items)
+    }
+
+    public static func action(_ verb: String) -> Action? {
+        if verb.hasPrefix("island.switch."), let n = Int(verb.dropFirst("island.switch.".count)) {
+            return .switchTo(n)
+        }
+        if verb.hasPrefix("island.window."), let id = UInt32(verb.dropFirst("island.window.".count)) {
+            return .window(id)
+        }
+        return nil
+    }
+}

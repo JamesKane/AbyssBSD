@@ -150,9 +150,33 @@ static void menubar_force_quit(struct wl_client *client, struct wl_resource *res
     if (m && app_id && m->hooks.force_quit) m->hooks.force_quit(m->hooks.ctx, app_id);
 }
 
+static void menubar_list_islands(struct wl_client *client, struct wl_resource *resource) {
+    (void)client;
+    struct tw_menus *m = wl_resource_get_user_data(resource);
+    if (m && m->hooks.list_islands) m->hooks.list_islands(m->hooks.ctx, resource);
+    else abyss_menubar_v1_send_islands_done(resource, "");
+}
+
+static void menubar_switch_island(struct wl_client *client, struct wl_resource *resource,
+                                  const char *display, uint32_t island) {
+    (void)client;
+    struct tw_menus *m = wl_resource_get_user_data(resource);
+    if (m && m->hooks.switch_island) m->hooks.switch_island(m->hooks.ctx, display ? display : "", island);
+}
+
+static void menubar_activate_window(struct wl_client *client, struct wl_resource *resource,
+                                    uint32_t id) {
+    (void)client;
+    struct tw_menus *m = wl_resource_get_user_data(resource);
+    if (m && m->hooks.activate_window) m->hooks.activate_window(m->hooks.ctx, id);
+}
+
 static const struct abyss_menubar_v1_interface menubar_impl = {
     .destroy = menubar_destroy_request,
     .force_quit = menubar_force_quit,
+    .list_islands = menubar_list_islands,
+    .switch_island = menubar_switch_island,
+    .activate_window = menubar_activate_window,
 };
 
 static void menubar_resource_destroyed(struct wl_resource *resource) {
@@ -192,6 +216,33 @@ void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
 }
 
 int tw_menubar_count(struct tw_menus *m) { return wl_list_length(&m->menubars); }
+
+void tw_menubar_send_island(struct wl_resource *menubar, const char *display, uint32_t island,
+                            const char *name, uint32_t count, uint32_t is_main) {
+    if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_ISLAND_SINCE_VERSION) return;
+    abyss_menubar_v1_send_island(menubar, display ? display : "", island, name ? name : "",
+                                 count, is_main);
+}
+
+void tw_menubar_send_island_all(struct tw_menus *m, const char *display, uint32_t island,
+                                const char *name, uint32_t count, uint32_t is_main) {
+    struct wl_resource *r;
+    wl_resource_for_each(r, &m->menubars) {
+        tw_menubar_send_island(r, display, island, name, count, is_main);
+    }
+}
+
+void tw_menubar_send_window(struct wl_resource *menubar, uint32_t id, const char *display,
+                            uint32_t island, const char *app_id, const char *title) {
+    if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_WINDOW_SINCE_VERSION) return;
+    abyss_menubar_v1_send_window(menubar, id, display ? display : "", island,
+                                 app_id ? app_id : "", title ? title : "");
+}
+
+void tw_menubar_send_islands_done(struct wl_resource *menubar, const char *names) {
+    if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_ISLANDS_DONE_SINCE_VERSION) return;
+    abyss_menubar_v1_send_islands_done(menubar, names ? names : "");
+}
 
 /* ---------------------------------------------------------------- who may see what */
 
@@ -366,7 +417,7 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
                                          m, manager_bind);
     m->window_global = wl_global_create(display, &abyss_window_manager_v1_interface, 2,
                                         m, window_manager_bind);
-    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 2,
+    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 3,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
     if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global) {

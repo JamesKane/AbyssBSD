@@ -197,6 +197,26 @@ judged against a number that already exists.
     with that window focused;
   - the menu bar's item switches islands.
 
+✅ **P13.4 done 2026-10-01.**
+- **`abyss_menubar_v1` v3**, privileged only:
+  - `island` events (on bind and on every switch);
+  - `list_islands`, answered with `window` events and `islands_done`, which
+    carries every island's name;
+  - `switch_island` and `activate_window`, by an id undertow gives every
+    window.
+- **The bar's island item** sits left of the status items. It shows the main
+  display's island and appears only with more than one island. Its menu
+  (`IslandMenu`) lists the islands, ticks the one shown, and puts each
+  island's windows under it. Choosing an island shows it; choosing a window
+  goes to it, wherever it is.
+- **The Dock half** came in P13.1 (`bringToFront`) and is now tested live,
+  through `ftctl`.
+- **Found:** the client capped the global at v2 (HANDOFF §2.117).
+- **Tests:** `live-islands-bar.sh` (6 claims) and 2 unit tests. Five faults
+  injected and caught: the bar ignoring island events, the list without
+  windows, choosing a window not switching, the Dock not switching, and an
+  item shown with one island.
+
 **P13.5 — Ebb (M–L).**
 - **The layout** is a pure function, unit-tested:
   - every window on the scope, scaled down, none overlapping;

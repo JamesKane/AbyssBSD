@@ -186,6 +186,42 @@ struct abyss_menubar_v1_listener {
 			uint32_t kind,
 			const char *address,
 			const char *app_id);
+	/**
+	 * a display shows an island
+	 *
+	 * Sent for every display on bind, and again whenever a display's
+	 * island changes. is_main is 1 for the display the menu bar is on.
+	 * @param count islands that display has
+	 * @since 3
+	 */
+	void (*island)(void *data,
+		       struct abyss_menubar_v1 *abyss_menubar_v1,
+		       const char *display,
+		       uint32_t island,
+		       const char *name,
+		       uint32_t count,
+		       uint32_t is_main);
+	/**
+	 * @param id this window, for activate_window
+	 * @since 3
+	 */
+	void (*window)(void *data,
+		       struct abyss_menubar_v1 *abyss_menubar_v1,
+		       uint32_t id,
+		       const char *display,
+		       uint32_t island,
+		       const char *app_id,
+		       const char *title);
+	/**
+	 * the list is complete
+	 *
+	 * With every island's name, in order, separated by tabs: island
+	 * 1's first. A name the person never set is the number.
+	 * @since 3
+	 */
+	void (*islands_done)(void *data,
+			     struct abyss_menubar_v1 *abyss_menubar_v1,
+			     const char *names);
 };
 
 /**
@@ -201,11 +237,26 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
 
 #define ABYSS_MENUBAR_V1_DESTROY 0
 #define ABYSS_MENUBAR_V1_FORCE_QUIT 1
+#define ABYSS_MENUBAR_V1_LIST_ISLANDS 2
+#define ABYSS_MENUBAR_V1_SWITCH_ISLAND 3
+#define ABYSS_MENUBAR_V1_ACTIVATE_WINDOW 4
 
 /**
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_FOCUSED_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_ISLAND_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_WINDOW_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_ISLANDS_DONE_SINCE_VERSION 3
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -215,6 +266,18 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_FORCE_QUIT_SINCE_VERSION 2
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_LIST_ISLANDS_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_SWITCH_ISLAND_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_ACTIVATE_WINDOW_SINCE_VERSION 3
 
 /** @ingroup iface_abyss_menubar_v1 */
 static inline void
@@ -259,6 +322,41 @@ abyss_menubar_v1_force_quit(struct abyss_menubar_v1 *abyss_menubar_v1, const cha
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
 			 ABYSS_MENUBAR_V1_FORCE_QUIT, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0, app_id);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ *
+ * Answered with a window event for every window that is mapped and not
+ * minimised, bottom to top, then islands_done.
+ */
+static inline void
+abyss_menubar_v1_list_islands(struct abyss_menubar_v1 *abyss_menubar_v1)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
+			 ABYSS_MENUBAR_V1_LIST_ISLANDS, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+static inline void
+abyss_menubar_v1_switch_island(struct abyss_menubar_v1 *abyss_menubar_v1, const char *display, uint32_t island)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
+			 ABYSS_MENUBAR_V1_SWITCH_ISLAND, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0, display, island);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ *
+ * Its island, then raised and focused: the Dock's rule.
+ */
+static inline void
+abyss_menubar_v1_activate_window(struct abyss_menubar_v1 *abyss_menubar_v1, uint32_t id)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
+			 ABYSS_MENUBAR_V1_ACTIVATE_WINDOW, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0, id);
 }
 
 #ifdef  __cplusplus

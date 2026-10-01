@@ -169,6 +169,7 @@ extension Compositor {
         } else if let f = seat?.focused, !isOnActiveIsland(f) {
             seat?.focusTopmost()
         }
+        menus?.sendIsland(of: d)
         Compositor.log("island \(d) \(n) (\(islands.name(n)))")
     }
 

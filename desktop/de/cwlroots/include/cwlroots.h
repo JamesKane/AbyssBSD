@@ -170,6 +170,13 @@ struct tw_menu_hooks {
      * included — in box[0..3], with app_id and title malloc'd for the caller
      * to free; 0 if none. */
     int (*window_at)(void *ctx, int32_t x, int32_t y, int32_t *box, char **app_id, char **title);
+    /* Islands (abyss_menubar_v1 v3, PHASE13 P13.4), all from the menu bar:
+     * answer with tw_menubar_send_window for each window, then
+     * tw_menubar_send_islands_done; show island n on a display ("" is the
+     * main one); go to a window by the id the list gave it. */
+    void (*list_islands)(void *ctx, struct wl_resource *menubar);
+    void (*switch_island)(void *ctx, const char *display, uint32_t island);
+    void (*activate_window)(void *ctx, uint32_t id);
 };
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);
@@ -184,6 +191,14 @@ void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
                                  const char *address, const char *app_id);
 int tw_menubar_count(struct tw_menus *m);
+/* Islands (v3). Each does nothing for a bar bound at an older version. */
+void tw_menubar_send_island(struct wl_resource *menubar, const char *display, uint32_t island,
+                            const char *name, uint32_t count, uint32_t is_main);
+void tw_menubar_send_island_all(struct tw_menus *m, const char *display, uint32_t island,
+                                const char *name, uint32_t count, uint32_t is_main);
+void tw_menubar_send_window(struct wl_resource *menubar, uint32_t id, const char *display,
+                            uint32_t island, const char *app_id, const char *title);
+void tw_menubar_send_islands_done(struct wl_resource *menubar, const char *names);
 /* The pid of the client owning `resource`, or -1. */
 int tw_client_pid_of(struct wl_resource *resource);
 /* Tell GTK (gtk_shell1.capabilities, on bind) that the desktop shows a global

@@ -730,6 +730,18 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.117 A protocol's version is capped on both ends
+(PHASE13 P13.4, `abyss_menubar_v1` v3.)
+
+undertow advertised v3, sent its new `island` events to a bar that had just
+bound, and logged that it had, but the bar never heard one. `Display`
+binds every one of our globals at `min(advertised, N)`, the right habit,
+because a client must not claim requests it cannot make. N for the menu bar
+was still 2, so the bar was a v2 client, and the server's `since`-version
+check correctly sent it nothing. **Bumping a protocol means bumping the client's
+cap in `Display.swift` too.** Nothing fails loudly: the old version works,
+only without the new features.
+
 ### 2.116 vt(4) switches only to a window somebody has open
 (PHASE16, the login window on the 12700KF.)
 

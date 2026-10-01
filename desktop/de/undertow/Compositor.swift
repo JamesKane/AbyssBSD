@@ -53,6 +53,9 @@ public final class Toplevel {
     /// (`islandDisplay`, settled when it maps and when a drag ends). Hidden
     /// unless that display is showing that island — `mappedToplevels`.
     public internal(set) var island = 1
+    /// Who this window is, for the menu bar's island menu (P13.4): a number
+    /// that is never reused while undertow runs.
+    public let id: UInt32
     public internal(set) var islandDisplay = ""
     /// What we last told the client about xdg-shell's `suspended`.
     var suspendedSaid = false
@@ -85,6 +88,7 @@ public final class Toplevel {
         self.xdgToplevel = toplevel
         self.surface = toplevel.pointee.base.pointee.surface
         self.compositor = compositor
+        self.id = compositor.allocateToplevelID()
 
         let me = Unmanaged.passUnretained(self).toOpaque()
         listeners.append(tw_listen(&surface.pointee.events.map, { ctx, _ in
@@ -373,6 +377,9 @@ public final class Compositor {
     var activeIslands: [String: Int] = [:]
     /// Switches asked for and not yet latched, by display (C6).
     var islandInputs: [String: UInt64] = [:]
+    /// The last window id handed out (P13.4); never reused while we run.
+    private var lastToplevelID: UInt32 = 0
+    func allocateToplevelID() -> UInt32 { lastToplevelID &+= 1; return lastToplevelID }
     /// Slides in progress, by display (P13.3).
     var islandSlides: [String: IslandSlide] = [:]
     public internal(set) var islandSwitches = 0

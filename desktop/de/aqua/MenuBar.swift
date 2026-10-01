@@ -46,10 +46,14 @@ public struct MenuBarLayout {
     /// The status items ("menu extras"), nil when the machine can't feed them.
     public var volumeRect: Rect?
     public var batteryRect: Rect?
+    /// The island item (PHASE13 P13.4), left of the status items; nil with
+    /// one island, or no compositor to ask.
+    public var islandRect: Rect?
     public init(titleRects: [Rect] = [], clockRect: Rect = Rect(0, 0, 0, 0),
-                volumeRect: Rect? = nil, batteryRect: Rect? = nil) {
+                volumeRect: Rect? = nil, batteryRect: Rect? = nil, islandRect: Rect? = nil) {
         self.titleRects = titleRects; self.clockRect = clockRect
         self.volumeRect = volumeRect; self.batteryRect = batteryRect
+        self.islandRect = islandRect
     }
 }
 
@@ -79,7 +83,8 @@ public func formatMenuClock(hour24: Int, minute: Int, wday: Int) -> String {
 public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
                           menus: [MenuBarMenu], clock: String,
                           showClock: Bool,
-                          status: MenuBarStatus = MenuBarStatus()) -> MenuBarLayout {
+                          status: MenuBarStatus = MenuBarStatus(),
+                          island: String? = nil) -> MenuBarLayout {
     var rects: [Rect] = []
     var x = MenuBarMetrics.leftMargin
     for m in menus {
@@ -103,8 +108,17 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
     // the bar's right margin when there is no clock).
     let statusRight = clockRect.w > 0 ? clockRect.x : w - MenuBarMetrics.clockMarginRight
     let items = menuBarStatusLayout(status: status, h: h, rightEdge: statusRight)
+    // The island item sits left of the status items, as one more of them.
+    var islandRect: Rect? = nil
+    if let island, !island.isEmpty {
+        let left = [items.volume?.x, items.battery?.x].compactMap { $0 }.min() ?? statusRight
+        let iw = Draw.textWidth(cr, island, size: MenuBarMetrics.fontSize, role: .chrome)
+            + 2 * MenuBarMetrics.titlePadX
+        islandRect = Rect(left - iw - 4, 0, iw, h)
+    }
     return MenuBarLayout(titleRects: rects, clockRect: clockRect,
-                         volumeRect: items.volume, batteryRect: items.battery)
+                         volumeRect: items.volume, batteryRect: items.battery,
+                         islandRect: islandRect)
 }
 
 /// Paint the menu bar. `openIndex` (if any) is drawn highlighted in menu blue.
@@ -113,11 +127,18 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
 public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
                          menus: [MenuBarMenu], clock: String,
                          openIndex: Int?, showClock: Bool,
-                         status: MenuBarStatus = MenuBarStatus()) -> MenuBarLayout {
+                         status: MenuBarStatus = MenuBarStatus(),
+                         island: String? = nil, islandOpen: Bool = false) -> MenuBarLayout {
     Draw.paint("menubar", cr, Rect(0, 0, w, h))
 
     let layout = menuBarLayout(cr, w: w, h: h, menus: menus, clock: clock,
-                               showClock: showClock, status: status)
+                               showClock: showClock, status: status, island: island)
+    if let r = layout.islandRect, let island {
+        if islandOpen { Draw.paint("menubar.highlight", cr, Rect(r.x, 0, r.w, h)) }
+        Draw.textLeft(cr, island, x: r.x + MenuBarMetrics.titlePadX, baselineY: h - 6.5,
+                      color: islandOpen ? Theme.menuTextOnHighlight : Theme.menuBarText,
+                      size: MenuBarMetrics.fontSize, style: .regular, role: .chrome)
+    }
     for (i, m) in menus.enumerated() {
         let r = layout.titleRects[i]
         let open = (i == openIndex)
@@ -165,6 +186,11 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// (P10.3). Nil unless this bar connected through undertow's privileged
     /// socket — the only connection offered it.
     private var focus: MenuBarFocus?
+    /// The main display's island, as the item shows it (P13.4): nil with one
+    /// island, so a desktop that never uses them has no item.
+    private var islandLabel: String?
+    private var islandOpen = false
+    private var loggedIslandItem: String?
     /// The frontmost application's menu service, when it has one (P10.4).
     /// Nil means the bar is drawing a definition it cannot ask about: the
     /// Finder's, under a compositor that has no view of focus to give.
@@ -274,6 +300,12 @@ public final class MenuBar: LayerSurfaceDelegate {
                 }
                 self?.follow(f)
             }
+            f.onIsland = { [weak self] i in
+                guard let self, i.isMain else { return }
+                let label = i.count > 1 ? i.name : nil
+                MenuBar.log("island \(i.display) \(i.island) of \(i.count) (\(i.name))")
+                if label != self.islandLabel { self.islandLabel = label; self.layer?.setNeedsDisplay() }
+            }
             focus = f
         } else {
             MenuBar.log("not on the compositor's privileged socket: no view of focus")
@@ -381,6 +413,8 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// definition alone. The system menu is the bar's own (P10.8).
     private func enabled(_ command: Command) -> Enablement {
         if command.verb.hasPrefix("system.") { return systemEnablement(command.verb) }
+        // The island menu's rows are the bar's own, not the application's.
+        if IslandMenu.action(command.verb) != nil { return .enabled }
         if service == nil { return MenuBar.staticEnablement(command) }
         return enablement[command.verb] ?? .disabled("the application did not say")
     }
@@ -546,6 +580,16 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// Run a command the person chose, and say what came of it.
     private func choose(_ command: Command, in menuName: String) {
         let what = "\(menuName) > \(command.title) (\(command.verb))"
+        if let a = IslandMenu.action(command.verb) {
+            let main = focus?.mainIsland?.display ?? ""
+            let ok: Bool
+            switch a {
+            case .switchTo(let n): ok = focus?.switchIsland(display: main, island: n) ?? false
+            case .window(let id):  ok = focus?.activateWindow(id: id) ?? false
+            }
+            MenuBar.log("chose \(what) → " + (ok ? "ok" : "refused: no compositor to ask"))
+            return
+        }
         if command.verb.hasPrefix("system.") {
             switch performSystem(command.verb) {
             case .ok(let v):      MenuBar.log("chose \(what) → ok" + (v.map { " \($0)" } ?? ""))
@@ -635,7 +679,10 @@ public final class MenuBar: LayerSurfaceDelegate {
         cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
         layoutCache = paintMenuBar(cr, w: w, h: h, menus: menus, clock: clock,
                                    openIndex: openIndex, showClock: showClock,
-                                   status: status)
+                                   status: status, island: islandLabel, islandOpen: islandOpen)
+        // Where the island item is, for a test to click (§2.46).
+        let item = layoutCache.islandRect.map { "'\(islandLabel ?? "")' at \(Int($0.x + $0.w / 2)),\(Int($0.y + $0.h / 2))" } ?? "none"
+        if item != loggedIslandItem { loggedIslandItem = item; MenuBar.log("island item \(item)") }
         if titlesDirty { titlesDirty = false; logTitles() }
         // Where the speaker is, whenever that changes — for a test to click
         // (§2.46); "none" when there is nothing to set.
@@ -655,6 +702,12 @@ public final class MenuBar: LayerSurfaceDelegate {
         if let r = layoutCache.volumeRect, pointerX >= r.x, pointerX < r.x + r.w {
             closeMenu()
             if volumeSlider == nil { openVolumeSlider(r) } else { closeVolumeSlider() }
+            return
+        }
+        if let r = layoutCache.islandRect, pointerX >= r.x, pointerX < r.x + r.w {
+            let wasOpen = islandOpen
+            closeMenu()
+            if !wasOpen { openIslandMenu(r) }
             return
         }
         if let i = titleAt(pointerX) {
@@ -848,15 +901,45 @@ public final class MenuBar: LayerSurfaceDelegate {
         popup = nil
         menu = nil
         if openIndex != nil { openIndex = nil; layer?.setNeedsDisplay() }
+        if islandOpen { islandOpen = false; layer?.setNeedsDisplay() }
     }
 
     private func menuDismissed() {   // outside click (popup_done), or Escape
         popup = nil
         menu = nil
-        if openIndex != nil {
+        if openIndex != nil || islandOpen {
             openIndex = nil
+            islandOpen = false
             MenuBar.log("closed")
             layer?.setNeedsDisplay()
         }
+    }
+
+    // MARK: the island item (PHASE13 P13.4)
+
+    /// Ask the compositor where every window is, then show the islands with
+    /// theirs — pulled as it opens, like enablement (§6.4).
+    private func openIslandMenu(_ r: Rect) {
+        guard let focus, let main = focus.mainIsland else { return }
+        let asked = focus.listIslands { [weak self] windows, names in
+            guard let self, self.menu == nil else { return }
+            let m = IslandMenu.build(display: main.display, active: main.island, count: main.count,
+                                     names: names, windows: windows)
+            let am = self.makeMenu(m, name: "Islands", at: (Int(r.x), Int(r.h)))
+            am.onDismiss = { [weak self] in self?.menuDismissed() }
+            guard let pop = self.layer?.openPopup(
+                anchorX: Int32(r.x), anchorY: 0, anchorW: Int32(r.w), anchorH: Int32(r.h),
+                width: Int32(max(150, am.preferredWidth)), height: Int32(am.preferredHeight.rounded(.up)),
+                delegate: am)
+            else { return }
+            am.popup = pop
+            self.menu = am
+            self.popup = pop
+            self.islandOpen = true
+            MenuBar.log("opened Islands")
+            MenuBar.logRows(am.items, x: Int(r.x), y: Int(r.h))
+            self.layer?.setNeedsDisplay()
+        }
+        if !asked { MenuBar.log("the compositor cannot list islands (abyss_menubar_v1 < 3)") }
     }
 }

@@ -69,6 +69,8 @@ public final class Menus {
             let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
             let f = m.current
             tw_menubar_send_focused(resource, f.kind.rawValue, f.address, f.appID)
+            // And what every display shows (P13.4): the bar's island item.
+            for d in m.compositor.layout.displays { m.sendIsland(of: d.name, to: resource) }
             Menus.log("a menu bar bound; told it \(f.describe)")
         }
         hooks.set_gtk_properties = { ctx, surface, appID, appMenu, menubar, window, appPath, bus in
@@ -106,8 +108,43 @@ public final class Menus {
             title?.pointee = strdup(w.toplevel.title ?? "")
             return 1
         }
+        // Islands (abyss_menubar_v1 v3, PHASE13 P13.4): the bar's island
+        // menu lists every island's windows, and does two things.
+        hooks.list_islands = { ctx, resource in
+            guard let ctx, let resource else { return }
+            let c = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue().compositor
+            for t in c.toplevels where t.mapped && !t.minimized {
+                tw_menubar_send_window(resource, t.id, t.islandDisplay, UInt32(t.island),
+                                       t.appID ?? "", t.title ?? "")
+            }
+            tw_menubar_send_islands_done(resource,
+                (1...c.islands.count).map { c.islands.name($0) }.joined(separator: "\t"))
+        }
+        hooks.switch_island = { ctx, display, island in
+            guard let ctx else { return }
+            let c = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue().compositor
+            let d = display.map { String(cString: $0) } ?? ""
+            c.switchIsland(Int(island), on: d.isEmpty ? (c.layout.main?.name ?? "") : d)
+        }
+        hooks.activate_window = { ctx, id in
+            guard let ctx else { return }
+            let c = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue().compositor
+            guard let t = c.toplevels.first(where: { $0.id == id && $0.mapped }) else { return }
+            c.bringToFront(t)
+        }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
+    }
+
+    /// Display `d`'s island, to one bar or (nil) to every bar.
+    func sendIsland(of d: String, to resource: UnsafeMutablePointer<wl_resource>? = nil) {
+        let c = compositor, n = c.activeIsland(on: d)
+        let isMain: UInt32 = d == c.layout.main?.name ? 1 : 0
+        if let resource {
+            tw_menubar_send_island(resource, d, UInt32(n), c.islands.name(n), UInt32(c.islands.count), isMain)
+        } else {
+            tw_menubar_send_island_all(raw, d, UInt32(n), c.islands.name(n), UInt32(c.islands.count), isMain)
+        }
     }
 
     deinit { teardown() }

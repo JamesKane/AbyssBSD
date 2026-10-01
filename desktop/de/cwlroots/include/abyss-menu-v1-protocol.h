@@ -198,14 +198,55 @@ struct abyss_menubar_v1_interface {
 	void (*force_quit)(struct wl_client *client,
 			   struct wl_resource *resource,
 			   const char *app_id);
+	/**
+	 * every island's windows, now
+	 *
+	 * Answered with a window event for every window that is mapped
+	 * and not minimised, bottom to top, then islands_done.
+	 * @since 3
+	 */
+	void (*list_islands)(struct wl_client *client,
+			     struct wl_resource *resource);
+	/**
+	 * @param display empty: the main display
+	 * @since 3
+	 */
+	void (*switch_island)(struct wl_client *client,
+			      struct wl_resource *resource,
+			      const char *display,
+			      uint32_t island);
+	/**
+	 * go to a window, wherever it is
+	 *
+	 * Its island, then raised and focused: the Dock's rule.
+	 * @since 3
+	 */
+	void (*activate_window)(struct wl_client *client,
+				struct wl_resource *resource,
+				uint32_t id);
 };
 
 #define ABYSS_MENUBAR_V1_FOCUSED 0
+#define ABYSS_MENUBAR_V1_ISLAND 1
+#define ABYSS_MENUBAR_V1_WINDOW 2
+#define ABYSS_MENUBAR_V1_ISLANDS_DONE 3
 
 /**
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_FOCUSED_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_ISLAND_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_WINDOW_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_ISLANDS_DONE_SINCE_VERSION 3
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -215,6 +256,18 @@ struct abyss_menubar_v1_interface {
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_FORCE_QUIT_SINCE_VERSION 2
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_LIST_ISLANDS_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_SWITCH_ISLAND_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_ACTIVATE_WINDOW_SINCE_VERSION 3
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -225,6 +278,41 @@ static inline void
 abyss_menubar_v1_send_focused(struct wl_resource *resource_, uint32_t kind, const char *address, const char *app_id)
 {
 	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_FOCUSED, kind, address, app_id);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ * Sends an island event to the client owning the resource.
+ * @param resource_ The client's resource
+ * @param count islands that display has
+ */
+static inline void
+abyss_menubar_v1_send_island(struct wl_resource *resource_, const char *display, uint32_t island, const char *name, uint32_t count, uint32_t is_main)
+{
+	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_ISLAND, display, island, name, count, is_main);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ * Sends an window event to the client owning the resource.
+ * @param resource_ The client's resource
+ * @param id this window, for activate_window
+ */
+static inline void
+abyss_menubar_v1_send_window(struct wl_resource *resource_, uint32_t id, const char *display, uint32_t island, const char *app_id, const char *title)
+{
+	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_WINDOW, id, display, island, app_id, title);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ * Sends an islands_done event to the client owning the resource.
+ * @param resource_ The client's resource
+ */
+static inline void
+abyss_menubar_v1_send_islands_done(struct wl_resource *resource_, const char *names)
+{
+	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_ISLANDS_DONE, names);
 }
 
 #ifdef  __cplusplus

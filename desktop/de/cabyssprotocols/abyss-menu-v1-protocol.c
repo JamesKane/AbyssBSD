@@ -40,13 +40,15 @@ static const struct wl_interface *abyss_menu_v1_types[] = {
 	NULL,
 	NULL,
 	NULL,
+	NULL,
+	NULL,
 	&wl_surface_interface,
 	NULL,
 };
 
 static const struct wl_message abyss_menu_manager_v1_requests[] = {
 	{ "destroy", "", abyss_menu_v1_types + 0 },
-	{ "set_address", "os", abyss_menu_v1_types + 3 },
+	{ "set_address", "os", abyss_menu_v1_types + 5 },
 };
 
 WL_PRIVATE const struct wl_interface abyss_menu_manager_v1_interface = {
@@ -58,15 +60,21 @@ WL_PRIVATE const struct wl_interface abyss_menu_manager_v1_interface = {
 static const struct wl_message abyss_menubar_v1_requests[] = {
 	{ "destroy", "", abyss_menu_v1_types + 0 },
 	{ "force_quit", "2s", abyss_menu_v1_types + 0 },
+	{ "list_islands", "3", abyss_menu_v1_types + 0 },
+	{ "switch_island", "3su", abyss_menu_v1_types + 0 },
+	{ "activate_window", "3u", abyss_menu_v1_types + 0 },
 };
 
 static const struct wl_message abyss_menubar_v1_events[] = {
 	{ "focused", "uss", abyss_menu_v1_types + 0 },
+	{ "island", "3susuu", abyss_menu_v1_types + 0 },
+	{ "window", "3ususs", abyss_menu_v1_types + 0 },
+	{ "islands_done", "3s", abyss_menu_v1_types + 0 },
 };
 
 WL_PRIVATE const struct wl_interface abyss_menubar_v1_interface = {
-	"abyss_menubar_v1", 2,
-	2, abyss_menubar_v1_requests,
-	1, abyss_menubar_v1_events,
+	"abyss_menubar_v1", 3,
+	5, abyss_menubar_v1_requests,
+	4, abyss_menubar_v1_events,
 };
 

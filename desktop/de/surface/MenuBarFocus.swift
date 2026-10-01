@@ -21,11 +21,37 @@ public final class MenuBarFocus {
         public let appID: String
     }
 
+    /// What a display shows (v3, PHASE13 P13.4).
+    public struct Island: Equatable, Sendable {
+        public let display: String
+        public let island: Int
+        public let name: String
+        public let count: Int
+        public let isMain: Bool
+    }
+    /// A window, wherever it is, for the island menu.
+    public struct IslandWindow: Equatable, Sendable {
+        public let id: UInt32
+        public let display: String
+        public let island: Int
+        public let appID: String
+        public let title: String
+        public init(id: UInt32, display: String, island: Int, appID: String, title: String) {
+            self.id = id; self.display = display; self.island = island
+            self.appID = appID; self.title = title
+        }
+    }
+
     private let display: Display
     private var proxy: OpaquePointer?
     public private(set) var current: Focus?
     /// Called on every `focused` event, including the one sent on bind.
     public var onFocus: (Focus) -> Void = { _ in }
+    /// Every display's island, as last told; and a call on each change.
+    public private(set) var islands: [String: Island] = [:]
+    public var onIsland: (Island) -> Void = { _ in }
+    private var listing: [IslandWindow] = []
+    private var listWaiters: [([IslandWindow], [String]) -> Void] = []
 
     /// Nil when this connection was not offered the global — which is to say,
     /// when this process is not the menu bar's.
@@ -46,6 +72,33 @@ public final class MenuBarFocus {
             me.current = f
             me.onFocus(f)
         }
+        // Islands (v3). Every event a v3 compositor may send has a handler:
+        // libwayland calls the listener's slot, and an empty one is a crash.
+        l.island = { data, _, d, island, name, count, isMain in
+            guard let data else { return }
+            let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
+            let i = Island(display: d.map { String(cString: $0) } ?? "", island: Int(island),
+                           name: name.map { String(cString: $0) } ?? "", count: Int(count),
+                           isMain: isMain != 0)
+            me.islands[i.display] = i
+            me.onIsland(i)
+        }
+        l.window = { data, _, id, d, island, appID, title in
+            guard let data else { return }
+            let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
+            me.listing.append(IslandWindow(id: id, display: d.map { String(cString: $0) } ?? "",
+                                           island: Int(island),
+                                           appID: appID.map { String(cString: $0) } ?? "",
+                                           title: title.map { String(cString: $0) } ?? ""))
+        }
+        l.islands_done = { data, _, names in
+            guard let data else { return }
+            let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
+            let got = me.listing, waiters = me.listWaiters
+            let n = (names.map { String(cString: $0) } ?? "").split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            me.listing = []; me.listWaiters = []
+            for w in waiters { w(got, n) }
+        }
         display.addListener(to: p, listener: l, data: Unmanaged.passUnretained(self).toOpaque())
         display.flush()
     }
@@ -58,6 +111,36 @@ public final class MenuBarFocus {
     public func forceQuit(appID: String) -> Bool {
         guard version >= 2, let p = proxy else { return false }
         abyss_menubar_v1_force_quit(p, appID)
+        display.flush()
+        return true
+    }
+
+    /// The main display's island, if the compositor says.
+    public var mainIsland: Island? { islands.values.first { $0.isMain } }
+
+    /// Every island's windows and every island's name, answered later (when
+    /// `islands_done` arrives). False when the compositor is too old to ask.
+    @discardableResult
+    public func listIslands(_ done: @escaping ([IslandWindow], [String]) -> Void) -> Bool {
+        guard version >= 3, let p = proxy else { return false }
+        listWaiters.append(done)
+        if listWaiters.count == 1 { abyss_menubar_v1_list_islands(p) }
+        display.flush()
+        return true
+    }
+
+    @discardableResult
+    public func switchIsland(display d: String, island: Int) -> Bool {
+        guard version >= 3, let p = proxy, island >= 1 else { return false }
+        abyss_menubar_v1_switch_island(p, d, UInt32(island))
+        display.flush()
+        return true
+    }
+
+    @discardableResult
+    public func activateWindow(id: UInt32) -> Bool {
+        guard version >= 3, let p = proxy else { return false }
+        abyss_menubar_v1_activate_window(p, id)
         display.flush()
         return true
     }
