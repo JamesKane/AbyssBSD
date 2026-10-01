@@ -204,6 +204,15 @@ public struct Metronome<O: Output, S: FrameSink> {
     /// output winning every tie while the others starve (P14.7a).
     public private(set) var lastTarget: UInt64 = 0
     public let config: Config
+    /// C6 (PHASE13 P13.2): island switches, from input to the vblank that
+    /// showed them. One in flight at a time per output — a second switch
+    /// before the first is shown is shown by the same frame, and measured from
+    /// the earlier input, which is the one a person has waited on longest.
+    public private(set) var c6 = SwitchLatencies()
+    private var c6InputAt: UInt64 = 0
+    private var c6Target: UInt64 = 0
+    /// The frame carrying the switch was refused: the next one carries it.
+    private var c6Carry = false
 
     public init(periodHintNs: UInt64, config: Config = Config()) {
         self.predictor = VblankPredictor(periodHintNs: periodHintNs)
@@ -298,6 +307,16 @@ public struct Metronome<O: Output, S: FrameSink> {
         // 3. Drain flip feedback BEFORE latching, so the prediction that
         //    produced this frame is the freshest one available.
         while let flip = output.pollFlip() {
+            // The frame that drew an island switch reached the screen — or
+            // was refused, and the next frame must (C6).
+            if c6InputAt != 0, flip.target == c6Target {
+                if flip.refused {
+                    c6Carry = true
+                } else {
+                    c6.record(inputAt: c6InputAt, shownAt: flip.vblank, periodNs: predictor.periodNs)
+                    c6InputAt = 0
+                }
+            }
             // A refused commit is a frame that never reached the screen: a miss,
             // for the recorder and for the margin's safety term — which is how
             // the loop learns a margin too small for the GPU and flip pipeline,
@@ -329,6 +348,14 @@ public struct Metronome<O: Output, S: FrameSink> {
         let wakeLate = config.freeRun ? 0 : Mono.since(deadline, latch)
         let stats = sink.latchAndComposite(now: latch, target: target)
         let compositeEnd = Mono.now()
+        if stats.inputAt != 0 {
+            if c6InputAt == 0 { c6InputAt = stats.inputAt }
+            c6Target = target
+            c6Carry = false
+        } else if c6Carry {
+            c6Target = target
+            c6Carry = false
+        }
 
         // 5. Fire and forget. We never wait for the display.
         output.submit(target: target, at: compositeEnd)

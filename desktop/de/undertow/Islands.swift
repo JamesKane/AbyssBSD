@@ -107,6 +107,9 @@ extension Compositor {
         guard n >= 1, n <= islands.count, activeIsland(on: d) != n else { return }
         activeIslands[d] = n
         islandSwitches &+= 1
+        // Stamped for C6: the earliest unshown request is what a person is
+        // waiting on.
+        if islandInputs[d] == nil { islandInputs[d] = Mono.now() }
         // A window being dragged goes with you (Spaces does the same): it is
         // in your hand, not on the island you are leaving.
         if let carried = moving, carried.islandDisplay == d { carried.island = n }
@@ -117,6 +120,14 @@ extension Compositor {
             seat?.focusTopmost()
         }
         Compositor.log("island \(d) \(n) (\(islands.name(n)))")
+    }
+
+    /// The stamp of a switch on `d` not yet drawn, taken by the scene that
+    /// draws it — 0 if none. Free when nobody is switching: one emptiness test.
+    @inline(__always)
+    func takeIslandInput(_ d: String) -> UInt64 {
+        guard !islandInputs.isEmpty, let t = islandInputs.removeValue(forKey: d) else { return 0 }
+        return t
     }
 
     /// Ctrl-← / Ctrl-→: the next island on the command display, wrapping.

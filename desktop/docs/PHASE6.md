@@ -30,6 +30,12 @@ So the promise is not "we wrote a compositor". It is:
 > make it stutter** — proved by an in-process flight recorder and headless
 > benches that fail the build on a regression.
 
+**A sixth number joined them in Phase 13** ([PHASE13.md](PHASE13.md) P13.2):
+**C6, an island switch reaches the screen within two frames of the key that
+asked for it.** It is measured by `undertow` from the key's dispatch to the
+vblank of the first frame that drew it, and `bench-islands.sh` gates the
+build under C2's load (p99 ≤ 2 frames, in the same lane as C1–C5).
+
 Everything else in this phase exists to make that true and to measure it.
 
 **We own the scene, the scheduler and the present path. wlroots owns the

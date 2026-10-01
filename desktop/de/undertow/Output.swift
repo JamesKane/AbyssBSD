@@ -87,11 +87,15 @@ public struct FrameStats: Equatable, Sendable {
     /// and logged, not a surprise stall". Nothing here degrades yet; the field
     /// exists so the recorder's shape is right before P6.3 needs it.
     public var degraded: Bool
+    /// When an island switch this frame is the first to draw was asked for
+    /// (PHASE13 P13.2), or 0. The metronome follows it to the flip: C6.
+    public var inputAt: UInt64
 
-    public init(surfaces: Int32 = 0, damageArea: Int64 = 0, degraded: Bool = false) {
+    public init(surfaces: Int32 = 0, damageArea: Int64 = 0, degraded: Bool = false, inputAt: UInt64 = 0) {
         self.surfaces = surfaces
         self.damageArea = damageArea
         self.degraded = degraded
+        self.inputAt = inputAt
     }
 }
 

@@ -55,12 +55,15 @@ public final class SurfaceScene: FrameSink {
     public private(set) var originX: Int32, originY: Int32
     public private(set) var outputWidth: Int32, outputHeight: Int32
     public private(set) var scale: Double
+    /// Its display's name: the key an island switch is stamped under (C6).
+    public private(set) var displayName: String
 
     public init(compositor: Compositor, display: DisplayBox, capacity: Int = 256) {
         self.compositor = compositor
         self.capacity = capacity
         self.originX = display.x
         self.originY = display.y
+        self.displayName = display.name
         self.outputWidth = display.width
         self.outputHeight = display.height
         self.scale = display.scale
@@ -93,6 +96,7 @@ public final class SurfaceScene: FrameSink {
     /// The output moved, changed mode or scale (P14.7b applies these).
     public func show(_ display: DisplayBox) {
         originX = display.x; originY = display.y
+        displayName = display.name
         outputWidth = display.width; outputHeight = display.height
         scale = display.scale
     }
@@ -123,6 +127,9 @@ public final class SurfaceScene: FrameSink {
     /// hold.
     public func latchAndComposite(now: UInt64, target: UInt64) -> FrameStats {
         count = 0
+        // An island switch asked for since this display last latched: this
+        // frame is the one that draws it, so it carries the stamp (C6).
+        let inputAt = compositor.takeIslandInput(displayName)
         // **Locked: the lock surface for this display, and nothing else**
         // (PHASE16 P16.2). Not the wallpaper, not a window, not a menu or an
         // input method's popup — a window that maps while locked is not
@@ -135,7 +142,7 @@ public final class SurfaceScene: FrameSink {
                 }
             }
             return FrameStats(surfaces: Int32(count), damageArea: Int64(outputWidth) * Int64(outputHeight),
-                              degraded: false)
+                              degraded: false, inputAt: inputAt)
         }
         // Paint order, and it is the shell's whole visual grammar:
         //
@@ -196,7 +203,7 @@ public final class SurfaceScene: FrameSink {
                 painted &+= 1
             }
         }
-        return FrameStats(surfaces: painted, damageArea: area, degraded: false)
+        return FrameStats(surfaces: painted, damageArea: area, degraded: false, inputAt: inputAt)
     }
 
     @inline(__always)

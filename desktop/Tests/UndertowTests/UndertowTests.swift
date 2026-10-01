@@ -314,6 +314,70 @@ final class UndertowTests: XCTestCase {
         }
     }
 
+    // MARK: - C6 (PHASE13 P13.2)
+
+    /// Frames from input to the vblank that showed it, rounded up, never 0.
+    func testC6CountsFramePeriodsToTheVblankThatShowedIt() {
+        let p: UInt64 = 16_666_666
+        XCTAssertEqual(SwitchLatencies.frames(inputAt: 1_000, shownAt: 1_000 + p / 2, periodNs: p), 1)
+        XCTAssertEqual(SwitchLatencies.frames(inputAt: 1_000, shownAt: 1_000 + p, periodNs: p), 1)
+        XCTAssertEqual(SwitchLatencies.frames(inputAt: 1_000, shownAt: 1_000 + p + 1, periodNs: p), 2)
+        XCTAssertEqual(SwitchLatencies.frames(inputAt: 1_000, shownAt: 999, periodNs: p), 1,
+                       "a grid vblank a hair before the input is still the next frame")
+        var l = SwitchLatencies()
+        for f in [1, 1, 2, 1, 3] { l.record(inputAt: 0, shownAt: UInt64(f) * p, periodNs: p) }
+        XCTAssertEqual(l.count, 5)
+        XCTAssertEqual(l.framesPercentile(50), 1)
+        XCTAssertEqual(l.framesPercentile(99), 3)
+        XCTAssertEqual(l.maxFrames, 3)
+    }
+
+    /// The metronome follows a switch to the flip that showed it — and a
+    /// refused flip does not count as shown: the next frame carries it, and
+    /// the sample says what the eye saw.
+    func testC6FollowsASwitchToItsFlipAndPastARefusal() {
+        struct Scripted: Output {
+            let periodNs: UInt64 = 16_666_666
+            var refuse: Set<Int> = []
+            var frame = 0
+            var pending: [Flip] = []
+            var periodHintNs: UInt64 { periodNs }
+            mutating func submit(target: UInt64, at now: UInt64) {
+                pending.append(Flip(target: target, vblank: target, done: now, missed: false,
+                                    refused: refuse.contains(frame)))
+                frame += 1
+            }
+            mutating func pollFlip() -> Flip? { pending.isEmpty ? nil : pending.removeFirst() }
+            mutating func waitUntil(deadlineNs: UInt64) {}
+        }
+        struct Stamping: FrameSink {
+            var stampOn: Int, frame = 0, lastTarget: UInt64 = 0
+            mutating func latchAndComposite(now: UInt64, target: UInt64) -> FrameStats {
+                defer { frame += 1; lastTarget = target }
+                // The switch was asked for half a period before this frame's vblank.
+                return FrameStats(inputAt: frame == stampOn ? target &- 8_333_333 : 0)
+            }
+        }
+        // Not free-running: the plan aims each frame at the next vblank, a
+        // period apart, as on a display. The scripted output never sleeps.
+        let config = Metronome<Scripted, Stamping>.Config()
+        let rec = FlightRecorder(capacity: 64)
+
+        // Shown on its own frame: one frame.
+        var out = Scripted(), sink = Stamping(stampOn: 5)
+        var m = Metronome<Scripted, Stamping>(periodHintNs: 16_666_666, config: config)
+        for _ in 0..<10 { m.step(output: &out, sink: &sink, recorder: rec) }
+        XCTAssertEqual(m.c6.count, 1)
+        XCTAssertEqual(m.c6.sample(0).frames, 1)
+
+        // Its frame refused by the display: shown by the next, so two.
+        var out2 = Scripted(refuse: [5]), sink2 = Stamping(stampOn: 5)
+        var m2 = Metronome<Scripted, Stamping>(periodHintNs: 16_666_666, config: config)
+        for _ in 0..<10 { m2.step(output: &out2, sink: &sink2, recorder: rec) }
+        XCTAssertEqual(m2.c6.count, 1)
+        XCTAssertGreaterThanOrEqual(m2.c6.sample(0).frames, 2, "a refused frame showed nothing")
+    }
+
     /// The scene walk must actually do something — a composite that culls
     /// everything would make every other number here meaningless.
     func testTheSceneCompositesTheSurfacesItIsGiven() {

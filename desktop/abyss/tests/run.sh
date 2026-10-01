@@ -153,6 +153,12 @@ sh "$root/abyss/tests/live-undertow-input.sh"
 phase "C2: no client can make us miss a frame"
 sh "$root/abyss/tests/live-undertow-c2.sh"
 
+# C6 — an island switch reaches the screen within two frames of the key that
+# asked for it, under C2's load (PHASE13 P13.2). Measured to the vblank that
+# showed it, by undertow; it gates the build as C1 does.
+phase "C6: an island switch within two frames"
+sh "$root/abyss/tests/bench-islands.sh"
+
 # The destination of Phase 6: the Aqua shell — wallpaper, menu bar and Dock,
 # three layer-shell clients from Phase 2 — composing on undertow (P6.6).
 phase "the Aqua shell on undertow"

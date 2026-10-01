@@ -45,6 +45,8 @@ func usage() -> Never {
                                     [--assert-missed N] [--config-dir DIR] [--verbose]
                                     [--socket NAME] [--privileged-socket NAME]
                                     [--display-sleep SECONDS]  (else energy.ini's minutes)
+                                    [--assert-c6-frames N] [--assert-c6-switches N]
+                                               (C6: island switches, input to vblank)
                                     [--stand-in-keyboard FIFO] (a keyboard with no keymap, for tests)
                                     [--stand-in-vt FIFO]       ("away"/"back": a VT switch, for tests)
     """)
@@ -60,6 +62,8 @@ var frames = 1200
 var surfaces = 512
 var assertMissed: Int? = nil
 var assertMissedPermille: Int? = nil
+var assertC6Frames: Int? = nil
+var assertC6Switches: Int? = nil
 var assertCostP99Us: UInt64? = nil
 var width: Int32 = 1920
 var height: Int32 = 1080
@@ -105,6 +109,8 @@ while i < args.count {
         guard let v = Int(value("--surfaces")) else { die("--surfaces wants a number") }
         surfaces = v
     case "--assert-missed": assertMissed = Int(value("--assert-missed"))
+    case "--assert-c6-frames": assertC6Frames = Int(value("--assert-c6-frames"))
+    case "--assert-c6-switches": assertC6Switches = Int(value("--assert-c6-switches"))
     case "--assert-missed-permille": assertMissedPermille = Int(value("--assert-missed-permille"))
     case "--assert-cost-p99-us": assertCostP99Us = UInt64(value("--assert-cost-p99-us"))
     case "--width":
@@ -641,6 +647,7 @@ case "run":
     var reportedLock = ""
     var reportedPrimary = 0
     var reportedIslands = ""
+    var reportedC6: [Int] = []
     var reportedWindowIslands: [String: Int] = [:]
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
@@ -677,6 +684,16 @@ case "run":
         let isl = compositor.layout.displays.map { "\($0.name)=\(compositor.activeIsland(on: $0.name))" }
             .joined(separator: " ")
         if isl != reportedIslands { reportedIslands = isl; out("islands \(isl)") }
+        // C6 (PHASE13 P13.2): each switch, from input to the vblank that
+        // showed it, as it is measured.
+        if reportedC6.count != conductor.metronomes.count { reportedC6 = Array(repeating: 0, count: conductor.metronomes.count) }
+        for (i, m) in conductor.metronomes.enumerated() where m.c6.count > reportedC6[i] {
+            for k in reportedC6[i]..<m.c6.count where m.c6.count - k <= m.c6.retained {
+                let s = m.c6.sample(m.c6.retained - (m.c6.count - k))
+                out("island-commit \(outs[i].name) frames=\(s.frames) us=\(s.ns / 1000)")
+            }
+            reportedC6[i] = m.c6.count
+        }
         for t in compositor.toplevels where t.mapped {
             let key = t.placeKey ?? "?"
             if reportedWindowIslands[key] != t.island {
@@ -922,6 +939,23 @@ case "run":
              + " expected at least \(want) — the load never arrived, so a passing"
              + " frame count would prove nothing")
         runFailed = true
+    }
+    // C6 (PHASE13 P13.2): every output's island switches together.
+    do {
+        let frames = conductor.metronomes.flatMap { m in (0..<m.c6.retained).map { m.c6.sample($0).frames } }.sorted()
+        let n = frames.count
+        let pct: (Int) -> Int = { p in n == 0 ? 0 : frames[min(max(1, (p * n + 99) / 100), n) - 1] }
+        out("c6 switches=\(n) frames p50=\(pct(50)) p99=\(pct(99)) max=\(frames.last ?? 0)")
+        if let want = assertC6Switches, n < want {
+            emit(2, "FAIL C6: only \(n) island switch(es) measured, expected at least \(want)"
+                 + " — the switches never arrived, so a passing number would prove nothing")
+            runFailed = true
+        }
+        if let limit = assertC6Frames, pct(99) > limit {
+            emit(2, "FAIL C6: an island switch took \(pct(99)) frames at p99 (max \(frames.last ?? 0)),"
+                 + " limit \(limit) — input to the vblank that showed it")
+            runFailed = true
+        }
     }
     if let limit = assertMissed, recorder.missedCount > limit {
         emit(2, "FAIL C2: \(recorder.missedCount) missed flips of \(recorder.retained),"

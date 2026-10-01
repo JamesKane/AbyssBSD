@@ -128,6 +128,26 @@ judged against a number that already exists.
   PHASE6's contract table.
 - A fault that defers the commit by one frame must fail it.
 
+✅ **P13.2 done 2026-10-01.**
+- **Measured to the display, not the latch** (`SwitchLatency.swift`).
+  `switchIsland` stamps the request. The scene that first latches the display
+  carries the stamp out (`FrameStats.inputAt`), and the metronome follows it
+  to that frame's flip. A sample is the number of frame periods from input to
+  that vblank. Counting latches would always say 1.
+- **A refused flip is not "shown":** the next frame carries the stamp.
+- **`undertow run`** prints `island-commit …` per switch and a `c6` summary,
+  with `--assert-c6-frames` and `--assert-c6-switches`.
+- **`bench-islands.sh`** gates the default lane beside C2:
+  - twelve windows on four islands and C2's eleven adversaries;
+  - 45 switches by the keyboard at jittered phases;
+  - p99 ≤ 2 frames, at least 40 switches measured, and C1's miss budget.
+- **Measured:** Linux and the guest (three runs) both give p99 = 2, median
+  8.5–10 ms, max 17–18 ms at 60 Hz. The worst, an input just after a latch,
+  waits one more frame, which is structurally the limit for a frame that is
+  not missed.
+- **Faults caught:** a 40 ms commit (3 frames; C1 failed too), and a refused
+  flip counted as shown (unit test).
+
 **P13.3 — the transition (S–M).**
 - **Alpha array** in `SurfaceScene`.
 - **The slide** is an x-offset over ≤ 150 ms. The outgoing island draws

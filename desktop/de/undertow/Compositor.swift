@@ -371,6 +371,8 @@ public final class Compositor {
     /// showing, by display name. See Islands.swift.
     public internal(set) var islands: IslandsConfig
     var activeIslands: [String: Int] = [:]
+    /// Switches asked for and not yet latched, by display (C6).
+    var islandInputs: [String: UInt64] = [:]
     public internal(set) var islandSwitches = 0
     private var moveDX: Double = 0
     private var moveDY: Double = 0
