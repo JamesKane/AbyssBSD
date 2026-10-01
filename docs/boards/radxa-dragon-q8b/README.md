@@ -53,7 +53,7 @@ directory records what we found, so nobody has to find it again.
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
-| The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started by hand, not yet at boot. Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
+| The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
 ## Clock, I²C, SD and devices
 
@@ -148,6 +148,12 @@ What was done (2026-09-30/10-01, ports fork, not yet committed):
   (`hw.msm.fb_pool_mb`, 64 MB, 0 for none; dmesg "64 MB at 0x8f000000 for
   scan-out buffers"), sub-allocates with vmem(9), and otherwise falls back to
   an exact-size allocation with reclaim (drm-msm-kmod `0f23f29`, `1e190da`).
+- **At boot:** the desktop's programs are installed as the image installs
+  them (`/usr/local/bin`, `/usr/local/share/abyss`, `abyss-session`,
+  `rc.d/abyss_desktop`). The service needed three fixes on metal (desktop
+  `dc91002`): it ran the session in the foreground and held up the rest of
+  the boot; started with `&`, the console's hangup at the end of rc killed it,
+  so it uses daemon(8); and it kept rc's HOME and PATH, so there was no bus.
 - **Exit:** removing the compositor's last framebuffer turned the output
   off after seatd had dropped master, so the monitor stayed black on exit.
   msmfb now shows the console then (`700b9ba`).
