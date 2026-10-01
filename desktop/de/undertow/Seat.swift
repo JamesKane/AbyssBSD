@@ -1259,6 +1259,9 @@ public final class Seat {
         case .previousWindow:  compositor.cycleWindow(forward: false)
         case .closeWindow:     compositor.closeFocusedWindow()
         case .quitApplication: compositor.quitFocusedApplication()
+        case .island(let n):   compositor.switchIsland(n)
+        case .islandStep(let d): compositor.stepIsland(d)
+        case .moveToIsland(let n, let follow): compositor.moveFocusedWindow(toIsland: n, follow: follow)
         case .run(let words):
             // Said, not swallowed: a binding whose program is not on PATH did
             // nothing at all, and nothing said so (HANDOFF §2.115).

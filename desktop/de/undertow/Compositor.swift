@@ -49,6 +49,13 @@ public final class Toplevel {
     /// once a second (`sendFrameDone`, U.2), because withholding it hangs a
     /// client that waits for one.
     public internal(set) var minimized = false
+    /// The island it is on (PHASE13 P13.1), of the display it lives on
+    /// (`islandDisplay`, settled when it maps and when a drag ends). Hidden
+    /// unless that display is showing that island — `mappedToplevels`.
+    public internal(set) var island = 1
+    public internal(set) var islandDisplay = ""
+    /// What we last told the client about xdg-shell's `suspended`.
+    var suspendedSaid = false
     /// When this window, minimized, last got a frame callback — the hidden
     /// clock's last tick (U.2), in monotonic nanoseconds.
     var hiddenFrameAt: UInt64 = 0
@@ -85,6 +92,7 @@ public final class Toplevel {
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
             t.mapped = true
             t.compositor.place(t)
+            t.compositor.settleIsland(t, fresh: true)
             t.publish()
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.unmap, { ctx, _ in
@@ -126,7 +134,8 @@ public final class Toplevel {
             }
             // **A window nobody can see drew anyway** (T.3): counted, so a test
             // can hold a client to xdg-shell's `suspended`.
-            if t.minimized, t.surface.pointee.current.committed & UInt32(WLR_SURFACE_STATE_BUFFER.rawValue) != 0 {
+            if t.minimized || !t.compositor.isOnActiveIsland(t),
+               t.surface.pointee.current.committed & UInt32(WLR_SURFACE_STATE_BUFFER.rawValue) != 0 {
                 t.compositor.hiddenCommits += 1
             }
             // A resize in progress: the client just told us the size it managed,
@@ -231,11 +240,10 @@ public final class Toplevel {
                                           { ctx, _ in
             guard let ctx else { return }
             let t = Unmanaged<Toplevel>.fromOpaque(ctx).takeUnretainedValue()
-            // A click on a Dock tile. Un-minimize first: raising a window that
-            // is not on screen is a click that appears to do nothing.
-            t.compositor.setMinimized(t, false)
-            t.compositor.raise(t)
-            t.compositor.seat?.focus(t)
+            // A click on a Dock tile. Its island first, then un-minimize:
+            // raising a window that is not on screen is a click that appears
+            // to do nothing (PHASE13 §6.3: a window is never lost).
+            t.compositor.bringToFront(t)
         }, me))
         foreignListeners.append(tw_listen(&handle.pointee.events.request_close, { ctx, _ in
             guard let ctx else { return }
@@ -359,6 +367,11 @@ public final class Compositor {
     public private(set) var configDir: String?
     /// The window being dragged, and the pointer offset within it.
     public private(set) var moving: Toplevel?
+    /// Islands (PHASE13 P13.1): the count and names, and what each display is
+    /// showing, by display name. See Islands.swift.
+    public internal(set) var islands: IslandsConfig
+    var activeIslands: [String: Int] = [:]
+    public internal(set) var islandSwitches = 0
     private var moveDX: Double = 0
     private var moveDY: Double = 0
     /// The window being resized, which edges are being dragged, and the box it
@@ -456,6 +469,7 @@ public final class Compositor {
                 configDir: String? = nil, socketName: String? = nil,
                 privilegedSocket: String? = nil) throws {
         self.places = WindowPlaces(configDir: configDir)
+        self.islands = IslandsConfig.load(configDir: configDir)
         self.configDir = configDir
         self.session = session
         self.layout = layout
@@ -775,6 +789,8 @@ public final class Compositor {
             t.x = area.x + max(0, (area.width - t.width) / 2)
             t.y = area.y + max(0, (area.height - t.height) / 2)
             Compositor.log("window \(t.placeKey ?? "?") was on no display; brought to the main one")
+            // On the main display now, so on the island it is showing.
+            settleIsland(t)
         }
         seat?.keepCursorOnDisplays()
     }
@@ -902,6 +918,8 @@ public final class Compositor {
             snapCount += 1
         }
         rememberPlace(of: t)
+        // Dropped on another display: it joins the island that display shows.
+        settleIsland(t)
     }
 
     // MARK: - Interactive resize
@@ -970,15 +988,18 @@ public final class Compositor {
     /// island with the icons — is Phase 13's; the binding and the raise are this
     /// pass's, and they are what Phase 13 is blocked on.
     func cycleWindow(forward: Bool) {
-        let windows = mappedToplevels          // bottom-to-top; the last is on top
+        // **Every island's windows** (PHASE13 §6.3): choosing one that is
+        // elsewhere goes there, as the Dock does. Bottom-to-top; the last is
+        // on top, and focusing raises, so the focused window is the last.
+        let windows = toplevels.filter { $0.mapped && !$0.minimized && wlr_surface_has_buffer($0.surface) }
         guard windows.count > 1 else {
-            if let only = windows.first { seat?.focus(only) }
+            if let only = windows.first { bringToFront(only) }
             return
         }
         // Forward means "the one under the top", which is what Cmd-Tab does on a
         // Mac: it goes to the window you were in before this one.
         let next = forward ? windows[windows.count - 2] : windows[0]
-        seat?.focus(next)
+        bringToFront(next)
     }
 
     /// Ask the focused window to close. The client decides what that means — a
@@ -1079,8 +1100,7 @@ public final class Compositor {
         t.minimized = on
         // Say so (xdg-shell v6). A client that listens stops drawing; one
         // that does not still has the slow clock `sendFrameDone` keeps.
-        _ = wlr_xdg_toplevel_set_suspended(t.xdgToplevel, on)
-        t.hiddenFrameAt = 0            // the first hidden tick is not delayed
+        refreshSuspended(t)
         if on {
             minimizeCount += 1
             // A minimized window must not keep the keyboard: the person just
@@ -1190,7 +1210,9 @@ public final class Compositor {
 
     /// Windows that currently have something to show, bottom to top.
     public var mappedToplevels: [Toplevel] {
-        toplevels.filter { $0.mapped && !$0.minimized && wlr_surface_has_buffer($0.surface) }
+        // On an island its display is not showing: not shown (PHASE13 P13.1).
+        toplevels.filter { $0.mapped && !$0.minimized && isOnActiveIsland($0)
+                           && wlr_surface_has_buffer($0.surface) }
     }
 
     /// The topmost window at (x, y), and its box as drawn — the frame undertow
@@ -1254,7 +1276,10 @@ public final class Compositor {
         // (Mesa's default: SDL, Blender, zed) blocks inside its swap until the
         // callback comes, which was never. Once a second is enough to keep it
         // alive and cheap enough to cost nothing (API-STUDY §1.4, F-102/F-209).
-        for t in toplevels where t.mapped && t.minimized && wlr_surface_has_buffer(t.surface) {
+        // **And so does one on an island nobody is looking at** (PHASE13 P13.1):
+        // the same case, the same clock.
+        for t in toplevels where t.mapped && (t.minimized || !isOnActiveIsland(t))
+                                 && wlr_surface_has_buffer(t.surface) {
             guard nowNs &- t.hiddenFrameAt >= Compositor.hiddenFramePeriodNs else { continue }
             t.hiddenFrameAt = nowNs
             Compositor.frameDone(tree: t.surface, &now)

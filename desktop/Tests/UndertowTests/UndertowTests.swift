@@ -777,6 +777,45 @@ final class UndertowTests: XCTestCase {
         XCTAssertNil(KeyBindingParser.parse(action: "run:"))
     }
 
+    /// Islands' actions (PHASE13 P13.1): a number in range, or nothing.
+    func testIslandActionsParseAndRefuse() {
+        XCTAssertEqual(KeyBindingParser.parse(action: "island 3"), .island(3))
+        XCTAssertEqual(KeyBindingParser.parse(action: "Island Next"), .islandStep(1))
+        XCTAssertEqual(KeyBindingParser.parse(action: "island previous"), .islandStep(-1))
+        XCTAssertEqual(KeyBindingParser.parse(action: "move-to-island 2"), .moveToIsland(2, follow: false))
+        XCTAssertEqual(KeyBindingParser.parse(action: "move-to-island 2 follow"), .moveToIsland(2, follow: true))
+        XCTAssertNil(KeyBindingParser.parse(action: "island 0"))
+        XCTAssertNil(KeyBindingParser.parse(action: "island 10"))
+        XCTAssertNil(KeyBindingParser.parse(action: "island"))
+        XCTAssertNil(KeyBindingParser.parse(action: "move-to-island 2 later"))
+        // §6.4's defaults, all of them bindable.
+        let d = Dictionary(KeyBindingParser.defaults, uniquingKeysWith: { a, _ in a })
+        XCTAssertEqual(d["Ctrl+2"], "island 2")
+        XCTAssertEqual(d["Ctrl+Right"], "island next")
+        XCTAssertEqual(d["Ctrl+Alt+3"], "move-to-island 3")
+        XCTAssertEqual(d["Ctrl+Alt+Shift+3"], "move-to-island 3 follow")
+        for (_, action) in KeyBindingParser.defaults {
+            XCTAssertNotNil(KeyBindingParser.parse(action: action), action)
+        }
+    }
+
+    /// islands.ini: a count from 1 to 9 (a digit each), names, and wrapping.
+    func testIslandsConfigClampsNamesAndWraps() {
+        XCTAssertEqual(IslandsConfig().count, 4, "§6.1: four by default")
+        XCTAssertEqual(IslandsConfig(count: 0).count, 1)
+        XCTAssertEqual(IslandsConfig(count: 40).count, 9)
+        var cfg = Config()
+        cfg = cfg.set("islands", "count", "3")
+        cfg = cfg.set("islands", "name.2", "Mail")
+        let c = IslandsConfig.from(cfg)
+        XCTAssertEqual(c.count, 3)
+        XCTAssertEqual(c.name(2), "Mail")
+        XCTAssertEqual(c.name(1), "1", "an unnamed island is its number")
+        XCTAssertEqual(c.step(3, by: 1), 1, "Ctrl-→ from the last is the first")
+        XCTAssertEqual(c.step(1, by: -1), 3, "Ctrl-← from the first is the last")
+        XCTAssertEqual(c.step(2, by: 1), 3)
+    }
+
     func testModifiersMustMatchExactly() {
         let table = KeyBindings(bindings: [
             KeyBinding(sym: 0x71, modifiers: [.cmd], action: .quitApplication),

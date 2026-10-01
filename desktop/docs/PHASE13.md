@@ -94,6 +94,26 @@ drawn over the eleven adversary clients C2 already survives.
   - two displays switch independently;
   - Cmd-Tab per §6.3.
 
+✅ **P13.1 done 2026-10-01.**
+- **The model.** `Islands.swift` holds `IslandsConfig` (`islands.ini`: count
+  1–9, default 4; names; wrapping) and the compositor's operations:
+  `switchIsland`, `stepIsland`, `moveFocusedWindow(toIsland:follow:)` and
+  `bringToFront`.
+- **The predicate.** `Toplevel.island` and `islandDisplay` are settled when a
+  window maps, when a drag ends, and when a layout change brings an orphaned
+  window home. `mappedToplevels`, the slow-clock loop and the hidden-commit
+  count all ask `isOnActiveIsland`.
+- **`suspended`** is said once per change (`refreshSuspended`), for minimised
+  and off-island windows alike.
+- **The keys** are §6.4's. A window being dragged goes with a switch.
+- **§6.3 now.** Cmd-Tab and the Dock's `request_activate` go through
+  `bringToFront`, so the Dock half of P13.4 is already in.
+- **Moved to P13.4:** the shell's requests on `abyss_menubar_v1`. Their first
+  user is the menu-bar item.
+- **Tests:** `live-islands.sh` (7 claims), 2 unit tests, and four faults
+  injected and caught (the predicate ignoring islands, no `suspended` on a
+  switch, Cmd-Tab not going there, Shift not following).
+
 **P13.2 — C6, measured (S–M).** Before anything animates, so the animation is
 judged against a number that already exists.
 - **The stamp.** `FrameRecord` gains the input that asked: its arrival time

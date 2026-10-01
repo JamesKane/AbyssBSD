@@ -640,6 +640,8 @@ case "run":
     var reportedHidden = -1
     var reportedLock = ""
     var reportedPrimary = 0
+    var reportedIslands = ""
+    var reportedWindowIslands: [String: Int] = [:]
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -669,6 +671,18 @@ case "run":
         if stack != reportedStack {
             reportedStack = stack
             out("stack=\(stack)")        // bottom to top
+        }
+        // Islands (PHASE13 P13.1): what each display shows, and where each
+        // window is — changes only.
+        let isl = compositor.layout.displays.map { "\($0.name)=\(compositor.activeIsland(on: $0.name))" }
+            .joined(separator: " ")
+        if isl != reportedIslands { reportedIslands = isl; out("islands \(isl)") }
+        for t in compositor.toplevels where t.mapped {
+            let key = t.placeKey ?? "?"
+            if reportedWindowIslands[key] != t.island {
+                reportedWindowIslands[key] = t.island
+                out("window-island \(key) \(t.island)")
+            }
         }
         // The text-input relay's counts (U.5): events, never text.
         if let ti = seat.textInput {

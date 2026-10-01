@@ -188,6 +188,10 @@ if [ "$live" -eq 1 ]; then
   # snapped to an edge, and put in the Dock and taken back out (P9.4).
   phase "window management"
   quiet "$root/abyss/tests/live-window.sh"
+  # Islands (PHASE13 P13.1): a display shows one island; the others' windows
+  # are not drawn and are suspended; the keys of §6.4; Cmd-Tab goes there.
+  echo "== islands =="
+  quiet "$root/abyss/tests/live-islands.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

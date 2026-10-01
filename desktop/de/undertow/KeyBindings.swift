@@ -71,6 +71,11 @@ public enum KeyAction: Equatable, Sendable {
     /// dependency on the hardware bridges to answer a volume key, and a person
     /// can bind anything else the same way.
     case run([String])
+    /// Islands (PHASE13 P13.1): show island N; step one way or the other,
+    /// wrapping; send the focused window to island N, and go with it or not.
+    case island(Int)
+    case islandStep(Int)
+    case moveToIsland(Int, follow: Bool)
 }
 
 /// One row of the table.
@@ -165,7 +170,16 @@ public enum KeyBindingParser {
         case "previous-window": return .previousWindow
         case "close-window":    return .closeWindow
         case "quit-app":        return .quitApplication
+        case "island next":     return .islandStep(1)
+        case "island previous": return .islandStep(-1)
         default:
+            // `island N`, `move-to-island N`, `move-to-island N follow`.
+            let w = a.lowercased().split(separator: " ")
+            if w.count == 2, w[0] == "island", let n = Int(w[1]), n >= 1, n <= 9 { return .island(n) }
+            if w.count >= 2, w.count <= 3, w[0] == "move-to-island", let n = Int(w[1]), n >= 1, n <= 9 {
+                if w.count == 3 { return w[2] == "follow" ? .moveToIsland(n, follow: true) : nil }
+                return .moveToIsland(n, follow: false)
+            }
             // `run: cmd arg arg`. Deliberately not a shell — no quoting, no
             // globbing, no `rm -rf $HOME` from a stray semicolon in a config
             // file the desktop reads at every keystroke.
@@ -218,7 +232,16 @@ public enum KeyBindingParser {
         ("XF86AudioRaiseVolume", "run: ventsctl volume +5"),
         ("XF86AudioLowerVolume", "run: ventsctl volume -5"),
         ("XF86AudioMute",        "run: ventsctl volume 0"),
-    ]
+        // Islands (PHASE13 §6.4): Mac's Spaces keys; Ctrl-Alt sends the
+        // focused window, and Shift goes with it (§6.2). A digit past
+        // `islands.ini`'s count does nothing.
+        ("Ctrl+Left",  "island previous"),
+        ("Ctrl+Right", "island next"),
+    ] + (1...9).flatMap { n in [
+        ("Ctrl+\(n)",           "island \(n)"),
+        ("Ctrl+Alt+\(n)",       "move-to-island \(n)"),
+        ("Ctrl+Alt+Shift+\(n)", "move-to-island \(n) follow"),
+    ] }
 }
 
 private extension Substring {
