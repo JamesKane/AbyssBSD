@@ -730,6 +730,42 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.103 Who may lock, and how anchor knows a lock screen crashed
+(PHASE16 P16.2c, the ways to lock.)
+
+**ext-session-lock is the privileged socket's.** Offered to every client, any
+application could lock the screen. Worse, when the lock screen crashes, an
+application could take the abandoned lock over and unlock it, and the protocol
+allows that by design. With a privileged socket, undertow keeps the global to
+it (`tw_menus_add_privileged_global`, beside the bar's own). Only what anchor
+starts there can lock. Without one (a bare undertow, the protocol tests) it is
+everyone's, as on sway. `live-locksession.sh` claim 1 fails if an ordinary
+client is offered it.
+
+**anchor cannot read a lock screen's exit status on FreeBSD.** A process
+descriptor closes with no status (`ap_child_reap` reports 0), so "exited
+after unlocking" and "crashed" look the same. The lock screen therefore writes
+`abyss-lock-outcome: unlocked|refused` on its stdout, a pipe only anchor
+holds, and an exit without that line is a crash, restarted with a limit of
+five a minute. Two traps from the first version:
+
+- **`ap_child_spawn`'s `stdoutTo` takes stderr too.** The lock screen's whole
+  log went into the pipe and out of anchor's. A pipe read only at exit would
+  also fill at 64 KB and leave the lock screen blocked writing its log. anchor
+  now drains it in the poll loop, passes the log on line by line, and keeps
+  only the prefixed line as the outcome. A bare "unlocked" can appear in
+  ordinary log text.
+- **`ap_child.pid` was -1 on FreeBSD**, so a log could not name the process
+  (the test kills it). It is recorded now, for reporting only; FreeBSD still
+  signals and reaps through the descriptor.
+
+And one in the test: "⌃⌘Q locked" first waited for a *second* `session-lock
+locked` line. The restart in claim 3 had already printed one, so the claim
+passed with the binding removed, and the fault was caught a step later by
+luck. Claims 5 and 6 now wait for undertow's own counter (`locks=3`,
+`locks=4`). §2.37 again: a positive check that is already true before the
+action proves nothing.
+
 ### 2.102 A lock surface had no frame clock — and a sleep is not a count
 (PHASE16 P16.2b, the Aqua lock screen.)
 

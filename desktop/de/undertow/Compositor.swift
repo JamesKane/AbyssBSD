@@ -624,6 +624,14 @@ public final class Compositor {
                   !dir.isEmpty else { throw BackendError.noSocket }
             try m.addPrivilegedSocket(name.hasPrefix("/") ? name : dir + "/" + name)
             privilegedSocketName = name
+            // **The session lock is the privileged socket's** (PHASE16
+            // P16.2c). Offered to every client, any application in the session
+            // could wait for the lock screen to crash, take the abandoned lock
+            // over, and unlock it. With a privileged socket, only what anchor
+            // starts there — the lock screen — can lock or take a lock over.
+            // Without one (a bare undertow, the protocol's own tests) it is
+            // everyone's, as on any compositor.
+            if let lock = sessionLock { m.restrictToPrivileged(lock.global) }
             // A session with a bar can show GTK's menus in it, so GTK may stop
             // drawing its own (PHASE10 §6.5). Without one it keeps them.
             m.advertiseGlobalMenusToGTK(true)

@@ -55,6 +55,11 @@ public struct SessionPlan: Equatable, Sendable {
     /// could not be built. **Not** silent omissions: a desktop that quietly has
     /// no file chooser for foreign apps is the failure this phase exists to fix.
     public let notes: [String]
+    /// The lock screen (PHASE16 P16.2c): not started with the session but
+    /// when asked (`abyssctl lock`, the system menu, ⌃⌘Q), on the privileged
+    /// display — the only one offered the session lock when there is one —
+    /// and restarted by anchor if it dies while the session is locked.
+    public var lockScreen: ComponentSpec?
 
     /// Exported to every child, with `busAddress`: what applications this
     /// session starts — not only its own components — need to know about it.
@@ -224,6 +229,16 @@ public func defaultSession(shellBinary: String,
                                         env: env, requires: [busSocket]))
     }
 
+    // ----------------------------------------------------------------- lock
+    var lockScreen: ComponentSpec?
+    if mode == .desktop, !without.contains("lock") {
+        var env = shared
+        env["AQUA_SCENE"] = "lock"
+        env["ABYSS_APP_BINARY"] = shellBinary
+        if let bar = menubarDisplay { env["WAYLAND_DISPLAY"] = bar }
+        lockScreen = ComponentSpec(name: "lock", argv: [shellBinary], env: env)
+    }
+
     // ---------------------------------------------------------------- shell
     // In stacking order: the desktop underneath, then the menu bar, then the
     // Dock — the same three `abyss/session.sh` ran. In installer mode, the
@@ -247,7 +262,9 @@ public func defaultSession(shellBinary: String,
                                         requires: needs))
     }
 
-    return SessionPlan(components: components, busAddress: busAddress, notes: notes)
+    var plan = SessionPlan(components: components, busAddress: busAddress, notes: notes)
+    plan.lockScreen = lockScreen
+    return plan
 }
 
 // MARK: - The pointer, for the toolkits that draw their own (U.7b)

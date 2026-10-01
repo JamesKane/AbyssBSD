@@ -60,6 +60,7 @@ func selfDirectory() -> String? {
 
 var compositorCmd: String?
 var display = ProcessInfoEnv("WAYLAND_DISPLAY")
+var lockSpec: ComponentSpec? = nil
 var menubarDisplay: String? = nil
 var explicitComponents: [(String, String)] = []
 var mode: SessionMode = .desktop
@@ -228,6 +229,7 @@ if explicitComponents.isEmpty {
         _ = b.withUnsafeBufferPointer { write(2, $0.baseAddress, b.count) }
     }
     specs = plan.components
+    lockSpec = plan.lockScreen
 } else {
     for (name, cmd) in explicitComponents where !without.contains(name) {
         let argv = splitCommand(cmd)
@@ -251,5 +253,6 @@ if let cmd = compositorCmd {
 let supervisor = Supervisor(
     compositor: compositorSpec,
     components: specs,
+    lockScreen: lockSpec,
     policy: RestartPolicy(maxConsecutiveFailures: maxRestarts))
 exit(supervisor.run())

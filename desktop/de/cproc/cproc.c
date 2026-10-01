@@ -49,7 +49,9 @@ int ap_child_spawn(const char *const *argv, const char *const *envp,
         _exit(127);
     }
     out->fd = pd;
-    out->pid = -1;      /* the descriptor is the handle; pdkill/close use it */
+    /* The descriptor is the handle (pdkill and close use it); the pid is kept
+     * only to be reported — a log that names the process (P16.2c). */
+    out->pid = (int)pid;
     return 0;
 #else
     pid_t pid = fork();
@@ -111,6 +113,7 @@ int ap_child_reap(ap_child *c, int *status) {
      * collect — so report 0 and let the caller judge by behaviour. */
     close(c->fd);
     c->fd = -1;
+    c->pid = -1;
     return 0;
 #else
     int st = 0;

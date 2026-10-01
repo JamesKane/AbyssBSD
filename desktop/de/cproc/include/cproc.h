@@ -21,7 +21,8 @@
 #define ABYSS_CPROC_H
 
 /* A supervised child. `fd` is pollable and becomes ready when the child exits;
- * `pid` is -1 on FreeBSD, where the descriptor is the only handle needed. */
+ * On FreeBSD the descriptor is the only handle used — `pid` is there to be
+ * reported, never to signal or wait on. */
 typedef struct {
     int fd;
     int pid;

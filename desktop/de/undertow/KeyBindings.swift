@@ -194,6 +194,7 @@ public enum KeyBindingParser {
         ("Cmd+Shift+Tab",     "previous-window"),
         ("Cmd+W",             "close-window"),
         ("Cmd+Q",             "quit-app"),
+        ("Ctrl+Cmd+Q",        "run: abyssctl lock"),
         ("Cmd+Shift+3",       "run: abyssgrab screen"),
         ("Cmd+Shift+4",       "run: abyssgrab region"),
         ("XF86AudioRaiseVolume", "run: ventsctl volume +5"),

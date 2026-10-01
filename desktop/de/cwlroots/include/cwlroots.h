@@ -177,6 +177,8 @@ void tw_menus_destroy(struct tw_menus *m);
 /* Listen on `path` (absolute) for privileged clients. 0, or -errno. */
 int tw_privileged_socket_add(struct tw_menus *m, const char *path);
 bool tw_client_is_privileged(struct tw_menus *m, struct wl_client *client);
+/* Offer `global` only to the privileged socket's clients (PHASE16 P16.2c). */
+void tw_menus_add_privileged_global(struct tw_menus *m, const struct wl_global *global);
 void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
                              const char *address, const char *app_id);
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,

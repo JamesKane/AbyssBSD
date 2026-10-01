@@ -179,6 +179,25 @@ final class AnchorTests: XCTestCase {
         XCTAssertEqual(q.components.first { $0.name == "menubar" }?.env["WAYLAND_DISPLAY"], "abyss-0")
     }
 
+    /// The lock screen (PHASE16 P16.2c) is part of a desktop session's plan
+    /// but not one of its components — started when asked, not at bring-up —
+    /// and it goes on the privileged socket, the only one offered the lock.
+    func testTheLockScreenIsPlannedOnThePrivilegedDisplayAndNotStarted() {
+        let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss",
+                               dbusDaemon: nil, runtimeDir: "/run/abyss", display: "abyss-0",
+                               menubarDisplay: "abyss-0-bar")
+        let lock = p.lockScreen
+        XCTAssertEqual(lock?.argv, ["/opt/abyss/AquaDemo"])
+        XCTAssertEqual(lock?.env["AQUA_SCENE"], "lock")
+        XCTAssertEqual(lock?.env["WAYLAND_DISPLAY"], "abyss-0-bar")
+        XCTAssertFalse(p.components.contains { $0.name == "lock" }, "not started with the session")
+        // No privileged socket: the ordinary one, which then offers the lock.
+        XCTAssertEqual(plan().lockScreen?.env["WAYLAND_DISPLAY"], "abyss-0")
+        // The installer has nothing to lock, and `--without lock` means none.
+        XCTAssertNil(plan(mode: .installer).lockScreen)
+        XCTAssertNil(plan(without: ["lock"]).lockScreen)
+    }
+
     func testTheDesktopSessionIsUnchangedByTheNewMode() {
         // The default is still what it was: a regression here is a desktop that
         // boots without its Dock.

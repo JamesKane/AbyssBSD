@@ -255,6 +255,10 @@ if [ "$live" -eq 1 ]; then
   # shakes, waits, unlocks only on a yes, and fails closed.
   echo "== the lock screen =="
   quiet "$root/abyss/tests/live-lockscreen.sh"
+  # Locking a real session (P16.2c): abyssctl, ⌃⌘Q and the menu, anchor
+  # restarting a lock screen that died, and no application offered the lock.
+  echo "== locking the session =="
+  quiet "$root/abyss/tests/live-locksession.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

@@ -46,11 +46,34 @@ public final class Supervisor {
     /// stderr.
     public private(set) var journal: [String] = []
 
+    // The lock screen (PHASE16 P16.2c), started on request. Its stdout and
+    // stderr are a pipe only anchor holds, drained as it runs and passed on to
+    // anchor's own log line by line. Before it exits it writes one line,
+    // `abyss-lock-outcome: unlocked` or `…: refused`, and **an exit that wrote
+    // neither is a crash** — on
+    // FreeBSD a process descriptor reaps with no exit status at all, so the
+    // status cannot say it, and nothing else in the session can write to that
+    // pipe to pretend. A crash is restarted: the session is still locked
+    // (undertow keeps it so), and the new lock screen takes the abandoned lock
+    // over, so the person at the desk gets a password field back.
+    private let lockScreen: ComponentSpec?
+    private var lockChild = ap_child(fd: -1, pid: -1)
+    private var lockPipe: Int32 = -1
+    private var lockPending: [UInt8] = []
+    private var lockOutcome: String?
+    static let lockOutcomePrefix = "abyss-lock-outcome: "
+    private var lockCrashes: [Double] = []
+    /// Crashes within `lockCrashWindow` seconds before anchor stops restarting.
+    static let lockCrashLimit = 5
+    static let lockCrashWindow = 60.0
+
     public init(compositor: ComponentSpec?,
                 components: [ComponentSpec],
+                lockScreen: ComponentSpec? = nil,
                 policy: RestartPolicy = RestartPolicy()) {
         self.compositor = compositor
         self.components = components.map(Running.init)
+        self.lockScreen = lockScreen
         self.policy = policy
     }
 
@@ -212,6 +235,14 @@ public final class Supervisor {
                 fds.append(pollfd(fd: c.fd, events: Int16(POLLIN), revents: 0))
                 owners.append(-2)
             }
+            if lockChild.fd >= 0 {
+                fds.append(pollfd(fd: lockChild.fd, events: exitEvents, revents: 0))
+                owners.append(-4)
+            }
+            if lockPipe >= 0 {
+                fds.append(pollfd(fd: lockPipe, events: Int16(POLLIN), revents: 0))
+                owners.append(-5)
+            }
             if signalFD >= 0 {
                 fds.append(pollfd(fd: signalFD, events: Int16(POLLIN), revents: 0))
                 owners.append(-3)
@@ -232,6 +263,8 @@ public final class Supervisor {
                 case -1: compositorExited(); if stopping { return }
                 case -2: handleControl(); if stopping { return }
                 case -3: handleSignal(); if stopping { return }
+                case -4: lockExited(); if stopping { return }
+                case -5: drainLock()
                 default: componentExited(components[owners[i]]); if stopping { return }
                 }
             }
@@ -316,6 +349,7 @@ public final class Supervisor {
                     "\($0.spec.name)=\($0.isUp ? "up" : "down")(\($0.restarts))"
                 }.joined(separator: ",")
                 reply.set("detail", detail)
+                reply.set("locked", lockChild.fd >= 0)
                 // Read from the environment rather than remembered from the
                 // plan, because the question a caller is really asking is "what
                 // bus will a child of this session see?" — and the environment
@@ -327,6 +361,19 @@ public final class Supervisor {
             case "quit", "shutdown":
                 reply.set("ok", true)
                 stopping = true
+            case "lock":
+                if lockScreen == nil {
+                    reply.set("ok", false)
+                    reply.set("error", "this session has no lock screen")
+                } else if lockChild.fd >= 0 {
+                    reply.set("ok", true)
+                    reply.set("already", true)
+                } else if let why = startLock() {
+                    reply.set("ok", false)
+                    reply.set("error", why)
+                } else {
+                    reply.set("ok", true)
+                }
             default:
                 reply.set("ok", false)
                 reply.set("error", "unknown method")
@@ -334,6 +381,85 @@ public final class Supervisor {
             return reply
         }
         if stopping { log("shutdown requested over the control plane") }
+    }
+
+    // MARK: - The lock screen
+
+    /// Start the lock screen; nil, or why it could not be.
+    private func startLock() -> String? {
+        guard let spec = lockScreen else { return "this session has no lock screen" }
+        var fds: [Int32] = [-1, -1]
+        guard pipe(&fds) == 0 else { return "no pipe: \(String(cString: strerror(errno)))" }
+        _ = fcntl(fds[0], F_SETFD, FD_CLOEXEC)
+        _ = fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK)
+        do {
+            lockChild = try spawn(spec, stdoutTo: fds[1])
+        } catch {
+            close(fds[0]); close(fds[1])
+            log("could not start the lock screen: \(error)")
+            return "could not start the lock screen"
+        }
+        close(fds[1])
+        lockPipe = fds[0]
+        lockPending = []
+        lockOutcome = nil
+        log("lock screen up (pid \(lockChild.pid)) — the session is locking")
+        return nil
+    }
+
+    /// Read what the lock screen wrote: pass its lines on, keep its outcome.
+    /// Read as it runs, never only at the end — a pipe nobody empties fills,
+    /// and a lock screen blocked writing its log is a hung lock screen.
+    private func drainLock(final: Bool = false) {
+        guard lockPipe >= 0 else { return }
+        var buf = [UInt8](repeating: 0, count: 4096)
+        var eof = false
+        while true {
+            let n = read(lockPipe, &buf, buf.count)
+            if n > 0 { lockPending += buf[0..<n]; continue }
+            if n == 0 { eof = true }
+            break                        // EAGAIN: nothing more for now
+        }
+        while let nl = lockPending.firstIndex(of: 10) {
+            let line = String(decoding: lockPending[..<nl], as: UTF8.self)
+            lockPending.removeSubrange(...nl)
+            if line.hasPrefix(Supervisor.lockOutcomePrefix) {
+                lockOutcome = String(line.dropFirst(Supervisor.lockOutcomePrefix.count))
+            } else {
+                let b = Array((line + "\n").utf8)
+                _ = b.withUnsafeBufferPointer { write(2, $0.baseAddress, b.count) }
+            }
+        }
+        if eof || final {
+            close(lockPipe)
+            lockPipe = -1
+        }
+    }
+
+    private func lockExited() {
+        _ = ap_child_reap(&lockChild, nil)
+        drainLock(final: true)
+        let said = lockOutcome ?? ""
+        if compositorIsGone() { compositorExited(); return }
+        if said == "unlocked" {
+            log("the lock screen unlocked the session")
+            lockCrashes = []
+            return
+        }
+        if said == "refused" {
+            log("the lock screen could not lock (the compositor refused it) — not restarting")
+            return
+        }
+        let now = monotonicSeconds()
+        lockCrashes = lockCrashes.filter { now - $0 < Supervisor.lockCrashWindow } + [now]
+        guard lockCrashes.count <= Supervisor.lockCrashLimit else {
+            log("the lock screen died \(lockCrashes.count) times in a minute — not restarting it;"
+                + " the compositor keeps the session locked")
+            return
+        }
+        log("the lock screen died while the session was locked — restarting it "
+            + "(\(lockCrashes.count)/\(Supervisor.lockCrashLimit)); the session stays locked")
+        _ = startLock()
     }
 
     // MARK: - Teardown
@@ -348,6 +474,10 @@ public final class Supervisor {
             _ = ap_child_signal(&r.child, SIGTERM)
             anyLive = true
         }
+        if lockChild.fd >= 0 {
+            _ = ap_child_signal(&lockChild, SIGTERM)
+            anyLive = true
+        }
         if compositorChild.fd >= 0 {
             _ = ap_child_signal(&compositorChild, SIGTERM)
             anyLive = true
@@ -356,6 +486,8 @@ public final class Supervisor {
             usleep(200_000)     // one shared grace period, as the sibling does
         }
         for r in components where r.isUp { _ = ap_child_reap(&r.child, nil) }
+        if lockChild.fd >= 0 { _ = ap_child_reap(&lockChild, nil) }
+        if lockPipe >= 0 { close(lockPipe); lockPipe = -1 }
         if compositorChild.fd >= 0 { _ = ap_child_reap(&compositorChild, nil) }
         control?.shutdownAndUnlink()
         control = nil

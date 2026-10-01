@@ -20,6 +20,10 @@ struct tw_menus {
     struct wl_global *manager_global;
     struct wl_global *window_global;      /* P11.6 */
     struct wl_global *menubar_global;
+    /* Other globals only the privileged socket's clients are offered: the
+     * session lock (PHASE16 P16.2c). */
+    const struct wl_global *privileged_globals[4];
+    int nprivileged_globals;
     struct wl_global *gtk_shell_global;   /* P10.6 */
     uint32_t gtk_capabilities;            /* sent on bind */
     struct wl_list menubars;        /* wl_resource links */
@@ -196,7 +200,15 @@ static bool global_filter(const struct wl_client *client, const struct wl_global
     struct tw_menus *m = data;
     if (global == m->menubar_global)
         return tw_client_is_privileged(m, (struct wl_client *)client);
+    for (int i = 0; i < m->nprivileged_globals; i++)
+        if (global == m->privileged_globals[i])
+            return tw_client_is_privileged(m, (struct wl_client *)client);
     return true;
+}
+
+void tw_menus_add_privileged_global(struct tw_menus *m, const struct wl_global *global) {
+    if (m && global && m->nprivileged_globals < 4)
+        m->privileged_globals[m->nprivileged_globals++] = global;
 }
 
 bool tw_client_is_privileged(struct tw_menus *m, struct wl_client *client) {

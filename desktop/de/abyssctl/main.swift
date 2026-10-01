@@ -6,6 +6,7 @@
 //
 //   abyssctl status              is the session up, and what is it running?
 //   abyssctl quit                tear the session down
+//   abyssctl lock                lock the screen (PHASE16 P16.2c)
 //   abyssctl --service NAME ...  talk to some other service (default: anchor)
 
 import CurrentIPC
@@ -37,7 +38,7 @@ while i < args.count {
         guard i < args.count else { fail("--service needs a name") }
         service = args[i]
     case "-h", "--help":
-        emit(1, "usage: abyssctl [--service NAME] status|quit")
+        emit(1, "usage: abyssctl [--service NAME] status|quit|lock")
         exit(0)
     default:
         guard method == nil else { fail("one method at a time (got '\(args[i])' too)") }
@@ -47,7 +48,7 @@ while i < args.count {
 }
 
 guard let method else {
-    emit(2, "usage: abyssctl [--service NAME] status|quit")
+    emit(2, "usage: abyssctl [--service NAME] status|quit|lock")
     exit(2)
 }
 
@@ -73,6 +74,8 @@ do {
         }
     case "quit", "shutdown":
         emit(1, "session: shutting down")
+    case "lock":
+        emit(1, reply.bool("already") == true ? "session: already locked" : "session: locking")
     default:
         emit(1, "ok")
     }

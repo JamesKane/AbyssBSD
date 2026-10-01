@@ -204,6 +204,9 @@ public final class MenuBar: LayerSurfaceDelegate {
         .command(Command("system.restart", "Restart…", summary: "Restart the computer.")),
         .command(Command("system.shut-down", "Shut Down…", summary: "Turn the computer off.")),
         .separator,
+        // Lock Screen (PHASE16 P16.2c), with the key later Macs gave it.
+        .command(Command("system.lock", "Lock Screen", key: .cmd("q", .control),
+                         summary: "Lock the screen; your password opens it.")),
         // No "…": there is no confirmation sheet yet, so this is Jaguar's
         // Option variant — Log Out now — and says so by its title.
         .command(Command("system.log-out", "Log Out", key: .cmd("q", .shift),
@@ -388,7 +391,7 @@ public final class MenuBar: LayerSurfaceDelegate {
 
     private func systemEnablement(_ verb: String) -> Enablement {
         switch verb {
-        case "system.about", "system.preferences", "system.log-out":
+        case "system.about", "system.preferences", "system.log-out", "system.lock":
             return .enabled
         case "system.force-quit":
             guard focus != nil else { return .disabled("the bar cannot see which application is frontmost") }
@@ -466,6 +469,16 @@ public final class MenuBar: LayerSurfaceDelegate {
             }
             RecentItems.record(bundle)
             return .ok(bundle)
+        case "system.lock":
+            // anchor runs the lock screen — on the privileged display, and
+            // again if it dies while locked — so the bar asks it to, rather
+            // than starting one itself.
+            var m = Msg(); m.set("method", "lock")
+            guard let reply = try? Current.call("anchor", m) else {
+                return .refused("no session supervisor answered")
+            }
+            guard reply.bool("ok") == true else { return .refused(reply.string("error") ?? "anchor said no") }
+            return .ok(reply.bool("already") == true ? "already locked" : nil)
         case "system.log-out":
             var m = Msg(); m.set("method", "quit")
             guard (try? Current.call("anchor", m))?.bool("ok") == true else {

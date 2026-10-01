@@ -33,6 +33,8 @@ final class LockSurfaceEntry {
 public final class SessionLock {
     private unowned let compositor: Compositor
     private var managerListener: UnsafeMutablePointer<tw_listener>?
+    /// The manager's global, so it can be kept to the privileged socket.
+    let global: OpaquePointer?
     /// The lock object currently held, nil when none is — unlocked, or abandoned.
     private var lock: UnsafeMutablePointer<wlr_session_lock_v1>?
     private var lockListeners: [UnsafeMutablePointer<tw_listener>?] = []
@@ -50,6 +52,7 @@ public final class SessionLock {
     init?(compositor: Compositor) {
         guard let m = wlr_session_lock_manager_v1_create(compositor.session.display) else { return nil }
         self.compositor = compositor
+        global = m.pointee.global
         let me = Unmanaged.passUnretained(self).toOpaque()
         managerListener = tw_listen(&m.pointee.events.new_lock, { ctx, data in
             guard let ctx, let data else { return }

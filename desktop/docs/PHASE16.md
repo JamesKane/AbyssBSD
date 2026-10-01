@@ -128,6 +128,19 @@ for PAM; a probe, never shipped) lets `live-lockscreen.sh` run on Linux:
 surfaces no frame clock, so a lock screen drew one frame and never another
 (HANDOFF §2.102). Fixed, and `live-sessionlock.sh` now asserts the clock.
 
+✅ **P16.2c done 2026-10-01, and with it P16.2.** Three ways to lock, one
+path: **anchor runs the lock screen.** `abyssctl lock` (the command, in place
+of a separate `abyss-lock`: abyssctl is already how a session is driven),
+System > Lock Screen ⌃⌘Q, and undertow's ⌃⌘Q binding (`run: abyssctl lock`)
+all ask anchor's new `lock` method. anchor starts the lock screen on the
+**privileged** display, and undertow now offers ext-session-lock only there
+when it has a privileged socket, so no application can lock, or take over
+the lock of a lock screen that died. A lock screen that dies is restarted by
+anchor and takes the abandoned lock over. It tells an unlock from a crash by a
+line on a pipe only anchor holds, since FreeBSD reports no exit status
+(HANDOFF §2.103). `live-locksession.sh`, 7 claims, six faults injected and
+caught.
+
 **P16.3 — the idle policy (M).** A session component (an ext-idle-notify
 client `anchor` supervises) that turns idleness into what a person asked for:
 lock after the Security pane's delay ("require a password after sleep or

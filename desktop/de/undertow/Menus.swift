@@ -126,6 +126,11 @@ public final class Menus {
         guard rc == 0 else { throw BackendError.privilegedSocket(path, -rc) }
     }
 
+    /// Offer `global` to the privileged socket's clients only (P16.2c).
+    func restrictToPrivileged(_ global: OpaquePointer?) {
+        tw_menus_add_privileged_global(raw, global)
+    }
+
     public var menubarCount: Int { Int(tw_menubar_count(raw)) }
 
     /// The address a surface published, if any.

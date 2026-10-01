@@ -161,13 +161,22 @@ if sceneName == "lock" {
     // The lock screen (PHASE16 P16.2b): an ext-session-lock client, not a
     // window. It exits 0 once the authenticator said yes and the session is
     // given back, 1 if the compositor would not let it lock.
+    //
+    // The outcome also goes to stdout, one word, unbuffered: anchor reads it
+    // from a pipe to tell an unlock from a crash (P16.2c) — on FreeBSD it gets
+    // no exit status to tell it.
+    func outcome(_ word: String) {
+        _ = ("abyss-lock-outcome: " + word + "\n").withCString { write(1, $0, strlen($0)) }
+    }
     guard let lockScreen = LockScreen(display: display) else {
-        print("AquaDemo: cannot lock (does the compositor offer ext-session-lock?).")
+        installerSay("AquaDemo: cannot lock (does the compositor offer ext-session-lock?).")
+        outcome("refused")
         exit(1)
     }
     var unlocked = false
     lockScreen.onDone = { ok in unlocked = ok; display.stop() }
     withExtendedLifetime(lockScreen) { display.run() }
+    outcome(unlocked ? "unlocked" : "refused")
     exit(unlocked ? 0 : 1)
 }
 if scene == .wallpaper {
