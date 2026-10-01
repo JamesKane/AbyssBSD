@@ -31,16 +31,12 @@ enum IconsRef {
         case .accounts:       people(cr, box)
         case .screenEffects:  swirl(cr, box)
         case .cdsDvds:        disc(cr, box)
-        case .colorSync:      colorWheel(cr, box)
         case .energySaver:    bulb(cr, box)
         case .keyboard:       keyboard(cr, box)
         case .mouse:          mouse(cr, box)
         case .sharing:        folder(cr, box)
         case .dateTime:       clock(cr, box)
         case .softwareUpdate: refresh(cr, box)
-        case .speech:         mic(cr, box)
-        case .quicktime:      letterCircle(cr, box, "Q", Color(hex: 0x3b7fea))
-        case .classic:        letterTile(cr, box, "9", Color(hex: 0xe6932a))
         }
     }
 

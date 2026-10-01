@@ -45,7 +45,9 @@ public enum PrefCatalogue {
         PrefPane(id: icon.name, title: title, icon: icon, purpose: purpose)
     }
 
-    /// Jaguar's panes, in Jaguar's sections and order.
+    /// Jaguar's panes, in Jaguar's sections and order — less the four with
+    /// nothing to be here (Classic, QuickTime, Speech, ColorSync: removed
+    /// 2026-10-01), and with Islands (PHASE13 P13.7).
     public static let sections: [(title: String, panes: [PrefPane])] = [
         ("Personal", [
             pane(.desktop, "Desktop", "The picture on your desktop."),
@@ -59,7 +61,6 @@ public enum PrefCatalogue {
         ]),
         ("Hardware", [
             pane(.cdsDvds, "CDs & DVDs", "What happens when a disc is inserted."),
-            pane(.colorSync, "ColorSync", "Colour profiles for displays and printers."),
             pane(.displays, "Displays", "Resolution, arrangement and scale of each display."),
             pane(.energySaver, "Energy Saver", "When the display and the computer sleep."),
             pane(.keyboard, "Keyboard", "Key repeat, layouts and shortcuts."),
@@ -69,15 +70,12 @@ public enum PrefCatalogue {
         ("Internet & Network", [
             pane(.internetIcon, "Internet", "Your default browser and mail."),
             pane(.network, "Network", "Wired and wireless connections, addresses and DNS."),
-            pane(.quicktime, "QuickTime", "Media playback settings."),
             pane(.sharing, "Sharing", "What this computer offers to others."),
         ]),
         ("System", [
             pane(.accounts, "Accounts", "Who can log in to this computer."),
-            pane(.classic, "Classic", "Not on this machine: there is no Classic here."),
             pane(.dateTime, "Date & Time", "The clock, the time zone and network time."),
             pane(.softwareUpdate, "Software Update", "Updates to AbyssBSD."),
-            pane(.speech, "Speech", "Spoken alerts and voices."),
             pane(.startupDisk, "Startup Disk", "The disk this computer starts from."),
             pane(.universalAccess, "Universal Access", "Seeing, hearing and typing help."),
         ]),

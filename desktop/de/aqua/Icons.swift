@@ -8,9 +8,9 @@ import CCairo
 public enum PrefIcon: Sendable {
     case showAll, displays, sound, network, startupDisk
     case desktop, dock, general, international, islands, loginItems, myAccount, screenEffects
-    case cdsDvds, colorSync, energySaver, keyboard, mouse
-    case internetIcon, quicktime, sharing
-    case accounts, classic, dateTime, softwareUpdate, speech, universalAccess
+    case cdsDvds, energySaver, keyboard, mouse
+    case internetIcon, sharing
+    case accounts, dateTime, softwareUpdate, universalAccess
 }
 
 public enum Icons {
@@ -39,18 +39,14 @@ extension PrefIcon {
         case .myAccount: return "myAccount"
         case .screenEffects: return "screenEffects"
         case .cdsDvds: return "cdsDvds"
-        case .colorSync: return "colorSync"
         case .energySaver: return "energySaver"
         case .keyboard: return "keyboard"
         case .mouse: return "mouse"
         case .internetIcon: return "internetIcon"
-        case .quicktime: return "quicktime"
         case .sharing: return "sharing"
         case .accounts: return "accounts"
-        case .classic: return "classic"
         case .dateTime: return "dateTime"
         case .softwareUpdate: return "softwareUpdate"
-        case .speech: return "speech"
         case .universalAccess: return "universalAccess"
         }
     }

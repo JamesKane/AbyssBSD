@@ -8,7 +8,7 @@ import MenuModel
 final class SystemPreferencesTests: XCTestCase {
     func testTheCatalogueIsWhatTheThemeCanDraw() {
         let ids = PrefCatalogue.all.map(\.id)
-        XCTAssertEqual(ids.count, 26, "Jaguar's 25, and Islands (PHASE13 P13.7)")
+        XCTAssertEqual(ids.count, 22, "Jaguar's 25, less Classic, QuickTime, Speech and ColorSync, and Islands")
         XCTAssertEqual(Set(ids).count, ids.count, "pane ids are unique")
         for id in ids { XCTAssertNotNil(Theme.lists["icon." + id], "no icon.\(id) in the icon set") }
         XCTAssertEqual(PrefCatalogue.toolbar.map(\.id), ["displays", "sound", "network", "startupDisk"])

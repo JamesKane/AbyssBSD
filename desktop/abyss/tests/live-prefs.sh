@@ -119,10 +119,10 @@ await "showing all" "$b" "Show All did not go back to the grid"
 echo "ok: Show All went back to the grid"
 
 # ----------------------------------------------------------- the keyboard
-# Focus stays on the pane last visited (Network), as a Mac's does: two → from
-# there is Sharing, the next row's last.
+# Focus stays on the pane last visited (Network), as a Mac's does: one → from
+# there is Sharing, the row's last (QuickTime, between them, is gone).
 b=$(mark "focus sharing")
-printf 'k 106\n' >&4; sleep 0.15; printf 'k 106\n' >&4          # → →
+printf 'k 106\n' >&4                                             # →
 await "focus sharing" "$b" "the arrows did not walk the grid from the pane last visited"
 b=$(mark "showing sharing")
 printf 'k 28\n' >&4                                              # Return

@@ -58,10 +58,9 @@ final class IconParityTests: XCTestCase {
         (.internetIcon, "internetIcon"), (.startupDisk, "startupDisk"), (.general, "general"),
         (.loginItems, "loginItems"), (.myAccount, "myAccount"), (.universalAccess, "universalAccess"),
         (.accounts, "accounts"), (.screenEffects, "screenEffects"), (.cdsDvds, "cdsDvds"),
-        (.colorSync, "colorSync"), (.energySaver, "energySaver"), (.keyboard, "keyboard"),
+        (.energySaver, "energySaver"), (.keyboard, "keyboard"),
         (.mouse, "mouse"), (.sharing, "sharing"), (.dateTime, "dateTime"),
-        (.softwareUpdate, "softwareUpdate"), (.speech, "speech"), (.quicktime, "quicktime"),
-        (.classic, "classic"),
+        (.softwareUpdate, "softwareUpdate"),
     ]
 
     func testPreferenceIcons() {
