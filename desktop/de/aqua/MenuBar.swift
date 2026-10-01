@@ -586,6 +586,7 @@ public final class MenuBar: LayerSurfaceDelegate {
             switch a {
             case .switchTo(let n): ok = focus?.switchIsland(display: main, island: n) ?? false
             case .window(let id):  ok = focus?.activateWindow(id: id) ?? false
+            case .shoal(let verb, let arg): ok = focus?.shoalCommand(verb, arg) ?? false
             }
             MenuBar.log("chose \(what) → " + (ok ? "ok" : "refused: no compositor to ask"))
             return
@@ -921,10 +922,10 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// theirs — pulled as it opens, like enablement (§6.4).
     private func openIslandMenu(_ r: Rect) {
         guard let focus, let main = focus.mainIsland else { return }
-        let asked = focus.listIslands { [weak self] windows, names in
+        let asked = focus.listIslands { [weak self] list in
             guard let self, self.menu == nil else { return }
             let m = IslandMenu.build(display: main.display, active: main.island, count: main.count,
-                                     names: names, windows: windows)
+                                     names: list.names, windows: list.windows, shoals: list.shoals)
             let am = self.makeMenu(m, name: "Islands", at: (Int(r.x), Int(r.h)))
             am.onDismiss = { [weak self] in self?.menuDismissed() }
             guard let pop = self.layer?.openPopup(

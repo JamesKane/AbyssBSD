@@ -117,6 +117,10 @@ public final class Menus {
                 tw_menubar_send_window(resource, t.id, t.islandDisplay, UInt32(t.island),
                                        t.appID ?? "", t.title ?? "")
             }
+            for (i, s) in c.shoalBook.shoals.enumerated() {
+                let open = s.members.filter { k in c.toplevels.contains { $0.mapped && $0.placeKey == k } }.count
+                tw_menubar_send_shoal(resource, s.display, UInt32(s.island), UInt32(i), s.name, UInt32(open))
+            }
             tw_menubar_send_islands_done(resource,
                 (1...c.islands.count).map { c.islands.name($0) }.joined(separator: "\t"))
         }
@@ -131,6 +135,18 @@ public final class Menus {
             let c = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue().compositor
             guard let t = c.toplevels.first(where: { $0.id == id && $0.mapped }) else { return }
             c.bringToFront(t)
+        }
+        hooks.shoal_command = { ctx, verb, arg in
+            guard let ctx, let verb else { return }
+            let c = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue().compositor
+            switch String(cString: verb) {
+            case "recall": c.recallShoal(Int(arg))
+            case "new":    c.newShoal()
+            case "add":    c.addFocusedToShoal(Int(arg))
+            case "remove": c.removeFocusedFromShoal()
+            case "strip":  c.toggleShoalStrip()
+            default:       break
+            }
         }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r

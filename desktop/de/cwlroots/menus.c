@@ -171,12 +171,20 @@ static void menubar_activate_window(struct wl_client *client, struct wl_resource
     if (m && m->hooks.activate_window) m->hooks.activate_window(m->hooks.ctx, id);
 }
 
+static void menubar_shoal_command(struct wl_client *client, struct wl_resource *resource,
+                                  const char *verb, uint32_t arg) {
+    (void)client;
+    struct tw_menus *m = wl_resource_get_user_data(resource);
+    if (m && verb && m->hooks.shoal_command) m->hooks.shoal_command(m->hooks.ctx, verb, arg);
+}
+
 static const struct abyss_menubar_v1_interface menubar_impl = {
     .destroy = menubar_destroy_request,
     .force_quit = menubar_force_quit,
     .list_islands = menubar_list_islands,
     .switch_island = menubar_switch_island,
     .activate_window = menubar_activate_window,
+    .shoal_command = menubar_shoal_command,
 };
 
 static void menubar_resource_destroyed(struct wl_resource *resource) {
@@ -237,6 +245,12 @@ void tw_menubar_send_window(struct wl_resource *menubar, uint32_t id, const char
     if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_WINDOW_SINCE_VERSION) return;
     abyss_menubar_v1_send_window(menubar, id, display ? display : "", island,
                                  app_id ? app_id : "", title ? title : "");
+}
+
+void tw_menubar_send_shoal(struct wl_resource *menubar, const char *display, uint32_t island,
+                           uint32_t index, const char *name, uint32_t open) {
+    if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_SHOAL_SINCE_VERSION) return;
+    abyss_menubar_v1_send_shoal(menubar, display ? display : "", island, index, name ? name : "", open);
 }
 
 void tw_menubar_send_islands_done(struct wl_resource *menubar, const char *names) {
@@ -417,7 +431,7 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
                                          m, manager_bind);
     m->window_global = wl_global_create(display, &abyss_window_manager_v1_interface, 2,
                                         m, window_manager_bind);
-    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 3,
+    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 4,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
     if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global) {

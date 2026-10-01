@@ -109,7 +109,9 @@ echo "ok: 1. the bar shows the island from the start, and follows the keyboard"
 # ---------------------------------------------------- 2. the menu
 click "$(at "MenuBar: island item '2'")"
 await "$work/bar.log" 'MenuBar: opened Islands' "the island item did not open its menu"
-rows=$(grep -E "MenuBar: item '" "$work/bar.log" | tail -7 | sed "s/.*item '\([^']*\)'.*/\1/" | sed 's/^ *//' | tr '\n' '|')
+# The island rows of the menu just opened (P13.6 added a Shoals section under them).
+rows=$(awk '/MenuBar: opened Islands/{ buf = "" } /MenuBar: item /{ buf = buf $0 "\n" } END { printf "%s", buf }' "$work/bar.log" \
+  | sed "s/.*item '\([^']*\)'.*/\1/" | sed 's/^ *//' | grep -v -E 'Shoal|Strip|Front Window' | tr '\n' '|')
 [ "$rows" = "Island 1|org.abyssbsd.ib-a|✓ Island 2|org.abyssbsd.ib-b|Island 3|org.abyssbsd.ib-c|Island 4|" ] \
   || fail "the menu's rows are not each island and its windows, 2 ticked: $rows"
 echo "ok: 2. the menu: every island, island 2 ticked, each with its own windows"

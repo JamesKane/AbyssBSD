@@ -97,6 +97,7 @@ public final class Toplevel {
             t.mapped = true
             t.compositor.place(t)
             t.compositor.settleIsland(t, fresh: true)
+            t.compositor.shoalRejoined(t)
             t.publish()
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.unmap, { ctx, _ in
@@ -380,6 +381,11 @@ public final class Compositor {
     /// The last window id handed out (P13.4); never reused while we run.
     private var lastToplevelID: UInt32 = 0
     func allocateToplevelID() -> UInt32 { lastToplevelID &+= 1; return lastToplevelID }
+    /// Shoals (P13.6): every set, the strip, and how many recalls.
+    public internal(set) var shoalBook = ShoalBook()
+    var stripShown = false
+    var stripLabels: [String: EbbLabel] = [:]
+    public internal(set) var recalls = 0
     /// Ebb, open or closing, on one display (P13.5); the labels it has drawn.
     var ebb: Ebb?
     var ebbLabels: [UInt32: EbbLabel] = [:]
@@ -485,6 +491,7 @@ public final class Compositor {
                 privilegedSocket: String? = nil) throws {
         self.places = WindowPlaces(configDir: configDir)
         self.islands = IslandsConfig.load(configDir: configDir)
+        self.shoalBook = ShoalBook.load(configDir: configDir)
         self.configDir = configDir
         self.session = session
         self.layout = layout

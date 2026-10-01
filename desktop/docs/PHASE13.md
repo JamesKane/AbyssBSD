@@ -292,6 +292,44 @@ judged against a number that already exists.
   - the strip shows it;
   - after a restart of the windows, the shoal re-forms.
 
+✅ **P13.6 done 2026-10-01.**
+- **The model.** `ShoalBook` (pure, `shoals.ini`): a shoal is a name, the
+  display and island it lives on, and its members by window key. A window is
+  in one shoal at most, a shoal left empty is gone, and names are "Shoal N",
+  never reused.
+- **The compositor (`Shoals.swift`).**
+  - New, add, remove and recall.
+  - Recall goes to the shoal's island and brings each open member there (one
+    sent elsewhere comes home), out of the Dock and at its remembered place.
+    It raises them in the shoal's order, focuses the last, and nothing else
+    moves.
+  - A window that maps and is a member is announced as back.
+- **The keys** (new defaults, not in §6.4):
+  - Ctrl-Alt-N makes a shoal of the front window;
+  - Ctrl-Alt-= adds the front window to the current shoal;
+  - Ctrl-Alt-- takes it out;
+  - Ctrl-Shift-1…9 recalls this island's Nth shoal;
+  - Ctrl-F3 shows or hides the strip, beside Ebb's F3.
+- **The strip** is drawn by undertow, not a layer-shell client as planned,
+  because a client cannot draw other clients' windows. A tile per shoal of
+  the island down the left edge shows a dark plate, up to three live member
+  windows stacked, and the name. A click recalls, and the strip goes unless
+  pinned. Pinned floats over the windows and reserves no space.
+- **The bar.** `abyss_menubar_v1` v4 adds `shoal` events in the island list and
+  a `shoal_command` request. The island menu has a Shoals section: recall each
+  of this island's shoals, new from the front window, add it to one, remove
+  it, and show the strip. The client's cap moved with it (§2.117).
+- **Tests:** `live-shoals.sh` (7 claims), 4 unit tests and two updated. Seven
+  faults injected and caught:
+  - a recall not raising;
+  - a recall moving another window;
+  - shoals not saved;
+  - the strip drawing no windows;
+  - the bar listing no shoals;
+  - members sent to another island left there. That fault first got through
+    the test (it waited for a line that already existed) and was caught once
+    the test was fixed.
+
 **P13.7 — Islands in System Preferences (S–M).** An "Islands" pane:
 - the count and names;
 - the animation on or off;

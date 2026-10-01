@@ -42,6 +42,24 @@ public final class MenuBarFocus {
         }
     }
 
+    /// A shoal, as the island list tells it (v4, PHASE13 P13.6).
+    public struct ShoalInfo: Equatable, Sendable {
+        public let display: String
+        public let island: Int
+        public let index: UInt32
+        public let name: String
+        public let open: Int
+        public init(display: String, island: Int, index: UInt32, name: String, open: Int) {
+            self.display = display; self.island = island; self.index = index; self.name = name; self.open = open
+        }
+    }
+    /// Everything one `list_islands` answer carries.
+    public struct IslandList: Sendable {
+        public let windows: [IslandWindow]
+        public let names: [String]
+        public let shoals: [ShoalInfo]
+    }
+
     private let display: Display
     private var proxy: OpaquePointer?
     public private(set) var current: Focus?
@@ -51,7 +69,8 @@ public final class MenuBarFocus {
     public private(set) var islands: [String: Island] = [:]
     public var onIsland: (Island) -> Void = { _ in }
     private var listing: [IslandWindow] = []
-    private var listWaiters: [([IslandWindow], [String]) -> Void] = []
+    private var shoalListing: [ShoalInfo] = []
+    private var listWaiters: [(IslandList) -> Void] = []
 
     /// Nil when this connection was not offered the global — which is to say,
     /// when this process is not the menu bar's.
@@ -91,13 +110,21 @@ public final class MenuBarFocus {
                                            appID: appID.map { String(cString: $0) } ?? "",
                                            title: title.map { String(cString: $0) } ?? ""))
         }
+        l.shoal = { data, _, d, island, index, name, open in
+            guard let data else { return }
+            let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
+            me.shoalListing.append(ShoalInfo(display: d.map { String(cString: $0) } ?? "", island: Int(island),
+                                             index: index, name: name.map { String(cString: $0) } ?? "",
+                                             open: Int(open)))
+        }
         l.islands_done = { data, _, names in
             guard let data else { return }
             let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
-            let got = me.listing, waiters = me.listWaiters
             let n = (names.map { String(cString: $0) } ?? "").split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            me.listing = []; me.listWaiters = []
-            for w in waiters { w(got, n) }
+            let got = IslandList(windows: me.listing, names: n, shoals: me.shoalListing)
+            let waiters = me.listWaiters
+            me.listing = []; me.shoalListing = []; me.listWaiters = []
+            for w in waiters { w(got) }
         }
         display.addListener(to: p, listener: l, data: Unmanaged.passUnretained(self).toOpaque())
         display.flush()
@@ -121,7 +148,7 @@ public final class MenuBarFocus {
     /// Every island's windows and every island's name, answered later (when
     /// `islands_done` arrives). False when the compositor is too old to ask.
     @discardableResult
-    public func listIslands(_ done: @escaping ([IslandWindow], [String]) -> Void) -> Bool {
+    public func listIslands(_ done: @escaping (IslandList) -> Void) -> Bool {
         guard version >= 3, let p = proxy else { return false }
         listWaiters.append(done)
         if listWaiters.count == 1 { abyss_menubar_v1_list_islands(p) }
@@ -133,6 +160,15 @@ public final class MenuBarFocus {
     public func switchIsland(display d: String, island: Int) -> Bool {
         guard version >= 3, let p = proxy, island >= 1 else { return false }
         abyss_menubar_v1_switch_island(p, d, UInt32(island))
+        display.flush()
+        return true
+    }
+
+    /// A shoal command (v4): recall, new, add, remove, strip.
+    @discardableResult
+    public func shoalCommand(_ verb: String, _ arg: UInt32 = 0) -> Bool {
+        guard version >= 4, let p = proxy else { return false }
+        abyss_menubar_v1_shoal_command(p, verb, arg)
         display.flush()
         return true
     }

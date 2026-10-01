@@ -992,6 +992,14 @@ public final class Seat {
             if state == WL_POINTER_BUTTON_STATE_PRESSED { compositor.ebbClick(cursorX, cursorY) }
             return
         }
+        // The Shoals strip takes a click on one of its tiles (P13.6); a click
+        // anywhere else goes where it always went.
+        if state == WL_POINTER_BUTTON_STATE_PRESSED, !compositor.isLocked,
+           compositor.stripClick(cursorX, cursorY) {
+            stripPressed = true
+            return
+        }
+        if state == WL_POINTER_BUTTON_STATE_RELEASED, stripPressed { stripPressed = false; return }
         // Releasing the button ends a drag, and the window's new position is
         // remembered there.
         if state == WL_POINTER_BUTTON_STATE_RELEASED,
@@ -1198,6 +1206,8 @@ public final class Seat {
     /// treat as a stuck modifier. Cheaper to remember the keycode than to debug
     /// that in an application six months from now.
     private var consumedKeys: Set<UInt32> = []
+    /// A press the Shoals strip took: its release is the strip's too.
+    private var stripPressed = false
     /// The table, and when its file was last looked at.
     private var bindings = KeyBindings()
     private var bindingsLoadedAt: time_t = 0
@@ -1292,6 +1302,11 @@ public final class Seat {
         case .quitApplication: compositor.quitFocusedApplication()
         case .island(let n):   compositor.switchIsland(n)
         case .ebb(let scope):  compositor.toggleEbb(scope)
+        case .shoalNew:        compositor.newShoal()
+        case .shoalAdd:        compositor.addFocusedToShoal()
+        case .shoalRemove:     compositor.removeFocusedFromShoal()
+        case .shoalRecall(let n): compositor.recallShoal(number: n)
+        case .shoalStrip:      compositor.toggleShoalStrip()
         case .islandStep(let d): compositor.stepIsland(d)
         case .moveToIsland(let n, let follow): compositor.moveFocusedWindow(toIsland: n, follow: follow)
         case .run(let words):

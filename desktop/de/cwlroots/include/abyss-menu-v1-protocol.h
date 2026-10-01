@@ -216,6 +216,19 @@ struct abyss_menubar_v1_interface {
 			      const char *display,
 			      uint32_t island);
 	/**
+	 * do something with shoals and the front window
+	 *
+	 * verb is "recall" (arg: a shoal's index), "new" (a shoal of the
+	 * front window), "add" (the front window to the shoal at arg),
+	 * "remove" (the front window from its shoal) or "strip" (show or
+	 * hide the strip).
+	 * @since 4
+	 */
+	void (*shoal_command)(struct wl_client *client,
+			      struct wl_resource *resource,
+			      const char *verb,
+			      uint32_t arg);
+	/**
 	 * go to a window, wherever it is
 	 *
 	 * Its island, then raised and focused: the Dock's rule.
@@ -230,6 +243,7 @@ struct abyss_menubar_v1_interface {
 #define ABYSS_MENUBAR_V1_ISLAND 1
 #define ABYSS_MENUBAR_V1_WINDOW 2
 #define ABYSS_MENUBAR_V1_ISLANDS_DONE 3
+#define ABYSS_MENUBAR_V1_SHOAL 4
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -247,6 +261,10 @@ struct abyss_menubar_v1_interface {
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_ISLANDS_DONE_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_SHOAL_SINCE_VERSION 4
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -264,6 +282,10 @@ struct abyss_menubar_v1_interface {
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_SWITCH_ISLAND_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_SHOAL_COMMAND_SINCE_VERSION 4
 /**
  * @ingroup iface_abyss_menubar_v1
  */
@@ -313,6 +335,18 @@ static inline void
 abyss_menubar_v1_send_islands_done(struct wl_resource *resource_, const char *names)
 {
 	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_ISLANDS_DONE, names);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ * Sends an shoal event to the client owning the resource.
+ * @param resource_ The client's resource
+ * @param index for shoal_command
+ */
+static inline void
+abyss_menubar_v1_send_shoal(struct wl_resource *resource_, const char *display, uint32_t island, uint32_t index, const char *name, uint32_t open)
+{
+	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_SHOAL, display, island, index, name, open);
 }
 
 #ifdef  __cplusplus

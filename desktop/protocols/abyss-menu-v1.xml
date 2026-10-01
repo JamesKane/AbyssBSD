@@ -51,7 +51,7 @@
     </request>
   </interface>
 
-  <interface name="abyss_menubar_v1" version="3">
+  <interface name="abyss_menubar_v1" version="4">
     <description summary="the menu bar's view of focus">
       Offered only to clients that connected to the compositor's privileged
       socket (PHASE10 §6.1). It says which application is frontmost and where
@@ -134,6 +134,30 @@
     <request name="switch_island" since="3">
       <arg name="display" type="string" summary="empty: the main display"/>
       <arg name="island" type="uint"/>
+    </request>
+
+    <!-- Shoals (PHASE13 P13.6): in the island list, the shoals of every
+         island, and what the menu does with them. -->
+    <event name="shoal" since="4">
+      <description summary="a shoal, sent with the island list">
+        Sent after the window events of a list_islands answer, before
+        islands_done: one per shoal, with how many of its windows are open.
+      </description>
+      <arg name="display" type="string"/>
+      <arg name="island" type="uint"/>
+      <arg name="index" type="uint" summary="for shoal_command"/>
+      <arg name="name" type="string"/>
+      <arg name="open" type="uint"/>
+    </event>
+
+    <request name="shoal_command" since="4">
+      <description summary="do something with shoals and the front window">
+        verb is "recall" (arg: a shoal's index), "new" (a shoal of the front
+        window), "add" (the front window to the shoal at arg), "remove" (the
+        front window from its shoal) or "strip" (show or hide the strip).
+      </description>
+      <arg name="verb" type="string"/>
+      <arg name="arg" type="uint"/>
     </request>
 
     <request name="activate_window" since="3">

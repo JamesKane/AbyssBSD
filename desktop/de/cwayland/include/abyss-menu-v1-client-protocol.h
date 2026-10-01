@@ -222,6 +222,22 @@ struct abyss_menubar_v1_listener {
 	void (*islands_done)(void *data,
 			     struct abyss_menubar_v1 *abyss_menubar_v1,
 			     const char *names);
+	/**
+	 * a shoal, sent with the island list
+	 *
+	 * Sent after the window events of a list_islands answer, before
+	 * islands_done: one per shoal, with how many of its windows are
+	 * open.
+	 * @param index for shoal_command
+	 * @since 4
+	 */
+	void (*shoal)(void *data,
+		      struct abyss_menubar_v1 *abyss_menubar_v1,
+		      const char *display,
+		      uint32_t island,
+		      uint32_t index,
+		      const char *name,
+		      uint32_t open);
 };
 
 /**
@@ -239,7 +255,8 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
 #define ABYSS_MENUBAR_V1_FORCE_QUIT 1
 #define ABYSS_MENUBAR_V1_LIST_ISLANDS 2
 #define ABYSS_MENUBAR_V1_SWITCH_ISLAND 3
-#define ABYSS_MENUBAR_V1_ACTIVATE_WINDOW 4
+#define ABYSS_MENUBAR_V1_SHOAL_COMMAND 4
+#define ABYSS_MENUBAR_V1_ACTIVATE_WINDOW 5
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -257,6 +274,10 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_ISLANDS_DONE_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_SHOAL_SINCE_VERSION 4
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -274,6 +295,10 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_SWITCH_ISLAND_SINCE_VERSION 3
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_SHOAL_COMMAND_SINCE_VERSION 4
 /**
  * @ingroup iface_abyss_menubar_v1
  */
@@ -345,6 +370,20 @@ abyss_menubar_v1_switch_island(struct abyss_menubar_v1 *abyss_menubar_v1, const 
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
 			 ABYSS_MENUBAR_V1_SWITCH_ISLAND, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0, display, island);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ *
+ * verb is "recall" (arg: a shoal's index), "new" (a shoal of the front
+ * window), "add" (the front window to the shoal at arg), "remove" (the
+ * front window from its shoal) or "strip" (show or hide the strip).
+ */
+static inline void
+abyss_menubar_v1_shoal_command(struct abyss_menubar_v1 *abyss_menubar_v1, const char *verb, uint32_t arg)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) abyss_menubar_v1,
+			 ABYSS_MENUBAR_V1_SHOAL_COMMAND, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_menubar_v1), 0, verb, arg);
 }
 
 /**

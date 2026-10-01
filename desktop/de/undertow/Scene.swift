@@ -204,6 +204,7 @@ public final class SurfaceScene: FrameSink {
                 addWindow(t, dx: 0)
             }
         }
+        if !ebbShown { addStrip() }
         for l in layers where l.layer >= 2 { add(layer: l) }
         if ebbShown { ebbShown = false; return finish(inputAt: inputAt) }
         // Menus above everything, parent before child (P10.4).
@@ -285,6 +286,44 @@ public final class SurfaceScene: FrameSink {
             alpha[count] = 1; fillOn[count] = false
             x[count] = lx; y[count] = ly; w[count] = label.width; h[count] = label.height
             count += 1
+        }
+    }
+
+    /// The Shoals strip (P13.6): a tile per shoal of this display's island,
+    /// down the left edge — a dark plate, up to three of its windows stacked
+    /// and live, and its name. Above the windows, under the menu bar and Dock.
+    private func addStrip() {
+        let tiles = compositor.stripTiles(on: displayName)
+        guard !tiles.isEmpty else { return }
+        for tile in tiles {
+            guard count < capacity - 8 else { return }
+            let r = tile.rect
+            addFill(r, wlr_render_color(r: 0.08, g: 0.10, b: 0.16, a: 0.78))
+            let s = compositor.shoalBook.shoals[tile.index]
+            let members = s.members.compactMap { k in
+                compositor.toplevels.first { $0.mapped && $0.placeKey == k && wlr_surface_has_buffer($0.surface) }
+            }
+            // Stacked: each a little lower and to the right of the one before.
+            let shown = Array(members.suffix(3))
+            let step: Int32 = 8
+            let boxW = r.width - 24 - step * Int32(max(shown.count - 1, 0))
+            let boxH = r.height - 34 - step * Int32(max(shown.count - 1, 0))
+            for (n, t) in shown.enumerated() where t.width > 0 && t.height > 0 {
+                let k = min(Double(boxW) / Double(t.width), Double(boxH) / Double(t.height), 1)
+                let tw = Int32(Double(t.width) * k), th = Int32(Double(t.height) * k)
+                addWindow(t, into: Rect(x: r.x + 12 + step * Int32(n), y: r.y + 10 + step * Int32(n),
+                                        width: tw, height: th), alpha: 1)
+                guard count < capacity - 2 else { return }
+            }
+            if let renderer = compositor.rendererForFrames,
+               let label = compositor.stripLabel(s.name, renderer: renderer) {
+                texture[count] = label.texture; source[count] = nil; crop[count] = wlr_fbox()
+                turn[count] = WL_OUTPUT_TRANSFORM_NORMAL; waitTimeline[count] = nil
+                alpha[count] = 1; fillOn[count] = false
+                x[count] = r.x + (r.width - label.width) / 2; y[count] = r.y + r.height - label.height - 4
+                w[count] = label.width; h[count] = label.height
+                count += 1
+            }
         }
     }
 

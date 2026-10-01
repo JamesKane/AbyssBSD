@@ -78,6 +78,11 @@ public enum KeyAction: Equatable, Sendable {
     case moveToIsland(Int, follow: Bool)
     /// Ebb (P13.5): open in a scope, or put the tide back.
     case ebb(EbbScope)
+    /// Shoals (P13.6): make one of the focused window, add it to the
+    /// current one, take it out, recall this island's Nth, show the strip.
+    case shoalNew, shoalAdd, shoalRemove
+    case shoalRecall(Int)
+    case shoalStrip
 }
 
 /// One row of the table.
@@ -172,6 +177,10 @@ public enum KeyBindingParser {
         case "previous-window": return .previousWindow
         case "close-window":    return .closeWindow
         case "quit-app":        return .quitApplication
+        case "shoal new":       return .shoalNew
+        case "shoal add":       return .shoalAdd
+        case "shoal remove":    return .shoalRemove
+        case "shoal strip":     return .shoalStrip
         case "ebb island":      return .ebb(.island)
         case "ebb archipelago": return .ebb(.archipelago)
         case "ebb app":         return .ebb(.app)
@@ -181,6 +190,7 @@ public enum KeyBindingParser {
             // `island N`, `move-to-island N`, `move-to-island N follow`.
             let w = a.lowercased().split(separator: " ")
             if w.count == 2, w[0] == "island", let n = Int(w[1]), n >= 1, n <= 9 { return .island(n) }
+            if w.count == 3, w[0] == "shoal", w[1] == "recall", let n = Int(w[2]), n >= 1, n <= 9 { return .shoalRecall(n) }
             if w.count >= 2, w.count <= 3, w[0] == "move-to-island", let n = Int(w[1]), n >= 1, n <= 9 {
                 if w.count == 3 { return w[2] == "follow" ? .moveToIsland(n, follow: true) : nil }
                 return .moveToIsland(n, follow: false)
@@ -246,7 +256,15 @@ public enum KeyBindingParser {
         ("F3",         "ebb island"),
         ("Ctrl+Up",    "ebb archipelago"),
         ("Ctrl+Down",  "ebb app"),
+        // Shoals (P13.6): Ctrl-Alt with N for new, = to add, - to take out;
+        // Ctrl-Shift-N recalls this island's Nth; Ctrl-F3 the strip, beside
+        // Ebb's F3.
+        ("Ctrl+Alt+N",     "shoal new"),
+        ("Ctrl+Alt+equal", "shoal add"),
+        ("Ctrl+Alt+minus", "shoal remove"),
+        ("Ctrl+F3",        "shoal strip"),
     ] + (1...9).flatMap { n in [
+        ("Ctrl+Shift+\(n)",     "shoal recall \(n)"),
         ("Ctrl+\(n)",           "island \(n)"),
         ("Ctrl+Alt+\(n)",       "move-to-island \(n)"),
         ("Ctrl+Alt+Shift+\(n)", "move-to-island \(n) follow"),

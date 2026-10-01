@@ -210,6 +210,10 @@ if [ "$live" -eq 1 ]; then
   # and Escape leaves the screen exactly as it was.
   echo "== Ebb =="
   quiet "$root/abyss/tests/live-ebb.sh"
+  # Shoals (P13.6): explicit working sets, recalled where they were left,
+  # nothing else moved; the strip; the bar; kept across a restart.
+  echo "== Shoals =="
+  quiet "$root/abyss/tests/live-shoals.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

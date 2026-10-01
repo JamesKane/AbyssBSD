@@ -177,6 +177,8 @@ struct tw_menu_hooks {
     void (*list_islands)(void *ctx, struct wl_resource *menubar);
     void (*switch_island)(void *ctx, const char *display, uint32_t island);
     void (*activate_window)(void *ctx, uint32_t id);
+    /* Shoals (v4, P13.6): the bar asked for one of shoal_command's verbs. */
+    void (*shoal_command)(void *ctx, const char *verb, uint32_t arg);
 };
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);
@@ -199,6 +201,8 @@ void tw_menubar_send_island_all(struct tw_menus *m, const char *display, uint32_
 void tw_menubar_send_window(struct wl_resource *menubar, uint32_t id, const char *display,
                             uint32_t island, const char *app_id, const char *title);
 void tw_menubar_send_islands_done(struct wl_resource *menubar, const char *names);
+void tw_menubar_send_shoal(struct wl_resource *menubar, const char *display, uint32_t island,
+                           uint32_t index, const char *name, uint32_t open);
 /* The pid of the client owning `resource`, or -1. */
 int tw_client_pid_of(struct wl_resource *resource);
 /* Tell GTK (gtk_shell1.capabilities, on bind) that the desktop shows a global
