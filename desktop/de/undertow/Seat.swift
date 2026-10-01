@@ -445,11 +445,16 @@ public final class Seat {
             // The keyboard comes from the seat rather than the closure: a C
             // function pointer cannot capture, and `wlr_seat_set_keyboard`
             // below has already told the seat which device this is.
-            if let kbd = wlr_seat_get_keyboard(s.seat), s.intercept(key: e, keyboard: kbd) {
+            // **Locked (PHASE16 P16.2): the lock screen's, and nobody else's.**
+            // No keybind fires behind it, and an input method holding a grab
+            // must not be handed the keys of a password.
+            let locked = s.compositor.isLocked
+            if locked { s.breakGrabs() }
+            if !locked, let kbd = wlr_seat_get_keyboard(s.seat), s.intercept(key: e, keyboard: kbd) {
                 return
             }
             // An input method holding the keyboard composes with it (U.5).
-            if let kbd = wlr_seat_get_keyboard(s.seat), s.textInput?.routeKey(e, keyboard: kbd) == true {
+            if !locked, let kbd = wlr_seat_get_keyboard(s.seat), s.textInput?.routeKey(e, keyboard: kbd) == true {
                 return
             }
             wlr_seat_keyboard_notify_key(s.seat, e.pointee.time_msec,
@@ -459,7 +464,7 @@ public final class Seat {
             guard let ctx, let data else { return }
             let s = Unmanaged<Seat>.fromOpaque(ctx).takeUnretainedValue()
             let kbd = data.assumingMemoryBound(to: wlr_keyboard.self)
-            if s.textInput?.routeModifiers(kbd) == true { return }
+            if !s.compositor.isLocked, s.textInput?.routeModifiers(kbd) == true { return }
             wlr_seat_keyboard_notify_modifiers(s.seat, &kbd.pointee.modifiers)
         }, me))
         group.append(tw_listen(&keyboard.pointee.base.events.destroy, { ctx, data in
@@ -491,8 +496,8 @@ public final class Seat {
         // Invisible until P9.2 wanted to send a ⌘C without clicking first: every
         // harness mode that uses a keyboard drives a pointer beforehand, and a
         // click re-runs `focus` when a keyboard does exist.
-        if let t = focused {
-            wlr_seat_keyboard_notify_enter(seat, t.surface,
+        if let s = compositor.isLocked ? lockKeyboardTarget() : focused?.surface {
+            wlr_seat_keyboard_notify_enter(seat, s,
                                            &keyboard.pointee.keycodes.0,
                                            keyboard.pointee.num_keycodes,
                                            &keyboard.pointee.modifiers)
@@ -708,9 +713,12 @@ public final class Seat {
         /// separate case rather than a toplevel hit with odd coordinates: a
         /// press here must never be forwarded to anybody.
         case frame(Toplevel, Double, Double)
+        /// A lock surface (PHASE16 P16.2): while locked, the only thing there is.
+        case lock(UnsafeMutablePointer<wlr_surface>, Double, Double)
 
         var surface: UnsafeMutablePointer<wlr_surface>? {
             switch self {
+            case .lock(let s, _, _): return s
             case .toplevel(let t, _, _): return t.surface
             case .layer(let l, _, _): return l.surface
             case .popup(let p, _, _): return p.surface
@@ -723,6 +731,7 @@ public final class Seat {
             case .layer(_, let x, let y): return (x, y)
             case .popup(_, let x, let y): return (x, y)
             case .frame(_, let x, let y): return (x, y)
+            case .lock(_, let x, let y): return (x, y)
             }
         }
     }
@@ -741,6 +750,17 @@ public final class Seat {
     /// The order is the layer-shell protocol's own: overlay and top sit above
     /// the windows, bottom and background below them.
     public func target(at x: Double, _ y: Double) -> PointerTarget? {
+        // Locked: the lock surface of the display under the pointer, or nothing.
+        if compositor.isLocked {
+            for m in compositor.sessionLock?.mapped ?? [] {
+                let lx = x - Double(m.display.x), ly = y - Double(m.display.y)
+                if lx >= 0, ly >= 0, lx < Double(m.display.width), ly < Double(m.display.height),
+                   Seat.leaf(of: m.surface, lx, ly) != nil {
+                    return .lock(m.surface, lx, ly)
+                }
+            }
+            return nil
+        }
         for p in compositor.mappedPopups.reversed() {
             guard let o = p.origin else { continue }
             let lx = x - Double(o.x), ly = y - Double(o.y)
@@ -857,6 +877,7 @@ public final class Seat {
     }
 
     private func moveCursor(to x: Double, _ y: Double, timeMsec: UInt32) {
+        if compositor.isLocked { breakGrabs() }
         (cursorX, cursorY) = compositor.layout.clamp(x, y)
 
         // A drag in progress owns the pointer: the window follows it, and no
@@ -957,6 +978,7 @@ public final class Seat {
 
     private func button(_ button: UInt32, state: wl_pointer_button_state,
                         timeMsec: UInt32) {
+        if compositor.isLocked { breakGrabs() }
         // Releasing the button ends a drag, and the window's new position is
         // remembered there.
         if state == WL_POINTER_BUTTON_STATE_RELEASED,
@@ -1012,17 +1034,93 @@ public final class Seat {
     public private(set) weak var keyboardLayer: LayerSurface?
 
     func giveKeyboard(to l: LayerSurface) {
-        guard keyboardLayer !== l, let kbd = wlr_seat_get_keyboard(seat) else { return }
+        guard !compositor.isLocked, keyboardLayer !== l, let kbd = wlr_seat_get_keyboard(seat) else { return }
         keyboardLayer = l
         wlr_seat_keyboard_notify_enter(seat, l.surface, &kbd.pointee.keycodes.0,
                                        kbd.pointee.num_keycodes, &kbd.pointee.modifiers)
+    }
+
+    // MARK: - The session lock (PHASE16 P16.2)
+
+    /// The lock surface the keyboard belongs to: the main display's, else any.
+    func lockKeyboardTarget() -> UnsafeMutablePointer<wlr_surface>? {
+        guard let lock = compositor.sessionLock else { return nil }
+        if let main = compositor.layout.main, let s = lock.surface(on: main.name) { return s }
+        return lock.mapped.first?.surface
+    }
+
+    /// **No grab survives a lock.** wlroots answers `xdg_popup.grab` itself,
+    /// and while a popup's keyboard grab holds, a change of keyboard focus is
+    /// ignored — so a client behind the lock that opened a grabbing popup
+    /// (with any serial it was ever given) would be handed the keys typed into
+    /// the lock screen. Ended before every key and button while locked.
+    func breakGrabs() {
+        if seat.pointee.keyboard_state.grab != seat.pointee.keyboard_state.default_grab {
+            wlr_seat_keyboard_end_grab(seat)
+            grabsBroken += 1
+            if let s = lockKeyboardTarget(), let kbd = wlr_seat_get_keyboard(seat) {
+                wlr_seat_keyboard_notify_enter(seat, s, &kbd.pointee.keycodes.0,
+                                               kbd.pointee.num_keycodes, &kbd.pointee.modifiers)
+            }
+        }
+        if seat.pointee.pointer_state.grab != seat.pointee.pointer_state.default_grab {
+            wlr_seat_pointer_end_grab(seat)
+            grabsBroken += 1
+        }
+    }
+    /// Grabs ended because the session was locked, for the log a test reads.
+    public private(set) var grabsBroken = 0
+
+    /// Locked: nothing behind the lock keeps the pointer, the keys, a grab or
+    /// the bar's keyboard. They go to the lock surface as it appears.
+    func sessionLocked() {
+        breakGrabs()
+        keyboardLayer = nil
+        compositor.endMove()
+        compositor.endResize()
+        wlr_seat_pointer_clear_focus(seat)
+        wlr_seat_keyboard_notify_clear_focus(seat)
+        if let s = lockKeyboardTarget() { lockSurfaceCommitted(s) }
+    }
+
+    /// A lock surface has drawn: it takes the keyboard if no lock surface has
+    /// it, and the pointer if the pointer is over it.
+    func lockSurfaceCommitted(_ s: UnsafeMutablePointer<wlr_surface>) {
+        guard compositor.isLocked, wlr_surface_has_buffer(s) else { return }
+        let current = seat.pointee.keyboard_state.focused_surface
+        let onLock = current.map { c in compositor.sessionLock?.surfaces.contains { $0.surface == c } == true } ?? false
+        if !onLock, let target = lockKeyboardTarget(), let kbd = wlr_seat_get_keyboard(seat) {
+            wlr_seat_keyboard_notify_enter(seat, target, &kbd.pointee.keycodes.0,
+                                           kbd.pointee.num_keycodes, &kbd.pointee.modifiers)
+        }
+        rehover()
+    }
+
+    /// Unlocked: the keys go back to the window that was frontmost, and the
+    /// pointer to whatever is under it.
+    func sessionUnlocked() {
+        wlr_seat_keyboard_notify_clear_focus(seat)
+        wlr_seat_pointer_clear_focus(seat)
+        if let t = focused, let kbd = wlr_seat_get_keyboard(seat) {
+            wlr_seat_keyboard_notify_enter(seat, t.surface, &kbd.pointee.keycodes.0,
+                                           kbd.pointee.num_keycodes, &kbd.pointee.modifiers)
+        } else if focused == nil {
+            focusTopmost()
+        }
+        rehover()
+    }
+
+    /// Tell whatever is under the pointer that it is, without the pointer moving.
+    private func rehover() {
+        var ts = timespec(); clock_gettime(CLOCK_MONOTONIC, &ts)
+        moveCursor(to: cursorX, cursorY, timeMsec: UInt32(truncatingIfNeeded: Int(ts.tv_sec) * 1000 + Int(ts.tv_nsec) / 1_000_000))
     }
 
     /// Hand the keyboard back to the active window — when the bar's menu
     /// closes, or the layer that had it goes away. Mac-like: the keys go back
     /// to the application you were in, which never stopped being frontmost.
     func restoreKeyboard() {
-        guard keyboardLayer != nil else { return }
+        guard !compositor.isLocked, keyboardLayer != nil else { return }
         keyboardLayer = nil
         guard let t = focused, let kbd = wlr_seat_get_keyboard(seat) else {
             wlr_seat_keyboard_notify_clear_focus(seat)
@@ -1034,6 +1132,11 @@ public final class Seat {
 
     /// Give a window keyboard focus and raise it to the top of the stack.
     public func focus(_ t: Toplevel) {
+        // **Locked (PHASE16 P16.2): focus does not move at all.** A window
+        // that maps behind the lock is not raised, made frontmost or told it
+        // is active, so unlocking finds you where you left off — and nothing
+        // behind the lock learns it has the keyboard.
+        guard !compositor.isLocked else { return }
         compositor.raise(t)
         // Clicking the active window while the bar held the keyboard gives it
         // back, even though focus as such did not move.

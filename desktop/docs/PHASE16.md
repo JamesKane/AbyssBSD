@@ -96,6 +96,21 @@ desktop's pixels are gone from the capture and a click on where a window was
 reaches nothing; the right password unlocks; a wrong one shakes; killing the
 lock client leaves the capture locked.
 
+Split in three, as P14.7 and P15.4 were: **(a)** the protocol in `undertow`,
+tested with a C lock client; **(b)** the Aqua lock screen, asking P16.1;
+**(c)** the ways to lock — the system menu, ⌃⌘Q, `abyss-lock`.
+
+✅ **P16.2a done 2026-10-01.** `SessionLock.swift`: one lock at a time (a
+second client is told `finished`); `locked` sent after a frame; a lock client
+that dies without unlocking leaves the session **abandoned** — still locked,
+and a new lock client may take it over. While locked the scene draws each
+display's lock surface and nothing else (no lock surface: the plain lock
+colour), the pointer and keys reach only lock surfaces, keybindings and input
+methods are off, focus does not move (a window that maps behind the lock is
+not raised or activated, so unlocking finds you where you were), and **every
+popup grab is ended** (HANDOFF §2.101). `live-sessionlock.sh`, 8 claims,
+seven faults injected and caught.
+
 **P16.3 — the idle policy (M).** A session component (an ext-idle-notify
 client `anchor` supervises) that turns idleness into what a person asked for:
 lock after the Security pane's delay ("require a password after sleep or

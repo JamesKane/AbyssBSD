@@ -247,6 +247,10 @@ if [ "$live" -eq 1 ]; then
   # stack the medium ships, each account asking about itself (Linux: refuses).
   echo "== the authenticator =="
   quiet "$root/abyss/tests/live-authenticator.sh"
+  # The session lock in undertow (PHASE16 P16.2a): nothing of the desktop
+  # shown or reachable, no grab survives it, and a dead lock client keeps it.
+  echo "== the session lock =="
+  quiet "$root/abyss/tests/live-sessionlock.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

@@ -201,9 +201,13 @@ echo "ok: the yellow light put the window away"
 # what is behind it. The Dock is behind it — a bottom-layer surface the window
 # was covering a moment ago — so a tile that responds is the proof.
 #
-# Seven tiles now (five pinned, this application, the Trash): 7x48 with 6px gaps
-# centres a 372px shelf at x=214, so the application's tile is around x=508.
-printf 'm 508 550\np\nr\n' >&3
+# The running application's tile is the one just before the Trash, where the
+# Dock says it is (P15.2) — not a coordinate measured once for one set of
+# tiles: P15.2a changed the set, and x=508 became the Trash.
+tile=$(grep 'Dock: tiles ' "$work/dock.log" | tail -1 | tr ' ' '\n' | grep '=' | tail -2 | head -1)
+tx=$(printf '%s' "${tile#*=}" | cut -d, -f1); ty=$(( 600 - $(printf '%s' "${tile#*=}" | cut -d, -f2) ))
+[ -n "$tx" ] || fail "the Dock never said where its tiles are"
+printf 'm %s %s\np\nr\n' "$tx" "$ty" >&3
 expect "$key" "0,22 400x578" "clicking the Dock tile did not bring the window back"
 echo "ok: its Dock tile brought it back — the tile exists, and it activates"
 

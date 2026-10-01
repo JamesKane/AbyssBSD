@@ -592,6 +592,7 @@ case "run":
     var reportedSync = ""
     var reportedLayout = ""
     var reportedHidden = -1
+    var reportedLock = ""
     var reportedPrimary = 0
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
@@ -652,6 +653,13 @@ case "run":
             let line = "display-sleep \(sleep.asleep ? "asleep" : "awake") sleeps=\(sleep.sleeps) "
                 + "wakes=\(sleep.wakes) inhibited=\(sleep.inhibited ? "yes" : "no")"
             if line != reportedIdle { reportedIdle = line; out(line) }
+        }
+        // The session lock (PHASE16 P16.2): its state, and what it refused.
+        if let l = compositor.sessionLock {
+            let line = "session-lock \(l.abandoned ? "abandoned" : l.locked ? "locked" : "unlocked") "
+                + "locks=\(l.locks) unlocks=\(l.unlocks) refused=\(l.refused) "
+                + "abandonments=\(l.abandonments) grabs-broken=\(seat.grabsBroken)"
+            if line != reportedLock { reportedLock = line; out(line) }
         }
         // What minimised windows drew anyway (T.3).
         if compositor.hiddenCommits != reportedHidden {

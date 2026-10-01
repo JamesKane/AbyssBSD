@@ -438,6 +438,11 @@ public final class Compositor {
     public internal(set) var hiddenCommits = 0
     /// linux-drm-syncobj (U.3b), where the renderer and backend can keep it.
     public private(set) var explicitSync: ExplicitSync?
+    /// ext-session-lock-v1 (PHASE16 P16.2): while locked, nothing of the
+    /// desktop is drawn or reachable.
+    public private(set) var sessionLock: SessionLock?
+    /// Whether the session is locked — held or abandoned.
+    public var isLocked: Bool { sessionLock?.locked == true }
 
     static func log(_ s: String) {
         let line = "undertow: \(s)\n"
@@ -516,6 +521,7 @@ public final class Compositor {
             Compositor.log("linux-dmabuf not offered — this renderer imports no dma-bufs "
                            + "(pixman?); GPU clients will fail, shm clients are unaffected")
         }
+        sessionLock = SessionLock(compositor: self)
         explicitSync = ExplicitSync(display: session.display, compositor: comp,
                                     renderer: session.renderer, backend: session.backend)
 
@@ -1219,6 +1225,8 @@ public final class Compositor {
     /// that is never flushed leaves the client waiting exactly as if it had
     /// never been sent, which is a hang with no fingerprints.
     public func endFrame() {
+        // A frame was drawn under a new lock: now its client may be told.
+        sessionLock?.frameDrawn()
         sendFrameDone()
         wl_display_flush_clients(session.display)
     }

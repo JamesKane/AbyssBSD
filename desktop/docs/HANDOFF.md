@@ -730,6 +730,39 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.101 A popup grab outlives a change of focus — and the lock is one
+(PHASE16 P16.2a, the session lock.)
+
+wlroots answers `xdg_popup.grab` itself, and **while a popup holds the
+keyboard grab, `wlr_seat_keyboard_notify_enter` and `…clear_focus` go to the
+grab, which ignores them.** A menu open when the session locks (an idle lock
+arriving while you were in one) would keep the keyboard on the window behind
+the lock, and the password typed into the lock screen would go to it.
+`Seat.breakGrabs()` ends any keyboard or pointer grab when the session locks
+and before every key, button and motion while it is locked.
+
+The first version of the test opened the grabbing popup *after* locking, and
+passed with `breakGrabs` disabled: a grab started after focus is already on the
+lock surface changes nothing, since grab keys go to the focused surface. **The
+attack is the other order**, and the test now opens the popup before locking
+(claim 2 catches the disabled fix). A test of a defence has to set up the
+state the attack needs, not just call the API the attack calls.
+
+Two smaller rules from the same pass:
+
+- **Focus does not move while locked.** A window mapping behind the lock ran
+  `focus(t)`, became frontmost silently, and took the keys on unlock. Now
+  `focus()` returns at once while locked.
+- **An uncovered display shows the lock colour, not the desktop.** That is
+  what a display plugged in while locked has until the lock client gives it a
+  surface (headless outputs cannot be hot-added, so claim 8 locks one of two
+  displays). The pointer is still drawn there, as on any lock screen.
+
+Also fixed: `live-window` clicked a Dock tile at a measured x=508. P15.2a
+shrank the default Dock, so x=508 became the Trash and the test had failed
+since then, unnoticed because the `--live` lane did not run during Phase 15.
+It now aims where the Dock logs its tiles, as live-dnd does.
+
 ### 2.100 Only root can check a password, and `nullok` means what it says
 (PHASE16 P16.1, the authenticator.)
 

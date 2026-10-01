@@ -123,6 +123,20 @@ public final class SurfaceScene: FrameSink {
     /// hold.
     public func latchAndComposite(now: UInt64, target: UInt64) -> FrameStats {
         count = 0
+        // **Locked: the lock surface for this display, and nothing else**
+        // (PHASE16 P16.2). Not the wallpaper, not a window, not a menu or an
+        // input method's popup — a window that maps while locked is not
+        // drawn either. With no lock surface (its client died, or has not
+        // drawn yet), the background alone: the lock colour, never the desktop.
+        if compositor.isLocked {
+            if let lock = compositor.sessionLock {
+                for m in lock.mapped where m.display.x == originX && m.display.y == originY {
+                    addTree(m.surface, at: m.display.x, m.display.y)
+                }
+            }
+            return FrameStats(surfaces: Int32(count), damageArea: Int64(outputWidth) * Int64(outputHeight),
+                              degraded: false)
+        }
         // Paint order, and it is the shell's whole visual grammar:
         //
         //   BACKGROUND(0), BOTTOM(1)  — the wallpaper, under everything
@@ -280,11 +294,16 @@ public final class SurfaceScene: FrameSink {
         return Rect(x: Int32(x0), y: Int32(y0), width: Int32(x1 - x0), height: Int32(y1 - y0))
     }
 
+    /// What a locked display shows where its lock surface is not: a dark slate,
+    /// unlike any colour the desktop draws — so a test can tell "locked, and
+    /// nothing drawn" from "the desktop".
+    public static let lockedColour = wlr_render_color(r: 0.09, g: 0.10, b: 0.13, a: 1)
+
     public func render(into pass: OpaquePointer, background: wlr_render_color) {
         var bg = wlr_render_rect_options()
         bg.box = wlr_box(x: 0, y: 0, width: Int32((Double(outputWidth) * scale).rounded()),
                          height: Int32((Double(outputHeight) * scale).rounded()))
-        bg.color = background
+        bg.color = compositor.isLocked ? SurfaceScene.lockedColour : background
         bg.blend_mode = WLR_RENDER_BLEND_MODE_NONE
         wlr_render_pass_add_rect(pass, &bg)
 
