@@ -343,6 +343,11 @@ if [ "$live" -eq 1 ]; then
   # the Finder, the save sheet on close, and the Finder opening a .txt in it.
   echo "== TextEdit =="
   quiet "$root/abyss/tests/live-textedit.sh"
+  # Grab (P15.6): a selection and a window (undertow's window_at) captured,
+  # saved through the portal, their pixels compared with the screen's; Screen,
+  # Escape (an exclusive overlay's keyboard), Timed Screen.
+  echo "== Grab =="
+  quiet "$root/abyss/tests/live-grab.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="

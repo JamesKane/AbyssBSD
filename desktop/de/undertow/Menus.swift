@@ -96,6 +96,16 @@ public final class Menus {
             guard let t = m.compositor.toplevels.first(where: { $0.surface == surface }) else { return }
             m.compositor.lower(t)
         }
+        hooks.window_at = { ctx, x, y, box, appID, title in
+            // abyss_window_manager_v1.window_at (P15.6): Grab's Window mode.
+            guard let ctx, let box else { return 0 }
+            let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
+            guard let w = m.compositor.windowBox(at: Double(x), Double(y)) else { return 0 }
+            box[0] = w.x; box[1] = w.y; box[2] = w.width; box[3] = w.height
+            appID?.pointee = strdup(w.toplevel.appID ?? "")
+            title?.pointee = strdup(w.toplevel.title ?? "")
+            return 1
+        }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
     }

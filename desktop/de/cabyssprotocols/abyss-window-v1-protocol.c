@@ -19,20 +19,46 @@
 #define WL_PRIVATE
 #endif
 
+extern const struct wl_interface abyss_window_query_v1_interface;
 extern const struct wl_interface xdg_toplevel_interface;
 
 static const struct wl_interface *abyss_window_v1_types[] = {
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 	&xdg_toplevel_interface,
+	&abyss_window_query_v1_interface,
+	NULL,
+	NULL,
 };
 
 static const struct wl_message abyss_window_manager_v1_requests[] = {
 	{ "destroy", "", abyss_window_v1_types + 0 },
-	{ "lower", "o", abyss_window_v1_types + 0 },
+	{ "lower", "o", abyss_window_v1_types + 6 },
+	{ "window_at", "2nii", abyss_window_v1_types + 7 },
 };
 
 WL_PRIVATE const struct wl_interface abyss_window_manager_v1_interface = {
-	"abyss_window_manager_v1", 1,
-	2, abyss_window_manager_v1_requests,
+	"abyss_window_manager_v1", 2,
+	3, abyss_window_manager_v1_requests,
 	0, NULL,
+};
+
+static const struct wl_message abyss_window_query_v1_requests[] = {
+	{ "destroy", "", abyss_window_v1_types + 0 },
+};
+
+static const struct wl_message abyss_window_query_v1_events[] = {
+	{ "window", "iiiiss", abyss_window_v1_types + 0 },
+	{ "none", "", abyss_window_v1_types + 0 },
+};
+
+WL_PRIVATE const struct wl_interface abyss_window_query_v1_interface = {
+	"abyss_window_query_v1", 1,
+	1, abyss_window_query_v1_requests,
+	2, abyss_window_query_v1_events,
 };
 

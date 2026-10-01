@@ -37,6 +37,7 @@ public enum SceneKind: Sendable {
     case installer   // the guided installer (PHASE5 P5.4)
     case terminal    // Terminal (PHASE15 P15.4b)
     case textedit    // TextEdit (PHASE15 P15.5)
+    case grab        // Grab (PHASE15 P15.6)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -215,6 +216,8 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
+    case .grab:
+        _ = paintGrabPanel(cr, w: cw, h: ch, status: "Choose what to capture.")
     case .textedit:
         // A fixed document: wrapped lines, a tab, a selection across a line
         // break, and the find bar with its text.

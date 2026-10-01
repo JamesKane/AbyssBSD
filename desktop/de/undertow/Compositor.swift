@@ -1140,6 +1140,22 @@ public final class Compositor {
         toplevels.filter { $0.mapped && !$0.minimized && wlr_surface_has_buffer($0.surface) }
     }
 
+    /// The topmost window at (x, y), and its box as drawn — the frame undertow
+    /// draws around a decorated window included (P15.6: Grab's Window mode
+    /// takes the whole window, title bar and all, as Jaguar's did).
+    public func windowBox(at x: Double, _ y: Double)
+        -> (toplevel: Toplevel, x: Int32, y: Int32, width: Int32, height: Int32)? {
+        for t in mappedToplevels.reversed() {
+            let box = t.decorated
+                ? FrameMetrics.frame(forSurfaceAt: t.x, t.y, width: t.width, height: t.height)
+                : (x: t.x, y: t.y, w: t.width, h: t.height)
+            if x >= Double(box.x), y >= Double(box.y), x < Double(box.x + box.w), y < Double(box.y + box.h) {
+                return (t, box.x, box.y, box.w, box.h)
+            }
+        }
+        return nil
+    }
+
     /// Tell every mapped client the frame is done, so it draws the next one.
     ///
     /// Without this a client renders exactly one frame and then waits for ever

@@ -155,6 +155,24 @@ public final class LayerSurface {
             != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE
     }
 
+    /// `exclusive` on the top or overlay layer: the protocol's "this surface
+    /// receives all keyboard input" — a lock screen, Grab's overlay (P15.6).
+    /// Given the keyboard as it maps, with no click; undertow did neither
+    /// until now.
+    public var wantsExclusiveKeyboard: Bool {
+        handle.pointee.current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+            && layer >= 2
+    }
+
+    private func claimKeyboardIfExclusive() {
+        guard mapped, wantsExclusiveKeyboard, let seat = compositor.seat, seat.keyboardLayer !== self else { return }
+        seat.giveKeyboard(to: self)
+    }
+
+    private func releaseKeyboard() {
+        if let seat = compositor.seat, seat.keyboardLayer === self { seat.restoreKeyboard() }
+    }
+
     private unowned let compositor: Compositor
     private var listeners: [UnsafeMutablePointer<tw_listener>?] = []
 
@@ -169,12 +187,14 @@ public final class LayerSurface {
             let l = Unmanaged<LayerSurface>.fromOpaque(ctx).takeUnretainedValue()
             l.mapped = true
             l.compositor.arrangeLayers()
+            l.claimKeyboardIfExclusive()
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.unmap, { ctx, _ in
             guard let ctx else { return }
             let l = Unmanaged<LayerSurface>.fromOpaque(ctx).takeUnretainedValue()
             l.mapped = false
             l.compositor.arrangeLayers()
+            l.releaseKeyboard()
         }, me))
         listeners.append(tw_listen(&surface.pointee.events.commit, { ctx, _ in
             guard let ctx else { return }
@@ -185,12 +205,14 @@ public final class LayerSurface {
             // exclusive zone at any time — the menu bar does exactly that when a
             // menu opens.
             l.compositor.arrangeLayers()
+            l.claimKeyboardIfExclusive()               // asked for after mapping
             _ = l.handle.pointee.initial_commit
         }, me))
         listeners.append(tw_listen(&handle.pointee.events.destroy, { ctx, _ in
             guard let ctx else { return }
             let l = Unmanaged<LayerSurface>.fromOpaque(ctx).takeUnretainedValue()
             l.mapped = false
+            l.releaseKeyboard()
             l.compositor.forgetLayer(l)
         }, me))
     }

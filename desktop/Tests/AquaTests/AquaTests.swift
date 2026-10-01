@@ -622,6 +622,24 @@ final class AquaTests: XCTestCase {
         XCTAssertFalse(PlainText.looksLikeText([]))
     }
 
+    /// Grab (P15.6): a crop is exactly those pixels, clamped to the screen;
+    /// the picture encodes as a PNG.
+    func testAGrabIsTheScreensPixelsCropped() throws {
+        // A 4×3 screen whose every pixel says where it is: B = x, G = y.
+        var px: [UInt8] = []
+        for y in 0..<3 { for x in 0..<4 { px += [UInt8(x), UInt8(y), 0, 0xFF] } }
+        let screen = ScreenCapture(width: 4, height: 3, pixels: px)
+        let c = try XCTUnwrap(GrabImage.crop(screen, x: 1, y: 1, w: 2, h: 2))
+        XCTAssertEqual(c.width, 2); XCTAssertEqual(c.height, 2)
+        XCTAssertEqual(c.pixels, [1, 1, 0, 0xFF, 2, 1, 0, 0xFF, 1, 2, 0, 0xFF, 2, 2, 0, 0xFF])
+        let edge = try XCTUnwrap(GrabImage.crop(screen, x: 3, y: -5, w: 10, h: 7))
+        XCTAssertEqual(edge.width, 1, "clamped to the screen's right edge")
+        XCTAssertEqual(edge.height, 2, "and its top")
+        XCTAssertNil(GrabImage.crop(screen, x: 9, y: 0, w: 2, h: 2), "nothing of it on the screen")
+        let png = try XCTUnwrap(c.png())
+        XCTAssertEqual(Array(png.prefix(8)), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    }
+
     func testTheDesktopsMenuIsItsOwnFewCommands() {
         XCTAssertEqual(Wallpaper.contextMenu.commands.map(\.verb),
                        ["desktop.new-folder", "desktop.change-background"])

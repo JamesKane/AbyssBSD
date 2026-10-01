@@ -329,6 +329,45 @@ opening a `.txt` in TextEdit. Goldens `textedit` and `textedit@2x`.
 output, a window picker (foreign-toplevel), and a save sheet, over the
 screencopy `abyssgrab` already does. *Verified:* a region's pixels in the saved
 file match the screen.
+✅ **Done 2026-10-01.** Grab (`AQUA_SCENE=grab`, app_id `org.abyssbsd.grab`):
+Jaguar's Capture menu — Selection ⇧⌘A (a rubber band on an OVERLAY layer
+surface, its size shown), Window ⇧⌘W (the window under the pointer tinted, a
+click takes it), Screen ⌘Z, Timed Screen ⇧⌘Z (ten seconds) — each picture in a
+window of its own, Save… through the portal's save picker as a PNG, Copy as
+`image/png`; a small main window with the four as buttons, because the bar shows
+a frontmost window's menus. **The overlay is never in the picture:** it is
+closed, and the compositor given a round trip, before the screen is copied.
+What it took below Grab:
+
+- **`window_at`** — `abyss_window_manager_v1` v2: foreign-toplevel names windows
+  but does not place them, so Window mode asks undertow which window is
+  topmost at a point and gets its box, **the frame undertow draws included**
+  (a whole window, title bar and all, as Jaguar's took), plus its app_id and
+  title. Not privileged: geometry is less than screencopy already gives any
+  client. Surface: `Display.windowAt` (one shared listener; Grab asks on every
+  motion).
+- **Exclusive keyboard for layer surfaces** — undertow honoured
+  `keyboard_interactivity` only on a click; an `exclusive` surface on the top
+  or overlay layer now gets the keyboard as it maps and hands it back as it
+  unmaps (the protocol's rule; a lock screen will need it too). Grab's Escape.
+- **A crash only FreeBSD showed** — HANDOFF §2.99: every Surface type left its
+  pending frame callback alive when closed, with an unretained `self` as its
+  data; Grab's overlay, closed between a commit and its `done`, died with SIGBUS.
+  All three now cancel it (and stop leaking a callback proxy per frame).
+- **The pointer is in the picture** where it is drawn in software (the build
+  VM): wlroots' screencopy can leave out only a hardware cursor. Said in Grab's
+  header and asserted honestly below.
+- `abyssgrab --convert` (PNG → PPM) and `--diff` (where two PPMs differ), so a
+  shell test compares pictures with no image library.
+
+`live-grab.sh`, both platforms, on a still scene (the wallpaper and System
+Preferences): a selection across a window's edge, saved through the portal and
+the Finder's save picker, **equal to the same region of a screencopy but for
+the pointer** where the drag ended (2 pixels, inside its box); a click captures
+System Preferences' exact box as undertow reports it, equal likewise (the
+pointer's 18×22); Screen is 1024×768; Escape cancels; Timed captures after its
+countdown. Goldens `grab` and `grab@2x`. Known limits: one output (the first, at
+the layout's origin); Grab's own windows are in a Screen capture.
 
 **P15.7 — Activity Monitor (M).** The process table from `kern.proc.all`
 (sysctl, no `kvm` needed for our own view), CPU and memory, sorted and

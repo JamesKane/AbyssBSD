@@ -15,7 +15,7 @@
     it, and a client must not assume its window moved.
   </description>
 
-  <interface name="abyss_window_manager_v1" version="1">
+  <interface name="abyss_window_manager_v1" version="2">
     <description summary="window operations">
       A global with no events. Bind it, and ask.
     </description>
@@ -32,5 +32,47 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
     </request>
+
+    <request name="window_at" since="2">
+      <description summary="which window is at a point, and where it is">
+        Ask which window is topmost at (x, y), in the layout's coordinates —
+        what Grab's Window mode clicks on (PHASE15 P15.6). The answer is one
+        event on `query`: `window` with its box — the frame the compositor
+        draws around it included — or `none`. The client then destroys it.
+
+        Geometry is less than wlr-screencopy already gives any client (every
+        pixel of the screen), so this is not a privileged request.
+      </description>
+      <arg name="query" type="new_id" interface="abyss_window_query_v1"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+    </request>
+  </interface>
+
+  <interface name="abyss_window_query_v1" version="1">
+    <description summary="one answer to window_at">
+      Answered once, with `window` or `none`, as soon as it is made.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="done with the answer"/>
+    </request>
+
+    <event name="window">
+      <description summary="the window there">
+        Its box in the layout's coordinates, the compositor's frame included,
+        and what it calls itself.
+      </description>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+      <arg name="app_id" type="string"/>
+      <arg name="title" type="string"/>
+    </event>
+
+    <event name="none">
+      <description summary="no window there"/>
+    </event>
   </interface>
 </protocol>

@@ -31,6 +31,7 @@ struct wl_resource;
  *
  * @section page_ifaces_abyss_window_v1 Interfaces
  * - @subpage page_iface_abyss_window_manager_v1 - window operations
+ * - @subpage page_iface_abyss_window_query_v1 - one answer to window_at
  * @section page_copyright_abyss_window_v1 Copyright
  * <pre>
  *
@@ -38,6 +39,7 @@ struct wl_resource;
  * </pre>
  */
 struct abyss_window_manager_v1;
+struct abyss_window_query_v1;
 struct xdg_toplevel;
 
 #ifndef ABYSS_WINDOW_MANAGER_V1_INTERFACE
@@ -56,6 +58,23 @@ struct xdg_toplevel;
  * A global with no events. Bind it, and ask.
  */
 extern const struct wl_interface abyss_window_manager_v1_interface;
+#endif
+#ifndef ABYSS_WINDOW_QUERY_V1_INTERFACE
+#define ABYSS_WINDOW_QUERY_V1_INTERFACE
+/**
+ * @page page_iface_abyss_window_query_v1 abyss_window_query_v1
+ * @section page_iface_abyss_window_query_v1_desc Description
+ *
+ * Answered once, with `window` or `none`, as soon as it is made.
+ * @section page_iface_abyss_window_query_v1_api API
+ * See @ref iface_abyss_window_query_v1.
+ */
+/**
+ * @defgroup iface_abyss_window_query_v1 The abyss_window_query_v1 interface
+ *
+ * Answered once, with `window` or `none`, as soon as it is made.
+ */
+extern const struct wl_interface abyss_window_query_v1_interface;
 #endif
 
 /**
@@ -81,6 +100,25 @@ struct abyss_window_manager_v1_interface {
 	void (*lower)(struct wl_client *client,
 		      struct wl_resource *resource,
 		      struct wl_resource *toplevel);
+	/**
+	 * which window is at a point, and where it is
+	 *
+	 * Ask which window is topmost at (x, y), in the layout's
+	 * coordinates — what Grab's Window mode clicks on (PHASE15
+	 * P15.6). The answer is one event on `query`: `window` with its
+	 * box — the frame the compositor draws around it included — or
+	 * `none`. The client then destroys it.
+	 *
+	 * Geometry is less than wlr-screencopy already gives any client
+	 * (every pixel of the screen), so this is not a privileged
+	 * request.
+	 * @since 2
+	 */
+	void (*window_at)(struct wl_client *client,
+			  struct wl_resource *resource,
+			  uint32_t query,
+			  int32_t x,
+			  int32_t y);
 };
 
 
@@ -92,6 +130,63 @@ struct abyss_window_manager_v1_interface {
  * @ingroup iface_abyss_window_manager_v1
  */
 #define ABYSS_WINDOW_MANAGER_V1_LOWER_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_window_manager_v1
+ */
+#define ABYSS_WINDOW_MANAGER_V1_WINDOW_AT_SINCE_VERSION 2
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ * @struct abyss_window_query_v1_interface
+ */
+struct abyss_window_query_v1_interface {
+	/**
+	 * done with the answer
+	 *
+	 * 
+	 */
+	void (*destroy)(struct wl_client *client,
+			struct wl_resource *resource);
+};
+
+#define ABYSS_WINDOW_QUERY_V1_WINDOW 0
+#define ABYSS_WINDOW_QUERY_V1_NONE 1
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+#define ABYSS_WINDOW_QUERY_V1_WINDOW_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+#define ABYSS_WINDOW_QUERY_V1_NONE_SINCE_VERSION 1
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+#define ABYSS_WINDOW_QUERY_V1_DESTROY_SINCE_VERSION 1
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ * Sends an window event to the client owning the resource.
+ * @param resource_ The client's resource
+ */
+static inline void
+abyss_window_query_v1_send_window(struct wl_resource *resource_, int32_t x, int32_t y, int32_t width, int32_t height, const char *app_id, const char *title)
+{
+	wl_resource_post_event(resource_, ABYSS_WINDOW_QUERY_V1_WINDOW, x, y, width, height, app_id, title);
+}
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ * Sends an none event to the client owning the resource.
+ * @param resource_ The client's resource
+ */
+static inline void
+abyss_window_query_v1_send_none(struct wl_resource *resource_)
+{
+	wl_resource_post_event(resource_, ABYSS_WINDOW_QUERY_V1_NONE);
+}
 
 #ifdef  __cplusplus
 }

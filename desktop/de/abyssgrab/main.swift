@@ -1,6 +1,14 @@
 // abyssgrab — capture an output to a PNG (PHASE7.md P7.5).
 //
 //     abyssgrab <out.png|out.ppm> [--output N] [--cursor]
+//     abyssgrab --convert <in.png> <out.ppm>
+//     abyssgrab --diff <a.ppm> <b.ppm>
+//
+// `--convert` reads a PNG and writes it as PPM, opaque RGB — how a test
+// compares a picture something else saved (Grab, P15.6) with the screen,
+// byte for byte, with no image library in the shell. `--diff` says where two
+// PPMs of one size differ: "same", or "N pixels differ, within X,Y WxH" — so a
+// test can say the only difference is where the pointer was drawn.
 //
 // The screenshot portal's capture step, as its own process — for the same
 // reason the file chooser's picker is (PHASE7.md §6.1): it keeps the portal a
@@ -29,6 +37,69 @@ func emit(_ fd: Int32, _ s: String) {
 }
 func die(_ s: String) -> Never { emit(2, "abyssgrab: \(s)"); exit(1) }
 func usage(_ s: String) -> Never { emit(2, "abyssgrab: \(s)"); exit(2) }
+
+/// `--convert in.png out.ppm`: a PNG's pixels as a PPM, alpha dropped.
+func convert(_ inPath: String, _ outPath: String) -> Never {
+    guard let surface = inPath.withCString({ cairo_image_surface_create_from_png($0) }),
+          cairo_surface_status(surface) == CAIRO_STATUS_SUCCESS else { die("cannot read \(inPath) as a PNG") }
+    defer { cairo_surface_destroy(surface) }
+    cairo_surface_flush(surface)
+    let w = Int(cairo_image_surface_get_width(surface)), h = Int(cairo_image_surface_get_height(surface))
+    let stride = Int(cairo_image_surface_get_stride(surface))
+    guard let data = cairo_image_surface_get_data(surface) else { die("\(inPath) has no pixels") }
+    var out = Array("P6\n\(w) \(h)\n255\n".utf8)
+    out.reserveCapacity(out.count + w * h * 3)
+    for y in 0..<h {
+        for x in 0..<w {
+            // ARGB32 or RGB24: B, G, R, A in memory on the little-endian hosts we run.
+            let i = y * stride + x * 4
+            out.append(data[i + 2]); out.append(data[i + 1]); out.append(data[i])
+        }
+    }
+    let fd = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+    guard fd >= 0 else { die("could not write \(outPath)") }
+    let n = out.withUnsafeBufferPointer { write(fd, $0.baseAddress, out.count) }
+    close(fd)
+    guard n == out.count else { die("short write to \(outPath)") }
+    emit(2, "abyssgrab: converted \(inPath) (\(w)x\(h)) → \(outPath)")
+    exit(0)
+}
+/// `--diff a.ppm b.ppm`: how many pixels differ, and the box around them.
+func diff(_ a: String, _ b: String) -> Never {
+    func load(_ p: String) -> (w: Int, h: Int, rgb: [UInt8]) {
+        let fd = open(p, O_RDONLY)
+        guard fd >= 0 else { die("cannot read \(p)") }
+        var bytes: [UInt8] = [], buf = [UInt8](repeating: 0, count: 65536)
+        while true {
+            let n = buf.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+            if n <= 0 { break }
+            bytes.append(contentsOf: buf[0..<n])
+        }
+        close(fd)
+        // "P6\nW H\n255\n": three header lines, then RGB.
+        var lines = 0, i = 0
+        while i < bytes.count && lines < 3 { if bytes[i] == 0x0A { lines += 1 }; i += 1 }
+        let head = String(decoding: bytes[..<i], as: UTF8.self).split(whereSeparator: { $0 == "\n" || $0 == " " })
+        guard head.count >= 4, head[0] == "P6", let w = Int(head[1]), let h = Int(head[2]) else { die("\(p) is not a PPM") }
+        return (w, h, Array(bytes[i...]))
+    }
+    let x = load(a), y = load(b)
+    guard x.w == y.w, x.h == y.h, x.rgb.count == y.rgb.count else { die("\(x.w)x\(x.h) and \(y.w)x\(y.h): not one size") }
+    var n = 0, x0 = Int.max, y0 = Int.max, x1 = -1, y1 = -1
+    for p in 0..<(x.w * x.h) where x.rgb[p * 3] != y.rgb[p * 3] || x.rgb[p * 3 + 1] != y.rgb[p * 3 + 1] || x.rgb[p * 3 + 2] != y.rgb[p * 3 + 2] {
+        n += 1
+        let px = p % x.w, py = p / x.w
+        x0 = min(x0, px); y0 = min(y0, py); x1 = max(x1, px); y1 = max(y1, py)
+    }
+    emit(1, n == 0 ? "same" : "\(n) pixels differ, within \(x0),\(y0) \(x1 - x0 + 1)x\(y1 - y0 + 1)")
+    exit(0)
+}
+if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--diff" {
+    diff(CommandLine.arguments[2], CommandLine.arguments[3])
+}
+if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--convert" {
+    convert(CommandLine.arguments[2], CommandLine.arguments[3])
+}
 
 var outPath: String?
 var outputIndex = 0

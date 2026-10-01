@@ -68,6 +68,7 @@ public final class Display {
     /// `abyss_window_manager_v1` (P11.6): window operations xdg-shell lacks —
     /// sending a window to the back. No events, so bound on sight.
     var windowManager: OpaquePointer?
+    var windowManagerVersion: UInt32 = 0
     /// `abyss_menubar_v1`, by name — offered only on undertow's privileged
     /// socket, so its presence is itself the answer to "am I the menu bar's
     /// connection". Bound with its listener by `MenuBarFocus`.
@@ -164,6 +165,55 @@ public final class Display {
     /// events, including the selection we may already have been handed, arrive
     /// only after the device object exists, which is after the second.
     public func roundtrip() { wl_display_roundtrip(display) }
+
+    // MARK: - Which window is where (P15.6)
+
+    /// One answer to `window_at`: a window's box (the compositor's frame
+    /// included) and what it calls itself.
+    public struct WindowAt: Equatable, Sendable {
+        public let x: Int32, y: Int32, width: Int32, height: Int32
+        public let appID: String, title: String
+    }
+
+    private final class WindowAtAnswer { var answered = false; var window: WindowAt? }
+    /// One listener for every query, made once: `addListener` keeps what it is
+    /// given, and Grab asks on every pointer motion.
+    private var windowQueryListener: UnsafeMutablePointer<abyss_window_query_v1_listener>?
+
+    /// Which window is topmost at (x, y) in the layout's coordinates, asked of
+    /// the compositor (`abyss_window_manager_v1` v2) — Grab's Window mode. nil
+    /// when nothing is there, or the compositor cannot say.
+    public func windowAt(x: Int32, y: Int32) -> WindowAt? {
+        guard let manager = windowManager, windowManagerVersion >= 2,
+              let q = abyss_window_manager_v1_window_at(manager, x, y) else { return nil }
+        if windowQueryListener == nil {
+            var l = abyss_window_query_v1_listener()
+            l.window = { data, _, x, y, w, h, app, title in
+                guard let data else { return }
+                let a = Unmanaged<WindowAtAnswer>.fromOpaque(data).takeUnretainedValue()
+                a.window = WindowAt(x: x, y: y, width: w, height: h,
+                                    appID: app.map { String(cString: $0) } ?? "",
+                                    title: title.map { String(cString: $0) } ?? "")
+                a.answered = true
+            }
+            l.none = { data, _ in
+                guard let data else { return }
+                Unmanaged<WindowAtAnswer>.fromOpaque(data).takeUnretainedValue().answered = true
+            }
+            let p = UnsafeMutablePointer<abyss_window_query_v1_listener>.allocate(capacity: 1)
+            p.initialize(to: l)
+            windowQueryListener = p
+        }
+        let answer = WindowAtAnswer()
+        let data = Unmanaged.passUnretained(answer).toOpaque()
+        _ = UnsafeMutableRawPointer(windowQueryListener!).withMemoryRebound(
+            to: (@convention(c) () -> Void)?.self, capacity: 1) { wl_proxy_add_listener(q, $0, data) }
+        // The compositor answers at once; a round trip is enough.
+        var tries = 0
+        while !answer.answered && tries < 3 { wl_display_roundtrip(display); tries += 1 }
+        abyss_window_query_v1_destroy(q)
+        return withExtendedLifetime(answer) { answer.window }
+    }
     // Whether the pointer is currently over the popup surface (vs the window).
     private var pointerOnPopup = false
 
@@ -321,7 +371,8 @@ public final class Display {
         case "abyss_menu_manager_v1":
             menuManager = wlBind(registry, name, abyss_menu_manager_v1_iface, 1)
         case "abyss_window_manager_v1":
-            windowManager = wlBind(registry, name, abyss_window_manager_v1_iface, 1)
+            windowManagerVersion = min(version, 2)
+            windowManager = wlBind(registry, name, abyss_window_manager_v1_iface, windowManagerVersion)
         case "abyss_menubar_v1":
             menubarGlobal = (name, min(version, 2))
         case "xdg_activation_v1":

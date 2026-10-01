@@ -57,7 +57,7 @@ Phases 14 and 15, [BACKLOG.md](BACKLOG.md) closed what Phase 15's applications
 would need from the compositor (U.1–U.10), the installer's keyboard items
 (T.1–T.3) and the toolchain passes (S.0–S.3; Swift 6.3.3 on both platforms).
 
-**Phase 15, the application layer, is five passes of eight done** ([PHASE15.md](PHASE15.md)).
+**Phase 15, the application layer, is six passes of eight done** ([PHASE15.md](PHASE15.md)).
 Every installed port is a Mac-shaped `.app` (P15.1); the Dock carries real
 applications — pinned, dragged on and off, matched to their running windows —
 and the Apple menu has Recent Items (P15.2); **Firefox ESR is the browser**, in
@@ -66,9 +66,11 @@ installed from it has one (P15.3); and **Terminal** is a shell in a window —
 the pty and a VT screen model, scrollback, selection and the clipboard, in the
 Dock, and the host for ports that need a terminal (P15.4); and **TextEdit** —
 the toolkit's multi-line text view, Open and Save through the portal, undo,
-find, and the Finder opening a `.txt` in it (P15.5). **One foreign
+find, and the Finder opening a `.txt` in it (P15.5); and **Grab** — selection,
+window (undertow says where a window is, `window_at`) and screen, saved through
+the portal (P15.6). **One foreign
 toolkit: GTK** (decided 2026-09-30; the rule is in Context, above) — the Qt menu work of P10.7 is gone.
-**Next is P15.6, Grab**, then Activity Monitor and Disk Utility.
+**Next is P15.7, Activity Monitor**, then Disk Utility.
 
 **Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
 medium boots, `amdgpu` binds, typing and the pointer work, and after five
@@ -258,7 +260,7 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | ✅ 2026-09-05, but its Aqua view |
 | 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | C6 waits on Phase 4 |
 | 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | ✅ 2026-09-29 |
-| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | **in flight** — P15.1–P15.5 done (bundles, Dock, Firefox, Terminal, TextEdit); Grab next |
+| 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | **in flight** — P15.1–P15.6 done (bundles, Dock, Firefox, Terminal, TextEdit, Grab); Activity Monitor next |
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | idle done early (BACKLOG U.9) |
 | 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | the overlay exists, for the board |
 | 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | |

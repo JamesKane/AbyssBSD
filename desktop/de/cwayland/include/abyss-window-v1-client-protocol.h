@@ -28,6 +28,7 @@ extern "C" {
  *
  * @section page_ifaces_abyss_window_v1 Interfaces
  * - @subpage page_iface_abyss_window_manager_v1 - window operations
+ * - @subpage page_iface_abyss_window_query_v1 - one answer to window_at
  * @section page_copyright_abyss_window_v1 Copyright
  * <pre>
  *
@@ -35,6 +36,7 @@ extern "C" {
  * </pre>
  */
 struct abyss_window_manager_v1;
+struct abyss_window_query_v1;
 struct xdg_toplevel;
 
 #ifndef ABYSS_WINDOW_MANAGER_V1_INTERFACE
@@ -54,9 +56,27 @@ struct xdg_toplevel;
  */
 extern const struct wl_interface abyss_window_manager_v1_interface;
 #endif
+#ifndef ABYSS_WINDOW_QUERY_V1_INTERFACE
+#define ABYSS_WINDOW_QUERY_V1_INTERFACE
+/**
+ * @page page_iface_abyss_window_query_v1 abyss_window_query_v1
+ * @section page_iface_abyss_window_query_v1_desc Description
+ *
+ * Answered once, with `window` or `none`, as soon as it is made.
+ * @section page_iface_abyss_window_query_v1_api API
+ * See @ref iface_abyss_window_query_v1.
+ */
+/**
+ * @defgroup iface_abyss_window_query_v1 The abyss_window_query_v1 interface
+ *
+ * Answered once, with `window` or `none`, as soon as it is made.
+ */
+extern const struct wl_interface abyss_window_query_v1_interface;
+#endif
 
 #define ABYSS_WINDOW_MANAGER_V1_DESTROY 0
 #define ABYSS_WINDOW_MANAGER_V1_LOWER 1
+#define ABYSS_WINDOW_MANAGER_V1_WINDOW_AT 2
 
 
 /**
@@ -67,6 +87,10 @@ extern const struct wl_interface abyss_window_manager_v1_interface;
  * @ingroup iface_abyss_window_manager_v1
  */
 #define ABYSS_WINDOW_MANAGER_V1_LOWER_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_window_manager_v1
+ */
+#define ABYSS_WINDOW_MANAGER_V1_WINDOW_AT_SINCE_VERSION 2
 
 /** @ingroup iface_abyss_window_manager_v1 */
 static inline void
@@ -110,6 +134,113 @@ abyss_window_manager_v1_lower(struct abyss_window_manager_v1 *abyss_window_manag
 {
 	wl_proxy_marshal_flags((struct wl_proxy *) abyss_window_manager_v1,
 			 ABYSS_WINDOW_MANAGER_V1_LOWER, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_window_manager_v1), 0, toplevel);
+}
+
+/**
+ * @ingroup iface_abyss_window_manager_v1
+ *
+ * Ask which window is topmost at (x, y), in the layout's coordinates —
+ * what Grab's Window mode clicks on (PHASE15 P15.6). The answer is one
+ * event on `query`: `window` with its box — the frame the compositor
+ * draws around it included — or `none`. The client then destroys it.
+ *
+ * Geometry is less than wlr-screencopy already gives any client (every
+ * pixel of the screen), so this is not a privileged request.
+ */
+static inline struct abyss_window_query_v1 *
+abyss_window_manager_v1_window_at(struct abyss_window_manager_v1 *abyss_window_manager_v1, int32_t x, int32_t y)
+{
+	struct wl_proxy *query;
+
+	query = wl_proxy_marshal_flags((struct wl_proxy *) abyss_window_manager_v1,
+			 ABYSS_WINDOW_MANAGER_V1_WINDOW_AT, &abyss_window_query_v1_interface, wl_proxy_get_version((struct wl_proxy *) abyss_window_manager_v1), 0, NULL, x, y);
+
+	return (struct abyss_window_query_v1 *) query;
+}
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ * @struct abyss_window_query_v1_listener
+ */
+struct abyss_window_query_v1_listener {
+	/**
+	 * the window there
+	 *
+	 * Its box in the layout's coordinates, the compositor's frame
+	 * included, and what it calls itself.
+	 */
+	void (*window)(void *data,
+		       struct abyss_window_query_v1 *abyss_window_query_v1,
+		       int32_t x,
+		       int32_t y,
+		       int32_t width,
+		       int32_t height,
+		       const char *app_id,
+		       const char *title);
+	/**
+	 * no window there
+	 *
+	 * 
+	 */
+	void (*none)(void *data,
+		     struct abyss_window_query_v1 *abyss_window_query_v1);
+};
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+static inline int
+abyss_window_query_v1_add_listener(struct abyss_window_query_v1 *abyss_window_query_v1,
+				   const struct abyss_window_query_v1_listener *listener, void *data)
+{
+	return wl_proxy_add_listener((struct wl_proxy *) abyss_window_query_v1,
+				     (void (**)(void)) listener, data);
+}
+
+#define ABYSS_WINDOW_QUERY_V1_DESTROY 0
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+#define ABYSS_WINDOW_QUERY_V1_WINDOW_SINCE_VERSION 1
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+#define ABYSS_WINDOW_QUERY_V1_NONE_SINCE_VERSION 1
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+#define ABYSS_WINDOW_QUERY_V1_DESTROY_SINCE_VERSION 1
+
+/** @ingroup iface_abyss_window_query_v1 */
+static inline void
+abyss_window_query_v1_set_user_data(struct abyss_window_query_v1 *abyss_window_query_v1, void *user_data)
+{
+	wl_proxy_set_user_data((struct wl_proxy *) abyss_window_query_v1, user_data);
+}
+
+/** @ingroup iface_abyss_window_query_v1 */
+static inline void *
+abyss_window_query_v1_get_user_data(struct abyss_window_query_v1 *abyss_window_query_v1)
+{
+	return wl_proxy_get_user_data((struct wl_proxy *) abyss_window_query_v1);
+}
+
+static inline uint32_t
+abyss_window_query_v1_get_version(struct abyss_window_query_v1 *abyss_window_query_v1)
+{
+	return wl_proxy_get_version((struct wl_proxy *) abyss_window_query_v1);
+}
+
+/**
+ * @ingroup iface_abyss_window_query_v1
+ */
+static inline void
+abyss_window_query_v1_destroy(struct abyss_window_query_v1 *abyss_window_query_v1)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) abyss_window_query_v1,
+			 ABYSS_WINDOW_QUERY_V1_DESTROY, NULL, wl_proxy_get_version((struct wl_proxy *) abyss_window_query_v1), WL_MARSHAL_FLAG_DESTROY);
 }
 
 #ifdef  __cplusplus

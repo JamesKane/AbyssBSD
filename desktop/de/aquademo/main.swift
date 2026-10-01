@@ -71,6 +71,9 @@ case "installer":
     // what a disk is, and tall enough that the hub does not scroll — a summary
     // you have to scroll is not a summary.
     scene = .installer; title = "Install AbyssBSD"; width = 620; height = 460
+case "grab":
+    // Grab (PHASE15 P15.6): its main window's size.
+    scene = .grab; title = "Grab"; width = 420; height = 150
 case "textedit":
     // TextEdit (PHASE15 P15.5): the arguments are files to open.
     scene = .textedit; title = "TextEdit"; width = 520; height = 380
@@ -189,6 +192,10 @@ if scene == .wallpaper {
     }
     installerSay("AquaDemo: System Preferences is up (\(PrefCatalogue.all.count) panes)")
     withExtendedLifetime(prefs) { display.run() }
+} else if scene == .grab {
+    guard let grab = GrabApp(display: display) else { print("AquaDemo: failed to open Grab."); exit(1) }
+    installerSay("AquaDemo: Grab is up.")
+    withExtendedLifetime(grab) { display.run() }
 } else if scene == .textedit {
     let textedit = TextEditApp(display: display)
     let files = Array(CommandLine.arguments.dropFirst())

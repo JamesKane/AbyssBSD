@@ -164,6 +164,11 @@ struct tw_menu_hooks {
     /* A client asked for one of its toplevels to go to the back
      * (abyss_window_manager_v1.lower, P11.6). */
     void (*lower)(void *ctx, struct wlr_surface *surface);
+    /* Which window is topmost at (x, y) in layout coordinates
+     * (abyss_window_manager_v1.window_at, P15.6): 1 and its box — frame
+     * included — in box[0..3], with app_id and title malloc'd for the caller
+     * to free; 0 if none. */
+    int (*window_at)(void *ctx, int32_t x, int32_t y, int32_t *box, char **app_id, char **title);
 };
 
 struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_menu_hooks *hooks);
