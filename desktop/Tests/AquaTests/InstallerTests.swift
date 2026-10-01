@@ -452,9 +452,10 @@ final class InstallerTests: XCTestCase {
         let p = ready().plan(passwordHash: "$6$fake")
         XCTAssertTrue(p.installsDesktop, "the Aqua installer did not install the desktop")
         XCTAssertEqual(p.sets.first, "base.txz", "base still has to be first")
-        // And the installed machine therefore starts it, for the account made.
-        XCTAssertTrue(rcConf(p).contains("abyss_desktop_enable"))
-        XCTAssertTrue(rcConf(p).contains("abyss_desktop_user=\"jkane\""))
+        // And the installed machine therefore starts it — at the login window
+        // (PHASE16 §6.2), with jkane's account to log in as.
+        XCTAssertTrue(rcConf(p).contains("abyss_loginwindow_flags=\"--greeter\""))
+        XCTAssertFalse(rcConf(p).contains("abyss_desktop_user"))
     }
 
     func testTheTrialPlanBehindAnObjectionMatchesTheRealOne() {

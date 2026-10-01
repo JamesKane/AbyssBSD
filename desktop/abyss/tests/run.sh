@@ -271,6 +271,10 @@ if [ "$live" -eq 1 ]; then
   # cannot be used to learn which names are accounts.
   echo "== the login window =="
   quiet "$root/abyss/tests/live-loginwindow.sh"
+  # Sessions (P16.5b): the login window, a session for whoever logs in, the
+  # window again on Log Out (unprivileged; the root half is live-authenticator's).
+  echo "== sessions =="
+  quiet "$root/abyss/tests/live-greeter.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

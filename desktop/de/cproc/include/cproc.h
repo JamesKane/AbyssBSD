@@ -21,8 +21,9 @@
 #define ABYSS_CPROC_H
 
 /* A supervised child. `fd` is pollable and becomes ready when the child exits;
- * On FreeBSD the descriptor is the only handle used — `pid` is there to be
- * reported, never to signal or wait on. */
+ * On FreeBSD the descriptor is what is polled and signalled (pdkill); the pid
+ * is reported, and reaped with waitpid — closing the descriptor alone leaves a
+ * zombie (HANDOFF §2.108). */
 typedef struct {
     int fd;
     int pid;
@@ -49,9 +50,21 @@ int ap_child_signal(const ap_child *c, int sig);
 
 /*
  * Reap an exited child and release its handle. Writes the exit status to
- * *status (as from waitpid; 0 means a clean exit) when `status` is non-NULL.
+ * *status (as from waitpid; 0 means a clean exit) when `status` is non-NULL —
+ * on FreeBSD too, since the pid is waited for (P16.5b).
  * Safe to call on an already-reaped child. Returns 0, or -1 with errno set.
  */
+/*
+ * ap_child_spawn, as `user` (PHASE16 P16.5b): the child takes the account's
+ * groups, limits and uid (setusercontext(LOGIN_SETALL) on FreeBSD) and starts
+ * in its home, before execve. Root may spawn as anyone; any other caller only
+ * as itself, with nothing changed (a test). -1 with errno: ENOENT for no such
+ * account, EPERM for anyone else's. A child that cannot become the account
+ * exits 126 and never runs the program.
+ */
+int ap_child_spawn_as(const char *user, const char *const *argv, const char *const *envp,
+                      int stdout_fd, ap_child *out);
+
 int ap_child_reap(ap_child *c, int *status);
 
 /*

@@ -18,7 +18,7 @@ name="abyss_loginwindow"
 rcvar="abyss_loginwindow_enable"
 pidfile="/var/run/${name}.pid"
 command="/usr/sbin/daemon"
-command_args="-f -P ${pidfile} -o /var/log/abyss-loginwindow.out /usr/local/bin/abyss-loginwindow"
+command_args="-f -P ${pidfile} -o /var/log/abyss-loginwindow.out /usr/local/bin/abyss-loginwindow ${abyss_loginwindow_flags}"
 start_postcmd="abyss_loginwindow_poststart"
 stop_postcmd="abyss_loginwindow_poststop"
 
@@ -31,6 +31,18 @@ abyss_loginwindow_poststart()
 	done
 	if [ -S /var/run/abyss-loginwindow.sock ]; then
 		echo "abyss: the authenticator is up"
+		# With --greeter (an installed desktop, PHASE16 P16.5): the daemon
+		# runs the login window; say when it is up, or that it is not.
+		case "${abyss_loginwindow_flags}" in *--greeter*)
+			i=0
+			while ! grep -q "the login window is up" /var/log/abyss-loginwindow.out 2>/dev/null \
+			    && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+			if grep -q "the login window is up" /var/log/abyss-loginwindow.out 2>/dev/null; then
+				echo "abyss: the login window is up"
+			else
+				echo "abyss: THE LOGIN WINDOW NEVER STARTED (see /var/log/abyss-loginwindow.out)"
+			fi ;;
+		esac
 		# The power key asks the session now (devd → the daemon): the
 		# kernel must not power off first. Kept to restore on stop.
 		state=$(sysctl -n hw.acpi.power_button_state 2>/dev/null)
@@ -52,5 +64,6 @@ abyss_loginwindow_poststop()
 	fi
 }
 
+: ${abyss_loginwindow_flags:=""}
 load_rc_config $name
 run_rc_command "$1"

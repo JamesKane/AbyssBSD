@@ -95,9 +95,9 @@ while i < args.count {
         guard let n = Int(next("a number")), n >= 0 else { fail("--max-restarts wants a number") }
         maxRestarts = n
     case "--mode":
-        let m = next("desktop or installer")
+        let m = next("desktop, installer or greeter")
         guard let parsed = SessionMode(rawValue: m) else {
-            fail("--mode is desktop or installer, not '\(m)'")
+            fail("--mode is desktop, installer or greeter, not '\(m)'")
         }
         mode = parsed
     case "--without":     without.insert(next("a component name"))

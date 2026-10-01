@@ -28,6 +28,8 @@ var commands = PowerCommands()
 var lockTimeout = 8.0
 var systemUID: UInt32 = 0
 var greeterUID: UInt32? = nil
+var greeter = false
+var sessionConfig = SessionManager.Config()
 var args = Array(CommandLine.arguments.dropFirst())
 while let a = args.first {
     args.removeFirst()
@@ -41,6 +43,17 @@ while let a = args.first {
     case "--system-uid": systemUID = UInt32(args.isEmpty ? "" : args.removeFirst()) ?? 0
     // Whose word counts as the login window's: a test's own account.
     case "--greeter-uid": greeterUID = UInt32(args.isEmpty ? "" : args.removeFirst())
+    // Sessions, as the real daemon's --greeter (P16.5b), with this test's own
+    // account standing in for _loginwindow and for whoever logs in.
+    case "--greeter": greeter = true
+    case "--greeter-user": sessionConfig.greeterUser = args.isEmpty ? "" : args.removeFirst()
+    case "--session-command": sessionConfig.command = args.isEmpty ? "" : args.removeFirst()
+    case "--session-log-dir": sessionConfig.logDirectory = args.isEmpty ? "" : args.removeFirst()
+    case "--runtime-root": sessionConfig.runtimeRoot = args.isEmpty ? "" : args.removeFirst()
+    case "--session-path": sessionConfig.path = args.isEmpty ? "" : args.removeFirst()
+    case "--session-env":
+        let kv = args.isEmpty ? "" : args.removeFirst()
+        if let eq = kv.firstIndex(of: "=") { sessionConfig.extraEnvironment[String(kv[..<eq])] = String(kv[kv.index(after: eq)...]) }
     default: emit("abyss-loginstub: unknown option '\(a)'"); exit(2)
     }
 }
@@ -71,4 +84,8 @@ let service = LoginService(server: server, authenticator: auth, commands: comman
 service.lockTimeout = lockTimeout
 service.systemUID = systemUID
 service.greeterUID = greeterUID
+if greeter {
+    sessionConfig.extraEnvironment["ABYSS_LOGIN_SOCKET"] = socketPath
+    service.sessions = SessionManager(config: sessionConfig, log: emit)
+}
 service.run()

@@ -20,8 +20,10 @@ let soundLibraries: [LinkerSetting] = []
 // authenticator refuses there (PHASE16 P16.1).
 #if os(FreeBSD)
 let pamLibraries: [LinkerSetting] = [.linkedLibrary("pam")]
+let utilLibraries: [LinkerSetting] = [.linkedLibrary("util")]
 #else
 let pamLibraries: [LinkerSetting] = []
+let utilLibraries: [LinkerSetting] = []
 #endif
 
 let package = Package(
@@ -311,7 +313,9 @@ let package = Package(
             name: "CProc",
             path: "de/cproc",
             sources: ["cproc.c"],
-            publicHeadersPath: "include"
+            publicHeadersPath: "include",
+            // setusercontext(3), for a session spawned as its user (P16.5b).
+            linkerSettings: utilLibraries
         ),
         // The session supervisor's logic — restart policy, the poll loop, the
         // control service. A library so it can be tested without a session.
@@ -353,7 +357,7 @@ let package = Package(
         // conversation; Login is the wire, the limiter and the client.
         .target(name: "CPAM", path: "de/cpam", sources: ["cpam.c"], publicHeadersPath: "include",
                 linkerSettings: pamLibraries),
-        .target(name: "Login", dependencies: ["CurrentIPC", "CPlatform", "CPAM", "Spawn"], path: "de/login"),
+        .target(name: "Login", dependencies: ["CurrentIPC", "CPlatform", "CPAM", "Spawn", "CProc"], path: "de/login"),
         .executableTarget(name: "abyss-loginwindow", dependencies: ["Login", "CurrentIPC"],
                           path: "de/loginwindowbin"),
         .executableTarget(name: "abyss-loginctl", dependencies: ["Login"], path: "de/loginctl"),

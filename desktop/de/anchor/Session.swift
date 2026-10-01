@@ -42,6 +42,11 @@ public enum SessionMode: String, Sendable, Equatable {
     /// to launch), no menu bar (there is nothing to quit to), and no bus — a
     /// machine being installed has no foreign apps to serve.
     case installer
+    /// The login window and nothing else (PHASE16 P16.5b): the session the
+    /// root daemon runs as `_loginwindow` while nobody is logged in. No bus,
+    /// no portal, no menu bar, no Dock, no idle policy, no lock screen —
+    /// there is nobody's anything to serve.
+    case greeter
 }
 
 /// The session as a plan: what to run, in what order, and what to export first.
@@ -145,7 +150,9 @@ public func defaultSession(shellBinary: String,
                            menubarDisplay: String? = nil,
                            menubarSocket: String? = nil,
                            mode: SessionMode = .desktop,
-                           without: Set<String> = []) -> SessionPlan {
+                           without asked: Set<String> = []) -> SessionPlan {
+    // The login window's session serves nobody: no bus, no portal, no bridge.
+    let without = mode == .greeter ? asked.union(["bus", "portal", "bridge", "menus"]) : asked
     var components: [ComponentSpec] = []
     var notes: [String] = []
     var busAddress: String?
@@ -256,9 +263,12 @@ public func defaultSession(shellBinary: String,
     // Dock — the same three `abyss/session.sh` ran. In installer mode, the
     // wallpaper and the installer instead: a backdrop and the one thing this
     // machine is for.
-    let scenes: [(String, String)] = mode == .installer
-        ? [("desktop", "wallpaper"), ("installer", "installer")]
-        : [("desktop", "wallpaper"), ("menubar", "menubar"), ("dock", "dock")]
+    let scenes: [(String, String)]
+    switch mode {
+    case .installer: scenes = [("desktop", "wallpaper"), ("installer", "installer")]
+    case .greeter: scenes = [("loginwindow", "loginwindow")]
+    case .desktop: scenes = [("desktop", "wallpaper"), ("menubar", "menubar"), ("dock", "dock")]
+    }
     for (name, scene) in scenes where !without.contains(name) {
         var env = shared
         env["AQUA_SCENE"] = scene

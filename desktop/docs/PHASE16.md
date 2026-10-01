@@ -255,6 +255,27 @@ installer defaults (§6.2), and `live-desktop.sh` through it.
   through the real daemon in the guest; 4 unit tests. Five faults injected,
   each caught.
 
+✅ **P16.5b done 2026-10-01, and with it P16.5** (but for `live-desktop.sh`,
+updated and not yet run: the `--full` lane).
+- **Sessions:** `SessionManager`, in `Login`, run by the daemon with
+  `--greeter`. At start it runs the greeter session as `_loginwindow`
+  (`abyss-session` in anchor's new `greeter` mode: the login window and
+  nothing else). On an accepted `login` it ends the greeter (SIGTERM, then
+  SIGKILL after 5 s) and starts the person's session **as them**
+  (`ap_child_spawn_as`: `setusercontext(LOGIN_SETALL)`, their home) in
+  `/var/run/abyss-<user>`, theirs, 0700, with a login's environment. When it
+  ends (Log Out) the greeter comes back; a greeter that dies is restarted.
+- **Installed systems** start at the login window: `rc.conf` gets
+  `abyss_loginwindow_flags="--greeter"`, and the installer makes
+  `_loginwindow` (uid 1099, nologin, no password, in `video`). Automatic login
+  is `InstallPlan.autoLogin` (`abyss-installctl --autologin`); the Accounts
+  pane gets it in P16.6. The medium keeps its automatic session.
+- **Tests:** `live-greeter.sh` runs the whole chain unprivileged (5 claims);
+  `live-authenticator.sh` claim 9 does it as root, asserting the privilege
+  drop. Five faults injected, each caught.
+- **Found:** FreeBSD never reaped a `pdfork` child: closing its descriptor
+  left a zombie, in anchor and the daemon alike (HANDOFF §2.108). Fixed.
+
 **P16.6 — two users (L).** The Accounts pane: add and delete a user (through the
 settings helper, an administrator only), their picture, automatic login on or
 off. Two sessions on one machine: fast user switching puts the second on its

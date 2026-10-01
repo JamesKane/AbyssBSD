@@ -28,6 +28,7 @@
 
 import CurrentIPC
 import Spawn
+import CProc
 
 #if canImport(Glibc)
 import Glibc
@@ -100,8 +101,12 @@ public final class LoginService {
     /// The login window's account (P16.5): the only caller that may ask about
     /// another account's password. Nil: no login window on this machine.
     public var greeterUID: UInt32?
-    /// Someone logged in at the window (P16.5b starts their session here).
+    /// Someone logged in at the window.
     public var onLogin: ((String) -> Void)?
+    /// The login window's sessions (P16.5b), when this daemon runs them
+    /// (`--greeter`): the greeter at start, a person's on a login, the
+    /// greeter again when they log out.
+    public var sessions: SessionManager?
     private let uidOf: (String) -> UInt32? = { name in getpwnam(name).map { UInt32($0.pointee.pw_uid) } }
     private var watchers: [(fd: Int32, uid: UInt32)] = []
 
@@ -124,15 +129,24 @@ public final class LoginService {
 
     /// Serve until `once` has answered one request (a test), or for ever.
     public func run(once: Bool = false) {
+        sessions?.startGreeter()
         while true {
             var fds = [pollfd(fd: server.fd, events: Int16(POLLIN), revents: 0)]
+            // The session's end, if one runs: polled first, read last.
+            let sessionFD = sessions?.childFD
+            if let f = sessionFD {
+                fds.append(pollfd(fd: f, events: Int16(ap_child_exit_events() | POLLHUP | POLLIN), revents: 0))
+            }
             for w in watchers { fds.append(pollfd(fd: w.fd, events: Int16(POLLIN), revents: 0)) }
             let n = fds.withUnsafeMutableBufferPointer { poll($0.baseAddress, nfds_t($0.count), -1) }
             if n < 0 { if errno == EINTR { continue }; return }
             // A watcher readable outside a sleep has hung up — or is answering
             // a sleep that was already called off (it was too slow). A late
             // answer is read and set aside; anything else ends the watch.
-            for p in fds.dropFirst() where p.revents != 0 {
+            if let f = sessionFD, fds.contains(where: { $0.fd == f && $0.revents != 0 }) {
+                sessions?.childExited()
+            }
+            for p in fds.dropFirst() where p.revents != 0 && p.fd != sessionFD {
                 if let late = try? Current.receive(on: p.fd), late.bool("ready") != nil {
                     say("loginwindow: a late answer from a session, after its sleep was called off — ignored")
                 } else {
@@ -174,7 +188,10 @@ public final class LoginService {
             reply(client, r)
             close(client)
             say("loginwindow: " + (isGreeter ? "" : "uid \(uid.map(String.init) ?? "?"): ") + line)
-            if let user { onLogin?(user) }
+            if let user {
+                onLogin?(user)
+                sessions?.login(user)
+            }
         default:
             let (r, line) = auth.handle(uid: uid, request: request, now: LoginService.now())
             request = Msg()

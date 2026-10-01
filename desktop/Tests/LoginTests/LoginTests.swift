@@ -1,4 +1,5 @@
 import XCTest
+import CProc
 import CurrentIPC
 @testable import Login
 
@@ -172,5 +173,30 @@ final class LoginTests: XCTestCase {
         XCTAssertTrue(PowerPolicy.may(.shutDown, uid: 1100, groups: [], greeterUID: 1100))
         XCTAssertFalse(PowerPolicy.may(.restart, uid: 1101, groups: [], greeterUID: 1100))
         XCTAssertFalse(PowerPolicy.may(.powerKey, uid: 1100, groups: [], greeterUID: 1100), "not the hardware")
+    }
+
+    // MARK: Sessions (P16.5b)
+
+    /// Only root may start a process as someone else; anyone else, only as
+    /// themselves — which is how a test runs the whole login flow unprivileged.
+    func testOnlyRootSpawnsAsAnotherAccount() throws {
+        try XCTSkipIf(geteuid() == 0, "as root, every account is ours to spawn as")
+        var c = ap_child(fd: -1, pid: -1)
+        let argv: [UnsafePointer<CChar>?] = [UnsafePointer(strdup("/bin/sh")), UnsafePointer(strdup("-c")),
+                                            UnsafePointer(strdup("exit 0")), nil]
+        let envp: [UnsafePointer<CChar>?] = [nil]
+        errno = 0
+        XCTAssertEqual(ap_child_spawn_as("root", argv, envp, -1, &c), -1)
+        XCTAssertEqual(errno, EPERM, "another account: refused before any fork")
+        XCTAssertEqual(ap_child_spawn_as("nosuchaccount\(getpid())", argv, envp, -1, &c), -1)
+        XCTAssertEqual(errno, ENOENT)
+        guard let me = getpwuid(geteuid()).map({ String(cString: $0.pointee.pw_name) }) else { return XCTFail("who am I") }
+        XCTAssertEqual(ap_child_spawn_as(me, argv, envp, -1, &c), 0, "as oneself: allowed, nothing changed")
+        var p = pollfd(fd: c.fd, events: Int16(ap_child_exit_events() | POLLHUP | POLLIN), revents: 0)
+        XCTAssertEqual(poll(&p, 1, 5000), 1)
+        _ = ap_child_reap(&c, nil)
+        // **Reaped means reaped**: on FreeBSD, closing the process descriptor
+        // alone left a zombie (HANDOFF §2.108).
+        XCTAssertEqual(waitpid(-1, nil, WNOHANG), -1, "a reaped child is not left as a zombie")
     }
 }

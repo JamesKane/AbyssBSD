@@ -28,6 +28,8 @@ func emit(_ fd: Int32, _ s: String) {
 
 var socketPath = Login.defaultSocket, service = Login.defaultService, once = false
 var commands = PowerCommands()
+var greeter = false
+var sessionConfig = SessionManager.Config()
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
 @MainActor func value(_ flag: String) -> String {
@@ -43,8 +45,14 @@ while i < args.count {
     // Stand-ins that record what was asked, for a test (PHASE16 §6.3).
     case "--acpiconf": commands.acpiconf = value("--acpiconf")
     case "--shutdown": commands.shutdown = value("--shutdown")
+    // The login window's sessions (P16.5b): the greeter, then whoever logs in.
+    case "--greeter": greeter = true
+    case "--session-command": sessionConfig.command = value("--session-command")
+    case "--session-log-dir": sessionConfig.logDirectory = value("--session-log-dir")
+    case "--runtime-root": sessionConfig.runtimeRoot = value("--runtime-root")
     case "-h", "--help":
-        emit(1, "usage: abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once] [--acpiconf PATH] [--shutdown PATH]")
+        emit(1, "usage: abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once] [--acpiconf PATH] [--shutdown PATH]\n"
+             + "                         [--greeter [--session-command PATH] [--session-log-dir DIR] [--runtime-root DIR]]")
         exit(0)
     default:
         emit(2, "abyss-loginwindow: unknown option '\(args[i])'"); exit(2)
@@ -79,6 +87,15 @@ let daemon = LoginService(server: server, authenticator: .system(service: servic
 if let g = getpwnam(Login.greeterUser) {
     daemon.greeterUID = UInt32(g.pointee.pw_uid)
     emit(2, "loginwindow: the login window's account is \(Login.greeterUser) (uid \(daemon.greeterUID!))")
+}
+if greeter {
+    // Without its account, the login window cannot run, and nobody could log
+    // in: say so, and answer the rest (the lock screen still needs it).
+    if daemon.greeterUID == nil {
+        emit(2, "loginwindow: --greeter, but there is no \(Login.greeterUser) account — no login window")
+    } else {
+        daemon.sessions = SessionManager(config: sessionConfig, log: { emit(2, $0) })
+    }
 }
 daemon.run(once: once)
 server.shutdownAndUnlink()

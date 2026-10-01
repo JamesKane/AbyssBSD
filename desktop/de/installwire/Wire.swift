@@ -56,6 +56,7 @@ public enum Wire {
         // at the socket is a guard that silently never lifts — and worse, one
         // that looks like it did.
         m.set("erase", p.eraseExistingData ? UInt64(1) : UInt64(0))
+        m.set("autologin", p.autoLogin ? UInt64(1) : UInt64(0))
         m.set("sets.count", UInt64(p.sets.count))
         for (i, s) in p.sets.enumerated() { m.set("set.\(i)", s) }
         m.set("accounts.count", UInt64(p.accounts.count))
@@ -98,7 +99,8 @@ public enum Wire {
             keymap: m.string("keymap") ?? "",
             rootPasswordHash: m.string("rootpw") ?? "*",
             accounts: accounts,
-            eraseExistingData: (m.uint64("erase") ?? 0) == 1)
+            eraseExistingData: (m.uint64("erase") ?? 0) == 1,
+            autoLogin: (m.uint64("autologin") ?? 0) == 1)
     }
 
     // MARK: - The machine

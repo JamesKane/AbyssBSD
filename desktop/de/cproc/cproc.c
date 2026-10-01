@@ -7,10 +7,13 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <pwd.h>
+#include <grp.h>
 #include "cproc.h"
 
 #if defined(__FreeBSD__)
 #include <sys/procdesc.h>
+#include <login_cap.h>
 #elif defined(__linux__)
 #include <sys/syscall.h>
 #else
@@ -25,8 +28,30 @@ int ap_child_exit_events(void) {
 #endif
 }
 
-int ap_child_spawn(const char *const *argv, const char *const *envp,
-                   int stdout_fd, ap_child *out) {
+/*
+ * In the child, before execve: become `pw`'s account, and start in its home.
+ * Only when this process is not that account already — a test running as its
+ * own user spawns "as" itself with nothing to change (PHASE16 P16.5b).
+ */
+static int become(const struct passwd *pw) {
+    if (getuid() != pw->pw_uid || geteuid() != pw->pw_uid) {
+#if defined(__FreeBSD__)
+        /* Groups, resource limits, umask, the login class's environment and
+         * finally the uid — login(1)'s own way, from login.conf. */
+        if (setusercontext(NULL, (struct passwd *)pw, pw->pw_uid, LOGIN_SETALL) != 0) return -1;
+#else
+        if (initgroups(pw->pw_name, pw->pw_gid) != 0) return -1;
+        if (setgid(pw->pw_gid) != 0) return -1;
+        if (setuid(pw->pw_uid) != 0) return -1;
+#endif
+        if (getuid() != pw->pw_uid || geteuid() != pw->pw_uid) return -1;   /* never go on as root */
+    }
+    if (pw->pw_dir == NULL || chdir(pw->pw_dir) != 0) (void)chdir("/");
+    return 0;
+}
+
+static int spawn_impl(const char *const *argv, const char *const *envp,
+                      int stdout_fd, ap_child *out, const struct passwd *as) {
     if (argv == NULL || argv[0] == NULL || out == NULL) {
         errno = EINVAL;
         return -1;
@@ -45,6 +70,7 @@ int ap_child_spawn(const char *const *argv, const char *const *envp,
             dup2(stdout_fd, 1);
             dup2(stdout_fd, 2);
         }
+        if (as != NULL && become(as) != 0) _exit(126);
         execve(argv[0], (char *const *)argv, (char *const *)envp);
         _exit(127);
     }
@@ -62,6 +88,7 @@ int ap_child_spawn(const char *const *argv, const char *const *envp,
             dup2(stdout_fd, 1);
             dup2(stdout_fd, 2);
         }
+        if (as != NULL && become(as) != 0) _exit(126);
         execve(argv[0], (char *const *)argv, (char *const *)envp);
         _exit(127);
     }
@@ -80,6 +107,22 @@ int ap_child_spawn(const char *const *argv, const char *const *envp,
     out->pid = (int)pid;
     return 0;
 #endif
+}
+
+int ap_child_spawn(const char *const *argv, const char *const *envp,
+                   int stdout_fd, ap_child *out) {
+    return spawn_impl(argv, envp, stdout_fd, out, NULL);
+}
+
+int ap_child_spawn_as(const char *user, const char *const *argv, const char *const *envp,
+                      int stdout_fd, ap_child *out) {
+    if (user == NULL) { errno = EINVAL; return -1; }
+    /* Looked up here, in the parent: after the fork the child does as little
+     * as it can. getpwnam's storage is copied into the child with the rest. */
+    struct passwd *pw = getpwnam(user);
+    if (pw == NULL) { errno = ENOENT; return -1; }
+    if (geteuid() != 0 && geteuid() != pw->pw_uid) { errno = EPERM; return -1; }
+    return spawn_impl(argv, envp, stdout_fd, out, pw);
 }
 
 int ap_child_signal(const ap_child *c, int sig) {
@@ -107,13 +150,24 @@ int ap_child_reap(ap_child *c, int *status) {
     if (c->fd < 0) return 0;        /* already reaped — not an error */
 
 #if defined(__FreeBSD__)
-    /* Closing a process descriptor reaps the process; there is no zombie and
-     * no waitpid race, which is the whole point of pdfork. The exit status is
-     * only available via a kqueue NOTE_EXIT, which a poll()-based loop does not
-     * collect — so report 0 and let the caller judge by behaviour. */
+    /* **Closing a process descriptor does not reap the process.** A pdfork
+     * child is still this process's child, and once it has exited it stays a
+     * zombie until waited for: every child anchor and the login daemon ever
+     * "reaped" here — each restarted lock screen, each session — was left as
+     * one, until a test that asked waitpid(-1) found it (PHASE16 P16.5b,
+     * HANDOFF §2.108). So: close the descriptor (which ends a child still
+     * running — no PD_DAEMON), then wait for that pid. The pid is recorded
+     * since P16.2c; with it, FreeBSD has an exit status too. */
+    pid_t pid = (pid_t)c->pid;
     close(c->fd);
     c->fd = -1;
     c->pid = -1;
+    if (pid > 0) {
+        int st = 0;
+        pid_t r;
+        do { r = waitpid(pid, &st, 0); } while (r < 0 && errno == EINTR);
+        if (r == pid && status != NULL) *status = st;
+    }
     return 0;
 #else
     int st = 0;

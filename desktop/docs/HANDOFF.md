@@ -730,6 +730,41 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.108 Closing a process descriptor does not reap — and how a session is started
+(PHASE16 P16.5b, the login window's sessions.)
+
+**cproc's FreeBSD `ap_child_reap` closed the `pdfork` descriptor and called the
+child reaped. It was not.** A `pdfork` child is still the caller's child: once
+it has exited it stays a zombie until waited for, and `waitpid(-1)` returns it.
+So every child anchor and the login daemon ever "reaped" on FreeBSD (each
+restarted lock screen, each session) stayed a zombie until its parent exited.
+Nothing noticed until a new unit test spawned a child in the same process as
+the Launcher test's `waitpid(-1, WNOHANG) == -1`, and only in the guest. Linux
+uses `waitpid` and was always right. The pid has been recorded since P16.2c,
+so the fix closes the descriptor (which ends a child still running) and then
+`waitpid`s that pid, which also gives FreeBSD a real exit status at last. The
+spawn test now asserts no child is left. cproc's own header said the opposite
+and was the reason nobody looked.
+
+**How a session is started**, greetd's shape, in `SessionManager`:
+- **The runtime directory** is made by the root daemon, not the session,
+  because `/var/run` is root's. It is chowned to the user and 0700, and
+  checked: a directory that is not theirs is refused.
+- **`ap_child_spawn_as`** looks the account up in the parent and, in the
+  child, `setusercontext(LOGIN_SETALL)` (groups, limits, login class, uid),
+  then the home directory, then `execve`. It checks the uid really changed:
+  never go on as root.
+- **A caller that already is that account changes nothing.** That is how
+  `live-greeter.sh` runs the whole chain unprivileged, while the privilege
+  drop itself is asserted as root in the guest (`live-authenticator.sh`
+  claim 9: uid, groups without wheel, home, the runtime directory's owner
+  and mode).
+- **The greeter is ended before the person's session starts.** On metal
+  both want the display.
+
+Metal checks still owed: the greeter's undertow as `_loginwindow` (in
+`video`) on a real GPU; a PAM session (`pam_open_session`) is not opened yet.
+
 ### 2.107 The login window asks about someone else — so it is one account's question
 (PHASE16 P16.5a.)
 

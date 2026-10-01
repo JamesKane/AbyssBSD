@@ -61,6 +61,11 @@ public struct InstallPlan: Equatable, Sendable {
     /// the operation is impossible, it is that it cannot happen by default and
     /// the sentence that unlocks it names what will be lost.
     public let eraseExistingData: Bool
+    /// Log the owner in with no password at boot (PHASE16 §6.2). **Off by
+    /// default**: an installed desktop starts at the login window. The
+    /// medium keeps its automatic session; an installed machine with `sudo`
+    /// one keystroke away does not get one unasked.
+    public let autoLogin: Bool
 
     public init(disk: String,
                 poolName: String = "abyss",
@@ -74,7 +79,8 @@ public struct InstallPlan: Equatable, Sendable {
                 keymap: String = "",
                 rootPasswordHash: String = "*",
                 accounts: [Account] = [],
-                eraseExistingData: Bool = false) {
+                eraseExistingData: Bool = false,
+                autoLogin: Bool = false) {
         self.disk = disk
         self.poolName = poolName
         self.espBytes = espBytes
@@ -88,6 +94,7 @@ public struct InstallPlan: Equatable, Sendable {
         self.rootPasswordHash = rootPasswordHash
         self.accounts = accounts
         self.eraseExistingData = eraseExistingData
+        self.autoLogin = autoLogin
     }
 
     /// The distribution set that carries the Aqua desktop.

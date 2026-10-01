@@ -537,26 +537,46 @@ final class InstallTests: XCTestCase {
         XCTAssertFalse(rcConf(plain).contains("abyss_desktop"))
     }
 
-    func testInstallingTheDesktopSetStartsTheDesktopForTheAccountCreated() {
-        var p = InstallPlan(disk: "ada0",
-                            sets: ["base.txz", "kernel.txz", InstallPlan.desktopSet],
-                            accounts: [Account(name: "guest", passwordHash: "$6$g"),
-                                       Account(name: "jkane", passwordHash: "$6$j",
-                                               groups: ["wheel"])])
+    /// **An installed desktop starts at the login window** (PHASE16 §6.2):
+    /// the daemon runs it (`--greeter`), and nobody's session starts unasked.
+    func testInstallingTheDesktopStartsTheLoginWindow() {
+        let accounts = [Account(name: "guest", passwordHash: "$6$g"),
+                        Account(name: "jkane", passwordHash: "$6$j", groups: ["wheel"])]
+        let p = InstallPlan(disk: "ada0", sets: ["base.txz", "kernel.txz", InstallPlan.desktopSet],
+                            accounts: accounts)
         XCTAssertTrue(p.installsDesktop)
+        XCTAssertFalse(p.autoLogin, "automatic login is never the default")
+        let rc = rcConf(p)
+        XCTAssertTrue(rc.contains("abyss_loginwindow_enable=\"YES\""), rc)
+        XCTAssertTrue(rc.contains("abyss_loginwindow_flags=\"--greeter\""), rc)
+        XCTAssertFalse(rc.contains("abyss_desktop"), "no session at boot without a password: \(rc)")
+        // The login window's own account is made, and it is nobody's to log in as.
+        let steps = (try? compile(p, on: machine())) ?? []
+        let made = steps.compactMap { step -> [String]? in
+            if case .run(let argv, _) = step.action { return argv }; return nil
+        }.first { $0.contains("_loginwindow") }
+        XCTAssertNotNil(made)
+        XCTAssertTrue(made?.contains("/usr/sbin/nologin") == true)
+        XCTAssertTrue(made?.contains("no") == true, "no password: \(made ?? [])")
+    }
+
+    /// Automatic login, chosen: the owner's session at boot — the
+    /// administrator, not merely the first account — and no login window.
+    func testAutomaticLoginIsAChoiceAndStartsTheOwnersDesktop() {
+        let p = InstallPlan(disk: "ada0", sets: ["base.txz", InstallPlan.desktopSet],
+                            accounts: [Account(name: "guest", passwordHash: "$6$g"),
+                                       Account(name: "jkane", passwordHash: "$6$j", groups: ["wheel"])],
+                            autoLogin: true)
         let rc = rcConf(p)
         XCTAssertTrue(rc.contains("abyss_desktop_enable=\"YES\""), rc)
-        // The administrator, not merely the first account: an installed desktop
-        // belongs to whoever the machine was installed for.
         XCTAssertTrue(rc.contains("abyss_desktop_user=\"jkane\""), rc)
-
-        // With nobody at all it still starts, and simply says nothing about who
-        // — rather than naming an account that does not exist.
-        p = InstallPlan(disk: "ada0",
-                        sets: ["base.txz", InstallPlan.desktopSet],
-                        rootPasswordHash: "$6$r")
-        XCTAssertTrue(rcConf(p).contains("abyss_desktop_enable"))
-        XCTAssertFalse(rcConf(p).contains("abyss_desktop_user"))
+        XCTAssertFalse(rc.contains("--greeter"), rc)
+        // Asked for with nobody to log in as: the login window, not a desktop
+        // for an account that does not exist.
+        let nobody = InstallPlan(disk: "ada0", sets: ["base.txz", InstallPlan.desktopSet],
+                                 rootPasswordHash: "$6$r", autoLogin: true)
+        XCTAssertFalse(rcConf(nobody).contains("abyss_desktop"))
+        XCTAssertTrue(rcConf(nobody).contains("--greeter"))
     }
 
     /// System Preferences' privileged half (PHASE14 P14.3) starts for the

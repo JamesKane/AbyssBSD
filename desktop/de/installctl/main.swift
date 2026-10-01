@@ -40,6 +40,8 @@ func usage() -> Never {
       --user NAME:HASH[:GROUPS]
       --service NAME       the service to talk to (default install)
       --yes                do not ask before the first destructive step
+      --autologin          start the owner's desktop at boot, no password
+                           (default: the login window — PHASE16 §6.2)
     """)
     exit(0)
 }
@@ -53,6 +55,7 @@ var swapMiB: UInt64?
 var sets: [String] = []
 var users: [Account] = []
 var erase = false
+var autoLogin = false
 var serviceName = "install"
 var assumeYes = false
 
@@ -98,6 +101,7 @@ while i < args.count {
     // there". `--force` would have been shorter and would not have said what it
     // does.
     case "--erase-this-disk": erase = true
+    case "--autologin": autoLogin = true
     case "-h", "--help": usage()
     default:
         emit(2, "abyss-installctl: unknown option '\(flag)'")
@@ -114,7 +118,8 @@ var plan = InstallPlan(disk: disk, poolName: pool,
                        hostname: host, timezone: tz,
                        rootPasswordHash: rootHash.isEmpty ? "*" : rootHash,
                        accounts: users,
-                       eraseExistingData: erase)
+                       eraseExistingData: erase,
+                       autoLogin: autoLogin)
 
 var request = Msg()
 request.set("method", verb == "disks" ? "disks" : verb)

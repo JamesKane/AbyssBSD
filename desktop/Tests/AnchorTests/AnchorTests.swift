@@ -211,6 +211,16 @@ final class AnchorTests: XCTestCase {
         XCTAssertFalse(plan(without: ["idle"]).components.contains { $0.name == "idle" })
     }
 
+    /// The login window's session (PHASE16 P16.5b): the window, and nothing
+    /// that serves a person who has not logged in yet.
+    func testTheGreeterSessionIsTheLoginWindowAlone() {
+        let p = plan(mode: .greeter)
+        XCTAssertEqual(p.components.map(\.name), ["loginwindow"])
+        XCTAssertEqual(p.components.first?.env["AQUA_SCENE"], "loginwindow")
+        XCTAssertNil(p.lockScreen, "nothing to lock")
+        XCTAssertNil(p.busAddress)
+    }
+
     func testTheDesktopSessionIsUnchangedByTheNewMode() {
         // The default is still what it was: a regression here is a desktop that
         // boots without its Dock.

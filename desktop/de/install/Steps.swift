@@ -259,6 +259,17 @@ func steps(for plan: InstallPlan, on inventory: DiskInventory = DiskInventory(di
                       onFailure: "the root password could not be set",
                       stdin: plan.rootPasswordHash))
     }
+    // The login window's own account (PHASE16 P16.5): no password, no
+    // shell, no home — it only ever runs the login window, and only it may
+    // ask the daemon about another account's password.
+    if plan.installsDesktop {
+        // In `video`, as the medium's account is: the login window's session
+        // runs a compositor, and on metal that needs the display.
+        s.append(.run(["pw", "-R", mnt, "useradd", "-n", "_loginwindow", "-u", "1099", "-c", "Login Window",
+                       "-d", "/nonexistent", "-s", "/usr/sbin/nologin", "-w", "no", "-G", "video"],
+                      what: "create the login window's account",
+                      onFailure: "the login window's account could not be created"))
+    }
     for a in plan.accounts {
         var argv = ["pw", "-R", mnt, "useradd", "-n", a.name, "-m", "-s", a.shell, "-H", "0"]
         if !a.fullName.isEmpty { argv += ["-c", a.fullName] }
@@ -344,14 +355,17 @@ public func rcConf(_ plan: InstallPlan) -> String {
     // **A machine that installed the desktop should start it.** The rule is
     // derived rather than assumed: the desktop is enabled exactly when the set
     // that contains it is one of the sets being extracted, so a plan that
-    // installs a plain FreeBSD produces a plain FreeBSD. And it names the
-    // account to run as, because an installed desktop belongs to whoever this
-    // machine was installed for — there is no login window yet (PHASE5 §6.8).
+    // installs a plain FreeBSD produces a plain FreeBSD. **It starts at the
+    // login window** (PHASE16 P16.5, §6.2): the root daemon runs it and
+    // starts whoever logs in. Automatic login — the owner's session at boot,
+    // no password (PHASE5 §6.8's old default) — is a choice, never the default.
     if plan.installsDesktop {
-        out += "abyss_desktop_enable=\"YES\"\n"
-        if let owner = plan.accounts.first(where: { $0.isAdministrator })
-                    ?? plan.accounts.first {
+        if plan.autoLogin, let owner = plan.accounts.first(where: { $0.isAdministrator })
+                                     ?? plan.accounts.first {
+            out += "abyss_desktop_enable=\"YES\"\n"
             out += "abyss_desktop_user=\"\(owner.name)\"\n"
+        } else {
+            out += "abyss_loginwindow_flags=\"--greeter\"\n"
         }
         // System Preferences' privileged half (PHASE14 P14.3), for the same
         // person — **only if they are an administrator**: the helper admits

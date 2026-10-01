@@ -172,10 +172,16 @@ grep -q "Setting hostname: jaguar" "$work/installed.log" \
        fail "the installed machine did not boot"; }
 echo "ok: it boots, as jaguar"
 
-grep -q "abyss: starting the desktop for abyss" "$work/installed.log" \
+# **It starts at the login window** (PHASE16 P16.5, §6.2): no session runs
+# until somebody logs in. Logging in through it is live-greeter.sh's (the
+# whole chain) and live-authenticator.sh's (as root: the session as its user);
+# typing into a nested machine's GUI would put the harness's tools in the image.
+grep -q "abyss: the login window is up" "$work/installed.log" \
   || { grep -i abyss "$work/installed.log" | tail -10 | sed 's/^/    /'
-       fail "the installed machine did not start the desktop for the account created"; }
-echo "ok: and it started the desktop for the account the installer created"
+       fail "the installed machine did not start the login window"; }
+grep -q "abyss: starting the desktop" "$work/installed.log" \
+  && fail "the installed machine started a desktop with nobody logged in"
+echo "ok: and it started at the login window — nobody's session, until somebody logs in"
 grep -q "abyss: the settings helper is up, for uid" "$work/installed.log" \
   || { grep -i 'abyss: .*settings' "$work/installed.log" | sed 's/^/    /'
        fail "the installed machine did not start the settings helper (PHASE14 P14.3)"; }
@@ -184,12 +190,6 @@ grep -q "abyss: the authenticator is up" "$work/installed.log" \
   || fail "the installed machine did not start the authenticator (PHASE16 P16.1)"
 echo "ok: ...and the authenticator (PHASE16 P16.1)"
 
-for surface in abyss.wallpaper abyss.menubar abyss.dock; do
-  grep -q "mapped .*\[$surface\]" "$work/installed.log" \
-    || { grep -i "abyss|" "$work/installed.log" | tail -15 | sed 's/^/    /'
-         fail "$surface never appeared on the installed machine"; }
-done
-echo "ok: wallpaper, menu bar and Dock — the Jaguar desktop, on a machine we installed"
 
 if grep -q "swapon:" "$work/installed.log"; then
   grep "swapon:" "$work/installed.log" | sed 's/^/    /'

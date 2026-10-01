@@ -25,7 +25,12 @@
 #      wheel may; and no account but root may report the lid or the keys;
 #   8. the login window (P16.5a): its account, `_loginwindow`, may ask about a
 #      named account's password — right accepted, wrong refused — and may
-#      restart; an ordinary account may not ask about another.
+#      restart; an ordinary account may not ask about another;
+#   9. sessions (P16.5b), through a second daemon with --greeter and a
+#      stand-in session that records who it is: the login window runs as
+#      `_loginwindow`; a login starts the person's session **as them** —
+#      their uid, not in wheel, in a runtime directory that is theirs and
+#      0700 — and its end brings the login window back.
 #
 # On Linux there is no PAM to ask, and the daemon must say so (the positive
 # control). Needs root in the guest (passwordless sudo, as the build VM has).
@@ -60,6 +65,7 @@ ua="abyss16a$$"; ub="abyss16b$$"; uc="abyss16c$$"; uw="abyss16w$$"
 pa="correct-horse-$$"; pb="battery-staple-$$"
 cleanup() {
   [ -n "${dpid:-}" ] && sudo kill "$dpid" 2>/dev/null || true
+  [ -n "${dpid2:-}" ] && sudo kill "$dpid2" 2>/dev/null || true
   sudo pw userdel "$ua" -r 2>/dev/null || true
   sudo pw userdel "$ub" -r 2>/dev/null || true
   sudo pw userdel "$uc" -r 2>/dev/null || true
@@ -182,5 +188,39 @@ i=0; while [ "$(grep -c '^shutdown -r now$' "$work/power.log" || true)" -le "$n"
 [ "$(grep -c '^shutdown -r now$' "$work/power.log" || true)" -gt "$n" ] || fail "the login window's restart ran nothing"
 for p in "$pb" not-it; do grep -qF -- "$p" "$work/daemon.log" && fail "the daemon logged a login window password"; done
 echo "ok: 8. the login window may ask about a named account (right accepted, wrong refused) and may restart; nobody else may ask"
+
+# ------------------------------------------------------------ 9. sessions, as root
+cat > "$work/session" <<SESSION
+#!/bin/sh
+echo "\$ABYSS_SESSION_MODE \$(id -un) uid=\$(id -u) groups=\$(id -Gn | tr ' ' ,) run=\$ABYSS_RUNTIME_DIR owner=\$(ls -ld "\$ABYSS_RUNTIME_DIR" | awk '{print \$3}') mode=\$(ls -ld "\$ABYSS_RUNTIME_DIR" | cut -c1-10) home=\$(pwd)" >> "$work/record"
+while [ ! -e "$work/end.\$(id -un)" ]; do sleep 0.1; done
+rm -f "$work/end.\$(id -un)"
+SESSION
+chmod 755 "$work/session"; : > "$work/record"; chmod 666 "$work/record"; chmod 777 "$work"
+mkdir -p "$work/run"
+sock2="$work/auth2.sock"
+sudo sh -c "'$daemon' --socket '$sock2' --pam-service '$svc' --greeter --session-command '$work/session' \
+  --session-log-dir '$work' --runtime-root '$work/run' > '$work/daemon2.log' 2>&1 & echo \$! > '$work/pid2'"
+i=0; while [ ! -S "$sock2" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+dpid2=$(cat "$work/pid2")
+rec() { i=0; while [ "$(grep -c "^$1" "$work/record" || true)" -lt "$2" ] && [ $i -lt 80 ]; do sleep 0.1; i=$((i + 1)); done
+        grep "^$1" "$work/record" | sed -n "$2p"; }
+g=$(rec "greeter _loginwindow " 1)
+[ -n "$g" ] || fail "the login window's session never ran: $(cat "$work/daemon2.log")"
+case "$g" in *"uid=$(id -u _loginwindow) "*"run=$work/run/abyss-_loginwindow owner=_loginwindow mode=drwx------"*) ;;
+  *) fail "the login window's session: $g" ;; esac
+[ "$(printf '%s\n' "$pa" | sudo -u _loginwindow "$work/abyss-loginctl" --socket "$sock2" login "$ua")" = accepted ] \
+  || fail "the login window could not log $ua in"
+d=$(rec "desktop $ua " 1)
+[ -n "$d" ] || fail "$ua's session never ran: $(tail -3 "$work/daemon2.log")"
+case "$d" in *"uid=$(id -u "$ua") "*"run=$work/run/abyss-$ua owner=$ua mode=drwx------ home=$(getent passwd "$ua" | cut -d: -f6)"*) ;;
+  *) fail "$ua's session: $d" ;; esac
+case "$d" in *wheel*) fail "$ua's session has wheel: $d" ;; esac
+grep -q "ending the login window — $ua logged in" "$work/daemon2.log" || fail "the login window was not ended first"
+sudo touch "$work/end.$ua"
+g2=$(rec "greeter _loginwindow " 2)
+[ -n "$g2" ] || fail "$ua's session ended and the login window did not come back"
+echo "ok: 9. sessions: the login window ran as _loginwindow; $ua's session as $ua (uid $(id -u "$ua"), its own 0700 runtime directory, its home, no wheel); its end brought the window back"
+sudo touch "$work/end._loginwindow"
 
 echo "all green (the authenticator answers each person about themselves, slowly when they guess, and writes no password down)."
