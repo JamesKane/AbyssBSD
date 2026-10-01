@@ -73,6 +73,10 @@ dump** is written.
   boot every package library would have gone. Stage with
   `tar --no-same-owner`, and list the entries outside the intended prefix
   first.
+- **After a `nextboot -k` test, don't rename the booted kernel's directory
+  before rebooting.** `kern.module_path` still names it, so module loads
+  fail with "depends on … not available". An msm swap then left the board
+  with no display driver. Reboot first, or fix `kern.module_path`.
 - **Lock our patched graphics packages** (`pkg lock libdrm mesa-dri
   mesa-libs`) before installing anything from the FreeBSD repos.
 

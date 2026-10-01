@@ -154,5 +154,5 @@ macOS deletes old files in /tmp):**
 - [ ] The desktop on the Q8B. So far it has been tested only on amd64 (VMs
       and the i7/RX 6750 XT). Check that `lang/swift6` builds for aarch64,
       then run the desktop on the Q8B. *2026-10-01: builds and tests on the
-      Q8B (680 tests: 1 skipped, 1 installer-probe bug); running it on
-      msmfb comes next.*
+      Q8B, and runs on the display (msmfb + GLES on the Adreno), started by
+      hand. Left: start it at boot, and package it.*

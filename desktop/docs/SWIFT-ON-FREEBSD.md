@@ -152,4 +152,12 @@ closed, and of the FreeBSD-specific facts that came out of it.
   ports toolchain on both architectures (no `libTestingMacros.so`), which
   this XCTest-only tree doesn't notice. Details: docs/boards/
   radxa-dragon-q8b/README.md, "Swift 6.3.3 on aarch64".
+- **2026-10-01 — the desktop runs on the Q8B.** `anchor --mode desktop` with
+  `undertow run --backend auto` from this tree's debug build: DP-1
+  1920×1080@60 through the board's msmfb KMS driver, GLES2 on the Adreno 690
+  (msm + freedreno), 7 components live, menu bar, desktop, Dock and pointer
+  on the monitor. The first tries were a blank screen: msmfb's scan-out
+  buffers need contiguous memory below 4 GB, which a long build had used up.
+  That's a board-driver problem, not the desktop's (docs/boards/
+  radxa-dragon-q8b/README.md).
 - _(append dated findings here as the spike runs)_

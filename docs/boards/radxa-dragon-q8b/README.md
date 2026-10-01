@@ -53,7 +53,7 @@ directory records what we found, so nobody has to find it again.
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
-| The AbyssBSD desktop on this board | Builds and tests (680 tests: 678 pass, 1 skipped, 1 installer-probe bug); not yet run on the display | `lang/swift6` for aarch64 |
+| The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started by hand, not yet at boot. Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
 ## Clock, I²C, SD and devices
 
@@ -131,6 +131,22 @@ What was done (2026-09-30/10-01, ports fork, not yet committed):
   tests, 1 skipped, 1 failure. The failure is the installer's disk probe:
   its `zpool list` fails on a UFS-root machine (ZFS not loaded, and the
   test runs as a normal user). See the desktop BACKLOG.
+- **Running it** (as `jkane`, from the build tree; anchor finds `AquaDemo`
+  beside itself):
+  `ABYSS_RUNTIME_DIR=/var/run/abyss-jkane XDG_RUNTIME_DIR=… .build/debug/anchor
+  --mode desktop --compositor ".build/debug/undertow run --hz 60 --frames 0
+  --backend auto --width 1920 --height 1080 --socket abyss-0
+  --privileged-socket abyss-0-bar" --display abyss-0 --menubar-display
+  abyss-0-bar`. Root creates the runtime directory, as `rc.d/abyss_desktop`
+  does. `undertow` picks GLES2 on the GPU; its buffers come from Mesa's GBM
+  on msmfb (card0). A screenshot with `grim` (undertow's screencopy) shows
+  the menu bar, the desktop with its disk, the pointer and the Dock.
+- **Scan-out memory:** msmfb's buffers must be physically contiguous below
+  4 GB. After the 5-hour Swift build, low memory was mostly wired (one free
+  8 MB run), every `CREATE_DUMB` failed with ENOMEM, and the screen stayed
+  blank. A reboot fixed it (83 free 16 MB runs). msmfb now allocates exact
+  sizes and reclaims (drm-msm-kmod `1e190da`), but a scan-out pool reserved when msm
+  loads would remove the fragility.
 - **Lesson:** the community tarball, untarred over `/`, re-owned `/usr`
   and `/usr/local/lib` and dropped stray cmark-gfm files. Stage
   third-party archives with `--no-same-owner` (see
