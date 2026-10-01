@@ -258,6 +258,20 @@ sudo test -e "$work/mnt/root/.ssh/authorized_keys" \
   && fail "this medium ships an authorized_keys — a key was baked into an artifact meant for strangers"
 echo "ok: no sshd and no baked key on a default build — the console is still the only way in"
 
+# **rc's PATH has no /usr/local**, and a session started from rc inherits it:
+# every key bound to a program failed silently on the 12700KF (HANDOFF §2.115).
+# The shipped abyss-session's own lines, run under rc's PATH, must add it.
+sess="$work/mnt/usr/local/libexec/abyss-session"
+sed -n '1,/^export PATH$/p' "$sess" > "$work/session-path.sh"
+grep -q '^export PATH$' "$work/session-path.sh" || fail "abyss-session never sets PATH"
+p=$(env -i PATH=/sbin:/bin:/usr/sbin:/usr/bin sh -c ". $work/session-path.sh; echo \$PATH")
+case ":$p:" in *:/usr/local/bin:*) ;; *) fail "under rc's PATH, abyss-session's PATH is $p — no /usr/local/bin" ;; esac
+echo "ok: a session started from rc finds /usr/local/bin ($p)"
+# And the address goes where Ctrl-Alt-F2 shows it (HANDOFF §2.114).
+grep -q '> /etc/issue' "$work/mnt/usr/local/libexec/abyss-live-session" \
+  || fail "the live session does not write its address into /etc/issue"
+echo "ok: the address is written into /etc/issue, above the console's login prompt"
+
 # **The address has to be announced by the part that still has a console.**
 #
 # This is a static check on the shipped script, and it exists because the dynamic

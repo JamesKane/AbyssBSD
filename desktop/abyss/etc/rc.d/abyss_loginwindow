@@ -54,7 +54,7 @@ abyss_loginwindow_poststart()
 		# --full gate's installed VM never powered off (HANDOFF §2.113).
 		state=$(sysctl -n hw.acpi.power_button_state 2>/dev/null)
 		if ! abyss_loginwindow_hears_power_button; then
-			echo "abyss: the power button is the firmware's fixed one, which devd cannot hear — it powers off, as FreeBSD's default"
+			echo "abyss: the power button is (or may be) the firmware's fixed one, which devd cannot hear — it powers off, as FreeBSD's default"
 		elif [ -n "$state" ] && [ "$state" != NONE ]; then
 			echo "$state" > /var/run/abyss-loginwindow.button
 			sysctl hw.acpi.power_button_state=NONE > /dev/null
@@ -65,10 +65,16 @@ abyss_loginwindow_poststart()
 	fi
 }
 
-# Whether a power button that devd hears is attached: an acpi_button whose
-# hardware id is PNP0C0C. (PNP0C0E is the sleep button; the lid is acpi_lid.)
+# Whether the power button is one devd hears: an acpi_button whose hardware id
+# is PNP0C0C (PNP0C0E is the sleep button; the lid is acpi_lid) — **and no
+# fixed-feature button beside it.** The 12700KF's board has both
+# (`acpi0: Power Button (fixed)` and acpi_button1), and the one on the case is
+# the fixed one: taking the button over there left it doing nothing (HANDOFF
+# §2.115). With both, we cannot tell which a person will press, and a button
+# that powers off without asking is better than one that does nothing.
 abyss_loginwindow_hears_power_button()
 {
+	grep -q 'Power Button (fixed)' /var/run/dmesg.boot 2>/dev/null && return 1
 	for u in 0 1 2 3 4 5 6 7; do
 		sysctl -n dev.acpi_button.$u.%pnpinfo 2>/dev/null | grep -q 'PNP0C0C' && return 0
 	done

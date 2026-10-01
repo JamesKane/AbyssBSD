@@ -597,6 +597,13 @@ sudo sh -c "cat > $de/usr/local/libexec/abyss-session" <<'SESSION'
 #!/bin/sh
 # One `anchor` command brings up the whole desktop (P8.4).
 set -u
+# **rc's PATH has no /usr/local** (/sbin:/bin:/usr/sbin:/usr/bin), and a
+# session started from rc — the live medium, abyss_desktop — inherits it. Every
+# key bound to a program then failed silently: ⌃⌘Q could not find `abyssctl`,
+# found on the 12700KF (HANDOFF §2.115). Added here, the one script every
+# session starts from.
+case ":$PATH:" in *:/usr/local/bin:*) ;; *) PATH="$PATH:/usr/local/sbin:/usr/local/bin" ;; esac
+export PATH
 export ABYSS_RUNTIME_DIR="${ABYSS_RUNTIME_DIR:-/var/run/abyss}"
 export XDG_RUNTIME_DIR="$ABYSS_RUNTIME_DIR"
 mkdir -p "$ABYSS_RUNTIME_DIR" && chmod 700 "$ABYSS_RUNTIME_DIR"

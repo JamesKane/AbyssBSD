@@ -176,7 +176,16 @@ scheduled; each is small and self-contained:
   `acpi_event_power_button_sleep`), as `acpi_button.c` already sends for a
   control-method one. Without it, the desktop's "Restart, Sleep, Cancel, Shut
   Down" can only be offered on machines whose button is a PNP0C0C device
-  (PHASE16 P16.4b, HANDOFF §2.113);
+  (PHASE16 P16.4b, HANDOFF §2.113). **Raised by the 12700KF** (§2.115): its
+  board has both kinds and the case button is the fixed one, so on a typical
+  desktop board the dialog is never offered;
+- **S3 resume on the 12700KF (MSI board, RX 6750 XT, igc0) leaves the machine
+  dead** (HANDOFF §2.115). With no desktop running, `acpiconf -s 3` from a bare
+  console suspends, and the wake brings the screen back, but the keyboard and
+  `igc0` (no ARP) never return. Same with the desktop. 16-CURRENT
+  `main-n289650`, stock GENERIC. The machine's own FreeBSD install is the
+  control to try next. Until this is fixed, the desktop's Sleep cannot be
+  checked on metal;
 - a **per-channel volume ioctl** for `sndstat`, if P14.6 chooses route (a);
 - `allow.rtprio`, already planned, and a **real-time CPU budget** to go with
   it — FreeBSD has no `RLIMIT_RTTIME` (Phase 18).

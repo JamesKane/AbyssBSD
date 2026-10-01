@@ -1259,7 +1259,12 @@ public final class Seat {
         case .previousWindow:  compositor.cycleWindow(forward: false)
         case .closeWindow:     compositor.closeFocusedWindow()
         case .quitApplication: compositor.quitFocusedApplication()
-        case .run(let words):  Spawn.detached(words)
+        case .run(let words):
+            // Said, not swallowed: a binding whose program is not on PATH did
+            // nothing at all, and nothing said so (HANDOFF §2.115).
+            if !Spawn.detached(words) {
+                Compositor.log("keybind: could not run \(words.joined(separator: " ")) — not found on PATH (\(getenv("PATH").map { String(cString: $0) } ?? "no PATH"))")
+            }
         }
         keybindsFired += 1
     }

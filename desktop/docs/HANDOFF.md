@@ -730,6 +730,34 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.115 The first desktop session on the 12700KF: PATH, a second power button, and resume
+(PHASE16, the metal checks. The live medium, switched by hand to a desktop
+session.)
+
+- **Ctrl-Cmd-Q did nothing.** The lock screen itself worked (sleep locked the
+  session first). But a session started from rc has rc's PATH,
+  `/sbin:/bin:/usr/sbin:/usr/bin`. `abyssctl` is in `/usr/local/bin`, and
+  `Spawn.detached` returned false, which the keybind code ignored. Every key
+  bound to a program failed this way, on the medium and on an installed
+  machine started by `abyss_desktop`. `abyss-session`, which every session
+  starts from, now adds `/usr/local/bin`. undertow logs a bound program it
+  cannot find. `live-medium.sh` runs the shipped script's PATH lines under
+  rc's PATH (a fault that dropped them was caught).
+- **The power button did nothing, again.** §2.113's rule was to take the
+  button over where an acpi_button is PNP0C0C. This board has that *and* a
+  fixed-feature button (`acpi0: Power Button (fixed)`), and the case button
+  is the fixed one. With `power_button_state=NONE` it was dead. The rule is now
+  stricter: no fixed button in `dmesg.boot` either. Here it powers off without
+  asking. The kernel change in BACKLOG §6 is what lets a typical desktop
+  board ask.
+- **Resume does not work on this machine, with or without us.** Sleep from
+  the desktop: the daemon locked the session, ran `acpiconf -s 3`, and logged
+  `awake`, then the machine was unusable. From a bare console with the desktop
+  stopped: the screen came back, the keyboard and `igc0` did not. A kernel
+  and driver matter (BACKLOG §6), not this tree's. The desktop's half of a
+  resume (lock screen first, frame clock, outputs) waits for a machine that
+  resumes.
+
 ### 2.114 A VT switch destroys every output, and undertow thought outputs lived for ever
 (PHASE16, the first boot on the 12700KF. Found because the medium had no way to
 a command line.)
