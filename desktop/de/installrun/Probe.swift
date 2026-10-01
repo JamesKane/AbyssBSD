@@ -33,7 +33,9 @@ public func probeMachine() throws -> DiskInventory {
     let geom = try capture(["geom", "disk", "list"])
     let mounts = try capture(["mount", "-p"])
     let labels = (try? capture(["glabel", "status", "-s"])) ?? ""
-    let poolNames = parsePoolNames(try capture(["zpool", "list", "-H", "-o", "name"]))
+    let poolNames = try importedPoolNames(
+        zfsPresent: runCaptureStdout(["kldstat", "-q", "-m", "zfs"]).status == 0,
+        list: { try capture(["zpool", "list", "-H", "-o", "name"]) })
     var poolVdevs: [String: [String]] = [:]
     for p in poolNames {
         poolVdevs[p] = parseZpoolVdevs((try? capture(["zpool", "list", "-Hv", p])) ?? "")
@@ -223,6 +225,20 @@ public func parseLabelComponents(_ text: String) -> [String: String] {
         out[String(f[0])] = String(f[2])
     }
     return out
+}
+
+/// The imported pools — none when the kernel has no ZFS.
+///
+/// **No module is an answer, not a failure** (found on the Radxa Dragon Q8B,
+/// whose root is UFS): with no ZFS in the kernel nothing can be imported, and
+/// asking `zpool` makes it try to load `zfs.ko` — which, for a caller that is
+/// not root, fails ("Operation not permitted") and threw the whole probe. So
+/// the kernel is asked first (`kldstat -q -m zfs`, which also sees ZFS built
+/// in). With ZFS present, a `zpool list` that fails is still a failure, and
+/// still loud: that is a machine whose pools we could not see.
+public func importedPoolNames(zfsPresent: Bool, list: () throws -> String) throws -> [String] {
+    guard zfsPresent else { return [] }
+    return parsePoolNames(try list())
 }
 
 public func parsePoolNames(_ text: String) -> [String] {

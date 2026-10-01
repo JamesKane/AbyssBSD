@@ -401,6 +401,20 @@ final class InstallRunTests: XCTestCase {
                        "scanning must not make it look imported")
     }
 
+    /// A kernel with no ZFS has no imported pools — and `zpool` is not asked,
+    /// because asking makes it try to load the module, which a non-root caller
+    /// cannot (the Q8B, 2026-10-01). With ZFS present, a failing `zpool list`
+    /// still fails the probe: that is a machine whose pools we could not see.
+    func testNoZFSMeansNoPoolsAndAFailingZpoolStillFails() throws {
+        var asked = false
+        XCTAssertEqual(try importedPoolNames(zfsPresent: false, list: { asked = true; return "zroot\n" }), [])
+        XCTAssertFalse(asked, "zpool must not be run where there is no ZFS")
+        XCTAssertEqual(try importedPoolNames(zfsPresent: true, list: { "zroot\nbackup\n" }), ["zroot", "backup"])
+        XCTAssertThrowsError(try importedPoolNames(zfsPresent: true, list: {
+            throw ProbeError.commandFailed("zpool list -H -o name", "internal error")
+        }))
+    }
+
     func testTheProbeRefusesLoudlyWhereItCannotWork() throws {
         // Not a skip. An installer whose disk discovery quietly does nothing on
         // the machine you develop on is one that ships broken.
