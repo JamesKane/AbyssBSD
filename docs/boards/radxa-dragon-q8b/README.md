@@ -47,7 +47,7 @@ directory records what we found, so nobody has to find it again.
 | Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480), DPMS; sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |
-| SD card | Works: 50 MHz, 4-bit, 23 MB/s (PIO); card not hot-swappable, no UHS | `sys/dev/sdhci/sdhci_acpi.c` |
+| SD card | Works: 50 MHz, 4-bit, 23 MB/s (PIO); hot-swap through the TLMM card-detect GPIO; no UHS, no DMA (ADMA2 only) | `sys/dev/sdhci/sdhci_acpi.c`, `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c` |
 | RTC | Works: ST M41T11 on I²C bus 12, as a DS1307; sets the clock at boot | `sys/dev/iicbus/rtc/ds13rtc.c` |
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
@@ -81,11 +81,27 @@ directory records what we found, so nobody has to find it again.
   cleared (`+0x248`) and acknowledged (`+0x24c`). `sdhci_acpi` polls for
   them after those writes. UEFI leaves the clocks (GCC `0x14004`,
   `0x14008`) and the card rails on at 3 V, so there's no regulator
-  control, no 1.8 V and no UHS. The slot is treated as non-removable,
-  because card detect is a TLMM GPIO. Transfers are PIO: DMA would go
-  through the apps SMMU, whose UEFI identity SMRs may not include SD's
-  stream, and an unmatched stream resets the SoC. At 50 MHz × 4 bits, PIO
-  reaches 23 MB/s, near the mode's ceiling. The boot card's GPT backup
+  control, no 1.8 V and no UHS. Card detect is TLMM GPIO 131, active low
+  (ACPI `GpioIo` 0x83, PullUp; Linux: `cd-gpios = <&tlmm 131
+  GPIO_ACTIVE_LOW>`); `qcom_tlmm_acpi` reads it and sdhci polls it every
+  200 ms, so the card detaches when pulled and attaches when put back. One
+  reinsertion of three attached the bus but found no card (probably a late
+  contact bounce; sdhci debounces 0.5 s and doesn't retry);
+  `devctl detach mmc0; devctl attach mmc0` recovers it. Transfers are PIO,
+  though the apps SMMU isn't the obstacle: UEFI matches SD's stream 0x4e0
+  (SMR 2) to context bank 2 with translation off, so DMA addresses would be
+  physical. The controller's capabilities (`0x3629c8b2`) offer ADMA2 but not
+  SDMA, the only mode FreeBSD's sdhci implements, and forcing SDMA
+  (`hw.sdhci.quirk_set=2`) hangs the SoC at boot. At 50 MHz × 4 bits, PIO
+  reaches 23 MB/s, near the mode's ceiling, at one interrupt per 512-byte
+  block.
+- **TLMM GPIOs (`\_SB.GIO0`, `QCOM060C`, `0xf100000`):** `qcom_tlmm_acpi`,
+  228 pins, keyed on `\_SB.SOID` 449. The DSDT's GPIO consumers are
+  Qualcomm's reference design (`PSUB` "QRD08280"): `acpi_gpiobus` would
+  apply them all at attach, making outputs of USB-C pins 26/27/47/48/…,
+  so the driver ignores configuration until its bus has attached. Pins
+  74–79, 83–86, 125–126 and 128–129 belong to the secure world and are not
+  offered. No pin interrupts yet. The boot card's GPT backup
   header isn't at the last LBA (an image smaller than the card); left
   alone.
 - **`/dev/drm/0`–`255`:** all 256 nodes exist. LinuxKPI's
