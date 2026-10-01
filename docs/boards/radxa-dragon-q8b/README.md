@@ -52,7 +52,7 @@ directory records what we found, so nobody has to find it again.
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
-| Audio | Headphone playback works through `pcm0` (src `3afeb7670d`, in GENERIC); microphone and jack detection not yet | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
+| Audio | Headphone playback through `pcm0` and jack detection work (src `c81975a93b`, in GENERIC); microphone not yet | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
 | Wi-Fi/BT, camera, NPU | Not investigated | — |
 | The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
@@ -129,7 +129,20 @@ directory records what we found, so nobody has to find it again.
     through the FIFO register 0x300) and the `regmap_reg_write` event.
     Don't read the macros' regmaps in debugfs while they're unclocked: the
     bus hangs and the watchdog resets the board.
-  - Not yet: microphone, jack detection, other rates in hardware.
+  - **Jack detection** (src `c81975a93b`): `dev.pcm.0.jack` (1 in use, 0
+    empty) and devd events `system=SND subsystem=JACK type=INSERT|REMOVE
+    cdev=dsp0`. Between uses the codec idles as Linux's does: both
+    SoundWire links clock-stopped (`ClockStopNow`; the WCD938x has the
+    simple clock-stop state machine), codec clocks released, the LPASS
+    core and digital codec votes held. The codec's mechanical detection
+    keeps running and wakes the TX link: wake-up interrupt GIC SPI 520
+    (GSI 552), not in ACPI, taken on its edge because the codec holds it
+    until the clock runs. While playing, the jack is read every second.
+  - `ACPI_BUS_MAP_INTR` takes FreeBSD's `INTR_TRIGGER_*`/`INTR_POLARITY_*`,
+    not ACPI's constants: `ACPI_ACTIVE_HIGH` is 0, which reads as
+    "conform", and the GIC refuses it (EINVAL at setup).
+  - Not yet: microphone, headset-vs-headphone detection and buttons, other
+    rates in hardware.
 - **GLINK to the ADSP** (src `bf6ce26ded`, in GENERIC since `3afeb7670d`): SMEM at `0x80900000` (2 MB, version 12, not
   in FreeBSD's physical segments), TCSR mutex lock 3 at `0x1f40000`; IPCC
   at `0x408000` (ACPI `IPCC` QCOM06C2 gives only its interrupts, SPI 229
