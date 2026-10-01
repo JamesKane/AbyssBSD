@@ -730,6 +730,26 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.107 The login window asks about someone else — so it is one account's question
+(PHASE16 P16.5a.)
+
+Until P16.5 the daemon answered only "is this **my** password?", and the
+kernel's uid named the account. The login window has to ask about **someone
+else**, which is the question an attacker wants. So `login` is accepted from
+one uid only, the login window's account `_loginwindow` (looked up by name
+when the daemon starts; a stand-in's `--greeter-uid` for a test). Two rules
+keep the window from being an oracle:
+- **The wait is keyed by the account asked about**, not the caller, so the
+  window cannot be used to guess faster by spreading attempts across callers.
+- **A name that is not an account is refused like a wrong password, and
+  costs a wait like one**, under a key of its own. Answering "no such
+  account" would list the machine's accounts for anyone at the console.
+
+`live-loginwindow.sh` shows it with a stand-in list holding one real account
+and one made-up name (`ABYSS_LOGINWINDOW_ACCOUNTS`). The list is only what
+is offered; the daemon checks the named account's real password, so a
+made-up list opens nothing.
+
 ### 2.106 A window closing behind the lock took the lock screen's keyboard
 (PHASE16 P16.4b, the power dialog and the buttons.)
 

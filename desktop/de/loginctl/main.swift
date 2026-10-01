@@ -2,6 +2,8 @@
 //
 //   abyss-loginctl [--socket PATH] verify      the password on stdin, one line
 //   abyss-loginctl [--socket PATH] power sleep|restart|shut-down   (P16.4a)
+//   abyss-loginctl [--socket PATH] login USER   the password on stdin (P16.5a;
+//                                               the login window's account only)
 //
 // Prints `accepted`, `refused`, `wait <ms>` or `unavailable: <why>`, and exits
 // 0 only for `accepted`. For tests and for people; the lock screen links Login.
@@ -25,8 +27,24 @@ if args.count == 2, args[0] == "power" {
         print("refused: \(r.string("error") ?? "?")"); exit(1)
     } catch { print("error: \(error)"); exit(1) }
 }
+if args.count == 2, args[0] == "login" {
+    var pw: [UInt8] = []
+    var ch: Int32
+    repeat { ch = getchar(); if ch != EOF && ch != 10 { pw.append(UInt8(ch)) } } while ch != EOF && ch != 10
+    defer { Login.wipe(&pw) }
+    do {
+        let s = try LoginClient.login(user: args[1], password: pw, socket: socket)
+        defer { close(s) }
+        switch try LoginClient.finish(on: s) {
+        case .accepted: print("accepted"); exit(0)
+        case .refused: print("refused"); exit(1)
+        case .wait(let ms): print("wait \(ms)"); exit(1)
+        case .unavailable(let why): print("unavailable: \(why)"); exit(1)
+        }
+    } catch { print("error: \(error)"); exit(1) }
+}
 guard args == ["verify"] else {
-    print("usage: abyss-loginctl [--socket PATH] verify | power sleep|restart|shut-down")
+    print("usage: abyss-loginctl [--socket PATH] verify | login USER | power sleep|restart|shut-down")
     exit(2)
 }
 // One line from stdin, without its newline, as bytes.

@@ -11,6 +11,7 @@
 import Surface
 import Aqua
 import AquaDraw
+import Login
 
 #if canImport(Glibc)
 import Glibc
@@ -157,6 +158,25 @@ if let watch = appearance {
 // data pointers — alive. Discarding it (e.g. `guard let _ =`) frees the surface
 // before the first configure event and crashes in the listener callback.
 // withExtendedLifetime pins it across run().
+if sceneName == "loginwindow" {
+    // The login window (PHASE16 P16.5a): the greeter session's one surface.
+    // ABYSS_LOGINWINDOW_ACCOUNTS="name:Full Name:uid,…" stands in for the
+    // password database in a test; the daemon still checks the named
+    // account's real password, so a made-up list opens nothing.
+    var accounts = LoginAccounts.system()
+    if let list = envString("ABYSS_LOGINWINDOW_ACCOUNTS") {
+        accounts = list.split(separator: ",").compactMap { e in
+            let f = e.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard f.count == 3, let uid = UInt32(f[2]) else { return nil }
+            return LoginAccount(name: f[0], fullName: f[1].isEmpty ? f[0] : f[1], uid: uid)
+        }
+    }
+    guard let window = LoginWindow(display: display, accounts: accounts) else {
+        print("AquaDemo: could not open the login window (does the compositor offer wlr-layer-shell?)."); exit(1)
+    }
+    withExtendedLifetime(window) { display.run() }
+    exit(0)
+}
 if sceneName == "powerdialog" {
     // "Are you sure…?" (PHASE16 P16.4b): ABYSS_POWER_ASK is restart,
     // shut-down or power-key.

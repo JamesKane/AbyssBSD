@@ -234,6 +234,27 @@ window comes up, a wrong password shakes, the right one starts the session as
 that user (its processes' uid, its runtime dir), Log Out brings the window back;
 and `live-desktop.sh` — empty disk to desktop — logs in through it.
 
+Split in two: **(a)** the window and the daemon's `login`; **(b)** the
+sessions (the greeter's, then the user's, and back on Log Out), the rc.d and
+installer defaults (§6.2), and `live-desktop.sh` through it.
+
+✅ **P16.5a done 2026-10-01.**
+- **The window:** `AQUA_SCENE=loginwindow` (`LoginWindow.swift`), a
+  full-screen layer surface. It shows Jaguar's list of accounts with
+  pictures (`LoginAccounts`: uid 1000 and up, a shell, not `_`-named), then
+  the chosen account's password view with Back and Log In; the lock screen's
+  `LockModel` gives it the shake and the countdown. Sleep, Restart and Shut
+  Down sit along the bottom.
+- **The daemon's `login`:** it asks about a **named** account, and only the
+  login window's account, `_loginwindow`, may ask it. The wait is per account
+  asked about. A name that is not an account is refused like a wrong password
+  and costs a wait like one, so the window cannot be used to learn which
+  names exist. The login window may also restart and shut down.
+- **The command line:** `abyss-loginctl login USER`.
+- **Tests:** `live-loginwindow.sh`, 7 claims; `live-authenticator.sh` claim 8
+  through the real daemon in the guest; 4 unit tests. Five faults injected,
+  each caught.
+
 **P16.6 — two users (L).** The Accounts pane: add and delete a user (through the
 settings helper, an administrator only), their picture, automatic login on or
 off. Two sessions on one machine: fast user switching puts the second on its

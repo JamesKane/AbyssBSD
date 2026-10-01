@@ -76,5 +76,9 @@ emit(2, "loginwindow: answering at \(socketPath), PAM service \(service)")
 
 let daemon = LoginService(server: server, authenticator: .system(service: service), commands: commands,
                            log: { emit(2, $0) })
+if let g = getpwnam(Login.greeterUser) {
+    daemon.greeterUID = UInt32(g.pointee.pw_uid)
+    emit(2, "loginwindow: the login window's account is \(Login.greeterUser) (uid \(daemon.greeterUID!))")
+}
 daemon.run(once: once)
 server.shutdownAndUnlink()

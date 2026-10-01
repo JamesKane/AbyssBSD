@@ -115,4 +115,62 @@ final class LoginTests: XCTestCase {
         XCTAssertEqual(PowerPolicy.argv(.powerKey, commands: PowerCommands()), ["/sbin/shutdown", "-p", "now"],
                        "the power key with nobody to ask: what the kernel would have done")
     }
+
+    // MARK: The login window (P16.5a)
+
+    private func loginRequest(_ user: String, _ pw: String) -> Msg {
+        var m = LoginWire.request(password: Array(pw.utf8)); m.set("method", "login"); m.set("user", user); return m
+    }
+    private func windowAuth() -> Authenticator {
+        Authenticator(userName: { _ in nil }, check: { user, pw in
+            (user == "ada" && pw == Array("lovelace".utf8)) || (user == "bob" && pw == Array("b".utf8)) ? .yes : .no("wrong")
+        })
+    }
+    private let uids: (String) -> UInt32? = { ["ada": 1001, "bob": 1002][$0] }
+
+    func testOnlyTheLoginWindowMayAskAboutAnotherAccount() {
+        var a = windowAuth()
+        let r = a.handleLogin(callerIsGreeter: false, request: loginRequest("ada", "lovelace"), now: 0, uidOf: uids)
+        XCTAssertEqual(r.reply.bool("ok"), false)
+        XCTAssertNil(r.user)
+        let g = a.handleLogin(callerIsGreeter: true, request: loginRequest("ada", "lovelace"), now: 0, uidOf: uids)
+        XCTAssertEqual(LoginWire.decode(g.reply), .accepted)
+        XCTAssertEqual(g.user, "ada", "the service starts ada's session")
+    }
+
+    func testTheWaitIsPerAccountAskedAboutAndUnknownNamesCostTheSame() {
+        var a = windowAuth()
+        for k in 0..<3 { _ = a.handleLogin(callerIsGreeter: true, request: loginRequest("ada", "x\(k)"), now: 0, uidOf: uids) }
+        let held = a.handleLogin(callerIsGreeter: true, request: loginRequest("ada", "lovelace"), now: 1, uidOf: uids)
+        guard case .wait? = LoginWire.decode(held.reply) else { return XCTFail("ada should wait: \(held.log)") }
+        let other = a.handleLogin(callerIsGreeter: true, request: loginRequest("bob", "b"), now: 1, uidOf: uids)
+        XCTAssertEqual(LoginWire.decode(other.reply), .accepted, "bob is not held up by guesses at ada")
+        let ghost = a.handleLogin(callerIsGreeter: true, request: loginRequest("nobodyhere", "x"), now: 1, uidOf: uids)
+        XCTAssertEqual(LoginWire.decode(ghost.reply), .refused, "no such account looks like a wrong password")
+        for _ in 0..<2 { _ = a.handleLogin(callerIsGreeter: true, request: loginRequest("nobodyhere", "x"), now: 1, uidOf: uids) }
+        guard case .wait? = LoginWire.decode(a.handleLogin(callerIsGreeter: true, request: loginRequest("nobodyhere", "x"),
+                                                           now: 2, uidOf: uids).reply) else {
+            return XCTFail("guessing at a name that is not an account must cost a wait too")
+        }
+        XCTAssertFalse(held.log.contains("lovelace"))
+    }
+
+    func testTheWindowOffersPeopleNotTheSystemsAccounts() {
+        let all: [(name: String, uid: UInt32, gecos: String, shell: String)] = [
+            ("root", 0, "Charlie &", "/bin/sh"), ("_loginwindow", 1100, "", "/usr/sbin/nologin"),
+            ("nobody", 65534, "Unprivileged user", "/usr/sbin/nologin"), ("daemon", 1, "", "/usr/sbin/nologin"),
+            ("zed", 1003, "Zed Shaw,,,", "/bin/sh"), ("ada", 1001, "Ada Lovelace", "/bin/csh"),
+            ("svc", 1004, "A service", "/usr/sbin/nologin"), ("bob", 1002, "", "/bin/sh"),
+        ]
+        XCTAssertEqual(LoginAccounts.offered(all).map(\.name), ["ada", "bob", "zed"])
+        XCTAssertEqual(LoginAccounts.offered(all).first?.fullName, "Ada Lovelace")
+        XCTAssertEqual(LoginAccounts.offered(all)[1].fullName, "bob", "no full name: the account name")
+    }
+
+    func testTheLoginWindowMayRestartAndShutDown() {
+        XCTAssertTrue(PowerPolicy.may(.restart, uid: 1100, groups: [], greeterUID: 1100))
+        XCTAssertTrue(PowerPolicy.may(.shutDown, uid: 1100, groups: [], greeterUID: 1100))
+        XCTAssertFalse(PowerPolicy.may(.restart, uid: 1101, groups: [], greeterUID: 1100))
+        XCTAssertFalse(PowerPolicy.may(.powerKey, uid: 1100, groups: [], greeterUID: 1100), "not the hardware")
+    }
 }

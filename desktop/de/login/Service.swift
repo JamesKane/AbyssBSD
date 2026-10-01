@@ -37,12 +37,16 @@ import Darwin
 
 /// Who may ask for what: pure, so it is tested without accounts.
 public enum PowerPolicy {
-    public static func may(_ action: PowerAction, uid: UInt32, groups: [String], systemUID: UInt32 = 0) -> Bool {
+    public static func may(_ action: PowerAction, uid: UInt32, groups: [String], systemUID: UInt32 = 0,
+                           greeterUID: UInt32? = nil) -> Bool {
         // The lid and the keys are devd's — root's. Anyone else saying "the
         // power key was pressed" could, with no session watching, shut the
         // machine down.
         if action.isHardware { return uid == systemUID }
         if action == .sleep || uid == 0 { return true }
+        // The login window: nobody is logged in at the console, and the Mac's
+        // login window has always offered Restart and Shut Down (P16.5).
+        if let g = greeterUID, uid == g { return true }
         return groups.contains("wheel") || groups.contains("operator")
     }
 
@@ -93,6 +97,12 @@ public final class LoginService {
     /// Who reports the machine's buttons: root (devd). Only a test's
     /// stand-in, which is never shipped, names another.
     public var systemUID: UInt32 = 0
+    /// The login window's account (P16.5): the only caller that may ask about
+    /// another account's password. Nil: no login window on this machine.
+    public var greeterUID: UInt32?
+    /// Someone logged in at the window (P16.5b starts their session here).
+    public var onLogin: ((String) -> Void)?
+    private let uidOf: (String) -> UInt32? = { name in getpwnam(name).map { UInt32($0.pointee.pw_uid) } }
     private var watchers: [(fd: Int32, uid: UInt32)] = []
 
     public init(server: Current.Server, authenticator: Authenticator,
@@ -156,6 +166,15 @@ public final class LoginService {
             say("loginwindow: uid \(uid)'s session is watching (\(watchers.count) watching)")
         case "power":
             power(client, uid: uid, request: request)
+        case "login":
+            let isGreeter = uid != nil && greeterUID != nil && uid == greeterUID
+            let (r, line, user) = auth.handleLogin(callerIsGreeter: isGreeter, request: request,
+                                                    now: LoginService.now(), uidOf: uidOf)
+            request = Msg()
+            reply(client, r)
+            close(client)
+            say("loginwindow: " + (isGreeter ? "" : "uid \(uid.map(String.init) ?? "?"): ") + line)
+            if let user { onLogin?(user) }
         default:
             let (r, line) = auth.handle(uid: uid, request: request, now: LoginService.now())
             request = Msg()
@@ -175,7 +194,8 @@ public final class LoginService {
         guard let action = request.string("action").flatMap(PowerAction.init(rawValue:)) else {
             reply(client, LoginWire.error("power: no such action \(request.string("action") ?? "(none)")")); return
         }
-        guard PowerPolicy.may(action, uid: uid, groups: groupsOf(uid), systemUID: systemUID) else {
+        guard PowerPolicy.may(action, uid: uid, groups: groupsOf(uid), systemUID: systemUID,
+                              greeterUID: greeterUID) else {
             say("loginwindow: uid \(uid): \(action.rawValue) refused — " + (action.isHardware ? "not root" : "not an administrator"))
             reply(client, LoginWire.error(action.isHardware ? "only the system reports the machine's buttons"
                 : "only an administrator can \(action == .restart ? "restart" : "shut down") this computer"))

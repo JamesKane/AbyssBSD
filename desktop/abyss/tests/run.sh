@@ -267,6 +267,10 @@ if [ "$live" -eq 1 ]; then
   # sleeps only with every session locked, whoever asks.
   echo "== power =="
   quiet "$root/abyss/tests/live-power.sh"
+  # The login window (P16.5a): it lists, asks about the named account, and
+  # cannot be used to learn which names are accounts.
+  echo "== the login window =="
+  quiet "$root/abyss/tests/live-loginwindow.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

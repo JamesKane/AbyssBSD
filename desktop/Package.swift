@@ -277,7 +277,7 @@ let package = Package(
             // recompiles across a layout change in a type (ThemeTokens grows
             // through Phase 11) only along a declared dependency, and a stale
             // object destroying the old layout crashed at exit (PHASE11 P11.2).
-            dependencies: ["Aqua", "AquaDraw"],
+            dependencies: ["Aqua", "AquaDraw", "Login"],
             path: "de/aquademo"
         ),
         // Two-process control-plane probe: hands a real descriptor from one

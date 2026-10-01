@@ -22,7 +22,10 @@
 #   7. power (P16.4a), through the real daemon with stand-in acpiconf and
 #      shutdown: an ordinary account may put the machine to sleep and may not
 #      restart or shut it down — refused in words, nothing run; an account in
-#      wheel may; and no account but root may report the lid or the keys.
+#      wheel may; and no account but root may report the lid or the keys;
+#   8. the login window (P16.5a): its account, `_loginwindow`, may ask about a
+#      named account's password — right accepted, wrong refused — and may
+#      restart; an ordinary account may not ask about another.
 #
 # On Linux there is no PAM to ask, and the daemon must say so (the positive
 # control). Needs root in the guest (passwordless sudo, as the build VM has).
@@ -61,6 +64,7 @@ cleanup() {
   sudo pw userdel "$ub" -r 2>/dev/null || true
   sudo pw userdel "$uc" -r 2>/dev/null || true
   sudo pw userdel "$uw" -r 2>/dev/null || true
+  [ "${made_greeter:-0}" = 1 ] && sudo pw userdel _loginwindow 2>/dev/null || true
   sudo rm -f "/etc/pam.d/$svc" 2>/dev/null || true
   rm -rf "$work" 2>/dev/null || true
 }
@@ -71,6 +75,14 @@ echo "$pa" | sudo pw useradd "$ua" -m -h 0 >/dev/null || fail "could not make $u
 echo "$pb" | sudo pw useradd "$ub" -m -h 0 >/dev/null || fail "could not make $ub"
 sudo pw useradd "$uc" -m -w none >/dev/null || fail "could not make $uc"
 sudo pw useradd "$uw" -m -w none -G wheel >/dev/null || fail "could not make $uw"
+# The login window's account, as the installer will make it (P16.5b); made
+# here only if this machine has none, and then removed again.
+made_greeter=0
+if ! id _loginwindow > /dev/null 2>&1; then
+  sudo pw useradd _loginwindow -u 1099 -d /nonexistent -s /usr/sbin/nologin -c "Login Window" -w no > /dev/null \
+    || fail "could not make _loginwindow"
+  made_greeter=1
+fi
 # Stand-ins for the machine's own commands: they record, as root, what they
 # were asked. Nothing here suspends or reboots the build VM.
 for c in acpiconf shutdown; do
@@ -154,5 +166,21 @@ grep -q '^shutdown' "$work/power.log" && fail "shutdown ran for an ordinary acco
 i=0; while ! grep -q '^shutdown -r now$' "$work/power.log" && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
 grep -q '^shutdown -r now$' "$work/power.log" || fail "restart did not run shutdown -r now: $(cat "$work/power.log")"
 echo "ok: 7. power: an ordinary account may sleep the machine, not restart or shut it down (refused in words); wheel may restart; nobody but root reports the lid or the keys"
+
+# ------------------------------------------------------------ 8. the login window
+lw() { printf '%s\n' "$3" | sudo -u "$1" "$work/abyss-loginctl" --socket "$sock" login "$2" || true; }
+grep -q "the login window's account is _loginwindow" "$work/daemon.log" || fail "the daemon did not find _loginwindow"
+[ "$(lw _loginwindow "$ub" "$pb")" = accepted ] || fail "the login window, with $ub's password: $(lw _loginwindow "$ub" "$pb")"
+[ "$(lw _loginwindow "$ub" "not-it")" = refused ] || fail "the login window, with a wrong password, was not refused"
+case "$(lw "$ua" "$ub" "$pb")" in
+  "error: only the login window may ask about another account") ;;
+  *) fail "an ordinary account asked about another: $(lw "$ua" "$ub" "$pb")" ;;
+esac
+n=$(grep -c '^shutdown -r now$' "$work/power.log" || true)
+[ "$(power _loginwindow restart)" = ok ] || fail "the login window could not restart: $(power _loginwindow restart)"
+i=0; while [ "$(grep -c '^shutdown -r now$' "$work/power.log" || true)" -le "$n" ] && [ $i -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+[ "$(grep -c '^shutdown -r now$' "$work/power.log" || true)" -gt "$n" ] || fail "the login window's restart ran nothing"
+for p in "$pb" not-it; do grep -qF -- "$p" "$work/daemon.log" && fail "the daemon logged a login window password"; done
+echo "ok: 8. the login window may ask about a named account (right accepted, wrong refused) and may restart; nobody else may ask"
 
 echo "all green (the authenticator answers each person about themselves, slowly when they guess, and writes no password down)."

@@ -27,6 +27,7 @@ var socketPath = "", passwordFile = ""
 var commands = PowerCommands()
 var lockTimeout = 8.0
 var systemUID: UInt32 = 0
+var greeterUID: UInt32? = nil
 var args = Array(CommandLine.arguments.dropFirst())
 while let a = args.first {
     args.removeFirst()
@@ -38,6 +39,8 @@ while let a = args.first {
     case "--lock-timeout": lockTimeout = Double(args.isEmpty ? "" : args.removeFirst()) ?? 8
     // Whose word counts as devd's: a test cannot be root.
     case "--system-uid": systemUID = UInt32(args.isEmpty ? "" : args.removeFirst()) ?? 0
+    // Whose word counts as the login window's: a test's own account.
+    case "--greeter-uid": greeterUID = UInt32(args.isEmpty ? "" : args.removeFirst())
     default: emit("abyss-loginstub: unknown option '\(a)'"); exit(2)
     }
 }
@@ -67,4 +70,5 @@ let auth = Authenticator(userName: { uid in
 let service = LoginService(server: server, authenticator: auth, commands: commands, log: emit)
 service.lockTimeout = lockTimeout
 service.systemUID = systemUID
+service.greeterUID = greeterUID
 service.run()

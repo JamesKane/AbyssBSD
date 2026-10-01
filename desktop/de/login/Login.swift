@@ -37,6 +37,9 @@ public enum Login {
     /// `include` of `login` — whose first line, `pam_self`, passes when the
     /// caller is the target user, and the caller here is root.
     public static let defaultService = "abyss"
+    /// The greeter's account (P16.5): the login window runs as it, and only
+    /// it may ask about *another* account's password.
+    public static let greeterUser = "_loginwindow"
 
     /// Zero a password's bytes and empty it, through a volatile write the
     /// optimiser cannot drop (CPAM's `abyss_wipe`).
@@ -179,6 +182,51 @@ public struct Authenticator {
         })
     }
 
+    /// The login window's question (P16.5): is this **that account's**
+    /// password? `callerIsGreeter` is the service's decision that the kernel's
+    /// uid for the caller is the greeter's — nobody else may ask about an
+    /// account not their own. The wait is per *account asked about*: guessing
+    /// one account's password is slow however many accounts guess.
+    public mutating func handleLogin(callerIsGreeter: Bool, request: Msg, now: UInt64,
+                                     uidOf: (String) -> UInt32?) -> (reply: Msg, log: String, user: String?) {
+        guard callerIsGreeter else {
+            return (LoginWire.error("only the login window may ask about another account"),
+                    "login refused: the caller is not the login window", nil)
+        }
+        guard let name = request.string("user"), !name.isEmpty else {
+            return (LoginWire.error("login needs an account name"), "login: no account named", nil)
+        }
+        guard var password = request.bytes("password") else {
+            return (LoginWire.error("login needs a password"), "login \(name): no password given", nil)
+        }
+        defer { password.withUnsafeMutableBytes { abyss_wipe($0.baseAddress, $0.count) } }
+        // An account that does not exist is refused like a wrong password —
+        // and costs a wait like one, under a key of its own — so the window
+        // cannot be used to learn which names are accounts.
+        let key = uidOf(name) ?? (0x8000_0000 | UInt32(truncatingIfNeeded: name.hashValue & 0x7fff_ffff))
+        let w = limiter.wait(for: key, now: now)
+        if w > 0 {
+            let ms = (w + 999_999) / 1_000_000
+            return (LoginWire.reply(.wait(ms)), "login \(name): asked again too soon — wait \(ms) ms", nil)
+        }
+        guard uidOf(name) != nil else {
+            limiter.failed(key, now: now)
+            return (LoginWire.reply(.refused), "login \(name): refused (no such account)", nil)
+        }
+        switch check(name, password) {
+        case .yes:
+            limiter.succeeded(key)
+            return (LoginWire.reply(.accepted), "login \(name): accepted", name)
+        case .no(let why):
+            limiter.failed(key, now: now)
+            let next = limiter.wait(for: key, now: now)
+            return (LoginWire.reply(.refused), "login \(name): refused (\(why))"
+                    + (next > 0 ? "; the next try waits \(next / 1_000_000_000) s" : ""), nil)
+        case .unavailable(let why):
+            return (LoginWire.reply(.unavailable(why)), "login \(name): could not ask PAM — \(why)", nil)
+        }
+    }
+
     /// `uid` is the kernel's answer for the caller, nil if it would not say.
     public mutating func handle(uid: UInt32?, request: Msg, now: UInt64) -> (reply: Msg, log: String) {
         guard let uid else {
@@ -230,7 +278,59 @@ public enum LoginError: Error, CustomStringConvertible {
     }
 }
 
+// MARK: - Accounts
+
+/// An account the login window offers.
+public struct LoginAccount: Equatable, Sendable {
+    public let name: String
+    public let fullName: String
+    public let uid: UInt32
+    public init(name: String, fullName: String, uid: UInt32) { self.name = name; self.fullName = fullName; self.uid = uid }
+}
+
+public enum LoginAccounts {
+    /// Who may log in at the window: people, not the system's accounts —
+    /// uid 1000 and up (FreeBSD's first user), not `nobody`, and with a
+    /// shell that lets them in. Pure, so it is tested with made-up entries.
+    public static func offered(_ entries: [(name: String, uid: UInt32, gecos: String, shell: String)]) -> [LoginAccount] {
+        entries.filter { e in
+            e.uid >= 1000 && e.uid < 65534 && !e.name.hasPrefix("_")
+                && !e.shell.hasSuffix("/nologin") && !e.shell.hasSuffix("/false") && !e.shell.isEmpty
+        }.map { e in
+            let full = e.gecos.split(separator: ",", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+            return LoginAccount(name: e.name, fullName: full.isEmpty ? e.name : full, uid: e.uid)
+        }.sorted { $0.fullName.lowercased() < $1.fullName.lowercased() }
+    }
+
+    /// This machine's, from the password database.
+    public static func system() -> [LoginAccount] {
+        var all: [(name: String, uid: UInt32, gecos: String, shell: String)] = []
+        setpwent()
+        while let p = getpwent() {
+            func s(_ c: UnsafeMutablePointer<CChar>?) -> String { c.map { String(cString: $0) } ?? "" }
+            all.append((s(p.pointee.pw_name), UInt32(p.pointee.pw_uid), s(p.pointee.pw_gecos), s(p.pointee.pw_shell)))
+        }
+        endpwent()
+        return offered(all)
+    }
+}
+
 public enum LoginClient {
+    /// The login window's question (P16.5a): is `password` the password of
+    /// `user`? Only the greeter's account may ask.
+    public static func login(user: String, password: [UInt8], socket: String = LoginClient.socket) throws -> Int32 {
+        var m = LoginWire.request(password: password)
+        m.set("method", "login")
+        m.set("user", user)
+        defer {
+            if var b = m.bytes("password") { b.withUnsafeMutableBytes { abyss_wipe($0.baseAddress, $0.count) } }
+            m = Msg()
+        }
+        let s = try Current.connect(path: socket)
+        do { try Current.send(m, on: s) } catch { close(s); throw error }
+        return s
+    }
+
     /// The socket a session asks: `$ABYSS_LOGIN_SOCKET` if set (a test's own
     /// authenticator), else the system's.
     public static var socket: String {
