@@ -730,6 +730,33 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.116 vt(4) switches only to a window somebody has open
+(PHASE16, the login window on the 12700KF.)
+
+The daemon puts the login window on VT 9 and sessions on VT 10–16 (P16.6b's
+`VTPlan`), and switches with `VT_ACTIVATE` on `/dev/ttyv0`. On metal every
+switch was refused, "could not bring VT 9 to the front: Invalid argument", and
+`vidcontrol -s 9` was refused the same way. The login window ran on whatever VT
+was current.
+
+`vt_proc_window_switch` refuses a window that is neither the console nor
+`VWF_OPENED`. ttyv1–ttyv7 have gettys holding them open. VT 9 and up have
+nobody (`/etc/ttys` leaves them off). `ap_vt_activate` now opens the target's
+own device (`ttyv8` for VT 9) and switches through it. The compositor's seat
+then opens it for itself. The session tests could not see this: they record
+the switches a stand-in daemon would make. `live-vtactivate.sh` makes them, as
+root in the guest:
+- a plain switch to VT 9 is refused (the control);
+- `ap_vt_activate(9)` and `(1)` work;
+- the old code, put back, was caught.
+
+*Verified on the 12700KF:*
+- the login window on VT 9, on the RX 6750 XT;
+- abyss logged in on VT 10;
+- "Login Window…" back to VT 9, and Bob on VT 11, with the Setup Assistant
+  at his first login;
+- back to abyss's session on VT 10, locked, and its password opened it.
+
 ### 2.115 The first desktop session on the 12700KF: PATH, a second power button, and resume
 (PHASE16, the metal checks. The live medium, switched by hand to a desktop
 session.)

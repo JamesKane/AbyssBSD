@@ -1,5 +1,6 @@
 /* See cproc.h. pdfork on FreeBSD, fork + pidfd_open on Linux. */
 #include <errno.h>
+#include <stdio.h>
 #include <poll.h>
 #include <signal.h>
 #include <stddef.h>
@@ -263,10 +264,20 @@ int ap_signal_pipe(const int *sigs, int count) {
  * Bring virtual terminal `vt` (1-based, as vidcontrol -s counts) to the front
  * and wait until it is (PHASE16 P16.6b): fast user switching's one console
  * act. Root's: the console is root's to switch.
+ *
+ * **On FreeBSD, through the target's own device.** vt(4) switches only to a
+ * window somebody has open (VWF_OPENED) or the console; ttyv1..ttyv7 have
+ * gettys, but VT 9 and up — where the login window and the sessions go — have
+ * nobody, and VT_ACTIVATE on ttyv0 was refused with EINVAL (found on the
+ * 12700KF; HANDOFF §2.116). Opening ttyvN makes the window switchable; the
+ * compositor's seat then opens it for itself, and this descriptor is closed.
  */
 int ap_vt_activate(int vt) {
 #if defined(__FreeBSD__)
-    int fd = open("/dev/ttyv0", O_RDWR | O_CLOEXEC);
+    if (vt < 1 || vt > 36) { errno = EINVAL; return -1; }
+    char dev[16];
+    snprintf(dev, sizeof dev, "/dev/ttyv%c", "0123456789abcdefghijklmnopqrstuvwxyz"[vt - 1]);
+    int fd = open(dev, O_RDWR | O_NOCTTY | O_CLOEXEC);
 #else
     int fd = open("/dev/tty0", O_RDWR | O_CLOEXEC);
 #endif

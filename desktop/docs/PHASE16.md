@@ -217,13 +217,15 @@ and caught (HANDOFF §2.105). The metal cycle on the 12700KF is still to do.
 - `live-power.sh` grew to 10 claims; `live-authenticator.sh` checks the real
   daemon refuses button reports from anyone but root. Five faults injected
   and caught.
+- **The login window and fast user switching on metal (HANDOFF §2.116):** pass,
+  once `ap_vt_activate` opens the target VT. vt(4) refuses a window nobody
+  holds open. The Setup Assistant came up at a second account's first login.
 - **Metal, 2026-10-01 (HANDOFF §2.115):**
   - VT switching, the lock screen, and ⌃⌘Q pass, after the PATH fix.
   - **The power button powers off:** the board's case button is
     fixed-feature, which devd cannot hear (BACKLOG §6).
   - **Sleep resumes into a dead machine,** desktop or not: a kernel/driver
-    bug (BACKLOG §6). Still owed: a resume check on a machine that resumes,
-    and the login window and fast user switching on the GPU.
+    bug (BACKLOG §6). Still owed: a resume check on a machine that resumes.
 - **Found on the 12700KF (HANDOFF §2.114):** a VT switch destroys every DRM
   output in wlroots 0.20, and undertow aborted. It now gives up its outputs and
   takes them up again by name. Ctrl-Alt-F*n* switches VTs (unlocked only), and
