@@ -153,12 +153,12 @@ From HANDOFF §5.3, still true:
   every arm64 machine reports "could not be read"; and the Wi-Fi probe reads
   `net.wlan.devices`, which exists only once `wlan` is loaded, so a machine
   without wireless reports "could not be asked" rather than "absent".
-- **The Q8B misses 0–5 of 300 flips at 60 Hz** where the i7 now holds 0 of
-  1800 — **not `undertow`'s**: the misses go away with C-states capped at
-  C1 (the board's C3 wake-up path), and the one late present event per run
-  was msmfb stamping the first flip with a stale vblank (fixed in
-  drm-msm-kmod) plus `undertow`'s own start-up (same report). Nothing to do
-  here unless start-up should be measured too.
+- ~~**The Q8B missed 0–5 of 300 flips at 60 Hz**~~ ✅ fixed 2026-10-01 in
+  the board's driver, not here: the vsync and GPU interrupts landed on
+  powered-down cores, and the first present event carried a stale vblank;
+  now 0 of 300 in five runs (same report). The 18–25 ms before `undertow`
+  hears its first present event is its own start-up, if that's worth
+  measuring.
 
 *Done and dropped from the list:* golden-image tests (Phase 11's gate, 70 scenes
 per platform).

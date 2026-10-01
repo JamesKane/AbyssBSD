@@ -232,12 +232,18 @@ apply it now. It's also applied at boot. The default is `balanced`.
 - **Frame pacing costs C3 something.** The desktop compositor at 60 Hz on
   DP-1 (`undertow run`, 300 frames, three runs each, 2026-10-01): with
   `cx_lowest=C1` (per-CPU ARM timer) 0, 0, 0 flips missed; with C3 (the
-  global MMIO timer) 4, 1, 2. Its wake-ups occasionally land too late for
-  the latch, though its margin was 2.7–6.4 ms. So `performance` paces
-  frames perfectly and `balanced` misses about 1%; where C3's wake-up time
-  goes (C3 exit, or the MMIO timer's interrupt reaching the sleeping thread's
-  CPU) is still to be measured. Details:
-  `desktop/docs/reports/q8b-bench-2026-10-01.md`.
+  global MMIO timer) 4, 1, 2. **Cause: interrupts delivered to powered-down
+  cores.** FreeBSD spreads SPIs over the CPUs (Linux leaves them on the boot
+  CPU): the display vsync (`s83`) went to CPU 6 and the GPU (`s300`) to
+  CPU 7, each a 910 µs C3 exit away. Ruled out on the way: the timer itself
+  (MMIO timer with C1: 0 misses), the compositor's own core (pinned to CPU 0:
+  still missed). Bisecting per-CPU `cx_lowest`: any big core held at C1 was
+  enough, CPUs 1–3 weren't. Rewriting the two IROUTERs to CPU 0: 1, 0, 0.
+  **Fixed in drm-msm-kmod `fcb7371`:** msm binds the GPU's interrupt and
+  msmfb the vsync to CPU 0, which deep idle keeps awake for the global
+  timer. Under `balanced`: 0 misses in five runs of 300. Other devices'
+  interrupts (NVMe, USB, Ethernet) still spread; they aren't frame-paced.
+  Details: `desktop/docs/reports/q8b-bench-2026-10-01.md`.
 - The desktop's Energy Saver pane should offer the three choices through
   `abyss-settings` (`sysrc power_profile=…` then
   `service power_profile start`). See the desktop BACKLOG.
