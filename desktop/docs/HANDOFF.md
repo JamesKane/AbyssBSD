@@ -730,6 +730,36 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.113 What the `--full` gate found: a hijacked variable and a power button that went deaf
+(PHASE16, the gate. Both on the installed machine, the one place only
+`live-desktop.sh` reaches.)
+
+**1. `abyss_loginwindow_flags` is not ours to name.** rc.subr runs
+`$command $rc_flags $command_args`, and `rc_flags` is `${name}_flags`. Our
+command is daemon(8), so `--greeter` went to *daemon*, which refused, and the
+first installed machine had no login window ("failed to start
+abyss_loginwindow"). It is now `abyss_loginwindow_greeter=YES`, which the rc.d
+script turns into the argument itself. The installer also writes
+`abyss_desktop_enable="NO"` instead of leaving it unset, which rc had warned
+about. **Never name an rc.conf variable `<rcd-name>_flags` unless it is meant
+for `command`.** InstallTests now refuses the old name.
+
+**2. The power button: devd hears only one kind.** P16.4b set
+`hw.acpi.power_button_state=NONE` so the button would reach devd and ask
+first. But only a **control-method** power button (an ACPI device `PNP0C0C`,
+`acpi_button.c`) sends devd anything. The **fixed-feature** button (bhyve's,
+and that of many PC boards) is handled in `acpi.c`'s
+`acpi_event_power_button_sleep`, which applies `power_button_state` and tells
+nobody. With NONE, that button did nothing: the installed VM ignored bhyve's
+SIGTERM (a power-button press) and ran until it was destroyed by hand.
+
+The rc.d script now takes the button over only when an `acpi_button` unit's
+`%pnpinfo` says PNP0C0C. Otherwise it leaves the kernel's power-off in place
+and says so on the console ("the firmware's fixed one, which devd cannot
+hear"). The real fix is a devctl notify for the fixed button: a kernel change,
+in BACKLOG §6 for the fork. **Which kind the 12700KF has is a metal check.**
+Whichever it is, it now either asks or powers off; it is never dead.
+
 ### 2.112 A fresh config directory is a first login
 (PHASE16 P16.7, the Setup Assistant.)
 

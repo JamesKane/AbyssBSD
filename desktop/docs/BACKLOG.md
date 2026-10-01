@@ -172,6 +172,11 @@ What the review found belongs in the kernel (API-STUDY §3–§4). None is
 scheduled; each is small and self-contained:
 
 - a `dev.cpu.N` **core-type sysctl**, so nothing has to probe for P- and E-cores;
+- a **devctl notify for the fixed-feature power button** (`acpi.c`'s
+  `acpi_event_power_button_sleep`), as `acpi_button.c` already sends for a
+  control-method one. Without it, the desktop's "Restart, Sleep, Cancel, Shut
+  Down" can only be offered on machines whose button is a PNP0C0C device
+  (PHASE16 P16.4b, HANDOFF §2.113);
 - a **per-channel volume ioctl** for `sndstat`, if P14.6 chooses route (a);
 - `allow.rtprio`, already planned, and a **real-time CPU budget** to go with
   it — FreeBSD has no `RLIMIT_RTTIME` (Phase 18).

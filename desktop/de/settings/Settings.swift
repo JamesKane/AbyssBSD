@@ -188,11 +188,11 @@ extension Settings {
             // login window as well: two sessions on one display at boot.
             return [.rcConf(key: "abyss_desktop_enable", value: "YES"),
                     .rcConf(key: "abyss_desktop_user", value: name),
-                    .rcConf(key: "abyss_loginwindow_flags", value: nil)]
+                    .rcConf(key: "abyss_loginwindow_greeter", value: "NO")]
         case .autoLogin(nil):
-            return [.rcConf(key: "abyss_desktop_enable", value: nil),
+            return [.rcConf(key: "abyss_desktop_enable", value: "NO"),
                     .rcConf(key: "abyss_desktop_user", value: nil),
-                    .rcConf(key: "abyss_loginwindow_flags", value: "--greeter")]
+                    .rcConf(key: "abyss_loginwindow_greeter", value: "YES")]
         }
     }
 }

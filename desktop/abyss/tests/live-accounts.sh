@@ -48,7 +48,7 @@ if [ "$freebsd" = 1 ]; then
 fi
 rundir="$work/run"; mkdir -p "$rundir"; chmod 700 "$rundir"
 export ABYSS_RUNTIME_DIR="$rundir"
-printf 'hostname="abyss"\nabyss_loginwindow_flags="--greeter"\n' > "$work/rc.conf"; chmod 644 "$work/rc.conf"
+printf 'hostname="abyss"\nabyss_desktop_enable="NO"\nabyss_loginwindow_greeter="YES"\n' > "$work/rc.conf"; chmod 644 "$work/rc.conf"
 
 # The scratch root: the machine's own password and group files, copied.
 pwroot="$work/root"
@@ -116,11 +116,12 @@ ctlrun apply accounts --autologin "$ua"
 [ "$rc" = 0 ] || fail "automatic login: $out"
 grep -q "^abyss_desktop_enable=\"YES\"" "$work/rc.conf" && grep -q "^abyss_desktop_user=\"$ua\"" "$work/rc.conf" \
   || fail "rc.conf after automatic login: $(cat "$work/rc.conf")"
-grep -q abyss_loginwindow_flags "$work/rc.conf" && fail "the login window was left on as well"
+grep -q '^abyss_loginwindow_greeter="NO"' "$work/rc.conf" || fail "the login window was left on as well: $(cat "$work/rc.conf")"
 ctlrun apply accounts --autologin "nosuch$$"
 [ "$rc" != 0 ] && echo "$out" | grep -q "there is no account" || fail "automatic login for nobody: $out"
 ctlrun apply accounts --no-autologin
-grep -q '^abyss_loginwindow_flags="--greeter"' "$work/rc.conf" && ! grep -q abyss_desktop "$work/rc.conf" \
+grep -q '^abyss_loginwindow_greeter="YES"' "$work/rc.conf" && grep -q '^abyss_desktop_enable="NO"' "$work/rc.conf" \
+  && ! grep -q abyss_desktop_user "$work/rc.conf" \
   || fail "rc.conf after turning automatic login off: $(cat "$work/rc.conf")"
 echo "ok: 4. automatic login as $ua in place of the login window; nobody refused; off, the login window again"
 

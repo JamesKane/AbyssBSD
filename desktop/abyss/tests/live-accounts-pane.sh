@@ -74,7 +74,7 @@ if [ "$freebsd" = 1 ]; then
 else
   cp /etc/passwd /etc/group "$pwroot/etc/"
 fi
-printf 'hostname="abyss"\nabyss_loginwindow_flags="--greeter"\n' > "$work/rc.conf"; chmod 644 "$work/rc.conf"
+printf 'hostname="abyss"\nabyss_desktop_enable="NO"\nabyss_loginwindow_greeter="YES"\n' > "$work/rc.conf"; chmod 644 "$work/rc.conf"
 export ABYSS_ACCOUNTS_ROOT="$pwroot" ABYSS_RC_CONF="$work/rc.conf"
 
 me=$(id -u); mygroup=$(id -gn)

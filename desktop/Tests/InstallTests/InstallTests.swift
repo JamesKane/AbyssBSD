@@ -548,8 +548,12 @@ final class InstallTests: XCTestCase {
         XCTAssertFalse(p.autoLogin, "automatic login is never the default")
         let rc = rcConf(p)
         XCTAssertTrue(rc.contains("abyss_loginwindow_enable=\"YES\""), rc)
-        XCTAssertTrue(rc.contains("abyss_loginwindow_flags=\"--greeter\""), rc)
-        XCTAssertFalse(rc.contains("abyss_desktop"), "no session at boot without a password: \(rc)")
+        XCTAssertTrue(rc.contains("abyss_loginwindow_greeter=\"YES\""), rc)
+        // **Never `abyss_loginwindow_flags`**: rc.subr hands `<name>_flags` to
+        // daemon(8), which refused `--greeter` (the --full gate, §2.113).
+        XCTAssertFalse(rc.contains("abyss_loginwindow_flags"), rc)
+        XCTAssertTrue(rc.contains("abyss_desktop_enable=\"NO\""), "said, not left unset: \(rc)")
+        XCTAssertFalse(rc.contains("abyss_desktop_user"), "no session at boot without a password: \(rc)")
         // The login window's own account is made, and it is nobody's to log in as.
         let steps = (try? compile(p, on: machine())) ?? []
         let made = steps.compactMap { step -> [String]? in
@@ -570,13 +574,13 @@ final class InstallTests: XCTestCase {
         let rc = rcConf(p)
         XCTAssertTrue(rc.contains("abyss_desktop_enable=\"YES\""), rc)
         XCTAssertTrue(rc.contains("abyss_desktop_user=\"jkane\""), rc)
-        XCTAssertFalse(rc.contains("--greeter"), rc)
+        XCTAssertFalse(rc.contains("abyss_loginwindow_greeter=\"YES\""), rc)
         // Asked for with nobody to log in as: the login window, not a desktop
         // for an account that does not exist.
         let nobody = InstallPlan(disk: "ada0", sets: ["base.txz", InstallPlan.desktopSet],
                                  rootPasswordHash: "$6$r", autoLogin: true)
-        XCTAssertFalse(rcConf(nobody).contains("abyss_desktop"))
-        XCTAssertTrue(rcConf(nobody).contains("--greeter"))
+        XCTAssertFalse(rcConf(nobody).contains("abyss_desktop_user"))
+        XCTAssertTrue(rcConf(nobody).contains("abyss_loginwindow_greeter=\"YES\""))
     }
 
     /// System Preferences' privileged half (PHASE14 P14.3) starts for the

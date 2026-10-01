@@ -18,7 +18,7 @@ name="abyss_loginwindow"
 rcvar="abyss_loginwindow_enable"
 pidfile="/var/run/${name}.pid"
 command="/usr/sbin/daemon"
-command_args="-f -P ${pidfile} -o /var/log/abyss-loginwindow.out /usr/local/bin/abyss-loginwindow ${abyss_loginwindow_flags}"
+command_args="-f -P ${pidfile} -o /var/log/abyss-loginwindow.out /usr/local/bin/abyss-loginwindow"
 start_postcmd="abyss_loginwindow_poststart"
 stop_postcmd="abyss_loginwindow_poststop"
 
@@ -33,7 +33,7 @@ abyss_loginwindow_poststart()
 		echo "abyss: the authenticator is up"
 		# With --greeter (an installed desktop, PHASE16 P16.5): the daemon
 		# runs the login window; say when it is up, or that it is not.
-		case "${abyss_loginwindow_flags}" in *--greeter*)
+		if checkyesno abyss_loginwindow_greeter; then
 			i=0
 			while ! grep -q "the login window is up" /var/log/abyss-loginwindow.out 2>/dev/null \
 			    && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
@@ -41,18 +41,38 @@ abyss_loginwindow_poststart()
 				echo "abyss: the login window is up"
 			else
 				echo "abyss: THE LOGIN WINDOW NEVER STARTED (see /var/log/abyss-loginwindow.out)"
-			fi ;;
-		esac
+			fi
+		fi
 		# The power key asks the session now (devd → the daemon): the
 		# kernel must not power off first. Kept to restore on stop.
+		#
+		# **Only where devd hears the button.** A control-method power
+		# button (an ACPI device, PNP0C0C, acpi_button) tells devd; the
+		# *fixed-feature* button most PCs and bhyve have tells only the
+		# kernel (acpi.c's acpi_event_power_button_sleep), so taking it
+		# over there would leave a power button that does nothing — the
+		# --full gate's installed VM never powered off (HANDOFF §2.113).
 		state=$(sysctl -n hw.acpi.power_button_state 2>/dev/null)
-		if [ -n "$state" ] && [ "$state" != NONE ]; then
+		if ! abyss_loginwindow_hears_power_button; then
+			echo "abyss: the power button is the firmware's fixed one, which devd cannot hear — it powers off, as FreeBSD's default"
+		elif [ -n "$state" ] && [ "$state" != NONE ]; then
 			echo "$state" > /var/run/abyss-loginwindow.button
 			sysctl hw.acpi.power_button_state=NONE > /dev/null
+			echo "abyss: the power button asks first"
 		fi
 	else
 		echo "abyss: THE AUTHENTICATOR NEVER STARTED (see /var/log/abyss-loginwindow.out)"
 	fi
+}
+
+# Whether a power button that devd hears is attached: an acpi_button whose
+# hardware id is PNP0C0C. (PNP0C0E is the sleep button; the lid is acpi_lid.)
+abyss_loginwindow_hears_power_button()
+{
+	for u in 0 1 2 3 4 5 6 7; do
+		sysctl -n dev.acpi_button.$u.%pnpinfo 2>/dev/null | grep -q 'PNP0C0C' && return 0
+	done
+	return 1
 }
 
 abyss_loginwindow_poststop()
@@ -64,6 +84,13 @@ abyss_loginwindow_poststop()
 	fi
 }
 
-: ${abyss_loginwindow_flags:=""}
+# **Not `abyss_loginwindow_flags`**: rc.subr hands `${name}_flags` to the
+# *command*, which here is daemon(8) — `daemon --greeter …` refused to start,
+# and the first installed machine had no login window (P16.5b, the --full
+# gate; HANDOFF §2.113). A yes/no of our own, turned into the argument here.
+: ${abyss_loginwindow_greeter:="NO"}
 load_rc_config $name
+if checkyesno abyss_loginwindow_greeter; then
+	command_args="${command_args} --greeter"
+fi
 run_rc_command "$1"

@@ -1147,19 +1147,26 @@ sudo sed -i '' 's|^root:[^:]*:|root::|' "$stage/etc/master.passwd"
 
 sudo sh -c "cat >> $stage/etc/master.passwd" <<'PW'
 abyss::1001:1001::0:0:AbyssBSD live:/home/abyss:/bin/sh
+_loginwindow:*:1099:1099::0:0:Login Window:/nonexistent:/usr/sbin/nologin
 PW
 sudo sh -c "cat >> $stage/etc/group" <<'GRP'
 abyss:*:1001:
+_loginwindow:*:1099:
 GRP
+# `_loginwindow` (PHASE16 P16.5): the login window's account, as an installed
+# system has it — locked, no shell. Unused at the medium's own boot (straight
+# to the desktop), but there so the login window can be tried on real
+# hardware: `sysrc abyss_loginwindow_greeter=YES`, stop abyss_desktop,
+# restart abyss_loginwindow. In video and realtime below, for its compositor.
 # seatd's socket is group `video`, which is how an unprivileged session is
 # allowed to ask for DRM master. Without this the session runs, finds a card it
 # may not open, and falls back to no display at all.
-sudo sed -i '' 's|^video:\*:44:.*|video:*:44:abyss|' "$stage/etc/group" 2>/dev/null || true
+sudo sed -i '' 's|^video:\*:44:.*|video:*:44:abyss,_loginwindow|' "$stage/etc/group" 2>/dev/null || true
 grep -q '^video:' "$stage/etc/group" 2>/dev/null \
-  || sudo sh -c "echo 'video:*:44:abyss' >> $stage/etc/group"
+  || sudo sh -c "echo 'video:*:44:abyss,_loginwindow' >> $stage/etc/group"
 # `realtime`, with mac_priority loaded (kld_list), lets the session's
 # compositor ask for real-time priority (PHASE4 §5.13).
-sudo sed -i '' 's|^realtime:\*:47:.*|realtime:*:47:abyss|' "$stage/etc/group" 2>/dev/null || true
+sudo sed -i '' 's|^realtime:\*:47:.*|realtime:*:47:abyss,_loginwindow|' "$stage/etc/group" 2>/dev/null || true
 # And `audio`: from FreeBSD 16 the sound devices are root:audio 0660, so a
 # session outside the group has no mixer (HANDOFF §2.95).
 sudo sed -i '' 's|^audio:\*:43:.*|audio:*:43:abyss|' "$stage/etc/group" 2>/dev/null || true

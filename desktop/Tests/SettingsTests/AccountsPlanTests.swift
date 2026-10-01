@@ -55,11 +55,11 @@ final class AccountsPlanTests: XCTestCase {
         let on = try Settings.compile(.accounts(AccountPlan(.autoLogin("ada"))))
         XCTAssertEqual(on, [.rcConf(key: "abyss_desktop_enable", value: "YES"),
                             .rcConf(key: "abyss_desktop_user", value: "ada"),
-                            .rcConf(key: "abyss_loginwindow_flags", value: nil)])
+                            .rcConf(key: "abyss_loginwindow_greeter", value: "NO")])
         let off = try Settings.compile(.accounts(AccountPlan(.autoLogin(nil))))
-        XCTAssertEqual(off, [.rcConf(key: "abyss_desktop_enable", value: nil),
+        XCTAssertEqual(off, [.rcConf(key: "abyss_desktop_enable", value: "NO"),
                              .rcConf(key: "abyss_desktop_user", value: nil),
-                             .rcConf(key: "abyss_loginwindow_flags", value: "--greeter")])
+                             .rcConf(key: "abyss_loginwindow_greeter", value: "YES")])
     }
 
     func testTheWireCarriesEachAction() {

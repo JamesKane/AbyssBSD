@@ -365,7 +365,10 @@ public func rcConf(_ plan: InstallPlan) -> String {
             out += "abyss_desktop_enable=\"YES\"\n"
             out += "abyss_desktop_user=\"\(owner.name)\"\n"
         } else {
-            out += "abyss_loginwindow_flags=\"--greeter\"\n"
+            // Said, not left unset: rc warns about an rc.d script whose
+            // enable variable is missing (the --full gate saw it).
+            out += "abyss_desktop_enable=\"NO\"\n"
+            out += "abyss_loginwindow_greeter=\"YES\"\n"
         }
         // System Preferences' privileged half (PHASE14 P14.3), for the same
         // person — **only if they are an administrator**: the helper admits

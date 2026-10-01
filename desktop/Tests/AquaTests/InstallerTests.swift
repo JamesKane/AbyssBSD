@@ -454,7 +454,7 @@ final class InstallerTests: XCTestCase {
         XCTAssertEqual(p.sets.first, "base.txz", "base still has to be first")
         // And the installed machine therefore starts it — at the login window
         // (PHASE16 §6.2), with jkane's account to log in as.
-        XCTAssertTrue(rcConf(p).contains("abyss_loginwindow_flags=\"--greeter\""))
+        XCTAssertTrue(rcConf(p).contains("abyss_loginwindow_greeter=\"YES\""))
         XCTAssertFalse(rcConf(p).contains("abyss_desktop_user"))
     }
 

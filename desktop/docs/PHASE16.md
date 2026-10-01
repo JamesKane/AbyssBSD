@@ -217,6 +217,12 @@ and caught (HANDOFF §2.105). The metal cycle on the 12700KF is still to do.
 - `live-power.sh` grew to 10 claims; `live-authenticator.sh` checks the real
   daemon refuses button reports from anyone but root. Five faults injected
   and caught.
+- **Corrected by the `--full` gate (HANDOFF §2.113):** devd hears only a
+  control-method power button (PNP0C0C). The fixed-feature button most PCs
+  have tells the kernel alone, so the daemon now takes the button over only
+  where devd hears it; elsewhere the kernel's power-off stays. The variable
+  for the login window is `abyss_loginwindow_greeter`, not `…_flags`, which
+  rc.subr gave to daemon(8).
 - **Found:** undertow cleared the keyboard from the lock screen when the last
   window closed while locked (the power dialog closing after its own sleep),
   so the password went nowhere. Fixed, with `live-sessionlock.sh` claim 7b
@@ -266,7 +272,8 @@ updated and not yet run: the `--full` lane).
   `/var/run/abyss-<user>`, theirs, 0700, with a login's environment. When it
   ends (Log Out) the greeter comes back; a greeter that dies is restarted.
 - **Installed systems** start at the login window: `rc.conf` gets
-  `abyss_loginwindow_flags="--greeter"`, and the installer makes
+  `abyss_loginwindow_greeter="YES"` (renamed after the `--full` gate:
+  HANDOFF §2.113), and the installer makes
   `_loginwindow` (uid 1099, nologin, no password, in `video`). Automatic login
   is `InstallPlan.autoLogin` (`abyss-installctl --autologin`); the Accounts
   pane gets it in P16.6. The medium keeps its automatic session.
