@@ -232,10 +232,13 @@ public final class Popup {
         wl_surface_set_buffer_scale(surface, scale)
         wl_surface_damage_buffer(surface, 0, 0, buf.width, buf.height)
         if let cb = wl_surface_frame(surface) {
+            frameCallback = cb
             var cl = wl_callback_listener()
-            cl.done = { data, _, _ in
+            cl.done = { data, cb, _ in
+                if let cb { wl_callback_destroy(cb) }     // `done` ends its life
                 guard let data else { return }
                 let p = Unmanaged<Popup>.fromOpaque(data).takeUnretainedValue()
+                p.frameCallback = nil
                 p.framePending = false
                 if p.needsRedraw { p.renderAndCommit() }
             }
@@ -265,6 +268,9 @@ public final class Popup {
     }
 
     /// Programmatic close (e.g. after choosing an item). Idempotent.
+    /// The frame callback in flight, so tearing down can cancel it.
+    private var frameCallback: OpaquePointer?
+
     public func close() { teardown() }
 
     private func teardown() {
@@ -275,6 +281,11 @@ public final class Popup {
         buffers.removeAll()
         xdg_popup_destroy(xdgPopup)
         xdg_surface_destroy(xdgSurface)
+        // **The pending frame callback first** (P15.6): its data is this object,
+        // unretained, and a `done` that arrives after the object is gone is a
+        // call into freed memory — Grab's overlay, closed between a frame's
+        // commit and its `done`, took the process down with SIGBUS.
+        if let c = frameCallback { wl_callback_destroy(c); frameCallback = nil }
         wl_surface_destroy(surface)
         wl_display_flush(display.display)
     }

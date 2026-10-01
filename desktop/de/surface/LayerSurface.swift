@@ -187,12 +187,20 @@ public final class LayerSurface {
 
     /// Destroy this surface and drop it from the display's routing. Idempotent,
     /// and safe to call from a run-loop callback.
+    /// The frame callback in flight, so `close()` can cancel it.
+    private var frameCallback: OpaquePointer?
+
     public func close() {
         guard !tornDown else { return }
         tornDown = true
         if display.layerSurface === self { display.layerSurface = nil }
         for b in buffers { b.destroy() }
         buffers.removeAll()
+        // **The pending frame callback first** (P15.6): its data is this object,
+        // unretained, and a `done` that arrives after the object is gone is a
+        // call into freed memory — Grab's overlay, closed between a frame's
+        // commit and its `done`, took the process down with SIGBUS.
+        if let c = frameCallback { wl_callback_destroy(c); frameCallback = nil }
         zwlr_layer_surface_v1_destroy(layerSurface)
         wl_surface_destroy(surface)
         wl_display_flush(display.display)
@@ -285,10 +293,15 @@ public final class LayerSurface {
         wl_surface_set_buffer_scale(surface, scale)
         wl_surface_damage_buffer(surface, 0, 0, buf.width, buf.height)
         if let cb = wl_surface_frame(surface) {
+            frameCallback = cb
             var cl = wl_callback_listener()
-            cl.done = { data, _, _ in
+            cl.done = { data, cb, _ in
+                // `done` ends the callback's life: destroy its proxy, or one
+                // leaks every frame.
+                if let cb { wl_callback_destroy(cb) }
                 guard let data else { return }
                 let s = Unmanaged<LayerSurface>.fromOpaque(data).takeUnretainedValue()
+                s.frameCallback = nil
                 s.frameDone()
             }
             let me = Unmanaged.passUnretained(self).toOpaque()

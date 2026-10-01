@@ -297,6 +297,9 @@ public final class Window {
 
     /// Destroy this window's surfaces and drop it from the display's routing.
     /// Idempotent — a multi-window app calls it, and so does deinit.
+    /// The frame callback in flight, so `close()` can cancel it.
+    private var frameCallback: OpaquePointer?
+
     public func close() {
         guard !tornDown else { return }
         tornDown = true
@@ -311,6 +314,11 @@ public final class Window {
         // the compositor is behaving correctly, which is why this survived
         // every close test the project has: they all asked whether the client
         // closed the window (P9.3).
+        // **The pending frame callback first** (P15.6): its data is this object,
+        // unretained, and a `done` that arrives after the object is gone is a
+        // call into freed memory — Grab's overlay, closed between a frame's
+        // commit and its `done`, took the process down with SIGBUS.
+        if let c = frameCallback { wl_callback_destroy(c); frameCallback = nil }
         xdg_toplevel_destroy(xdgToplevel)
         xdg_surface_destroy(xdgSurface)
         wl_surface_destroy(surface)
@@ -455,10 +463,13 @@ public final class Window {
         wl_surface_damage_buffer(surface, 0, 0, buf.width, buf.height)
 
         if let cb = wl_surface_frame(surface) {
+            frameCallback = cb
             var cl = wl_callback_listener()
-            cl.done = { data, _, _ in
+            cl.done = { data, cb, _ in
+                if let cb { wl_callback_destroy(cb) }     // `done` ends its life
                 guard let data else { return }
                 let w = Unmanaged<Window>.fromOpaque(data).takeUnretainedValue()
+                w.frameCallback = nil
                 w.frameDone()
             }
             let me = Unmanaged.passUnretained(self).toOpaque()

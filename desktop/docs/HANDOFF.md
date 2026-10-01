@@ -730,6 +730,27 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.99 A frame callback outlives the surface that asked for it
+(PHASE15 P15.6, 2026-10-01: Grab's overlay, on FreeBSD only.)
+
+Every Surface type — `Window`, `LayerSurface`, `Popup` — asked for a frame
+callback after each commit with its own address as the listener's data,
+**unretained** (§2.2), and kept no handle on the `wl_callback`. Closing the
+surface destroyed the `wl_surface`, not the callback; a `done` that arrived
+after that called `frameDone()` on freed memory. Grab's overlay is closed in
+the middle of its own frames (a cancel, a capture), and on FreeBSD the
+process died with **SIGBUS in `swift_weakLoadStrong`** inside
+`LayerSurface.frameDone` — every run. Linux survived the same code by luck of
+timing. The symptom it showed first was nothing like a crash: the test saw
+focus jump to another application, because the app's windows vanished.
+
+The fix, in all three: keep the callback, `wl_callback_destroy` it in `done`
+(its destructor event — the proxy leaked one per frame before), and destroy a
+pending one in `close()` before the surface. **Rule: a proxy whose data is an
+unretained `self` is cancelled when `self` is torn down, not left to fire.**
+And: read the core (`gdb -batch -ex bt`) before reasoning about a symptom two
+processes away from the cause.
+
 ### 2.98 A window's early requests wait for its first commit
 (PHASE15 §4.2, 2026-09-30: the first real browser under `undertow`.)
 
