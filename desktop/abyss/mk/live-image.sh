@@ -674,13 +674,25 @@ abyss_desktop_start()
 		mkdir -p "$rundir"
 		chown "$abyss_desktop_user" "$rundir"
 		chmod 700 "$rundir"
-		su -m "$abyss_desktop_user" -c \
-			"ABYSS_RUNTIME_DIR=$rundir \
-			 /usr/local/libexec/abyss-session" 2>&1 | sed 's/^/abyss| /'
+		# **HOME and PATH too, because `su -m` keeps rc's**: HOME `/` left
+		# fontconfig and Mesa nowhere for their caches, as on the live medium,
+		# and rc's PATH has no /usr/local/bin, so the session found no
+		# dbus-daemon and started no bus.
+		home=$(getent passwd "$abyss_desktop_user" | cut -d: -f6)
+		set -- su -m "$abyss_desktop_user" -c \
+			"HOME=$home PATH=$PATH:/usr/local/sbin:/usr/local/bin \
+			 ABYSS_RUNTIME_DIR=$rundir /usr/local/libexec/abyss-session"
 	else
-		/usr/local/libexec/abyss-session 2>&1 | sed 's/^/abyss| /'
+		set -- /usr/local/libexec/abyss-session
 	fi
-	echo "abyss: the desktop exited $?"
+	# **Detached, by daemon(8).** The session runs until it is quit, and rc
+	# runs its scripts one after another: in the foreground, everything
+	# ordered after this one (bgfsck, securelevel, …) and the console's getty
+	# waited for the desktop to exit. A plain `&` is not enough either: the
+	# job stays in rc's process group, and the console's hangup when rc
+	# finishes killed it. Found on the Radxa Dragon Q8B.
+	echo "abyss: the session logs to /var/log/abyss-desktop.log"
+	/usr/sbin/daemon -o /var/log/abyss-desktop.log "$@"
 }
 load_rc_config $name
 run_rc_command "$1"
