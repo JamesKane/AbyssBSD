@@ -10,6 +10,8 @@
 #      it (the display never sleeps later than the computer), and energy.ini
 #      holds both once the slider is let go;
 #   3. dragging the display's slider to Never pushes the computer's to Never;
+#   3b. "Require a password to wake…" (PHASE16 P16.3) is on by default, and
+#      its checkbox turns it off in energy.ini and back on;
 #   4. FreeBSD: powerd, read from rc.conf through the helper (off), turned on
 #      by its checkbox, then its battery mode set to Slowest — rc.conf written
 #      for real (scratch), the restart skipped and said (write-only);
@@ -183,6 +185,18 @@ await "energy: stored" "$b" "letting go of the display's slider stored nothing"
 [ "$(ini display_sleep_minutes)" = 0 ] && [ "$(ini system_sleep_minutes)" = 0 ] \
   || fail "energy.ini after Never: $(cat "$work/cfg/energy.ini")"
 echo "ok: 3. the display to Never pushed the computer to Never too"
+
+# ------------------------------------------------- 3b. require a password
+b=$(mark "energy: stored require_password")
+click password
+await "energy: stored require_password" "$b" "the password checkbox stored nothing"
+[ "$(ini require_password)" = false ] || fail "after unchecking: $(cat "$work/cfg/energy.ini")"
+b=$(mark "energy: stored require_password")
+click password
+await "energy: stored require_password" "$b" "the password checkbox, again, stored nothing"
+[ "$(ini require_password)" = true ] || fail "after checking again: $(cat "$work/cfg/energy.ini")"
+[ "$(ini display_sleep_minutes)" = 0 ] || fail "the checkbox disturbed the delays: $(cat "$work/cfg/energy.ini")"
+echo "ok: 3b. require a password: on by default, off and on again by its checkbox, in energy.ini"
 
 # -------------------------------------------------------------- 4. powerd
 if [ "$freebsd" = 1 ]; then

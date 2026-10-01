@@ -132,6 +132,9 @@ public final class LockScreen: SessionLockDelegate {
     private var timer: Int32 = -1
     private let style: DesktopStyle
     public var onDone: ((Bool) -> Void)?
+    /// The compositor said `locked`: the desktop is hidden. anchor is told,
+    /// so "locked" means locked, not "a lock screen is starting" (P16.3).
+    public var onLocked: (() -> Void)?
 
     static func log(_ s: String) {
         let line = "LockScreen: " + s + "\n"
@@ -160,7 +163,7 @@ public final class LockScreen: SessionLockDelegate {
 
     // MARK: SessionLockDelegate
 
-    public func sessionLocked() { LockScreen.log("locked") }
+    public func sessionLocked() { LockScreen.log("locked"); onLocked?() }
 
     public func sessionLockFinished() {
         LockScreen.log(model.phase == .unlocked ? "finished" : "the compositor refused the lock or ended it")

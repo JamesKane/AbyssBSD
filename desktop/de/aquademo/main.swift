@@ -175,6 +175,7 @@ if sceneName == "lock" {
     }
     var unlocked = false
     lockScreen.onDone = { ok in unlocked = ok; display.stop() }
+    lockScreen.onLocked = { outcome("locked") }
     withExtendedLifetime(lockScreen) { display.run() }
     outcome(unlocked ? "unlocked" : "refused")
     exit(unlocked ? 0 : 1)

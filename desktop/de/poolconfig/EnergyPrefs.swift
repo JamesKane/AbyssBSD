@@ -10,16 +10,40 @@
 //     [energy]
 //     display_sleep_minutes = 10
 //     system_sleep_minutes = 30
+//     require_password = true      (PHASE16 P16.3: lock when the display sleeps)
+//
+// The session's idle policy (`abyss-idle`, P16.3) reads all three: it locks
+// when the display sleeps if a password is required, and asks for the
+// computer to sleep — locking first — after the computer's delay.
 
 public struct EnergyPrefs: Equatable, Sendable {
     /// Minutes of inactivity before the display sleeps; 0 is never.
     public var displaySleepMinutes: Int
     /// Minutes of inactivity before the computer sleeps; 0 is never.
     public var systemSleepMinutes: Int
+    /// Jaguar's "require a password to wake this computer from sleep or
+    /// screen saver": lock when the display sleeps, and before the computer
+    /// does. On unless a person turns it off.
+    public var requirePassword: Bool
 
-    public init(displaySleepMinutes: Int = 10, systemSleepMinutes: Int = 30) {
+    public init(displaySleepMinutes: Int = 10, systemSleepMinutes: Int = 30, requirePassword: Bool = true) {
         self.displaySleepMinutes = displaySleepMinutes
         self.systemSleepMinutes = systemSleepMinutes
+        self.requirePassword = requirePassword
+    }
+
+    /// What idleness does, in milliseconds of it (P16.3): when to lock, and
+    /// when to ask for the computer to sleep; nil is never. `minuteMs` is how
+    /// long a minute is — 60 000, but a test may make it a second.
+    ///
+    /// The lock comes with the display's sleep, as the Mac's screen saver
+    /// password did; with no display sleep there is no lock *before* the
+    /// computer's — but the computer is locked as it goes to sleep, whatever
+    /// the delays (the idle component does that, not this arithmetic).
+    public func idleTimeouts(minuteMs: UInt64 = 60_000) -> (lock: UInt64?, sleep: UInt64?) {
+        let lock = requirePassword && displaySleepMinutes > 0 ? UInt64(displaySleepMinutes) * minuteMs : nil
+        let sleep = systemSleepMinutes > 0 ? UInt64(systemSleepMinutes) * minuteMs : nil
+        return (lock, sleep)
     }
 
     /// Jaguar's slider stops, in minutes; `never` (0) sits past the last.
@@ -53,6 +77,7 @@ public struct EnergyPrefs: Equatable, Sendable {
         var p = EnergyPrefs()
         if let v = c.int64(section, "display_sleep_minutes"), v >= 0 { p.displaySleepMinutes = Int(v) }
         if let v = c.int64(section, "system_sleep_minutes"), v >= 0 { p.systemSleepMinutes = Int(v) }
+        if let v = c.bool(section, "require_password") { p.requirePassword = v }
         return p
     }
 
@@ -60,6 +85,7 @@ public struct EnergyPrefs: Equatable, Sendable {
         var c = (try? Pool.load(EnergyPrefs.domain, in: configDir)) ?? Config()
         c = c.set(EnergyPrefs.section, "display_sleep_minutes", "\(displaySleepMinutes)")
         c = c.set(EnergyPrefs.section, "system_sleep_minutes", "\(systemSleepMinutes)")
+        c = c.set(EnergyPrefs.section, "require_password", requirePassword ? "true" : "false")
         try c.store(EnergyPrefs.domain, in: configDir)
     }
 }

@@ -6,7 +6,7 @@
 
 # The products that go on the medium. An explicit list, not a glob over
 # `.build/debug`, because that directory is full of SwiftPM's own intermediates.
-BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus abyss-theme
+BINARIES="undertow anchor abyssctl abyss-idle AquaDemo abyss-portal abyss-dbus abyss-theme
           abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl
           fathom abyss-settings abyss-settingsctl abyss-appgen
           abyss-loginwindow abyss-loginctl"

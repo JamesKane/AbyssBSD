@@ -61,6 +61,15 @@ while true {
     guard let client = try? server.accept() else { continue }
     let uid = loginPeerUID(client)
     if let request = try? Current.receive(on: client) {
+        // Power requests (P16.3's idle sleep; P16.4's daemon will act): the
+        // stand-in records them, as the stand-in acpiconf will (§6.3).
+        if request.string("method") == "power" {
+            var ok = Msg(); ok.set("ok", true)
+            try? Current.send(ok, on: client)
+            emit("loginstub: power \(request.string("action") ?? "?") from uid \(uid.map(String.init) ?? "?")")
+            close(client)
+            continue
+        }
         let (reply, line) = auth.handle(uid: uid, request: request, now: now())
         try? Current.send(reply, on: client)
         emit("loginwindow: \(line)")

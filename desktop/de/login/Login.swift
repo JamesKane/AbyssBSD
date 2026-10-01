@@ -269,6 +269,28 @@ public enum LoginClient {
     }
 }
 
+// MARK: - Power (the wire; the daemon's half is P16.4)
+
+/// What the session may ask the root daemon to do to the machine: the idle
+/// policy's "sleep" (P16.3), the system menu's three and the lid (P16.4).
+public enum PowerAction: String, CaseIterable, Sendable {
+    case sleep, restart, shutDown = "shut-down"
+}
+
+public enum PowerClient {
+    /// Ask for `action`. The reply's `ok`, or why not — an error naming the
+    /// method is a daemon from before P16.4, which says so and does nothing.
+    public static func request(_ action: PowerAction, socket: String = LoginClient.socket) throws -> Msg {
+        var m = Msg()
+        m.set("method", "power")
+        m.set("action", action.rawValue)
+        let s = try Current.connect(path: socket)
+        defer { close(s) }
+        try Current.send(m, on: s)
+        return try Current.receive(on: s)
+    }
+}
+
 /// The caller of a connected socket, as the kernel reports it.
 public func loginPeerUID(_ socket: Int32) -> UInt32? {
     var uid: UInt32 = 0

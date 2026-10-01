@@ -560,6 +560,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             func t(_ r: Rect) -> String { "\(Int(r.x))-\(Int(r.x + r.w)),\(Int(r.y + r.h / 2))" }
             let e = layout.energy
             var line = "energy layout computer=\(t(e.computer)) display=\(t(e.display)) powerd=\(c(e.powerd.hit))"
+                + " password=\(c(e.password.hit))"
             for r in e.ac { line += " ac.\(r.value)=\(c(r.hit))" }
             for r in e.battery { line += " battery.\(r.value)=\(c(r.hit))" }
             for r in e.profile { line += " profile.\(r.value)=\(c(r.hit))" }
@@ -633,6 +634,15 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             // keeps choosing its mode (P14.8b).
             p.modesFromProfile = energy.profile != nil
             applyEnergy(p)
+        case .requirePassword:
+            energy.prefs.requirePassword.toggle()
+            do {
+                try energy.prefs.store()
+                SystemPreferencesApp.log("energy: stored require_password \(energy.prefs.requirePassword)")
+            } catch {
+                energy.note = "Could not save: \(error)"
+                SystemPreferencesApp.log("energy: \(energy.note)")
+            }
         case .profile(let chosen):
             guard energy.profile != chosen else { return }
             apply(.powerProfile(PowerProfilePlan(profile: chosen)), "power profile \(chosen.rawValue)")

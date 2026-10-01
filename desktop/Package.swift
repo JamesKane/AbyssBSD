@@ -70,6 +70,7 @@ let package = Package(
                       "wlr-screencopy-unstable-v1-protocol.c",
                       "wlr-output-management-unstable-v1-protocol.c",
                       "ext-session-lock-v1-protocol.c",
+                      "ext-idle-notify-v1-protocol.c",
                       "cwayland_shm.c"],
             publicHeadersPath: "include"
         ),
@@ -359,6 +360,10 @@ let package = Package(
         // A stand-in authenticator for the lock screen's test (P16.2b): the
         // real Authenticator, PAM replaced by a password file. A probe, like
         // ipcprobe — never shipped.
+        // The session's idle policy (PHASE16 P16.3): lock when the display
+        // sleeps, ask the machine to sleep after the computer's delay.
+        .executableTarget(name: "abyss-idle", dependencies: ["Surface", "PoolConfig", "CurrentIPC", "Login"],
+                          path: "de/idlebin"),
         .executableTarget(name: "abyss-loginstub", dependencies: ["Login", "CurrentIPC"], path: "de/loginstub"),
         .executableTarget(name: "abyss-settings",
                           dependencies: ["SettingsRun", "CurrentIPC"], path: "de/settingsbin"),

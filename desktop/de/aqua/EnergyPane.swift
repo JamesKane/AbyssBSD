@@ -124,6 +124,8 @@ public struct EnergyLayout: Equatable, Sendable {
     public var sleepBox = Rect(0, 0, 0, 0)
     public var powerdBox = Rect(0, 0, 0, 0)
     public var powerd = Row(value: "powerd", hit: Rect(0, 0, 0, 0), control: Rect(0, 0, 0, 0))
+    /// "Require a password to wake…" (PHASE16 P16.3), in the Sleep box.
+    public var password = Row(value: "password", hit: Rect(0, 0, 0, 0), control: Rect(0, 0, 0, 0))
     public var ac: [Row] = []
     public var battery: [Row] = []
     /// The power mode's radios (P14.8b), where the base has profiles; then
@@ -137,9 +139,11 @@ public struct EnergyLayout: Equatable, Sendable {
 public func energyLayout(body: Rect, profiles: Bool = false) -> EnergyLayout {
     var l = EnergyLayout()
     let left = body.x + 40, w = body.w - 80
-    l.sleepBox = Rect(left, body.y + 18, w, 186)
+    l.sleepBox = Rect(left, body.y + 18, w, 212)
     l.computer = Rect(left + 20, body.y + 70, w - 40, 20)
     l.display = Rect(left + 20, body.y + 140, w - 40, 20)
+    l.password = .init(value: "password", hit: Rect(left + 16, body.y + 180, w - 32, 22),
+                       control: Rect(left + 16, body.y + 183, 16, 16))
     var y = l.sleepBox.y + l.sleepBox.h + 16
     l.powerdBox = Rect(left, y, w, 128)
     y += 26
@@ -180,6 +184,8 @@ public enum EnergyHit: Equatable, Sendable {
     /// pointer's x means on it.
     case sleep(display: Bool, minutes: Int)
     case powerd
+    /// The "require a password" checkbox (P16.3).
+    case requirePassword
     case ac(PowerdMode)
     case battery(PowerdMode)
     case profile(PowerProfile)
@@ -190,6 +196,7 @@ public func energyHit(_ l: EnergyLayout, x: Double, y: Double) -> EnergyHit? {
     func near(_ r: Rect) -> Bool { x >= r.x - 8 && x <= r.x + r.w + 8 && y >= r.y - 6 && y <= r.y + r.h + 6 }
     if near(l.computer) { return .sleep(display: false, minutes: EnergySlider.minutes(at: t(l.computer))) }
     if near(l.display) { return .sleep(display: true, minutes: EnergySlider.minutes(at: t(l.display))) }
+    if l.password.hit.contains(x, y) { return .requirePassword }
     if l.powerd.hit.contains(x, y) { return .powerd }
     if let r = l.ac.first(where: { $0.hit.contains(x, y) }), let m = PowerdMode(rawValue: r.value) { return .ac(m) }
     if let r = l.battery.first(where: { $0.hit.contains(x, y) }), let m = PowerdMode(rawValue: r.value) { return .battery(m) }
@@ -213,6 +220,10 @@ public func paintEnergyPane(_ cr: OpaquePointer, _ l: EnergyLayout, _ s: EnergyP
     }
     slider(l.computer, "Put the computer to sleep when it is inactive for:", s.prefs.systemSleepMinutes)
     slider(l.display, "Put the display to sleep when the computer is inactive for:", s.prefs.displaySleepMinutes)
+    Draw.checkbox(cr, l.password.control, checked: s.prefs.requirePassword)
+    Draw.textLeft(cr, "Require a password to wake this computer from sleep or the screen saver",
+                  x: l.password.control.x + 24, baselineY: l.password.control.y + 12,
+                  color: Theme.bodyText, size: 13)
     Draw.text(cr, "The display sleeps as set; the computer does not yet.  "
               + EnergyWords.sleepStates(s.sleepStates),
               centerX: l.sleepBox.x + l.sleepBox.w / 2, centerY: l.sleepBox.y + l.sleepBox.h - 12,

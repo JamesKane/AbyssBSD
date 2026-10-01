@@ -56,6 +56,9 @@ public final class Display {
     /// `ext_session_lock_manager_v1` (PHASE16 P16.2b): the lock screen's.
     var sessionLockManager: OpaquePointer?
     public var hasSessionLock: Bool { sessionLockManager != nil }
+    /// `ext_idle_notifier_v1` (P16.3): idleness, as the compositor counts it.
+    var idleNotifier: OpaquePointer?
+    public var hasIdleNotifier: Bool { idleNotifier != nil }
     /// A display appeared or went (index into the bound outputs / its proxy):
     /// a lock must cover every display, including one plugged in while locked.
     public var outputAdded: ((Int) -> Void)?
@@ -404,6 +407,10 @@ public final class Display {
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.
             activation = wlBind(registry, name, xdg_activation_v1_iface, min(version, 1))
+        case "ext_idle_notifier_v1":
+            // v1's notifications honour idle inhibitors — the one idea of
+            // idle (HANDOFF §2.86) the session's policy must share (P16.3).
+            idleNotifier = wlBind(registry, name, ext_idle_notifier_v1_iface, 1)
         case "ext_session_lock_manager_v1":
             // No events on the manager; the lock object reports back.
             sessionLockManager = wlBind(registry, name, ext_session_lock_manager_v1_iface, 1)

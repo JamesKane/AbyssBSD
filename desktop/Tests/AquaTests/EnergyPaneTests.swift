@@ -51,6 +51,32 @@ final class EnergyPaneTests: XCTestCase {
         XCTAssertEqual(EnergyPrefs.load(configDir: dir), EnergyPrefs(displaySleepMinutes: 5, systemSleepMinutes: 0))
     }
 
+    /// The idle policy's arithmetic (PHASE16 P16.3): the lock comes with
+    /// the display's sleep when a password is required, the computer's sleep
+    /// on its own delay; 0 minutes, or no password, is never.
+    func testIdleTimeouts() {
+        let p = EnergyPrefs(displaySleepMinutes: 10, systemSleepMinutes: 30)
+        XCTAssertTrue(p.requirePassword, "a password is required unless a person says otherwise")
+        XCTAssertEqual(p.idleTimeouts().lock, 600_000)
+        XCTAssertEqual(p.idleTimeouts().sleep, 1_800_000)
+        XCTAssertEqual(p.idleTimeouts(minuteMs: 1000).lock, 10_000, "a test's minute is a second")
+        var q = p; q.requirePassword = false
+        XCTAssertNil(q.idleTimeouts().lock, "no password, no lock")
+        XCTAssertEqual(q.idleTimeouts().sleep, 1_800_000, "but the computer still sleeps")
+        let never = EnergyPrefs(displaySleepMinutes: 0, systemSleepMinutes: 0)
+        XCTAssertNil(never.idleTimeouts().lock)
+        XCTAssertNil(never.idleTimeouts().sleep)
+    }
+
+    func testRequirePasswordIsStoredAndLoaded() throws {
+        var t = Array("/tmp/abyss-energy-pw.XXXXXX".utf8CString)
+        let dir = t.withUnsafeMutableBufferPointer { String(cString: mkdtemp($0.baseAddress!)) }
+        defer { _ = unlink(dir + "/energy.ini"); _ = rmdir(dir) }
+        XCTAssertTrue(EnergyPrefs.load(configDir: dir).requirePassword, "no file: on")
+        try EnergyPrefs(displaySleepMinutes: 5, systemSleepMinutes: 0, requirePassword: false).store(configDir: dir)
+        XCTAssertFalse(EnergyPrefs.load(configDir: dir).requirePassword)
+    }
+
     func testThePageInWords() {
         XCTAssertEqual(EnergyWords.statusLine(.sample), "computer 30 display 10 powerd on ac hiadaptive battery adaptive battery 83")
         XCTAssertEqual(EnergyWords.battery(nil), "No battery")

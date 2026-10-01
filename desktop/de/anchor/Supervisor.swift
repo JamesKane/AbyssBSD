@@ -61,6 +61,10 @@ public final class Supervisor {
     private var lockPipe: Int32 = -1
     private var lockPending: [UInt8] = []
     private var lockOutcome: String?
+    /// The lock screen said the compositor has locked: `status` reports
+    /// `locked` only then — before, only `locking` (P16.3: a sleep that went
+    /// on "a lock screen is running" went with the desktop still showing).
+    private var lockConfirmed = false
     static let lockOutcomePrefix = "abyss-lock-outcome: "
     private var lockCrashes: [Double] = []
     /// Crashes within `lockCrashWindow` seconds before anchor stops restarting.
@@ -349,7 +353,8 @@ public final class Supervisor {
                     "\($0.spec.name)=\($0.isUp ? "up" : "down")(\($0.restarts))"
                 }.joined(separator: ",")
                 reply.set("detail", detail)
-                reply.set("locked", lockChild.fd >= 0)
+                reply.set("locking", lockChild.fd >= 0)
+                reply.set("locked", lockChild.fd >= 0 && lockConfirmed)
                 // Read from the environment rather than remembered from the
                 // plan, because the question a caller is really asking is "what
                 // bus will a child of this session see?" — and the environment
@@ -403,6 +408,7 @@ public final class Supervisor {
         lockPipe = fds[0]
         lockPending = []
         lockOutcome = nil
+        lockConfirmed = false
         log("lock screen up (pid \(lockChild.pid)) — the session is locking")
         return nil
     }
@@ -424,7 +430,9 @@ public final class Supervisor {
             let line = String(decoding: lockPending[..<nl], as: UTF8.self)
             lockPending.removeSubrange(...nl)
             if line.hasPrefix(Supervisor.lockOutcomePrefix) {
-                lockOutcome = String(line.dropFirst(Supervisor.lockOutcomePrefix.count))
+                let word = String(line.dropFirst(Supervisor.lockOutcomePrefix.count))
+                if word == "locked" { lockConfirmed = true; log("the session is locked") }
+                else { lockOutcome = word }
             } else {
                 let b = Array((line + "\n").utf8)
                 _ = b.withUnsafeBufferPointer { write(2, $0.baseAddress, b.count) }
@@ -439,6 +447,7 @@ public final class Supervisor {
     private func lockExited() {
         _ = ap_child_reap(&lockChild, nil)
         drainLock(final: true)
+        lockConfirmed = false
         let said = lockOutcome ?? ""
         if compositorIsGone() { compositorExited(); return }
         if said == "unlocked" {

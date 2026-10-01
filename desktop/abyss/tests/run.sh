@@ -259,6 +259,10 @@ if [ "$live" -eq 1 ]; then
   # restarting a lock screen that died, and no application offered the lock.
   echo "== locking the session =="
   quiet "$root/abyss/tests/live-locksession.sh"
+  # The idle policy (P16.3): idleness locks and asks the machine to sleep,
+  # as energy.ini says; an inhibitor or input holds it off.
+  echo "== the idle policy =="
+  quiet "$root/abyss/tests/live-idlepolicy.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

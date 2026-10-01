@@ -229,6 +229,16 @@ public func defaultSession(shellBinary: String,
                                         env: env, requires: [busSocket]))
     }
 
+    // ----------------------------------------------------------------- idle
+    // The idle policy (PHASE16 P16.3): lock when the display sleeps, ask the
+    // machine to sleep after energy.ini's delay. A Wayland client of the
+    // ordinary socket (ext-idle-notify is everyone's), waiting for it as the
+    // shell does.
+    if mode == .desktop, !without.contains("idle") {
+        components.append(ComponentSpec(name: "idle", argv: [serviceDirectory + "/abyss-idle"],
+                                        env: shared, requires: compositorSocket.map { [$0] } ?? []))
+    }
+
     // ----------------------------------------------------------------- lock
     var lockScreen: ComponentSpec?
     if mode == .desktop, !without.contains("lock") {

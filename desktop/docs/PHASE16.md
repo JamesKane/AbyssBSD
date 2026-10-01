@@ -150,6 +150,22 @@ P14.8 and nothing has read. One idea of idle (§2.86): an inhibitor holds both.
 *Verified:* with seconds for minutes, idleness locks; an inhibitor holds it off;
 the system-sleep request reaches the helper (P16.4's stand-in).
 
+✅ **P16.3 done 2026-10-01.** `abyss-idle`, anchor's `idle` component: an
+ext-idle-notify **v1** client (inhibitors count), re-armed when `energy.ini`
+changes. When the display's time comes it asks anchor to lock, if a password
+is required. When the computer's time comes it locks the same way, waits for
+anchor to say the compositor **has** locked, then sends `power sleep` to the
+root daemon. If the lock never comes, it does not ask. The setting is Energy
+Saver's new checkbox, "Require a password to wake this computer from sleep
+or the screen saver" (`require_password`, on by default), rather than a
+Security pane: Jaguar's catalogue has none, and Energy Saver owns both
+delays. The power wire (`PowerClient`, `PowerAction`) is in `Login`; the
+daemon's half is P16.4. Until then a real session logs that the machine
+cannot sleep yet. `live-idlepolicy.sh`, 6 claims, five faults injected and
+caught; Energy Saver's test clicks the checkbox; its goldens moved on
+purpose. **Found:** anchor's `locked` meant "a lock screen is running", and
+the first sleep request went with the desktop still showing (HANDOFF §2.104).
+
 **P16.4 — suspend, lid and power (M).** Sleep, Restart and Shut Down in the
 system menu become real, through the daemon (root): `acpiconf -s 3`,
 `shutdown -r now`, `shutdown -p now`. The session is locked *before* the

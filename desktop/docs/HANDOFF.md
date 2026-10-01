@@ -730,6 +730,34 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.104 "A lock screen is running" is not "locked"
+(PHASE16 P16.3, the idle policy.)
+
+The idle policy locks before it asks the machine to sleep. Its first version
+then waited for anchor's status to say `locked`, and anchor said so as soon as
+the lock screen *process* existed. The sleep request went out before the
+compositor had hidden anything. On metal, that machine wakes showing the
+desktop. Claim 6 of `live-idlepolicy.sh` caught it. That claim sets the display
+to never sleep, so the only lock is the one the sleep path itself asks for.
+Claims 1 and 5 could not have caught it: in 1 the display's lock had long since
+happened, and in 5 no lock is wanted.
+
+The word now travels the pipe from P16.2c. When the compositor sends `locked`,
+the lock screen writes `abyss-lock-outcome: locked`. anchor's status reports
+`locking` while the lock screen runs and `locked` only after that line. If it
+does not come within five seconds, `abyss-idle` does not ask for sleep at all:
+a computer that stays awake is better than one that wakes unlocked. P16.4's
+daemon, which does the suspending, must hold the same line.
+
+A second trap, in the test. `energy.ini` rewritten with `printf >` was seen on
+Linux (inotify reports the file) and **not on FreeBSD**. kqueue watches the
+config *directory*, and an in-place write changes no entry in it.
+`Config.store`, which the Energy pane uses, writes a new file and renames it
+over the old one, and the watcher sees that. The test writes the same way now.
+A hand edit in an editor that saves in place will not be noticed on FreeBSD
+until something else changes in the directory. That is PoolConfig's existing
+behaviour, not new.
+
 ### 2.103 Who may lock, and how anchor knows a lock screen crashed
 (PHASE16 P16.2c, the ways to lock.)
 
