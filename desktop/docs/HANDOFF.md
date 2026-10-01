@@ -730,6 +730,42 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.100 Only root can check a password, and `nullok` means what it says
+(PHASE16 P16.1, the authenticator.)
+
+**Nothing unprivileged on FreeBSD can verify a password**, not even a person
+checking their own: OpenPAM's `pam_unix` reads `master.passwd`, and only root
+can (PHASE16 §4.2, measured). There is no `unix_chkpwd`-style setuid helper in
+base. So the lock screen and the login window ask one root daemon,
+`abyss-loginwindow`, on a 0666 socket. **The socket's mode only lets the call
+arrive.** Whose password is checked comes from the kernel (`ap_peer_uid`); the
+request names nobody. CurrentIPC gained `Server(path:mode:)` and
+`connect(path:)` for this; every other service keeps its 0600 socket in the
+session's runtime directory.
+
+**The PAM stack is its own (`abyss/etc/pam.d/abyss`), never `include login`.**
+`login` begins with `pam_self`, which passes when the caller is the target
+user, and the caller is the root daemon, so a root session would unlock on
+anything. `live-authenticator.sh` fails if the shipped stack names `pam_self`
+or includes anything.
+
+**Found while testing:** a claim that "root, with a wrong password, is
+refused" failed in the build VM. **Root there has no password at all**
+(`master.passwd`'s field is empty), and `pam_unix`'s `nullok` succeeds for an
+empty hash without asking anything. That is FreeBSD's own `system` stack's
+behaviour, and the right one for a lock: an account with no password has
+nothing to protect it, and the live medium's account is one. The test now
+states the rule with a throwaway password-less account. A test that assumes
+root has a password will lie in that VM.
+
+Failed answers make the next try wait, per uid (two typos free, then 2 s, 4 s,
+… five minutes), and during a wait the daemon refuses **without asking PAM**,
+so a wait is not a free guess. The password is never logged; every copy the
+code holds is wiped when the answer is known (Swift's own copies inside `Msg`
+are best-effort). The daemon is one connection at a time with CurrentIPC's
+2-second request timeout, so a client that connects and says nothing holds
+the others up by at most that.
+
 ### 2.99 A frame callback outlives the surface that asked for it
 (PHASE15 P15.6, 2026-10-01: Grab's overlay, on FreeBSD only.)
 

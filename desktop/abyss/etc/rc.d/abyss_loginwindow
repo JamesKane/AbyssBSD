@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# PROVIDE: abyss_loginwindow
+# REQUIRE: LOGIN
+# BEFORE: abyss_desktop
+# KEYWORD: shutdown
+#
+# The session's privileged half (desktop/docs/PHASE16.md, P16.1): answers "is
+# this my password?" for whoever asks, about themselves, at
+# /var/run/abyss-loginwindow.sock. Root, because only root can read
+# master.passwd.
+
+. /etc/rc.subr
+
+name="abyss_loginwindow"
+rcvar="abyss_loginwindow_enable"
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-f -P ${pidfile} -o /var/log/abyss-loginwindow.out /usr/local/bin/abyss-loginwindow"
+start_postcmd="abyss_loginwindow_poststart"
+
+abyss_loginwindow_poststart()
+{
+	# Up only when a client could reach it: the socket exists (§2.42).
+	i=0
+	while [ ! -S /var/run/abyss-loginwindow.sock ] && [ $i -lt 50 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+	if [ -S /var/run/abyss-loginwindow.sock ]; then
+		echo "abyss: the authenticator is up"
+	else
+		echo "abyss: THE AUTHENTICATOR NEVER STARTED (see /var/log/abyss-loginwindow.out)"
+	fi
+}
+
+load_rc_config $name
+run_rc_command "$1"

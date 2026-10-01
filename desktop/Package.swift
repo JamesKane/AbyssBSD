@@ -16,6 +16,13 @@ let soundLibraries: [LinkerSetting] = [.linkedLibrary("nv"), .linkedLibrary("mix
 #else
 let soundLibraries: [LinkerSetting] = []
 #endif
+// OpenPAM is in FreeBSD's base; the Linux dev box has no PAM headers, and the
+// authenticator refuses there (PHASE16 P16.1).
+#if os(FreeBSD)
+let pamLibraries: [LinkerSetting] = [.linkedLibrary("pam")]
+#else
+let pamLibraries: [LinkerSetting] = []
+#endif
 
 let package = Package(
     name: "AbyssBSD",
@@ -337,6 +344,15 @@ let package = Package(
         .target(name: "SettingsRun",
                 dependencies: ["Settings", "SettingsWire", "CurrentIPC", "CPlatform", "Spawn", "Vents", "Volumes"],
                 path: "de/settingsrun"),
+        // The session's authenticator (PHASE16 P16.1): one root daemon every
+        // user may ask about their own password. CPAM holds PAM's
+        // conversation; Login is the wire, the limiter and the client.
+        .target(name: "CPAM", path: "de/cpam", sources: ["cpam.c"], publicHeadersPath: "include",
+                linkerSettings: pamLibraries),
+        .target(name: "Login", dependencies: ["CurrentIPC", "CPlatform", "CPAM"], path: "de/login"),
+        .executableTarget(name: "abyss-loginwindow", dependencies: ["Login", "CurrentIPC"],
+                          path: "de/loginwindowbin"),
+        .executableTarget(name: "abyss-loginctl", dependencies: ["Login"], path: "de/loginctl"),
         .executableTarget(name: "abyss-settings",
                           dependencies: ["SettingsRun", "CurrentIPC"], path: "de/settingsbin"),
         .executableTarget(name: "abyss-settingsctl",
@@ -627,6 +643,11 @@ let package = Package(
             // away from the theme token it was copied from.
             dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua", "AquaDraw"],
             path: "Tests/DBusPortalTests"
+        ),
+        .testTarget(
+            name: "LoginTests",
+            dependencies: ["Login", "CurrentIPC"],
+            path: "Tests/LoginTests"
         ),
         .testTarget(
             name: "SettingsTests",

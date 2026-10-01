@@ -67,6 +67,22 @@ delay), and nothing is logged but the outcome. PAM service `abyss`
 settings helper does. *Verified (guest, with a throwaway account):* the right
 password is accepted, a wrong one refused with the delay, another user's
 password refused whatever it is, and the password never in a log.
+✅ **Done 2026-10-01.** `Login` (pure: the `Limiter` — two typos free, then
+2 s, 4 s, … five minutes per uid, refusing unasked while it runs; the wire; the
+`Authenticator`'s decision; the client), `CPAM` (PAM's conversation in C,
+wiping its copies), `abyss-loginwindow` (root, `/var/run/abyss-loginwindow.sock`
+0666, the caller from `ap_peer_uid`) and `abyss-loginctl`. CurrentIPC can now
+bind and connect an explicit path. The PAM stack ships from the tree
+(`abyss/etc/pam.d/abyss`: `pam_unix` with `nullok`, **no `include login`** —
+its `pam_self` would pass a root session on anything) with its rc.d script
+(`abyss/etc/rc.d/abyss_loginwindow`); the medium carries both and enables it,
+and an installed desktop enables it for every account. 8 unit tests;
+`live-authenticator.sh` (guest, as root, two throwaway accounts asking as
+themselves; Linux: the refusal in words). **Found:** the build VM's root has
+no password, so `nullok` accepts it with anything — FreeBSD's rule for an
+account with nothing to check, not a hole (HANDOFF §2.100). The medium's and
+installed system's new checks (`live-medium.sh`, `live-desktop.sh`) are in the
+`--full` lane and have not run yet.
 
 **P16.2 — the screen lock (M–L).** `undertow` serves `ext-session-lock-v1`
 (wlroots' helper): while locked, every output shows the lock client's surface

@@ -361,6 +361,9 @@ public func rcConf(_ plan: InstallPlan) -> String {
             out += "abyss_settings_enable=\"YES\"\n"
             out += "abyss_settings_admin=\"\(admin.name)\"\n"
         }
+        // The session's authenticator (PHASE16 P16.1): for every account, so
+        // anyone's screen can be unlocked — and later, the login window.
+        out += "abyss_loginwindow_enable=\"YES\"\n"
     }
     return out
 }

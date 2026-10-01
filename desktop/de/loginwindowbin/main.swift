@@ -1,0 +1,92 @@
+// abyss-loginwindow — the session's privileged half (PHASE16 P16.1).
+//
+//   abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once]
+//
+// Root. Answers one question, for whoever asks, about themselves: *is this my
+// password?* The lock screen asks it (P16.2), and the login window will
+// (P16.5). The caller is who the kernel says (`ap_peer_uid`); a request names
+// nobody. A run of wrong answers makes the next one wait (`Login.Limiter`).
+// The password is never logged.
+//
+// Later passes give it its other jobs — starting sessions, sleep and power
+// (PHASE16 §6.1: one daemon, greetd-shaped). Linux has no PAM here, and it
+// says so rather than answering.
+
+import CurrentIPC
+import Login
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+func emit(_ fd: Int32, _ s: String) {
+    let b = Array((s + "\n").utf8)
+    _ = b.withUnsafeBufferPointer { write(fd, $0.baseAddress, b.count) }
+}
+
+var socketPath = Login.defaultSocket, service = Login.defaultService, once = false
+var args = Array(CommandLine.arguments.dropFirst())
+var i = 0
+@MainActor func value(_ flag: String) -> String {
+    i += 1
+    guard i < args.count else { emit(2, "abyss-loginwindow: \(flag) needs a value"); exit(2) }
+    return args[i]
+}
+while i < args.count {
+    switch args[i] {
+    case "--socket": socketPath = value("--socket")
+    case "--pam-service": service = value("--pam-service")
+    case "--once": once = true
+    case "-h", "--help":
+        emit(1, "usage: abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once]")
+        exit(0)
+    default:
+        emit(2, "abyss-loginwindow: unknown option '\(args[i])'"); exit(2)
+    }
+    i += 1
+}
+
+#if !os(FreeBSD)
+// The PAM the authenticator is written against is OpenPAM's, in FreeBSD's
+// base; the Linux dev box has no PAM headers. Refuse in words rather than
+// answer "no" to every password.
+emit(2, "abyss-loginwindow: this platform has no PAM to ask — the authenticator is FreeBSD's")
+exit(1)
+#endif
+
+// Only root can read master.passwd, so only root can answer (PHASE16 §4.2).
+if geteuid() != 0 {
+    emit(2, "abyss-loginwindow: not running as root — PAM can check no password but root's own")
+}
+
+signal(SIGPIPE, SIG_IGN)
+let server: Current.Server
+// 0666: every user — every session, and the login window's own — may ask.
+// What they may ask is limited by who the kernel says they are, not by this.
+do { server = try Current.Server(path: socketPath, mode: 0o666) } catch {
+    emit(2, "abyss-loginwindow: cannot bind \(socketPath): \(error)"); exit(1)
+}
+emit(2, "loginwindow: answering at \(socketPath), PAM service \(service)")
+
+func now() -> UInt64 {
+    var ts = timespec()
+    clock_gettime(CLOCK_MONOTONIC, &ts)
+    return UInt64(ts.tv_sec) &* 1_000_000_000 &+ UInt64(ts.tv_nsec)
+}
+
+var auth = Authenticator.system(service: service)
+while true {
+    guard let client = try? server.accept() else { continue }
+    let uid = loginPeerUID(client)
+    if var request = try? Current.receive(on: client) {
+        let (reply, line) = auth.handle(uid: uid, request: request, now: now())
+        request = Msg()
+        try? Current.send(reply, on: client)
+        emit(2, "loginwindow: \(line)")
+    }
+    close(client)
+    if once { break }
+}
+server.shutdownAndUnlink()

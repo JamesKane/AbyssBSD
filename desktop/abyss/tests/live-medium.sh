@@ -154,6 +154,9 @@ echo "ok: it chose the headless backend, and said so"
 grep -q "the settings helper is up, for uid" "$work/boot.log" \
   || fail "the live session never started the settings helper (PHASE14 P14.3)"
 echo "ok: the settings helper is up beside the installer, as root, for the live user"
+grep -q "abyss: the authenticator is up" "$work/boot.log" \
+  || fail "rc never started the authenticator (PHASE16 P16.1)"
+echo "ok: the authenticator is up (PHASE16 P16.1)"
 grep -q "the installer service is up, for uid" "$work/boot.log" \
   || fail "the medium has no installer service, so its disk spoke is empty"
 grep -q "AquaDemo: installer is up" "$work/boot.log" \

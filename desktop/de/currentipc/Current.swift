@@ -59,7 +59,12 @@ public enum Current {
     /// Connect to a service, returning the connected socket. The caller owns it
     /// and must `close` it.
     public static func connect(_ service: String) throws -> Int32 {
-        let path = try socketPath(service)
+        try connect(path: socketPath(service))
+    }
+
+    /// Connect to a socket at an explicit path — a system service outside any
+    /// session's runtime directory (the authenticator, PHASE16 P16.1).
+    public static func connect(path: String) throws -> Int32 {
         let sock = socket(AF_UNIX, sockStream, 0)
         guard sock >= 0 else { throw CurrentError.system(errno, "socket") }
         var addr = sockaddr_un()
@@ -165,8 +170,14 @@ public enum Current {
         private var closed = false
 
         /// Bind the service socket, replacing a stale one left by a crash.
-        public init(service: String, backlog: Int32 = 16) throws {
-            let p = try Current.socketPath(service)
+        public convenience init(service: String, backlog: Int32 = 16) throws {
+            try self.init(path: Current.socketPath(service), mode: 0o600, backlog: backlog)
+        }
+
+        /// Bind a socket at an explicit path with an explicit mode. A system
+        /// service every user may reach is 0666 **and asks the kernel who
+        /// called** (`ap_peer_uid`): the mode only lets the call arrive.
+        public init(path p: String, mode: mode_t, backlog: Int32 = 16) throws {
             self.path = p
             let s = socket(AF_UNIX, sockStream, 0)
             guard s >= 0 else { throw CurrentError.system(errno, "socket") }
@@ -189,8 +200,9 @@ public enum Current {
                 close(s)
                 throw CurrentError.system(e, "bind \(p)")
             }
-            // Only this user may talk to the service.
-            _ = chmod(p, 0o600)
+            // Only this user may talk to the service — unless the caller said
+            // otherwise, for a reason it gives.
+            _ = chmod(p, mode)
             guard listen(s, backlog) == 0 else {
                 let e = errno
                 close(s)

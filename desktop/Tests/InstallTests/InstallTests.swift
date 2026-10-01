@@ -739,4 +739,15 @@ extension InstallTests {
    $ zpool export abyss
 
 """
+
+    /// PHASE16 P16.1: a machine that installs the desktop starts the
+    /// authenticator — for every account, administrator or not.
+    func testTheAuthenticatorStartsWheneverTheDesktopIsInstalled() {
+        let desktop = InstallPlan(disk: "ada0", sets: ["base.txz", InstallPlan.desktopSet],
+                                  accounts: [Account(name: "guest", passwordHash: "$6$g")])
+        XCTAssertTrue(rcConf(desktop).contains("abyss_loginwindow_enable=\"YES\""), rcConf(desktop))
+        let plain = InstallPlan(disk: "ada0", sets: ["base.txz"],
+                                accounts: [Account(name: "guest", passwordHash: "$6$g")])
+        XCTAssertFalse(rcConf(plain).contains("abyss_loginwindow"), "a plain FreeBSD gets no desktop services")
+    }
 }

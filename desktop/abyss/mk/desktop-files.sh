@@ -8,7 +8,8 @@
 # `.build/debug`, because that directory is full of SwiftPM's own intermediates.
 BINARIES="undertow anchor abyssctl AquaDemo abyss-portal abyss-dbus abyss-theme
           abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl
-          fathom abyss-settings abyss-settingsctl abyss-appgen"
+          fathom abyss-settings abyss-settingsctl abyss-appgen
+          abyss-loginwindow abyss-loginctl"
 
 # Data read at run time, from the tree, installed under /usr/local/share/abyss.
 DATA_DIRS="themes fonts"

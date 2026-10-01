@@ -180,6 +180,9 @@ grep -q "abyss: the settings helper is up, for uid" "$work/installed.log" \
   || { grep -i 'abyss: .*settings' "$work/installed.log" | sed 's/^/    /'
        fail "the installed machine did not start the settings helper (PHASE14 P14.3)"; }
 echo "ok: ...and System Preferences' privileged half, as root, for that administrator"
+grep -q "abyss: the authenticator is up" "$work/installed.log" \
+  || fail "the installed machine did not start the authenticator (PHASE16 P16.1)"
+echo "ok: ...and the authenticator (PHASE16 P16.1)"
 
 for surface in abyss.wallpaper abyss.menubar abyss.dock; do
   grep -q "mapped .*\[$surface\]" "$work/installed.log" \

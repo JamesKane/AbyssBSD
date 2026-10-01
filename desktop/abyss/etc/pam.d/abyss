@@ -1,0 +1,13 @@
+#
+# PAM service `abyss`: the authenticator behind the lock screen and the login
+# window (desktop/docs/PHASE16.md, P16.1). Asked by abyss-loginwindow, as root,
+# about the account of whoever is calling.
+#
+# Its own stack — NOT `include login`. login's stack begins with pam_self,
+# which passes whenever the caller is the target user; the caller here is the
+# root daemon, so a root session's screen would unlock with no password.
+# nullok, as `system` has it: an account with no password (the live medium's)
+# can still unlock its own screen.
+#
+auth		required	pam_unix.so		no_warn try_first_pass nullok
+account		required	pam_unix.so

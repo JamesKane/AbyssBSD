@@ -286,8 +286,9 @@ fingerprint() {
       [ -f "$builddir/$b" ] && { sha256 -q "$builddir/$b" 2>/dev/null || sha256sum "$builddir/$b"; }
     done
     # The themes are data the medium carries (PHASE11 P11.2) — a theme edit
-    # must rebuild the image, not hit a cache built before it.
-    find "$root/themes" "$root/fonts" -type f | sort | while read -r f; do
+    # must rebuild the image, not hit a cache built before it. So are the rc.d
+    # scripts and PAM stack under abyss/etc (PHASE16 P16.1).
+    find "$root/themes" "$root/fonts" "$root/abyss/etc" -type f | sort | while read -r f; do
       sha256 -q "$f" 2>/dev/null || sha256sum "$f"
     done
     pkg query '%n-%v' 2>/dev/null | sort
@@ -759,6 +760,12 @@ run_rc_command "$1"
 RCD
 sudo chmod 755 "$de/etc/rc.d/abyss_settings"
 
+# The session's authenticator (PHASE16 P16.1) and its PAM stack, from the tree
+# — the same files live-authenticator.sh runs against.
+sudo install -m 755 "$root/abyss/etc/rc.d/abyss_loginwindow" "$de/etc/rc.d/abyss_loginwindow"
+sudo mkdir -p "$de/etc/pam.d"
+sudo install -m 644 "$root/abyss/etc/pam.d/abyss" "$de/etc/pam.d/abyss"
+
 say "== abyss.tzst — the desktop, as a distribution set"
 # **zstd, not xz, and the name says so.** On the build guest `tar -cJf` over
 # this tree is 48 seconds of the 92 a whole medium costs — xz at level 6,
@@ -792,6 +799,9 @@ abyss_desktop_enable="NO"
 # …and abyss_settings for the same reason: the live session starts the helper
 # itself, beside the installer (below).
 abyss_settings_enable="NO"
+# The authenticator answers whoever asks, about themselves — the live user's
+# lock screen too (PHASE16 P16.1).
+abyss_loginwindow_enable="YES"
 
 # **The GPU driver, and the thing that lets an unprivileged session use it.**
 # `kld_list` rather than loader.conf, which is what FreeBSD's own drm-kmod

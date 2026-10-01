@@ -243,6 +243,10 @@ if [ "$live" -eq 1 ]; then
   # real sysrc write to a scratch rc.conf.
   echo "== the settings helper =="
   quiet "$root/abyss/tests/live-settings.sh"
+  # The session's authenticator (PHASE16 P16.1): as root, against the PAM
+  # stack the medium ships, each account asking about itself (Linux: refuses).
+  echo "== the authenticator =="
+  quiet "$root/abyss/tests/live-authenticator.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration
