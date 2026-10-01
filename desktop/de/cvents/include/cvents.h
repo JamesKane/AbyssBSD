@@ -21,6 +21,7 @@
 #define ABYSS_CVENTS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 /* ---- sysctl ---------------------------------------------------------- */
 
@@ -113,5 +114,31 @@ long av_mixer_describe(int unit, char *buf, size_t len);
  * the user's to change — no privilege. 0 on success, -1 with errno. */
 int av_mixer_set(int unit, const char *control, int left, int right);
 int av_mixer_mute(int unit, const char *control, int muted);
+
+/*
+ * Processes (PHASE15 P15.7) — Activity Monitor's table. FreeBSD reads
+ * `kern.proc.proc` (one kinfo_proc per process, no kvm); Linux reads /proc.
+ * The same struct either way, so the Swift above it does not know which.
+ */
+struct av_proc {
+    int32_t pid;
+    int32_t ppid;
+    uint32_t uid;
+    int32_t threads;
+    uint64_t rss_bytes;     /* resident memory */
+    uint64_t vsize_bytes;   /* virtual size */
+    uint64_t cpu_usec;      /* CPU time used, user + system, microseconds */
+    int64_t start_sec;      /* when it started, seconds since the epoch */
+    char state;             /* R S D T Z I … as each system spells it */
+    uint8_t system;         /* a kernel process or thread: never signalled */
+    char name[40];          /* the command, truncated */
+};
+
+/* Fill up to `max` processes; returns how many, or -1 with errno set. Asked
+ * again with a bigger buffer when it returns `max`. */
+int av_proc_list(struct av_proc *out, int max);
+
+/* Physical memory, and how much is available without paging. Returns 0. */
+int av_memory(uint64_t *total_bytes, uint64_t *available_bytes);
 
 #endif /* ABYSS_CVENTS_H */

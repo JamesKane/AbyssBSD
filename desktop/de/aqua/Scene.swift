@@ -38,6 +38,7 @@ public enum SceneKind: Sendable {
     case terminal    // Terminal (PHASE15 P15.4b)
     case textedit    // TextEdit (PHASE15 P15.5)
     case grab        // Grab (PHASE15 P15.6)
+    case activity    // Activity Monitor (PHASE15 P15.7)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -216,6 +217,27 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
+    case .activity:
+        // A fixed table: names, users and numbers that do not change from run to run.
+        func p(_ pid: Int32, _ name: String, _ uid: UInt32, _ rss: UInt64, _ thr: Int32, sys: Bool = false) -> Processes.Info {
+            Processes.Info(pid: pid, uid: uid, threads: thr, residentBytes: rss, started: 100, system: sys, name: name)
+        }
+        let procs = [p(1, "init", 0, 1_200_000, 1), p(14, "kernel", 0, 0, 230, sys: true),
+                     p(812, "undertow", 1001, 96_000_000, 6), p(840, "AquaDemo", 1001, 58_000_000, 3),
+                     p(901, "firefox", 1001, 412_000_000, 64), p(1203, "sh", 1001, 2_400_000, 1)]
+        let before = Processes.Sample(processes: procs, at: 0)
+        let cpu: [Int32: UInt64] = [812: 120_000, 840: 40_000, 901: 310_000]
+        let after = Processes.Sample(processes: procs.map { q in
+            Processes.Info(pid: q.pid, uid: q.uid, threads: q.threads, residentBytes: q.residentBytes,
+                           cpuMicroseconds: cpu[q.pid] ?? 0, started: q.started, system: q.system, name: q.name)
+        }, at: 1_000_000, memoryTotal: 16 << 30, memoryAvailable: 9 << 30)
+        var v = ActivityView()
+        v.mineOnly = false
+        v.rows = ProcessTable(now: after, before: before).view(filter: .all, sortBy: .cpu, ascending: false,
+                                                               userName: { $0 == 0 ? "root" : "abyss" })
+        v.selected = v.rows.first { $0.info.pid == 840 }?.info.identity
+        v.memoryTotal = 16 << 30; v.memoryAvailable = 9 << 30; v.cpuTotal = 11.8
+        _ = paintActivity(cr, w: cw, h: ch, view: v, userName: { $0 == 0 ? "root" : "abyss" })
     case .grab:
         _ = paintGrabPanel(cr, w: cw, h: ch, status: "Choose what to capture.")
     case .textedit:

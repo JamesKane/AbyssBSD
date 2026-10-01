@@ -65,11 +65,12 @@ var i = 0
 while i < args.count {
     if args[i] == "--dhcp" { fields["mode"] = "dhcp"; i += 1; continue }
     if args[i] == "--open" { fields["open"] = "1"; i += 1; continue }
+    if args[i] == "--force" { fields["force"] = "1"; i += 1; continue }
     guard i + 1 < args.count else { emit(2, "abyss-settingsctl: \(args[i]) needs a value"); exit(2) }
     switch args[i] {
     case "--service": serviceName = args[i + 1]
     case "--powerd", "--ac", "--battery", "--profile", "--interface", "--address", "--netmask", "--router", "--dns", "--default",
-         "--device", "--join", "--forget", "--passphrase":
+         "--device", "--join", "--forget", "--passphrase", "--pid", "--started", "--name":
         fields[String(args[i].dropFirst(2))] = args[i + 1]
     default: emit(2, "abyss-settingsctl: unknown option '\(args[i])'"); exit(2)
     }
@@ -125,6 +126,15 @@ if verb != "read" && verb != "scan" {
     case "sound":
         guard let d = fields["default"] else { emit(2, "abyss-settingsctl: --default pcmN is required"); exit(2) }
         request.set("sound.default", d)       // as typed: the helper decides
+    case "signal":
+        // Quit another user's process (P15.7): which one, as the caller saw it.
+        guard let pid = fields["pid"], let started = fields["started"], let name = fields["name"] else {
+            emit(2, "abyss-settingsctl: signal needs --pid N --started SECONDS --name NAME [--force]"); exit(2)
+        }
+        request.set("signal.pid", pid)
+        request.set("signal.started", started)
+        request.set("signal.name", name)
+        request.set("signal.force", fields["force"] != nil)
     default:
         emit(2, "abyss-settingsctl: there is no \(kind) plan"); exit(2)
     }
@@ -177,6 +187,8 @@ case "read":
         emit(1, "sound: default pcm\(s.defaultUnit)")
     case .success(.powerProfile(let p)):
         emit(1, "power profile: \(p.profile.rawValue)")
+    case .success(.signal):
+        emit(1, "signal: nothing to read")
     case .success(.wifi):
         emit(2, "abyss-settingsctl: read wifi is answered separately"); exit(1)
     case .failure(let why):

@@ -348,6 +348,11 @@ if [ "$live" -eq 1 ]; then
   # Escape (an exclusive overlay's keyboard), Timed Screen.
   echo "== Grab =="
   quiet "$root/abyss/tests/live-grab.sh"
+  # Activity Monitor (P15.7): processes started by the test, filtered, quit
+  # and force quit from the window, and gone; another user's through the
+  # root helper (dry run, FreeBSD).
+  echo "== Activity Monitor =="
+  quiet "$root/abyss/tests/live-activity.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="

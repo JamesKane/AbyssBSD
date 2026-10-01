@@ -331,7 +331,7 @@ let package = Package(
         .target(name: "Settings", path: "de/settings"),
         .target(name: "SettingsWire", dependencies: ["Settings", "CurrentIPC"], path: "de/settingswire"),
         .target(name: "SettingsRun",
-                dependencies: ["Settings", "SettingsWire", "CurrentIPC", "CPlatform", "Spawn"],
+                dependencies: ["Settings", "SettingsWire", "CurrentIPC", "CPlatform", "Spawn", "Vents"],
                 path: "de/settingsrun"),
         .executableTarget(name: "abyss-settings",
                           dependencies: ["SettingsRun", "CurrentIPC"], path: "de/settingsbin"),

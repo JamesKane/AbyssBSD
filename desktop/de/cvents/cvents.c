@@ -366,3 +366,147 @@ int av_mixer_mute(int unit, const char *control, int muted) {
 }
 
 #endif
+
+/* ------------------------------------------------------------ processes (P15.7) */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <dirent.h>
+
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#include <sys/sysctl.h>
+#include <sys/user.h>
+#include <sys/proc.h>
+
+int av_proc_list(struct av_proc *out, int max) {
+    int mib[3] = { CTL_KERN, KERN_PROC, KERN_PROC_PROC };
+    size_t len = 0;
+    if (sysctl(mib, 3, NULL, &len, NULL, 0) < 0) return -1;
+    len += len / 4 + 16 * sizeof(struct kinfo_proc);   /* it grows while we ask */
+    struct kinfo_proc *kp = malloc(len);
+    if (!kp) return -1;
+    if (sysctl(mib, 3, kp, &len, NULL, 0) < 0) { int e = errno; free(kp); errno = e; return -1; }
+    int n = (int)(len / sizeof(struct kinfo_proc));
+    long page = sysconf(_SC_PAGESIZE);
+    int count = 0;
+    for (int i = 0; i < n && count < max; i++) {
+        struct kinfo_proc *k = &kp[i];
+        struct av_proc *p = &out[count++];
+        memset(p, 0, sizeof(*p));
+        p->pid = k->ki_pid;
+        p->ppid = k->ki_ppid;
+        p->uid = k->ki_ruid;
+        p->threads = k->ki_numthreads;
+        p->rss_bytes = (uint64_t)k->ki_rssize * (uint64_t)page;
+        p->vsize_bytes = (uint64_t)k->ki_size;
+        p->cpu_usec = (uint64_t)k->ki_runtime;
+        p->start_sec = (int64_t)k->ki_start.tv_sec;
+        static const char states[] = " IRSTZWL";   /* SIDL SRUN SSLEEP SSTOP SZOMB SWAIT SLOCK */
+        p->state = (k->ki_stat > 0 && k->ki_stat < (int)sizeof(states) - 1) ? states[(int)k->ki_stat] : '?';
+        p->system = (k->ki_flag & P_SYSTEM) ? 1 : 0;
+        strncpy(p->name, k->ki_comm, sizeof(p->name) - 1);
+    }
+    free(kp);
+    return count;
+}
+
+int av_memory(uint64_t *total, uint64_t *available) {
+    unsigned long phys = 0; size_t l = sizeof(phys);
+    sysctlbyname("hw.physmem", &phys, &l, NULL, 0);
+    unsigned int freep = 0, inact = 0, laund = 0; l = sizeof(freep);
+    sysctlbyname("vm.stats.vm.v_free_count", &freep, &l, NULL, 0); l = sizeof(inact);
+    sysctlbyname("vm.stats.vm.v_inactive_count", &inact, &l, NULL, 0); l = sizeof(laund);
+    sysctlbyname("vm.stats.vm.v_laundry_count", &laund, &l, NULL, 0);
+    long page = sysconf(_SC_PAGESIZE);
+    *total = phys;
+    /* Free and inactive pages can be had without paging anything out. */
+    *available = ((uint64_t)freep + inact) * (uint64_t)page;
+    (void)laund;
+    return 0;
+}
+
+#elif defined(__linux__)
+
+static int64_t linux_btime(void) {
+    FILE *f = fopen("/proc/stat", "r");
+    if (!f) return 0;
+    char line[256]; int64_t bt = 0;
+    while (fgets(line, sizeof(line), f)) { if (sscanf(line, "btime %lld", (long long *)&bt) == 1) break; }
+    fclose(f);
+    return bt;
+}
+
+int av_proc_list(struct av_proc *out, int max) {
+    DIR *d = opendir("/proc");
+    if (!d) return -1;
+    long hz = sysconf(_SC_CLK_TCK), page = sysconf(_SC_PAGESIZE);
+    int64_t btime = linux_btime();
+    int count = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) && count < max) {
+        char *end; long pid = strtol(e->d_name, &end, 10);
+        if (*end || pid <= 0) continue;
+        char path[64], buf[2048];
+        snprintf(path, sizeof(path), "/proc/%ld/stat", pid);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;                         /* gone since the listing */
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f); fclose(f);
+        buf[n] = 0;
+        /* "pid (comm) state ppid …": comm may hold spaces and parentheses, so
+         * it ends at the LAST ')'. */
+        char *lp = strchr(buf, '('), *rp = strrchr(buf, ')');
+        if (!lp || !rp || rp < lp) continue;
+        struct av_proc *p = &out[count];
+        memset(p, 0, sizeof(*p));
+        p->pid = (int32_t)pid;
+        size_t cl = (size_t)(rp - lp - 1); if (cl > sizeof(p->name) - 1) cl = sizeof(p->name) - 1;
+        memcpy(p->name, lp + 1, cl);
+        char state; int ppid; unsigned long flags, utime, stime, vsize; long nthr, rss; unsigned long long start;
+        /* fields after comm: 3 state, 4 ppid, 5-8 skipped, 9 flags, 10-13 skipped,
+         * 14 utime, 15 stime, 16-19 skipped, 20 num_threads, 21 skipped,
+         * 22 starttime, 23 vsize, 24 rss */
+        if (sscanf(rp + 2, "%c %d %*d %*d %*d %*d %lu %*u %*u %*u %*u %lu %lu %*d %*d %*d %*d %ld %*d %llu %lu %ld",
+                   &state, &ppid, &flags, &utime, &stime, &nthr, &start, &vsize, &rss) != 9) continue;
+        p->state = state;
+        p->ppid = ppid;
+        p->threads = (int32_t)nthr;
+        p->cpu_usec = (uint64_t)(utime + stime) * 1000000ULL / (uint64_t)hz;
+        p->start_sec = btime + (int64_t)(start / (unsigned long long)hz);
+        p->vsize_bytes = vsize;
+        p->rss_bytes = (uint64_t)(rss > 0 ? rss : 0) * (uint64_t)page;
+        p->system = (flags & 0x00200000) ? 1 : 0;  /* PF_KTHREAD */
+        snprintf(path, sizeof(path), "/proc/%ld/status", pid);
+        if ((f = fopen(path, "r"))) {
+            char line[256];
+            while (fgets(line, sizeof(line), f)) {
+                unsigned int ruid;
+                if (sscanf(line, "Uid: %u", &ruid) == 1) { p->uid = ruid; break; }
+            }
+            fclose(f);
+        }
+        count++;
+    }
+    closedir(d);
+    return count;
+}
+
+int av_memory(uint64_t *total, uint64_t *available) {
+    *total = 0; *available = 0;
+    FILE *f = fopen("/proc/meminfo", "r");
+    if (!f) return 0;
+    char line[256]; unsigned long long v;
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "MemTotal: %llu kB", &v) == 1) *total = v * 1024ULL;
+        else if (sscanf(line, "MemAvailable: %llu kB", &v) == 1) *available = v * 1024ULL;
+    }
+    fclose(f);
+    return 0;
+}
+
+#else
+int av_proc_list(struct av_proc *out, int max) { (void)out; (void)max; errno = ENOSYS; return -1; }
+int av_memory(uint64_t *t, uint64_t *a) { *t = 0; *a = 0; return 0; }
+#endif

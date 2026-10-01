@@ -13,6 +13,7 @@ import CurrentIPC
 import Settings
 import SettingsWire
 import Spawn
+import Vents
 
 #if canImport(Glibc)
 import Glibc
@@ -141,6 +142,19 @@ public final class SettingsService {
             return radios().contains(w.device) ? []
                 : [SettingsRefusal("there is no wireless device \(w.device) on this machine"
                                    + " (it has: \(radios().joined(separator: ", ").isEmpty ? "none" : radios().joined(separator: ", ")))")]
+        case .signal(let s):
+            // **The process the window showed, still.** Between the person
+            // choosing it and this line its pid may have been freed and given
+            // to something else; signalling that would quit the wrong thing.
+            guard let now = Processes.sample() else { return [SettingsRefusal("the process table could not be read")] }
+            guard let p = now.processes.first(where: { $0.pid == s.pid }) else {
+                return [SettingsRefusal("\(s.name) (pid \(s.pid)) has already quit")]
+            }
+            if p.started != s.started || p.name != s.name {
+                return [SettingsRefusal("pid \(s.pid) is now \(p.name), not the \(s.name) that was chosen")]
+            }
+            if p.system { return [SettingsRefusal("\(p.name) is part of the kernel, and is not quit")] }
+            return []
         case .sound(let s):
             // Before sysctl.conf is written: a default the kernel then refuses
             // would leave the next boot pointing at nothing.

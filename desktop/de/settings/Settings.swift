@@ -83,6 +83,9 @@ public enum SettingsPlan: Equatable, Sendable {
     case network(NetworkPlan)
     case sound(SoundPlan)
     case wifi(WifiPlan)
+    /// Quit another user's process (P15.7, Activity Monitor): the one plan
+    /// that acts on a process rather than on the machine's configuration.
+    case signal(SignalPlan)
 
     public var kind: String {
         switch self {
@@ -91,7 +94,23 @@ public enum SettingsPlan: Equatable, Sendable {
         case .network: return "network"
         case .sound: return "sound"
         case .wifi: return "wifi"
+        case .signal: return "signal"
         }
+    }
+}
+
+// MARK: - Quitting a process (P15.7)
+
+/// Quit (SIGTERM) or Force Quit (SIGKILL) one process — **the one the window
+/// showed**: its pid, when it started and its name travel with the request,
+/// and the helper refuses a pid that has since become another process.
+public struct SignalPlan: Equatable, Sendable {
+    public var pid: Int32
+    public var force: Bool
+    public var started: Int64
+    public var name: String
+    public init(pid: Int32, force: Bool, started: Int64, name: String) {
+        self.pid = pid; self.force = force; self.started = started; self.name = name
     }
 }
 
@@ -275,6 +294,12 @@ public enum Settings {
             return s.defaultUnit < 0 ? [SettingsRefusal("pcm\(s.defaultUnit) is not a sound device's unit")] : []
         case .wifi(let w):
             return wifiProblems(w)
+        case .signal(let s):
+            if s.pid <= 1 {
+                return [SettingsRefusal(s.pid == 1 ? "pid 1 is init: quitting it would stop the machine"
+                                                   : "\(s.pid) is not a process")]
+            }
+            return s.name.isEmpty ? [SettingsRefusal("a quit must name the process it means")] : []
         }
     }
 
@@ -349,6 +374,8 @@ public enum Settings {
                     .service(name: "power_profile", action: "start", mayFail: false)]
         case .wifi(let w):
             return compileWifi(w)
+        case .signal(let s):
+            return [.tool(argv: ["kill", "-s", s.force ? "KILL" : "TERM", "\(s.pid)"], mayFail: false)]
         case .sound(let s):
             // For the next boot, then for now. The kernel refuses a unit with
             // no device behind it, which fails the plan — after sysctl.conf

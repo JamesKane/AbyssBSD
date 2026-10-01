@@ -48,6 +48,11 @@ public enum SettingsWire {
             m.set("network.dns", n.dns.map(\.description).joined(separator: " "))
         case .sound(let s):
             m.set("sound.default", "\(s.defaultUnit)")
+        case .signal(let s):
+            m.set("signal.pid", "\(s.pid)")
+            m.set("signal.force", s.force)
+            m.set("signal.started", "\(s.started)")
+            m.set("signal.name", s.name)
         case .wifi(let w):
             m.set("wifi.device", w.device)
             m.set("wifi.interface", w.interface)
@@ -116,6 +121,12 @@ public enum SettingsWire {
                 return .failure(SettingsRefusal(other.isEmpty ? "a network plan must say DHCP or manual"
                                                              : "\(other) is not DHCP or manual"))
             }
+        case "signal":
+            guard let pid = Int32(m.string("signal.pid") ?? ""), let started = Int64(m.string("signal.started") ?? "") else {
+                return .failure(SettingsRefusal("a quit must say which process, and when it started"))
+            }
+            return .success(.signal(SignalPlan(pid: pid, force: m.bool("signal.force") ?? false,
+                                               started: started, name: m.string("signal.name") ?? "")))
         case "sound":
             let said = m.string("sound.default") ?? ""
             guard let u = Int(said.hasPrefix("pcm") ? String(said.dropFirst(3)) : said) else {

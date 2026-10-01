@@ -91,6 +91,8 @@ textedit|textedit|
 textedit@2x|textedit|AQUA_SCALE=2
 grab|grab|
 grab@2x|grab|AQUA_SCALE=2
+activity|activity|
+activity@2x|activity|AQUA_SCALE=2
 menu|menu|
 menu@2x|menu|AQUA_SCALE=2
 menu-marks|menu|AQUA_MENU_MARKS=1

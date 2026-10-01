@@ -547,4 +547,24 @@ final class SettingsTests: XCTestCase {
             #endif
         }
     }
+
+    // MARK: Quitting a process (P15.7)
+
+    /// What may be asked: never init, never an unnamed pid; Quit is TERM and
+    /// Force Quit is KILL; and the plan crosses the wire whole — the start
+    /// time and name are what let the helper refuse a reused pid.
+    func testASignalPlanRefusesInitAndCompilesToKill() throws {
+        func why(_ p: SignalPlan) -> String? { Settings.problems(.signal(p)).first?.message }
+        XCTAssertNotNil(why(SignalPlan(pid: 1, force: false, started: 5, name: "init")))
+        XCTAssertNotNil(why(SignalPlan(pid: 0, force: false, started: 5, name: "kernel")))
+        XCTAssertNotNil(why(SignalPlan(pid: 500, force: false, started: 5, name: "")))
+        let quit = SignalPlan(pid: 4242, force: false, started: 1_700_000_000, name: "sleep")
+        XCTAssertNil(why(quit))
+        XCTAssertEqual(try Settings.compile(.signal(quit)), [.tool(argv: ["kill", "-s", "TERM", "4242"], mayFail: false)])
+        var force = quit; force.force = true
+        XCTAssertEqual(try Settings.compile(.signal(force)), [.tool(argv: ["kill", "-s", "KILL", "4242"], mayFail: false)])
+        var m = Msg()
+        SettingsWire.encode(.signal(force), into: &m)
+        XCTAssertEqual(try SettingsWire.decodePlan(m).get(), .signal(force))
+    }
 }

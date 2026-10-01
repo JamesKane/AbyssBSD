@@ -161,7 +161,7 @@ public final class AquaWindow: WindowDelegate {
                 installerLastDumped = installer.page
                 dumpInstallerLayout(w: w, h: h)
             }
-        case .menubar, .dock, .finder, .notify, .terminal, .textedit, .grab:
+        case .menubar, .dock, .finder, .notify, .terminal, .textedit, .grab, .activity:
             break  // not used live (MenuBar/Dock/FinderWindow own them)
         }
     }

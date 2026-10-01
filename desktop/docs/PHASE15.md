@@ -374,6 +374,30 @@ the layout's origin); Grab's own windows are in a Screen capture.
 refreshed; quitting a process of one's own with a signal, another user's
 through the helper (administrators only, as P14.3). *Verified:* a process
 started by the test appears, is quit from the window, and is gone.
+✅ **Done 2026-10-01.** The process table in `Vents.Processes`, read in
+`CVents` — FreeBSD's `kern.proc.proc` (`kinfo_proc`: no kvm, no privilege),
+Linux's `/proc` — with memory from `hw.physmem` and the free and inactive
+pages (`/proc/meminfo`). `ProcessTable`, pure and tested: %CPU is CPU time
+between two samples over the time between them, and **a process is the same one
+only if its pid and its start time agree** — a pid reused between samples is a
+new process at 0%, not an old one at 1,000%; sorting with pid as the tiebreak so
+the order holds still between refreshes. Activity Monitor (`AQUA_SCENE=activity`,
+app_id `org.abyssbsd.activitymonitor`): PID, Process Name, User, % CPU, Threads,
+Real Memory, sortable; My or All Processes; a filter that typing narrows; every
+two seconds; CPU and memory along the bottom; kernel processes dimmed and never
+offered. **Quit Process** asks (Jaguar's sheet: Quit, Force Quit, Cancel), then:
+one's own process is signalled after checking its pid is still the process
+chosen (start time and name); **another user's goes to the root helper as a new
+`signal` plan** — `kill -s TERM|KILL`, init refused, and the same identity check
+made again as root before anything runs (a pid that has quit or been reused is
+refused; so is a kernel process). `abyss-settingsctl signal` drives it from a
+shell. `live-activity.sh`, both platforms: copies of `sleep` with names of their
+own appear, typing `abyss-` narrows to exactly them, Quit ends one (gone from
+the system and the table), a SIGTERM-ignoring one survives Quit and Force Quit
+ends it; and in the guest, with the helper as root in dry run, root's `cron`
+quit from All Processes goes through the helper, which checks it and says
+`kill -s TERM <pid>` — and cron is left running. Goldens `activity`,
+`activity@2x`.
 
 **P15.8 — Disk Utility (M–L).** Volumes from `DiskInventory`, mount and unmount,
 and ZFS snapshots — list, create, roll back — through the settings helper as
