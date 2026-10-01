@@ -464,6 +464,8 @@ case "run":
     }
     // A person may change the theme while we run (P14.2).
     compositor.watchAppearance()
+    // And islands.ini, which the Islands pane writes (PHASE13 P13.7).
+    compositor.watchIslands()
     let seat: Seat
     do {
         seat = try Seat(compositor: compositor)

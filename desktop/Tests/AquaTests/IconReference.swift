@@ -21,6 +21,7 @@ enum IconsRef {
         case .sound:          speaker(cr, box)
         case .network:        globe(cr, box)
         case .international:   globe(cr, box)
+        case .islands:        break   // born a draw list (P13.7): no Swift painter to match
         case .internetIcon:   globe(cr, box)
         case .startupDisk:    drive(cr, box)
         case .general:        doc(cr, box)

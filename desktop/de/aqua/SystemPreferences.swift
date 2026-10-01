@@ -52,6 +52,7 @@ public enum PrefCatalogue {
             pane(.dock, "Dock", "Where the Dock sits, and how it magnifies."),
             pane(.general, "General", "Appearance: the theme, its colours and its settings."),
             pane(.international, "International", "Languages, formats and input sources."),
+            pane(.islands, "Islands", "Islands, Ebb and Shoals: how many, the slide, and the keys."),
             pane(.loginItems, "Login Items", "What opens when you log in."),
             pane(.myAccount, "My Account", "Your name, picture and password."),
             pane(.screenEffects, "Screen Effects", "What the screen shows while you are away."),
@@ -121,6 +122,7 @@ public struct PrefsModel: Equatable, Sendable {
         case PrefsModel.soundPane: return "The output device, its levels and mute, and who is playing."
         case PrefsModel.displaysPane: return "Arrange the displays, and choose each one's resolution and scale."
         case PrefsModel.energyPane: return "When the computer and the display sleep, and how the processor saves power."
+        case PrefsModel.islandsPane: return "How many islands each display has, whether a switch slides, and the keys."
         case PrefsModel.accountsPane: return "Who can log in, who administers this computer, and who logs in automatically."
         default: return "This pane cannot change anything yet."
         }
@@ -136,6 +138,8 @@ public struct PrefsModel: Equatable, Sendable {
     public static let displaysPane = "displays"
     /// Energy Saver (P14.8).
     public static let energyPane = "energySaver"
+    /// Islands, Ebb and Shoals (PHASE13 P13.7).
+    public static let islandsPane = "islands"
     /// Accounts (PHASE16 P16.6a).
     public static let accountsPane = "accounts"
 
@@ -178,6 +182,8 @@ public struct PrefsLayout: Equatable, Sendable {
     public var energy = EnergyLayout()
     /// The Accounts pane's controls, when it is showing (P16.6a).
     public var accounts = AccountsLayout()
+    /// The Islands pane's controls, when it is showing (P13.7).
+    public var islands = IslandsLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
@@ -303,6 +309,11 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         let d = displays ?? .sample
         l.displays = displaysLayout(body: l.body, d)
         paintDisplaysPane(cr, l.displays, d)
+    case .pane(let id) where id == PrefsModel.islandsPane:
+        // Read, not remembered: islands.ini and the key table as they are now.
+        let c = IslandsConfig.load(configDir: nil)
+        l.islands = islandsLayout(body: l.body, c)
+        paintIslandsPane(cr, l.islands, c, keys: IslandsKeys.shown(DesktopKeys.effective()))
     case .pane(let id) where id == PrefsModel.soundPane:
         let s = sound ?? .sample
         l.sound = soundLayout(body: l.body, s)
@@ -440,6 +451,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var energyDrag: Bool?          // display (true) or computer (false)
     private var energyApplying: Int32?
     private var dumpedEnergy: EnergyLayout?
+    private var dumpedIslands: IslandsLayout?
     private var accounts = AccountsPaneState()
     private var accountsApplying: Int32?
     private var dumpedAccounts: AccountsLayout?
@@ -585,6 +597,19 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             for (i, r) in a.fields.enumerated() { line += " field\(i)=\(c(r))" }
             if a.sheet.w > 0 { line += " admin=\(c(a.adminBox)) cancel=\(c(a.cancel)) confirm=\(c(a.confirm))" }
             SystemPreferencesApp.log(line)
+        }
+        // The Islands pane's controls, for a test to click (§2.46), and what it
+        // shows of the key table.
+        if dumpLayout, model.view == .pane(PrefsModel.islandsPane), dumpedIslands != layout.islands {
+            dumpedIslands = layout.islands
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            var line = "islands layout"
+            for r in layout.islands.counts { line += " count.\(r.value)=\(c(r.control))" }
+            line += " slide=\(c(layout.islands.slide.control))"
+            SystemPreferencesApp.log(line)
+            for (label, key) in IslandsKeys.shown(DesktopKeys.effective()) {
+                SystemPreferencesApp.log("islands key '\(label)' = \(key)")
+            }
         }
         if dumpLayout, model.view == .pane(PrefsModel.energyPane), dumpedEnergy != layout.energy {
             dumpedEnergy = layout.energy
@@ -1475,6 +1500,19 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
            let hit = networkHit(layout.network, form: network.form ?? NetworkForm(interface: ""),
                                 x: pointerX, y: pointerY) {
             pressNetwork(hit)
+            return
+        }
+        if model.view == .pane(PrefsModel.islandsPane), let hit = islandsHit(layout.islands, x: pointerX, y: pointerY) {
+            let next = IslandsWrite.next(hit, from: IslandsConfig.load(configDir: nil))
+            do {
+                try IslandsWrite.store(next)
+                model.notes[PrefsModel.islandsPane] = nil
+                SystemPreferencesApp.log("islands -> \(next.count) island(s), slide \(next.animate ? "on" : "off")")
+            } catch {
+                model.notes[PrefsModel.islandsPane] = "Could not save: \(error)"
+                SystemPreferencesApp.log("islands: could not write islands.ini: \(error)")
+            }
+            window?.setNeedsDisplay()
             return
         }
         if model.view == .pane(PrefsModel.appearancePane),

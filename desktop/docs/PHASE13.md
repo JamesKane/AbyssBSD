@@ -339,6 +339,33 @@ judged against a number that already exists.
 
 Verified by `live-islands-pane.sh`, as the other panes are.
 
+✅ **P13.7 done 2026-10-01.**
+- **The pane** ("Islands", in Personal) offers:
+  - the count, radios 1–9;
+  - "Slide from one island to the next";
+  - the names, shown;
+  - every key of the phase as it is bound: the defaults, with `keys.ini`
+    over them. Number rows show "1…9", not "N", which is a key itself
+    (⌃⌥N).
+
+  A click writes `islands.ini` at once and tells nobody.
+- **undertow follows the file** (`watchIslands`, `Pool.Watcher`). Fewer
+  islands than a display shows, or a window is on: they come to the last
+  that is left, so nothing is lost. The bar is told.
+- **Shared now:** `IslandsConfig` and the default key table (`DesktopKeys`)
+  moved to PoolConfig, so the pane reads what undertow does. There is a new
+  `icon.islands`, and the compiled lists were regenerated.
+- **Changed from the plan:**
+  - **Per-island desktop pictures are deferred** (BACKLOG §5): the desktop
+    process cannot know the island.
+  - **Names are shown, not edited:** a text list is its own work, and
+    `islands.ini` takes them.
+- **Tests:** `live-islands-pane.sh` (4 claims), 3 unit tests; two catalogue
+  expectations moved on purpose (26 panes; Personal now wraps to a second
+  row). Four faults injected and caught: undertow not watching, the pane
+  ignoring `keys.ini`, windows left on islands that are gone, and the slide
+  not written.
+
 **P13.8 — the gate.**
 - Both lanes, `--full`.
 - **C6 on the 12700KF under load:**

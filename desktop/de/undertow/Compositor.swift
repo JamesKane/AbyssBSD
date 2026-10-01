@@ -14,6 +14,7 @@
 // it would hand away exactly the part the performance contract is about.
 
 import CWlroots
+import PoolConfig
 import AquaDraw
 
 #if canImport(Glibc)
@@ -390,6 +391,9 @@ public final class Compositor {
     var ebb: Ebb?
     var ebbLabels: [UInt32: EbbLabel] = [:]
     public internal(set) var ebbOpens = 0
+    /// islands.ini, watched (P13.7).
+    var islandsWatch: Pool.Watcher?
+    var islandsSource: OpaquePointer?
     /// Slides in progress, by display (P13.3).
     var islandSlides: [String: IslandSlide] = [:]
     public internal(set) var islandSwitches = 0

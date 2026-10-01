@@ -8,7 +8,7 @@ import MenuModel
 final class SystemPreferencesTests: XCTestCase {
     func testTheCatalogueIsWhatTheThemeCanDraw() {
         let ids = PrefCatalogue.all.map(\.id)
-        XCTAssertEqual(ids.count, 25)
+        XCTAssertEqual(ids.count, 26, "Jaguar's 25, and Islands (PHASE13 P13.7)")
         XCTAssertEqual(Set(ids).count, ids.count, "pane ids are unique")
         for id in ids { XCTAssertNotNil(Theme.lists["icon." + id], "no icon.\(id) in the icon set") }
         XCTAssertEqual(PrefCatalogue.toolbar.map(\.id), ["displays", "sound", "network", "startupDisk"])
@@ -57,7 +57,10 @@ final class SystemPreferencesTests: XCTestCase {
         m.moveFocus(1); XCTAssertEqual(m.focus, "desktop")
         m.moveFocus(1); XCTAssertEqual(m.focus, "dock")
         m.moveFocus(-5); XCTAssertEqual(m.focus, "desktop", "clamped at the first")
-        m.moveFocus(7); XCTAssertEqual(m.focus, "cdsDvds", "down a row is the next section's first")
+        // Personal has eight panes since Islands (P13.7), so it wraps: down a
+        // row from Desktop is its own second row, then the next section.
+        m.moveFocus(7); XCTAssertEqual(m.focus, "screenEffects", "down a row: Personal's second row")
+        m.moveFocus(1); XCTAssertEqual(m.focus, "cdsDvds", "then the next section's first")
         m.moveFocus(100); XCTAssertEqual(m.focus, "universalAccess", "clamped at the last")
     }
 

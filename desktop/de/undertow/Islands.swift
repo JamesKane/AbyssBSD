@@ -15,54 +15,6 @@
 import CWlroots
 import PoolConfig
 
-/// `islands.ini`: how many islands each display has, and what they are called.
-/// §6.1: a fixed count, so Ctrl-3 always means the same place.
-public struct IslandsConfig: Equatable, Sendable {
-    public static let defaultCount = 4
-    public static let maxCount = 9          // one per digit key
-
-    public var count: Int
-    /// Index 0 is island 1. A missing name is the number.
-    public var names: [String]
-    /// The slide (P13.3, §6.5): on by default, 150 ms, skippable. Decoration
-    /// only — the switch is committed before the first frame of it (C6).
-    public var animate: Bool
-    /// Its length. PRODUCT §7.2 budgets ~150 ms; up to 2 s is allowed so a
-    /// test (or a person who wants to watch) can slow it down.
-    public var slideMs: Int
-
-    public init(count: Int = IslandsConfig.defaultCount, names: [String] = [],
-                animate: Bool = true, slideMs: Int = 150) {
-        self.count = min(max(count, 1), IslandsConfig.maxCount)
-        self.names = names
-        self.animate = animate
-        self.slideMs = min(max(slideMs, 0), 2000)
-    }
-
-    public func name(_ n: Int) -> String {
-        n >= 1 && n <= names.count && !names[n - 1].isEmpty ? names[n - 1] : "\(n)"
-    }
-
-    public static func from(_ c: Config) -> IslandsConfig {
-        let count = c.int64("islands", "count").map(Int.init) ?? defaultCount
-        var names: [String] = []
-        for n in 1...maxCount { names.append(c.string("islands", "name.\(n)") ?? "") }
-        while let last = names.last, last.isEmpty { names.removeLast() }
-        return IslandsConfig(count: count, names: names,
-                             animate: c.bool("islands", "animate") ?? true,
-                             slideMs: c.int64("islands", "slide_ms").map(Int.init) ?? 150)
-    }
-
-    public static func load(configDir: String?) -> IslandsConfig {
-        (try? Pool.load("islands", in: configDir)).map(from) ?? IslandsConfig()
-    }
-
-    /// The island one step from `n`, wrapping — Ctrl-→ from the last is the first.
-    public func step(_ n: Int, by d: Int) -> Int {
-        ((n - 1 + d) % count + count) % count + 1
-    }
-}
-
 /// A slide in progress on one display: the view moving from where it was
 /// (an island position, fractional mid-slide) to the island now shown.
 struct IslandSlide {
@@ -214,5 +166,39 @@ extension Compositor {
         setMinimized(t, false)
         raise(t)
         seat?.focus(t)
+    }
+}
+
+// MARK: - islands.ini, followed (P13.7)
+
+extension Compositor {
+    /// Follow islands.ini while we run, as the theme is followed: the Islands
+    /// pane writes it and never tells anybody (P14.2's rule), and a person's
+    /// editor is exactly as good.
+    public func watchIslands() {
+        guard islandsWatch == nil, let w = try? Pool.Watcher(in: configDir) else { return }
+        islandsWatch = w
+        let loop = wl_display_get_event_loop(session.display)
+        islandsSource = wl_event_loop_add_fd(loop, w.fileDescriptor, UInt32(WL_EVENT_READABLE), { _, _, data in
+            guard let data else { return 0 }
+            let c = Unmanaged<Compositor>.fromOpaque(data).takeUnretainedValue()
+            _ = c.islandsWatch?.drain()
+            c.reloadIslands()
+            return 0
+        }, Unmanaged.passUnretained(self).toOpaque())
+    }
+
+    /// Take islands.ini again. Fewer islands than a display is showing, or a
+    /// window is on: they come to the last that is left — nothing is lost.
+    func reloadIslands() {
+        let next = IslandsConfig.load(configDir: configDir)
+        guard next != islands else { return }
+        islands = next
+        for (d, n) in activeIslands where n > next.count { activeIslands[d] = next.count }
+        for t in toplevels where t.island > next.count { t.island = next.count; refreshSuspended(t) }
+        for t in toplevels where t.mapped { refreshSuspended(t) }
+        for d in layout.displays { menus?.sendIsland(of: d.name) }
+        Compositor.log("islands.ini: \(next.count) island(s), slide \(next.animate ? "on" : "off")"
+                       + (next.names.isEmpty ? "" : ", named \(next.names.joined(separator: ","))"))
     }
 }

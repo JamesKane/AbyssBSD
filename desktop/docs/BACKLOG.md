@@ -128,6 +128,12 @@ with `abyss/mk/metal.sh push` (PHASE4 §5.11–§5.13):
 
 From HANDOFF §5.3, still true:
 
+- **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
+  drawn by the desktop process, an ordinary client that cannot know which
+  island is showing. It needs that told to it: a small protocol, or a desktop
+  on the privileged socket. Island names are edited in `islands.ini` until
+  the pane grows a text list.
+
 - **No login window** — Phase 16's; wrong only for a machine with two users.
 - **The live medium's root is read-write** — fix before a stick goes to anyone.
 - **A real Aqua save panel** — a name field and New Folder, replacing ⌘S-into-

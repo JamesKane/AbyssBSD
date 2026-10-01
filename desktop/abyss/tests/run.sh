@@ -214,6 +214,10 @@ if [ "$live" -eq 1 ]; then
   # nothing else moved; the strip; the bar; kept across a restart.
   echo "== Shoals =="
   quiet "$root/abyss/tests/live-shoals.sh"
+  # The Islands pane (P13.7): islands.ini written as clicked, followed by a
+  # running undertow; the keys shown as bound.
+  echo "== the Islands pane =="
+  quiet "$root/abyss/tests/live-islands-pane.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

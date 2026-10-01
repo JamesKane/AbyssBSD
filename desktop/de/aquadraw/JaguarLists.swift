@@ -1753,6 +1753,24 @@ list icon.classic
   stroke #000000/0.22 1
   text "9" w/2 h/2 center size=h*0.5 color=#ffffff
 end
+
+# Islands (PHASE13 P13.7): three islands in a blue sea — Islands, Ebb, Shoals.
+list icon.islands
+  rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) 4
+  fill vertical stops 0 #9cc7f2 1 #2f66b8
+  circle w*0.32 h*0.40 w*0.17
+  fill #e8d9a8
+  circle w*0.32 h*0.40 w*0.11
+  fill #5aa24a
+  circle w*0.68 h*0.36 w*0.13
+  fill #e8d9a8
+  circle w*0.68 h*0.36 w*0.08
+  fill #5aa24a
+  circle w*0.52 h*0.70 w*0.15
+  fill #e8d9a8
+  circle w*0.52 h*0.70 w*0.09
+  fill #5aa24a
+end
 """##
 
     static let file: DrawListFile = {

@@ -7,7 +7,7 @@ import CCairo
 
 public enum PrefIcon: Sendable {
     case showAll, displays, sound, network, startupDisk
-    case desktop, dock, general, international, loginItems, myAccount, screenEffects
+    case desktop, dock, general, international, islands, loginItems, myAccount, screenEffects
     case cdsDvds, colorSync, energySaver, keyboard, mouse
     case internetIcon, quicktime, sharing
     case accounts, classic, dateTime, softwareUpdate, speech, universalAccess
@@ -34,6 +34,7 @@ extension PrefIcon {
         case .dock: return "dock"
         case .general: return "general"
         case .international: return "international"
+        case .islands: return "islands"
         case .loginItems: return "loginItems"
         case .myAccount: return "myAccount"
         case .screenEffects: return "screenEffects"
