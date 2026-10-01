@@ -730,6 +730,31 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.102 A lock surface had no frame clock — and a sleep is not a count
+(PHASE16 P16.2b, the Aqua lock screen.)
+
+**undertow's `sendFrameDone` named toplevels, layer surfaces and popups, and
+lock surfaces were none of them.** The lock screen drew its first frame and
+never another: typing showed no bullets, a refusal no message and no shake.
+P16.2a's test passed because its C lock client drew one buffer and never asked
+for a frame. A test client that does less than a real one tests less. Now, while
+locked, the lock surfaces get the display's clock and everything behind the lock
+gets the slow one (U.2's one-a-second), since none of it is shown. While the
+displays sleep, the lock surfaces join the slow clock. `lockclient f` asks for
+frames, and `live-sessionlock.sh` claim 1 fails without them.
+
+**The first "nothing is sent during the wait" check counted the stub's answers
+0.4 s after typing, and passed with the fault injected.** vkeyboard types a
+fourteen-character password more slowly than that, so the Return arrived after
+the count. It now counts once the wait is over: the authenticator must have
+refused unasked exactly once, the try that was told to wait. A fault shows up
+whenever it happens. This is §2.43's lesson from the other side: a negative
+check needs an end point, not a pause.
+
+The lock screen fails closed. If the authenticator is not running, it says so
+and the session stays locked. The way out is another console, which is why
+P16.1's daemon is started by rc before anything that could lock.
+
 ### 2.101 A popup grab outlives a change of focus — and the lock is one
 (PHASE16 P16.2a, the session lock.)
 

@@ -251,6 +251,10 @@ if [ "$live" -eq 1 ]; then
   # shown or reachable, no grab survives it, and a dead lock client keeps it.
   echo "== the session lock =="
   quiet "$root/abyss/tests/live-sessionlock.sh"
+  # The Aqua lock screen (P16.2b), against a stand-in authenticator: it
+  # shakes, waits, unlocks only on a yes, and fails closed.
+  echo "== the lock screen =="
+  quiet "$root/abyss/tests/live-lockscreen.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

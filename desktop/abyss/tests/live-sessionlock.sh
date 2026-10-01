@@ -7,7 +7,8 @@
 # that log any input reaching them (A blue, B red). Asserted in screencopy
 # captures (`abyssgrab`) and in what each client heard:
 #
-#   1. locked, no pixel of the desktop is shown — only the lock's green;
+#   1. locked, no pixel of the desktop is shown — only the lock's green — and
+#      the lock surface keeps a frame clock (a lock screen draws more than once);
 #   2. a click and a key reach the lock client, and not the window under them;
 #   3. a window that maps while locked is not drawn, and gets no keys;
 #   4. a keyboard-grabbing popup does not keep the keys from the lock: one held
@@ -124,7 +125,11 @@ sleep 0.3; shot locked
 [ "$(has locked 51 102 153)" = 0 ] || fail "locked, window A's blue is still on screen ($(has locked 51 102 153) pixels)"
 [ "$(has locked 255 0 255)" = 0 ] || fail "locked, window A's popup is still on screen"
 [ "$(has locked 42 90 42)" -gt 400000 ] || fail "locked, the lock's green does not cover the output ($(has locked 42 90 42) pixels)"
-echo "ok: 1. locked: no pixel of the desktop, the lock's green over the output"
+printf 'f\n' >&6
+await "$work/l1.log" '^frame$' "the lock surface's frame callback never came — a lock screen could draw only once"
+printf 'f\n' >&6; sleep 0.2
+[ "$(count '^frame$' "$work/l1.log")" -ge 2 ] || fail "the lock surface had one frame callback and not a second"
+echo "ok: 1. locked: no pixel of the desktop, the lock's green over the output, and the lock keeps a frame clock"
 
 # ------------------------------------------------------ 2. input to the lock only
 ka=$(count '^key \|^button' "$work/a.log"); kl=$(count '^key \|^button' "$work/l1.log")

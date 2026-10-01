@@ -111,6 +111,23 @@ not raised or activated, so unlocking finds you where you were), and **every
 popup grab is ended** (HANDOFF §2.101). `live-sessionlock.sh`, 8 claims,
 seven faults injected and caught.
 
+✅ **P16.2b done 2026-10-01.** `AQUA_SCENE=lock` (`LockScreen.swift`): the
+desktop's backdrop dimmed on every display, and on the first a pinstriped
+panel with the My Account picture, the full name (GECOS, else the account
+name) and a password field. Return asks the authenticator through
+`LoginClient.begin`/`finish` in the run loop; only `accepted` unlocks. A
+refusal empties the field and shakes the panel; `wait` closes the field with
+a countdown, and nothing typed then is sent; no authenticator, or no PAM,
+says so and **stays locked**. The password is bytes, wiped when sent or
+cleared, never logged. `LockModel` is pure and unit-tested (7). The surface
+library gained `SessionLockClient`/`LockSurface` (a lock surface on every
+display, including one that appears while locked), and Display routes input
+to them. `abyss-loginstub` (the real `Authenticator` with a password file
+for PAM; a probe, never shipped) lets `live-lockscreen.sh` run on Linux:
+7 claims, six faults injected and caught. **Found:** undertow gave lock
+surfaces no frame clock, so a lock screen drew one frame and never another
+(HANDOFF §2.102). Fixed, and `live-sessionlock.sh` now asserts the clock.
+
 **P16.3 — the idle policy (M).** A session component (an ext-idle-notify
 client `anchor` supervises) that turns idleness into what a person asked for:
 lock after the Security pane's delay ("require a password after sleep or

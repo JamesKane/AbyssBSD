@@ -20,6 +20,7 @@
 #include "xdg-activation-v1-client-protocol.h"
 #include "wlr-screencopy-unstable-v1-client-protocol.h"
 #include "wlr-output-management-unstable-v1-client-protocol.h"
+#include "ext-session-lock-v1-client-protocol.h"
 #include "abyss-menu-v1-client-protocol.h"
 #include "abyss-window-v1-client-protocol.h"
 
@@ -59,6 +60,7 @@ static const struct wl_interface *const xdg_activation_v1_iface = &xdg_activatio
 static const struct wl_interface *const zwlr_layer_shell_v1_iface = &zwlr_layer_shell_v1_interface;
 static const struct wl_interface *const zwlr_foreign_toplevel_manager_v1_iface = &zwlr_foreign_toplevel_manager_v1_interface;
 static const struct wl_interface *const zwlr_screencopy_manager_v1_iface = &zwlr_screencopy_manager_v1_interface;
+static const struct wl_interface *const ext_session_lock_manager_v1_iface = &ext_session_lock_manager_v1_interface;
 static const struct wl_interface *const zwlr_output_manager_v1_iface = &zwlr_output_manager_v1_interface;
 static const struct wl_interface *const abyss_menu_manager_v1_iface = &abyss_menu_manager_v1_interface;
 static const struct wl_interface *const abyss_window_manager_v1_iface = &abyss_window_manager_v1_interface;

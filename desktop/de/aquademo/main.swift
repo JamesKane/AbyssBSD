@@ -3,6 +3,7 @@
 //
 //   WAYLAND_DISPLAY must point at a running compositor.
 //   AQUA_SCENE=sysprefs  picks the System Preferences demo (else a simple window).
+//   AQUA_SCENE=lock      locks the session (PHASE16 P16.2b); exits 0 on unlock.
 //   AQUA_SCALE=2         pins 2x rendering (overrides the automatic per-output
 //                        scale, which the window otherwise tracks from wl_output).
 //   AQUA_RENDER_PNG=path renders one frame to PNG and exits (no compositor).
@@ -156,6 +157,19 @@ if let watch = appearance {
 // data pointers — alive. Discarding it (e.g. `guard let _ =`) frees the surface
 // before the first configure event and crashes in the listener callback.
 // withExtendedLifetime pins it across run().
+if sceneName == "lock" {
+    // The lock screen (PHASE16 P16.2b): an ext-session-lock client, not a
+    // window. It exits 0 once the authenticator said yes and the session is
+    // given back, 1 if the compositor would not let it lock.
+    guard let lockScreen = LockScreen(display: display) else {
+        print("AquaDemo: cannot lock (does the compositor offer ext-session-lock?).")
+        exit(1)
+    }
+    var unlocked = false
+    lockScreen.onDone = { ok in unlocked = ok; display.stop() }
+    withExtendedLifetime(lockScreen) { display.run() }
+    exit(unlocked ? 0 : 1)
+}
 if scene == .wallpaper {
     guard let wallpaper = Wallpaper(display: display) else {
         print("AquaDemo: failed to create the wallpaper " +

@@ -37,6 +37,13 @@ public enum Login {
     /// `include` of `login` — whose first line, `pam_self`, passes when the
     /// caller is the target user, and the caller here is root.
     public static let defaultService = "abyss"
+
+    /// Zero a password's bytes and empty it, through a volatile write the
+    /// optimiser cannot drop (CPAM's `abyss_wipe`).
+    public static func wipe(_ bytes: inout [UInt8]) {
+        bytes.withUnsafeMutableBytes { abyss_wipe($0.baseAddress, $0.count) }
+        bytes = []
+    }
 }
 
 // MARK: - The limiter
@@ -224,17 +231,37 @@ public enum LoginError: Error, CustomStringConvertible {
 }
 
 public enum LoginClient {
-    /// Ask whether `password` is this process's user's. The caller's copy is
-    /// theirs to wipe; this one's is wiped before it returns.
+    /// The socket a session asks: `$ABYSS_LOGIN_SOCKET` if set (a test's own
+    /// authenticator), else the system's.
+    public static var socket: String {
+        getenv("ABYSS_LOGIN_SOCKET").map { String(cString: $0) } ?? Login.defaultSocket
+    }
+
+    /// Ask whether `password` is this process's user's, and wait for the
+    /// answer. The caller's copy is theirs to wipe; this one's is wiped before
+    /// it returns.
     public static func verify(password: [UInt8], socket: String = Login.defaultSocket) throws -> Verdict {
+        let s = try begin(password: password, socket: socket)
+        defer { close(s) }
+        return try finish(on: s)
+    }
+
+    /// The first half, for a run loop: connect and ask, and return the socket
+    /// to poll. The request's copy of the password is wiped once it is sent.
+    public static func begin(password: [UInt8], socket: String = Login.defaultSocket) throws -> Int32 {
         var request = LoginWire.request(password: password)
         defer {
             if var b = request.bytes("password") { b.withUnsafeMutableBytes { abyss_wipe($0.baseAddress, $0.count) } }
             request = Msg()
         }
         let s = try Current.connect(path: socket)
-        defer { close(s) }
-        try Current.send(request, on: s)
+        do { try Current.send(request, on: s) } catch { close(s); throw error }
+        return s
+    }
+
+    /// The second half: read the answer from a socket `begin` returned.
+    /// The caller closes it.
+    public static func finish(on s: Int32) throws -> Verdict {
         let reply = try Current.receive(on: s)
         guard reply.bool("ok") == true else { throw LoginError.service(reply.string("error") ?? "refused") }
         guard let v = LoginWire.decode(reply) else { throw LoginError.garbled }

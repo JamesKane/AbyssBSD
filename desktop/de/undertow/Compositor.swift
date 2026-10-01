@@ -1075,6 +1075,8 @@ public final class Compositor {
     /// loop, which owns the outputs it switches.
     public var displaySleep: DisplaySleep?
     private var asleepFrameAt: UInt64 = 0
+    /// When the windows behind the lock last had a frame (P16.2).
+    private var lockedFrameAt: UInt64 = 0
 
     func forgetPopup(_ p: PopupSurface) {
         p.teardown()
@@ -1178,6 +1180,23 @@ public final class Compositor {
         if displaySleep?.asleep == true {
             guard nowNs &- asleepFrameAt >= Compositor.hiddenFramePeriodNs else { return }
             asleepFrameAt = nowNs
+            for t in toplevels where t.mapped { Compositor.frameDone(tree: t.surface, &now) }
+            for l in mappedLayers { Compositor.frameDone(tree: l.surface, &now) }
+            for p in mappedPopups { Compositor.frameDone(tree: p.surface, &now) }
+            for s in sessionLock?.surfaces ?? [] { Compositor.frameDone(tree: s.surface, &now) }
+            return
+        }
+        // **Locked (PHASE16 P16.2): the lock screen gets the display's rate,
+        // and everything behind it the slow clock** — nothing of it is shown,
+        // so nothing of it should draw at full rate, but a FIFO client must
+        // still be let go now and then (U.2). Without this the lock surfaces
+        // had no clock at all: a lock screen drew its first frame and never
+        // another, so typing and the shake were invisible (found in P16.2b —
+        // P16.2a's test client drew one frame and never asked for a second).
+        if let lock = sessionLock, lock.locked {
+            for s in lock.surfaces { Compositor.frameDone(tree: s.surface, &now) }
+            guard nowNs &- lockedFrameAt >= Compositor.hiddenFramePeriodNs else { return }
+            lockedFrameAt = nowNs
             for t in toplevels where t.mapped { Compositor.frameDone(tree: t.surface, &now) }
             for l in mappedLayers { Compositor.frameDone(tree: l.surface, &now) }
             for p in mappedPopups { Compositor.frameDone(tree: p.surface, &now) }

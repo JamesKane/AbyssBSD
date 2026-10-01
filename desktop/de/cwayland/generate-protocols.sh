@@ -47,6 +47,7 @@ gen wlr-foreign-toplevel-management-unstable-v1
 gen xdg-activation-v1
 gen wlr-screencopy-unstable-v1
 gen wlr-output-management-unstable-v1
+gen ext-session-lock-v1
 
 gen_server xdg-shell
 gen_server wlr-layer-shell-unstable-v1

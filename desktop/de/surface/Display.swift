@@ -53,6 +53,13 @@ public final class Display {
     var activation: OpaquePointer?
     var screencopy: OpaquePointer?
     var screencopyVersion: UInt32 = 0
+    /// `ext_session_lock_manager_v1` (PHASE16 P16.2b): the lock screen's.
+    var sessionLockManager: OpaquePointer?
+    public var hasSessionLock: Bool { sessionLockManager != nil }
+    /// A display appeared or went (index into the bound outputs / its proxy):
+    /// a lock must cover every display, including one plugged in while locked.
+    public var outputAdded: ((Int) -> Void)?
+    var outputRemoved: ((OpaquePointer) -> Void)?
     var pointer: OpaquePointer?
     var keyboard: OpaquePointer?
 
@@ -106,6 +113,24 @@ public final class Display {
     // safe proxy for where an event belongs — only the surface is.
     private var pointerOnLayer = false
     private var keyboardOnLayer = false
+
+    // Lock surfaces (PHASE16 P16.2b), one per display, and which one the
+    // pointer and the keyboard are on. A lock surface is checked first: while
+    // a process holds the lock, they are the only surfaces it is shown.
+    private var lockSurfaces: [WeakLockSurface] = []
+    private weak var pointerLock: LockSurface?
+    private weak var keyboardLock: LockSurface?
+    func lockSurfaceAdded(_ l: LockSurface) {
+        lockSurfaces.removeAll { $0.surface == nil }
+        lockSurfaces.append(WeakLockSurface(l))
+    }
+    func lockSurfaceRemoved(_ l: LockSurface) {
+        lockSurfaces.removeAll { $0.surface == nil || $0.surface === l }
+    }
+    private func lockSurface(for surface: OpaquePointer?) -> LockSurface? {
+        guard let surface else { return nil }
+        return lockSurfaces.lazy.compactMap { $0.surface }.first { $0.surface == surface }
+    }
 
     // The open grabbing popups, oldest first — a menu and the submenus opened
     // from it (P10.8). Weak: the caller owns each; we route input to the one
@@ -379,6 +404,9 @@ public final class Display {
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.
             activation = wlBind(registry, name, xdg_activation_v1_iface, min(version, 1))
+        case "ext_session_lock_manager_v1":
+            // No events on the manager; the lock object reports back.
+            sessionLockManager = wlBind(registry, name, ext_session_lock_manager_v1_iface, 1)
         case "zwlr_screencopy_manager_v1":
             // v3 adds buffer_done, which is what says "I've told you every
             // buffer type I take — now send copy". Below it, the wl_shm buffer
@@ -405,6 +433,7 @@ public final class Display {
                 d.outputScaleChanged(output, factor)
             }
             addListener(to: o, listener: ol, data: me)
+            outputAdded?(outputs.count - 1)
         default:
             break
         }
@@ -412,6 +441,7 @@ public final class Display {
 
     private func handleGlobalRemove(name: UInt32) {
         guard let i = outputs.firstIndex(where: { $0.name == name }) else { return }
+        outputRemoved?(outputs[i].proxy)
         outputs.remove(at: i)      // compositor destroys the proxy on its side
         window?.recomputeScale()
         layerSurface?.recomputeScale()
@@ -472,7 +502,8 @@ public final class Display {
                 let d = Unmanaged<Display>.fromOpaque(data).takeUnretainedValue()
                 // If the pointer left the primary layer surface (not into a
                 // popup), let it reset hover state (e.g. Dock magnification).
-                if !d.pointerOnPopup { d.layerSurface?.pointerLeft() }
+                if let l = d.pointerLock { l.pointerLeft(); d.pointerLock = nil }
+                else if !d.pointerOnPopup { d.layerSurface?.pointerLeft() }
                 d.pointerOnPopup = false
             }
             pl.motion = { data, _, _, sx, sy in
@@ -510,7 +541,8 @@ public final class Display {
     private func updatePointerTarget(_ surface: OpaquePointer?) {
         pointerOnPopup = false
         pointerOnLayer = false
-        guard let surface else { return }
+        pointerLock = lockSurface(for: surface)
+        guard let surface, pointerLock == nil else { return }
         if let popup = openPopups.lazy.compactMap({ $0.popup }).first(where: { $0.surface == surface }) {
             pointerOnPopup = true
             pointerPopup = popup
@@ -523,6 +555,7 @@ public final class Display {
     }
 
     private func routePointerMotion(_ sx: Int32, _ sy: Int32) {
+        if let l = pointerLock { l.pointerMoved(fx: sx, fy: sy); return }
         if pointerOnPopup, let popup = pointerPopup {
             popup.pointerMoved(fx: sx, fy: sy)
         } else if pointerOnLayer {
@@ -535,6 +568,7 @@ public final class Display {
     }
 
     private func routePointerButton(_ button: UInt32, pressed: Bool) {
+        if let l = pointerLock { l.pointerButton(button, pressed: pressed); return }
         if pointerOnPopup, let popup = pointerPopup {
             if button == 0x110 { popup.pointerButton(pressed: pressed) }  // BTN_LEFT
         } else if pointerOnLayer {
@@ -548,7 +582,7 @@ public final class Display {
 
     private func routePointerAxis(_ axis: UInt32, value: Double) {
         // The primary surface scrolls; an open menu just stays put.
-        guard !pointerOnPopup else { return }
+        guard !pointerOnPopup, pointerLock == nil else { return }
         if pointerOnLayer { layerSurface?.pointerAxis(axis, value: value) }
         else if let w = pointerWindow ?? window { w.pointerAxis(axis, value: value) }
         else { layerSurface?.pointerAxis(axis, value: value) }
@@ -558,12 +592,18 @@ public final class Display {
     // layer surface. A grabbing popup does not steal keyboard from our client
     // (see HANDOFF §2.12), so the window/layer surface forwards to its open menu.
     private func routeKeyEvent(_ ev: KeyEvent) {
+        if let l = keyboardLock { l.keyEvent(ev); return }
         if keyboardOnLayer { layerSurface?.keyEvent(ev) }
         else if let w = keyboardWindow ?? window { w.keyEvent(ev) }
         else { layerSurface?.keyEvent(ev) }
     }
 
     private func keyboardFocus(_ surface: OpaquePointer?) {
+        if let l = lockSurface(for: surface) {
+            keyboardLock = l
+            return
+        }
+        keyboardLock = nil
         if let w = window(forSurface: surface) {
             keyboardWindow = w
             keyboardOnLayer = false
@@ -574,6 +614,11 @@ public final class Display {
     }
 
     private func keyboardBlur(_ surface: OpaquePointer?) {
+        if let l = keyboardLock, l.surface == surface {
+            keyboardLock = nil
+            repeatKey = nil
+            return
+        }
         if let w = window(forSurface: surface), keyboardWindow === w {
             keyboardWindow = nil
             repeatKey = nil        // don't keep repeating into an unfocused window
@@ -767,7 +812,14 @@ public final class Display {
         for w in windowRegistry { w.window?.setNeedsDisplay() }
         layerSurface?.setNeedsDisplay()
         for p in openPopups { p.popup?.setNeedsDisplay() }
+        for l in lockSurfaces { l.surface?.setNeedsDisplay() }
     }
+}
+
+/// A weak reference to a lock surface.
+final class WeakLockSurface {
+    weak var surface: LockSurface?
+    init(_ s: LockSurface) { surface = s }
 }
 
 /// A weak reference to a popup, for the open-popup stack.

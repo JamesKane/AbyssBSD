@@ -22,6 +22,8 @@
  *   l   lock (lock mode)            u   unlock and destroy (lock mode)
  *   p   open a popup that grabs the keyboard, with the last serial this
  *       client was given (window mode) — the attack a lock must survive
+ *   f   ask a frame callback on the first lock surface (lock mode): prints
+ *       `frame` when it comes — a lock screen that animates needs a clock
  *   q   quit — in lock mode, WITHOUT unlocking: the abandoned lock
  *
  * A test helper, not part of the product; built by live-sessionlock.sh.
@@ -49,6 +51,8 @@ static struct wl_output *outputs[8];
 static int noutputs;
 static uint32_t colour, last_serial;
 static int lock_mode, last_only;
+static struct wl_surface *lock_surfaces[8];
+static int nlock_surfaces;
 
 static void reg_global(void *d, struct wl_registry *r, uint32_t id, const char *iface, uint32_t v) {
     (void)d;
@@ -143,10 +147,14 @@ static void do_lock(void) {
     ext_session_lock_v1_add_listener(lock, &lock_listener, NULL);
     for (int i = last_only ? noutputs - 1 : 0; i < noutputs; i++) {
         struct wl_surface *sf = wl_compositor_create_surface(compositor);
+        if (nlock_surfaces < 8) lock_surfaces[nlock_surfaces++] = sf;
         struct ext_session_lock_surface_v1 *ls = ext_session_lock_v1_get_lock_surface(lock, sf, outputs[i]);
         ext_session_lock_surface_v1_add_listener(ls, &ls_listener, sf);
     }
 }
+
+static void frame_done(void *d, struct wl_callback *cb, uint32_t t) { (void)d; (void)t; wl_callback_destroy(cb); printf("frame\n"); }
+static const struct wl_callback_listener frame_listener = { frame_done };
 
 /* ---------------------------------------------------------------- window */
 static struct wl_surface *window;
@@ -233,6 +241,13 @@ int main(int argc, char **argv) {
             case 'l': if (lock_mode && !lock) do_lock(); break;
             case 'u': if (lock) { ext_session_lock_v1_unlock_and_destroy(lock); lock = NULL; wl_display_roundtrip(dpy); printf("unlocked\n"); } break;
             case 'p': if (!lock_mode) open_grabbing_popup(); break;
+            case 'f':
+                if (lock && nlock_surfaces) {
+                    struct wl_callback *cb = wl_surface_frame(lock_surfaces[0]);
+                    wl_callback_add_listener(cb, &frame_listener, NULL);
+                    wl_surface_commit(lock_surfaces[0]);
+                }
+                break;
             case 'q': exit(0);
             }
         }

@@ -69,6 +69,7 @@ let package = Package(
                       "xdg-activation-v1-protocol.c",
                       "wlr-screencopy-unstable-v1-protocol.c",
                       "wlr-output-management-unstable-v1-protocol.c",
+                      "ext-session-lock-v1-protocol.c",
                       "cwayland_shm.c"],
             publicHeadersPath: "include"
         ),
@@ -255,6 +256,8 @@ let package = Package(
             name: "Aqua",
             dependencies: ["AquaDraw", "MenuModel", "MenuWire", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform", "Spawn", "AppBundles", "Terminal", "Pty", "TextModel", "Volumes", "InstallRun",
                            "Vents", "CurrentIPC",
+                           // The lock screen asks the authenticator (P16.2b).
+                           "Login",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
                            // may be chosen. `Install` depends on nothing, so
@@ -353,6 +356,10 @@ let package = Package(
         .executableTarget(name: "abyss-loginwindow", dependencies: ["Login", "CurrentIPC"],
                           path: "de/loginwindowbin"),
         .executableTarget(name: "abyss-loginctl", dependencies: ["Login"], path: "de/loginctl"),
+        // A stand-in authenticator for the lock screen's test (P16.2b): the
+        // real Authenticator, PAM replaced by a password file. A probe, like
+        // ipcprobe — never shipped.
+        .executableTarget(name: "abyss-loginstub", dependencies: ["Login", "CurrentIPC"], path: "de/loginstub"),
         .executableTarget(name: "abyss-settings",
                           dependencies: ["SettingsRun", "CurrentIPC"], path: "de/settingsbin"),
         .executableTarget(name: "abyss-settingsctl",
@@ -569,7 +576,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AquaTests",
-            dependencies: ["Aqua", "AquaDraw", "PoolConfig", "SVGImport", "CurrentIPC", "Settings", "SettingsWire", "Vents"],
+            dependencies: ["Aqua", "AquaDraw", "PoolConfig", "SVGImport", "CurrentIPC", "Settings", "SettingsWire", "Vents", "Surface", "Login"],
             path: "Tests/AquaTests"
         ),
         .testTarget(
