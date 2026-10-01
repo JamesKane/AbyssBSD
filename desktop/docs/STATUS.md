@@ -35,6 +35,12 @@ open result is a failure — **the frame contract does not hold on real hardware
 **On 2026-09-30 this tree became the monorepo's `desktop/`**, and the distribution's
 base moved to FreeBSD `main` with the Radxa Dragon Q8B (aarch64) as its first board;
 what that leaves for the desktop is in [../../docs/MIGRATION.md](../../docs/MIGRATION.md).
+**Phase 15 — the application layer — is COMPLETE (2026-10-01)**
+([PHASE15.md](PHASE15.md)): bundles from `.desktop` files, a real Dock, Firefox
+ESR, Terminal, TextEdit, Grab, Activity Monitor and Disk Utility. **Phase 16 —
+the session — is scoped** ([PHASE16.md](PHASE16.md), 2026-10-01): an
+authenticator first (nothing unprivileged can check a password), then the lock,
+the idle policy, power, the login window, two users and a first run.
 See [What's next](#whats-next).
 
 ## What this is
@@ -455,6 +461,9 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
   via `Unmanaged.passUnretained(...).toOpaque()` as the `data` arg.
 
 ## What's next
+
+**Next: Phase 16, the session, from P16.1** ([PHASE16.md](PHASE16.md)). The
+paragraph below is as it stood before Phase 15.
 
 **Phases 0–3, 5–11 and 14 are complete. Phase 4 is in flight on metal (paused: the
 metal target is moving to the Radxa Dragon Q8B, whose bring-up is done elsewhere);

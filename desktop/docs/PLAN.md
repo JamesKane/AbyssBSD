@@ -73,7 +73,8 @@ one's own processes and, through the root helper, another user's (P15.7); and
 **Disk Utility** — disks, datasets, and ZFS snapshots taken, rolled back (the
 latest only), mounted and unmounted through the root helper (P15.8). **One foreign
 toolkit: GTK** (decided 2026-09-30; the rule is in Context, above) — the Qt menu work of P10.7 is gone.
-**Next is Phase 16, the session** — login, lock, idle and power.
+**Next is Phase 16, the session** — login, lock, idle and power — **scoped
+2026-10-01 in [PHASE16.md](PHASE16.md)** (P16.1–P16.8, its §6 decided).
 
 **Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
 medium boots, `amdgpu` binds, typing and the pointer work, and after five
