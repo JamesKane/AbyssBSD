@@ -9,7 +9,7 @@ directory records what we found, so nobody has to find it again.
 |---|---|
 | [firmware-acpi-boot.md](firmware-acpi-boot.md) | UEFI, ACPI tables, boot media, root on NVMe, console, recovery |
 | [ethernet-tc956x.md](ethernet-tc956x.md) | the `tcx(4)` driver and the chip |
-| [usb.md](usb.md) | xHCI on ACPI, USB-C role-switch devices, the DWC3 throughput fix |
+| [usb.md](usb.md) | xHCI on ACPI, USB-C role-switch devices, the DWC3 throughput fix, plug orientation |
 | [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, GPU devfreq, `_LPI` deep idle, power profiles |
 | [gpu-display.md](gpu-display.md) | msmfb (display KMS), sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
 | [lessons.md](lessons.md) | **read first**: things that reset the SoC, debugging method, gotchas |
@@ -39,7 +39,7 @@ directory records what we found, so nobody has to find it again.
 | Serial console | Driver works; header pins unread (1.8 V pads) | `uart_dev_qcom_geni.c` |
 | Ethernet ×2, 2.5G/1G/100M/10M | Works: ~2.2 Gbit/s each way, TSO, checksum offload, jumbo, hardware multicast filter | `sys/dev/tcx` |
 | USB-A (multiport) | Works | `generic_xhci_acpi.c` |
-| USB-C ×2 (host) | Works at 112 MB/s; SuperSpeed only in one plug orientation | `generic_xhci_acpi.c` |
+| USB-C ×2 (host) | Works at 112 MB/s, SuperSpeed with the plug either way round (orientation from the ADSP over pmic_glink, src `9ded7b873f`) | `generic_xhci_acpi.c`, `sys/dev/qcom_pmic_glink` |
 | Thermal sensors (46) | Works; critical-temperature shutdown tested (clean shutdown, PSCI power-off) | `sys/dev/qcom_tsens` |
 | CPU frequency, 2 domains | Works; per-domain powerd | `sys/dev/qcom_epss`, `usr.sbin/powerd` |
 | Deep idle (PSCI power-down, C3) | Works, on by default (`balanced` power profile; the kernel picks the always-on timer) | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c`, `kern_clocksource.c` |
@@ -50,7 +50,8 @@ directory records what we found, so nobody has to find it again.
 | SD card | Works: 50 MHz, 4-bit, 24 MB/s, ADMA2 DMA; hot-swap by the TLMM card-detect GPIO's interrupt; no UHS | `sys/dev/sdhci/sdhci_acpi.c`, `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c` |
 | RTC | Works: ST M41T11 on I²C bus 12, as a DS1307; sets the clock at boot | `sys/dev/iicbus/rtc/ds13rtc.c` |
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
-| USB-C orientation, PD | Needs pmic_glink | — |
+| USB-C orientation | Works: `qcom_pmic_glink` switches each PHY's lanes to the plug ([usb.md](usb.md)) | `sys/dev/qcom_pmic_glink` |
+| USB-C power delivery, DisplayPort alt mode | Not done (same pmic_glink service) | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio | Headphone playback through `pcm0` and jack detection work (src `85f6f47c54`, in GENERIC); microphone not yet | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
 | Wi-Fi/BT, camera, NPU | Not investigated | — |
