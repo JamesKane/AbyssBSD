@@ -44,6 +44,17 @@ public final class SurfaceScene: FrameSink {
     /// its buffer's acquire point, when its client uses explicit sync.
     private let waitTimeline: UnsafeMutableBufferPointer<UnsafeMutablePointer<wlr_drm_syncobj_timeline>?>
     private let waitPoint: UnsafeMutableBufferPointer<UInt64>
+    /// How opaque each entry is drawn (P13.5): 1 for almost everything; less
+    /// for Ebb's thumbnails not under the pointer. PRODUCT §7.4's "one genuine
+    /// addition".
+    private let alpha: UnsafeMutableBufferPointer<Float>
+    /// A solid colour instead of a texture (P13.5: the dimming behind Ebb, and
+    /// the mark behind the window under the pointer).
+    private let fillOn: UnsafeMutableBufferPointer<Bool>
+    private let fill: UnsafeMutableBufferPointer<wlr_render_color>
+    /// The walk's scale and opacity, for a tree drawn as a thumbnail.
+    private var walkScale = 1.0
+    private var walkAlpha: Float = 1
     /// Textures drawn behind an acquire wait, all told — the test's witness
     /// that the scene, and not only wlroots, took part.
     public private(set) var acquireWaits = 0
@@ -91,6 +102,15 @@ public final class SurfaceScene: FrameSink {
         let wp = UnsafeMutablePointer<UInt64>.allocate(capacity: capacity)
         wp.initialize(repeating: 0, count: capacity)
         waitPoint = UnsafeMutableBufferPointer(start: wp, count: capacity)
+        let al = UnsafeMutablePointer<Float>.allocate(capacity: capacity)
+        al.initialize(repeating: 1, count: capacity)
+        alpha = UnsafeMutableBufferPointer(start: al, count: capacity)
+        let fo = UnsafeMutablePointer<Bool>.allocate(capacity: capacity)
+        fo.initialize(repeating: false, count: capacity)
+        fillOn = UnsafeMutableBufferPointer(start: fo, count: capacity)
+        let fc = UnsafeMutablePointer<wlr_render_color>.allocate(capacity: capacity)
+        fc.initialize(repeating: wlr_render_color(), count: capacity)
+        fill = UnsafeMutableBufferPointer(start: fc, count: capacity)
     }
 
     /// The output moved, changed mode or scale (P14.7b applies these).
@@ -116,6 +136,9 @@ public final class SurfaceScene: FrameSink {
         turn.baseAddress?.deallocate()
         waitTimeline.baseAddress?.deinitialize(count: capacity)
         waitTimeline.baseAddress?.deallocate()
+        alpha.baseAddress?.deinitialize(count: capacity); alpha.baseAddress?.deallocate()
+        fillOn.baseAddress?.deinitialize(count: capacity); fillOn.baseAddress?.deallocate()
+        fill.baseAddress?.deinitialize(count: capacity); fill.baseAddress?.deallocate()
         waitPoint.baseAddress?.deinitialize(count: capacity)
         waitPoint.baseAddress?.deallocate()
     }
@@ -155,7 +178,9 @@ public final class SurfaceScene: FrameSink {
         // is what puts the shell above the apps and the wallpaper below them.
         let layers = compositor.mappedLayers
         for l in layers where l.layer <= 1 { add(layer: l) }
-        if let view = compositor.islandView(on: displayName, now: now) {
+        if let ebb = compositor.ebbFrame(on: displayName, now: now) {
+            addEbb(ebb, now: now)
+        } else if let view = compositor.islandView(on: displayName, now: now) {
             // **Mid-slide (P13.3)**: this display's islands within one width
             // of the view, each shifted by its distance from it — the one
             // being left slides off as the one asked for slides on. Input and
@@ -180,6 +205,7 @@ public final class SurfaceScene: FrameSink {
             }
         }
         for l in layers where l.layer >= 2 { add(layer: l) }
+        if ebbShown { ebbShown = false; return finish(inputAt: inputAt) }
         // Menus above everything, parent before child (P10.4).
         for p in compositor.mappedPopups {
             guard let o = p.origin else { continue }
@@ -191,6 +217,11 @@ public final class SurfaceScene: FrameSink {
             for p in ti.mappedPopups { addTree(p.surface, at: p.x, p.y) }
         }
 
+        return finish(inputAt: inputAt)
+    }
+
+    /// The cull's arithmetic, and the frame's stats.
+    private func finish(inputAt: UInt64) -> FrameStats {
         var painted: Int32 = 0
         var area: Int64 = 0
         for i in 0..<count {
@@ -205,6 +236,86 @@ public final class SurfaceScene: FrameSink {
             }
         }
         return FrameStats(surfaces: painted, damageArea: area, degraded: false, inputAt: inputAt)
+    }
+
+    // MARK: - Ebb (P13.5)
+
+    /// Whether this frame drew Ebb: no popups over it.
+    private var ebbShown = false
+
+    /// Ebb on this display: the desktop dimmed, and every window in scope
+    /// drawn into its slot — moving there while it opens, home while it
+    /// closes. Windows of this display that are not in it are not drawn;
+    /// other displays' windows are, as ever.
+    private func addEbb(_ e: Ebb, now: UInt64) {
+        ebbShown = true
+        let p = e.progress(at: now)
+        addFill(Rect(x: originX, y: originY, width: outputWidth, height: outputHeight),
+                wlr_render_color(r: 0, g: 0, b: 0, a: Float(0.5 * p)))
+        for t in compositor.toplevels where t.islandDisplay != displayName && compositor.isOnActiveIsland(t)
+                                            && t.mapped && !t.minimized && wlr_surface_has_buffer(t.surface) {
+            guard count < capacity else { return }
+            addWindow(t, dx: 0)
+        }
+        for s in e.slots {
+            guard count < capacity else { return }
+            // Closing after a pick, the windows of islands no longer shown
+            // simply go: they have nowhere on screen to fly home to.
+            // A window of an island not shown (the archipelago) has no home
+            // on screen to fly from: it fades in at its slot instead, and out
+            // the same way — the alpha array's first use.
+            let home = compositor.isOnActiveIsland(s.window)
+            let r = home ? e.rect(s, at: now) : s.slot
+            let a: Float = home ? 1 : Float(p)
+            if a <= 0.01 { continue }
+            if e.hovered == s.window.id && !e.closing {
+                addFill(Rect(x: r.x - 4, y: r.y - 4, width: r.width + 8, height: r.height + 8),
+                        wlr_render_color(r: 0.20, g: 0.45, b: 0.85, a: 0.9))
+            }
+            addWindow(s.window, into: r, alpha: a)
+        }
+        if let id = e.hovered, !e.closing, p > 0.99, let s = e.slots.first(where: { $0.window.id == id }),
+           let renderer = compositor.rendererForFrames,
+           let label = compositor.ebbLabel(for: s.window, renderer: renderer) {
+            guard count < capacity else { return }
+            let lx = s.slot.x + (s.slot.width - label.width) / 2
+            let ly = s.slot.y + s.slot.height - label.height - 8
+            texture[count] = label.texture; source[count] = nil; crop[count] = wlr_fbox()
+            turn[count] = WL_OUTPUT_TRANSFORM_NORMAL; waitTimeline[count] = nil
+            alpha[count] = 1; fillOn[count] = false
+            x[count] = lx; y[count] = ly; w[count] = label.width; h[count] = label.height
+            count += 1
+        }
+    }
+
+    private func addFill(_ r: Rect, _ c: wlr_render_color) {
+        guard count < capacity else { return }
+        texture[count] = nil; source[count] = nil; waitTimeline[count] = nil
+        fillOn[count] = true; fill[count] = c; alpha[count] = 1
+        x[count] = r.x; y[count] = r.y; w[count] = r.width; h[count] = r.height
+        count += 1
+    }
+
+    /// A window drawn into `r`, scaled — its frame too, as the frame it is.
+    private func addWindow(_ t: Toplevel, into r: Rect, alpha a: Float) {
+        let s = t.width > 0 ? Double(r.width) / Double(t.width) : 1
+        if t.decorated, let deco = compositor.decorations,
+           let renderer = compositor.rendererForFrames,
+           let frame = deco.texture(for: t, renderer: renderer,
+                                    active: compositor.seat?.focused === t) {
+            let b = FrameMetrics.frame(forSurfaceAt: t.x, t.y, width: t.width, height: t.height)
+            texture[count] = frame; source[count] = nil; crop[count] = wlr_fbox()
+            turn[count] = WL_OUTPUT_TRANSFORM_NORMAL; waitTimeline[count] = nil
+            alpha[count] = a; fillOn[count] = false
+            x[count] = r.x + Int32((Double(b.x - t.x) * s).rounded())
+            y[count] = r.y + Int32((Double(b.y - t.y) * s).rounded())
+            w[count] = Int32((Double(b.w) * s).rounded()); h[count] = Int32((Double(b.h) * s).rounded())
+            count += 1
+            guard count < capacity else { return }
+        }
+        walkScale = s; walkAlpha = a
+        addTree(t.surface, at: r.x, r.y)
+        walkScale = 1; walkAlpha = 1
     }
 
     /// A window, and the frame undertow draws for it, `dx` to the side.
@@ -224,6 +335,7 @@ public final class SurfaceScene: FrameSink {
             crop[count] = wlr_fbox()            // all of it, as drawn
             turn[count] = WL_OUTPUT_TRANSFORM_NORMAL
             waitTimeline[count] = nil           // drawn by us, on the CPU
+            alpha[count] = 1; fillOn[count] = false
             x[count] = box.x; y[count] = box.y
             w[count] = box.w; h[count] = box.h
             count += 1
@@ -269,10 +381,19 @@ public final class SurfaceScene: FrameSink {
         guard count < capacity, let tex = wlr_surface_get_texture(s) else { return }
         texture[count] = tex
         source[count] = s
-        x[count] = walkX &+ sx; y[count] = walkY &+ sy
+        alpha[count] = walkAlpha; fillOn[count] = false
         // The size on screen is the surface's: wlroots has already applied
-        // the buffer scale, the transform and a viewport's destination.
-        w[count] = s.pointee.current.width; h[count] = s.pointee.current.height
+        // the buffer scale, the transform and a viewport's destination. A
+        // thumbnail (Ebb) scales the whole tree, offsets included.
+        if walkScale == 1 {
+            x[count] = walkX &+ sx; y[count] = walkY &+ sy
+            w[count] = s.pointee.current.width; h[count] = s.pointee.current.height
+        } else {
+            x[count] = walkX &+ Int32((Double(sx) * walkScale).rounded())
+            y[count] = walkY &+ Int32((Double(sy) * walkScale).rounded())
+            w[count] = Int32((Double(s.pointee.current.width) * walkScale).rounded())
+            h[count] = Int32((Double(s.pointee.current.height) * walkScale).rounded())
+        }
         // **What part of the buffer (U.8).** A viewport may crop it — a video
         // player showing a 16:9 picture out of a padded decoder buffer, or a
         // client that rendered at 1.5x drawing into a 1x rectangle. Drawn
@@ -341,6 +462,16 @@ public final class SurfaceScene: FrameSink {
         wlr_render_pass_add_rect(pass, &bg)
 
         for i in 0..<count {
+            if fillOn[i] {
+                var f = wlr_render_rect_options()
+                f.box = box(x[i], y[i], w[i], h[i])
+                f.color = fill[i]
+                f.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
+                // Premultiplied: the colour carries its own alpha.
+                f.color.r *= f.color.a; f.color.g *= f.color.a; f.color.b *= f.color.a
+                wlr_render_pass_add_rect(pass, &f)
+                continue
+            }
             guard let tex = texture[i] else { continue }
             var opts = wlr_render_texture_options()
             opts.texture = tex
@@ -353,6 +484,7 @@ public final class SurfaceScene: FrameSink {
                 acquireWaits &+= 1
             }
             opts.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED
+            if alpha[i] < 1 { opts.alpha = UnsafePointer(alpha.baseAddress! + i) }
             wlr_render_pass_add_texture(pass, &opts)
         }
     }

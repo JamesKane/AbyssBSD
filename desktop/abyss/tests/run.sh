@@ -206,6 +206,10 @@ if [ "$live" -eq 1 ]; then
   # island's windows, and a Dock click that goes to a window's island.
   echo "== islands in the bar and the Dock =="
   quiet "$root/abyss/tests/live-islands-bar.sh"
+  # Ebb (P13.5): every window of a scope in its own slot, one click to pick,
+  # and Escape leaves the screen exactly as it was.
+  echo "== Ebb =="
+  quiet "$root/abyss/tests/live-ebb.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

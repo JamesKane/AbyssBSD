@@ -76,6 +76,8 @@ public enum KeyAction: Equatable, Sendable {
     case island(Int)
     case islandStep(Int)
     case moveToIsland(Int, follow: Bool)
+    /// Ebb (P13.5): open in a scope, or put the tide back.
+    case ebb(EbbScope)
 }
 
 /// One row of the table.
@@ -170,6 +172,9 @@ public enum KeyBindingParser {
         case "previous-window": return .previousWindow
         case "close-window":    return .closeWindow
         case "quit-app":        return .quitApplication
+        case "ebb island":      return .ebb(.island)
+        case "ebb archipelago": return .ebb(.archipelago)
+        case "ebb app":         return .ebb(.app)
         case "island next":     return .islandStep(1)
         case "island previous": return .islandStep(-1)
         default:
@@ -237,6 +242,10 @@ public enum KeyBindingParser {
         // `islands.ini`'s count does nothing.
         ("Ctrl+Left",  "island previous"),
         ("Ctrl+Right", "island next"),
+        // Ebb (§6.4): Mission Control's and App Exposé's keys.
+        ("F3",         "ebb island"),
+        ("Ctrl+Up",    "ebb archipelago"),
+        ("Ctrl+Down",  "ebb app"),
     ] + (1...9).flatMap { n in [
         ("Ctrl+\(n)",           "island \(n)"),
         ("Ctrl+Alt+\(n)",       "move-to-island \(n)"),

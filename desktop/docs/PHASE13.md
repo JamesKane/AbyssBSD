@@ -240,6 +240,42 @@ judged against a number that already exists.
   - an Ebb over C2's eleven adversary clients, with C1 held (the bench);
   - goldens of the three scopes.
 
+✅ **P13.5 done 2026-10-01.**
+- **The layout** (`EbbLayout`) is a grid of the column count that shows the
+  windows largest. Ties go to the grid whose cells are most the windows'
+  shape, and a short last row is centred. It keeps aspect, never enlarges,
+  and orders windows by island and then window id, so a new window does
+  not reorder the others.
+- **The view.** The scene draws the scope's windows (frames too) scaled
+  from home to slot, with the desktop dimmed behind. It eases in and out
+  over the slide's time, and Escape mid-way reverses from where it is.
+  - The window under the pointer gets an Aqua-blue mark and its title on a
+    dark plate (`EbbLabel`).
+  - The scene gained solid fills and the alpha array. The alpha array's
+    first use: in the archipelago, windows of islands not shown fade in
+    where their slot is, because they have no home on screen to fly from.
+- **Input.** While Ebb is open it has the pointer and the keyboard. Escape
+  closes it; an Ebb key changes or closes it; an island key switches; no
+  window hears anything.
+- **Scopes:** F3 for the island, Ctrl-↑ for the archipelago, Ctrl-↓ for the
+  focused application (§6.4).
+- **Changed from the plan:**
+  - Goldens of the scopes became pixel claims in `live-ebb.sh`: each slot's
+    centre is its window's colour, and the screen after Escape equals the
+    one before.
+  - The frozen-thumbnail fallback was not needed: Ebb under C2's load held
+    C1.
+  - Arrow-key navigation is not in.
+- **Known:** in the archipelago, windows of other islands show their last
+  frame. They are suspended and on the 1 Hz clock, as an unseen window is.
+- **Tests:**
+  - `live-ebb.sh` (6 claims) and 2 unit tests;
+  - `bench-islands.sh` gained ten Ebbs over the adversaries, counted, inside
+    C1's budget;
+  - six faults injected and caught: Ebb moving windows, the scene ignoring
+    Ebb, keys leaking, a pick not going to the window, the archipelago
+    without other islands, and the app scope showing other apps.
+
 **P13.6 — Shoals (M–L).**
 - **A shoal is a named set of windows on one island.** Membership is explicit:
   add the focused window, remove it, from the menu bar's item and by keys.

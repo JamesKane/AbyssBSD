@@ -20,7 +20,10 @@
 #   2. the switches arrived — at least 40 measured (a bench whose input never
 #      reached the compositor passes beautifully and proves nothing);
 #   3. C1 held while it switched: missed frames within the same 5-per-mille
-#      budget bench-metronome.sh gives an idle compositor.
+#      budget bench-metronome.sh gives an idle compositor;
+#   4. and while Ebb opened and closed over the same load ten times (P13.5:
+#      "an Ebb drawn over the eleven adversary clients C2 already survives") —
+#      counted, so an Ebb that never opened cannot pass.
 #
 # Usage: abyss/tests/bench-islands.sh
 set -eu
@@ -34,8 +37,8 @@ undertow="$root/.build/debug/undertow"
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 HZ=60
-FRAMES=1500           # 25 s: room for the windows, the storm and every switch
-MISS_BUDGET=7         # 5 per mille of 1500, as bench-metronome.sh allows
+FRAMES=1800           # 30 s: room for the windows, the storm, every switch and Ebb
+MISS_BUDGET=9         # 5 per mille of 1800, as bench-metronome.sh allows
 SWITCHES=45
 C6_FRAMES=2
 HARD=8
@@ -106,11 +109,19 @@ while read -r island pause; do
 done < "$work/plan"
 echo "ok: $SWITCHES switches asked for, by the keyboard"
 
+# Ebb over the storm: F3 open, F3 closed, ten times, on a full island.
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  printf 'c 0 61\n' >&4; sleep 0.25; printf 'c 0 61\n' >&4; sleep 0.25
+done
+echo "ok: Ebb opened and closed ten times over the same load"
+
 rc=0; wait "$ut_pid" 2>/dev/null || rc=$?
 ut_pid=""
 grep '^c6 ' "$work/ut.out" | sed 's/^/   /'
 grep '^island-commit ' "$work/ut.out" | sed 's/.*us=//' | sort -n \
   | awk '{ a[NR] = $1 } END { if (NR) printf "   input to the vblank that showed it: min %.1f ms, median %.1f ms, max %.1f ms\n", a[1] / 1000, a[int((NR + 1) / 2)] / 1000, a[NR] / 1000 }'
 [ "$rc" = 0 ] || { grep -E '^FAIL' "$work/ut.err" | sed 's/^/  /'; fail "the island switch contract did not hold (see above)"; }
+opened=$(count 'undertow: ebb HEADLESS-1 on island' "$work/ut.err")
+[ "$opened" -ge 10 ] || fail "Ebb opened only $opened time(s) of 10 — the load it was meant to be drawn over proves nothing"
 echo "ok: C6 held — $(grep '^c6 ' "$work/ut.out" | cut -d' ' -f2-), limit p99 ≤ $C6_FRAMES; C1's budget held under load"
-echo "all green (C6: an island switch reaches the screen within two frames, under C2's load)."
+echo "all green (C6: an island switch reaches the screen within two frames, and Ebb draws, under C2's load)."

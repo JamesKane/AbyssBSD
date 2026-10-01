@@ -893,6 +893,14 @@ public final class Seat {
             compositor.updateResize(cursorX: cursorX, cursorY: cursorY)
             return
         }
+        // Ebb open: the pointer is Ebb's — it says which window it is over,
+        // and no client is told it moved (P13.5).
+        if compositor.ebb != nil {
+            compositor.ebbHover(cursorX, cursorY)
+            wlr_seat_pointer_clear_focus(seat)
+            setCursor(.shape("default"))
+            return
+        }
 
         guard let hit = target(at: cursorX, cursorY) else {
             // Off every surface: the pointer belongs to the desktop, and a client
@@ -979,6 +987,11 @@ public final class Seat {
     private func button(_ button: UInt32, state: wl_pointer_button_state,
                         timeMsec: UInt32) {
         if compositor.isLocked { breakGrabs() }
+        // Ebb open: a click picks a window or puts the tide back (P13.5).
+        if compositor.ebb != nil, !compositor.isLocked {
+            if state == WL_POINTER_BUTTON_STATE_PRESSED { compositor.ebbClick(cursorX, cursorY) }
+            return
+        }
         // Releasing the button ends a drag, and the window's new position is
         // remembered there.
         if state == WL_POINTER_BUTTON_STATE_RELEASED,
@@ -1209,6 +1222,24 @@ public final class Seat {
         }
         reloadBindingsIfStale()
         let mods = KeyModifiers(rawValue: wlr_keyboard_get_modifiers(keyboard)).normalized()
+        // **Ebb has the keyboard while it is open** (P13.5): Escape puts the
+        // tide back, an Ebb key changes or closes it, an island key switches
+        // (and closes an island-scope Ebb); nothing reaches a window under it.
+        if let e = compositor.ebb, !e.closing {
+            let syms = symbols(keyboard: keyboard, keycode: keycode)
+            consumedKeys.insert(keycode)
+            if syms.contains(0xff1b) { compositor.ebbDismiss(); return true }       // Escape
+            for sym in syms {
+                if let a = bindings.match(sym: sym, modifiers: mods, focusedAppID: nil) {
+                    switch a {
+                    case .ebb, .island, .islandStep: perform(a)
+                    default: break
+                    }
+                    break
+                }
+            }
+            return true
+        }
         let app = focused?.appID
 
         // Two symbols, and both are needed. The **translated** one is what the
@@ -1260,6 +1291,7 @@ public final class Seat {
         case .closeWindow:     compositor.closeFocusedWindow()
         case .quitApplication: compositor.quitFocusedApplication()
         case .island(let n):   compositor.switchIsland(n)
+        case .ebb(let scope):  compositor.toggleEbb(scope)
         case .islandStep(let d): compositor.stepIsland(d)
         case .moveToIsland(let n, let follow): compositor.moveFocusedWindow(toIsland: n, follow: follow)
         case .run(let words):

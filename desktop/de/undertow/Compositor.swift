@@ -380,6 +380,10 @@ public final class Compositor {
     /// The last window id handed out (P13.4); never reused while we run.
     private var lastToplevelID: UInt32 = 0
     func allocateToplevelID() -> UInt32 { lastToplevelID &+= 1; return lastToplevelID }
+    /// Ebb, open or closing, on one display (P13.5); the labels it has drawn.
+    var ebb: Ebb?
+    var ebbLabels: [UInt32: EbbLabel] = [:]
+    public internal(set) var ebbOpens = 0
     /// Slides in progress, by display (P13.3).
     var islandSlides: [String: IslandSlide] = [:]
     public internal(set) var islandSwitches = 0
@@ -1181,6 +1185,8 @@ public final class Compositor {
 
     fileprivate func forget(_ t: Toplevel) {
         decorations?.forget(t)
+        ebb?.forget(t)
+        ebbLabels[t.id] = nil
         t.teardown()
         toplevels.removeAll { $0 === t }
         // **Closing the focused window used to leave focus on nothing** — the

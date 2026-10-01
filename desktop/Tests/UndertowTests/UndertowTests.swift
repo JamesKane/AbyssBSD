@@ -347,6 +347,53 @@ final class UndertowTests: XCTestCase {
         XCTAssertEqual(c.slideMs, 2000)
     }
 
+    // MARK: - Ebb (PHASE13 P13.5)
+
+    private func ebbItems(_ sizes: [(Int32, Int32)]) -> [EbbLayout.Item] {
+        sizes.enumerated().map { EbbLayout.Item(id: UInt32($0.offset + 1), width: $0.element.0, height: $0.element.1) }
+    }
+
+    /// Inside the area, never overlapping, aspect kept, never enlarged.
+    func testEbbSlotsAreInsideApartInProportionAndNeverLarger() {
+        let area = Undertow.Rect(x: 0, y: 22, width: 1280, height: 700)
+        for sizes in [[(800, 600)], [(800, 600), (400, 300), (1200, 900)],
+                      Array(repeating: (640, 480), count: 7), [(300, 900), (1600, 200), (500, 500), (90, 60)]] {
+            let items = ebbItems(sizes.map { (Int32($0.0), Int32($0.1)) })
+            let slots = EbbLayout.arrange(items, in: area)
+            XCTAssertEqual(slots.count, items.count)
+            let rects = items.map { slots[$0.id]! }
+            for (i, r) in rects.enumerated() {
+                let it = items[i]
+                XCTAssertGreaterThanOrEqual(r.x, area.x); XCTAssertGreaterThanOrEqual(r.y, area.y)
+                XCTAssertLessThanOrEqual(r.x + r.width, area.x + area.width)
+                XCTAssertLessThanOrEqual(r.y + r.height, area.y + area.height)
+                XCTAssertLessThanOrEqual(r.width, it.width, "never drawn larger than it is")
+                let want = Double(it.width) / Double(it.height), got = Double(r.width) / Double(r.height)
+                XCTAssertEqual(got, want, accuracy: want * 0.05 + 0.05, "aspect kept")
+                for q in rects[(i + 1)...] {
+                    let apart = r.x + r.width <= q.x || q.x + q.width <= r.x || r.y + r.height <= q.y || q.y + q.height <= r.y
+                    XCTAssertTrue(apart, "slots overlap: \(r) and \(q)")
+                }
+            }
+        }
+    }
+
+    /// One window that fits is shown at its own size; a new window does not
+    /// move the others' order (they only shrink).
+    func testEbbIsStableAndDoesNotEnlarge() {
+        let area = Undertow.Rect(x: 0, y: 0, width: 1600, height: 1000)
+        let one = EbbLayout.arrange(ebbItems([(400, 300)]), in: area)
+        XCTAssertEqual(one[1]!.width, 400); XCTAssertEqual(one[1]!.height, 300)
+        let three = EbbLayout.arrange(ebbItems([(640, 480), (640, 480), (640, 480)]), in: area)
+        let four = EbbLayout.arrange(ebbItems([(640, 480), (640, 480), (640, 480), (640, 480)]), in: area)
+        func order(_ m: [UInt32: Undertow.Rect], _ ids: [UInt32]) -> [UInt32] {
+            ids.sorted { (m[$0]!.y, m[$0]!.x) < (m[$1]!.y, m[$1]!.x) }
+        }
+        XCTAssertEqual(order(three, [1, 2, 3]), [1, 2, 3])
+        XCTAssertEqual(order(four, [1, 2, 3]), [1, 2, 3], "the first three keep their reading order")
+        XCTAssertTrue(EbbLayout.arrange([], in: area).isEmpty)
+    }
+
     // MARK: - C6 (PHASE13 P13.2)
 
     /// Frames from input to the vblank that showed it, rounded up, never 0.

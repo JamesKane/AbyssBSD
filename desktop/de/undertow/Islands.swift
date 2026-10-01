@@ -146,6 +146,8 @@ extension Compositor {
     public func switchIsland(_ n: Int, on display: String? = nil) {
         let d = display ?? commandDisplay()
         guard n >= 1, n <= islands.count, activeIsland(on: d) != n else { return }
+        // An island switch puts the tide back: Ebb showed the island you left.
+        if let e = ebb, e.display == d, !e.closing, e.scope == .island { e.close(at: Mono.now()) }
         // The slide starts from wherever the view is — mid-slide, that is
         // between two islands — so asking again re-targets; it never queues
         // (PRODUCT §7.2 rule 2). Off, or zero-length: the view just is there.
