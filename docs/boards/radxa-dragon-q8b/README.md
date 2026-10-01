@@ -47,7 +47,7 @@ directory records what we found, so nobody has to find it again.
 | Display KMS (DPU/DP) | Works (`msmfb`): page flips on vsync, EDID, hotplug with link training, the monitor's modes (1080p to 640×480), DPMS; sway on HDMI | `kmod/drm-msm/freebsd/msm_freebsd_fb.c` |
 | Firmware framebuffer KMS | Works (`sysfbdrm`); the fallback when msm isn't loaded | `kmod/drm/sysfbdrm` |
 | GPU: GL ES 3.2, Vulkan 1.3 | Works: freedreno/Turnip, per-process page tables, fault isolation, hang recovery, frequency scaling with load | `kmod/drm-msm`, `sys/dev/qcom_*` |
-| SD card | Works: 50 MHz, 4-bit, 24 MB/s, ADMA2 DMA; hot-swap through the TLMM card-detect GPIO; no UHS | `sys/dev/sdhci/sdhci_acpi.c`, `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c` |
+| SD card | Works: 50 MHz, 4-bit, 24 MB/s, ADMA2 DMA; hot-swap by the TLMM card-detect GPIO's interrupt; no UHS | `sys/dev/sdhci/sdhci_acpi.c`, `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c` |
 | RTC | Works: ST M41T11 on I²C bus 12, as a DS1307; sets the clock at boot | `sys/dev/iicbus/rtc/ds13rtc.c` |
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
@@ -83,8 +83,10 @@ directory records what we found, so nobody has to find it again.
   `0x14008`) and the card rails on at 3 V, so there's no regulator
   control, no 1.8 V and no UHS. Card detect is TLMM GPIO 131, active low
   (ACPI `GpioIo` 0x83, PullUp; Linux: `cd-gpios = <&tlmm 131
-  GPIO_ACTIVE_LOW>`); `qcom_tlmm_acpi` reads it and sdhci polls it every
-  200 ms, so the card detaches when pulled and attaches when put back. One
+  GPIO_ACTIVE_LOW>`); `qcom_tlmm_acpi` reads it, and its interrupt (both
+  edges) tells sdhci, so the card detaches when pulled and attaches when put
+  back: two interrupts per swap (src `e64f72c767`; polled every 200 ms
+  before, and still if the interrupt can't be had). One
   reinsertion of three attached the bus but found no card (probably a late
   contact bounce; sdhci debounces 0.5 s and doesn't retry);
   `devctl detach mmc0; devctl attach mmc0` recovers it. The controller's
@@ -102,7 +104,13 @@ directory records what we found, so nobody has to find it again.
   apply them all at attach, making outputs of USB-C pins 26/27/47/48/…,
   so the driver ignores configuration until its bus has attached. Pins
   74–79, 83–86, 125–126 and 128–129 belong to the secure world and are not
-  offered. No pin interrupts yet. The boot card's GPT backup
+  offered. **Pin interrupts** (src `e64f72c767`) come through the summary
+  interrupt, SPI 208 (`gpio0,N` in `vmstat -i`), for pins in the GPIO
+  function only: the firmware leaves every pin's interrupt disabled and
+  routed nowhere (`intr_cfg` 0xe2: target 7), and the DSDT's `_AEI` (pin 2,
+  `Notify(GPU0, 0x92)`; and 0x2c0, past the pins) is the reference design's
+  — pin 2 is in a peripheral function here, so it's refused. No PDC, so no
+  wake from sleep. The boot card's GPT backup
   header isn't at the last LBA (an image smaller than the card); left
   alone.
 - **`/dev/drm/0`–`255`:** all 256 nodes exist. LinuxKPI's
