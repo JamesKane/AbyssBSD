@@ -9,7 +9,7 @@ Mac. Tick items off, and delete this file once they're all done.
 The monorepo was assembled from a Phase B snapshot, before Phase C (the
 LinuxKPI platform bus, the component framework, runtime PM and platform IRQs).
 
-- [ ] `src` → freebsd-src `radxa-dragon-q8b` **`bf6ce26ded`** (pinned: `9fbc25e3a1`).
+- [ ] `src` → freebsd-src `radxa-dragon-q8b` **`6dc35e9777`** (pinned: `9fbc25e3a1`).
       Kernel `__FreeBSD_version` 1600032 (arm64 write-combining), plus the
       C3 event-timer handoff, rc power profiles, `qcom_adsp`, and
       `qcom_geni_i2c` + `ds13rtc` for the RTC, and SD in `sdhci_acpi`.
