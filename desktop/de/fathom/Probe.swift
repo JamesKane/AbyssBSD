@@ -67,8 +67,17 @@ func trimmed(_ s: some StringProtocol) -> String {
 /// **Both cases are exercised by the harness**, which is unusual and worth
 /// keeping: the build VM boots BIOS, and the nested bhyve run in
 /// `live-medium.sh` boots UEFI off `edk2-bhyve`.
-public func probeBootMethod(_ sysctlValue: String?) -> ProbeResult {
+///
+/// **`machdep.bootmethod` is x86's alone.** An arm64 kernel has no such sysctl,
+/// and FreeBSD/arm64 starts only through UEFI (`loader.efi`, whether the
+/// firmware is EDK2 or U-Boot's EFI) — so on arm64 its absence *is* the answer,
+/// not an unknown. Without this, every arm64 machine (the Radxa Dragon Q8B)
+/// read as an incomplete report.
+public func probeBootMethod(_ sysctlValue: String?, arch: String? = nil) -> ProbeResult {
     guard let raw = sysctlValue.map(trimmed), !raw.isEmpty else {
+        if let a = arch, a == "aarch64" || a == "arm64" {
+            return ProbeResult("Boot", .present, "UEFI (arm64 starts only through UEFI)")
+        }
         return ProbeResult("Boot", .unknown, "machdep.bootmethod could not be read")
     }
     switch raw.uppercased() {
@@ -110,7 +119,8 @@ public func probeModules(kldstat: String?) -> ProbeResult {
     guard let text = kldstat, !trimmed(text).isEmpty else {
         return ProbeResult("Modules", .unknown, "kldstat could not be read")
     }
-    let wanted = ["amdgpu", "i915kms", "radeonkms", "drm"]
+    // msm: the Qualcomm Adreno's (the Radxa Dragon Q8B's, kmod/drm-msm).
+    let wanted = ["amdgpu", "i915kms", "radeonkms", "msm", "drm"]
     var found: [String] = []
     for line in text.split(separator: "\n") {
         guard let last = line.split(separator: " ").last else { continue }
@@ -146,8 +156,16 @@ public func probeNetwork(interfaceList: String?) -> ProbeResult {
 /// `net.wlan.devices` is **an empty string, not a missing sysctl**, on a machine
 /// with no wifi — so the absent case is a value to parse rather than a lookup
 /// that fails, and the parser is exercised rather than skipped.
-public func probeWifi(wlanDevices: String?) -> ProbeResult {
+///
+/// **`net.wlan.devices` exists only once `wlan` is loaded**, and every radio
+/// driver needs `wlan` — so with the sysctl missing *and* the module not
+/// loaded (`wlanLoaded` false), nothing wireless is attached: absent, not
+/// unknown. Found on the Radxa Dragon Q8B (BACKLOG §5), which has no radio.
+public func probeWifi(wlanDevices: String?, wlanLoaded: Bool? = nil) -> ProbeResult {
     guard let raw = wlanDevices else {
+        if wlanLoaded == false {
+            return ProbeResult("Wi-Fi", .absent, "no wireless: the wlan module is not loaded, so no radio is attached")
+        }
         return ProbeResult("Wi-Fi", .unknown, "net.wlan.devices could not be read")
     }
     let devs = trimmed(raw).split(separator: " ").map(String.init).filter { !$0.isEmpty }

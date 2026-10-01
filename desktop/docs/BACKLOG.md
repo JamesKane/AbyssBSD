@@ -147,12 +147,15 @@ From HANDOFF §5.3, still true:
   fails there. No ZFS module (`kldstat -q -m zfs` false, or a load failure)
   should mean "no pools", not a failed probe.
 
-- **`fathom` on arm64** (found 2026-10-01 on the Q8B,
-  [reports/q8b-bench-2026-10-01.md](reports/q8b-bench-2026-10-01.md)): the
-  Boot probe reads `machdep.bootmethod`, which only amd64 and i386 have, so
-  every arm64 machine reports "could not be read"; and the Wi-Fi probe reads
-  `net.wlan.devices`, which exists only once `wlan` is loaded, so a machine
-  without wireless reports "could not be asked" rather than "absent".
+- ~~**`fathom` on arm64**~~ ✅ fixed 2026-10-01 (found the same day on the
+  Q8B, [reports/q8b-bench-2026-10-01.md](reports/q8b-bench-2026-10-01.md)):
+  - **Boot:** with no `machdep.bootmethod` (amd64 and i386 alone have it),
+    arm64 reads as UEFI, since FreeBSD/arm64 starts only through `loader.efi`.
+  - **Wi-Fi:** no `net.wlan.devices` *and* no `wlan` module
+    (`kldstat -q -m wlan`) is "absent", since every radio driver needs `wlan`.
+    With `wlan` loaded and no sysctl it stays unknown.
+  - **`msm`** is now among the graphics modules, so the Q8B's report names its
+    Adreno driver, not just `drm`. FathomTests cover all three.
 - ~~**The Q8B missed 0–5 of 300 flips at 60 Hz**~~ ✅ fixed 2026-10-01 in
   the board's driver, not here: the vsync and GPU interrupts landed on
   powered-down cores, and the first present event carried a stale vblank;

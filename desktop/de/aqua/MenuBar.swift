@@ -412,23 +412,16 @@ public final class MenuBar: LayerSurfaceDelegate {
     private func performSystem(_ verb: String) -> CommandResult {
         switch verb {
         case "system.about":
-            var u = utsname(); uname(&u)
-            func field<T>(_ t: T) -> String {
-                withUnsafeBytes(of: t) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            // About This Mac opened Apple System Profiler; About This
+            // Computer opens ours — fastfetch's report, in a window. On the
+            // ordinary display, as every application the bar opens (P10.8).
+            guard let display = MenuBar.appDisplay else {
+                return .refused("the bar does not know the ordinary display to launch on")
             }
-            let cpus = sysconf(Int32(_SC_NPROCESSORS_ONLN))
-            let bytes = Double(sysconf(Int32(_SC_PHYS_PAGES))) * Double(sysconf(Int32(_SC_PAGESIZE)))
-            let body = "\(field(u.sysname)) \(field(u.release)) (\(field(u.machine))) on "
-                + "\(field(u.nodename)) — \(cpus) CPUs, "
-                + "\(Int((bytes / 1_073_741_824).rounded())) GB memory"
-            var m = Msg()
-            m.set("method", "notify")
-            m.set("summary", "About This Computer")
-            m.set("body", body)
-            guard (try? Current.call("notify", m))?.bool("ok") == true else {
-                return .refused("the notification centre did not answer")
-            }
-            return .ok(body)
+            let exe = getenv("ABYSS_APP_BINARY").map { String(cString: $0) }
+                ?? Launcher.selfExecutable() ?? "AquaDemo"
+            return Launcher.launchDetached([exe], extraEnv: ["AQUA_SCENE": "systemprofiler", "WAYLAND_DISPLAY": display])
+                ? .ok("System Profiler") : .refused("could not start System Profiler")
         case "system.preferences":
             // **Never launch on our own connection's socket.** The bar is on
             // the compositor's privileged socket, and a child that inherited

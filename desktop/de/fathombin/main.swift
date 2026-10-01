@@ -137,7 +137,7 @@ let report = FathomReport([
     probeCPU(model: Vents.Sysctl.string("hw.model"),
              cores: Vents.Sysctl.int("hw.ncpu")),
     probeMemory(physBytes: Vents.Sysctl.int("hw.physmem")),
-    probeBootMethod(Vents.Sysctl.string("machdep.bootmethod")),
+    probeBootMethod(Vents.Sysctl.string("machdep.bootmethod"), arch: Vents.Sysctl.string("hw.machine_arch")),
     probeModules(kldstat: capture(["kldstat"])),
     // `/dev/dri` absent is `absent`; unreadable for another reason is `unknown`,
     // and `listDirectory` distinguishes them by returning [] versus nil only
@@ -145,7 +145,10 @@ let report = FathomReport([
     // bound" looks like.
     probeGPU(driEntries: listDirectory("/dev/dri") ?? []),
     probeNetwork(interfaceList: capture(["ifconfig", "-l"])),
-    probeWifi(wlanDevices: Vents.Sysctl.string("net.wlan.devices")),
+    probeWifi(wlanDevices: Vents.Sysctl.string("net.wlan.devices"),
+              // `-m` finds a module compiled into the kernel too; nil where
+              // kldstat itself could not be run.
+              wlanLoaded: canAsk ? Spawn.run(["kldstat", "-q", "-m", "wlan"]).succeeded : nil),
     probeAudio(sndstat: readFile("/dev/sndstat")),
     probeBattery(life: batteryLife, present: canAsk && batteryLife != nil,
                  canAsk: canAsk),

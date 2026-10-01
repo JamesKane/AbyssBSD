@@ -279,6 +279,9 @@ if [ "$live" -eq 1 ]; then
   # and through the Accounts pane, clicked and typed.
   echo "== accounts =="
   quiet "$root/abyss/tests/live-accounts.sh"
+  # System Profiler: fastfetch's report, read against the machine.
+  echo "== System Profiler =="
+  quiet "$root/abyss/tests/live-systemprofiler.sh"
   echo "== the Accounts pane =="
   quiet "$root/abyss/tests/live-accounts-pane.sh"
   echo "== System Preferences =="

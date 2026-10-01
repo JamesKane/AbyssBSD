@@ -261,6 +261,8 @@ let package = Package(
                            "Vents", "CurrentIPC",
                            // The lock screen asks the authenticator (P16.2b).
                            "Login",
+                           // System Profiler.
+                           "SystemFacts",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
                            // may be chosen. `Install` depends on nothing, so
@@ -357,6 +359,9 @@ let package = Package(
         // conversation; Login is the wire, the limiter and the client.
         .target(name: "CPAM", path: "de/cpam", sources: ["cpam.c"], publicHeadersPath: "include",
                 linkerSettings: pamLibraries),
+        // What this computer is, fastfetch's list: pure parsing and
+        // formatting, tested without the hardware (System Profiler).
+        .target(name: "SystemFacts", path: "de/systemfacts"),
         .target(name: "Login", dependencies: ["CurrentIPC", "CPlatform", "CPAM", "Spawn", "CProc"], path: "de/login"),
         .executableTarget(name: "abyss-loginwindow", dependencies: ["Login", "CurrentIPC"],
                           path: "de/loginwindowbin"),
@@ -660,6 +665,7 @@ let package = Package(
             dependencies: ["DBusPortal", "DBus", "CurrentIPC", "Aqua", "AquaDraw"],
             path: "Tests/DBusPortalTests"
         ),
+        .testTarget(name: "SystemFactsTests", dependencies: ["SystemFacts"], path: "Tests/SystemFactsTests"),
         .testTarget(
             name: "LoginTests",
             dependencies: ["Login", "CurrentIPC"],

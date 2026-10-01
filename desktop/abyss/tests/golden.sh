@@ -55,6 +55,7 @@ sysprefs-displays|sysprefs|AQUA_PREFS_PANE=displays
 sysprefs-energy|sysprefs|AQUA_PREFS_PANE=energySaver
 sysprefs-accounts|sysprefs|AQUA_PREFS_PANE=accounts
 sysprefs-accounts-new|sysprefs|AQUA_PREFS_PANE=accounts-new
+systemprofiler|systemprofiler|
 sysprefs-general|sysprefs|AQUA_PREFS_PANE=general
 widgets|widgets|
 scroll|scroll|

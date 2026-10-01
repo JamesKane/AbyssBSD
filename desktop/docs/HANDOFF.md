@@ -730,6 +730,39 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.110 System Profiler — and a fact is a reading, or unknown
+(fastfetch's report as an application; About This Computer opens it.)
+
+`SystemFacts` (pure) and `FactGatherer` (in the app) report what fastfetch
+does: the OS, kernel, uptime, packages, shell, desktop, window manager, theme,
+terminal and locale; the host, CPU, GPU, memory, swap, disk, displays, address
+and battery. Rules carried over from Fathom (PHASE12):
+- **A value the machine will not give is shown as "unknown", never left out
+  and never filled in.** `live-systemprofiler.sh` counts 19 rows. On Linux,
+  where there is no sysctl, most hardware rows are unknown, and a fault that
+  dropped them was caught there. The guest has no unknown rows, so the same
+  fault passed there: claims that need an unknown want a machine that has
+  one.
+- **Every reading has an arm64 fallback.** The host is SMBIOS, else the device
+  tree's `model` (`ofwdump`). The GPU is `pciconf -lv`'s display devices,
+  else the bound DRM driver from `kldstat` (`msm` on the Q8B; an SoC has no
+  PCI display device). A PCI display the database does not name (QEMU's
+  VGA) shows its ids, not nothing.
+- **The guest checks the rows against the base's own tools** (`sysctl`,
+  `pkg info`, `df -T`, `ifconfig`). One fault, a wrong memory total, was
+  caught that way.
+
+**Copy cannot be read back by `abyssclip paste`.** A client with no surface
+is never sent a selection: the protocol only tells the focused client
+(live-clipboard.sh's note). So the test asserts that the compositor took the
+offer (`selections-accepted`) under the click's serial, and the unit test
+asserts the text.
+
+Found alongside, from the Q8B team's BACKLOG §5: `fathom`'s Boot probe read
+"could not be read" on every arm64 machine (`machdep.bootmethod` is x86's),
+and its Wi-Fi probe could not say "absent" without the `wlan` module. Both
+are fixed, and `msm` is now among its graphics modules.
+
 ### 2.109 Accounts in a scratch root — and what the pane may never see
 (PHASE16 P16.6a, the Accounts pane.)
 

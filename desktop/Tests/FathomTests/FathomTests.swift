@@ -470,4 +470,33 @@ final class FathomTests: XCTestCase {
         XCTAssertFalse(needsPCIeHotplugDisabled(maker: "QEMU", product: "MacPro6,1"))
         XCTAssertFalse(needsPCIeHotplugDisabled(maker: nil, product: "MacPro6,1"))
     }
+
+    /// arm64 has no `machdep.bootmethod`, and boots only through UEFI: its
+    /// absence there is the answer, not an unknown — on x86 it stays unknown.
+    func testArm64BootsThroughUEFIWithoutTheX86Sysctl() {
+        XCTAssertEqual(probeBootMethod(nil, arch: "aarch64").status, .present)
+        XCTAssertTrue(probeBootMethod(nil, arch: "aarch64").detail.hasPrefix("UEFI"))
+        XCTAssertEqual(probeBootMethod(nil, arch: "amd64").status, .unknown)
+        XCTAssertEqual(probeBootMethod("BIOS", arch: "amd64").detail, "BIOS (legacy)")
+    }
+
+    /// The Q8B's Adreno is the msm driver's, and is named as such.
+    func testTheAdrenosDriverIsAGraphicsModule() {
+        let k = """
+        Id Refs Address                Size Name
+         1   80 0xffff000000000000  2b4e9a8 kernel
+         7    1 0xffff0000ab000000   400000 msm.ko
+         8    2 0xffff0000ac000000   100000 drm.ko
+        """
+        XCTAssertEqual(probeModules(kldstat: k).detail, "drm, msm loaded")
+    }
+
+    /// No `net.wlan.devices` and no `wlan` module: nothing wireless, which is
+    /// "absent" (the Q8B); with `wlan` loaded and still no sysctl, unknown.
+    func testNoWlanModuleMeansNoWireless() {
+        XCTAssertEqual(probeWifi(wlanDevices: nil, wlanLoaded: false).status, .absent)
+        XCTAssertEqual(probeWifi(wlanDevices: nil, wlanLoaded: true).status, .unknown)
+        XCTAssertEqual(probeWifi(wlanDevices: nil).status, .unknown, "not asked: unknown, as before")
+        XCTAssertEqual(probeWifi(wlanDevices: "iwm0", wlanLoaded: true).status, .present)
+    }
 }

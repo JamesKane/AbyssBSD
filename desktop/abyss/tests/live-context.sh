@@ -8,8 +8,8 @@
 #   1. Right-click an item in a Finder window: it is selected, and its menu
 #      offers the Finder's own commands. Duplicate makes a copy **on disk**.
 #   2. Right-click the folder's background: New Folder makes one **on disk**.
-#   3. System ▸ About This Computer posts a notification — the notification
-#      centre's own log says it arrived, with the machine in it.
+#   3. System ▸ About This Computer opens System Profiler, which reads this
+#      machine and draws it — the compositor saw its window take focus.
 #   4. System ▸ Force Quit <frontmost> kills the frontmost application's
 #      process: **the process is gone**, and the compositor says which pid.
 #   5. System ▸ System Preferences opens a System Preferences window, which the
@@ -39,7 +39,7 @@ cleanup() {
   for p in ${vp_pid:-} ${victim_pid:-} ${finder_pid:-} ${notify_pid:-} ${bar_pid:-} ${ut_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
-  [ -s "$work/prefs.pid" ] && kill "$(cat "$work/prefs.pid")" 2>/dev/null || true
+  for f in "$work"/*.pid; do [ -s "$f" ] && kill "$(cat "$f")" 2>/dev/null || true; done
   rm -rf "$work" "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
@@ -71,7 +71,8 @@ wd=$(grep -m1 '^WAYLAND_DISPLAY=' "$work/ut.out" | cut -d= -f2-)
 # centre About posts to, and a Finder.
 # What the bar launches for System Preferences: AquaDemo, through a wrapper that
 # records its pid — the launch is detached, and this test must clean it up.
-printf '#!/bin/sh\necho $$ > "%s/prefs.pid"\necho "$WAYLAND_DISPLAY" > "%s/prefs.display"\nexec "%s" "$@"\n' "$work" "$work" "$aqua" > "$work/prefs.sh"
+# One pid file per scene: About opens System Profiler through the same wrapper.
+printf '#!/bin/sh\necho $$ > "%s/$AQUA_SCENE.pid"\necho "$WAYLAND_DISPLAY" > "%s/$AQUA_SCENE.display"\nexec "%s" "$@"\n' "$work" "$work" "$aqua" > "$work/prefs.sh"
 chmod +x "$work/prefs.sh"
 env WAYLAND_DISPLAY="$priv" ABYSS_CONFIG_DIR="$work/cfg" AQUA_SCENE=menubar \
     ABYSS_APP_BINARY="$work/prefs.sh" ABYSS_APP_WAYLAND_DISPLAY="$wd" \
@@ -162,12 +163,17 @@ system_item() {  # system_item TITLE-PREFIX — open System and click that row
 }
 
 # ------------------------------------------------------------- 3. About
+focused_before=$(count "$work/ut.err" "focused org.abyssbsd.systemprofiler")
 system_item "About This Computer"
-after "$work/notify.log" "posted #1: About This Computer" 0 \
-  "About This Computer never reached the notification centre"
-grep -q "chose System > About This Computer (system.about) → ok .* CPUs, .* GB memory" "$work/bar.log" \
-  || fail "About did not say what machine this is: $(grep 'system.about' "$work/bar.log" | tail -1)"
-echo "ok: About This Computer — $(grep 'system.about' "$work/bar.log" | tail -1 | sed 's/.*→ ok //')"
+after "$work/bar.log" "chose System > About This Computer (system.about) → ok System Profiler" 0 \
+  "About This Computer did not open System Profiler"
+i=0
+while [ $i -lt 25 ] && [ ! -s "$work/systemprofiler.pid" ]; do sleep 0.2; i=$((i + 1)); done
+[ -s "$work/systemprofiler.pid" ] || fail "nothing was launched for About"
+[ "$(cat "$work/systemprofiler.display")" = "$wd" ] || fail "System Profiler was given the bar's privileged display"
+after "$work/ut.err" "focused org.abyssbsd.systemprofiler" "$focused_before" "System Profiler's window never took focus"
+kill "$(cat "$work/systemprofiler.pid")" 2>/dev/null || true
+echo "ok: About This Computer opened System Profiler, on the ordinary display"
 
 # ------------------------------------------------------- 4. Force Quit
 env WAYLAND_DISPLAY="$wd" ABYSS_CONFIG_DIR="$work/cfg" AQUA_SCENE=widgets \
@@ -190,17 +196,17 @@ system_item "System Preferences"
 after "$work/bar.log" "chose System > System Preferences… (system.preferences) → ok" 0 \
   "System Preferences was not started"
 i=0
-while [ $i -lt 25 ] && [ ! -s "$work/prefs.pid" ]; do sleep 0.2; i=$((i + 1)); done
-[ -s "$work/prefs.pid" ] || fail "nothing was launched"
-kill -0 "$(cat "$work/prefs.pid")" 2>/dev/null || fail "System Preferences started and died"
+while [ $i -lt 25 ] && [ ! -s "$work/sysprefs.pid" ]; do sleep 0.2; i=$((i + 1)); done
+[ -s "$work/sysprefs.pid" ] || fail "nothing was launched"
+kill -0 "$(cat "$work/sysprefs.pid")" 2>/dev/null || fail "System Preferences started and died"
 # Its window maps and takes focus — the compositor says System Preferences is
 # frontmost. It has been an application of its own, `org.abyssbsd.preferences`,
 # since P14.1; this waited for `org.abyssbsd.aquademo` until 2026-09-28, and
 # failed from P14.1 on without anyone running it.
 after "$work/ut.err" "focused org.abyssbsd.preferences" "$focused_before" \
   "no System Preferences window ever became frontmost"
-[ "$(cat "$work/prefs.display")" = "$wd" ] \
-  || fail "System Preferences was launched on '$(cat "$work/prefs.display")', not the ordinary display — a child of the bar must never inherit its privilege"
+[ "$(cat "$work/sysprefs.display")" = "$wd" ] \
+  || fail "System Preferences was launched on '$(cat "$work/sysprefs.display")', not the ordinary display — a child of the bar must never inherit its privilege"
 echo "ok: System Preferences opened a window the compositor made frontmost — on the ordinary display, not the bar's"
 
 echo "all green (contextual menus are the menu bar's commands; the system menu does what it says)."

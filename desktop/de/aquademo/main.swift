@@ -118,6 +118,11 @@ if let out = envString("AQUA_RENDER_PNG") {
         print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
         exit(ok ? 0 : 1)
     }
+    if sceneName == "systemprofiler" {
+        let ok = renderSystemProfilerPNG(path: out, scale: max(1, scale))
+        print(ok ? "AquaDemo: wrote \(out)" : "AquaDemo: PNG render failed")
+        exit(ok ? 0 : 1)
+    }
     if sceneName == "menu" || sceneName == "frame" {
         let ok = sceneName == "menu" ? renderMenuPNG(path: out, scale: max(1, scale))
                                      : renderFramePNG(path: out, scale: max(1, scale))
@@ -158,6 +163,16 @@ if let watch = appearance {
 // data pointers — alive. Discarding it (e.g. `guard let _ =`) frees the surface
 // before the first configure event and crashes in the listener callback.
 // withExtendedLifetime pins it across run().
+if sceneName == "systemprofiler" {
+    // System Profiler: what this computer is, fastfetch's report in a window.
+    guard let app = SystemProfilerApp(display: display) else {
+        print("AquaDemo: could not open System Profiler."); exit(1)
+    }
+    app.onQuit = { display.stop() }
+    installerSay("AquaDemo: System Profiler is up.")
+    withExtendedLifetime(app) { display.run() }
+    exit(0)
+}
 if sceneName == "loginwindow" {
     // The login window (PHASE16 P16.5a): the greeter session's one surface.
     // ABYSS_LOGINWINDOW_ACCOUNTS="name:Full Name:uid,…" stands in for the
