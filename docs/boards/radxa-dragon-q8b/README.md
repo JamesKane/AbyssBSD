@@ -52,7 +52,8 @@ directory records what we found, so nobody has to find it again.
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
-| Audio, Wi-Fi/BT, camera, NPU | Not investigated (the ADSP runs, but nothing talks to it) | — |
+| Audio | In progress, for the headset jack (WCD9380): the GLINK link to the ADSP works (src `bf6ce26ded`); next GPR/AudioReach, then LPASS, SoundWire and the codec | `sys/dev/qcom_glink` |
+| Wi-Fi/BT, camera, NPU | Not investigated | — |
 | The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
 ## Clock, I²C, SD and devices
@@ -98,6 +99,25 @@ directory records what we found, so nobody has to find it again.
   0x4e0 (SMR 2) to context bank 2 with translation off, so DMA addresses are
   physical. Reading 256 MB takes 256 interrupts (PIO: 524,288) at the same
   24 MB/s, the ceiling of 50 MHz × 4 bits.
+- **Audio, as Linux drives it:** one card ("SC8280XP-Radxa-Dragon-Q8B"):
+  the headset jack (WCD9380 on SoundWire, playback and mic) and three DP
+  outputs; everything through the ADSP (LPASS macros, GPR and AudioReach on
+  the DSP). The DSDT's audio devices (`ADSP` → `ADCM` QCOM06C1 → `AUCD`
+  QCOM0629) are the reference design's Windows stack and say nothing
+  useful. LinuxKPI has no ALSA, so it's native drivers.
+- **GLINK to the ADSP** (src `bf6ce26ded`, `qcom_glink.ko`,
+  `qcom_glink_load="YES"`): SMEM at `0x80900000` (2 MB, version 12, not
+  in FreeBSD's physical segments), TCSR mutex lock 3 at `0x1f40000`; IPCC
+  at `0x408000` (ACPI `IPCC` QCOM06C2 gives only its interrupts, SPI 229
+  first); the edge's items in the APPS–ADSP partition (host 2): descriptor
+  478, our ring 479, the DSP's 480, 16 KB each. The DSP announces GLINK v1
+  (features 0x7) and waits; we agree on 0x1 (intent reuse), and it opens
+  `glink_ssr`, `IPCRTR`, `adsp_apps` (GPR), `fastrpcglink-apps-dsp`,
+  `LOOPBACK_CTL_LPASS`, `PMIC_RTR_ADSP_APPS`, `PMIC_LOGS_ADSP_APPS`,
+  `RADXA_SVC_ADSP_APPS`. A QRTR HELLO on `IPCRTR` gets the DSP's (node 5)
+  and eight services, among them 66 (service-registry notifier, which says
+  when the audio protection domain is up) and 43 (subsystem control).
+  `sysctl dev.qcom_glink.0.lpass` shows the edge and channels.
 - **TLMM GPIOs (`\_SB.GIO0`, `QCOM060C`, `0xf100000`):** `qcom_tlmm_acpi`,
   228 pins, keyed on `\_SB.SOID` 449. The DSDT's GPIO consumers are
   Qualcomm's reference design (`PSUB` "QRD08280"): `acpi_gpiobus` would
