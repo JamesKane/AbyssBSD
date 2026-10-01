@@ -17,10 +17,10 @@ LinuxKPI platform bus, the component framework, runtime PM and platform IRQs).
       the Q8B's ADSP firmware).
 - [ ] `kmod/drm-msm` → drm-msm-kmod **`0f23f29`** (imported up to `02f48c0`;
       missing everything since: Phase C, the msmfb display driver
-      `fc3e136`..`349d5ea` and DPMS `0f23f29`, and GPU devfreq `412bc43`). The msm code at `02f48c0` won't run against the
+      `fc3e136`..`349d5ea` DPMS `42228ff`, GPU devfreq `412bc43`, and the scan-out fixes `1e190da`..`0f23f29`). The msm code at `02f48c0` won't run against the
       Phase C kernel.
 - [ ] `ports/` → freebsd-ports `freedreno` **`2e2e095be`** (copied from
-      `d80cb373e`): drm-msm-kmod at `0f23f29`, PORTREVISION 13 (with the
+      `d80cb373e`): drm-msm-kmod at `0f23f29`, PORTREVISION 15 (with the
       power_profile hook), and the new `sysutils/qcom-dsp-firmware-kmod`.
 - [ ] Decide which copy of msm is canonical: `kmod/drm-msm`, or the
       standalone `JamesKane/drm-msm-kmod` repo that the port still fetches.
