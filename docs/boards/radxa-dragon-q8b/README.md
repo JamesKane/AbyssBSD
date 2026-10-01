@@ -52,7 +52,7 @@ directory records what we found, so nobody has to find it again.
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
-| Audio | Headphone playback through `pcm0` and jack detection work (src `c81975a93b`, in GENERIC); microphone not yet | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
+| Audio | Headphone playback through `pcm0` and jack detection work (src `85f6f47c54`, in GENERIC); microphone not yet | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
 | Wi-Fi/BT, camera, NPU | Not investigated | — |
 | The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
