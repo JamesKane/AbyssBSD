@@ -206,6 +206,10 @@ public final class MenuBar: LayerSurfaceDelegate {
         .command(Command("system.shut-down", "Shut Down…", summary: "Turn the computer off.")),
         .separator,
         // Lock Screen (PHASE16 P16.2c), with the key later Macs gave it.
+        // Fast user switching (PHASE16 P16.6b): this session locks and stays
+        // running; the login window comes forward for someone else.
+        .command(Command("system.login-window", "Login Window…",
+                         summary: "Let someone else log in; your session stays, locked.")),
         .command(Command("system.lock", "Lock Screen", key: .cmd("q", .control),
                          summary: "Lock the screen; your password opens it.")),
         // No "…": there is no confirmation sheet yet, so this is Jaguar's
@@ -392,7 +396,8 @@ public final class MenuBar: LayerSurfaceDelegate {
 
     private func systemEnablement(_ verb: String) -> Enablement {
         switch verb {
-        case "system.about", "system.preferences", "system.log-out", "system.lock", "system.sleep":
+        case "system.about", "system.preferences", "system.log-out", "system.lock", "system.sleep",
+             "system.login-window":
             return .enabled
         case "system.force-quit":
             guard focus != nil else { return .disabled("the bar cannot see which application is frontmost") }
@@ -463,6 +468,17 @@ public final class MenuBar: LayerSurfaceDelegate {
             }
             RecentItems.record(bundle)
             return .ok(bundle)
+        case "system.login-window":
+            var m = Msg(); m.set("method", "switch-user")
+            do {
+                let s = try Current.connect(path: LoginClient.socket)
+                defer { close(s) }
+                try Current.send(m, on: s)
+                let r = try Current.receive(on: s)
+                return r.bool("ok") == true ? .ok("the login window") : .refused(r.string("error") ?? "not switched")
+            } catch {
+                return .refused("nobody to ask for the login window: \(error)")
+            }
         case "system.restart", "system.shut-down":
             // "…": it asks first (P16.4b) — the power dialog, on the ordinary
             // display like any application the bar opens (P10.8), never ours.

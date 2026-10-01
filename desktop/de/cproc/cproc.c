@@ -8,14 +8,17 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <pwd.h>
+#include <sys/ioctl.h>
 #include <grp.h>
 #include "cproc.h"
 
 #if defined(__FreeBSD__)
 #include <sys/procdesc.h>
 #include <login_cap.h>
+#include <sys/consio.h>
 #elif defined(__linux__)
 #include <sys/syscall.h>
+#include <linux/vt.h>
 #else
 #error "CProc: unsupported platform (need pdfork or pidfd_open)"
 #endif
@@ -254,4 +257,24 @@ int ap_signal_pipe(const int *sigs, int count) {
         if (sigaction(sigs[i], &sa, NULL) != 0) return -1;
     }
     return g_sig_pipe[0];
+}
+
+/*
+ * Bring virtual terminal `vt` (1-based, as vidcontrol -s counts) to the front
+ * and wait until it is (PHASE16 P16.6b): fast user switching's one console
+ * act. Root's: the console is root's to switch.
+ */
+int ap_vt_activate(int vt) {
+#if defined(__FreeBSD__)
+    int fd = open("/dev/ttyv0", O_RDWR | O_CLOEXEC);
+#else
+    int fd = open("/dev/tty0", O_RDWR | O_CLOEXEC);
+#endif
+    if (fd < 0) return -1;
+    int rc = ioctl(fd, VT_ACTIVATE, vt);
+    if (rc == 0) rc = ioctl(fd, VT_WAITACTIVE, vt);
+    int e = errno;
+    close(fd);
+    errno = e;
+    return rc;
 }

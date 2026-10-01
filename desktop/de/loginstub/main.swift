@@ -51,6 +51,9 @@ while let a = args.first {
     case "--session-log-dir": sessionConfig.logDirectory = args.isEmpty ? "" : args.removeFirst()
     case "--runtime-root": sessionConfig.runtimeRoot = args.isEmpty ? "" : args.removeFirst()
     case "--session-path": sessionConfig.path = args.isEmpty ? "" : args.removeFirst()
+    case "--vt-command": sessionConfig.vtCommand = args.isEmpty ? "" : args.removeFirst()
+    // Two named users, both this account, each in its own runtime directory (P16.6b).
+    case "--sessions-as-self": sessionConfig.sessionsAsSelf = true
     case "--session-env":
         let kv = args.isEmpty ? "" : args.removeFirst()
         if let eq = kv.firstIndex(of: "=") { sessionConfig.extraEnvironment[String(kv[..<eq])] = String(kv[kv.index(after: eq)...]) }
@@ -86,6 +89,7 @@ service.systemUID = systemUID
 service.greeterUID = greeterUID
 if greeter {
     sessionConfig.extraEnvironment["ABYSS_LOGIN_SOCKET"] = socketPath
+    if sessionConfig.sessionsAsSelf { service.uidOf = { _ in UInt32(geteuid()) } }
     service.sessions = SessionManager(config: sessionConfig, log: emit)
 }
 service.run()

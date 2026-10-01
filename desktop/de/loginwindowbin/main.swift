@@ -50,6 +50,8 @@ while i < args.count {
     case "--session-command": sessionConfig.command = value("--session-command")
     case "--session-log-dir": sessionConfig.logDirectory = value("--session-log-dir")
     case "--runtime-root": sessionConfig.runtimeRoot = value("--runtime-root")
+    // A stand-in for the console's VT switch, for a test (P16.6b).
+    case "--vt-command": sessionConfig.vtCommand = value("--vt-command")
     case "-h", "--help":
         emit(1, "usage: abyss-loginwindow [--socket PATH] [--pam-service NAME] [--once] [--acpiconf PATH] [--shutdown PATH]\n"
              + "                         [--greeter [--session-command PATH] [--session-log-dir DIR] [--runtime-root DIR]]")

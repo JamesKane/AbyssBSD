@@ -67,6 +67,10 @@ int ap_child_spawn_as(const char *user, const char *const *argv, const char *con
 
 int ap_child_reap(ap_child *c, int *status);
 
+/* Bring virtual terminal `vt` (1-based) to the front and wait for it (P16.6b).
+ * 0, or -1 with errno. */
+int ap_vt_activate(int vt);
+
 /*
  * Run a command to completion and return its **exit status** (as from
  * WEXITSTATUS), or -1 with errno set. Writes 1 to *signalled when the child

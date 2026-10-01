@@ -164,10 +164,15 @@ final class Policy {
             return
         }
         switch m.string("event") {
-        case "sleep":
+        case "sleep", "lock":
+            // "lock" (P16.6b): the person is switching to the login window,
+            // and their session must be locked behind it — whatever the
+            // password setting, since otherwise one VT switch would open it.
+            let mustLock = prefs.requirePassword || m.string("event") == "lock"
             var answer = Msg()
-            if prefs.requirePassword {
-                if let why = lockAndConfirm(because: "the machine is about to sleep") {
+            if mustLock {
+                if let why = lockAndConfirm(because: m.string("event") == "lock" ? "switching to the login window"
+                                                                                 : "the machine is about to sleep") {
                     answer.set("ready", false); answer.set("why", why)
                     say("the machine is about to sleep: NOT ready — \(why)")
                 } else {

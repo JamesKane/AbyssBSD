@@ -107,7 +107,9 @@ public final class LoginService {
     /// (`--greeter`): the greeter at start, a person's on a login, the
     /// greeter again when they log out.
     public var sessions: SessionManager?
-    private let uidOf: (String) -> UInt32? = { name in getpwnam(name).map { UInt32($0.pointee.pw_uid) } }
+    /// An account's uid by name; a test's sessions-as-self stand-in maps every
+    /// name to its own.
+    public var uidOf: (String) -> UInt32? = { name in getpwnam(name).map { UInt32($0.pointee.pw_uid) } }
     private var watchers: [(fd: Int32, uid: UInt32)] = []
 
     public init(server: Current.Server, authenticator: Authenticator,
@@ -132,10 +134,10 @@ public final class LoginService {
         sessions?.startGreeter()
         while true {
             var fds = [pollfd(fd: server.fd, events: Int16(POLLIN), revents: 0)]
-            // The session's end, if one runs: polled first, read last.
-            let sessionFD = sessions?.childFD
-            if let f = sessionFD {
-                fds.append(pollfd(fd: f, events: Int16(ap_child_exit_events() | POLLHUP | POLLIN), revents: 0))
+            // Every session's end (P16.6b: several at once): polled first, read last.
+            let sessionFDs = sessions?.childFDs ?? []
+            for s in sessionFDs {
+                fds.append(pollfd(fd: s.fd, events: Int16(ap_child_exit_events() | POLLHUP | POLLIN), revents: 0))
             }
             for w in watchers { fds.append(pollfd(fd: w.fd, events: Int16(POLLIN), revents: 0)) }
             let n = fds.withUnsafeMutableBufferPointer { poll($0.baseAddress, nfds_t($0.count), -1) }
@@ -143,10 +145,10 @@ public final class LoginService {
             // A watcher readable outside a sleep has hung up — or is answering
             // a sleep that was already called off (it was too slow). A late
             // answer is read and set aside; anything else ends the watch.
-            if let f = sessionFD, fds.contains(where: { $0.fd == f && $0.revents != 0 }) {
-                sessions?.childExited()
+            for s in sessionFDs where fds.contains(where: { $0.fd == s.fd && $0.revents != 0 }) {
+                sessions?.childExited(s.who)
             }
-            for p in fds.dropFirst() where p.revents != 0 && p.fd != sessionFD {
+            for p in fds.dropFirst() where p.revents != 0 && !sessionFDs.contains(where: { $0.fd == p.fd }) {
                 if let late = try? Current.receive(on: p.fd), late.bool("ready") != nil {
                     say("loginwindow: a late answer from a session, after its sleep was called off — ignored")
                 } else {
@@ -180,6 +182,22 @@ public final class LoginService {
             say("loginwindow: uid \(uid)'s session is watching (\(watchers.count) watching)")
         case "power":
             power(client, uid: uid, request: request)
+        case "switch-user":
+            switchUser(client, uid: uid)
+        case "sessions", "resume":
+            // The login window's alone: who is logged in, and back to one of them.
+            defer { close(client) }
+            guard let uid, let g = greeterUID, uid == g, let s = sessions else {
+                reply(client, LoginWire.error("only the login window may ask that")); return
+            }
+            var r = Msg(); r.set("ok", true)
+            if request.string("method") == "sessions" {
+                r.set("users", s.loggedIn.sorted().joined(separator: " "))
+            } else {
+                let user = request.string("user") ?? ""
+                guard s.resume(user) else { reply(client, LoginWire.error("\(user) has no session to go back to")); return }
+            }
+            reply(client, r)
         case "login":
             let isGreeter = uid != nil && greeterUID != nil && uid == greeterUID
             let (r, line, user) = auth.handleLogin(callerIsGreeter: isGreeter, request: request,
@@ -255,12 +273,43 @@ public final class LoginService {
         }
     }
 
-    /// Tell every watching session the machine is about to sleep, and wait for
-    /// each to say it is locked. Nil when all did, else why not.
-    private func lockEverySession() -> String? {
+    /// "Login Window…" from a session (P16.6b): that session is locked —
+    /// its agent, as before a sleep — and only then does the login window
+    /// come forward; the session keeps running behind it. Refused if it
+    /// cannot lock: switching away from an open session would leave it one
+    /// VT switch from anyone.
+    private func switchUser(_ client: Int32, uid: UInt32?) {
+        defer { close(client) }
+        guard let uid, let s = sessions, case .user(let front)? = s.front else {
+            reply(client, LoginWire.error("there is no session in front to switch from")); return
+        }
+        let frontUID = getpwnam(front).map { UInt32($0.pointee.pw_uid) }
+        guard frontUID == uid || (s.sessionsAsSelf && uid == geteuid()) else {
+            reply(client, LoginWire.error("only the session in front may switch away from itself")); return
+        }
+        // Nobody watching for that account means nobody to lock it: refused,
+        // never "nobody objected".
+        guard watchers.contains(where: { $0.uid == uid }) else {
+            say("loginwindow: \(front) asked for the login window — refused: no agent to lock the session")
+            reply(client, LoginWire.error("not switched: the session has nothing to lock it")); return
+        }
+        if let why = lockEverySession(of: uid, event: "lock") {
+            say("loginwindow: \(front) asked for the login window — refused: \(why)")
+            reply(client, LoginWire.error("not switched: \(why)")); return
+        }
+        var ok = Msg(); ok.set("ok", true)
+        reply(client, ok)
+        say("loginwindow: \(front) is locked — the login window")
+        s.showLoginWindow(for: front)
+    }
+
+    /// Tell every watching session the machine is about to sleep (or, for a
+    /// switch, one account's sessions to lock), and wait for each to say it
+    /// is locked. Nil when all did, else why not.
+    private func lockEverySession(of only: UInt32? = nil, event: String = "sleep") -> String? {
         var waiting: [(fd: Int32, uid: UInt32)] = []
-        for w in watchers {
-            var m = Msg(); m.set("event", "sleep")
+        for w in watchers where only == nil || w.uid == only {
+            var m = Msg(); m.set("event", event)
             if (try? Current.send(m, on: w.fd)) != nil { waiting.append(w) }
             else { dropWatcher(w.fd, "gone") }
         }

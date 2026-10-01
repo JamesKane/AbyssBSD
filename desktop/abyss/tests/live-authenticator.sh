@@ -30,7 +30,11 @@
 #      stand-in session that records who it is: the login window runs as
 #      `_loginwindow`; a login starts the person's session **as them** —
 #      their uid, not in wheel, in a runtime directory that is theirs and
-#      0700 — and its end brings the login window back.
+#      0700 — and its end brings the login window back, each on its own VT
+#      (the console's switch a stand-in that records: VT 9, then 10);
+#  10. fast user switching's refusals (P16.6b), as the real uids: a session
+#      with no agent to lock it cannot switch away, and nobody but the session
+#      in front may switch.
 #
 # On Linux there is no PAM to ask, and the daemon must say so (the positive
 # control). Needs root in the guest (passwordless sudo, as the build VM has).
@@ -197,9 +201,10 @@ while [ ! -e "$work/end.\$(id -un)" ]; do sleep 0.1; done
 rm -f "$work/end.\$(id -un)"
 SESSION
 chmod 755 "$work/session"; : > "$work/record"; chmod 666 "$work/record"; chmod 777 "$work"
+printf '#!/bin/sh\necho "$1" >> "%s/vt.log"\n' "$work" > "$work/vt"; chmod 755 "$work/vt"; : > "$work/vt.log"; chmod 666 "$work/vt.log"
 mkdir -p "$work/run"
 sock2="$work/auth2.sock"
-sudo sh -c "'$daemon' --socket '$sock2' --pam-service '$svc' --greeter --session-command '$work/session' \
+sudo sh -c "'$daemon' --socket '$sock2' --pam-service '$svc' --greeter --session-command '$work/session' --vt-command '$work/vt' \
   --session-log-dir '$work' --runtime-root '$work/run' > '$work/daemon2.log' 2>&1 & echo \$! > '$work/pid2'"
 i=0; while [ ! -S "$sock2" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
 dpid2=$(cat "$work/pid2")
@@ -221,6 +226,19 @@ sudo touch "$work/end.$ua"
 g2=$(rec "greeter _loginwindow " 2)
 [ -n "$g2" ] || fail "$ua's session ended and the login window did not come back"
 echo "ok: 9. sessions: the login window ran as _loginwindow; $ua's session as $ua (uid $(id -u "$ua"), its own 0700 runtime directory, its home, no wheel); its end brought the window back"
+[ "$(tr '\n' ' ' < "$work/vt.log")" = "9 10 9 " ] || fail "the VT switches: $(tr '\n' ' ' < "$work/vt.log")"
+
+# ------------------------------------------------------------ 10. switching's refusals
+[ "$(printf '%s\n' "$pb" | sudo -u _loginwindow "$work/abyss-loginctl" --socket "$sock2" login "$ub")" = accepted ] \
+  || fail "the login window could not log $ub in"
+[ -n "$(rec "desktop $ub " 1)" ] || fail "$ub's session never ran"
+got=$(sudo -u "$ub" "$work/abyss-loginctl" --socket "$sock2" switch-user || true)
+[ "$got" = "refused: not switched: the session has nothing to lock it" ] || fail "$ub, with no agent, switching: $got"
+got=$(sudo -u "$ua" "$work/abyss-loginctl" --socket "$sock2" switch-user || true)
+[ "$got" = "refused: only the session in front may switch away from itself" ] || fail "$ua, not in front, switching: $got"
+[ "$(tr '\n' ' ' < "$work/vt.log")" = "9 10 9 10 " ] || fail "a refused switch moved the VT: $(tr '\n' ' ' < "$work/vt.log")"
+echo "ok: 10. switching away is refused for a session nothing can lock, and for anyone not in front — as the real uids"
+sudo touch "$work/end.$ub"
 sudo touch "$work/end._loginwindow"
 
 echo "all green (the authenticator answers each person about themselves, slowly when they guess, and writes no password down)."

@@ -199,4 +199,18 @@ final class LoginTests: XCTestCase {
         // alone left a zombie (HANDOFF §2.108).
         XCTAssertEqual(waitpid(-1, nil, WNOHANG), -1, "a reaped child is not left as a zombie")
     }
+
+    /// One VT each (P16.6b): the greeter's is fixed; people get the lowest
+    /// free from 10, keep theirs, and give it back when they log out.
+    func testEachSessionHasItsOwnVT() {
+        var p = VTPlan()
+        XCTAssertEqual(VTPlan.greeter, 9, "ttyv8: what /etc/ttys leaves for a display manager")
+        XCTAssertEqual(p.vt(for: "ada"), 10)
+        XCTAssertEqual(p.vt(for: "bob"), 11)
+        XCTAssertEqual(p.vt(for: "ada"), 10, "ada keeps hers")
+        p.release("ada")
+        XCTAssertEqual(p.vt(for: "cy"), 10, "the lowest free")
+        for n in ["d", "e", "f", "g", "h"] { _ = p.vt(for: n) }
+        XCTAssertNil(p.vt(for: "z"), "every VT taken: none, not a shared one")
+    }
 }

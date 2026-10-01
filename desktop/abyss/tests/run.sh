@@ -275,6 +275,10 @@ if [ "$live" -eq 1 ]; then
   # window again on Log Out (unprivileged; the root half is live-authenticator's).
   echo "== sessions =="
   quiet "$root/abyss/tests/live-greeter.sh"
+  # Fast user switching (P16.6b): two sessions side by side, each locked
+  # behind the window, back to one with no password at the window.
+  echo "== fast user switching =="
+  quiet "$root/abyss/tests/live-switchuser.sh"
   # Accounts (P16.6a): through the settings helper, against a scratch root,
   # and through the Accounts pane, clicked and typed.
   echo "== accounts =="

@@ -17,6 +17,7 @@ import Login
 import CCairo
 import PoolConfig
 import CWayland
+import CurrentIPC
 
 #if canImport(Glibc)
 import Glibc
@@ -65,6 +66,9 @@ public final class LoginWindow: LayerSurfaceDelegate {
     private let socket: String
     private let style: DesktopStyle
     private var loggedLayout = ""
+    /// Who already has a session running (P16.6b): choosing one of them goes
+    /// back to it, and its own lock screen asks.
+    public private(set) var loggedIn: Set<String> = []
 
     static func log(_ s: String) {
         let line = "LoginWindow: " + s + "\n"
@@ -80,6 +84,8 @@ public final class LoginWindow: LayerSurfaceDelegate {
                                     width: 0, height: 0, anchor: .all, exclusiveZone: -1,
                                     keyboard: .exclusive, delegate: self) else { return nil }
         layer = ls
+        loggedIn = LoginWindow.askLoggedIn(socket)
+        if !loggedIn.isEmpty { LoginWindow.log("logged in: " + loggedIn.sorted().joined(separator: " ")) }
         LoginWindow.log("up: " + (accounts.isEmpty ? "no accounts" : accounts.map(\.name).joined(separator: " ")))
     }
 
@@ -156,8 +162,12 @@ public final class LoginWindow: LayerSurfaceDelegate {
                     Draw.setColor(cr, Color(0.22, 0.46, 0.84, 0.9)); cairo_fill(cr)
                 }
                 Draw.icon("icon.myAccount", cr, Rect(r.x + 8, r.y + 4, r.h - 8, r.h - 8))
-                Draw.textLeft(cr, a.fullName, x: r.x + r.h + 12, baselineY: r.y + r.h / 2 + 5,
+                Draw.textLeft(cr, a.fullName, x: r.x + r.h + 12, baselineY: r.y + r.h / 2 + (loggedIn.contains(a.name) ? -1 : 5),
                               color: i == highlighted ? Color(1, 1, 1) : Color(0, 0, 0), size: 14, style: .bold)
+                if loggedIn.contains(a.name) {
+                    Draw.textLeft(cr, "Logged in", x: r.x + r.h + 12, baselineY: r.y + r.h / 2 + 14,
+                                  color: i == highlighted ? Color(1, 1, 1) : Color(0.35, 0.35, 0.35), size: 11)
+                }
             }
         }
         for (r0, label) in [(l.sleep, "Sleep"), (l.restart, "Restart"), (l.shutDown, "Shut Down")] {
@@ -206,7 +216,28 @@ public final class LoginWindow: LayerSurfaceDelegate {
         layer?.setNeedsDisplay()
     }
 
+    static func askLoggedIn(_ socket: String) -> Set<String> {
+        var m = Msg(); m.set("method", "sessions")
+        guard let s = try? Current.connect(path: socket) else { return [] }
+        defer { close(s) }
+        guard (try? Current.send(m, on: s)) != nil, let r = try? Current.receive(on: s), r.bool("ok") == true else { return [] }
+        return Set((r.string("users") ?? "").split(separator: " ").map(String.init))
+    }
+
     private func choose(_ a: LoginAccount) {
+        if loggedIn.contains(a.name) {
+            // Theirs is running, locked: back to it — no password here. Said
+            // first: the daemon ends this window as it goes back.
+            LoginWindow.log("back to \(a.name)'s session")
+            var m = Msg(); m.set("method", "resume"); m.set("user", a.name)
+            let ok = (try? Current.connect(path: socket)).map { s -> Bool in
+                defer { close(s) }
+                guard (try? Current.send(m, on: s)) != nil, let r = try? Current.receive(on: s) else { return false }
+                return r.bool("ok") == true
+            } ?? false
+            if !ok { LoginWindow.log("going back to \(a.name)'s session was refused") }
+            return
+        }
         chosen = a
         model = LockModel()
         LoginWindow.log("chose \(a.name)")

@@ -730,6 +730,40 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.111 Fast user switching — one password, and locked before it leaves
+(PHASE16 P16.6b.)
+
+**The session is locked before the login window comes forward.** With
+sessions on VTs, the one left behind is a key-press away (Ctrl-Alt-F10). So
+`switch-user` has the session's agent lock it, with the same confirmation as
+before a sleep (the compositor's word, §2.104), and refuses if the session
+has no agent or cannot lock. Only the session in front may ask, and only for
+itself.
+
+**One password, not two.** Locking first and then asking for the password at
+the window would make a person type it twice: once at the window, once at
+their lock screen. So the window marks who is logged in, and choosing them
+sends `resume` (the greeter's alone, with no password): the daemon goes back to
+their VT, and their lock screen, which guards the session anyway, asks.
+
+**Two test traps:**
+- **Killing a session's agent proves nothing:** anchor supervises it and starts
+  another at once, so a "no agent, refused" claim passed the switch. The
+  refusal is tested with the agent *stopped* (SIGSTOP), there and unable to
+  answer.
+- **"login " also matches "the login window".** Count the daemon's
+  `loginwindow: login <user>:` lines, not a word that is in the prose.
+
+A daemon that ends the login window before it replies kills the window
+mid-request, which is fine for a greeter. The window logs its "back to …"
+*before* it asks.
+
+Two sessions side by side as **two real uids** would need each to have a
+working display as that user. The harness shows it with one account playing
+two named users (`--sessions-as-self`, a stand-in only the never-shipped
+stub accepts), each in its own runtime directory under its own name. The real
+privilege drop is P16.5b's claim 9, as root.
+
 ### 2.110 System Profiler — and a fact is a reading, or unknown
 (fastfetch's report as an application; About This Computer opens it.)
 

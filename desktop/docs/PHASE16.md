@@ -310,6 +310,29 @@ and fast user switching.
   (4 claims, clicked and typed). Two new goldens, 9 unit tests, six faults
   injected and caught.
 
+✅ **P16.6b done 2026-10-01, and with it P16.6** (but for the metal VT switch).
+- **Several sessions:** `SessionManager` runs the greeter and one session per
+  person, one in front, each on its own VT (`VTPlan`: the greeter on 9, which
+  is ttyv8, the slot `/etc/ttys` leaves for a display manager; people on 10
+  to 16). The console's `VT_ACTIVATE` (`ap_vt_activate`), or a recording
+  stand-in for a test.
+- **System > Login Window…** asks the daemon's new `switch-user`. The session
+  in front, and only it, is **locked first** through its agent (a `lock`
+  event, whatever the password setting), and refused if it has no agent or
+  cannot lock. Then the login window comes forward, the session running
+  behind it.
+- **At the window** people already logged in are marked. Choosing one sends
+  `resume` (the greeter's alone): back to their session with **no password
+  at the window**. Their own lock screen asks, so it is one password, not
+  two. Anyone else gets a session beside the others. Logging out from behind
+  leaves the front session alone.
+- **Tests:** `live-switchuser.sh` (6 claims, unprivileged: two named users
+  played by one account, `--sessions-as-self`, each in its own runtime
+  directory), and `live-authenticator.sh` claims 9–10 as root (VTs recorded;
+  the refusals as the real uids). Five faults injected, each caught.
+- **Owed on metal:** a real VT switch, and seatd handing the seat from one
+  compositor to the next.
+
 **P16.7 — first run (M).** A Setup Assistant at an account's first login, on the
 installer's hub-and-spoke shape (§6.5). *Verified:* a fresh account sees it
 once, its choices are written where the panes read them, and the second login

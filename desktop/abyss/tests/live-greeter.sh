@@ -111,7 +111,8 @@ echo "ok: 2. the right password ended the login window and started the session â
 # ------------------------------------------------------------ 3. Log Out
 await "$work/abyss-session-$me.log" 'anchor: session is live' "the person's session never went live" 2
 ABYSS_RUNTIME_DIR="$run" "$bin/abyssctl" quit > /dev/null 2>&1 || fail "abyssctl quit could not reach the session"
-await "$work/stub.log" "sessions: $me logged out â€” the login window again" "Log Out did not bring the login window back"
+await "$work/stub.log" "sessions: $me logged out" "Log Out was not seen"
+await "$work/stub.log" "sessions: the login window again" "Log Out did not bring the login window back"
 await "$work/record" "^greeter $me " "the login window did not run again" 2
 await "$work/abyss-session-$me.log" 'LoginWindow: layout' "the login window did not draw again" 2
 echo "ok: 3. Log Out brought the login window back"

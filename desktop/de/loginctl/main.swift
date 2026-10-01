@@ -9,6 +9,7 @@
 // 0 only for `accepted`. For tests and for people; the lock screen links Login.
 
 import Login
+import CurrentIPC
 
 #if canImport(Glibc)
 import Glibc
@@ -23,6 +24,18 @@ if args.count == 2, args[0] == "power" {
     guard let action = PowerAction(rawValue: args[1]) else { print("no such action: \(args[1])"); exit(2) }
     do {
         let r = try PowerClient.request(action, socket: socket)
+        if r.bool("ok") == true { print("ok"); exit(0) }
+        print("refused: \(r.string("error") ?? "?")"); exit(1)
+    } catch { print("error: \(error)"); exit(1) }
+}
+if args == ["switch-user"] {
+    // Fast user switching (P16.6b): lock this session, show the login window.
+    var m = Msg(); m.set("method", "switch-user")
+    do {
+        let s = try Current.connect(path: socket)
+        defer { close(s) }
+        try Current.send(m, on: s)
+        let r = try Current.receive(on: s)
         if r.bool("ok") == true { print("ok"); exit(0) }
         print("refused: \(r.string("error") ?? "?")"); exit(1)
     } catch { print("error: \(error)"); exit(1) }
