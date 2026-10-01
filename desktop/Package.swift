@@ -246,7 +246,7 @@ let package = Package(
         // The Aqua toolkit: drawing, theme tokens, the 10.2 widget set.
         .target(
             name: "Aqua",
-            dependencies: ["AquaDraw", "MenuModel", "MenuWire", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform", "Spawn", "AppBundles", "Terminal", "Pty",
+            dependencies: ["AquaDraw", "MenuModel", "MenuWire", "Surface", "CCairo", "CText", "PoolConfig", "CPlatform", "Spawn", "AppBundles", "Terminal", "Pty", "TextModel",
                            "Vents", "CurrentIPC",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
@@ -313,6 +313,9 @@ let package = Package(
         // pseudo-terminal beside it — and a tool that runs a program through
         // both with no display, which is how `vi` is asserted on.
         .target(name: "Terminal", path: "de/terminal"),
+        // TextEdit (PHASE15 P15.5): editing, undo, find and wrapping, pure —
+        // the model under the toolkit's text view.
+        .target(name: "TextModel", path: "de/textmodel"),
         .target(name: "Pty", dependencies: ["CPlatform", "Spawn"], path: "de/pty"),
         .executableTarget(name: "abyss-vt", dependencies: ["Pty", "Terminal"], path: "de/vtbin"),
         // `.desktop` → `.app` (PHASE15 P15.1): the rules as values, importing
@@ -321,6 +324,7 @@ let package = Package(
         .executableTarget(name: "abyss-appgen", dependencies: ["AppBundles", "Spawn"], path: "de/appgen"),
         .testTarget(name: "AppBundlesTests", dependencies: ["AppBundles"], path: "Tests/AppBundlesTests"),
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
+        .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
         // installer's shape: plans as values that import nothing, a wire the
         // pane links without the executor, the runner, and two binaries.

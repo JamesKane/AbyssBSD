@@ -14,6 +14,7 @@ import CCairo
 import Surface
 import Vents
 import Terminal
+import TextModel
 
 #if canImport(Glibc)
 import Glibc
@@ -35,6 +36,7 @@ public enum SceneKind: Sendable {
     case finder      // the file browser (an ordinary xdg-shell toplevel)
     case installer   // the guided installer (PHASE5 P5.4)
     case terminal    // Terminal (PHASE15 P15.4b)
+    case textedit    // TextEdit (PHASE15 P15.5)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -213,6 +215,14 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // Show the sheet fully out for the static shot.
         paintSheetScene(cr, w: cw, h: ch, progress: 1, visible: true,
                         lastAction: "—")
+    case .textedit:
+        // A fixed document: wrapped lines, a tab, a selection across a line
+        // break, and the find bar with its text.
+        let view = TextView()
+        view.setText("Welcome to TextEdit.\n\nPlain text, opened and saved through the Finder, with undo and find. A long line wraps at the window's edge, after the last space that fits.\n\tIndented with a tab.\nThe end.")
+        view.edit { $0.select(TextRange(TextPosition(line: 2, column: 6), TextPosition(line: 3, column: 9))) }
+        paintTextEdit(cr, w: cw, h: ch, title: "Notes.txt — Edited", view: view,
+                      findBar: "wraps", findFocused: false, caretOn: true)
     case .terminal:
         // A fixed transcript through the real screen model: a prompt, colours,
         // bold, inverse, a line-drawing box, and the caret on the last line.

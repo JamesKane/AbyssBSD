@@ -606,6 +606,22 @@ final class AquaTests: XCTestCase {
         XCTAssertEqual(RecentItems.load(configDir: dir + "/nowhere"), [])
     }
 
+    /// What opens in TextEdit (P15.5): text by its name — even with the execute
+    /// bit a FAT stick gives every file — and by its bytes when it has no
+    /// extension; anything else goes on to the configured opener.
+    func testPlainTextIsKnownByNameOrBytes() {
+        XCTAssertTrue(PlainText.hasTextExtension("notes.TXT"))
+        XCTAssertTrue(PlainText.hasTextExtension("main.swift"))
+        XCTAssertFalse(PlainText.hasTextExtension("run.sh.bak"))
+        XCTAssertFalse(PlainText.hasTextExtension(".profile"), "a dotfile's name is not an extension")
+        XCTAssertTrue(PlainText.looksLikeText(Array("# README\nCafé ☕\n".utf8)))
+        XCTAssertFalse(PlainText.looksLikeText([0x7F, 0x45, 0x4C, 0x46, 0x02, 0x01, 0x00]), "an ELF binary")
+        XCTAssertFalse(PlainText.looksLikeText([0xFF, 0xFE, 0x41]), "not UTF-8")
+        let cut = Array(String(repeating: "a", count: 10).utf8) + [0xE2, 0x98]   // half of ☕ at the edge
+        XCTAssertTrue(PlainText.looksLikeText(cut), "a rune cut off by the 4 KB edge is still text")
+        XCTAssertFalse(PlainText.looksLikeText([]))
+    }
+
     func testTheDesktopsMenuIsItsOwnFewCommands() {
         XCTAssertEqual(Wallpaper.contextMenu.commands.map(\.verb),
                        ["desktop.new-folder", "desktop.change-background"])

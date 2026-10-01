@@ -279,6 +279,51 @@ piece, not TextEdit's: every later editor uses it), then TextEdit on it: open
 and save plain text, through the file chooser (our portal, so a sandboxed
 editor is possible later), undo, find. *Verified:* a file opened, edited with
 the virtual keyboard, saved, and its bytes read back.
+✅ **Done 2026-10-01**, in three:
+
+- **(a) the model — `TextModel`, pure, 8 tests.** Lines of Characters (a caret
+  never lands inside a grapheme), one `replace` primitive every edit goes
+  through so Undo is exact by construction; Mac motion (Option for words —
+  from a line's end, to the end of the next word — Command for row ends and the
+  document's); **undo that groups a run of typing (or of Backspaces) into one
+  "Undo Typing"**, closed by a click, a caret move or a save, with the
+  selection put back, and a dirty flag that knows when Undo returns to the saved
+  text — and that an edit after undoing past it can never get back there; find,
+  either way, round the end, case optionally ignored; and `TextLayout`, which
+  wraps lines after the last space that fits (or inside a word longer than the
+  row) and maps positions to (row, x) and back — a caret at a wrap starts the
+  next row, a click past a wrapped row's end lands at that row's end.
+- **(b) the toolkit's `TextView` and TextEdit on it.** The view: scrolled,
+  wrapped, Jaguar's selection highlight (a selected newline drawn to the edge),
+  a thin blinking caret, keys (arrows, Shift, Option, Command, Page keys,
+  Delete both ways, Return, Tab) and the pointer (click, Shift-click, drag,
+  double- and triple-click, the wheel). **Fixed pitch for now** (the `mono`
+  role), so caret and click positions are exact; proportional text needs only
+  another `advance` for the layout. TextEdit (`AQUA_SCENE=textedit`, app_id
+  `org.abyssbsd.textedit`; files as arguments): a window per document, title
+  `name — Edited`, menus (File: New, Open…, Close, Save, Save As…; Edit: Undo
+  and Redo titled from the history, Cut, Copy, Paste, Select All, Find…, Find
+  Next/Previous), a find bar. **Open… and Save As… ask the portal** — the
+  answer arrives on its socket in the run loop, so the window keeps drawing
+  while the person chooses in the Finder; Save is a temporary file and a
+  rename, keeping the file's mode; **a file that is not UTF-8 is refused, not
+  opened**, because saving replacement characters back would destroy it.
+- **(c) around it.** The Finder opens text in TextEdit (`Launcher.open`: a text
+  extension, or no extension and UTF-8 with no NUL in the first 4 KB — tested),
+  **before** the executable check for a text name, because a file off a FAT
+  stick has every execute bit set and a `.txt` must not run; a configured
+  opener still wins, being the person's choice. Closing a document with edits
+  shows Jaguar's sheet — Save (Return), Don't Save (⌘D), Cancel (Escape) — and
+  Quit asks each edited document in turn; Save on an untitled one goes through
+  Save As and then closes.
+
+`live-textedit.sh`, both platforms, every claim on the file's bytes: opened by
+path; a click at a measured character, typing, ⌘↓, typing, ⌘S — exactly the
+expected bytes; typing then ⌘Z ("Undo Typing") — saved again, unchanged; ⌘F
+`needle`, Return, Escape, typing — the replacement on disk; ⌘O through the
+portal and the Finder opens a second file; an untitled ⌘S is Save As through the
+Finder's save picker; the sheet's three answers; and a Finder double-click
+opening a `.txt` in TextEdit. Goldens `textedit` and `textedit@2x`.
 
 **P15.6 — Grab (S–M).** A selection rectangle on a layer surface over every
 output, a window picker (foreign-toplevel), and a save sheet, over the

@@ -71,6 +71,9 @@ case "installer":
     // what a disk is, and tall enough that the hub does not scroll — a summary
     // you have to scroll is not a summary.
     scene = .installer; title = "Install AbyssBSD"; width = 620; height = 460
+case "textedit":
+    // TextEdit (PHASE15 P15.5): the arguments are files to open.
+    scene = .textedit; title = "TextEdit"; width = 520; height = 380
 case "terminal":
     // Terminal (PHASE15 P15.4b). Live, it sizes its window to 80×24 itself;
     // this is the golden scene's size.
@@ -186,6 +189,14 @@ if scene == .wallpaper {
     }
     installerSay("AquaDemo: System Preferences is up (\(PrefCatalogue.all.count) panes)")
     withExtendedLifetime(prefs) { display.run() }
+} else if scene == .textedit {
+    let textedit = TextEditApp(display: display)
+    let files = Array(CommandLine.arguments.dropFirst())
+    var any = false
+    for f in files where textedit.open(path: f) { any = true }
+    if !any { guard textedit.open(path: nil) else { print("AquaDemo: failed to open a TextEdit window."); exit(1) } }
+    installerSay("AquaDemo: TextEdit is up.")
+    withExtendedLifetime(textedit) { display.run() }
 } else if scene == .terminal {
     // `-e PROGRAM ARGS…` runs that instead of the shell, as xterm's does —
     // how a bundle whose entry says Terminal=true opens (PHASE15 P15.4).

@@ -125,15 +125,46 @@ public enum Launcher {
             RecentItems.record(path)   // the Apple menu's Recent Items (P15.2c)
             return .launchedApp(exe)
         }
+        // Plain text opens in TextEdit (PHASE15 P15.5) — unless an opener is
+        // configured, which is the person choosing what opens documents — and
+        // **before** the executable check for a name that says it is text: a
+        // file copied off a FAT stick has every execute bit set, and a `.txt`
+        // must not run.
+        let base = String(path.split(separator: "/").last ?? "")
+        if PlainText.hasTextExtension(base) { return openDocument(path, textEdit: true) }
         if isExecutableFile(path) {
             return launchDetached([path]) ? .ranExecutable(path)
                                           : .failed("could not start \(path)")
         }
+        if !base.contains("."), PlainText.looksLikeText(head(of: path)) { return openDocument(path, textEdit: true) }
+        return openDocument(path, textEdit: false)
+    }
+
+    /// A document: to the configured opener when there is one; else, for
+    /// text, to TextEdit.
+    static func openDocument(_ path: String, textEdit: Bool) -> LaunchOutcome {
         let opener = openerCommand()
-        guard !opener.isEmpty else { return .noHandler }
+        guard !opener.isEmpty else { return textEdit ? openInTextEdit(path) : .noHandler }
         let argv = opener + [path]
         return launchDetached(argv) ? .openedWith(opener.joined(separator: " "))
                                     : .failed("could not run \(opener[0])")
+    }
+
+    /// TextEdit is this binary in another scene.
+    static func openInTextEdit(_ path: String) -> LaunchOutcome {
+        guard let exe = selfExecutable() else { return .failed("cannot find this program to run TextEdit") }
+        return launchDetached([exe, path], extraEnv: ["AQUA_SCENE": "textedit"])
+            ? .openedWith("TextEdit") : .failed("could not start TextEdit")
+    }
+
+    /// The first 4 KB of a file, for sniffing.
+    static func head(of path: String) -> [UInt8] {
+        let fd = Glibc.open(path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return [] }
+        defer { close(fd) }
+        var buf = [UInt8](repeating: 0, count: 4096)
+        let n = buf.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+        return n > 0 ? Array(buf[0..<n]) : []
     }
 
     // MARK: - Spawning
@@ -146,5 +177,34 @@ public enum Launcher {
     public static func launchDetached(_ argv: [String],
                                       extraEnv: [String: String] = [:]) -> Bool {
         Spawn.detached(argv, environment: extraEnv)
+    }
+}
+
+/// Is a file plain text, for opening in TextEdit (PHASE15 P15.5)? By its name
+/// when it has a text one; by its first bytes when it has no extension at all
+/// (a README, a config file) — UTF-8 with no NUL. Anything else keeps going to
+/// the configured opener.
+public enum PlainText {
+    public static let extensions: Set<String> = [
+        "txt", "text", "md", "markdown", "rst", "log", "conf", "cfg", "ini", "csv", "tsv",
+        "json", "xml", "yaml", "yml", "toml", "sh", "c", "h", "cc", "cpp", "hpp", "swift",
+        "py", "rb", "pl", "lua", "rs", "go", "js", "ts", "css", "html", "htm", "tex", "diff", "patch",
+    ]
+
+    public static func hasTextExtension(_ name: String) -> Bool {
+        guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return false }
+        return extensions.contains(name[name.index(after: dot)...].lowercased())
+    }
+
+    public static func looksLikeText(_ head: [UInt8]) -> Bool {
+        guard !head.isEmpty, !head.contains(0) else { return false }
+        func valid(_ b: ArraySlice<UInt8>) -> Bool { Array(String(decoding: b, as: UTF8.self).utf8) == Array(b) }
+        // A rune cut off by the 4 KB edge is not a reason to say no: try
+        // without up to three trailing non-ASCII bytes (one rune's worth).
+        for drop in 0...3 where drop < head.count {
+            if drop > 0 && head[head.count - drop] < 0x80 { break }
+            if valid(head[..<(head.count - drop)]) { return true }
+        }
+        return false
     }
 }

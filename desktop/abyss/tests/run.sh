@@ -338,6 +338,11 @@ if [ "$live" -eq 1 ]; then
   # Clear Scrollback, ⌘N, exit.
   echo "== Terminal =="
   quiet "$root/abyss/tests/live-terminal.sh"
+  # TextEdit (P15.5): a file opened, edited with the virtual keyboard, saved,
+  # its bytes read back; undo, find, Open and Save As through the portal and
+  # the Finder, the save sheet on close, and the Finder opening a .txt in it.
+  echo "== TextEdit =="
+  quiet "$root/abyss/tests/live-textedit.sh"
   # The Wi-Fi lab (P14.5): wtap with station/AP modes and our teardown fixes;
   # three WPA2 joins, and the kernel still on the same boot. FreeBSD only.
   echo "== the Wi-Fi lab =="
