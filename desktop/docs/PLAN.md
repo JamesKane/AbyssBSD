@@ -73,8 +73,12 @@ one's own processes and, through the root helper, another user's (P15.7); and
 **Disk Utility** — disks, datasets, and ZFS snapshots taken, rolled back (the
 latest only), mounted and unmounted through the root helper (P15.8). **One foreign
 toolkit: GTK** (decided 2026-09-30; the rule is in Context, above) — the Qt menu work of P10.7 is gone.
-**Next is Phase 16, the session** — login, lock, idle and power — **scoped
-2026-10-01 in [PHASE16.md](PHASE16.md)** (P16.1–P16.8, its §6 decided).
+**Phase 16, the session, is complete (2026-10-01)** ([PHASE16.md](PHASE16.md)): the
+authenticator, the lock, the idle policy, power, the login window, two users
+side by side and a Setup Assistant, all checked on the 12700KF except a resume,
+which this machine's kernel cannot do (BACKLOG §6).
+**Next is Phase 13, Islands, Shoals and Ebb — scoped 2026-10-01 in
+[PHASE13.md](PHASE13.md)** (P13.1–P13.8; its §6 decided).
 
 **Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
 medium boots, `amdgpu` binds, typing and the pointer work, and after five
@@ -942,6 +946,9 @@ no display at all; and a saved report from the Mac Pro as the matrix's first row
 ---
 
 ## Phase 13 — Islands, Shoals and Ebb
+
+> **Scoped 2026-10-01 in [PHASE13.md](PHASE13.md)** (P13.1–P13.8). C6 is
+> measured from P13.2, before anything animates, and gates the build.
 
 **Needs:** 9 (the keybind table — the honest blocker), 4 (C6 is meaningless
 against a synthetic clock). **Unblocks:** thesis 3's case against tiling.
