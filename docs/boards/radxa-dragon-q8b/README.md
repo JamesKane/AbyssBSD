@@ -144,9 +144,13 @@ What was done (2026-09-30/10-01, ports fork, not yet committed):
 - **Scan-out memory:** msmfb's buffers must be physically contiguous below
   4 GB. After the 5-hour Swift build, low memory was mostly wired (one free
   8 MB run), every `CREATE_DUMB` failed with ENOMEM, and the screen stayed
-  blank. A reboot fixed it (83 free 16 MB runs). msmfb now allocates exact
-  sizes and reclaims (drm-msm-kmod `1e190da`), but a scan-out pool reserved when msm
-  loads would remove the fragility.
+  blank. msmfb now reserves a pool when it attaches at boot
+  (`hw.msm.fb_pool_mb`, 64 MB, 0 for none; dmesg "64 MB at 0x8f000000 for
+  scan-out buffers"), sub-allocates with vmem(9), and otherwise falls back to
+  an exact-size allocation with reclaim (drm-msm-kmod `0f23f29`, `1e190da`).
+- **Exit:** removing the compositor's last framebuffer turned the output
+  off after seatd had dropped master, so the monitor stayed black on exit.
+  msmfb now shows the console then (`700b9ba`).
 - **Lesson:** the community tarball, untarred over `/`, re-owned `/usr`
   and `/usr/local/lib` and dropped stray cmark-gfm files. Stage
   third-party archives with `--no-same-owner` (see
