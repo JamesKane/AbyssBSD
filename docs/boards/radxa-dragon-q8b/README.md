@@ -52,7 +52,7 @@ directory records what we found, so nobody has to find it again.
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation, PD | Needs pmic_glink | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
-| Audio | In progress, for the headset jack (WCD9380): GLINK to the ADSP and GPR work (src `6dc35e9777`, APM ready); next the DSP DMA stream, PRM clocks, the APM graph, then LPASS, SoundWire and the codec | `sys/dev/qcom_glink` |
+| Audio | Headphone playback works through `pcm0` (src `3afeb7670d`, in GENERIC); microphone and jack detection not yet | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
 | Wi-Fi/BT, camera, NPU | Not investigated | — |
 | The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
@@ -105,8 +105,32 @@ directory records what we found, so nobody has to find it again.
   the DSP). The DSDT's audio devices (`ADSP` → `ADCM` QCOM06C1 → `AUCD`
   QCOM0629) are the reference design's Windows stack and say nothing
   useful. LinuxKPI has no ALSA, so it's native drivers.
-- **GLINK to the ADSP** (src `bf6ce26ded`, `qcom_glink.ko`,
-  `qcom_glink_load="YES"`): SMEM at `0x80900000` (2 MB, version 12, not
+- **Headphone playback works** (src `9492cc2943`…`3afeb7670d`, built into
+  GENERIC through `std.qcom`): `pcm0` "Qualcomm audio DSP", the default
+  device, 48 kHz 16-bit stereo with vchans for other rates; `mixer vol`
+  is the DSP's gain (levels are 0–1: `mixer vol=0.5`), `pcm` is software.
+  The path: sound(4) ring mapped into the DSP through apps-SMMU stream
+  0xc01 (context bank 7) → APM graphs MultiMedia1 → RX_CODEC_DMA_RX_0 →
+  RX macro (interpolators 0/1) → RX SoundWire → WCD9385 headphone amps.
+  The codec is powered only while playing. Lessons:
+  - Every address given to the DSP carries the stream ID's low 4 bits
+    above bit 32 (`iova | 1 << 32`), as Linux's q6apm-dai does. Without
+    them the DSP's first access to our memory hangs the whole SoC, with no
+    SMMU fault.
+  - The RX macro's interpolator paths must be on, or the DSP keeps every
+    buffer until the graph stops.
+  - The codec's registers are reached through the **TX** SoundWire link,
+    which runs on the VA macro's SoundWire clock. The codec's reset is
+    TLMM GPIO 106, active low; UEFI leaves it held in reset.
+  - Blocks must be whole milliseconds (multiples of 192 bytes): sound(4)'s
+    1024-byte blocks put a buzz at the block rate on a sine.
+  - The codec and SoundWire sequences are Linux's, captured on Ubuntu with
+    kprobes on `qcom_swrm_cpu_reg_write` (every SoundWire command goes
+    through the FIFO register 0x300) and the `regmap_reg_write` event.
+    Don't read the macros' regmaps in debugfs while they're unclocked: the
+    bus hangs and the watchdog resets the board.
+  - Not yet: microphone, jack detection, other rates in hardware.
+- **GLINK to the ADSP** (src `bf6ce26ded`, in GENERIC since `3afeb7670d`): SMEM at `0x80900000` (2 MB, version 12, not
   in FreeBSD's physical segments), TCSR mutex lock 3 at `0x1f40000`; IPCC
   at `0x408000` (ACPI `IPCC` QCOM06C2 gives only its interrupts, SPI 229
   first); the edge's items in the APPS–ADSP partition (host 2): descriptor
