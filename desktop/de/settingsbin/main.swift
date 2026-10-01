@@ -30,6 +30,7 @@ func emit(_ fd: Int32, _ s: String) {
 var allowed: UInt32?
 var dryRun = false, once = false
 var serviceName = "settings", rcConf = "/etc/rc.conf", journal = "/var/log/abyss-settings.log"
+var pwRoot = "/"
 var resolvconf = "/etc/resolvconf.conf", writeOnly = false, sysctlConf = "/etc/sysctl.conf"
 var wpaConf = "/etc/wpa_supplicant.conf"
 var adminGroup = "wheel"
@@ -54,6 +55,8 @@ while i < args.count {
     case "--wpa-conf": wpaConf = value("--wpa-conf")
     case "--write-only": writeOnly = true
     case "--journal": journal = value("--journal")
+    // Accounts in a scratch root, for a test (P16.6a).
+    case "--pw-root": pwRoot = value("--pw-root")
     case "--admin-group": adminGroup = value("--admin-group")
     case "-h", "--help":
         emit(1, "usage: abyss-settings --uid N [--dry-run] [--once] [--service NAME]"
@@ -75,7 +78,7 @@ guard let uid = allowed else {
 
 signal(SIGPIPE, SIG_IGN)
 let service = SettingsService(authority: Authority(allowed: uid, adminGroup: adminGroup),
-                              dryRun: dryRun, rcConf: rcConf, resolvconf: resolvconf,
+                              dryRun: dryRun, pwRoot: pwRoot, rcConf: rcConf, resolvconf: resolvconf,
                               journal: journal, writeOnly: writeOnly, sysctlConf: sysctlConf,
                               wpaConf: wpaConf)
 let server: Current.Server

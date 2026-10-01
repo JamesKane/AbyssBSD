@@ -15,6 +15,10 @@
 //   abyss-settingsctl scan  wifi --device RADIO [--interface wlanN]
 //   abyss-settingsctl check|apply wifi --device RADIO [--interface wlanN]
 //                     (--join SSID (--passphrase P | --open) | --forget SSID)
+//   abyss-settingsctl check|apply accounts --add NAME [--full-name F] [--admin]
+//                     (the password on stdin, hashed here: none crosses the socket)
+//   abyss-settingsctl check|apply accounts --delete NAME [--remove-home]
+//   abyss-settingsctl check|apply accounts --autologin NAME | --no-autologin
 //
 // It links `SettingsWire` and not `SettingsRun`, as the pane does: a client
 // speaks the protocol and carries none of the code that runs `sysrc`. It exists
@@ -24,6 +28,7 @@
 import CurrentIPC
 import Settings
 import SettingsWire
+import CPlatform
 
 #if canImport(Glibc)
 import Glibc
@@ -66,12 +71,15 @@ while i < args.count {
     if args[i] == "--dhcp" { fields["mode"] = "dhcp"; i += 1; continue }
     if args[i] == "--open" { fields["open"] = "1"; i += 1; continue }
     if args[i] == "--force" { fields["force"] = "1"; i += 1; continue }
+    // Flags with no value (P16.6a).
+    if ["--admin", "--remove-home", "--no-autologin"].contains(args[i]) { fields[String(args[i].dropFirst(2))] = "1"; i += 1; continue }
     guard i + 1 < args.count else { emit(2, "abyss-settingsctl: \(args[i]) needs a value"); exit(2) }
     switch args[i] {
     case "--service": serviceName = args[i + 1]
     case "--powerd", "--ac", "--battery", "--profile", "--interface", "--address", "--netmask", "--router", "--dns", "--default",
          "--device", "--join", "--forget", "--passphrase", "--pid", "--started", "--name",
-         "--dataset", "--snapshot", "--rollback", "--mount", "--unmount", "--unmount-path":
+         "--dataset", "--snapshot", "--rollback", "--mount", "--unmount", "--unmount-path",
+         "--add", "--full-name", "--delete", "--autologin":
         fields[String(args[i].dropFirst(2))] = args[i + 1]
     default: emit(2, "abyss-settingsctl: unknown option '\(args[i])'"); exit(2)
     }
@@ -143,6 +151,27 @@ if verb != "read" && verb != "scan" {
         } else {
             emit(2, "abyss-settingsctl: volume needs --dataset D --snapshot NAME, --rollback D@S, --mount D, --unmount D or --unmount-path P"); exit(2)
         }
+    case "accounts":
+        // The Accounts pane (PHASE16 P16.6a).
+        if let name = fields["add"] {
+            var pw = ""
+            while let line = readLine(strippingNewline: true) { pw = line; break }
+            var buf = [CChar](repeating: 0, count: 256)
+            let ok = pw.withCString { p in buf.withUnsafeMutableBufferPointer { ap_crypt_sha512(p, $0.baseAddress, 256) == 0 } }
+            guard ok, !pw.isEmpty else { emit(2, "abyss-settingsctl: --add needs a password on stdin"); exit(2) }
+            request.set("accounts.action", "add"); request.set("accounts.name", name)
+            request.set("accounts.fullname", fields["full-name"] ?? "")
+            request.set("accounts.hash", String(cString: buf)); request.set("accounts.admin", fields["admin"] != nil)
+        } else if let name = fields["delete"] {
+            request.set("accounts.action", "delete"); request.set("accounts.name", name)
+            request.set("accounts.removehome", fields["remove-home"] != nil)
+        } else if let name = fields["autologin"] {
+            request.set("accounts.action", "autologin"); request.set("accounts.name", name)
+        } else if fields["no-autologin"] != nil {
+            request.set("accounts.action", "autologin")
+        } else {
+            emit(2, "abyss-settingsctl: accounts needs --add NAME, --delete NAME, --autologin NAME or --no-autologin"); exit(2)
+        }
     case "signal":
         // Quit another user's process (P15.7): which one, as the caller saw it.
         guard let pid = fields["pid"], let started = fields["started"], let name = fields["name"] else {
@@ -208,6 +237,8 @@ case "read":
         emit(1, "signal: nothing to read")
     case .success(.volume):
         emit(1, "volume: nothing to read")
+    case .success(.accounts):
+        emit(1, "accounts: nothing to read")
     case .success(.wifi):
         emit(2, "abyss-settingsctl: read wifi is answered separately"); exit(1)
     case .failure(let why):

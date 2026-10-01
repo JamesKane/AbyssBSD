@@ -302,6 +302,40 @@ public enum LoginAccounts {
         }.sorted { $0.fullName.lowercased() < $1.fullName.lowercased() }
     }
 
+    /// From a passwd(5) file's text — a scratch root's, in a test (P16.6a).
+    public static func parse(passwd text: String) -> [LoginAccount] {
+        offered(text.split(separator: "\n").compactMap { line in
+            let f = line.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard f.count >= 7, !line.hasPrefix("#"), let uid = UInt32(f[2]) else { return nil }
+            return (f[0], uid, f[4], f[6])
+        })
+    }
+
+    /// Who is in `group`, from a group(5) file's text.
+    public static func members(of group: String, in text: String) -> Set<String> {
+        for line in text.split(separator: "\n") {
+            let f = line.split(separator: ":", omittingEmptySubsequences: false)
+            if f.count >= 4, f[0] == group { return Set(f[3].split(separator: ",").map(String.init)) }
+        }
+        return []
+    }
+
+    /// Who logs in at boot, from rc.conf's text: `abyss_desktop_user`, when
+    /// `abyss_desktop_enable` says so — nil for the login window.
+    public static func autoLogin(rcConf text: String) -> String? {
+        var enabled = false, user: String?
+        for raw in text.split(separator: "\n") {
+            let line = raw.trimmingPrefix(while: { $0 == " " || $0 == "\t" })
+            func value(_ key: String) -> String? {
+                guard line.hasPrefix(key + "=") else { return nil }
+                return String(line.dropFirst(key.count + 1)).filter { $0 != "\"" && $0 != "'" }
+            }
+            if let v = value("abyss_desktop_enable") { enabled = v.uppercased() == "YES" }
+            if let v = value("abyss_desktop_user") { user = v.isEmpty ? nil : v }
+        }
+        return enabled ? user : nil
+    }
+
     /// This machine's, from the password database.
     public static func system() -> [LoginAccount] {
         var all: [(name: String, uid: UInt32, gecos: String, shell: String)] = []

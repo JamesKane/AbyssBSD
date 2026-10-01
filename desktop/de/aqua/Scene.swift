@@ -197,6 +197,7 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         // AQUA_PREFS_PANE=<id> pictures a pane's page (P14.1); else the grid.
         var m = PrefsModel()
         var network: NetworkPaneState?
+        var accounts: AccountsPaneState?
         if let p = getenv("AQUA_PREFS_PANE").map({ String(cString: $0) }) {
             // "network-wifi": the Network pane with its radio chosen (P14.5c).
             if p == "network-wifi" {
@@ -205,11 +206,19 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                 n.radios = ["iwn0"]
                 n.wifi = .sample
                 network = n
+            } else if p == "accounts-new" {
+                // "accounts-new": the Accounts pane with New User… open (P16.6a).
+                m.view = .pane("accounts")
+                var a = AccountsPaneState.sample
+                var f = NewUserForm()
+                f.type("Alan Turing"); f.tab(); f.tab(); f.type("enigma"); f.tab(); f.type("enigma"); f.admin = true
+                a.form = f
+                accounts = a
             } else {
                 m.view = .pane(p)
             }
         }
-        paintSystemPreferences(cr, w: cw, h: ch, model: m, network: network)
+        paintSystemPreferences(cr, w: cw, h: ch, model: m, network: network, accounts: accounts)
     case .widgets:
         paintWidgets(cr, w: cw, h: ch, state: WidgetState(), focus: .ok)
     case .scroll:

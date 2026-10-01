@@ -730,6 +730,35 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.109 Accounts in a scratch root — and what the pane may never see
+(PHASE16 P16.6a, the Accounts pane.)
+
+**`pw -R ROOT`** (the installer's own way of working in its target) is how the
+settings helper makes and deletes accounts. ROOT is `/`, or a test's scratch:
+copies of `master.passwd` and `group`, then `pwd_mkdb -p -d` (**`-p`**, or there
+is no `passwd` file for the pane to read, only the databases; the first guest
+run showed an empty list for exactly that reason). The pane reads
+`$ABYSS_ACCOUNTS_ROOT/etc/passwd`, `group` and `$ABYSS_RC_CONF` for the same
+reason, so a test changes nothing of the machine it runs on. `live-accounts.sh`
+checks the machine's own `master.passwd` is unchanged.
+
+**The password is hashed in the pane** (SHA-512 crypt, `ap_crypt_sha512`, as
+the installer does), and only the hash crosses the socket. **The hash goes to
+`pw` on stdin** (`-H 0`), through a new `.pw(args:input:what:)` step, whose
+description names the account and never the hash. `check`, the journal and
+the pane see only that description. One fault injection put the hash in argv,
+and the unit test and `check`'s output both caught it.
+
+Refused on the machine, not just in the plan: an account that exists (add);
+one that does not, a system account, **the administrator asking**, and one with
+processes running (delete); automatic login for nobody.
+
+A flake seen while verifying, not from this pass:
+`DisplaysTests.testEqualOutputsAreAllServed` failed once in a full guest run
+(frames per output [30, 30, 32], tolerance 1) and passed five times alone and
+in the next full run. It is a wall-clock test, and the guest was loaded. If
+it recurs, its tolerance wants a look.
+
 ### 2.108 Closing a process descriptor does not reap — and how a session is started
 (PHASE16 P16.5b, the login window's sessions.)
 

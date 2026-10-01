@@ -275,6 +275,12 @@ if [ "$live" -eq 1 ]; then
   # window again on Log Out (unprivileged; the root half is live-authenticator's).
   echo "== sessions =="
   quiet "$root/abyss/tests/live-greeter.sh"
+  # Accounts (P16.6a): through the settings helper, against a scratch root,
+  # and through the Accounts pane, clicked and typed.
+  echo "== accounts =="
+  quiet "$root/abyss/tests/live-accounts.sh"
+  echo "== the Accounts pane =="
+  quiet "$root/abyss/tests/live-accounts-pane.sh"
   echo "== System Preferences =="
   quiet "$root/abyss/tests/live-prefs.sh"
   # The Network pane (P14.4c): the kernel's status, rc.conf's configuration

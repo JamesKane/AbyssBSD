@@ -97,8 +97,11 @@ public final class SettingsService {
     /// on a machine whose network is how the test reaches it (PHASE14 §6.3).
     /// Each step it does not run is reported as skipped, never as done.
     public let writeOnly: Bool
+    /// Where accounts are made and deleted: `/`, or a scratch root a test
+    /// built (`pw -R`, as the installer does) — P16.6a.
+    public let pwRoot: String
 
-    public init(authority: Authority, dryRun: Bool = false,
+    public init(authority: Authority, dryRun: Bool = false, pwRoot: String = "/",
                 rcConf: String = "/etc/rc.conf", resolvconf: String = "/etc/resolvconf.conf",
                 journal: String = "/var/log/abyss-settings.log", writeOnly: Bool = false,
                 sysctlConf: String = "/etc/sysctl.conf", wpaConf: String = "/etc/wpa_supplicant.conf") {
@@ -110,6 +113,43 @@ public final class SettingsService {
         self.wpaConf = wpaConf
         self.journal = journal
         self.writeOnly = writeOnly
+        self.pwRoot = pwRoot
+        SettingsStep.pwRoot = pwRoot
+    }
+
+    /// An account in the helper's password database, as `pw usershow` says:
+    /// its uid, or nil when there is none.
+    func accountUID(_ name: String) -> UInt32? {
+        let r = Spawn.run(["pw", "-R", pwRoot, "usershow", "-n", name], limit: 4096)
+        guard r.succeeded else { return nil }
+        let f = r.stdoutText.split(separator: ":", omittingEmptySubsequences: false)
+        return f.count > 2 ? UInt32(f[2]) : nil
+    }
+
+    func accountMachineProblems(_ a: AccountPlan) -> [SettingsRefusal] {
+        func person(_ name: String) -> SettingsRefusal? {
+            guard let uid = accountUID(name) else { return SettingsRefusal("there is no account \(name)") }
+            return uid >= 1000 && uid < 65534 ? nil : SettingsRefusal("\(name) is one of the system's accounts")
+        }
+        switch a.action {
+        case .add(let name, _, _, _):
+            return accountUID(name) == nil ? [] : [SettingsRefusal("there is already an account \(name)")]
+        case .delete(let name, _):
+            if let r = person(name) { return [r] }
+            // Not the administrator who is asking: the account that could
+            // undo a mistake must not be the one a click deletes.
+            if Authority.name(authority.allowed) == name {
+                return [SettingsRefusal("\(name) is the account you are using; log in as another administrator to delete it")]
+            }
+            if pwRoot == "/", Spawn.run(["pgrep", "-U", name], limit: 4096).succeeded {
+                return [SettingsRefusal("\(name) is logged in; their session must end first")]
+            }
+            return []
+        case .autoLogin(let name?):
+            return person(name).map { [$0] } ?? []
+        case .autoLogin(nil):
+            return []
+        }
     }
 
     /// Where each file this helper edits is, on this machine.
@@ -188,6 +228,8 @@ public final class SettingsService {
                                    + " (it has: \(radios().joined(separator: ", ").isEmpty ? "none" : radios().joined(separator: ", ")))")]
         case .volume(let v):
             return volumeMachineProblems(v)
+        case .accounts(let a):
+            return accountMachineProblems(a)
         case .signal(let s):
             // **The process the window showed, still.** Between the person
             // choosing it and this line its pid may have been freed and given
@@ -463,11 +505,13 @@ public enum Runner {
             }
             if writeOnly { emit(.skipped(index: i, why: "write-only: the machine is left as it is")); continue }
             let mayFail: Bool
+            var input: [UInt8]?
             switch step {
             case .service(_, _, let m), .tool(_, let m): mayFail = m
             case .setVar: mayFail = false
+            case .pw(_, let i, _): mayFail = false; input = i.map { Array(($0 + "\n").utf8) }
             }
-            let r = Spawn.run(step.command(path: path), stderr: .merge, limit: 8192)
+            let r = Spawn.run(step.command(path: path), input: input, stderr: .merge, limit: 8192)
             if r.succeeded { emit(.ok(index: i)); continue }
             if mayFail {
                 emit(.failed(index: i, what: step.description, why: reason(r), ignored: true))

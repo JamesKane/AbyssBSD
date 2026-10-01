@@ -121,6 +121,7 @@ public struct PrefsModel: Equatable, Sendable {
         case PrefsModel.soundPane: return "The output device, its levels and mute, and who is playing."
         case PrefsModel.displaysPane: return "Arrange the displays, and choose each one's resolution and scale."
         case PrefsModel.energyPane: return "When the computer and the display sleep, and how the processor saves power."
+        case PrefsModel.accountsPane: return "Who can log in, who administers this computer, and who logs in automatically."
         default: return "This pane cannot change anything yet."
         }
     }
@@ -135,6 +136,8 @@ public struct PrefsModel: Equatable, Sendable {
     public static let displaysPane = "displays"
     /// Energy Saver (P14.8).
     public static let energyPane = "energySaver"
+    /// Accounts (PHASE16 P16.6a).
+    public static let accountsPane = "accounts"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -173,6 +176,8 @@ public struct PrefsLayout: Equatable, Sendable {
     public var displays = DisplaysLayout()
     /// The Energy Saver pane's controls, when it is showing (P14.8).
     public var energy = EnergyLayout()
+    /// The Accounts pane's controls, when it is showing (P16.6a).
+    public var accounts = AccountsLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
@@ -247,7 +252,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                                    network: NetworkPaneState? = nil,
                                    sound: SoundPaneState? = nil,
                                    displays: DisplaysPaneState? = nil,
-                                   energy: EnergyPaneState? = nil) -> PrefsLayout {
+                                   energy: EnergyPaneState? = nil,
+                                   accounts: AccountsPaneState? = nil) -> PrefsLayout {
     var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
@@ -289,6 +295,10 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         let e = energy ?? .sample
         l.energy = energyLayout(body: l.body, profiles: e.profile != nil)
         paintEnergyPane(cr, l.energy, e)
+    case .pane(let id) where id == PrefsModel.accountsPane:
+        let a = accounts ?? .sample
+        l.accounts = accountsLayout(body: l.body, a)
+        paintAccountsPane(cr, l.accounts, a)
     case .pane(let id) where id == PrefsModel.displaysPane:
         let d = displays ?? .sample
         l.displays = displaysLayout(body: l.body, d)
@@ -430,6 +440,9 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var energyDrag: Bool?          // display (true) or computer (false)
     private var energyApplying: Int32?
     private var dumpedEnergy: EnergyLayout?
+    private var accounts = AccountsPaneState()
+    private var accountsApplying: Int32?
+    private var dumpedAccounts: AccountsLayout?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -477,6 +490,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if v == .pane(PrefsModel.soundPane) { loadSound(readConfigured: true) }
         if v == .pane(PrefsModel.displaysPane) { loadDisplays() }
         if v == .pane(PrefsModel.energyPane) { loadEnergy() }
+        if v == .pane(PrefsModel.accountsPane) { loadAccounts() }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -500,7 +514,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         layout = paintSystemPreferences(cr, w: w, h: h, model: model,
                                         themes: installedThemes, choice: AppearanceChoice.current(),
                                         dragging: dragging, network: network, sound: sound,
-                                        displays: displays, energy: energy)
+                                        displays: displays, energy: energy, accounts: accounts)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -554,6 +568,19 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         }
         // Energy Saver's: `computer` and `display` tracks as `x0-x1,y`,
         // `powerd`, `ac.<mode>` and `battery.<mode>` at their controls.
+        // The Accounts pane's (P16.6a): each row by account name, the
+        // buttons, and the sheet's fields and buttons when one is open.
+        if dumpLayout, model.view == .pane(PrefsModel.accountsPane), dumpedAccounts != layout.accounts {
+            dumpedAccounts = layout.accounts
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            let a = layout.accounts
+            var line = "accounts layout"
+            for (row, r) in zip(accounts.accounts, a.rows) { line += " row.\(row.name)=\(c(r))" }
+            line += " new=\(c(a.newUser)) delete=\(c(a.deleteUser)) auto=\(c(a.autoLogin))"
+            for (i, r) in a.fields.enumerated() { line += " field\(i)=\(c(r))" }
+            if a.sheet.w > 0 { line += " admin=\(c(a.adminBox)) cancel=\(c(a.cancel)) confirm=\(c(a.confirm))" }
+            SystemPreferencesApp.log(line)
+        }
         if dumpLayout, model.view == .pane(PrefsModel.energyPane), dumpedEnergy != layout.energy {
             dumpedEnergy = layout.energy
             func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
@@ -720,6 +747,127 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             SystemPreferencesApp.log("energy: \(ok ? "applied" : "not applied") — \(said)")
             loadEnergy()
             energy.note = said
+        }
+        window?.setNeedsDisplay()
+    }
+
+    // MARK: the Accounts pane (P16.6a)
+
+    /// Read, not remembered: the password file, the group file and rc.conf —
+    /// under `$ABYSS_ACCOUNTS_ROOT` and `$ABYSS_RC_CONF` for a test's scratch.
+    private func loadAccounts() {
+        let root = getenv("ABYSS_ACCOUNTS_ROOT").map { String(cString: $0) } ?? ""
+        let rc = getenv("ABYSS_RC_CONF").map { String(cString: $0) } ?? "/etc/rc.conf"
+        func text(_ p: String) -> String {
+            guard let f = fopen(p, "r") else { return "" }
+            defer { fclose(f) }
+            var out = [UInt8](), buf = [UInt8](repeating: 0, count: 4096)
+            while true { let n = fread(&buf, 1, buf.count, f); if n <= 0 { break }; out += buf[0..<n] }
+            return String(decoding: out, as: UTF8.self)
+        }
+        let keep = accounts.selectedAccount?.name
+        let note = accounts.note
+        accounts = AccountsPaneState.read(passwd: text(root + "/etc/passwd"), group: text(root + "/etc/group"),
+                                          rcConf: text(rc))
+        if let keep, let i = accounts.accounts.firstIndex(where: { $0.name == keep }) { accounts.selected = i }
+        accounts.note = note
+        SystemPreferencesApp.log("accounts: " + accounts.accounts.map { "\($0.name)\($0.admin ? "(admin)" : "")" }
+            .joined(separator: " ") + "; automatic login: \(accounts.autoLogin ?? "none")")
+        window?.setNeedsDisplay()
+    }
+
+    private func pressAccounts(_ hit: AccountsHit) {
+        guard !accounts.busy else { return }
+        switch hit {
+        case .row(let i): accounts.selected = i
+        case .newUser: accounts.form = NewUserForm(); accounts.note = ""; SystemPreferencesApp.log("accounts: new user sheet")
+        case .deleteUser:
+            guard accounts.selectedAccount != nil else { return }
+            accounts.confirmingDelete = true; accounts.removeHome = false
+            SystemPreferencesApp.log("accounts: delete sheet for \(accounts.selectedAccount!.name)")
+        case .autoLogin:
+            guard let who = accounts.selectedAccount else { return }
+            let on = accounts.autoLogin != who.name
+            applyAccounts(.autoLogin(on ? who.name : nil), on ? "automatic login as \(who.name)" : "no automatic login")
+        case .field(let f): accounts.form?.focus = f
+        case .adminBox:
+            if accounts.form != nil { accounts.form!.admin.toggle() } else { accounts.removeHome.toggle() }
+        case .cancel:
+            accounts.form?.clear(); accounts.form = nil; accounts.confirmingDelete = false
+            SystemPreferencesApp.log("accounts: cancelled")
+        case .confirm: confirmAccounts()
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func accountsKey(_ e: KeyEvent) {
+        if accounts.form != nil {
+            switch e.keysym {
+            case KeySym.escape: pressAccounts(.cancel); return
+            case KeySym.enter, 0xff8d: confirmAccounts()
+            case KeySym.tab: accounts.form!.tab(e.modifiers.contains(.shift) ? -1 : 1)
+            case KeySym.backTab: accounts.form!.tab(-1)
+            case KeySym.backspace: accounts.form!.backspace()
+            default: accounts.form!.type(e.text)
+            }
+        } else if accounts.confirmingDelete {
+            if e.keysym == KeySym.escape { pressAccounts(.cancel); return }
+            if e.keysym == KeySym.enter { confirmAccounts() }
+        } else {
+            switch e.keysym {
+            case KeySym.down: accounts.selected = min((accounts.selected ?? -1) + 1, accounts.accounts.count - 1)
+            case KeySym.up: accounts.selected = max((accounts.selected ?? 1) - 1, 0)
+            default: return
+            }
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func confirmAccounts() {
+        if var f = accounts.form {
+            if let why = f.whyNot { f.problem = why; accounts.form = f; window?.setNeedsDisplay(); return }
+            let hash = InstallerClient.hash(f.password)
+            f.clear()
+            accounts.form = nil
+            applyAccounts(.add(name: f.shortName, fullName: f.fullName, passwordHash: hash, admin: f.admin),
+                          "create \(f.shortName)" + (f.admin ? ", an administrator" : ""))
+        } else if accounts.confirmingDelete, let who = accounts.selectedAccount {
+            accounts.confirmingDelete = false
+            applyAccounts(.delete(name: who.name, removeHome: accounts.removeHome),
+                          "delete \(who.name)" + (accounts.removeHome ? " and its home folder" : ""))
+        }
+        window?.setNeedsDisplay()
+    }
+
+    private func applyAccounts(_ action: AccountAction, _ what: String) {
+        guard accountsApplying == nil else { return }
+        var m = Msg()
+        m.set("method", "apply")
+        SettingsWire.encode(.accounts(AccountPlan(action)), into: &m)
+        SystemPreferencesApp.log("accounts: apply \(what)")
+        guard let sock = SettingsClient.begin(m) else {
+            accounts.note = "Not changed: the settings helper is not running on this machine"
+            SystemPreferencesApp.log("accounts: \(accounts.note)")
+            return
+        }
+        accountsApplying = sock
+        accounts.busy = true
+        display.addFileDescriptor(sock) { [weak self] in self?.accountsEvent() }
+    }
+
+    private func accountsEvent() {
+        guard let sock = accountsApplying else { return }
+        let e = SettingsClient.next(on: sock) ?? .finished(ok: false, error: "the settings helper hung up")
+        switch e {
+        case .starting(let i, let n, let what): SystemPreferencesApp.log("accounts: [\(i + 1)/\(n)] \(what)")
+        case .finished(let ok, let error):
+            display.removeFileDescriptor(sock); close(sock)
+            accountsApplying = nil
+            accounts.busy = false
+            accounts.note = ok ? "Done." : "Not changed: \(error)"
+            SystemPreferencesApp.log("accounts: \(ok ? "applied" : "not applied") — \(accounts.note)")
+            loadAccounts()
+        default: return
         }
         window?.setNeedsDisplay()
     }
@@ -1291,6 +1439,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if dumpLayout {
             SystemPreferencesApp.log("press at \(Int(pointerX)),\(Int(pointerY))")
         }
+        if model.view == .pane(PrefsModel.accountsPane) {
+            if let hit = accountsHit(layout.accounts, accounts, x: pointerX, y: pointerY) { pressAccounts(hit) }
+            return
+        }
         if model.view == .pane(PrefsModel.energyPane), let hit = energyHit(layout.energy, x: pointerX, y: pointerY) {
             pressEnergy(hit)
             return
@@ -1347,8 +1499,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             return
         }
         guard model.view == .all else {
-            if event.keysym == KeySym.escape { show(.all) }
+            if event.keysym == KeySym.escape, !(model.view == .pane(PrefsModel.accountsPane)
+                                                && (accounts.form != nil || accounts.confirmingDelete)) { show(.all) }
             else if model.view == .pane(PrefsModel.networkPane) { networkKey(event) }
+            else if model.view == .pane(PrefsModel.accountsPane) { accountsKey(event) }
             return
         }
         switch event.keysym {

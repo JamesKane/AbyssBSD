@@ -56,6 +56,16 @@ public enum SettingsWire {
             case .unmountDataset(let ds): m.set("volume.action", "unmount"); m.set("volume.dataset", ds)
             case .unmount(let path): m.set("volume.action", "unmount"); m.set("volume.path", path)
             }
+        case .accounts(let a):
+            switch a.action {
+            case .add(let name, let full, let hash, let admin):
+                m.set("accounts.action", "add"); m.set("accounts.name", name); m.set("accounts.fullname", full)
+                m.set("accounts.hash", hash); m.set("accounts.admin", admin)
+            case .delete(let name, let removeHome):
+                m.set("accounts.action", "delete"); m.set("accounts.name", name); m.set("accounts.removehome", removeHome)
+            case .autoLogin(let name):
+                m.set("accounts.action", "autologin"); if let name { m.set("accounts.name", name) }
+            }
         case .signal(let s):
             m.set("signal.pid", "\(s.pid)")
             m.set("signal.force", s.force)
@@ -128,6 +138,24 @@ public enum SettingsWire {
             case let other:
                 return .failure(SettingsRefusal(other.isEmpty ? "a network plan must say DHCP or manual"
                                                              : "\(other) is not DHCP or manual"))
+            }
+        case "accounts":
+            let name = m.string("accounts.name")
+            switch m.string("accounts.action") ?? "" {
+            case "add":
+                guard let name, let hash = m.string("accounts.hash") else {
+                    return .failure(SettingsRefusal("a new account needs a name and a password"))
+                }
+                return .success(.accounts(AccountPlan(.add(name: name, fullName: m.string("accounts.fullname") ?? "",
+                                                           passwordHash: hash, admin: m.bool("accounts.admin") ?? false))))
+            case "delete":
+                guard let name else { return .failure(SettingsRefusal("a deletion must name the account")) }
+                return .success(.accounts(AccountPlan(.delete(name: name, removeHome: m.bool("accounts.removehome") ?? false))))
+            case "autologin":
+                return .success(.accounts(AccountPlan(.autoLogin(name))))
+            case let other:
+                return .failure(SettingsRefusal(other.isEmpty ? "an accounts plan must say what to do"
+                                                             : "\(other) is not something the Accounts pane does"))
             }
         case "volume":
             let ds = m.string("volume.dataset"), path = m.string("volume.path")

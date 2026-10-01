@@ -283,6 +283,33 @@ own VT through seatd (§6.4), the first locked behind it. *Verified:* two users,
 two sessions, one machine — in the harness headless, as two sessions side by
 side with each user's processes and files their own; on metal, switching VTs.
 
+Split in two, as §6.4 decided: **(a)** the Accounts pane; **(b)** two sessions
+and fast user switching.
+
+✅ **P16.6a done 2026-10-01.**
+- **The plan:** the settings helper gains an `accounts` plan
+  (`AccountAction`):
+  - **add** a user, with the installer's groups (administrator: wheel,
+    operator, audio, video; standard: audio, video), a home of their own, and
+    the password hashed in the pane and handed to `pw` **on stdin** (never
+    argv, the journal or the pane);
+  - **delete** a user, keeping the home folder unless asked; never the
+    administrator asking, root or a system account, or someone logged in;
+  - **automatic login** on or off, swapping rc.conf's `abyss_desktop_*` lines
+    with the login window's `--greeter`.
+  - `pw -R` lets a test work in a scratch root, as the installer works in
+    the target.
+- **The pane:** `AccountsPane.swift`, Jaguar's list (Admin / Standard), New
+  User… (a sheet: the short name follows the full name, the passwords
+  must match), Delete User (asks, with "Delete the home folder too"), and
+  "Log in automatically as …". It reads the password file, `group`'s wheel
+  and rc.conf afresh.
+- **The command line:** `abyss-settingsctl accounts`.
+- **Tests:** `live-accounts.sh` (6 claims, through the root helper in a
+  scratch root; Linux: check and the refusal) and `live-accounts-pane.sh`
+  (4 claims, clicked and typed). Two new goldens, 9 unit tests, six faults
+  injected and caught.
+
 **P16.7 — first run (M).** A Setup Assistant at an account's first login, on the
 installer's hub-and-spoke shape (§6.5). *Verified:* a fresh account sees it
 once, its choices are written where the panes read them, and the second login

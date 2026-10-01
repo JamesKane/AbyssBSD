@@ -372,7 +372,7 @@ let package = Package(
         .executableTarget(name: "abyss-settings",
                           dependencies: ["SettingsRun", "CurrentIPC"], path: "de/settingsbin"),
         .executableTarget(name: "abyss-settingsctl",
-                          dependencies: ["Settings", "SettingsWire", "CurrentIPC"], path: "de/settingsctl"),
+                          dependencies: ["Settings", "SettingsWire", "CurrentIPC", "CPlatform"], path: "de/settingsctl"),
         .target(
             name: "Anchor",
             dependencies: ["CProc", "CurrentIPC", "Spawn"],

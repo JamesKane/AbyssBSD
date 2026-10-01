@@ -88,6 +88,9 @@ public enum SettingsPlan: Equatable, Sendable {
     case signal(SignalPlan)
     /// Disk Utility (P15.8): a ZFS snapshot or rollback, a mount or unmount.
     case volume(VolumePlan)
+    /// The Accounts pane (PHASE16 P16.6a): add or delete a user, or choose
+    /// who is logged in automatically.
+    case accounts(AccountPlan)
 
     public var kind: String {
         switch self {
@@ -98,6 +101,98 @@ public enum SettingsPlan: Equatable, Sendable {
         case .wifi: return "wifi"
         case .signal: return "signal"
         case .volume: return "volume"
+        case .accounts: return "accounts"
+        }
+    }
+}
+
+// MARK: - Accounts (PHASE16 P16.6a)
+
+/// One change the Accounts pane may ask for. The password is a crypt(3) hash,
+/// made in the pane: **no plan ever carries a password**, as no install plan
+/// does (P5.4) — and the hash itself is given to `pw` on stdin, never argv.
+public enum AccountAction: Equatable, Sendable {
+    case add(name: String, fullName: String, passwordHash: String, admin: Bool)
+    /// The account goes; its home stays unless `removeHome` — a person's files
+    /// are not deleted by a button that said "delete user".
+    case delete(name: String, removeHome: Bool)
+    /// Who is logged in at boot with no password; nil for the login window.
+    case autoLogin(String?)
+}
+
+public struct AccountPlan: Equatable, Sendable {
+    public var action: AccountAction
+    public init(_ action: AccountAction) { self.action = action }
+}
+
+extension Settings {
+    /// The groups a new account is given: the installer's (P5.4), so a user
+    /// made here is like one made there.
+    public static func accountGroups(admin: Bool) -> [String] {
+        admin ? ["wheel", "operator", "audio", "video"] : ["audio", "video"]
+    }
+
+    /// An account name FreeBSD's `pw` takes and a person may have: lower-case
+    /// letters, digits, `_` and `-`, starting with a letter, at most 16 — and
+    /// not one of the system's.
+    public static func isAccountName(_ s: String) -> Bool {
+        guard let f = s.unicodeScalars.first, ("a"..."z").contains(f), s.count <= 16 else { return false }
+        return s.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "_" || $0 == "-" }
+    }
+    public static let reservedAccounts: Set<String> = [
+        "root", "toor", "daemon", "operator", "bin", "tty", "kmem", "games", "news", "man", "sshd", "smmsp",
+        "mailnull", "bind", "unbound", "proxy", "pflogd", "dhcp", "uucp", "pop", "auditdistd", "www", "ntpd",
+        "nobody", "hast", "tests", "messagebus", "polkitd", "avahi", "cups", "abyss",
+    ]
+
+    static func accountProblems(_ a: AccountPlan) -> [SettingsRefusal] {
+        switch a.action {
+        case .add(let name, let full, let hash, _):
+            var out: [SettingsRefusal] = []
+            if !isAccountName(name) {
+                out.append(SettingsRefusal("\(name.isEmpty ? "an empty name" : "\"\(name)\"") is not an account name"
+                                           + " (lower-case letters, digits, _ and -, starting with a letter, at most 16)"))
+            } else if reservedAccounts.contains(name) {
+                out.append(SettingsRefusal("\(name) is one of the system's accounts"))
+            }
+            if full.contains(":") || full.contains("\n") || full.contains(",") {
+                out.append(SettingsRefusal("a full name cannot contain a colon, a comma or a new line"))
+            }
+            if !(hash.hasPrefix("$6$") || hash.hasPrefix("$2b$")) || hash.contains(":") || hash.contains("\n") {
+                out.append(SettingsRefusal("the password did not arrive hashed"))
+            }
+            return out
+        case .delete(let name, _):
+            if !isAccountName(name) { return [SettingsRefusal("\(name) is not an account name")] }
+            return reservedAccounts.contains(name) ? [SettingsRefusal("\(name) is one of the system's accounts")] : []
+        case .autoLogin(let name?):
+            return isAccountName(name) ? [] : [SettingsRefusal("\(name) is not an account name")]
+        case .autoLogin(nil):
+            return []
+        }
+    }
+
+    static func compileAccount(_ a: AccountPlan) -> [SettingsStep] {
+        switch a.action {
+        case .add(let name, let full, let hash, let admin):
+            var args = ["useradd", "-n", name, "-m", "-s", "/bin/sh", "-G", accountGroups(admin: admin).joined(separator: ","),
+                        "-H", "0"]
+            if !full.isEmpty { args += ["-c", full] }
+            return [.pw(args: args, input: hash, what: "create the account \(name)"
+                        + (admin ? ", an administrator" : ""))]
+        case .delete(let name, let removeHome):
+            return [.pw(args: ["userdel", "-n", name] + (removeHome ? ["-r"] : []), input: nil,
+                        what: "delete the account \(name)" + (removeHome ? " and its home folder" : ", keeping its home folder"))]
+        case .autoLogin(let name?):
+            // The owner's desktop at boot (rc.d/abyss_desktop), and not the
+            // login window as well: two sessions on one display at boot.
+            return [.rcConf(key: "abyss_desktop_enable", value: "YES"),
+                    .rcConf(key: "abyss_desktop_user", value: name),
+                    .rcConf(key: "abyss_loginwindow_flags", value: nil)]
+        case .autoLogin(nil):
+            return [.rcConf(key: "abyss_desktop_enable", value: nil),
+                    .rcConf(key: "abyss_desktop_user", value: nil),
+                    .rcConf(key: "abyss_loginwindow_flags", value: "--greeter")]
         }
     }
 }
@@ -307,6 +402,10 @@ public enum SettingsStep: Equatable, Sendable {
     case service(name: String, action: [String], mayFail: Bool)
     /// A base tool, run after the files are in place (`resolvconf -u`).
     case tool(argv: [String], mayFail: Bool)
+    /// `pw -R ROOT ARGS…`, with `input` on stdin — a password hash, which
+    /// must never be in argv, the journal or the pane (P16.6a). `what` is how
+    /// it is described; ROOT is the helper's (`/`, or a test's scratch root).
+    case pw(args: [String], input: String?, what: String)
 
     /// Set or remove an rc.conf variable — the common case.
     public static func rcConf(key: String, value: String?) -> SettingsStep {
@@ -334,6 +433,7 @@ public enum SettingsStep: Equatable, Sendable {
             // "restart the netif service for wlan0", not "restart wlan0 the …".
             return "\(a.first ?? "") the \(n) service" + (a.count > 1 ? " for " + a.dropFirst().joined(separator: " ") : "")
         case .tool(let argv, _): return "run " + argv.joined(separator: " ")
+        case .pw(_, _, let what): return what
         }
     }
 
@@ -346,8 +446,11 @@ public enum SettingsStep: Equatable, Sendable {
         case .setVar(let f, let k, nil): return ["sysrc", "-f", path(f), "-x", k]
         case .service(let n, let a, _): return ["service", n] + a
         case .tool(let argv, _): return argv
+        case .pw(let args, _, _): return ["pw", "-R", SettingsStep.pwRoot] + args
         }
     }
+    /// Where `pw` works: `/`, or a test's scratch root (the helper sets it).
+    nonisolated(unsafe) public static var pwRoot = "/"
     public func command(rcConf: String) -> [String] {
         command { $0 == .rcConf ? rcConf : "/etc/" + $0.rawValue }
     }
@@ -381,6 +484,8 @@ public enum Settings {
             return s.name.isEmpty ? [SettingsRefusal("a quit must name the process it means")] : []
         case .volume(let v):
             return volumeProblems(v)
+        case .accounts(let a):
+            return accountProblems(a)
         }
     }
 
@@ -459,6 +564,8 @@ public enum Settings {
             return [.tool(argv: ["kill", "-s", s.force ? "KILL" : "TERM", "\(s.pid)"], mayFail: false)]
         case .volume(let v):
             return compileVolume(v)
+        case .accounts(let a):
+            return compileAccount(a)
         case .sound(let s):
             // For the next boot, then for now. The kernel refuses a unit with
             // no device behind it, which fails the plan — after sysctl.conf
