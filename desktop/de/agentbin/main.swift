@@ -6,8 +6,8 @@
 //       chat window). Its only way to a model is abyss-model at --model, and
 //       its tools read only what the jail holds. `bye` ends the session.
 //   abyss-agent ask --listen SOCKET TEXT...
-//       ask the agent at SOCKET, and print its answer, then `stop=` `steps=`
-//       and one `call=` line per tool it used. Exits 0 when it answered, 3
+//       ask the agent at SOCKET: one `call=` line per tool as it is called,
+//       then its answer, then `stop=` and `steps=`. Exits 0 when it answered, 3
 //       when the budget stopped it, 4 when the step limit did, 1 otherwise.
 //   abyss-agent bye --listen SOCKET
 
@@ -64,6 +64,13 @@ case "serve":
         var reply = Msg()
         switch req.string("method") {
         case "ask":
+            // Each tool call as it starts, as an event on the same connection
+            // before the reply (the chat window shows it then, not after).
+            loop.onCall = { call in
+                var e = Msg(); e.set("event", "call"); e.set("call", call)
+                try? Current.send(e, on: c)
+            }
+            defer { loop.onCall = { _ in } }
             let a = loop.ask(req.string("text") ?? "")
             reply.set("ok", true)
             reply.set("text", a.text)
@@ -98,12 +105,17 @@ case "ask", "bye":
         }
         m.set("text", words.joined(separator: " "))
     }
-    let r: Msg
+    var r = Msg()
     do {
         let fd = try Current.connect(path: listen)
         defer { close(fd) }
         try Current.send(m, on: fd)
-        r = try Current.receive(on: fd)
+        // Events first (a tool call as it starts), then the reply.
+        while true {
+            r = try Current.receive(on: fd)
+            guard r.string("event") == "call" else { break }
+            emit(1, "call=\(r.string("call") ?? "")")
+        }
     } catch { die("no agent at \(listen): \(error)") }
     guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
     if args[0] == "bye" { emit(1, "bye"); exit(0) }
@@ -111,7 +123,6 @@ case "ask", "bye":
     let stop = r.string("stop") ?? "failed"
     emit(1, "stop=\(stop)")
     emit(1, "steps=\(r.uint64("steps") ?? 0)")
-    for c in String(decoding: r.bytes("calls") ?? [], as: UTF8.self).split(separator: "\n") { emit(1, "call=\(c)") }
     exit(stop == "answered" ? 0 : stop == "budget" ? 3 : stop == "steps" ? 4 : 1)
 
 default:

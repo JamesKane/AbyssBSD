@@ -9,8 +9,8 @@
 #   1. the window asks the keeper for a session and says where it runs; Ask
 #      with an empty field is refused, and says why;
 #   2. a question typed and sent with Return is answered: the window shows
-#      the tool calls and the answer (the agent's log and the transcript
-#      agree);
+#      each tool call as it starts — while the (slowed) model has not yet
+#      answered — then the answer (the agent's log and the transcript agree);
 #   3. the Ask button sends the next, and it is answered;
 #   4. a script asks through the vocabulary (`abyssmenu run agent
 #      agent.question text=…`), as a person does; the budget stops it, the window says so in
@@ -81,7 +81,9 @@ env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height
     > "$W/ut.out" 2> "$W/ut.err" 3>&- 4>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-.build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
+# The stub takes 1.5 s a reply (inherited by abyss-model), so a tool call is
+# on the screen while the answer does not exist yet.
+env ABYSS_MODEL_STUB_DELAY=1500 .build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 
 # ---- 1. the window, and its session -------------------------------------------
@@ -115,11 +117,13 @@ printf 't what is due on monday\n' >&4
 sleep 0.5
 printf 'k 28\n' >&4
 await "$W/app.log" 'Agent: asked: what is due on monday' "Return did not send the question"
+await "$W/app.log" 'Agent: call list_directory' "the first tool call was not shown as it started"
+[ "$(count 'Agent: answered' "$W/app.log")" = 0 ] || fail "the call was shown only with the answer, not while the model worked"
 await "$W/app.log" 'Agent: answered: stop=answered calls=2 steps=2' "the question was not answered with the two tool calls"
 t=$(ls -d "$HOME"/Library/Logs/Agents/*-agent-*)/transcript.jsonl
 grep -q '"content":"what is due on monday"' "$t" || fail "the transcript does not have the question"
 grep -q '"content":"mine' "$t" || fail "the tool's read of notes.txt did not go back to the model"
-echo "ok: 2. typed and sent with Return: answered after list_directory and read_file, as the transcript says"
+echo "ok: 2. typed and sent with Return: each tool call shown as it started, before the answer; the transcript agrees"
 
 # ---- 3. the button ------------------------------------------------------------------
 printf 't and tuesday\n' >&4

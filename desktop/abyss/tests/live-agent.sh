@@ -84,7 +84,8 @@ echo "ok: 1. the agent runs in $N (jid $jid): no address, and only its two socke
 # ---- 2. the loop, in the jail -------------------------------------------------
 printf 'mine\n' > "$HB/$me/agent/marker.txt"
 .build/debug/abyss-agent ask --listen "$sock" look around > "$W/q1" 2>&1 || fail "the question failed: $(cat "$W/q1")"
-[ "$(head -1 "$W/q1")" = "done looking" ] || fail "the agent's answer: $(cat "$W/q1")"
+[ "$(grep -v '^call=' "$W/q1" | head -1)" = "done looking" ] || fail "the agent's answer: $(cat "$W/q1")"
+[ "$(head -1 "$W/q1" | cut -c1-20)" = "call=list_directory(" ] || fail "the calls did not come first, as they happened: $(cat "$W/q1")"
 grep -q '^stop=answered$' "$W/q1" && grep -q '^steps=2$' "$W/q1" || fail "not answered in 2 steps: $(cat "$W/q1")"
 grep -q "^call=list_directory" "$W/q1" && grep -q "^call=read_file" "$W/q1" || fail "the tool calls were not made: $(cat "$W/q1")"
 t="$transcript/transcript.jsonl"

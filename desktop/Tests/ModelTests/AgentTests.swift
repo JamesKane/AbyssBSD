@@ -49,6 +49,20 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(second[3]["content"]?.string, "echoed hi")
     }
 
+    /// The person sees each call as it starts: in order, before the answer.
+    func testEachCallIsToldAsItStarts() {
+        var told: [String] = []
+        var answeredWhenTold: [Int] = []
+        let s = Script([(200, completion(nil, calls: [("echo", #"{"say":"a"}"#), ("echo", #"{"say":"b"}"#)])),
+                        (200, completion("done"))])
+        let loop = AgentLoop(system: "sys", tools: [echo], model: s.call)
+        loop.onCall = { told.append($0); answeredWhenTold.append(s.asked.count) }
+        let a = loop.ask("go")
+        XCTAssertEqual(told, [#"echo({"say":"a"})"#, #"echo({"say":"b"})"#])
+        XCTAssertEqual(told, a.calls)
+        XCTAssertEqual(answeredWhenTold, [1, 1], "told before the model was asked again")
+    }
+
     func testTheRequestOffersTheToolsWithThinkingOff() {
         let s = Script([(200, completion("ok"))])
         _ = AgentLoop(system: "sys", tools: [echo], model: s.call).ask("q")

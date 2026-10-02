@@ -36,9 +36,13 @@ public final class StubBackend: ModelBackend {
     var next = 0
     /// How many requests reached it — what a refusal must leave unchanged.
     public private(set) var calls = 0
+    /// A pause before each reply — a test's stand-in for a model that takes
+    /// its time (the Agent window shows tool calls while it waits).
+    public var delayMs = 0
     public init(replies: [JSON]) { self.replies = replies }
     public func complete(_ request: JSON) throws -> JSON {
         calls += 1
+        if delayMs > 0 { usleep(useconds_t(delayMs) * 1000) }
         guard !replies.isEmpty else { throw HTTP.Failure("the stub has no replies") }
         defer { next = (next + 1) % replies.count }
         return replies[next]

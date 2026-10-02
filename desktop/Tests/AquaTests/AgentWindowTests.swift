@@ -12,6 +12,11 @@ final class AgentWindowTests: XCTestCase {
         XCTAssertEqual(agentTurn(question: "hi", calls: [], answer: "Hello."), "You: hi\nAgent: Hello.\n\n")
     }
 
+    func testThePiecesAddUpToTheTurn() {
+        XCTAssertEqual(agentQuestionLine("q") + agentCallLine("c()") + agentAnswerLine("a"),
+                       agentTurn(question: "q", calls: ["c()"], answer: "a"))
+    }
+
     func testTheLayoutKeepsTheFieldAndButtonAtTheBottom() {
         for (w, h) in [(560.0, 460.0), (900.0, 700.0), (300.0, 200.0)] {
             let l = AgentLayout(w: w, h: h)
@@ -22,6 +27,23 @@ final class AgentWindowTests: XCTestCase {
             XCTAssertLessThan(l.conversation.y + l.conversation.h, l.statusBaseline - 10, "the conversation is above the status")
             XCTAssertGreaterThanOrEqual(l.conversation.h, 40)
         }
+    }
+
+    /// `agent` in dock.ini pins Agent; and a running Agent that is not pinned
+    /// wears its own tile, not the generic one, and leaves when it quits.
+    func testTheDockKnowsAgent() {
+        let pinned = Dock.items(tokens: ["agent"], library: [])
+        XCTAssertEqual(pinned.count, 1)
+        XCTAssertEqual(pinned[0].label, "Agent")
+        XCTAssertEqual(pinned[0].appID, "org.abyssbsd.agent")
+        XCTAssertEqual(pinned[0].environment["AQUA_SCENE"], "agent")
+        XCTAssertEqual(pinned[0].pinToken, "agent")
+        let running = Dock.builtin(appID: "org.abyssbsd.agent")
+        XCTAssertEqual(running?.label, "Agent")
+        XCTAssertNil(running?.pinToken, "running, not pinned")
+        if case .agent? = running?.icon {} else { XCTFail("a running Agent wears the generic icon") }
+        XCTAssertEqual(Dock.builtin(appID: "org.abyssbsd.terminal")?.label, "Terminal")
+        XCTAssertNil(Dock.builtin(appID: "org.mozilla.firefox"), "a bundle's app is the library's to name")
     }
 
     func testTheMenusSayWhatTheyDo() {

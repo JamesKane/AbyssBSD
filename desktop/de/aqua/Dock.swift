@@ -24,7 +24,7 @@ private let kBtnLeft: UInt32 = 0x110
 private let kBtnRight: UInt32 = 0x111
 
 public enum DockIcon: Sendable {
-    case finder, browser, mail, music, prefs, genericApp, trash, trashFull, terminal
+    case finder, browser, mail, music, prefs, genericApp, trash, trashFull, terminal, agent
     /// An installed application's own icon: its bundle's PNG (P15.2).
     case bundle(String)
 }
@@ -199,6 +199,9 @@ private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
     case .trash: name = "trash"
     case .trashFull: name = "trashFull"
     case .terminal: name = "terminal"
+    // A theme without an Agent icon (one whose art has none yet) shows
+    // the generic one: a tile never goes blank.
+    case .agent: name = Theme.lists["dock.icon.agent"] != nil ? "agent" : "genericApp"
     case .bundle(let path):
         // The application's own icon; the generic one if it has none or it
         // cannot be read — a tile never goes blank.
@@ -246,6 +249,22 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         items(tokens: pinTokens(setting: setting, library: library), library: library)
     }
 
+    /// The built-in tile a running window of the desktop's own wears when it
+    /// is not pinned (its icon, its name, how to start another), by app ID.
+    public static func builtin(appID: String) -> DockItem? {
+        let token: String
+        switch appID {
+        case "org.abyssbsd.finder": token = "finder"
+        case "org.abyssbsd.terminal": token = "terminal"
+        case "org.abyssbsd.prefs": token = "sysprefs"
+        case "org.abyssbsd.agent": token = "agent"
+        default: return nil
+        }
+        guard let i = items(tokens: [token], library: []).first else { return nil }
+        // Running, not pinned: no pin token, so it leaves the Dock when it quits.
+        return DockItem(icon: i.icon, label: i.label, appID: i.appID, command: i.command, environment: i.environment)
+    }
+
     /// `dock.ini`'s entries, or the default ones.
     public static func pinTokens(setting: String?, library: [InstalledApp]) -> [String] {
         guard let setting else {
@@ -278,6 +297,12 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             case "sysprefs":
                 return DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
                                 command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "sysprefs"],
+                                pinToken: t)
+            case "agent":
+                // The Agent window (PHASE18 P18.8b): pinned by `agent` in
+                // dock.ini, as the other built-ins are.
+                return DockItem(icon: .agent, label: "Agent", appID: "org.abyssbsd.agent",
+                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "agent"],
                                 pinToken: t)
             default:
                 guard let app = AppLibrary.find(t, in: library) else {
@@ -520,7 +545,9 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         for t in extras {
             // A running application that is not pinned wears its bundle's icon
             // and name when it has one.
-            if let app = AppLibrary.owner(of: t.appID, in: library) {
+            if let b = Dock.builtin(appID: t.appID) {
+                items.append(b)
+            } else if let app = AppLibrary.owner(of: t.appID, in: library) {
                 items.append(DockItem(icon: .bundle(app.icon ?? ""), label: app.name, appID: t.appID,
                                       command: app.executable.map { [$0] }, appIDs: [t.appID],
                                       bundle: app.bundle))

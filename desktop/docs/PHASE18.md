@@ -336,9 +336,25 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   prompt it took 2. `⌘Q`/Quit said bye, and the model and llama-server
   stopped.
 
-  **P18.8 is complete.** Not yet: a Dock or Applications entry for Agent (it
-  is reachable by `AQUA_SCENE=agent`, as Grab is), and showing tool calls as
-  they happen rather than with the answer.
+  **P18.8 is complete.** Its loose ends, closed the same day:
+  - **Tool calls as they happen.** `AgentLoop.onCall` tells each call as it
+    starts; `abyss-agent serve` sends it as an `event=call` message before the
+    reply on the same connection; the window writes "You: …" at once, each
+    "› call" as it comes, then the answer, and its status counts the calls so
+    far. `live-agent-window.sh` proves it with a slowed stub
+    (`ABYSS_MODEL_STUB_DELAY`, tests only): a call is on the screen while the
+    answer does not exist yet. Without the delay the test cannot tell
+    streaming from batching, and a fault that removes it fails the test.
+  - **The Dock.** `agent` in `dock.ini` pins Agent, as `terminal` pins
+    Terminal, with an icon of its own in Aqua's `dock.dl` (a speech bubble and
+    a padlock); a theme without one shows the generic icon. A running
+    built-in that is not pinned (Agent, or Terminal opened by a file) now
+    wears its own tile rather than the generic one.
+
+  **Still open:** Agent is not in the default Dock (that is a choice of what
+  the desktop puts in front of everyone), Trench has no Agent art, and Grab,
+  Activity Monitor and Disk Utility have no way in from the UI at all: there
+  is no Applications entry for the desktop's own applications.
 - **P18.9 — the crash, first (M).** jaild gives a spawned program the person's
   login-class limits (`setusercontext`), not jaild's own: a jailed process now
   inherits a core limit of 0 (§4.7). When a confined application dies of a

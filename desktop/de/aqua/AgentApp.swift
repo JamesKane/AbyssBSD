@@ -91,12 +91,15 @@ public func paintAgentWindow(_ cr: OpaquePointer, w: Double, h: Double, conversa
     return l
 }
 
-/// What a reply adds to the conversation: one line per tool call, then the
-/// answer. Pure, for the tests.
+/// A turn of the conversation, in the three pieces the window writes as they
+/// happen: the question at once, each tool call as it starts, the answer.
+public func agentQuestionLine(_ q: String) -> String { "You: \(q)\n" }
+public func agentCallLine(_ c: String) -> String { "  › \(c)\n" }
+public func agentAnswerLine(_ a: String) -> String { "Agent: \(a)\n\n" }
+
+/// A whole turn: what the pieces add up to. Pure, for the tests.
 public func agentTurn(question: String, calls: [String], answer: String) -> String {
-    var s = "You: \(question)\n"
-    for c in calls { s += "  › \(c)\n" }
-    return s + "Agent: \(answer)\n\n"
+    agentQuestionLine(question) + calls.map(agentCallLine).joined() + agentAnswerLine(answer)
 }
 
 // MARK: - The application
@@ -115,6 +118,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     private var agentSocket = ""
     private var pending: Int32 = -1
     private var asked = ""
+    private var callsSoFar = 0
     private var menuService: MenuService?
     private var menuName = ""
     private var logged = false
@@ -198,16 +202,39 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         let q = field.trimmingSpaces
         guard phase == .ready, !q.isEmpty else { return }
         var m = Msg(); m.set("method", "ask"); m.set("text", q)
-        let sock = agentSocket
-        let sent = request({ try Current.connect(path: sock) }, m) { [weak self] r in
-            self?.answered(r)
+        guard let fd = try? Current.connect(path: agentSocket), (try? Current.send(m, on: fd)) != nil else {
+            status = "The agent is gone."; phase = .ended; return
         }
-        guard sent else { status = "The agent is gone."; phase = .ended; return }
         asked = q
         field = ""
         phase = .asking
+        callsSoFar = 0
         status = "Thinking…"
+        append(agentQuestionLine(q))
         AgentApp.log("asked: \(q)")
+        // Events (a tool call as it starts) until the reply.
+        pending = fd
+        display.addFileDescriptor(fd) { [weak self] in
+            guard let self else { return }
+            let r = try? Current.receive(on: fd)
+            if let r, r.string("event") == "call" {
+                self.callsSoFar += 1
+                let c = r.string("call") ?? ""
+                self.append(agentCallLine(c))
+                self.status = "Thinking… (\(self.callsSoFar) tool call\(self.callsSoFar == 1 ? "" : "s") so far)"
+                AgentApp.log("call \(c)")
+                return
+            }
+            self.display.removeFileDescriptor(fd)
+            close(fd)
+            self.pending = -1
+            self.answered(r)
+        }
+    }
+
+    private func append(_ text: String) {
+        conversation.edit { $0.move(.documentEnd); $0.insert(text) }
+        window?.setNeedsDisplay()
     }
 
     private func answered(_ r: Msg?) {
@@ -220,8 +247,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         let calls = String(decoding: r.bytes("calls") ?? [], as: UTF8.self).split(separator: "\n").map(String.init)
         let text = r.string("text") ?? ""
         let stop = r.string("stop") ?? "failed"
-        conversation.edit { $0.move(.documentEnd); $0.insert(agentTurn(question: asked, calls: calls,
-                                                                        answer: stop == "answered" ? text : "(stopped)")) }
+        append(agentAnswerLine(stop == "answered" ? text : "(stopped)"))
         switch stop {
         case "answered": phase = .ready; status = "Confined in \(agentClass): no network; only what you grant it."
         case "budget": phase = .ended; status = "Stopped: \(text)"

@@ -79,7 +79,10 @@ case "serve":
         guard let b = readFile(stub), let j = try? JSON.parse(b), let replies = j.array else {
             die("--stub \(stub) is not a JSON array of chat completions")
         }
-        backend = StubBackend(replies: replies)
+        let stub = StubBackend(replies: replies)
+        // A test's slow model: $ABYSS_MODEL_STUB_DELAY milliseconds a reply.
+        stub.delayMs = getenv("ABYSS_MODEL_STUB_DELAY").flatMap { Int(String(cString: $0)) } ?? 0
+        backend = stub
     } else if let url = opt("--backend") {
         guard let h = HTTPBackend(url: url) else { die("--backend must be http://HOST:PORT[/path]") }
         backend = h

@@ -47,6 +47,9 @@ public final class AgentLoop {
     public let tools: [AgentTool]
     public let maxSteps: Int
     public private(set) var messages: [JSON]
+    /// Each tool call as it starts, as "name(arguments)" — so the person
+    /// watches what the agent does while it does it, not after.
+    public var onCall: (String) -> Void = { _ in }
     let model: ModelCall
 
     public init(system: String, tools: [AgentTool], maxSteps: Int = 12, model: @escaping ModelCall) {
@@ -94,6 +97,7 @@ public final class AgentLoop {
                 let argText = call["function"]?["arguments"]?.string ?? "{}"
                 let id = call["id"]?.string ?? "call\(step)-\(i)"
                 calls.append("\(name)(\(argText))")
+                onCall(calls.last!)
                 let result: String
                 if let tool = tools.first(where: { $0.name == name }) {
                     if let args = try? JSON.parse(argText) { result = tool.run(args) }
