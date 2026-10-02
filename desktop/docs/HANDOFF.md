@@ -730,6 +730,31 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.125 How a bus got in: a principle that lived only in a plan's goal
+(2026-10-02.)
+
+**ADE excluded D-Bus as a bus from the start.** PLAN goal 3 says "the control
+plane *is* the bus (brokerless)", with "a **jailed D-Bus bridge**" for foreign
+apps, and PHASE7 kept D-Bus out on purpose. Phase 8 then wrote "**We do not
+implement a bus.** `dbus-daemon` from ports is the session bus" (PHASE8 §1).
+The sentence that rejected `xdg-desktop-portal` for being a broker sat two
+paragraphs above it, unapplied. PRODUCT later quoted the result as a decision
+("we took a broker we did not like"), so later phases built on it: the session
+plan's `bus` component, the tests, and P18.4–P18.5's per-jail buses. The
+medium never carried `dbus-daemon`, and every test ran where one was
+installed, so nothing failed. On the 12700KF there was no D-Bus at all, and
+foreign apps had neither a file chooser nor global menus. The user caught it:
+"dbus is a mistake… we excluded it for a reason."
+
+**The lesson: a principle that is only in a plan's goal list can be traded
+away by a phase plan, one local argument at a time.** It now lives where
+phases are checked against: PRODUCT §5.6, which says what the bridge is and
+what it is not, and PRODUCT §10 and PLAN's "not on this roadmap", which list
+"a message bus". The fix is BACKLOG D.1. Until it lands, every place that
+assumed `dbus-daemon` carries a dated correction (PLAN Phase 8, PHASE8 §1 and
+§6.3, STATUS, PHASE18 P18.4 and P18.6) instead of being rewritten, so the
+mistake stays legible.
+
 ### 2.124 FreeBSD's watcher missed edits in place; a jail's folder is not a folder
 (2026-10-02, PHASE18 P18.6.)
 

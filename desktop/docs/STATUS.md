@@ -775,6 +775,12 @@ the desktop's `-1` zone paints underneath it, and the Dock overlaps without
 reserving. That usable rectangle is the same §2.26 check `live-session.sh` has
 made against sway since Phase 2 — now made against us.
 
+> **Correction (2026-10-02):** everything below runs the bridge on a
+> `dbus-daemon`, which is a mistake: ADE supplies a *bridge* for foreign
+> applications, never a bus ([PRODUCT §5.6](PRODUCT.md)). The medium never
+> carried one, so on metal foreign apps had no file chooser. BACKLOG D.1
+> replaces it.
+
 **Phase 8 — the D-Bus bridge — is now scoped and half built**
 ([PHASE8.md](PHASE8.md), passes P8.1–P8.4). It deletes PHASE7 §6.7's caveat: a
 stock GTK/Qt app gets the Finder as its file chooser. **We are the portal** —

@@ -108,7 +108,7 @@ ship Jaguar as the product**, and a second theme only as proof the format is one
 | Toolkit | `Aqua` over `AquaDraw`: the 10.2 widget set, drawn from **theme data** (tokens, draw lists, chrome, fonts, icons, cursors — Phase 11), FreeType/HarfBuzz text, focus traversal, sheets, menus, undo |
 | Control plane | `CurrentIPC`, `PoolConfig`, `Anchor` (supervisor, session plan), `Vents` (sysctl, sound, battery, devd, network), `Spawn` (the one async-signal-safe way to start a process) |
 | Menus | the menu protocol: an application publishes its **vocabulary**, the bar is its first consumer; GTK (`org.gtk.Menus`) applications appear in the same bar through `abyss-dbus` (Phase 10). **One foreign toolkit, GTK** — Qt's `dbusmenu` path was removed 2026-09-30 (PLAN: one toolkit) |
-| Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus` (`org.freedesktop.portal.*`, including the theme's palette) |
+| Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus`, the **D-Bus bridge for foreign applications** (`org.freedesktop.portal.*`, including the theme's palette). **A bridge, not a bus** (§5.6); today it still sits on a `dbus-daemon`, which is BACKLOG D.1 |
 | Privileged helpers | `abyss-install` and `abyss-settings`: an unprivileged GUI sends a typed plan, a root service checks who is asking and does the writing |
 | Delivery | a live medium that boots, runs `Fathom`, and installs onto an empty disk |
 
@@ -425,9 +425,10 @@ path needs a second branch — and it widens the attack surface.
 built with `WLR_HAS_XWAYLAND` on Linux *and* in the FreeBSD VM, `Xwayland` is in
 ports, and the live medium grows by **≈6 MiB** once you subtract the packages
 `undertow`'s own `ldd` closure already pulls in — on a three-gigabyte image
-(PHASE9 §4.4). **Decide it explicitly and write the reason down**, the way the
-D-Bus bridge decision was — we took a broker we did not like, scoped it to the
-legacy path, and said so. **It was decided, and the other way: no XWayland**
+(PHASE9 §4.4). **Decide it explicitly and write the reason down.** (This line
+used to add "the way the D-Bus bridge decision was — we took a broker we did not
+like". That was not a decision, it was a mistake: §5.6.) **It was decided, and
+the other way: no XWayland**
 ([PHASE9 §6.3](PHASE9.md), which keeps the reasoning, and `live-session.sh`
 asserts `undertow` names none of wlroots' XWayland symbols). PHASE9 had
 recommended taking it, off by default; this paragraph said so until 2026-09-28,
@@ -506,6 +507,51 @@ Two things fall out, both free:
 
 And it is the reason §4.4's pixel fallback stays a fallback: an application that
 can describe itself is never driven by screenshot.
+
+### 5.6 D-Bus: a bridge for foreign applications, never a bus
+
+**ADE has no message bus and runs none.** Its own processes talk over
+`CurrentIPC`: a socket per service, one peer at each end, and a descriptor where
+a descriptor is the answer. D-Bus was excluded from the start (PLAN goal 3: "the
+control plane *is* the bus — brokerless"), for reasons that have not changed:
+
+- **A session bus is a party line.** It is one socket that every process of the
+  person can reach. On it, any client can call any service, list every name,
+  claim a well-known name before its real owner does, subscribe to other
+  clients' signals (and, with eavesdropping or `BecomeMonitor`, read their
+  traffic), and have the bus start programs by name. Its default session policy
+  allows all of that.
+- **It is ambient authority.** It authenticates by uid and nothing else, so
+  every process of the person is equally trusted. That is the opposite of a
+  capability handed out by a click (§4.4). A bus a jail can reach is a way out
+  of the jail; flatpak puts a filtering proxy (`xdg-dbus-proxy`) in front of
+  every sandbox for exactly this reason.
+- **It is a large C program** parsing every message from every client, with the
+  person's authority.
+
+**What foreign applications get instead is a bridge.** GTK applications expect a
+session bus at `DBUS_SESSION_BUS_ADDRESS`, so ADE answers there. It does so with
+a Swift component that speaks D-Bus's wire protocol and **is not a bus**:
+- Each connection reaches ADE's own services (the portal's `FileChooser` and
+  `Settings`, and the menu bridge reading `org.gtk.Menus`) and nothing else.
+- No client reaches another client through it, nothing is started by name, and
+  nobody can monitor. A name a client asks for is recorded for the bridge's own
+  use, not owned in a namespace anyone else can call.
+- There is one per session and one per jail (§4.4). A jailed application's
+  bridge knows which jail it serves from the socket it came in on.
+
+The price is stated rather than hidden. A GTK application cannot find a running
+copy of itself through the bus, so "open in the existing window" becomes a
+second window. And anything that wants a real bus (MPRIS, AT-SPI) is a bridge
+of its own, decided one at a time, or it does not work.
+
+**Correction, 2026-10-02.** Phase 8 shipped the opposite: "`dbus-daemon` from
+ports is the session bus" (PHASE8 §1, §6.3). This document then called that a
+decision (§5.2's "we took a broker we did not like"). It was a mistake, not a
+decision: it contradicted goal 3, and nobody re-read goal 3. On the 12700KF the
+medium carried no `dbus-daemon` at all, so foreign applications had neither a
+file chooser nor global menus, and P18.4–P18.5 had built per-jail buses on the
+same daemon. Replacing it is BACKLOG D.1.
 
 ## 6. Four proposals
 
@@ -1108,3 +1154,7 @@ both directions:
 - **Driving programs by screenshot.** Pixels are the documented fallback for an
   application that cannot describe itself, and they stop being used the day it
   can (§4.4).
+- **A message bus.** No `dbus-daemon`, no session bus, and no broker that every
+  process of the person can reach. ADE's IPC is `CurrentIPC`. Foreign
+  applications that speak D-Bus reach ADE through a bridge in Swift that answers
+  only for ADE's own services; they cannot reach each other through it (§5.6).

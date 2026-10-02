@@ -32,6 +32,10 @@ and firmware the fork remote is named `fork`.
   rewrite. GPL code (adapted from Linux) lives only in `kmod/drm-msm`, which
   records its licences in `LICENSES/`. Never copy Linux reference sources
   into the tree.
+- **No message bus.** ADE's IPC is `CurrentIPC`. Foreign applications that
+  speak D-Bus get a **bridge** in Swift that answers only for ADE's own
+  services, never a bus, and never `dbus-daemon`
+  ([PRODUCT §5.6](desktop/docs/PRODUCT.md)).
 - **"Nothing special"** on the board: stock GENERIC and an empty
   `loader.conf`. A board-specific setting is a driver bug.
 - **Bumping `__FreeBSD_version`** (LinuxKPI KBI changes) means deploying the

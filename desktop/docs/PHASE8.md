@@ -72,9 +72,18 @@ alike is worth the extra code.
 - **No jail plumbing.** PLAN.md wants the bridge jailed; that is FreeBSD systems
   work belonging with Phase 4's hardware/jail story, exactly as PHASE7 said of
   the sandboxed client.
-- **We do not implement a bus.** `dbus-daemon` from ports is the session bus.
+- **We do not implement a bus.** ~~`dbus-daemon` from ports is the session bus.
   Writing a broker would be absurd for a project whose whole argument is that
-  brokers should not be on the critical path — and nothing here is.
+  brokers should not be on the critical path — and nothing here is.~~
+  **Corrected 2026-10-02 ([PRODUCT §5.6](PRODUCT.md)).** The first sentence was
+  right and the second undid it. Not implementing a bus does not mean running
+  someone else's: a bus is the thing excluded, whoever wrote it. This
+  paragraph's argument against `xdg-desktop-portal` (a broker on the path) is
+  the argument against `dbus-daemon`, and it went unapplied. The bridge should
+  have answered foreign applications at the bus address itself, speaking the
+  protocol from Swift as P8.1 proved it could. Instead it needed a party line
+  between them that every process of the person can reach. BACKLOG D.1 makes it
+  so.
 
 ---
 
@@ -372,7 +381,9 @@ out.* This anticipated marshalling an `h` into the reply; §6.6 records what P8.
 found instead — `FileChooser` has no descriptor in its answer at all. The `h`
 support in `de/dbus` is real and tested, but the file chooser does not use it.
 
-**6.3 `dbus-daemon` is a broker, and we are running one.** Worth saying plainly
+**6.3 `dbus-daemon` is a broker, and we are running one.** *(Corrected
+2026-10-02: running one was the mistake, not something to carry honestly. See
+PRODUCT §5.6 and BACKLOG D.1. What follows is kept as it was written.)* Worth saying plainly
 rather than pretending otherwise: this phase adds the exact kind of process the
 architecture argues against. What keeps it honest is *where* it sits — nothing on
 the frame path talks to it, no native app needs it, and if it dies the desktop

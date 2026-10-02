@@ -195,7 +195,7 @@ C2–C5 in [PHASE6.md](PHASE6.md) are still provisional until P4.5 re-measures t
 | `abyss-settings` | System Preferences' privileged half: a typed plan in, `rc.conf` and friends written whole | — (new) |
 | `fathom` | the medium's report on the machine, Phase 12 ([PHASE12.md](PHASE12.md)) | — (new) |
 | `Spawn` | the one async-signal-safe way to start a process | — (new) |
-| `abyss-dbus` | the D-Bus bridge: `org.freedesktop.portal.*` for legacy apps, Phase 8 ([PHASE8.md](PHASE8.md)) | — (new) |
+| `abyss-dbus` | the D-Bus bridge: `org.freedesktop.portal.*` for legacy apps, Phase 8 ([PHASE8.md](PHASE8.md)). **A bridge, never a bus** ([PRODUCT §5.6](PRODUCT.md)); its `dbus-daemon` goes in BACKLOG D.1 | — (new) |
 
 Names are a theme, not a contract — the architecture is what matters.
 
@@ -542,9 +542,15 @@ and two risks spiked on both platforms before the plan was written.
   GDBus (drags in the GLib/GTK stack this project rejects), no sd-bus (systemd).
   The spike connects, authenticates and calls `Hello` on both platforms in ~110
   lines, which is the same answer `CurrentIPC` reached for its own wire format.
-- `dbus-daemon` from ports **is** the session bus. This phase adds a broker, and
+- ~~`dbus-daemon` from ports **is** the session bus. This phase adds a broker, and
   says so: nothing on the frame path talks to it, and if it dies the desktop does
-  not notice. PLAN.md always called it a legacy adapter.
+  not notice. PLAN.md always called it a legacy adapter.~~ **A mistake, corrected
+  2026-10-02** ([PRODUCT §5.6](PRODUCT.md)). Goal 3 below says the control plane
+  *is* the bus, brokerless, with a **jailed D-Bus bridge** for foreign apps. A
+  bridge is not a bus: ADE answers foreign applications itself, in Swift, and no
+  client reaches another through it. The medium never carried `dbus-daemon`, so
+  on metal foreign apps had no file chooser at all. Its replacement is BACKLOG
+  D.1.
 
 ---
 
@@ -1297,6 +1303,10 @@ that has never failed is a comment.
 
 [PRODUCT.md §10](PRODUCT.md) is the list and the reasons, in short:
 
+- **A message bus.** No `dbus-daemon` and no session bus: ADE's IPC is
+  `CurrentIPC`, and foreign applications that speak D-Bus get a bridge in Swift
+  that answers only for ADE's own services ([PRODUCT §5.6](PRODUCT.md)). Phase 8
+  ran a `dbus-daemon` anyway, by mistake; BACKLOG D.1 removes it.
 - **Tiling as a layout policy.** Phase 9's drag-to-edge snapping is the one
   affordance worth offering, and Phase 13 is why that is not a concession.
 - **A theme *catalogue*.** The theme *system* is a must-have and Phase 11 ships

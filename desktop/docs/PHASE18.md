@@ -122,6 +122,11 @@ unless the descriptor was writable, and checks the inode again through the
 mount. Each jail has **its own D-Bus**, at `/run/user/bus` in the plan's
 environment (with `GTK_USE_PORTAL=1`), served by an `abyss-dbus --jail`. So a
 jailed caller is known by the bus it is on, with no pid-to-jid lookup.
+*(2026-10-02: that bus is a `dbus-daemon` per jail, which repeats Phase 8's
+mistake. The design stands, a socket per jail with the portal on it, but the
+socket should be the Swift bridge itself, not a bus with the bridge as a client
+(PRODUCT §5.6, BACKLOG D.1). `live-jail-files.sh` uses `dbus-monitor`, which
+needs a bus; it changes with D.1.)*
 `live-jail-files.sh`'s five claims pass in the guest, with gdbus and dbus-monitor
 running inside the jail. Seven faults were injected, and each failed the test.
 P18.5 starts the bus and its bridge for each jail (HANDOFF §2.122).
@@ -169,7 +174,8 @@ Live test in the guest:
 - logging out removes the jail.
 
 **P18.6 — the gate for 18a (S). — GREEN IN THE GUEST 2026-10-02; the 12700KF
-run is owed.** `live-jail-gate.sh` has seven claims, green three runs in a row,
+run waits on BACKLOG D.1**, because the medium has no D-Bus at all and the run
+stopped there. `live-jail-gate.sh` has seven claims, green three runs in a row,
 and four faults were injected, each failing the test. Firefox ESR, confined in
 `app-net` by its bundle, renders a page served over the network. Its file input
 opens the Finder through the jail's portal, and the chosen file comes in as a
