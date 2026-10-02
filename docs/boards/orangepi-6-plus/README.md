@@ -129,18 +129,49 @@ the Q8B.
 - **GPIO, I²C, pinctrl:** `cdnc_i2c` on ACPI, Cadence GPIO, when something
   needs them (USB-C PD, sensors).
 
-### Phase 3: power, the generic parts first
+### Phase 3: power, the generic parts first (in progress)
 
-- **CPU idle:** our `_LPI` support from the Q8B should take the three
-  states as they are (check the cluster state's coordination).
-- **CPU frequency: an ACPI CPPC driver** (`acpi_cppc`, a cpufreq(4) driver):
-  `_CPC` with SystemMemory and FFixedHW (AMU) registers, per-domain as our
-  Q8B powerd already handles. Generic FreeBSD code: it fixes every
-  CPPC-only arm64 server and SBC, and goes upstream.
-- **Thermal:** `acpi_thermal`'s 13 zones, and critical shutdown tested as on
-  the Q8B.
+Branch `orangepi-6-plus` of freebsd-src, from `radxa-dragon-q8b` (local
+until the Q8B is regression-tested; 2026-10-02):
+
+- **CPU idle: works.** All three `_LPI` states: WFI, core power-down
+  (PSCI `0x10000`, 3 ms/360 µs) and cluster power-down (`0x1010000`,
+  10 ms/500 µs). Three things beyond the Q8B's code:
+  - the firmware leaves `_LPI`'s context-lost flag clear on its power-down
+    states, so `acpi_cpu` also reads the PSCI state's type bit, as Linux;
+  - UEFI enters the kernel at EL2 and it runs with VHE, and the cores have
+    SVE: the power-down path now restores the SVE vector length and
+    vmm(4)'s `VTCR_EL2`, and allows VHE;
+  - the cores' generic timers stop in both states and the GTDT has no
+    memory-mapped timer: **`sky1_gpt`** drives CIX's general purpose timer
+    (`CIXH1007`, 25 MHz, the one Linux broadcasts with) as a global event
+    timer, its interrupt on CPU 0, which stays in WFI.
+
+  Opt-in, as on the Q8B: `kern.eventtimer.timer="Sky1 GPT"` and
+  `hw.acpi.cpu.cx_lowest=C3`. Idle cores then spend 83-100% powered down.
+  Soaked: mixed CPU, NVMe and network load, 140 logins without a stall, SVE
+  registers intact across 8000 idle sleeps.
+- **CPU frequency: works.** **`acpi_cppc`**, a generic cpufreq(4) driver for
+  `_CPC` (SystemMemory registers, arm64 AMU counters), one per `_PSD` domain:
+  CPUs 0-1, 2-5, 6-7, 8-9, 10-11, as Linux's policies, 800 MHz to
+  1.8-2.6 GHz in 100 MHz levels. `dev.acpi_cppc.N.delivered_mhz` measures
+  the real clock; the firmware rounds a request up to its operating points:
+
+  | Domain | Operating points (MHz) |
+  |---|---|
+  | 0-1 (A720) | 800, 1200, 1500, 1900, 2000, 2100, 2200, 2500, 2600 |
+  | 10-11 (A720) | 800, 1200, 1500, 1900, 2000, 2100, 2200, 2400, 2500 |
+  | 2-5 (A520) | 800, 1800 |
+
+  The branch's `powerd` runs each domain on its own; base `powerd` only
+  drives CPU 0's.
+- **Thermal: reads.** All 13 zones report (about 42 °C idle), critical at
+  98 °C, passive from 85 °C on `tz0`. To do: passive cooling with
+  per-domain cpufreq drivers, and the critical shutdown test.
 - **Device power:** ACPI power resources and the AML clock methods, as
   devices need them.
+- Also: the Qualcomm GLINK clients built into the branch's GENERIC no
+  longer wait for a DSP on this board.
 
 ### Phase 4: display and desktop, early
 
