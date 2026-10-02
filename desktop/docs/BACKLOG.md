@@ -193,7 +193,9 @@ scheduled; each is small and self-contained:
   more than half a period late, and ≈100 of 1800 frames are lost. undertow
   was traced on time at every stage. The path is amdgpu → LinuxKPI task
   queues at ordinary priority. Reproduce with `abyss/mk/metal-bench.sh c2`
-  (and `--no-adversaries` plus spinners);
+  (and `--no-adversaries` plus spinners). **Ours, not the Mac Studio's**
+  (2026-10-02): that machine works only on the Radxa board, so this amd64
+  kernel item is the desktop side's to take on;
 - **S3 resume on the 12700KF (MSI board, RX 6750 XT, igc0) leaves the machine
   dead** (HANDOFF §2.115). With no desktop running, `acpiconf -s 3` from a bare
   console suspends, and the wake brings the screen back, but the keyboard and
