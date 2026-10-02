@@ -150,11 +150,23 @@ and panfrost (CSF) for the userland.
 The NPU (Zhouyi), the video codec, USB-C PD and DP alt mode, the eDP
 panel, the audio DSP, Wi-Fi (no module fitted: nothing on PCIe or USB).
 
-## Decisions to make
+## Decisions (2026-10-02)
 
-- **ACPI or DT.** ACPI, as for the Q8B: it is what the firmware gives, it
-  is complete, and Linux uses it. (Mainline Linux goes DT-first for Sky1,
-  with `acpi=off`; that path needs a DTB the firmware doesn't provide.)
-- **Where FreeBSD lives** after phase 1: a second NVMe, or a partition taken
-  from Ubuntu's.
-- **A serial console:** the UART header's pins and level, and a cable.
+- **ACPI**, as for the Q8B: it is what the firmware gives, it is complete,
+  and Linux uses it. (Mainline Linux goes DT-first for Sky1, with
+  `acpi=off`; that path needs a DTB the firmware doesn't provide.)
+- **FreeBSD shares the NVMe.** Ubuntu's root (`nvme0n1p2`, ext4) shrinks to
+  about 100 GiB from a live USB stick (ext4 can't shrink mounted), leaving
+  ~360 GB unallocated for FreeBSD's installer, its swap big enough for
+  crash dumps; the ESP (`nvme0n1p1`, 1 GB) is shared. Ubuntu stays as the
+  Linux reference. Status: the benchmark data that filled the disk is
+  deleted (17 GB used); the shrink waits on a live image.
+- **Serial console:** the 10-pin debug header is 3.3 V, so a common USB-TTL
+  adapter works (unlike the Q8B's 1.8 V pads). UART2, the BIOS and kernel
+  log, is pin 1 TX, pin 3 RX, pin 5 GND, and is the DBG2 table's `COM2` at
+  `0x40d0000`; UART4 (power-management firmware log), UART5 (secure
+  element) and UART6 (POST codes) share the header.
+- **A watchdog:** the GTDT describes an SBSA generic watchdog (refresh frame
+  `0x16008000`, control `0x16003000`) that FreeBSD has no driver for. A
+  small generic one turns hangs into resets instead of power cycles, and
+  goes upstream with the CPPC driver.
