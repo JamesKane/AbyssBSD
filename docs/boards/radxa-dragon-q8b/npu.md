@@ -15,7 +15,7 @@ quantization step of QNN's CPU backend: 0.94 ms per inference against
 
 | Piece | Where |
 |---|---|
-| CDSP start: RPMh votes, PAS load | `qcom_rpmh`, `qcom_adsp` (src) |
+| CDSP start: RPMh votes while it boots, PAS load | `qcom_rpmh`, `qcom_adsp` (src) |
 | FastRPC, Linux's ioctls: `/dev/fastrpc-cdsp` | `qcom_fastrpc` (src, in GENERIC) |
 | Those ioctls for Linux programs | `qcom_fastrpc_linux` (src, module) |
 | `/sys/devices/soc0` for Linux programs | `hw.soc` from `qcom_glink`'s socinfo; `linsysfs` (src) |
@@ -41,6 +41,12 @@ Two things QNN expects of Linux that this board does differently:
   write-back and shareable (`hw.qcom_fastrpc.coherent`, on by default).
   Mapped uncached, graphs fail on the DSP (`Dma execution failed on the skel
   side`).
+
+The CDSP's rail and path to memory are voted to their highest while it
+boots, and let go once its GLINK edge is up, as Linux drops its proxy votes:
+the DSP votes for itself as its work needs. Held, they warmed the idle SoC
+by about half a degree; released, QNN runs as fast. `dev.qcom_adsp.1.votes`
+shows them, and takes them back (1) by hand.
 
 ## Setting it up
 
@@ -125,6 +131,4 @@ loads directly (`libQnnModelDlc.so`), preparing the graph on the board.
   fails for it.
 - At the end of a run the DSP refuses QNN's heap unmap (`AEE_EBADSTATE`) and
   some optional calls (`AEE_ERPC`): the process is already going.
-- Nothing lowers the CDSP's votes once it is running (its rail at its top
-  level, its path to memory at full bandwidth): the idle cost is unmeasured.
 - The DSP's own log (adspmsgd) shows nothing.
