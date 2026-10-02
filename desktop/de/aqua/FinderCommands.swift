@@ -81,13 +81,16 @@ public enum FinderVerb: String, CaseIterable, Sendable {
 
 /// The Finder's menus, as Jaguar laid them out. Pure, so a test can walk it.
 public func finderMenuBar() -> MenuBarModel {
+    // The verbs that remove one of the person's files: an agent's first in a
+    // session asks the person first (PHASE18 P18.11, requester 1).
+    let writing: Set<FinderVerb> = [.moveToTrash, .emptyTrash]
     func c(_ v: FinderVerb, _ title: String, _ key: KeyEquivalent,
            also: [KeyEquivalent] = [], args: [Argument] = [], _ summary: String) -> MenuItem {
         .command(Command(v.rawValue, title, key: key, alternateKeys: also,
-                         arguments: args, summary: summary))
+                         arguments: args, summary: summary, writes: writing.contains(v)))
     }
     func c(_ v: FinderVerb, _ title: String, _ summary: String) -> MenuItem {
-        .command(Command(v.rawValue, title, summary: summary))
+        .command(Command(v.rawValue, title, summary: summary, writes: writing.contains(v)))
     }
     return MenuBarModel(appName: "Finder", menus: [
         Menu("Finder", [

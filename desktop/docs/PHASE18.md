@@ -515,8 +515,42 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   - (c) requester 1, the first write to an existing file. PHASE18 assumed
     jaild "can see" a writable grant's first open for writing. It cannot ask
     before one: FreeBSD tells a watcher about a write after it happens
-    (kqueue `NOTE_WRITE`), not before. A decision is pending.
+    (kqueue `NOTE_WRITE`), not before. **Decided 2026-10-02: ask at the
+    menu.** Applications mark the verbs that write a file (Save, Save As…,
+    Move to Trash). The first time in a session an agent activates one of an
+    application's, the Agent window asks before it runs; the bridge holds the
+    answer, outside the jail. A person saving is the person, so a confined
+    application acting for a person is not asked. Rejected: read-only grants
+    until asked (a program that does not retry a failed write loses the save),
+    and telling after the write (it informs; it does not ask).
   - Requesters 2 and 3 wait for the `admin` class and P18.12.
+
+  **Requester 1 — the first write — DONE 2026-10-02 (in the guest).**
+  - **`Command.writes`** (on the menu wire as `writes`) marks the verbs that
+    write or remove a person's file: TextEdit's Save and Save As…, the
+    Finder's Move to Trash and Empty Trash.
+  - **The bridge holds the line.** It does not run such a verb for an
+    application not yet allowed this session: it answers `permission`, and
+    logs `asked`.
+  - **The agent passes it on** as an event on the question's connection, and
+    waits.
+  - **The window asks:** "Allow the agent to write with TextEdit?", with
+    Don't Allow and **Allow**.
+  - **The answer goes keeper → bridge first** (`permit`, logged as `permitted`
+    or `denied`, outside the jail). Only then does the window tell the agent
+    to try once more. An agent that answers itself yes is still refused by
+    the bridge.
+  - Don't Allow is not remembered: the next write asks again. Allow lasts the
+    session.
+  - `abyss-agent ask` on a command line answers no, because a script is not
+    the person. `abyss-jail permit SESSION APP yes|no` is the keeper's form.
+  - Tests: unit tests for the bridge's flow, the wire, the marked verbs and
+    the wording; an `agent-write` golden (97 scenes on both platforms); every
+    unit test (907) green on both; `live-agent-vocab.sh` (refused unasked,
+    saves once permitted), `live-agent-give.sh` (Don't Allow writes nothing
+    and asks again; Allow saves) and `live-agent-requester.sh` in the guest. 6
+    faults injected, all caught (four after the harness's arguments were put
+    in order).
 
 - **P18.12 — network for agents, when a class needs it (M).** A `vnet` jail
   (§4.7) whose only route out is an egress proxy outside it, which asks

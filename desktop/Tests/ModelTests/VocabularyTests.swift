@@ -12,9 +12,10 @@ final class VocabularyTests: XCTestCase {
         var activated: [(String, String, [String: String])] = []
         let models: [String: MenuBarModel] = [
             "menus.textedit.42": MenuBarModel(appName: "TextEdit", menus: [
-                Menu("File", [.command(Command("file.save", "Save", key: .cmd("s"), summary: "Save the document.")),
+                Menu("File", [.command(Command("file.save", "Save", key: .cmd("s"), summary: "Save the document.", writes: true)),
                               .command(Command("file.open", "Open…", arguments: [Argument("path", .path, "The file.")],
-                                               summary: "Open a file."))]),
+                                               summary: "Open a file.")),
+                              .command(Command("file.close", "Close", summary: "Close the document."))]),
             ]),
             "menus.grab.7": MenuBarModel(appName: "Grab", menus: [
                 Menu("Capture", [.command(Command("capture.screen", "Screen", summary: "Capture the screen."))]),
@@ -26,7 +27,7 @@ final class VocabularyTests: XCTestCase {
         }
         func activate(_ service: String, verb: String, arguments: [String: String]) throws -> CommandResult {
             activated.append((service, verb, arguments))
-            return verb == "file.save" ? .ok(nil) : .refused("not now")
+            return verb == "file.save" || verb == "file.close" ? .ok(nil) : .refused("not now")
         }
     }
     enum MenuWireTestError: Error { case gone }
@@ -54,10 +55,34 @@ final class VocabularyTests: XCTestCase {
         XCTAssertEqual(logged, ["given TextEdit", "refused Grab", "refused Grab"])
     }
 
+    /// Requester 1 (P18.11): a verb that writes is not run until the person
+    /// allowed that application, on the keeper's side; one that does not, is.
+    func testAWriteWaitsForThePerson() throws {
+        let menus = FakeMenus()
+        var logged: [String] = []
+        let b = VocabularyBridge(menus: menus) { kind, _ in logged.append(kind) }
+        _ = try b.give(service: "menus.textedit.42")
+        let first = b.handle(msg("activate", app: "TextEdit", verb: "file.save"))
+        XCTAssertEqual(first.bool("ok"), false)
+        XCTAssertEqual(first.bool("permission"), true)
+        XCTAssertEqual(first.string("title"), "Save")
+        XCTAssertTrue(menus.activated.isEmpty, "not run before the person answers")
+        XCTAssertEqual(b.handle(msg("activate", app: "TextEdit", verb: "file.close")).string("text"), "ok",
+                       "a verb that writes nothing is not asked about")
+        b.permit("TextEdit", allow: false)
+        XCTAssertEqual(b.handle(msg("activate", app: "TextEdit", verb: "file.save")).bool("permission"), true,
+                       "Don't Allow: asked again next time, never run")
+        b.permit("TextEdit", allow: true)
+        XCTAssertEqual(b.handle(msg("activate", app: "TextEdit", verb: "file.save")).string("text"), "ok")
+        XCTAssertEqual(menus.activated.map(\.1), ["file.close", "file.save"])
+        XCTAssertEqual(logged, ["given", "asked", "activate", "denied", "asked", "permitted", "activate"])
+    }
+
     func testActivateGoesToTheApplicationWithItsArguments() throws {
         let menus = FakeMenus()
         let b = VocabularyBridge(menus: menus)
         _ = try b.give(service: "menus.textedit.42")
+        b.permit("TextEdit", allow: true)
         XCTAssertEqual(b.handle(msg("activate", app: "textedit", verb: "file.save")).string("text"), "ok", "names are matched without case")
         XCTAssertEqual(b.handle(msg("activate", app: "TextEdit", verb: "file.open", arguments: "path=/home/a.txt")).string("text"),
                        "refused: not now", "the application's refusal, in its words")
@@ -72,6 +97,7 @@ final class VocabularyTests: XCTestCase {
         TextEdit:
           file.save — "Save" in File [enabled]. Save the document.
           file.open — "Open…" in File; arguments: path (path): The file. [disabled: a document is open]. Open a file.
+          file.close — "Close" in File [enabled]. Close the document.
         """)
     }
 
@@ -93,12 +119,13 @@ final class VocabularyTests: XCTestCase {
         var logged: [String] = []
         let b = VocabularyBridge(menus: menus) { kind, _ in logged.append(kind) }
         _ = try b.give(service: "menus.textedit.42")
+        b.permit("TextEdit", allow: true)
         XCTAssertTrue(b.take("textedit"))
         XCTAssertFalse(b.take("textedit"), "nothing to take twice")
         let r = b.handle(msg("activate", app: "TextEdit", verb: "file.save"))
         XCTAssertEqual(r.string("error"), "TextEdit was not given to this session")
         XCTAssertTrue(menus.activated.isEmpty)
-        XCTAssertEqual(logged, ["given", "taken", "refused"])
+        XCTAssertEqual(logged, ["given", "permitted", "taken", "refused"])
     }
 
     func testAGiveIsOneRunningCopy() throws {

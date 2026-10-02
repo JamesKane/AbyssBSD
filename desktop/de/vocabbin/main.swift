@@ -4,7 +4,8 @@
 //       answers the agent at INSIDE (a socket in its jail): apps, describe,
 //       activate — for the applications given to this session and no others.
 //       Gives come from the keeper at OUTSIDE (a socket outside the jail, 0600):
-//       `give service=menus.APP.PID`, and `take app=NAME` (P18.11). Every give, activation and refusal is a
+//       `give service=menus.APP.PID`, `take app=NAME`, and `permit app=NAME
+//       allow=BOOL` (the person's answer to requester 1; P18.11). Every give, activation and refusal is a
 //       line of DIR/transcript.jsonl. The keeper starts it beside abyss-model
 //       and stops it with the agent.
 
@@ -71,6 +72,11 @@ while true {
                     reply.set("ok", true); reply.set("app", name)
                     emit(1, "given \(name) (\(s))")
                 } catch { reply.set("ok", false); reply.set("error", "\(s) did not answer: \(error)") }
+            } else if req.string("method") == "permit", let app = req.string("app") {
+                // Requester 1 (P18.11): the person's answer, from outside.
+                bridge.permit(app, allow: req.bool("allow") == true)
+                reply.set("ok", true)
+                emit(1, "\(req.bool("allow") == true ? "permitted" : "denied") \(app)")
             } else if req.string("method") == "take", let app = req.string("app") {
                 // Taken back (P18.11): refused from now on, as never given.
                 if bridge.take(app) { reply.set("ok", true); emit(1, "taken \(app)") }

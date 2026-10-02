@@ -6,7 +6,8 @@
 # and abyss-agent. The stub's tool call is TextEdit's file.save. FreeBSD only;
 # needs passwordless sudo. Claims:
 #
-#   1. given TextEdit, the agent saves through it;
+#   1. given TextEdit, the agent saves through it, once the person allowed
+#      the first write (requester 1);
 #   2. Take Back: TextEdit is taken back — the transcript says so — and the
 #      agent's next save is refused by name; TextEdit does not save again;
 #   3. that question crosses the budget: the window puts up the requester, in
@@ -90,6 +91,8 @@ t=$(ls -d "$HOME"/Library/Logs/Agents/*-agent-*)/transcript.jsonl
 menu agent.give "app=textedit" || fail "Give was refused"
 await "$W/app.log" 'Agent: gave TextEdit' "TextEdit was not given"
 menu agent.question "text=save it" || fail "the first question was refused"
+await "$W/app.log" 'Agent: requester write: TextEdit file.save' "the first save was not asked about"
+menu agent.allow || fail "Allow (write) was refused"
 await "$W/app.log" 'Agent: answered: stop=answered' "the first question was not answered"
 [ "$(count "TextEdit: saved $W/note.txt" "$W/te.log")" = 1 ] || fail "TextEdit did not save once for the agent"
 echo "ok: 1. given TextEdit, the agent saved through it"

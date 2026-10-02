@@ -52,6 +52,18 @@ private final class FakeApp: MenuProvider {
 final class MenuWireTests: XCTestCase {
     private func roundTrip(_ m: Msg) throws -> Msg { try Msg.unpack(m.pack()) }
 
+    /// `writes` (P18.11) travels, and an application that never says it
+    /// reads as writing nothing.
+    func testWritesRoundTrips() throws {
+        let model = MenuBarModel(appName: "W", menus: [Menu("File", [
+            .command(Command("file.save", "Save", summary: "Save.", writes: true)),
+            .command(Command("file.close", "Close", summary: "Close.")),
+        ])])
+        let d = try MenuWire.decodeDescribe(roundTrip(MenuWire.describeReply(model, enablement: { _ in .enabled })))
+        XCTAssertEqual(d.model.commands.map(\.writes), [true, false])
+        XCTAssertEqual(d.model, model)
+    }
+
     func testDescribeRoundTripsTheWholeTree() throws {
         let app = FakeApp()
         let reply = try roundTrip(MenuWire.describeReply(app.menuModel,

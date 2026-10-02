@@ -65,9 +65,9 @@ public func agentMenuBar() -> MenuBarModel {
             c(AgentVerb.take, "Take Back", nil, "Take a given application back, by name.",
               [Argument("app", .string, "The application, as the agent was given it.")]),
             .separator,
-            // Requester 4 (P18.11): the budget is spent — allow more, or stop.
-            c(AgentVerb.allow, "Allow More", nil, "Let the agent use another budget's worth of tokens, and carry on."),
-            c(AgentVerb.stop, "Stop", nil, "End the question the budget stopped."),
+            // Requesters 1 and 4 (P18.11): the answer to what is being asked.
+            c(AgentVerb.allow, "Allow", nil, "Allow what the agent is asking: to write with an application, or to use more budget."),
+            c(AgentVerb.stop, "Don't Allow", nil, "Refuse what the agent is asking; a spent budget ends the question."),
         ]),
         Menu("Window", [
             c(AgentVerb.minimize, "Minimize", .cmd("m"), "Put the window in the Dock."),
@@ -134,7 +134,8 @@ public struct AgentRequesterLayout: Equatable, Sendable {
 }
 
 @discardableResult
-public func paintAgentRequester(_ cr: OpaquePointer, in area: Rect, title: String, body: String) -> AgentRequesterLayout {
+public func paintAgentRequester(_ cr: OpaquePointer, in area: Rect, title: String, body: String,
+                                no: String = "Stop", yes: String = "Allow More") -> AgentRequesterLayout {
     let l = AgentRequesterLayout(in: area)
     Draw.setColor(cr, Theme.contentBackground)
     cairo_rectangle(cr, l.panel.x, l.panel.y, l.panel.w, l.panel.h); cairo_fill(cr)
@@ -147,8 +148,8 @@ public func paintAgentRequester(_ cr: OpaquePointer, in area: Rect, title: Strin
         Draw.textLeft(cr, line, x: l.panel.x + 12, baselineY: y, color: Theme.bodyText, size: 11)
         y += 15
     }
-    Draw.gelButton(cr, l.stop, label: "Stop", blue: false, pressed: false)
-    Draw.gelButton(cr, l.allow, label: "Allow More", blue: true, pressed: false)
+    Draw.gelButton(cr, l.stop, label: no, blue: false, pressed: false)
+    Draw.gelButton(cr, l.allow, label: yes, blue: true, pressed: false)
     return l
 }
 
@@ -156,7 +157,7 @@ public func paintAgentRequester(_ cr: OpaquePointer, in area: Rect, title: Strin
 public func paintAgentWindow(_ cr: OpaquePointer, w: Double, h: Double, conversation: TextView,
                              status: String, field: String, caret: Bool, canAsk: Bool,
                              picker: [String]? = nil, pickerTitle: String? = nil,
-                             requester: (title: String, body: String)? = nil) -> AgentLayout {
+                             requester: (title: String, body: String, no: String, yes: String)? = nil) -> AgentLayout {
     paintWindowChrome(cr, w: w, h: h, title: "Agent")
     Draw.setColor(cr, Theme.contentBackground)
     cairo_rectangle(cr, 0, Theme.titleBarHeight, w, h - Theme.titleBarHeight); cairo_fill(cr)
@@ -165,7 +166,7 @@ public func paintAgentWindow(_ cr: OpaquePointer, w: Double, h: Double, conversa
     conversation.caretOn = false
     conversation.paint(cr, focused: false)
     if let picker { paintAgentPicker(cr, in: l.conversation, names: picker, title: pickerTitle) }
-    if let r = requester { paintAgentRequester(cr, in: l.conversation, title: r.title, body: r.body) }
+    if let r = requester { paintAgentRequester(cr, in: l.conversation, title: r.title, body: r.body, no: r.no, yes: r.yes) }
     Draw.textLeft(cr, status, x: 12, baselineY: l.statusBaseline, color: Theme.bodyText, size: Theme.fontSize)
     Draw.textField(cr, l.field, text: field, caret: caret,
                    placeholder: canAsk ? "Ask the agent…" : "")
@@ -178,6 +179,26 @@ public func paintAgentWindow(_ cr: OpaquePointer, w: Double, h: Double, conversa
 public func agentQuestionLine(_ q: String) -> String { "You: \(q)\n" }
 public func agentCallLine(_ c: String) -> String { "  › \(c)\n" }
 public func agentAnswerLine(_ a: String) -> String { "Agent: \(a)\n\n" }
+
+/// What the window is asking the person (P18.11).
+public enum AgentAsk: Equatable, Sendable {
+    /// Requester 4: the budget is spent; abyss-model's words.
+    case budget(String)
+    /// Requester 1: the agent's first command this session that writes one of
+    /// the person's files, with this application.
+    case write(app: String, verb: String, title: String)
+
+    public func text(budget: Int) -> (title: String, body: String, no: String, yes: String) {
+        switch self {
+        case .budget(let why):
+            return ("The agent has used its budget.", agentBudgetQuestion(why, budget: budget), "Stop", "Allow More")
+        case .write(let app, let verb, let title):
+            return ("Allow the agent to write with \(app)?",
+                    "It wants to \(String(title.filter { $0 != "…" })) (\(verb)) in \(app): the first time it would write one of your files this session. Allow \(app) to write for it until the session ends?",
+                    "Don't Allow", "Allow")
+        }
+    }
+}
 
 /// Requester 4's question: abyss-model's words, as a sentence, and the ask.
 public func agentBudgetQuestion(_ why: String, budget: Int) -> String {
@@ -218,8 +239,8 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     private var pickingToTake = false
     /// The session's budget: what Allow More allows again (P18.11).
     private var sessionBudget = 0
-    /// The budget requester, while it is up: abyss-model's words.
-    public private(set) var requester: String?
+    /// The requester, while it is up (P18.11).
+    public private(set) var requester: AgentAsk?
     private var loggedRequester = false
     private var menuService: MenuService?
     private var menuName = ""
@@ -426,6 +447,17 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         display.addFileDescriptor(fd) { [weak self] in
             guard let self else { return }
             let r = try? Current.receive(on: fd)
+            if let r, r.string("event") == "permission" {
+                // Requester 1: the agent waits, on this connection, for the
+                // person's answer.
+                let app = r.string("app") ?? "", verb = r.string("verb") ?? ""
+                self.requester = .write(app: app, verb: verb, title: r.string("title") ?? verb)
+                self.loggedRequester = false
+                self.status = "The agent is asking to write with \(app)."
+                AgentApp.log("requester write: \(app) \(verb)")
+                self.window?.setNeedsDisplay()
+                return
+            }
             if let r, r.string("event") == "call" {
                 self.callsSoFar += 1
                 let c = r.string("call") ?? ""
@@ -441,12 +473,38 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         }
     }
 
+    // MARK: requester 1 — the first write (P18.11)
+
+    /// The person's answer to a write requester: told to the keeper (which
+    /// tells the bridge, outside the jail) first, then to the agent, waiting
+    /// on the question's connection, so it may try again.
+    func answerWrite(_ allow: Bool) {
+        guard case .write(let app, _, _)? = requester else { return }
+        requester = nil
+        let fd = pending
+        var m = Msg(); m.set("method", "permit"); m.set("session", sessionID); m.set("app", app); m.set("allow", allow)
+        status = allow ? "Allowing \(app) to write…" : "Thinking…"
+        let sent = request({ try Current.connect(AgentApp.keeperService) }, m) { [weak self] r in
+            guard let self else { return }
+            let told = r?.bool("ok") == true
+            var a = Msg(); a.set("method", "answer"); a.set("allow", allow && told)
+            if fd >= 0 { try? Current.send(a, on: fd) }
+            self.status = "Thinking…"
+            AgentApp.log(allow && told ? "allowed \(app) to write" : "did not allow \(app) to write")
+        }
+        if !sent, fd >= 0 { var a = Msg(); a.set("method", "answer"); a.set("allow", false); try? Current.send(a, on: fd) }
+        window?.setNeedsDisplay()
+    }
+
+    func answerYes() { if case .write? = requester { answerWrite(true) } else { allowMore() } }
+    func answerNo() { if case .write? = requester { answerWrite(false) } else { stopAsked() } }
+
     // MARK: requester 4 — the budget (P18.11)
 
     /// Let it use another budget's worth: the keeper raises abyss-model's
     /// budget, and the agent carries on.
     func allowMore() {
-        guard requester != nil else { return }
+        guard case .budget? = requester else { return }
         requester = nil
         var m = Msg(); m.set("method", "raise"); m.set("session", sessionID); m.set("tokens", UInt64(max(1, sessionBudget)))
         status = "Allowing more…"
@@ -466,7 +524,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     }
 
     func stopAsked() {
-        guard let why = requester else { return }
+        guard case .budget(let why)? = requester else { return }
         requester = nil
         phase = .ended
         status = "Stopped: \(why)"
@@ -496,7 +554,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
             // Requester 4 (P18.11): the person decides, in the window, where
             // they can — a session the keeper started, whose model it can raise.
             if !sessionID.isEmpty {
-                requester = text
+                requester = .budget(text)
                 loggedRequester = false
                 phase = .asking
                 status = "The agent's budget is spent."
@@ -535,8 +593,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
                                  caret: phase == .ready && caretOn && picking == nil, canAsk: phase == .ready,
                                  picker: picking?.map(\.name),
                                  pickerTitle: pickingToTake ? "Take an application back:" : nil,
-                                 requester: requester.map { (title: "The agent has used its budget.",
-                                                             body: agentBudgetQuestion($0, budget: sessionBudget)) })
+                                 requester: requester.map { $0.text(budget: sessionBudget) })
         if requester != nil, !loggedRequester {
             loggedRequester = true
             let r = AgentRequesterLayout(in: l.conversation)
@@ -571,8 +628,8 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         let layout = AgentLayout(w: Double(size.width), h: Double(size.height))
         if requester != nil {
             let r = AgentRequesterLayout(in: layout.conversation)
-            if r.allow.contains(pointerX, pointerY) { allowMore() }
-            else if r.stop.contains(pointerX, pointerY) { stopAsked() }
+            if r.allow.contains(pointerX, pointerY) { answerYes() }
+            else if r.stop.contains(pointerX, pointerY) { answerNo() }
             return
         }
         if let p = picking {
@@ -596,7 +653,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
             return
         }
         if requester != nil {
-            if event.keysym == KeySym.enter { allowMore() } else if event.keysym == KeySym.escape { stopAsked() }
+            if event.keysym == KeySym.enter { answerYes() } else if event.keysym == KeySym.escape { answerNo() }
             return
         }
         if picking != nil {
@@ -630,8 +687,8 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         case AgentVerb.clear: field = ""; window?.setNeedsDisplay(); return .ok("")
         case AgentVerb.giveApp: openPicker(); return .ok("")
         case AgentVerb.takeApp: openTakePicker(); return .ok("")
-        case AgentVerb.allow: allowMore(); return .ok("")
-        case AgentVerb.stop: stopAsked(); return .ok("")
+        case AgentVerb.allow: answerYes(); return .ok("")
+        case AgentVerb.stop: answerNo(); return .ok("")
         case AgentVerb.minimize: _ = window?.minimize(); return .ok("")
         default: return .refused("Agent has no verb \(verb)")
         }

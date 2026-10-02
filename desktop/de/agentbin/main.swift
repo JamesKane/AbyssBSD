@@ -36,6 +36,9 @@ func emit(_ fd: Int32, _ s: String) {
 func die(_ s: String) -> Never { emit(2, "abyss-agent: \(s)"); exit(1) }
 
 let args = Array(CommandLine.arguments.dropFirst())
+/// The connection of the question being answered: where a requester goes.
+final class Asking: @unchecked Sendable { var fd: Int32 = -1 }
+let asking = Asking()
 func opt(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
     return args[i + 1]
@@ -74,7 +77,16 @@ case "serve":
         """
     }
     if let vocab = opt("--vocab") {
-        tools += AgentTools.vocabulary(socket: vocab)
+        tools += AgentTools.vocabulary(socket: vocab, askPerson: { app, verb, title in
+            // Requester 1 (P18.11): ask the window on the question's own
+            // connection, and wait for its answer there. The window tells the
+            // bridge first; this only says whether to try again.
+            let c = asking.fd
+            guard c >= 0 else { return false }
+            var e = Msg(); e.set("event", "permission"); e.set("app", app); e.set("verb", verb); e.set("title", title)
+            guard (try? Current.send(e, on: c)) != nil, let r = try? Current.receive(on: c) else { return false }
+            return r.string("method") == "answer" && r.bool("allow") == true
+        })
         system += " " + """
         You can drive the applications the person gave you, by their menus: list them with apps, \
         read one's commands with describe_app, and run a command with activate. Use only verbs \
@@ -95,7 +107,8 @@ case "serve":
                 var e = Msg(); e.set("event", "call"); e.set("call", call)
                 try? Current.send(e, on: c)
             }
-            defer { loop.onCall = { _ in } }
+            asking.fd = c
+            defer { loop.onCall = { _ in }; asking.fd = -1 }
             // `continue` (P18.11): on, from where the budget stopped it.
             let a = req.string("method") == "continue" ? loop.resume() : loop.ask(req.string("text") ?? "")
             reply.set("ok", true)
@@ -136,9 +149,17 @@ case "ask", "bye", "continue":
         let fd = try Current.connect(path: listen)
         defer { close(fd) }
         try Current.send(m, on: fd)
-        // Events first (a tool call as it starts), then the reply.
+        // Events first (a tool call as it starts), then the reply. A
+        // requester (P18.11) has no person here to ask: it is said, and
+        // answered no — a script is not the person.
         while true {
             r = try Current.receive(on: fd)
+            if r.string("event") == "permission" {
+                emit(1, "permission=\(r.string("app") ?? "") \(r.string("verb") ?? "")")
+                var no = Msg(); no.set("method", "answer"); no.set("allow", false)
+                try Current.send(no, on: fd)
+                continue
+            }
             guard r.string("event") == "call" else { break }
             emit(1, "call=\(r.string("call") ?? "")")
         }

@@ -509,6 +509,14 @@ public final class JailKeeper {
         return Int(r.uint64("budget") ?? 0)
     }
 
+    /// The person's answer to requester 1 (P18.11): may `app` write for the
+    /// session's agent? Told to the bridge, outside the jail.
+    public func permit(session: String, app: String, allow: Bool) throws {
+        var m = Msg(); m.set("method", "permit"); m.set("app", app); m.set("allow", allow)
+        _ = try control(vocabularies[session], m, what: "a vocabulary \(session)")
+        say("jails: \(allow ? "allowed" : "did not allow") \(app) to write for agent session \(session)")
+    }
+
     /// Take a given application back from a session (P18.11).
     public func take(session: String, app: String) throws {
         var m = Msg(); m.set("method", "take"); m.set("app", app)
@@ -634,6 +642,14 @@ public final class JailKeeper {
                 reply.set("ok", true); reply.set("budget", UInt64(b))
             } catch {
                 say("jails: raise refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "permit":
+            do {
+                try permit(session: req.string("session") ?? "", app: req.string("app") ?? "", allow: req.bool("allow") == true)
+                reply.set("ok", true)
+            } catch {
+                say("jails: permit refused: \(error)")
                 reply = JailWire.error("\(error)")
             }
         case "take":

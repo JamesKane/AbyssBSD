@@ -97,6 +97,7 @@ grab@2x|grab|AQUA_SCALE=2
 agent|agent|
 agent-give|agent|AQUA_AGENT_PICKER=1
 agent-budget|agent|AQUA_AGENT_REQUESTER=1
+agent-write|agent|AQUA_AGENT_REQUESTER=write
 crashreport|crashreport|
 activity|activity|
 activity@2x|activity|AQUA_SCALE=2

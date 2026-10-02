@@ -109,6 +109,7 @@ public enum MenuWire {
         m.set("verb", c.verb)
         m.set("title", c.title)
         m.set("summary", c.summary)
+        if c.writes { m.set("writes", true) }
         if let k = c.key { m.set("key", bytes: encode(k).pack()) }
         if !c.alternateKeys.isEmpty {
             m.set("alternates", bytes: packList(c.alternateKeys.map(encode)))
@@ -155,7 +156,8 @@ public enum MenuWire {
             return Argument(name, type, am.string("summary") ?? "")
         }
         return Command(verb, title, key: key, alternateKeys: alternates,
-                       arguments: arguments, summary: m.string("summary") ?? "")
+                       arguments: arguments, summary: m.string("summary") ?? "",
+                       writes: m.bool("writes") ?? false)
     }
 
     static func encode(_ menu: Menu, enablement: (Command) -> Enablement?) -> Msg {

@@ -12,8 +12,9 @@
 #      TextEdit among them, and not the Agent window itself;
 #   2. clicking TextEdit's row gives it: the keeper says so, the window's
 #      status names it, and the conversation notes it;
-#   3. the agent, asked, saves through TextEdit's own menu: TextEdit writes
-#      the file;
+#   3. the agent's first save asks the person in the window (P18.11): Don't
+#      Allow writes nothing and the next save asks again; Allow, and TextEdit
+#      writes the file;
 #   4. Give by name (a script's way) refuses an application that is not
 #      running, in words, and the window says so;
 #   5. a window opened on a session it was handed (as Crash Reporter opens a
@@ -104,9 +105,22 @@ echo "ok: 2. clicking TextEdit's row gave it (menus.textedit.$te), and the windo
 # ---- 3. the agent drives it -------------------------------------------------------------
 .build/debug/abyssmenu run agent agent.question "text=save my note" > /dev/null 2>&1 || fail "the question was refused"
 await "$W/app.log" 'Agent: call activate' "the agent did not activate anything"
+# Requester 1 (P18.11): the first save asks the person. Don't Allow first:
+# nothing is written, and the next save asks again. Then Allow.
+await "$W/app.log" 'Agent: requester write: TextEdit file.save' "the window did not ask before the first save"
+grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved before the person answered"
+.build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Don't Allow was refused"
+await "$W/app.log" 'Agent: did not allow TextEdit to write' "Don't Allow did not reach the keeper"
+await "$W/app.log" 'Agent: answered: stop=answered' "the question was not answered after Don't Allow"
+sleep 0.3
+grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved after the person did not allow it"
+.build/debug/abyssmenu run agent agent.question "text=save my note, please" > /dev/null 2>&1 || fail "the second question was refused"
+await "$W/app.log" 'Agent: requester write: TextEdit file.save' "the next save after Don't Allow was not asked about again" 2
+.build/debug/abyssmenu run agent agent.allow > /dev/null 2>&1 || fail "Allow was refused"
+await "$W/app.log" 'Agent: allowed TextEdit to write' "Allow did not reach the keeper"
 await "$W/te.log" "TextEdit: saved $W/note.txt" "TextEdit did not save for the agent"
-await "$W/app.log" 'Agent: answered: stop=answered' "the question was not answered"
-echo "ok: 3. asked, the agent saved through TextEdit's own menu: TextEdit wrote note.txt"
+await "$W/app.log" 'Agent: answered: stop=answered' "the question was not answered" 2
+echo "ok: 3. the first save asked the person: Don't Allow wrote nothing and the next save asked again; Allow, and TextEdit saved"
 
 # ---- 4. a give that cannot be -------------------------------------------------------------
 .build/debug/abyssmenu run agent agent.give "app=diskutility" > /dev/null 2>&1 || fail "Give was refused outright"

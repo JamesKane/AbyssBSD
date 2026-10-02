@@ -96,17 +96,30 @@ public enum AgentTools {
     /// The vocabulary (P18.10): the applications this session was given,
     /// through the bridge at `socket`. What the agent may drive is the
     /// bridge's to say, not these tools'.
-    public static func vocabulary(socket: String) -> [AgentTool] {
-        @Sendable func ask(_ m: Msg) -> String {
-            do {
+    /// `askPerson` (P18.11, requester 1): the bridge would not run a verb
+    /// that writes until the person is asked — through the window, which tells
+    /// the bridge itself — so the tool waits for their answer, and tries once
+    /// more if they allowed it. Whether it may write is still the bridge's call.
+    public static func vocabulary(socket: String,
+                                  askPerson: @escaping @Sendable (_ app: String, _ verb: String, _ title: String) -> Bool = { _, _, _ in false })
+        -> [AgentTool] {
+        @Sendable func call(_ m: Msg) -> Result<Msg, Error> {
+            Result {
                 let fd = try Current.connect(path: socket)
                 defer { close(fd) }
                 try Current.send(m, on: fd)
-                let r = try Current.receive(on: fd)
+                return try Current.receive(on: fd)
+            }
+        }
+        @Sendable func say(_ r: Result<Msg, Error>) -> String {
+            switch r {
+            case .failure(let e): return "error: the vocabulary bridge did not answer: \(e)"
+            case .success(let r):
                 if r.bool("ok") != true { return "error: " + (r.string("error") ?? "refused") }
                 return r.string("text") ?? r.string("apps") ?? "ok"
-            } catch { return "error: the vocabulary bridge did not answer: \(error)" }
+            }
         }
+        @Sendable func ask(_ m: Msg) -> String { say(call(m)) }
         let appParam: JSON = .object([("type", .string("string")), ("description", .string("The application's name, as apps lists it."))])
         return [
             AgentTool(name: "apps", description: "List the applications you were given to drive.",
@@ -132,6 +145,12 @@ public enum AgentTools {
                 var m = Msg(); m.set("method", "activate"); m.set("app", a["app"]?.string ?? ""); m.set("verb", a["verb"]?.string ?? "")
                 if case .object(let kv)? = a["arguments"] {
                     m.set("arguments", kv.map { "\($0.0)=\($0.1.string ?? $0.1.text)" }.joined(separator: "\n"))
+                }
+                let first = call(m)
+                guard case .success(let r) = first, r.bool("permission") == true else { return say(first) }
+                let app = r.string("app") ?? "", title = r.string("title") ?? ""
+                guard askPerson(app, r.string("verb") ?? "", title) else {
+                    return "refused: the person did not allow \(app) to write for you (\(title))"
                 }
                 return ask(m)
             },

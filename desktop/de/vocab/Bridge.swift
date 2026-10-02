@@ -41,6 +41,11 @@ public final class VocabularyBridge {
     /// Given applications: the name the agent uses (the application's own),
     /// and the service it was given as.
     public private(set) var given: [(name: String, service: String)] = []
+    /// Applications the person allowed to write for the agent this session
+    /// (P18.11, requester 1). Until then a verb that writes is not run: the
+    /// agent is told the person must be asked, and the answer comes here on
+    /// the keeper's side, never the agent's.
+    public private(set) var permitted: Set<String> = []
     let menus: MenuCaller
     let log: (String, [(String, JSON)]) -> Void
 
@@ -67,6 +72,12 @@ public final class VocabularyBridge {
         given.removeAll { $0.name.lowercased() == app.lowercased() }
         if had { log("taken", [("app", .string(app))]) }
         return had
+    }
+
+    /// The keeper's: the person's answer to requester 1 for `app`.
+    public func permit(_ app: String, allow: Bool) {
+        if allow { permitted.insert(app.lowercased()) }
+        log(allow ? "permitted" : "denied", [("app", .string(app))])
     }
 
     func service(of app: String) -> String? {
@@ -97,6 +108,18 @@ public final class VocabularyBridge {
             guard let s = service(of: app) else { return notGiven(app, refuse) }
             let verb = req.string("verb") ?? ""
             let args = VocabularyBridge.arguments(req.string("arguments") ?? "")
+            // Requester 1: a verb that writes the person's file, from an
+            // application not yet allowed to write for the agent.
+            let name = given.first { $0.service == s }?.name ?? app
+            if !permitted.contains(name.lowercased()),
+               let c = (try? menus.describe(s))?.model.command(verb), c.writes {
+                log("asked", [("app", .string(name)), ("verb", .string(verb)), ("title", .string(c.title))])
+                var m = Msg()
+                m.set("ok", false)
+                m.set("permission", true); m.set("app", name); m.set("verb", verb); m.set("title", c.title)
+                m.set("error", "the person has not allowed \(name) to write for you yet; they are being asked")
+                return m
+            }
             let result: CommandResult
             do { result = try menus.activate(s, verb: verb, arguments: args) } catch {
                 log("activate", [("app", .string(app)), ("verb", .string(verb)), ("failed", .string("\(error)"))])

@@ -76,6 +76,18 @@ final class AgentWindowTests: XCTestCase {
         XCTAssertTrue(zip(l.rows, l.rows.dropFirst()).allSatisfy { $0.y + $0.h <= $1.y }, "rows do not overlap")
     }
 
+    /// Requester 1 (P18.11): which verbs write, said on the wire, and how
+    /// the window asks.
+    func testWritesAreMarkedAndAsked() throws {
+        XCTAssertEqual(textEditMenuBar().commands.filter(\.writes).map(\.verb), [TextEditVerb.save, TextEditVerb.saveAs])
+        XCTAssertEqual(Set(finderMenuBar().commands.filter(\.writes).map(\.verb)), ["file.move-to-trash", "finder.empty-trash"])
+        let t = AgentAsk.write(app: "TextEdit", verb: "file.save-as", title: "Save As…").text(budget: 0)
+        XCTAssertEqual(t.title, "Allow the agent to write with TextEdit?")
+        XCTAssertEqual(t.body, "It wants to Save As (file.save-as) in TextEdit: the first time it would write one of your files this session. Allow TextEdit to write for it until the session ends?")
+        XCTAssertEqual(t.no, "Don't Allow")
+        XCTAssertEqual(AgentAsk.budget("spent").text(budget: 9).yes, "Allow More")
+    }
+
     func testTheBudgetRequester() {
         XCTAssertEqual(agentBudgetQuestion("the session's budget of 500 tokens is spent (600 used)", budget: 500),
                        "The session's budget of 500 tokens is spent (600 used). Let it use another 500 tokens and carry on?")

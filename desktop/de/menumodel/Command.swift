@@ -110,13 +110,18 @@ public struct Command: Equatable, Sendable {
     public let arguments: [Argument]
     /// One sentence: what it does. For a reader that cannot see the menu.
     public let summary: String
+    /// It writes or removes one of the person's files (Save, Save As…, Move
+    /// to Trash). An agent's first such command in a session asks the person
+    /// before it runs (PHASE18 P18.11, requester 1).
+    public let writes: Bool
 
     public init(_ verb: String, _ title: String, key: KeyEquivalent? = nil,
                 alternateKeys: [KeyEquivalent] = [], arguments: [Argument] = [],
-                summary: String) {
+                summary: String, writes: Bool = false) {
         self.verb = verb; self.title = title; self.key = key
         self.alternateKeys = alternateKeys; self.arguments = arguments
         self.summary = summary
+        self.writes = writes
     }
 
     /// Every key that runs this command, shown one first.

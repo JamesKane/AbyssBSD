@@ -42,8 +42,11 @@ public enum TextEditVerb {
 }
 
 public func textEditMenuBar() -> MenuBarModel {
+    // Save and Save As… write the person's file: an agent's first in a
+    // session asks the person first (PHASE18 P18.11, requester 1).
+    let writing: Set<String> = [TextEditVerb.save, TextEditVerb.saveAs]
     func c(_ verb: String, _ title: String, _ key: KeyEquivalent? = nil, _ summary: String) -> MenuItem {
-        .command(Command(verb, title, key: key, summary: summary))
+        .command(Command(verb, title, key: key, summary: summary, writes: writing.contains(verb)))
     }
     return MenuBarModel(appName: "TextEdit", menus: [
         Menu("TextEdit", [

@@ -12,7 +12,9 @@
 #   2. `abyss-jail give SESSION TextEdit` gives that running TextEdit, and the
 #      transcript says so;
 #   3. the agent's apps lists TextEdit; describe_app reads TextEdit's own
-#      menus; activate file.save makes TextEdit save — the file is written;
+#      menus; activate file.save asks the person first (P18.11, requester 1):
+#      a script is not the person, so it is refused and nothing is written;
+#      once the person allows TextEdit (abyss-jail permit), it saves;
 #   4. Grab, running but not given, is refused by name, and nothing reaches
 #      it: Grab captures nothing;
 #   5. giving to a session that does not exist, or an application that is not
@@ -105,10 +107,17 @@ echo "ok: 2. TextEdit (pid $te) was given to the session, and the transcript say
 grep '"kind":"request"' "$t" | sed -n 2p > "$W/second"
 [ "$(toolsaid "$W/second" v1)" = "TextEdit" ] || fail "apps did not list TextEdit alone: $(toolsaid "$W/second" v1)"
 toolsaid "$W/second" v2 | grep -q 'file.save — \\"Save\\" in File \[enabled\]' || fail "describe_app did not read TextEdit's menus: $(toolsaid "$W/second" v2 | head -c 400)"
-# TextEdit's own answer, passed through: "ok: PATH".
-[ "$(toolsaid "$W/second" v3)" = "ok: $W/note.txt" ] || fail "activate file.save: $(toolsaid "$W/second" v3)"
-await "$W/te.log" "TextEdit: saved $W/note.txt" "TextEdit did not save when the agent activated file.save"
-echo "ok: 3. apps listed TextEdit; describe_app read its own menus; activate file.save made TextEdit save note.txt"
+grep -q '^permission=TextEdit file.save$' "$W/q1" || fail "the save was not asked about: $(cat "$W/q1")"
+[ "$(toolsaid "$W/second" v3)" = "refused: the person did not allow TextEdit to write for you (Save)" ] || fail "activate file.save, unasked: $(toolsaid "$W/second" v3)"
+sleep 0.3
+grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved before the person allowed it"
+grep -q '"event":"asked","app":"TextEdit","verb":"file.save","title":"Save"' "$t" || fail "the transcript does not say the person was asked"
+.build/debug/abyss-jail permit "$session" TextEdit yes > /dev/null || fail "permit was refused"
+grep -q '"event":"permitted","app":"TextEdit"' "$t" || fail "the transcript does not say TextEdit was allowed"
+.build/debug/abyss-agent ask --listen "$sock" save it now > "$W/q2" 2>&1 || fail "the second question failed: $(cat "$W/q2")"
+grep -q '^permission=' "$W/q2" && fail "an allowed application was asked about again"
+await "$W/te.log" "TextEdit: saved $W/note.txt" "TextEdit did not save once allowed"
+echo "ok: 3. apps listed TextEdit; describe_app read its menus; file.save asked the person — refused unasked, nothing written — and saved once allowed"
 [ "$(toolsaid "$W/second" v4)" = "error: Grab was not given to this session" ] || fail "Grab was not refused by name: $(toolsaid "$W/second" v4)"
 sleep 0.5
 grep -q 'Grab: captured' "$W/grab.log" && fail "Grab captured: the refusal reached it"
