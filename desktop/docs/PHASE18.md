@@ -216,31 +216,86 @@ The stack proof in the guest: galculator and zenity confined, Firefox in
 
 Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
 
-### 18b — agents (listed; re-scoped after P18.6)
+### 18b — agents (re-scoped 2026-10-02, after 18a)
 
-- **P18.7 — the stub model and the wire format.** One wire format,
-  OpenAI-compatible chat completions with tool calls. llama.cpp's server and
-  ollama both speak it, and so does every provider. A stub backend with canned
-  replies and tool calls makes every 18b test hermetic. **We do not write an
-  inference engine.**
-- **P18.8 — the agent's tools are the vocabulary.** Phase 10's published menu
-  vocabulary, consumed exactly as `abyssmenu` and a script consume it. Pixels
-  only for an application that cannot describe itself.
-- **P18.9 — the crash, first.** "Application quit unexpectedly" gets a button.
-  It opens a `debug`-class session that sees one process (its core and its
-  binary) and nothing else, reads and reports, and writes nothing. No network
-  and no vocabulary, so it can land first.
-- **P18.10 — the four requesters, the transcript, the budget.** A sheet for
-  each of the four (PRODUCT §4.4), and no others. An append-only transcript that
-  outlives the process. A budget line that stops at the next tool call and shows
-  why.
-- **P18.11 — network for agents.** `vnet` per class, with egress through the
-  process that holds the credential (outside the jail), and egress to a new host
-  as requester 3. Local models first: on the 12700KF, ggml's Vulkan backend
-  under RADV (PLAN: checked available, never run).
-- **P18.12 — the agent application, state on the Dock, the menu bar and the
-  island switcher, and off as one file.**
-- **P18.13 — the gate.** PLAN's verify list.
+**What 18a settled, and 18b builds on.**
+- **A class is data, and jails are pooled:** an agent class is one more row.
+- **Grants are how files get in:** an agent sees a file only because the
+  person handed it over.
+- **A jail's channels out are bridges the keeper runs, outside the jail, on
+  sockets inside it:** Wayland (security context), D-Bus (the portal, the
+  menus). An agent's two channels out, to a **model** and to the **vocabulary**,
+  are built the same way. The agent jail itself then needs **no network at
+  all** for a local model, which is the strongest form of "egress through the
+  thing that holds the credential".
+- **The keeper sees a confined program exit, with its status.** A crash of a
+  confined application is already observed, and its core lands in the jail's
+  own home (§4.7).
+
+**The passes, in order:**
+
+- **P18.7 — `abyss-model`, the only way to a model (M).** A session service
+  speaking one wire format, OpenAI-compatible chat completions with tool calls,
+  over a unix socket. The keeper puts that socket into an agent's jail.
+  Backends:
+  - **stub**: canned replies and tool calls, for every test;
+  - **local**: ports' `llama-server`, from `llama-cpp` on `ggml` with Vulkan
+    (§4.7), run outside any jail, CPU in the guest and the 6750 XT on the box;
+  - **remote**: a provider and its key, which stay in this process.
+
+  It counts tokens against a per-session **budget**. A call over budget is
+  refused with its reason (requester 4's raw material). It appends every
+  request and reply to the session's **transcript**: JSON lines, append-only,
+  outliving the process. We do not write an inference engine.
+- **P18.8 — the agent runtime, in its jail (M).** `abyss-agent` runs the loop,
+  model to tool to model, **inside** the agent's jail. It reaches the model
+  only through `abyss-model`'s socket, and is started by the keeper like any
+  confined program. The **chat window** is ours, outside the jail, and talks
+  to it over the session's socket. Classes are new rows:
+  - `agent`: no network, no devices, the model socket;
+  - `debug`: the same, plus `lldb`.
+
+  Tested hermetically against the stub.
+- **P18.9 — the crash, first (M).** jaild gives a spawned program the person's
+  login-class limits (`setusercontext`), not jaild's own: a jailed process now
+  inherits a core limit of 0 (§4.7). When a confined application dies of a
+  signal, the keeper tells the desktop. "Application quit unexpectedly" gets
+  an **Ask the agent** button. That starts a `debug` session: its core and its
+  binary come in as read-only grants, the agent's tool is `lldb --batch` on
+  them, and it writes only a report into the transcript. No network, no
+  vocabulary. This is 18b's first visible deliverable.
+- **P18.10 — tools are the vocabulary (M).** A vocabulary bridge per agent
+  jail, beside the model socket: Phase 10's `describe`/`validate`/`activate`
+  over `CurrentIPC`, for **the applications this session was given** (§6b.2)
+  and no others. An agent drives an application exactly as the menu bar and a
+  script do. Pixels only for an application that cannot describe itself, and
+  not in this phase.
+- **P18.11 — the four requesters, the transcript viewer, revocation (M).**
+  1. The first write in a session to a file that exists. This is a writable
+     grant's first open for writing, which jaild can see.
+  2. Anything in the `admin` class.
+  3. Egress to a host not already granted (P18.12).
+  4. A spend over the budget (P18.7).
+
+  A sheet for each, and no others. The grants list (P18.4) and the
+  transcript are shown in a Preferences pane.
+- **P18.12 — network for agents, when a class needs it (M).** A `vnet` jail
+  (§4.7) whose only route out is an egress proxy outside it, which asks
+  (requester 3) before a new host. A remote model never needs this: it goes
+  through `abyss-model`.
+- **P18.13 — presence and off (S).** Agent state (working, waiting, idle) on
+  the Dock tile, the menu bar and the island switcher. `agents.ini` absent
+  means no menu item, no chord, no spend indicator, and no process.
+- **P18.14 — the gate (S).** PLAN's verify list:
+  - an agent in a jail with exactly one descriptor (the model socket);
+  - the transcript showing what it was granted;
+  - a revocation taking effect;
+  - a budget stop with its reason on screen;
+  - the crash notice starting a `debug` session that sees one process and not
+    a second.
+
+  In the guest with the stub and with `llama-server` on the CPU; on the
+  12700KF with a local model on the GPU.
 
 ## 4. The spikes (2026-10-02, in the FreeBSD 16 guest)
 
@@ -327,6 +382,25 @@ So GTK draws and maps with only the allowlist's 24 interfaces. The jail
 never saw undertow's runtime directory: its socket is the jail's own, made
 from outside. P18.5 is the same three steps, done by Anchor.
 
+### 4.7 What 18b stands on — **all there.** (2026-10-02, in the guest)
+
+- **Local inference is packaged.** Ports have `llama-cpp` (build 10975) on
+  `ggml` 0.23.0 **with `VULKAN=on`** (it depends on `vulkan-loader`), and
+  `ollama` 0.34.3. A local model on the 6750 XT is a packaging question, not a
+  build. The live medium carries no `pkg` and none of these yet; the desktop
+  set would carry them as it carries Firefox (§6b.1).
+- **A crash can be read inside a jail.** A program killed with SIGSEGV in an
+  `app` jail left `sh.core` in the jail's home. `lldb -c sh.core /bin/sh
+  --batch -o "bt 3"`, *also inside the jail*, printed the stop reason and
+  frames with source lines (`kill.c:127`). `lldb` 21 is in base.
+- **But jailed programs inherit a core limit of 0.** They inherit jaild's
+  limits, which the spike got from `sudo`; an rc.d daemon's may differ. Raising
+  it inside the jail is refused. jaild should apply the person's login class
+  (P18.9).
+- **`vnet` jails work.** An `epair` end moved into a `vnet` jail took an
+  address, and pinged the host's end across it.
+- **No resource limits yet.** `kern.racct.enable=0` on GENERIC (§6.4 stands).
+
 ## 5. Verification
 
 - Unit: `JailPlan`'s mounts, parameters and environment per class, with fault
@@ -362,3 +436,32 @@ from outside. P18.5 is the same three steps, done by Anchor.
    later. *Recommendation: ruleset-level in 18a.*
 7. **What 18a does not do.** It does not confine the desktop's own components,
    the terminal or the shell. Those are you, acting as you.
+
+### 6b. Decisions for 18b
+
+1. **The model on the machine.** *Recommendation:*
+   - the desktop set carries `llama-cpp`, `ggml` and `vulkan-loader` (with
+     Mesa's RADV) as it carries Firefox;
+   - **no model ships**: turning agents on downloads one, with the size and
+     licence shown first;
+   - a small open-weights instruct model by default (the choice of which is
+     yours).
+
+   Local stays the default; a remote provider is opt-in, through
+   `abyss-model`.
+2. **What an agent may drive.** *Recommendation: only the applications a
+   session was given*, by dragging an application onto the agent's window or
+   picking it from a list. It is the same capability rule as files. "Every
+   published vocabulary" would make the agent the person, which is what
+   thesis 4 argues against.
+3. **Where the loop runs.** *Recommendation: inside the agent's jail.* The
+   loop is the part that acts on a model's output, so it is the part to
+   confine. The window and `abyss-model` stay outside.
+4. **The transcript.** *Recommendation: JSON lines under
+   `~/.local/state/abyss/agents/<session>/`, append-only, kept until deleted
+   from the Preferences pane.*
+5. **The crash path for unconfined applications.** The keeper sees only
+   confined programs exit. *Recommendation: confined first (P18.9); an
+   unconfined application's crash comes later*, through `undertow` (its client
+   gone) and the kernel's core, which is a separate pass.
+
