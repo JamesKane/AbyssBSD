@@ -63,7 +63,7 @@ case "tier":
             let kb = Int(line.split(separator: " ").dropFirst().first ?? "") { ram = kb >> 10 }
     let mem = MachineMemory(vramMiB: MachineMemory.vram(fromBootMessages: boot), ramMiB: ram)
     let tier = ModelTier.choose(mem)
-    emit(1, "vram=\(mem.vramMiB.map { "\($0)M" } ?? "none") ram=\(mem.ramMiB)M tier=\(tier.rawValue) proposed=\(tier.proposed.model) \(tier.proposed.quant)")
+    emit(1, "vram=\(mem.vramMiB.map { "\($0)M" } ?? "none") ram=\(mem.ramMiB)M tier=\(tier.rawValue) proposed=\(tier.proposed.model) \(tier.proposed.quant) context=\(tier.proposed.context)")
 
 case "serve":
     guard let listen = opt("--listen"), let session = opt("--session"), let dir = opt("--transcript"),

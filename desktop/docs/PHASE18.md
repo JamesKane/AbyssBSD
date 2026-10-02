@@ -261,10 +261,20 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   all caught. On the 12700KF, `abyss-model tier` reads
   `vram=12272M ram=130893M tier=gpu12` from amdgpu's boot report.
 
-  **Still to do in P18.7:** (b) starting and stopping `llama-server` with a
-  model, and measuring the §6b.1 candidates on the box; (c) the remote
-  backend, which needs TLS that the tree does not have; (d) the keeper
-  putting the socket in an agent's jail, which lands with P18.8.
+  **P18.7b — the local backend — DONE 2026-10-02.** `serve --local MODEL`
+  runs ports' `llama-server` as a supervised child on a unix socket in a 0700
+  directory (no TCP port), with `--jinja` and one slot (`-np 1`). It is ready
+  only once `/health` answers. A model that fails to load fails abyss-model
+  with the server's words; a server that dies is a 502 that says so. Stopping
+  abyss-model stops the server, and on FreeBSD killing it outright does too.
+  `live-model.sh` claims 6–9 (a stand-in server made of `nc`), green on Linux
+  and in the guest, 6 faults injected and caught; claim 10 and
+  `measure-model.sh` run a real model, and the §6b.1 candidates were measured
+  on the 12700KF (the table there).
+
+  **Still to do in P18.7:** (c) the remote backend, which needs TLS the tree
+  does not have; (d) the keeper putting the socket in an agent's jail, which
+  lands with P18.8.
 - **P18.8 — the agent runtime, in its jail (M).** `abyss-agent` runs the loop,
   model to tool to model, **inside** the agent's jail. It reaches the model
   only through `abyss-model`'s socket, and is started by the keeper like any
@@ -474,9 +484,9 @@ from outside. P18.5 is the same three steps, done by Anchor.
 
    | Tier | Machine | Default | Why |
    |---|---|---|---|
-   | 0 | no usable GPU, or under 6 GB VRAM (CPU inference) | **MiniCPM5-2B**, Q4_K_M (OpenBMB, 2026-09-07, 2.52B dense, Apache 2.0, 128K context) | official GGUF; passes multi-call tool tests at 4-bit through llama.cpp's server |
-   | 1 | 8 GB VRAM | **Granite 4.2 8B**, Q4_K_M (IBM, 2026-08-25, ~9B dense, Apache 2.0, 128K) | native tool calling, a thinking switch, GGUF made with llama.cpp's own converter |
-   | 2 | 12–16 GB VRAM (**the 6750 XT**) | **Granite 4.2 8B at Q8_0** first; a 3B-active MoE as a measured step up (below) | headroom for context; same family, same tool format as tiers 1 and 3 |
+   | 0 | no usable GPU, or under 6 GB VRAM (CPU inference) | **MiniCPM5-2B**, Q4_K_M, 8K context (OpenBMB, 2026-09-07, 2.52B dense, Apache 2.0, 128K context) | official GGUF; passes multi-call tool tests at 4-bit through llama.cpp's server |
+   | 1 | 8 GB VRAM | **Granite 4.2 8B**, Q4_K_M, **8K context** (IBM, 2026-08-25, ~9B dense, Apache 2.0, 128K) | native tool calling, a thinking switch, GGUF made with llama.cpp's own converter; 6.1 GB measured |
+   | 2 | 12–16 GB VRAM (**the 6750 XT**) | **Granite 4.2 8B Q4_K_M, 16K context**; a 3B-active MoE as a step up, unmeasured (below) | 5/5 at 63 tok/s in 7.7 GB. Q8 was proposed first and **measured out**: it left the desktop 775 MiB |
    | 3 | 24 GB+ VRAM | **Granite 4.2 30B**, Q4_K_M (29B dense, Apache 2.0) | the same family's large size |
 
    **One family across tiers 1–3**, so the tool-call format, chat template and
@@ -489,7 +499,36 @@ from outside. P18.5 is the same three steps, done by Anchor.
    Lightning (NVIDIA, 2026-08-11) is held back: it is under the OpenMDW
    licence, and its hybrid architecture's early GGUFs had reported problems.
 
-   **Before any of this is a default, it is measured here.** None of these
+   **Measured 2026-10-02** on the 12700KF (RX 6750 XT, RADV, ports'
+   `llama-cpp` build 10975), through `abyss-model`, with `measure-model.sh`:
+   five desktop tool-calling prompts, one to be answered without a tool;
+   thinking off; the focused application named in the system prompt.
+
+   | Model | Where | Right | Speed | Memory | Verdict |
+   |---|---|---|---|---|---|
+   | Granite 4.2 8B Q4_K_M, 16K | 6750 XT | 5/5 | 63 tok/s | 7.7 GB VRAM (4.5 GB left) | **gpu12 default** |
+   | Granite 4.2 8B Q4_K_M, 8K | 6750 XT | (same model) | | 6.1 GB VRAM | **gpu8 default** (16K is 7.7 GB: no room on 8 GB) |
+   | Granite 4.2 8B Q8_0, 16K | 6750 XT | 5/5 | 40 tok/s | 11.4 GB VRAM (775 MiB left) | **not a default**: starves the desktop |
+   | Granite 4.2 3B Q4_K_M | 6750 XT | 4/5 | | 3.2 GB VRAM | below the 8B |
+   | MiniCPM5-2B Q4_K_M, CPU | i7-12700KF | 4/5 | 12 tok/s | 2.6 GB RAM | **cpu default**, the weak tier |
+   | Granite 4.2 3B Q4_K_M, CPU | i7-12700KF | 4/5 | 8 tok/s | 3.8 GB RAM | slower than MiniCPM, same score |
+
+   - **The context, not the slots, sets the VRAM**: about 0.2 MB per token for
+     Granite 8B. `-np 1` saves little, but a session never needs more.
+   - **Both small models miss the same case.** Asked to save, they explain
+     the shortcut instead of calling `menu_activate`. Granite 3B misses it on
+     the GPU too, so the CPU tier is weaker by its size, not its speed.
+   - **On a CPU the first request is slow** (27–55 s): it is reading the tool
+     definitions. Later ones take 2–6 s. P18.8 should keep the tool list
+     short and fixed so the cache holds it.
+   - **Thinking stays off for tool calls.** With it on, MiniCPM spent a
+     256-token reply thinking and called nothing; Granite 8B Q8 was 5/5 but
+     took 2–27 s. Without the focused application named, Granite 8B asked
+     which one; that is the agent runtime's to supply.
+   - Five prompts is a smoke test, not a benchmark. The 24 GB tier (Granite
+     30B) and the MoE step-up are not measured: no machine here has 24 GB.
+
+   **Before any of this was a default, it was to be measured here.** None of these
    has run on this project's machines. They must load under ports'
    `llama-cpp` (build 10975) and `ggml` 0.23.0 with Vulkan on RADV on the
    6750 XT, drive `abyss-model`'s tool-call path, and fit beside the desktop's

@@ -730,6 +730,57 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.128 abyss-model: a test must fail, not hang; a descriptor's child dies first
+(2026-10-02, PHASE18 P18.7a/b.)
+
+**A fault must fail a test, never hang it.** Claim 9 of `live-model.sh` ran
+`abyss-model` in the foreground, expecting it to exit when the model failed to
+load. With the "no health wait" fault, it served forever and so did the test,
+until it was stopped by hand, part-way through an injection. Stopping a fault
+run mid-injection leaves the fault in the tree, so check the source after any
+interrupted run. Anything a fault could make wait for ever now runs in the
+background with a deadline.
+
+**SwiftPM can miss an edit made just after a build.** In a fault harness that
+restores a file and edits it again within moments, `swift build` sometimes
+reported "complete" without recompiling. A fault then looked "caught" by the
+wrong check, or the restored code still carried the fault. Before believing a
+result, **sleep 1 and touch the file** after each edit; check a surprising
+binary with `strings` or by running it.
+
+**On FreeBSD, the process descriptor kills the child before it can stop.**
+`abyss-model`'s SIGTERM handler sent `llama-server` SIGTERM and `_exit`ed. The
+exit closed the pdfork descriptor (no `PD_DAEMON`), so the kernel sent
+SIGKILL at once, before the server could act on the SIGTERM. On Linux the
+same code stopped it cleanly. The handler now waits up to 5s for the child,
+calling only `waitpid` and `nanosleep`. The same descriptor is what makes
+`kill -9 abyss-model` take the server with it, and the test asserts both.
+
+**`nc` as the far end.** Ncat's `--send-only` never reads the request, so
+closing with the request unread is a reset ("Connection reset by peer").
+Ncat half-closes by default when its input ends; FreeBSD's `nc` needs `-N`.
+
+**A reasoning model can spend its whole reply thinking.** MiniCPM5-2B, asked
+to save a document with 256 tokens to answer in, spent them all in
+`reasoning_content` and called nothing (`finish_reason: length`). Measure tool
+calling with thinking off (`chat_template_kwargs.enable_thinking: false`),
+and check `finish_reason` before scoring a "wrong" answer.
+
+**The VRAM a model takes is what it leaves the desktop.** Granite 8B Q8 at
+16K context answered perfectly and left 775 MiB of the 6750 XT's 12 GB; Q4
+at 16K was as right, faster (63 vs 40 tok/s), and left 4.5 GB. The context
+is the cost (≈0.2 MB/token), not the slots. Read free VRAM from
+`llama-server --list-devices` *while the server answers*. One reading taken
+after a run said 4.9 GB where the steady state was 11.4.
+
+**Staging on the box.** The live medium has 476 MB free and no `pkg` or
+`curl`. `llama-server` and its ggml libraries (~75 MB, from the guest's
+packages) and the models go in a tmpfs at `/var/tmp/abyss-llm`, run with
+`LD_LIBRARY_PATH`; nothing touches the box's disks. Start downloads with
+`daemon -f fetch`, and **check `pgrep -x fetch`** before starting more: a
+`fetch` in an ssh one-liner's background survived the ssh, and two
+`fetch`es were writing one file.
+
 ### 2.127 Kiosk was undone by a stray unset; `mount -p` cannot be parsed
 (2026-10-02, BACKLOG F.1, and a jaild bug found on the way.)
 

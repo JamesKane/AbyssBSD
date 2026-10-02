@@ -30,11 +30,14 @@ public final class LocalServer {
     public private(set) var exited: Int32?
 
     /// The argv for `llama-server`: the model, the socket, tool calling
-    /// (`--jinja`, the model's own chat template), no web UI, and every layer
-    /// on the GPU that will take it (`-ngl 999`; with no GPU, none are).
+    /// (`--jinja`, the model's own chat template), no web UI, every layer on
+    /// the GPU that will take it (`-ngl 999`; with no GPU, none are), and
+    /// **one slot** (`-np 1`): a session is one client asking one thing at a
+    /// time, and the default four slots cost VRAM the desktop needs (on the
+    /// 6750 XT, Granite 8B Q8 at 16K context left 775 MiB free with four).
     public static func argv(server: String, model: String, socket: String, context: Int, extra: [String]) -> [String] {
         [server, "-m", model, "--host", socket, "--jinja", "--no-webui", "-ngl", "999",
-         "-c", String(context), "--offline"] + extra
+         "-c", String(context), "-np", "1", "--offline"] + extra
     }
 
     /// Start it and wait until it is healthy, or throw with why not.

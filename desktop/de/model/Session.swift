@@ -211,14 +211,17 @@ public enum ModelTier: String, Equatable, Sendable, CaseIterable {
         return .gpu8
     }
 
-    /// The default model (PHASE18 §6b.1) — to be measured here before it is
-    /// one; the names are what is proposed, not yet what has run.
-    public var proposed: (model: String, quant: String) {
+    /// The default model and context (PHASE18 §6b.1), as measured on the
+    /// 12700KF's 6750 XT (2026-10-02, measure-model.sh). The context is
+    /// chosen so the desktop keeps room: Granite 8B Q4 took 6.1 GB at 8K,
+    /// 7.7 GB at 16K and 10.2 GB at 32K; Q8 took 11.4 GB at 16K, leaving
+    /// 775 MiB, which is why the 12 GB tier is Q4 and not Q8.
+    public var proposed: (model: String, quant: String, context: Int) {
         switch self {
-        case .cpu: return ("MiniCPM5-2B", "Q4_K_M")
-        case .gpu8: return ("Granite-4.2-8B", "Q4_K_M")
-        case .gpu12: return ("Granite-4.2-8B", "Q8_0")
-        case .gpu24: return ("Granite-4.2-30B", "Q4_K_M")
+        case .cpu: return ("MiniCPM5-2B", "Q4_K_M", 8192)
+        case .gpu8: return ("Granite-4.2-8B", "Q4_K_M", 8192)
+        case .gpu12: return ("Granite-4.2-8B", "Q4_K_M", 16384)
+        case .gpu24: return ("Granite-4.2-30B", "Q4_K_M", 16384)
         }
     }
 }

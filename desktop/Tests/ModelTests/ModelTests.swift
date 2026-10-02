@@ -188,6 +188,8 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(ModelTier.choose(.init(vramMiB: 8192, ramMiB: 16384)), .gpu8)
         XCTAssertEqual(ModelTier.choose(.init(vramMiB: 24576, ramMiB: 65536)), .gpu24)
         XCTAssertEqual(ModelTier.gpu12.proposed.model, "Granite-4.2-8B")
+        XCTAssertEqual(ModelTier.gpu12.proposed.quant, "Q4_K_M", "Q8 left the desktop 775 MiB on 12 GB")
+        XCTAssertEqual(ModelTier.gpu8.proposed.context, 8192, "8B Q4 at 16K is 7.7 GB: no room on 8 GB")
         XCTAssertEqual(ModelTier.cpu.proposed.model, "MiniCPM5-2B")
     }
 }

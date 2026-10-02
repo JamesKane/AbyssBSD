@@ -6,7 +6,13 @@
 # tool-calling requests in the desktop's own vocabulary. This runs five, one of
 # which must be answered *without* a tool, and reports what it measured:
 # whether each was right, how long the load and each answer took, tokens per
-# second, and the device memory llama-server says it used.
+# second, and the device memory it took. The system prompt says which
+# application is focused, as the agent runtime's will (it knows, from the menu
+# bar); without it a careful model rightly asks.
+#
+# Thinking is off (the chat template's enable_thinking): an agent's tool call
+# should be quick, and a reasoning model can spend its whole reply thinking.
+# MEASURE_THINKING=1 measures it with thinking on, and a larger reply.
 #
 # Usage: abyss/tests/measure-model.sh MODEL.gguf [ABYSS_MODEL [LLAMA_SERVER]]
 # The client is curl if present, else nc(1) on the unix socket — never ours.
@@ -20,6 +26,10 @@ work=$(mktemp -d /tmp/abyss-measure.XXXXXX)
 cleanup() { [ -n "${mp:-}" ] && kill "$mp" 2>/dev/null; wait 2>/dev/null; rm -rf "$work"; }
 trap cleanup EXIT INT TERM HUP
 
+srv=${server:-$(command -v llama-server || echo /usr/local/bin/llama-server)}
+# Free device memory, as Vulkan reports it — before the load and during it.
+devfree() { "$srv" --list-devices 2>&1 | sed -n 's/.*Vulkan0: \(.*\) (\([0-9]*\) MiB, \([0-9]*\) MiB free).*/\3/p' | head -1; }
+free0=$(devfree)
 t0=$(date +%s)
 "$bin" serve --listen "$work/m.sock" --session measure --budget 1000000 --transcript "$work/t" \
     --local "$model" ${server:+--llama-server "$server"} > "$work/log" 2>&1 3>&- 4>&- 5>&- &
@@ -51,13 +61,15 @@ Start Firefox.|launch_app|Firefox
 What is 12 times 12? Just tell me.|none|144
 C
 
+if [ -n "${MEASURE_THINKING:-}" ]; then think=true; max=2048; else think=false; max=256; fi
 right=0; n=0; detail=
 while IFS='|' read -r prompt want carry; do
     n=$((n + 1))
-    printf '{"model":"default","temperature":0,"max_tokens":256,"messages":[{"role":"system","content":"You operate the AbyssBSD desktop through tools. Call a tool when one fits; otherwise answer briefly."},{"role":"user","content":"%s"}],"tools":%s}' \
-        "$prompt" "$tools" > "$work/req"
+    printf '{"model":"default","temperature":0,"max_tokens":%s,"chat_template_kwargs":{"enable_thinking":%s},"messages":[{"role":"system","content":"You operate the AbyssBSD desktop through tools. The focused application is TextEdit. Call a tool when one fits; otherwise answer briefly."},{"role":"user","content":"%s"}],"tools":%s}' \
+        "$max" "$think" "$prompt" "$tools" > "$work/req"
     a=$(date +%s)
     post "$work/req" > "$work/resp" || true
+    f=$(devfree); [ -n "$f" ] && { [ -z "${low:-}" ] || [ "$f" -lt "$low" ]; } && low=$f
     b=$(date +%s)
     got=$(grep -o '"tool_calls":\[{[^]]*"name":"[a-z_]*"' "$work/resp" | sed 's/.*"name":"//; s/"$//' | head -1)
     [ -n "$got" ] || got=none
@@ -69,8 +81,10 @@ while IFS='|' read -r prompt want carry; do
        $(head -c 400 "$work/resp")"
 done < "$work/cases"
 
-vram=$(grep -E '(Vulkan0|CPU).*(model buffer size|KV buffer size|compute buffer size)' "$work/t/llama/llama-server.log" 2>/dev/null \
-       | sed 's/.*= *\([0-9.]*\) MiB.*/\1/' | awk '{s+=$1} END {printf "%d", s}')
-dev=$(grep -o 'Vulkan0: [^(]*' "$work/t/llama/llama-server.log" | head -1)
-echo "$(basename "$model"): $right/$n right, loaded in $((t1 - t0))s, ${vram:-?} MiB of buffers on ${dev:-CPU}$detail"
+free1=${low:-}   # the least free while it answered: what it really took
+lp=$(pgrep -P "$mp" | head -1)
+rss=$(ps -o rss= -p "$lp" 2>/dev/null | awk '{printf "%d", $1/1024}')
+dev=$("$srv" --list-devices 2>&1 | sed -n 's/.*Vulkan0: \([^(]*\) (.*/\1/p' | head -1 | sed 's/ *$//')
+if [ -n "$free0" ] && [ -n "$free1" ] && [ $((free0 - free1)) -gt 64 ]; then where="$((free0 - free1)) MiB of VRAM on $dev"; else where="CPU only"; fi
+echo "$(basename "$model") (thinking $think): $right/$n right, loaded in $((t1 - t0))s, $where, llama-server resident ${rss:-?} MiB$detail"
 [ "$right" = "$n" ]

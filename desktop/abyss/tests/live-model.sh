@@ -127,6 +127,7 @@ case "$argv" in *"-m $work/model.gguf "*) ;; *) fail "llama-server was not given
 case "$argv" in *"--host $work/sessions/c1/llama/llama.sock "*) ;; *) fail "llama-server is not on abyss-model's private socket: $argv" ;; esac
 case "$argv" in *--port*) fail "llama-server was given a TCP port: $argv" ;; esac
 case "$argv" in *--jinja*) ;; *) fail "llama-server was started without its chat template (no tool calls): $argv" ;; esac
+case "$argv" in *"-np 1 "*) ;; *) fail "llama-server was started with more than one slot (VRAM the desktop needs): $argv" ;; esac
 case "$(uname)" in FreeBSD) lmode=$(stat -f %Lp "$work/sessions/c1/llama") ;; *) lmode=$(stat -c %a "$work/sessions/c1/llama") ;; esac
 [ "$lmode" = 700 ] || fail "llama-server's socket directory is $lmode, not 700"
 sleep 0.3   # the stand-in re-arms nc between connections; the real server does not need this
@@ -134,7 +135,7 @@ code=$(call)
 [ "$code" = 200 ] || fail "through --local: $code $(cat "$work/body") / $(cat "$work/model.log")"
 grep -q '"name":"menu.activate"' "$work/body" || fail "the local server's tool call did not come back"
 grep -q '"model":"default"' "$work/sessions/c1/transcript.jsonl" || fail "the transcript lost the request"
-echo "ok: 6. --local ran llama-server on a private unix socket (no port, 0700, --jinja), and answered through it"
+echo "ok: 6. --local ran llama-server on a private unix socket (no port, 0700, --jinja, one slot), and answered through it"
 
 # ---- 7. the server dies mid-session ---------------------------------------------
 kill "$(cat "$work/fake.pid")"
