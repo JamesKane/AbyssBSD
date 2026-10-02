@@ -768,11 +768,33 @@ Two separate things:
   priority 16) and still waited 294 ms once for a flip's completion. amdgpu's
   page-flip news goes through LinuxKPI, whose task queues run at ordinary
   priority. BACKLOG §6.
-- **undertow's:** the flood makes undertow itself wake 12–15 ms late, ten times
-  the misses. It is *not* CPU time in undertow: a 4999 Hz profile caught
-  ~22 ms of it in 8 s. Nor is it texture uploads (~2 ms). It is not yet
-  found. A separate event loop for the backend was tried and dropped: it cut
+- **undertow's — which turned out not to be.** Under the flood, every stage of
+  undertow's frame was traced with DTrace (pid and sched providers, on the
+  machine, during `metal-bench.sh c2`) and every one is on time:
+
+  | stage | under C2's adversaries |
+  |---|---|
+  | a pass over the clients (`dispatchPending`) | < 0.25 ms |
+  | a blocking wait (`dispatch(timeoutMs:)`) | ≤ 0.5 ms past its deadline |
+  | woken to running (scheduler) | < 8 µs |
+  | the final precise sleep (`Mono.sleep`) | within 2 µs |
+  | latch, composite, commit (`fire`) | ~0.1 ms |
+  | `endFrame`, and between frames | 8 µs, 32 µs |
+
+  The misses are on the display's side. About 50 flip completions a run reach
+  undertow more than half a period late, while it waits on that very fd and
+  would read it in microseconds. The kernel produces the event late: the
+  spinner case again, made worse by the flood's syscalls. **C2 on metal is the
+  driver's**, in BACKLOG §6.
+- **Two loose ends.** The CPU profile caught ~22 ms of undertow in 8 s and
+  texture uploads at ~2 ms. undertow's own `wake-late-p99` reports 12–21 ms,
+  which none of these traces reproduce: a statistic to recheck, not a cause.
+  A separate event loop for the backend was tried and dropped. It cut
   refused commits (52 → 9) and raised misses (96).
+- **Measuring in DTrace, for next time:** DTrace's `timestamp` and
+  CLOCK_MONOTONIC have different origins (calibrate from `Mono.now`'s
+  return value). A Swift symbol's leading `$s` is a macro in a probe
+  description, so match `*8Undertow…`.
 
 ### 2.118 C2 does not hold on metal: a flood delays the page flip's news
 (PHASE13 P13.8, measuring C6 on the 12700KF.)
