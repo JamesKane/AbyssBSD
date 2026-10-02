@@ -109,6 +109,9 @@ await "$W/app.log" 'Agent: call activate' "the agent did not activate anything"
 # nothing is written, and the next save asks again. Then Allow.
 await "$W/app.log" 'Agent: requester write: TextEdit file.save' "the window did not ask before the first save"
 grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved before the person answered"
+# A person reads before they answer: longer than any request's timeout.
+sleep 4
+grep -q 'Agent: call activate.*file.save-as\|Agent: answered' "$W/app.log" && fail "the agent did not wait for the person's answer"
 .build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Don't Allow was refused"
 await "$W/app.log" 'Agent: did not allow TextEdit to write' "Don't Allow did not reach the keeper"
 await "$W/app.log" 'Agent: answered: stop=answered' "the question was not answered after Don't Allow"

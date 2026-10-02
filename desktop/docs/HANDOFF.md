@@ -730,6 +730,24 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.131 A person takes as long as they take
+(2026-10-02, PHASE18 P18.11, requester 1, on the 12700KF.)
+
+The write requester worked in the guest and failed on the box. The agent
+waits for the person's answer on the question's own connection, which
+`Current.Server.accept` gave a **2 s receive timeout** (`requestTimeout`, so
+a request that never comes cannot hang a service). The guest's tests answered
+within a second. On the box I took a screenshot first, the wait timed out,
+and the agent carried on as if refused: it tried Save As, then read files and
+told the person "TextEdit cannot save due to permission restrictions", while
+the requester was still on screen. The bridge did its job (nothing was
+written), but the agent did not wait.
+
+The agent now clears the timeout on that connection before waiting
+(`SO_RCVTIMEO` 0). `live-agent-give.sh` pauses 4 s before answering, and
+fails when the timeout is put back. **Any wait on a person needs a test that
+is slower than every timeout on the way.**
+
 ### 2.130 The crash path: limits, a core's real path, and lldb's assertion
 (2026-10-02, PHASE18 P18.9a.)
 

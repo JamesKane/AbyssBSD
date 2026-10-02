@@ -84,7 +84,15 @@ case "serve":
             let c = asking.fd
             guard c >= 0 else { return false }
             var e = Msg(); e.set("event", "permission"); e.set("app", app); e.set("verb", verb); e.set("title", title)
-            guard (try? Current.send(e, on: c)) != nil, let r = try? Current.receive(on: c) else { return false }
+            guard (try? Current.send(e, on: c)) != nil else { return false }
+            // **A person takes as long as they take.** The connection was
+            // accepted with a 2 s receive timeout (for a request that never
+            // comes); waiting on a person under it gave up while they read the
+            // requester, and the agent carried on as if refused (HANDOFF
+            // §2.131). No timeout for the answer.
+            var none = timeval(tv_sec: 0, tv_usec: 0)
+            _ = setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &none, socklen_t(MemoryLayout<timeval>.size))
+            guard let r = try? Current.receive(on: c) else { return false }
             return r.string("method") == "answer" && r.bool("allow") == true
         })
         system += " " + """

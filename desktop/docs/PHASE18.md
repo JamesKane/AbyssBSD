@@ -551,6 +551,12 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     and asks again; Allow saves) and `live-agent-requester.sh` in the guest. 6
     faults injected, all caught (four after the harness's arguments were put
     in order).
+  - **On the 12700KF with Granite (same day).** The first run found that the
+    agent did not wait: a 2 s receive timeout on its connection
+    (HANDOFF §2.131). After the fix, Granite called `activate file.save`, the
+    requester stayed up 10 s with the agent waiting, Allow was answered, and
+    TextEdit wrote the note. The transcript reads `given`, `asked`,
+    `permitted`.
 
 - **P18.12 — network for agents, when a class needs it (M).** A `vnet` jail
   (§4.7) whose only route out is an egress proxy outside it, which asks
