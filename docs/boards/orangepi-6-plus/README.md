@@ -165,9 +165,12 @@ until the Q8B is regression-tested; 2026-10-02):
 
   The branch's `powerd` runs each domain on its own; base `powerd` only
   drives CPU 0's.
-- **Thermal: reads.** All 13 zones report (about 42 °C idle), critical at
-  98 °C, passive from 85 °C on `tz0`. To do: passive cooling with
-  per-domain cpufreq drivers, and the critical shutdown test.
+- **Thermal: works.** All 13 zones report (about 42 °C idle), critical at
+  98 °C, passive from 85 °C. `acpi_thermal` now cools each domain from the
+  zones whose `_PSL` names it: `TZB1` CPUs 0-1, `TZM0` 6-7, `TZM1` 8-9,
+  `TZB0` 10-11 (the little cluster has no zone); zones naming no CPU, such
+  as the video unit's, slow nothing. Tested by lowering `TZB1`'s `_PSV`
+  (`hw.acpi.thermal.user_override=1`). To do: the critical shutdown test.
 - **Device power:** ACPI power resources and the AML clock methods, as
   devices need them.
 - Also: the Qualcomm GLINK clients built into the branch's GENERIC no
