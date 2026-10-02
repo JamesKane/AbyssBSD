@@ -262,6 +262,10 @@ if [ "$live" -eq 1 ]; then
   # crash granted to a debug agent, lldb on it.
   echo "== a confined crash, read by a debug agent =="
   quiet "$root/abyss/tests/live-crash.sh"
+  # "… has unexpectedly quit" (P18.9b): the report, Ask the Agent…, and
+  # the Agent window on a debug session that reads the core.
+  echo "== a crash reported, and Ask the Agent =="
+  quiet "$root/abyss/tests/live-crash-dialog.sh"
   # A window that starts fullscreen (F.1): `firefox --kiosk`'s requests, the
   # whole display, at its origin, whatever it said next.
   echo "== a window that starts fullscreen =="

@@ -199,8 +199,9 @@ private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
     case .trash: name = "trash"
     case .trashFull: name = "trashFull"
     case .terminal: name = "terminal"
-    // A theme without an Agent icon (one whose art has none yet) shows
-    // the generic one: a tile never goes blank.
+    // A theme without an Agent icon of its own draws the compiled Aqua one
+    // (JaguarLists, as for any list a theme lacks); the generic one only if
+    // even that is gone. A tile never goes blank.
     case .agent: name = Theme.lists["dock.icon.agent"] != nil ? "agent" : "genericApp"
     case .bundle(let path):
         // The application's own icon; the generic one if it has none or it

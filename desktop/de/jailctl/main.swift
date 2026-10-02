@@ -78,6 +78,9 @@ if args.first == "serve" {
     let keeper = JailKeeper(server: server, display: display, runtimeDir: runtime, binDir: binDir,
                             classes: JailClass.load(), log: { emit(1, $0) })
     keeper.jaildSocket = socket
+    // A crash is shown to the person (P18.9b) — when there is a display to
+    // show it on.
+    if display != nil, access(binDir + "/AquaDemo", X_OK) == 0 { keeper.crashDialog = [binDir + "/AquaDemo"] }
     // The bundles follow [apps] (P18.6): the same appgen anchor runs at login.
     if access(binDir + "/abyss-appgen", X_OK) == 0, let home = getenv("HOME") {
         keeper.appgen = [binDir + "/abyss-appgen", "--to", String(cString: home) + "/Applications"]

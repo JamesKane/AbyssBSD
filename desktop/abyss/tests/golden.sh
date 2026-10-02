@@ -95,6 +95,7 @@ textedit@2x|textedit|AQUA_SCALE=2
 grab|grab|
 grab@2x|grab|AQUA_SCALE=2
 agent|agent|
+crashreport|crashreport|
 activity|activity|
 activity@2x|activity|AQUA_SCALE=2
 diskutility|diskutility|

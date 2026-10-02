@@ -382,8 +382,28 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     faults injected, all caught (one after the test learned to send the
     argument the fault listened to).
 
-  **P18.9b, next:** the "quit unexpectedly" dialog with **Ask the Agent**,
-  opening the Agent window on that session; then the 12700KF.
+  **P18.9b — what a person sees — DONE 2026-10-02 (in the guest).**
+  - **Crash Reporter** (`AQUA_SCENE=crashreport`, `de/aqua/CrashReport.swift`):
+    "The application X has unexpectedly quit. It ran confined, so nothing else
+    was affected. It was killed by SIGSEGV…". The keeper starts it on a crash
+    when it has a display (`crashDialog`).
+  - **Ask the Agent…** is the default when there is a core. It asks the
+    keeper for `debug N` through the poll loop, then opens the Agent window on
+    that session (`ABYSS_AGENT_SOCKET`) asking "Why did X crash?"
+    (`ABYSS_AGENT_ASK`), and closes. A crash without a core gets an OK and
+    says it left nothing to read. Its verbs (`crash.ask`, `crash.close`) are a
+    menu, so a script can answer it.
+  - Tests: 3 CrashReportTests, a `crashreport` golden on both platforms, and
+    `live-crash-dialog.sh` claims 1–5 in the guest. The report is clicked
+    with a virtual pointer; the Agent window, started by the report and not
+    the test, runs lldb and answers. 6 faults injected, all caught. The whole
+    Aqua suite (285) is green on both platforms.
+  - Found on the way: P18.8b's Dock icon had not regenerated
+    `JaguarLists.swift`, which ThemeTests checks byte for byte. Only filtered
+    suites had been run. It is regenerated, and Trench's icon sheet shows the
+    compiled Aqua Agent icon, as it does for any list Trench lacks.
+
+  **Not yet:** the 12700KF with a real model.
 - **P18.10 — tools are the vocabulary (M).** A vocabulary bridge per agent
   jail, beside the model socket: Phase 10's `describe`/`validate`/`activate`
   over `CurrentIPC`, for **the applications this session was given** (§6b.2)

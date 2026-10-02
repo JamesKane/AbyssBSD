@@ -43,6 +43,7 @@ public enum SceneKind: Sendable {
     case activity    // Activity Monitor (PHASE15 P15.7)
     case diskutility // Disk Utility (PHASE15 P15.8)
     case agent       // Agent, the chat window (PHASE18 P18.8b)
+    case crashreport // "… has unexpectedly quit" (PHASE18 P18.9b)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -271,6 +272,9 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         _ = paintActivity(cr, w: cw, h: ch, view: v, userName: { $0 == 0 ? "root" : "abyss" })
     case .grab:
         _ = paintGrabPanel(cr, w: cw, h: ch, status: "Choose what to capture.")
+    case .crashreport:
+        paintCrashReport(cr, w: cw, h: ch, notice: CrashNotice(id: 1, app: "galculator", signal: "SIGSEGV", core: true),
+                         refusal: nil, choices: [.close, .ask])
     case .agent:
         // A fixed conversation: a question, the tool calls it took, the
         // answer — and the field with the next question being typed.

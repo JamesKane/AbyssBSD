@@ -1240,6 +1240,31 @@ list dock.icon.terminal
   fill #ffffff/0.45
 end
 
+list dock.icon.agent
+  # The Agent (PHASE18 P18.8b): a speech bubble on Aqua blue — someone to
+  # ask — and a small padlock, because it is asked from inside a jail.
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #79b2ff 1 #1d5bcc
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.22
+  rect w*0.14 w*0.18 w*0.72 w*0.46 w*0.13
+  fill #ffffff
+  path w*0.28 w*0.6 w*0.22 w*0.8 w*0.44 w*0.62 close
+  fill #ffffff
+  circle w*0.33 w*0.41 w*0.055
+  fill #1d5bcc
+  circle w*0.5 w*0.41 w*0.055
+  fill #1d5bcc
+  circle w*0.67 w*0.41 w*0.055
+  fill #1d5bcc
+  path w*0.665 w*0.7 w*0.665 w*0.63 w*0.815 w*0.63 w*0.815 w*0.7
+  stroke #e8b23a w*0.045 round
+  rect w*0.6 w*0.69 w*0.28 w*0.19 w*0.035
+  fill vertical stops 0 #ffd76a 1 #d99a1e
+  circle w*0.74 w*0.78 w*0.025
+  fill #6b4a0c
+end
+
 list dock.icon.trash
   path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
   stroke rgba(0.78, 0.80, 0.85, 1) w*0.05

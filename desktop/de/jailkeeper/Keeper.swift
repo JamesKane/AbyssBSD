@@ -169,6 +169,9 @@ public final class JailKeeper {
     private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String, model: ap_child?, root: String, home: String)] = []
     /// Crashes seen this session, by number (P18.9).
     public private(set) var crashes: [Int: Crash] = [:]
+    /// What shows a crash to the person (P18.9b): AquaDemo's Crash Reporter,
+    /// given `ABYSS_CRASH_*`. Nil without a display, when nobody would see it.
+    public var crashDialog: [String]?
     private var sessions = 0
     /// Where agent transcripts are kept: outside every jail, and past the
     /// session — "the session is the log".
@@ -313,6 +316,13 @@ public final class JailKeeper {
                       binaryInside: inside, binary: binary)
         crashes[c.id] = c
         say("jails: crash \(c.id): \(c.summary) in \(jail)\(c.coreDumped ? " (core \(core))" : "")")
+        if let argv = crashDialog {
+            let app = program.split(separator: "/").last.map(String.init) ?? program
+            let shown = Spawn.detached(argv, environment: [
+                "AQUA_SCENE": "crashreport", "ABYSS_CRASH_ID": String(c.id), "ABYSS_CRASH_APP": app,
+                "ABYSS_CRASH_SIGNAL": Crash.signalName(signal), "ABYSS_CRASH_CORE": c.coreDumped ? "1" : "0"])
+            say("jails: crash \(c.id) \(shown ? "shown" : "could not be shown")")
+        }
     }
 
     /// A `debug` session for crash `id`: its core, and its binary if the debug

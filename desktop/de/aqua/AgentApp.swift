@@ -157,6 +157,11 @@ public final class AgentApp: WindowDelegate, MenuProvider {
 
     static func log(_ s: String) { ("Agent: " + s + "\n").withCString { _ = write(2, $0, strlen($0)) } }
 
+    var readyStatus: String {
+        agentClass == "debug" ? "Confined in debug: one crash, read-only; no network."
+                              : "Confined in \(agentClass): no network; only what you grant it."
+    }
+
     // MARK: talking to the keeper and the agent
 
     /// Send `m` on a new connection and hand the reply to `then` when it comes.
@@ -176,6 +181,19 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     }
 
     private func startSession() {
+        // A session already started for it (a crash's debug session): use it,
+        // and ask what it was opened to ask.
+        if let given = getenv("ABYSS_AGENT_SOCKET").map({ String(cString: $0) }), !given.isEmpty {
+            agentSocket = given
+            phase = .ready
+            status = readyStatus
+            AgentApp.log("session (given) at \(given)")
+            if let q = getenv("ABYSS_AGENT_ASK").map({ String(cString: $0) }), !q.isEmpty {
+                field = q
+                ask()
+            }
+            return
+        }
         status = "Starting an agent in \(agentClass)…"
         var m = Msg(); m.set("method", "agent"); m.set("class", agentClass)
         let sent = request({ try Current.connect(AgentApp.keeperService) }, m) { [weak self] r in
@@ -188,7 +206,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
             }
             self.agentSocket = sock
             self.phase = .ready
-            self.status = "Confined in \(self.agentClass): no network; only what you grant it."
+            self.status = self.readyStatus
             AgentApp.log("session \(r.string("session") ?? "") at \(sock)")
         }
         if !sent {
@@ -249,7 +267,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         let stop = r.string("stop") ?? "failed"
         append(agentAnswerLine(stop == "answered" ? text : "(stopped)"))
         switch stop {
-        case "answered": phase = .ready; status = "Confined in \(agentClass): no network; only what you grant it."
+        case "answered": phase = .ready; status = readyStatus
         case "budget": phase = .ended; status = "Stopped: \(text)"
         case "steps": phase = .ready; status = "Stopped: \(text)"
         default: phase = .ready; status = "Failed: \(text)"

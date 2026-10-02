@@ -79,6 +79,9 @@ case "diskutility":
 case "activity":
     // Activity Monitor (PHASE15 P15.7).
     scene = .activity; title = "Activity Monitor"; width = 620; height = 360
+case "crashreport":
+    // Crash Reporter (PHASE18 P18.9b).
+    scene = .crashreport; title = ""; width = 480; height = 180
 case "agent":
     // Agent (PHASE18 P18.8b): the chat window.
     scene = .agent; title = "Agent"; width = 560; height = 460
@@ -173,6 +176,16 @@ if sceneName == "setupassistant" {
     }
     app.onQuit = { display.stop() }
     withExtendedLifetime(app) { display.run() }
+    exit(0)
+}
+if sceneName == "crashreport" {
+    // "… has unexpectedly quit" (PHASE18 P18.9b): started by the keeper for a
+    // confined program that died of a signal (ABYSS_CRASH_*).
+    guard let dialog = CrashReport(display: display, notice: CrashNotice.fromEnvironment()) else {
+        print("AquaDemo: could not open the crash report."); exit(1)
+    }
+    dialog.onDone = { display.stop() }
+    withExtendedLifetime(dialog) { display.run() }
     exit(0)
 }
 if sceneName == "agent" {
