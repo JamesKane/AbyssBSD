@@ -29,6 +29,35 @@ plus patches: ACPI probe, the SCMI-over-SMC power-on, SCMI performance
 domain DVFS, ACE-Lite coherency with non-cacheable buffers, and the
 `_CCA` override.
 
+## Bring-up sequence (phase 1, done 2026-10-02)
+
+Found by a test module, against CIX's Linux patches, the DSDT and a dump of
+Linux running it. In this order; a GPU register read before all five hangs
+or faults the bus (SError), and the board then needs a power cycle:
+
+1. **Power domain:** SCMI POWER_STATE_SET, domain 21, over TF-A's SMC
+   (function `0xc2000001`, shared memory `0x84380000`).
+2. **Clocks:** SCMI CLOCK_CONFIG_SET enable for `gpu_top` (`0x1F`) and
+   `gpu_core` (`0x20`), both off at boot. Not through the firmware's AML
+   (`\_SB.PMMX.CLK*`): that SCMI agent answers NOT_FOUND for every clock.
+   Through the agent Linux uses, ACPI `CIXHA006`: shared memory at the start
+   of CIX mailbox 6 (`0x06590000`, `CIXHA004`), doorbell at `+0x80`
+   (`DB_ACK`), polled on the channel-free bit; mailbox 7 (`0x065a0000`)
+   carries the platform's messages. CLOCK_ATTRIBUTES confirms the names and
+   the enabled bit. (SCMI v2.0 `cix:cix`: protocols 0x13 perf, 0x14 clock.)
+3. **Power resource:** `\_SB.GPUP.PPRS._ON` (AML): RCSU `0x218` gets
+   `0x1000 | 0xFFC` (bit 12 is what `_STA` reads as on), and the GPU's
+   memories are repaired (`DMRP`).
+4. **Reset:** reset controller `0x16000000`, active low: `0x400` bit 6
+   (GPU) pulsed low, `0x800` bit 28 (GPU RCSU) already high.
+5. **Q-channel clock gating:** RCSU `0x218` bit 0.
+
+ACPI resource 0 (`0x15000000`) is CIX's RCSU, not the GPU: only `0x218` and
+`0x304` (harvested cores; `0xf` here: none) may be read. The GPU is
+resource 1 (`0x15010000`). Read then: GPU_ID `0xc8700008`, L2 `0x8130306`,
+tiler `0x809`, mem `0x301`, MMU `0x2830`, AS `0xff`, CSF `0x4200412`,
+shader_present `0x550555`: as Linux reports.
+
 ## Versions
 
 drm-kmod's DRM core is Linux 6.13; it has `drm_gpuvm`, `drm_exec` and the
