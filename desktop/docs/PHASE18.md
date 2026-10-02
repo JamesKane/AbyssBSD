@@ -529,6 +529,15 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     1–3 in the guest, with clicks on a session and on the second of two
     grants' Revoke. 6 faults injected, all caught (one after the test gained
     a second grant).
+  - **On the 12700KF (same day).** The pane listed the day's seven real
+    sessions (the agent's, and the 16:29 crash's `debug` session), the newest
+    one's digest, and a document given to a program confined in `app`.
+    Revoke, clicked with a virtual pointer (built in the guest; the medium
+    carries no Wayland headers), took it back, and the jail's grants were
+    unmounted. **Found there:** an agent's answer with line breaks drew a
+    missing-glyph box for each, because the word wrapper splits on spaces;
+    each line of the digest is now split into paragraphs first
+    (`agentsDigestParagraphs`).
 
   **Still in P18.11:**
   - (c) requester 1, the first write to an existing file. PHASE18 assumed

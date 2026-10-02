@@ -28,6 +28,12 @@ final class AgentsPaneTests: XCTestCase {
         XCTAssertLessThan(l.digest.y + l.digest.h, l.grants.y)
     }
 
+    func testAnAnswersLineBreaksAreParagraphs() {
+        XCTAssertEqual(agentsDigestParagraphs(["17:33:08  The agent answered: Let me check.\nThen save.", "next"]),
+                       ["17:33:08  The agent answered: Let me check.", "Then save.", "next"])
+        XCTAssertEqual(agentsDigestParagraphs(["a\n\nb"]), ["a", "b"], "no empty paragraph")
+    }
+
     func testAtMostWhatFits() {
         var s = AgentsPaneState()
         s.sessions = (0..<20).map { TranscriptSummary(id: "\($0)", agentClass: "agent", started: "", questions: 0, tokens: 0, given: []) }

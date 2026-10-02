@@ -116,6 +116,13 @@ public func agentsHit(_ l: AgentsLayout, _ s: AgentsPaneState, x: Double, y: Dou
     return nil
 }
 
+/// The digest as paragraphs to wrap: an agent's answer may hold line breaks,
+/// which the word wrapper would draw as a missing glyph (seen on the
+/// 12700KF), so each is a paragraph of its own.
+public func agentsDigestParagraphs(_ digest: [String]) -> [String] {
+    digest.flatMap { $0.split(separator: "\n", omittingEmptySubsequences: true).map(String.init) }
+}
+
 public func paintAgentsPane(_ cr: OpaquePointer, _ l: AgentsLayout, _ s: AgentsPaneState) {
     func box(_ r: Rect) {
         Draw.setColor(cr, Color(1, 1, 1)); cairo_rectangle(cr, r.x, r.y, r.w, r.h); cairo_fill(cr)
@@ -144,7 +151,7 @@ public func paintAgentsPane(_ cr: OpaquePointer, _ l: AgentsLayout, _ s: AgentsP
         lines.append(s.sessions[i].line)
         lines.append("")
     }
-    for d in s.digest { lines += wrapWords(cr, d, width: l.digest.w - 16, size: 11) }
+    for d in agentsDigestParagraphs(s.digest) { lines += wrapWords(cr, d, width: l.digest.w - 16, size: 11) }
     let fit = Int((l.digest.h - 10) / 15)
     let shown = lines.count > fit ? Array(lines.prefix(2)) + Array(lines.suffix(fit - 2)) : lines
     for (k, line) in shown.enumerated() {
