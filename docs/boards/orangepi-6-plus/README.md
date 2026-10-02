@@ -171,6 +171,12 @@ until the Q8B is regression-tested; 2026-10-02):
   `TZB0` 10-11 (the little cluster has no zone); zones naming no CPU, such
   as the video unit's, slow nothing. Tested by lowering `TZB1`'s `_PSV`
   (`hw.acpi.thermal.user_override=1`). To do: the critical shutdown test.
+- **Watchdog: works.** **`sbsa_gwdt`**, a generic driver for the GTDT's
+  SBSA watchdog (here architecture version 1). On Sky1 a write to the
+  refresh frame does not refresh it, and Linux's driver, which refreshes
+  that way, would reset the board if armed; the driver checks at attach
+  and refreshes through `WOR` instead. `watchdogd -t 8` keeps the board up;
+  left unrefreshed it resets it.
 - **Device power:** ACPI power resources and the AML clock methods, as
   devices need them.
 - Also: the Qualcomm GLINK clients built into the branch's GENERIC no
