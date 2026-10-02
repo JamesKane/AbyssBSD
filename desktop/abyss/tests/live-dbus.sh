@@ -1,10 +1,10 @@
 #!/bin/sh
-# AbyssBSD Swift DE — D-Bus, against a real bus (PHASE8.md P8.1).
+# AbyssBSD Swift DE — D-Bus, against GLib (PHASE8.md P8.1; BACKLOG D.1).
 #
 # The claim: our hand-written D-Bus implementation is correct — not
 # self-consistent, correct. So **the client on the other end is never our own
-# code**. `dbus-daemon` is the bus, and `dbus-send` and `gdbus` (GLib's
-# implementation, an entirely independent encoder) are the callers. A marshaller
+# code**: `gdbus` (GLib's implementation, an entirely independent encoder) is
+# the caller. A marshaller
 # tested against its own parser round-trips beautifully and is still wrong
 # (HANDOFF §2.37); these assertions cannot pass that way.
 #
@@ -12,107 +12,101 @@
 # all three were rejected.
 #
 # Usage: abyss/tests/live-dbus.sh
+#
+# **On ADE's bridge, not a bus** (BACKLOG D.1, PRODUCT §5.6): the probe joins as
+# one of ADE's services (the private socket), GLib's `gdbus` calls it as an
+# application does — and section 5 holds the bridge to its promise: an
+# application cannot reach another application through it.
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
+. "$root/abyss/common.sh"
 
 probe="$root/.build/debug/dbusprobe"
-[ -x "$probe" ] || swift build
-
-command -v dbus-run-session >/dev/null \
-  || { echo "FAIL: dbus-run-session not installed"; exit 1; }
-command -v dbus-send >/dev/null || { echo "FAIL: dbus-send not installed"; exit 1; }
+[ -x "$probe" ] && [ -x "$root/.build/debug/abyss-dbus" ] || swift build
+command -v gdbus >/dev/null || { echo "FAIL: gdbus (GLib) not installed — it is the independent caller"; exit 1; }
 
 work=$(mktemp -d /tmp/abyss-dbus.XXXXXX)
-trap 'rm -rf "$work"' EXIT
+cleanup() { for p in ${sp:-} ${ap:-} ${abyss_bridge_pid:-}; do kill "$p" 2>/dev/null || true; done; rm -rf "$work"; }
+trap cleanup EXIT INT TERM HUP
+fail() { echo "FAIL: $1"; exit 1; }
 
-# Everything runs inside one private session bus, so this test can never touch
-# the developer's own bus or be affected by what is on it.
-dbus-run-session -- sh -s "$probe" "$work" <<'SESSION' > "$work/out" 2>&1
-set -eu
-probe=$1
-work=$2
+# A private bridge, so this test never touches the developer's own session.
+abyss_bridge_start "$work" || exit 1
+# env(1), not a prefix assignment: in POSIX sh, one before a function call can
+# outlive the call and leave the whole script on the services socket.
+svc() { env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$@"; }
 
 # ---- 1. connect + authenticate + Hello -------------------------------------
-name=$("$probe" hello | sed -n 's/^unique-name=//p')
+name=$(svc "$probe" hello | sed -n 's/^unique-name=//p')
 case "$name" in
-  :1.*) echo "ok: authenticated and the bus assigned us $name" ;;
-  *)    echo "FAIL: no unique name from Hello (got '$name')"; exit 1 ;;
+  :1.*) echo "ok: 1. authenticated, and the bridge assigned us $name" ;;
+  *)    fail "no unique name from Hello (got '$name')" ;;
 esac
 
-# ---- 2. own a well-known name and answer real callers -----------------------
-"$probe" serve org.abyssbsd.Probe 10 > "$work/serve.out" 2>&1 &
+# ---- 2. own a well-known name and answer a real caller ---------------------
+svc "$probe" serve org.abyssbsd.Probe 20 > "$work/serve.out" 2>&1 &
 sp=$!
-i=0
-while [ $i -lt 60 ]; do grep -q '^ready' "$work/serve.out" 2>/dev/null && break; sleep 0.1; i=$((i+1)); done
-grep -q '^ready' "$work/serve.out" \
-  || { echo "FAIL: the probe never owned its name"; cat "$work/serve.out"; exit 1; }
-grep -q '^owning=org.abyssbsd.Probe' "$work/serve.out" \
-  || { echo "FAIL: RequestName did not make us the primary owner"; exit 1; }
-echo "ok: owned org.abyssbsd.Probe as primary owner"
-
-# dbus-send: a different implementation entirely.
-reply=$(dbus-send --session --print-reply --dest=org.abyssbsd.Probe / \
-        org.abyssbsd.Probe.Ping 2>&1)
-echo "$reply" | grep -q '"pong"' \
-  || { echo "FAIL: dbus-send did not get our reply"; echo "$reply"; exit 1; }
-echo "ok: dbus-send called us and read our reply"
-
-# A string echoed back through their encoder and ours.
-reply=$(dbus-send --session --print-reply --dest=org.abyssbsd.Probe / \
-        org.abyssbsd.Probe.Echo string:"round trip" 2>&1)
-echo "$reply" | grep -q '"round trip"' \
-  || { echo "FAIL: string did not survive the round trip"; echo "$reply"; exit 1; }
-echo "ok: a string survived their encoder and our decoder"
+i=0; while [ $i -lt 60 ]; do grep -q '^ready' "$work/serve.out" 2>/dev/null && break; sleep 0.1; i=$((i+1)); done
+grep -q '^ready' "$work/serve.out" || fail "the probe never owned its name: $(cat "$work/serve.out")"
+grep -q '^owning=org.abyssbsd.Probe' "$work/serve.out" || fail "RequestName did not make us the primary owner"
+reply=$(gdbus call --session --dest org.abyssbsd.Probe --object-path / --method org.abyssbsd.Probe.Ping 2>&1)
+echo "$reply" | grep -q "'pong'" || fail "gdbus did not get our reply: $reply"
+reply=$(gdbus call --session --dest org.abyssbsd.Probe --object-path / --method org.abyssbsd.Probe.Echo "<'round trip'>" 2>&1)
+echo "$reply" | grep -q "'round trip'" || fail "a string did not survive the round trip: $reply"
+echo "ok: 2. owned org.abyssbsd.Probe as a service; gdbus, as an application, called it and read our replies"
 
 # ---- 3. the complex types the portal API is made of -------------------------
-# gdbus is GLib's implementation. If our a{sv} is wrong in any way that matters,
-# this is where it shows: it is the exact shape every portal method takes.
-if command -v gdbus >/dev/null; then
-  opts=$(gdbus call --session --dest org.abyssbsd.Probe --object-path / \
-         --method org.abyssbsd.Probe.Echo \
-         "<{'handle_token': <'abyss1'>, 'multiple': <true>, 'n': <uint32 7>}>" 2>&1)
-  echo "$opts" | grep -q "handle_token" \
-    || { echo "FAIL: an a{sv} options dict did not survive"; echo "$opts"; exit 1; }
-  echo "$opts" | grep -q "uint32 7" \
-    || { echo "FAIL: a uint32 inside a variant did not survive"; echo "$opts"; exit 1; }
-  echo "ok: gdbus round-tripped a{sv} — the portal's options dictionary"
-
-  arr=$(gdbus call --session --dest org.abyssbsd.Probe --object-path / \
-        --method org.abyssbsd.Probe.Echo "<['a', 'bb', 'ccc']>" 2>&1)
-  echo "$arr" | grep -q "'ccc'" \
-    || { echo "FAIL: an array of strings did not survive"; echo "$arr"; exit 1; }
-  echo "ok: gdbus round-tripped a nested array"
-
-  # They parse our introspection XML with their own parser.
-  intro=$(gdbus introspect --session --dest org.abyssbsd.Probe --object-path / 2>&1)
-  echo "$intro" | grep -q "org.abyssbsd.Probe" \
-    || { echo "FAIL: gdbus could not parse our introspection"; echo "$intro"; exit 1; }
-  echo "ok: gdbus parsed our introspection XML"
-else
-  echo "note: gdbus not installed — skipped the a{sv} checks"
-fi
+# GLib's encoder. If our a{sv} is wrong in any way that matters, this is where
+# it shows: it is the exact shape every portal method takes.
+opts=$(gdbus call --session --dest org.abyssbsd.Probe --object-path / \
+       --method org.abyssbsd.Probe.Echo \
+       "<{'handle_token': <'abyss1'>, 'multiple': <true>, 'n': <uint32 7>}>" 2>&1)
+echo "$opts" | grep -q "handle_token" || fail "an a{sv} options dict did not survive: $opts"
+echo "$opts" | grep -q "uint32 7" || fail "a uint32 inside a variant did not survive: $opts"
+arr=$(gdbus call --session --dest org.abyssbsd.Probe --object-path / \
+      --method org.abyssbsd.Probe.Echo "<['a', 'bb', 'ccc']>" 2>&1)
+echo "$arr" | grep -q "'ccc'" || fail "an array of strings did not survive: $arr"
+intro=$(gdbus introspect --session --dest org.abyssbsd.Probe --object-path / 2>&1)
+echo "$intro" | grep -q "org.abyssbsd.Probe" || fail "gdbus could not parse our introspection: $intro"
+echo "ok: 3. gdbus round-tripped a{sv} and a nested array, and parsed our introspection"
 
 # ---- 4. an unknown method must be ANSWERED, not ignored ---------------------
-# A caller that gets no reply hangs for its full timeout with no error. This is
-# the same failure shape as a missing xdg-shell configure (PHASE6 P6.3).
-if dbus-send --session --print-reply --reply-timeout=2000 \
-     --dest=org.abyssbsd.Probe / org.abyssbsd.Probe.NoSuchMethod > "$work/unk" 2>&1; then
-  echo "FAIL: an unknown method appeared to succeed"; exit 1
+# A caller that gets no reply hangs for its full timeout with no error.
+if gdbus call --session --timeout 2 --dest org.abyssbsd.Probe --object-path / \
+     --method org.abyssbsd.Probe.NoSuchMethod > "$work/unk" 2>&1; then
+  fail "an unknown method appeared to succeed"
 fi
-grep -qi 'UnknownMethod' "$work/unk" \
-  || { echo "FAIL: an unknown method did not produce an error reply"
-       echo "      (a caller with no reply hangs for its whole timeout)"
-       cat "$work/unk"; exit 1; }
-echo "ok: an unknown method got a proper error reply, not silence"
+grep -qi 'UnknownMethod' "$work/unk" || fail "an unknown method did not get an error reply: $(cat "$work/unk")"
+echo "ok: 4. an unknown method got a proper error reply, not silence"
+
+# ---- 5. a bridge, not a bus -------------------------------------------------
+# The same probe, joined as an APPLICATION, owning a name: gdbus (another
+# application) cannot reach it by that name or by its unique one, cannot see
+# it in ListNames, and cannot watch anything.
+"$probe" serve org.abyssbsd.Other 20 > "$work/app.out" 2>&1 &
+ap=$!
+i=0; while [ $i -lt 60 ]; do grep -q '^ready' "$work/app.out" 2>/dev/null && break; sleep 0.1; i=$((i+1)); done
+grep -q '^owning=org.abyssbsd.Other' "$work/app.out" || fail "an application could not ask for a name: $(cat "$work/app.out")"
+other=$(sed -n 's/^unique-name=//p' "$work/app.out" | head -1)
+if gdbus call --session --timeout 2 --dest org.abyssbsd.Other --object-path / --method org.abyssbsd.Probe.Ping > "$work/a2a" 2>&1; then
+  fail "an application called another application through the bridge"
+fi
+grep -q 'ServiceUnknown' "$work/a2a" || fail "calling another application's name failed the wrong way: $(cat "$work/a2a")"
+if [ -n "$other" ] && gdbus call --session --timeout 2 --dest "$other" --object-path / --method org.abyssbsd.Probe.Ping > "$work/a2u" 2>&1; then
+  fail "an application called another application by its unique name"
+fi
+names=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ListNames)
+echo "$names" | grep -q 'org.abyssbsd.Other' && fail "ListNames shows an application another application asked for: $names"
+echo "$names" | grep -q 'org.abyssbsd.Probe' || fail "ListNames does not show ADE's service: $names"
+if gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+     --method org.freedesktop.DBus.Monitoring.BecomeMonitor "[]" 0 > "$work/mon" 2>&1; then
+  fail "an application became a monitor"
+fi
+grep -q 'AccessDenied' "$work/mon" || fail "BecomeMonitor refused the wrong way: $(cat "$work/mon")"
+echo "ok: 5. a bridge, not a bus: no application reaches, lists or watches another"
 
 wait $sp 2>/dev/null || true
-grep -q '^done' "$work/serve.out" \
-  || { echo "FAIL: the probe did not exit cleanly"; cat "$work/serve.out"; exit 1; }
-echo "ok: served throughout and shut down cleanly"
-SESSION
-
-cat "$work/out"
-grep -q '^FAIL' "$work/out" && exit 1
-echo "all green (we speak D-Bus, and somebody else's implementation agrees)."
+grep -q '^done' "$work/serve.out" || fail "the probe did not exit cleanly: $(cat "$work/serve.out")"
+echo "all green (we speak D-Bus, somebody else's implementation agrees, and the bridge is not a bus)."

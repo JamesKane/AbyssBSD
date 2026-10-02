@@ -6,7 +6,7 @@
 //   dbusprobe portal-save <dir> <n>  ... SaveFile, suggesting the name <n>
 //   dbusprobe portal-open-late <dir> ... but subscribe only AFTER the call
 //
-// The point of `serve` is that the CLIENT is `dbus-send` or `gdbus` — somebody
+// The point of `serve` is that the CLIENT is GLib's `gdbus` — somebody
 // else's encoder. A marshaller tested only against its own parser round-trips
 // beautifully and is still wrong (HANDOFF §2.37).
 

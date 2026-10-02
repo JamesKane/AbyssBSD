@@ -9,7 +9,7 @@
 # Six real processes, and the important one is not ours:
 #
 #   undertow      our compositor — GTK is just another xdg-shell client
-#   dbus-daemon   the session bus
+#   abyss-dbus    ADE's D-Bus bridge (BACKLOG D.1) — a bridge, never a bus
 #   abyss-portal  the portal (P7.1), unchanged
 #   abyss-dbus    the bridge (P8.2), unchanged apart from Settings
 #   gtkpick       a stock GTK 3 app: gtk_file_chooser_native_new + run
@@ -47,9 +47,7 @@ undertow="$root/.build/debug/undertow"
 demo="$root/.build/debug/AquaDemo"
 [ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$undertow" ] && [ -x "$demo" ] || swift build
 
-command -v dbus-daemon >/dev/null || { echo "FAIL: dbus-daemon not installed"; exit 1; }
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }
-command -v dbus-monitor >/dev/null || { echo "FAIL: dbus-monitor not installed"; exit 1; }
 
 W=900
 H=700
@@ -60,7 +58,7 @@ rundir=$(mktemp -d /tmp/abyss-gtkr.XXXXXX)
 cleanup() {
   [ -n "${fd3open:-}" ] && exec 3>&- 2>/dev/null || true
   for p in ${vp_pid:-} ${app_pid:-} ${mon_pid:-} ${bridge_pid:-} ${portal_pid:-} \
-           ${ut_pid:-} ${bus_pid:-}; do
+           ${ut_pid:-} ${abyss_bridge_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
   rm -rf "$work" "$rundir" "${vp_dir:-}" "${fifo:-}" 2>/dev/null || true
@@ -102,31 +100,11 @@ cc -I"$vp_dir" "$root/abyss/tests/vpointer.c" "$vp_dir/vpointer-proto.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$vp_dir/vpointer"
 
 # ------------------------------------------------------------------- the bus
-# Our own dbus-daemon, and one with **no service directories**: the stock
-# `--session` config includes /usr/share/dbus-1/services, so the first call to
-# an unowned `org.freedesktop.portal.Desktop` would ACTIVATE the real
-# xdg-desktop-portal and it would answer instead of us. On a developer box with
-# a desktop installed, that turns this test into an elaborate way of checking
-# that GNOME works. Nothing here is activatable; every process is one we start.
-
-cat > "$work/bus.conf" <<'EOF'
-<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:tmpdir=/tmp</listen>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-EOF
-busaddr=$(dbus-daemon --config-file="$work/bus.conf" --fork \
-          --print-address=1 --print-pid=3 3>"$work/buspid")
-bus_pid=$(cat "$work/buspid")
-export DBUS_SESSION_BUS_ADDRESS="$busaddr"
-echo "bus: $busaddr (pid $bus_pid, nothing activatable)"
+# ADE's own D-Bus bridge, private to this test: nothing on it is ours but what
+# we start, and nothing can be started by name — so no xdg-desktop-portal on a
+# developer box can answer instead of us.
+abyss_bridge_start "$work" || exit 1
+echo "bridge: $DBUS_SESSION_BUS_ADDRESS (nothing activatable — a bridge starts nothing)"
 
 # ------------------------------------------------------------ the compositor
 # Window positions are SEEDED rather than guessed. P6.7's remembered places
@@ -170,7 +148,7 @@ while [ $i -lt 50 ]; do [ -S "$rundir/portal.sock" ] && break; sleep 0.1; i=$((i
 [ -S "$rundir/portal.sock" ] \
   || { echo "FAIL: abyss-portal never bound its socket"; cat "$work/portal.log"; exit 1; }
 
-"$bridge" > "$work/bridge.out" 2>"$work/bridge.err" &
+env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$bridge" > "$work/bridge.out" 2>"$work/bridge.err" &
 bridge_pid=$!
 i=0
 while [ $i -lt 60 ]; do grep -q '^ready' "$work/bridge.out" 2>/dev/null && break; sleep 0.1; i=$((i+1)); done
@@ -222,15 +200,6 @@ echo "$two" | grep -q '<<uint32 2>>' \
   || { echo "FAIL: Read() must double-wrap its variant (its own XML says so), got: $two"; exit 1; }
 echo "ok: GLib decoded ReadOne (one variant) and Read (two) as the spec describes"
 
-# ---------------------------------------------------------------- the witness
-# A REAL bus monitor, not `gdbus monitor`. The Response is addressed to its
-# caller (HANDOFF §2.40), and the bus hands an addressed signal to that caller
-# and to monitors — not to everyone holding a match rule. `gdbus monitor`
-# watches through match rules, so it would see nothing here and say nothing
-# about it: the witness would stop witnessing and the test would still pass.
-dbus-monitor --session > "$work/monitor" 2>&1 &
-mon_pid=$!
-sleep 0.5
 
 # ------------------------------------------------------------------ the files
 # A fixed directory name, because it becomes the Finder window's title and
@@ -331,22 +300,13 @@ grep -q "$chosen" "$work/app.err" \
   && { echo "FAIL: the app named the file itself somewhere"; cat "$work/app.err"; exit 1; }
 echo "ok: the app asked about a directory and was answered with a file"
 
-# 4. Two independent D-Bus implementations read that same Response: GLib, in
-#    the app above, and libdbus here. Nothing in this test rests on our encoder
-#    being read back by our decoder (HANDOFF §2.37).
-#
-#    And the destination is asserted, not just the signal: it is what makes the
-#    difference between an answer GTK receives and one it never hears
-#    (HANDOFF §2.40).
-grep -q 'member=Response' "$work/monitor" \
-  || { echo "FAIL: dbus-monitor never saw our Response signal"; cat "$work/monitor"; exit 1; }
-grep -E 'destination=:[0-9.]+.*member=Response' "$work/monitor" >/dev/null \
-  || { echo "FAIL: the Response was broadcast, not addressed to the caller"
-       grep Response "$work/monitor"; exit 1; }
-grep -q 'Chosen%20file.txt' "$work/monitor" \
-  || { echo "FAIL: libdbus could not decode the uri out of our Response"
-       cat "$work/monitor"; exit 1; }
-echo "ok: libdbus decoded the same signal, and saw it addressed to the app"
+# 4. The Response was decoded by GLib, in the app above — never our decoder
+#    reading our encoder (HANDOFF §2.37) — and it was addressed to the app
+#    (HANDOFF §2.40): GTK only hears an addressed answer, and ADE's bridge has
+#    no monitor through which anyone else could (PRODUCT §5.6).
+grep -qE "Response\(0\) on /org/freedesktop/portal/desktop/request/1_[0-9]+/" "$work/bridge.err" \
+  || { echo "FAIL: the portal sent no Response"; cat "$work/bridge.err"; exit 1; }
+echo "ok: GLib, in the app, decoded the Response addressed to it — no third party could watch"
 
 # 5. And the compositor was ours throughout: it composited the GTK app's own
 #    window as well as the picker's, which is the claim that GTK is simply

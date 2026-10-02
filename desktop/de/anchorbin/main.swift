@@ -17,8 +17,6 @@
 //     --binary PATH        the shell binary for the default components
 //                          (default: $ABYSS_APP_BINARY, else AquaDemo beside us).
 //     --runtime-dir DIR    where the control socket lives ($ABYSS_RUNTIME_DIR).
-//     --dbus-config PATH   dbus-daemon config for the session bus (default:
-//                          --session, the system's own).
 //     --max-restarts N     consecutive failures tolerated per component (5).
 //
 // The default session is **bus, portal, bridge, desktop, menubar, dock** — see
@@ -69,7 +67,6 @@ var mode: SessionMode = .desktop
 var without: Set<String> = []
 var binary = ProcessInfoEnv("ABYSS_APP_BINARY")
 var runtimeDir = ProcessInfoEnv("ABYSS_RUNTIME_DIR")
-var dbusConfig: String?
 var maxRestarts = 5
 
 func ProcessInfoEnv(_ k: String) -> String? {
@@ -92,7 +89,6 @@ while i < args.count {
     case "--menubar-display": menubarDisplay = next("a socket name")
     case "--binary":      binary = next("a path")
     case "--runtime-dir": runtimeDir = next("a directory")
-    case "--dbus-config": dbusConfig = next("a path")
     case "--max-restarts":
         guard let n = Int(next("a number")), n >= 0 else { fail("--max-restarts wants a number") }
         maxRestarts = n
@@ -115,7 +111,7 @@ while i < args.count {
         usage: anchor [--compositor CMD] [--display NAME] [--menubar-display NAME]
                       [--component NAME=CMD]
                       [--without NAME] [--binary PATH] [--runtime-dir DIR]
-                      [--dbus-config PATH] [--max-restarts N]
+                      [--max-restarts N]
         the default session: bus, portal, bridge, desktop, menubar, dock
         control it with: abyssctl status | abyssctl quit
 
@@ -193,11 +189,6 @@ if explicitComponents.isEmpty {
     // binary follows, so a build tree and an installed tree both work with no
     // configuration.
     let serviceDir = selfDirectory() ?? "."
-    // `dbus-daemon` is somebody else's program, so it is looked up on $PATH —
-    // and resolved HERE, in the parent, because a forked child may not go
-    // searching (HANDOFF §2.25). A box without one still gets a desktop; it
-    // just gets one with no bus, and `plan.notes` says so out loud.
-    let dbusDaemon = Spawn.resolveExecutable("dbus-daemon")
 
     // Where the compositor's socket will be, when that is knowable: a bare
     // `WAYLAND_DISPLAY` is a name under $XDG_RUNTIME_DIR, and an absolute one is
@@ -213,8 +204,6 @@ if explicitComponents.isEmpty {
 
     let plan = defaultSession(shellBinary: shellBinary,
                               serviceDirectory: serviceDir,
-                              dbusDaemon: dbusDaemon,
-                              dbusConfig: dbusConfig,
                               runtimeDir: dir,
                               display: display,
                               compositorSocket: compositorSocket,

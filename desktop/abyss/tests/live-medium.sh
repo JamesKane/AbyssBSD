@@ -193,11 +193,16 @@ echo "ok: the medium's desktop drew from its own theme file and draw lists"
   || fail "the desktop never said what its type roles resolved to: $(grep 'Text: role' "$work/boot.log" | head -2)"
 echo "ok: $(grep -o 'Text: role chrome.*' "$work/boot.log" | head -1)"
 
-# No bus on the medium, and the session says so rather than silently lacking a
-# file chooser (P8.4's design, exercised here for real).
-grep -q "no dbus-daemon" "$work/boot.log" \
-  || fail "the medium carries no dbus-daemon but the session did not say so"
-echo "ok: no session bus on the medium, and it said so instead of pretending"
+# ADE's D-Bus bridge on the medium (BACKLOG D.1): foreign applications get a
+# file chooser because ADE supplies the bridge itself — never a bus (§5.6),
+# which the medium does not carry and must not need (PRODUCT §5.6). This line
+# used to assert the opposite: "no bus, and it said so", which made a missing
+# file chooser for every foreign app look like a design.
+grep -q "anchor: bus up" "$work/boot.log" \
+  || fail "the medium's session did not start ADE's D-Bus bridge: $(grep -i 'bus' "$work/boot.log" | head -3)"
+forbidden=dbus-daemon   # PRODUCT §5.6: the medium's session must not name one
+grep -q "$forbidden" "$work/boot.log" && fail "the medium's session mentions $forbidden: $(grep "$forbidden" "$work/boot.log" | head -2)"
+echo "ok: the medium's session runs ADE's D-Bus bridge, and no other bus"
 
 # ------------------------------------------------------------------- 3. look
 echo "== what it actually drew =="

@@ -15,24 +15,23 @@
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
+. "$root/abyss/common.sh"
 bridge="$root/.build/debug/abyss-dbus"
 [ -x "$bridge" ] && [ -x "$root/.build/debug/abyss-theme" ] || swift build
-command -v dbus-daemon >/dev/null 2>&1 && command -v gdbus >/dev/null 2>&1 \
-  || { echo "SKIP: no dbus-daemon or gdbus"; exit 0; }
+command -v gdbus >/dev/null 2>&1 || { echo "SKIP: no gdbus (GLib, the independent reader)"; exit 0; }
 
 rundir=$(mktemp -d /tmp/abyss-palette.XXXXXX)
 cleanup() {
   [ -n "${bridge_pid:-}" ] && kill "$bridge_pid" 2>/dev/null || true
-  [ -s "$rundir/buspid" ] && kill "$(cat "$rundir/buspid")" 2>/dev/null || true
+  [ -n "${abyss_bridge_pid:-}" ] && kill "$abyss_bridge_pid" 2>/dev/null || true
   rm -rf "$rundir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; exit 1; }
 mkdir -p "$rundir/cfg"
 
-# Our own bus, never the developer's session.
-busaddr=$(dbus-daemon --session --fork --print-address=1 --print-pid=3 3>"$rundir/buspid")
-export DBUS_SESSION_BUS_ADDRESS="$busaddr"
+# ADE's own bridge (BACKLOG D.1), never the developer's session.
+abyss_bridge_start "$rundir" || exit 1
 
 ask() {  # ask NAMESPACE KEY
   gdbus call --session --dest org.freedesktop.portal.Desktop \
@@ -42,7 +41,7 @@ ask() {  # ask NAMESPACE KEY
 
 serve() {  # serve [ENV...] — start abyss-dbus under a theme, wait for ready
   [ -n "${bridge_pid:-}" ] && { kill "$bridge_pid" 2>/dev/null; wait "$bridge_pid" 2>/dev/null || true; }
-  env ABYSS_CONFIG_DIR="$rundir/cfg" "$@" "$bridge" > "$rundir/out" 2> "$rundir/err" &
+  env ABYSS_CONFIG_DIR="$rundir/cfg" DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$@" "$bridge" > "$rundir/out" 2> "$rundir/err" &
   bridge_pid=$!
   i=0
   while [ $i -lt 60 ]; do grep -q '^ready' "$rundir/out" 2>/dev/null && break; sleep 0.1; i=$((i + 1)); done

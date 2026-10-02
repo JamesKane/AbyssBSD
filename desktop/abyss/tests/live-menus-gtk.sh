@@ -30,7 +30,6 @@ undertow="$root/.build/debug/undertow"
 aqua="$root/.build/debug/AquaDemo"
 bridge="$root/.build/debug/abyss-dbus"
 [ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$bridge" ] || swift build
-command -v dbus-daemon >/dev/null || { echo "SKIP: no dbus-daemon"; exit 0; }
 command -v wayland-scanner >/dev/null || { echo "SKIP: no wayland-scanner"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-mgtk.XXXXXX)
@@ -38,7 +37,7 @@ rundir=$(mktemp -d /tmp/abyss-mgtr.XXXXXX)
 priv="abyss-gbar-$$"
 cleanup() {
   exec 3>&- 2>/dev/null || true
-  for p in ${vp_pid:-} ${app_pid:-} ${br_pid:-} ${bar_pid:-} ${ut_pid:-} ${bus_pid:-}; do
+  for p in ${vp_pid:-} ${app_pid:-} ${br_pid:-} ${bar_pid:-} ${ut_pid:-} ${abyss_bridge_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
   rm -rf "$work" "$rundir" 2>/dev/null || true
@@ -66,24 +65,11 @@ cc -I"$work" "$root/abyss/tests/vpointer.c" "$work/vpointer-proto.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$work/vpointer" || fail "no vpointer"
 
 # ---------------------------------------------------------------- the bus
-# Nothing activatable: every process on it is one we started (live-gtk.sh).
-cat > "$work/bus.conf" <<'EOF'
-<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:tmpdir=/tmp</listen>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-EOF
-busaddr=$(dbus-daemon --config-file="$work/bus.conf" --fork \
-          --print-address=1 --print-pid=3 3>"$work/buspid")
-bus_pid=$(cat "$work/buspid")
-export DBUS_SESSION_BUS_ADDRESS="$busaddr"
+# ADE's own D-Bus bridge (BACKLOG D.1): nothing on it but what we start, and
+# nothing can be started by name. The menu bridge joins as one of ADE's
+# services; the GTK application as an application — the one direction the
+# bridge carries a call INTO an application is a service's, as here.
+abyss_bridge_start "$work" || exit 1
 
 # ---------------------------------------------- compositor, bridge, bar
 mkdir -p "$work/cfg"
@@ -94,7 +80,7 @@ ut_pid=$!
 after "$work/ut.out" "WAYLAND_PRIVILEGED=$priv" 0 "undertow never came up"
 wd=$(grep -m1 '^WAYLAND_DISPLAY=' "$work/ut.out" | cut -d= -f2-)
 
-"$bridge" --menus > "$work/bridge.log" 2>&1 &
+env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$bridge" --menus > "$work/bridge.log" 2>&1 &
 br_pid=$!
 after "$work/bridge.log" "ready (menus: menus-dbus)" 0 "the menu bridge never came up"
 

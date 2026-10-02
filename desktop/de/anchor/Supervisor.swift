@@ -32,7 +32,7 @@ public final class Supervisor {
 
     private let policy: RestartPolicy
     /// How long a component waits for something it `requires`. Long enough for a
-    /// cold `dbus-daemon` on the FreeBSD guest, short enough that a session that
+    /// cold start on the FreeBSD guest, short enough that a session that
     /// is never going to compose says so rather than hanging for ever.
     private let dependencyTimeout: Double = 10
     private let components: [Running]

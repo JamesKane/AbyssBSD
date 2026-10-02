@@ -26,7 +26,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for t in dbus-daemon gdbus zenity galculator; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
+for t in gdbus zenity galculator; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
 for b in abyss-jaild abyss-jail abyss-portal abyss-dbus abyss-appgen undertow; do [ -x .build/debug/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-jl.XXXXXX); chmod 755 "$W"
@@ -43,7 +43,7 @@ cleanup() {
   for p in $(daemon); do sudo kill -9 "$p" 2>/dev/null || true; done
   for j in $(jls name | grep -E '^abyss-[0-9]+-' || true); do sudo jail -r "$j" 2>/dev/null || true; done
   for m in $(mount -p | awk '{print $2}' | grep "^$RB" | sort -r); do sudo umount -f "$m" 2>/dev/null || true; done
-  pkill -f "dbus-daemon --nofork --config-file=$XDG_RUNTIME_DIR" 2>/dev/null || true
+  pkill -f "endpoint --listen $RB" 2>/dev/null || true
   sudo rm -rf "$W" "$docs"
 }
 trap cleanup EXIT INT TERM HUP
@@ -121,7 +121,7 @@ jls -j "$N" > /dev/null 2>&1 && fail "the jail outlived the session's keeper"
 jls -d -j "$N" > /dev/null 2>&1 && fail "the jail is removed but still dying (unreaped programs?): $(ps -axo pid,jid,stat,comm | awk -v j="$(jls -d -j "$N" jid)" '$2 == j' | tr '\n' '|')"
 [ "$(mounts)" = 0 ] || fail "$(mounts) mount(s) outlived the keeper"
 sleep 0.5
-pgrep -f "dbus-daemon --nofork --config-file=$XDG_RUNTIME_DIR/jails" > /dev/null && fail "the jail's bus outlived the keeper"
+pgrep -f "abyss-dbus --endpoint --listen $RB" > /dev/null && fail "the jail's D-Bus bridge outlived the keeper"
 pgrep -f "abyss-dbus --bus unix:path=$RB" > /dev/null && fail "the jail's portal outlived the keeper"
 pgrep -x zenity > /dev/null && pgrep -x zenity | xargs ps -o jid= -p | grep -qv '^ *0$' && fail "a jailed zenity outlived the keeper"
 echo "ok: 6. the keeper ended, and the jail, its mounts, its bus, its portal and its applications went with it"

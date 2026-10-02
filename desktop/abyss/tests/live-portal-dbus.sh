@@ -5,7 +5,8 @@
 # `org.freedesktop.portal.FileChooser.OpenFile` on the session bus, **the Finder
 # opens**, and the answer names the file the user picked in it.
 #
-# Five real processes, and none of them is a mock: dbus-daemon as the bus, sway
+# Real processes, and none of them is a mock: ADE's D-Bus bridge (BACKLOG D.1 —
+# a bridge, never a bus), sway
 # hosting the picker, abyss-portal running it, abyss-dbus bridging, and a caller.
 # `gdbus` — GLib's D-Bus, an entirely independent implementation — introspects
 # us, reads our property, and **decodes the Response signal for itself**, so no
@@ -31,9 +32,7 @@ bin="$root/.build/debug/AquaDemo"
 [ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$probe" ] && [ -x "$bin" ] || swift build
 
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
-command -v dbus-daemon >/dev/null || { echo "FAIL: dbus-daemon not installed"; exit 1; }
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }
-command -v dbus-monitor >/dev/null || { echo "FAIL: dbus-monitor not installed"; exit 1; }
 
 # Short paths: a unix socket must fit in sun_path (HANDOFF §2.32).
 rundir=$(mktemp -d /tmp/abyss-pdbus.XXXXXX)
@@ -47,10 +46,9 @@ printf 'not this one\n' > "$docs/Other.txt"
 
 cleanup() {
   [ -n "${probe_pid:-}" ] && kill "$probe_pid" 2>/dev/null || true
-  [ -n "${mon_pid:-}" ] && kill "$mon_pid" 2>/dev/null || true
+  [ -n "${abyss_bridge_pid:-}" ] && kill "$abyss_bridge_pid" 2>/dev/null || true
   [ -n "${bridge_pid:-}" ] && kill "$bridge_pid" 2>/dev/null || true
   [ -n "${portal_pid:-}" ] && kill "$portal_pid" 2>/dev/null || true
-  [ -n "${bus_pid:-}" ] && kill "$bus_pid" 2>/dev/null || true
   [ -n "${sway_pid:-}" ] && kill "$sway_pid" 2>/dev/null || true
   [ -n "${vp_pid:-}" ] && kill "$vp_pid" 2>/dev/null || true
   rm -rf "$rundir" "$docs" "${cfg:-}" "${swaylog:-}" "${vp_dir:-}" "${fifo:-}" 2>/dev/null || true
@@ -59,13 +57,10 @@ trap cleanup EXIT
 export ABYSS_RUNTIME_DIR="$rundir"
 
 # ---------------------------------------------------------------- the bus
-# Our own dbus-daemon, so this test can never touch the developer's session bus
-# — nor be answered by an xdg-desktop-portal that happens to be running on it.
-
-busaddr=$(dbus-daemon --session --fork --print-address=1 --print-pid=3 3>"$rundir/buspid")
-bus_pid=$(cat "$rundir/buspid")
-export DBUS_SESSION_BUS_ADDRESS="$busaddr"
-echo "bus: $busaddr (pid $bus_pid)"
+# ADE's own bridge, so this test can never touch the developer's session bus —
+# nor be answered by an xdg-desktop-portal that happens to be running on it.
+abyss_bridge_start "$rundir" || exit 1
+echo "bridge: $DBUS_SESSION_BUS_ADDRESS (services at $ABYSS_BRIDGE_SERVICES)"
 
 # ---------------------------------------------------------------- compositor
 
@@ -109,7 +104,8 @@ while [ $i -lt 50 ]; do [ -S "$rundir/portal.sock" ] && break; sleep 0.1; i=$((i
 [ -S "$rundir/portal.sock" ] \
   || { echo "FAIL: abyss-portal never bound its socket"; cat "$rundir/portal.log"; exit 1; }
 
-"$bridge" > "$rundir/bridge.out" 2>"$rundir/bridge.err" &
+# The portal is one of ADE's services: it joins on the bridge's private socket.
+env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$bridge" > "$rundir/bridge.out" 2>"$rundir/bridge.err" &
 bridge_pid=$!
 i=0
 while [ $i -lt 60 ]; do grep -q '^ready' "$rundir/bridge.out" 2>/dev/null && break; sleep 0.1; i=$((i+1)); done
@@ -162,17 +158,9 @@ grep -qi 'InvalidArgs' "$rundir/badtoken" \
 echo "ok: a handle_token that would break the object path was refused, with an error"
 
 # ---------------------------------------------------------------- the caller
-# dbus-monitor is our independent witness: it decodes the Response signal with
-# libdbus's parser at the same time our probe decodes it with ours.
-#
-# **A real monitor, not `gdbus monitor`.** Since P8.3 the Response is addressed
-# to the caller rather than broadcast (HANDOFF §2.40), and an addressed signal
-# is delivered only to its destination and to true bus monitors. `gdbus monitor`
-# watches through match rules and would silently see nothing here — a witness
-# that stops witnessing, which is the shape of a test that quietly passes on.
-dbus-monitor --session > "$rundir/monitor" 2>&1 &
-mon_pid=$!
-sleep 0.5
+# Our probe first; GLib's GDBus is the independent caller further down (the
+# Response is addressed to its caller alone, and ADE's bridge lets nobody else
+# watch, so the witness has to be a caller — PRODUCT §5.6).
 
 # The probe SUBSCRIBES BEFORE IT CALLS, deriving the Request path from its own
 # unique name and its own token exactly as the spec describes — and then asserts
@@ -237,15 +225,6 @@ grep -q "^uri=$want\$" "$rundir/probe.log" \
   || { echo "FAIL: wrong uri (wanted $want)"; cat "$rundir/probe.log"; exit 1; }
 echo "ok: the answer named the file the user chose, escaped ($want)"
 
-# 3. libdbus decoded the same signal with its own parser. Without this, every
-#    claim above is our encoder being read back by our decoder.
-grep -q 'member=Response' "$rundir/monitor" \
-  || { echo "FAIL: dbus-monitor never saw our Response signal"
-       cat "$rundir/monitor"; exit 1; }
-grep -q 'Chosen%20file.txt' "$rundir/monitor" \
-  || { echo "FAIL: libdbus could not decode the uri out of our Response"
-       cat "$rundir/monitor"; exit 1; }
-echo "ok: libdbus decoded the Response signal and its uris independently of us"
 
 # 4. The client never named that file — it suggested a directory. The
 #    confused-deputy property survives the extra hop through D-Bus.
@@ -289,5 +268,32 @@ grep -q '^response=0' "$rundir/late.log" \
        echo "      (the method return must reach the caller before the signal goes out)"
        cat "$rundir/late.log"; exit 1; }
 echo "ok: a client that subscribed only after calling still got its Response"
+
+# ------------------------------------------------------ GLib, as the caller
+# The independent witness: GLib's GDBus calls OpenFile, hears its own Response
+# and decodes it with its own parser. Without this, every claim above is our
+# encoder being read back by our decoder.
+cc "$root/abyss/tests/portalcall.c" $(pkg-config --cflags --libs gio-2.0) -o "$rundir/portalcall" \
+  || { echo "FAIL: cannot build the GLib caller"; exit 1; }
+# The last round's Finder must be gone first, or the wait below finds it and
+# the click lands before this round's picker is up.
+i=0
+while swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.finder"' && [ $i -lt 80 ]; do sleep 0.25; i=$((i + 1)); done
+"$rundir/portalcall" OpenFile glib1 - "$docs" > "$rundir/glib.log" 2>&1 &
+probe_pid=$!
+i=0
+while [ $i -lt 80 ]; do
+  swaymsg -t get_tree 2>/dev/null | grep -q '"app_id": "org.abyssbsd.finder"' && break
+  sleep 0.25; i=$((i + 1))
+done
+swaymsg -t get_tree | grep -q '"app_id": "org.abyssbsd.finder"' \
+  || { echo "FAIL: GLib's call never opened a picker"; cat "$rundir/glib.log" "$rundir/bridge.err"; exit 1; }
+sleep 1.5
+printf 'm 54 96\np\nr\np\nr\n' >&3
+rc=0; wait "$probe_pid" 2>/dev/null || rc=$?
+[ "$rc" = 0 ] || { echo "FAIL: GLib's caller got no Response (exit $rc)"; cat "$rundir/glib.log"; for f in bridge.err portal.log bridge-endpoint.log; do echo "-- $f"; tail -n 6 "$rundir/$f"; done; exit 1; }
+grep -q '^response 0$' "$rundir/glib.log" || { echo "FAIL: GLib decoded no success"; cat "$rundir/glib.log"; exit 1; }
+grep -q "^uri $want\$" "$rundir/glib.log" || { echo "FAIL: GLib decoded the wrong uri (wanted $want)"; cat "$rundir/glib.log"; exit 1; }
+echo "ok: GLib's GDBus, as the caller, got its Response and decoded the uri independently of us"
 
 echo "all green (a foreign caller got the Finder, and the file it picked)."

@@ -2,6 +2,13 @@
 //
 //   abyss-dbus [--portal SERVICE] [--seconds N] [--once]
 //              [--bus ADDRESS --jail NAME [--jaild SOCKET]]
+//   abyss-dbus --endpoint --listen PATH --services PATH
+//
+// `--endpoint` is ADE's D-Bus bridge itself (BACKLOG D.1, PRODUCT §5.6):
+// applications connect at `--listen` (what DBUS_SESSION_BUS_ADDRESS names),
+// ADE's services — this program's portal and menu modes — at `--services`,
+// and messages go between the two kinds and never within one. There is no
+// bus: no application reaches another through it.
 //
 // With `--jail` it is a jail's portal (PHASE18 P18.4): on that jail's own bus
 // (`--bus`), and a chosen file is granted into the jail by abyss-jaild and
@@ -20,6 +27,7 @@
 
 import CurrentIPC
 import DBusPortal
+import DBusBridge
 import DBusMenus
 import JailD
 import PoolConfig
@@ -63,6 +71,7 @@ var once = false
 // own, because the portal half blocks while a file dialog is open.
 var menus = false
 var busAddress: String?, jailName: String?, jaildSocket = JailWire.defaultSocket
+var endpoint = false, listenPath: String?, servicesPath: String?
 let args = Array(CommandLine.arguments.dropFirst())
 var i = 0
 while i < args.count {
@@ -79,6 +88,16 @@ while i < args.count {
         once = true
     case "--menus":
         menus = true
+    case "--endpoint":
+        endpoint = true
+    case "--listen":
+        i += 1
+        guard i < args.count else { die("--listen needs a socket path") }
+        listenPath = args[i]
+    case "--services":
+        i += 1
+        guard i < args.count else { die("--services needs a socket path") }
+        servicesPath = args[i]
     case "--bus":
         i += 1
         guard i < args.count else { die("--bus needs an address") }
@@ -102,13 +121,25 @@ while i < args.count {
 
 // A client that hangs up mid-reply must not kill us (HANDOFF §2.33).
 signal(SIGPIPE, SIG_IGN)
+if endpoint {
+    guard let listen = listenPath, let services = servicesPath else { die("--endpoint needs --listen and --services") }
+    let bridge = BridgeEndpoint(log: { emit(2, $0) })
+    do {
+        try bridge.listen(services, kind: .service)
+        try bridge.listen(listen, kind: .application)
+    } catch { die("cannot listen: \(error)") }
+    emit(1, "ready (endpoint: applications at \(listen), ADE's services at \(services))")
+    bridge.run()
+    bridge.shutdown()
+    exit(0)
+}
 
 let conn = DBusConnection()
 do {
     try conn.connect(address: busAddress)
 } catch {
-    die("cannot reach the session bus: \(error)"
-        + " (is DBUS_SESSION_BUS_ADDRESS set, and is dbus-daemon running?)")
+    die("cannot reach ADE's D-Bus bridge: \(error)"
+        + " (is DBUS_SESSION_BUS_ADDRESS set, and is `abyss-dbus --endpoint` running?)")
 }
 
 if menus {

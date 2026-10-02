@@ -49,6 +49,10 @@ public struct DBusMessage: Equatable, Sendable {
     public var body: [DBusValue] = []
     /// Descriptors accompanying this message.
     public var fds: [Int32] = []
+    /// On a decoded message, its `UNIX_FDS` header: how many of the
+    /// descriptors that arrived are this message's (the rest are the next
+    /// one's). A forwarder consumes exactly this many (BACKLOG D.1).
+    public var declaredFDs = 0
 
     public init(type: MessageType) { self.type = type }
 
@@ -229,7 +233,7 @@ public struct DBusMessage: Equatable, Sendable {
             case .destination: if case .string(let s) = inner { m.destination = s }
             case .sender: if case .string(let s) = inner { m.sender = s }
             case .signature: if case .signature(let s) = inner { bodySignature = s }
-            case .unixFDs: break
+            case .unixFDs: if case .uint32(let n) = inner { m.declaredFDs = Int(n) }
             case nil: break                    // unknown fields are ignored, per spec
             }
         }

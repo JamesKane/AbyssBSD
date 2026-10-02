@@ -584,10 +584,15 @@ if [ "$live" -eq 1 ]; then
   fi
 fi
 
-# D-Bus against a real dbus-daemon, with dbus-send/gdbus as the callers — never
-# our own encoder on both ends (PHASE8.md P8.1). Needs no compositor.
-phase "D-Bus, against a real bus"
+# D-Bus on ADE's bridge (BACKLOG D.1), with GLib's gdbus as the caller — never
+# our own encoder on both ends (PHASE8.md P8.1) — and the bridge held to not
+# being a bus. Needs no compositor.
+phase "D-Bus, against GLib, on ADE's bridge"
 sh "$root/abyss/tests/live-dbus.sh"
+# And no bus anywhere (§5.6): not the freedesktop daemon nor its tools, in the code, the tests or
+# the image (BACKLOG D.1, PRODUCT §5.6).
+phase "no message bus"
+sh "$root/abyss/tests/check-no-bus.sh"
 
 # The hardware bridges against the real kernel (sysctl + devd on FreeBSD; on
 # Linux it asserts the stubs report themselves absent). No compositor needed.

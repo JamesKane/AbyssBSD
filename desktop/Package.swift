@@ -345,6 +345,9 @@ let package = Package(
         .target(name: "Volumes", dependencies: ["Spawn"], path: "de/volumes"),
         // Jails — what a jail contains, as data, and the plan a root daemon
         // performs (PHASE18). Pure: tested on Linux, where there are no jails.
+        // ADE's D-Bus bridge (BACKLOG D.1, PRODUCT §5.6): applications reach
+        // ADE's services and never each other. A bridge, not a bus.
+        .target(name: "DBusBridge", dependencies: ["DBus", "CPlatform", "CurrentIPC"], path: "de/dbusbridge"),
         .target(name: "Jails", dependencies: ["PoolConfig"], path: "de/jails"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
@@ -371,6 +374,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
+        .testTarget(name: "DBusBridgeTests", dependencies: ["DBusBridge", "DBus"], path: "Tests/DBusBridgeTests"),
         .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "JailKeeper", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
         // installer's shape: plans as values that import nothing, a wire the
@@ -588,8 +592,8 @@ let package = Package(
             dependencies: ["Undertow", "CAllocProbe", "AquaDraw"],
             path: "de/undertowbin"
         ),
-        // Drive the DBus library against a real bus — the client on the other
-        // end is dbus-send, not us (PHASE8.md §5).
+        // Drive the DBus library on ADE's bridge — the client on the other end
+        // is GLib's gdbus, not us (PHASE8.md §5).
         .executableTarget(
             name: "dbusprobe",
             dependencies: ["DBus"],
@@ -599,7 +603,7 @@ let package = Package(
         // that gets a stock GTK app the Finder as its file chooser.
         .executableTarget(
             name: "abyss-dbus",
-            dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC", "Spawn", "PoolConfig", "JailD"],
+            dependencies: ["DBusPortal", "DBusMenus", "DBusBridge", "CurrentIPC", "Spawn", "PoolConfig", "JailD"],
             path: "de/dbusbin"
         ),
         // Read the machine through the FreeBSD-native bridges.

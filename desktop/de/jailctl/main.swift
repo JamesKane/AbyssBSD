@@ -64,7 +64,7 @@ if args.first == "serve" {
     do { server = try Current.Server(service: KeeperWire.service) } catch { die("cannot serve \(KeeperWire.service): \(error)") }
     signal(SIGPIPE, SIG_IGN)
     let keeper = JailKeeper(server: server, display: display, runtimeDir: runtime, binDir: binDir,
-                            dbusDaemon: Spawn.resolveExecutable("dbus-daemon"), log: { emit(1, $0) })
+                            log: { emit(1, $0) })
     keeper.jaildSocket = socket
     // The bundles follow [apps] (P18.6): the same appgen anchor runs at login.
     if access(binDir + "/abyss-appgen", X_OK) == 0, let home = getenv("HOME") {

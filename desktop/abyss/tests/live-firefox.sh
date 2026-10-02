@@ -31,7 +31,7 @@ for d in /usr/local/share/applications /usr/share/applications; do
 done
 [ -n "$entry" ] && command -v firefox >/dev/null 2>&1 \
   || { echo "SKIP: no Firefox here (the FreeBSD guest has firefox-esr)"; exit 0; }
-for c in dbus-daemon gdbus; do command -v $c >/dev/null || { echo "FAIL: $c not installed"; exit 1; }; done
+for c in gdbus; do command -v $c >/dev/null || { echo "FAIL: $c not installed"; exit 1; }; done
 
 portal="$root/.build/debug/abyss-portal"
 bridge="$root/.build/debug/abyss-dbus"
@@ -46,7 +46,7 @@ work=$(mktemp -d /tmp/abyss-ff.XXXXXX)
 rundir=$(mktemp -d /tmp/abyss-ffr.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
-  for p in ${vp_pid:-} ${ff_pid:-} ${bridge_pid:-} ${portal_pid:-} ${ut_pid:-} ${bus_pid:-}; do
+  for p in ${vp_pid:-} ${ff_pid:-} ${bridge_pid:-} ${portal_pid:-} ${ut_pid:-} ${abyss_bridge_pid:-}; do
     kill "$p" 2>/dev/null || true
   done
   pkill -f "$work/profile" 2>/dev/null || true   # Firefox's content processes
@@ -82,24 +82,9 @@ cc -I"$work" "$root/abyss/tests/vpointer.c" "$work/vpointer-proto.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$work/vpointer" || fail "no vpointer"
 
 # ------------------------------------------------------------ the bus
-# Nothing activatable (live-gtk.sh): a desktop's own xdg-desktop-portal must not
-# answer in our place.
-cat > "$work/bus.conf" <<'EOF'
-<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:tmpdir=/tmp</listen>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-EOF
-busaddr=$(dbus-daemon --config-file="$work/bus.conf" --fork --print-address=1 --print-pid=3 3>"$work/buspid")
-bus_pid=$(cat "$work/buspid")
-export DBUS_SESSION_BUS_ADDRESS="$busaddr"
+# ADE's own D-Bus bridge (BACKLOG D.1): nothing on it is started by name, so a
+# desktop's own xdg-desktop-portal cannot answer in our place.
+abyss_bridge_start "$work" || exit 1
 
 # ------------------------------------------------------------ the compositor
 # The picker's place is seeded, so the click on a file is a fact (live-gtk.sh).
@@ -123,7 +108,7 @@ export WAYLAND_DISPLAY="$wd"
 portal_pid=$!
 i=0; while [ $i -lt 50 ] && [ ! -S "$rundir/portal.sock" ]; do sleep 0.1; i=$((i + 1)); done
 [ -S "$rundir/portal.sock" ] || fail "abyss-portal never bound its socket"
-"$bridge" > "$work/bridge.out" 2>"$work/bridge.err" &
+env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$bridge" > "$work/bridge.out" 2>"$work/bridge.err" &
 bridge_pid=$!
 i=0; while [ $i -lt 60 ] && ! grep -q '^ready' "$work/bridge.out" 2>/dev/null; do sleep 0.1; i=$((i + 1)); done
 grep -q '^ready' "$work/bridge.out" || fail "abyss-dbus never came up"

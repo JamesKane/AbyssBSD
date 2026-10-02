@@ -684,8 +684,8 @@ abyss_desktop_start()
 		chmod 700 "$rundir"
 		# **HOME and PATH too, because `su -m` keeps rc's**: HOME `/` left
 		# fontconfig and Mesa nowhere for their caches, as on the live medium,
-		# and rc's PATH has no /usr/local/bin, so the session found no
-		# dbus-daemon and started no bus.
+		# and rc's PATH has no /usr/local/bin, which programs the session
+		# starts expect.
 		home=$(getent passwd "$abyss_desktop_user" | cut -d: -f6)
 		set -- su -m "$abyss_desktop_user" -c \
 			"HOME=$home PATH=$PATH:/usr/local/sbin:/usr/local/bin \

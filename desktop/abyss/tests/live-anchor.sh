@@ -189,12 +189,12 @@ kill -0 "$anchor_pid" 2>/dev/null \
   && { echo "FAIL: anchor ignored quit"; cat "$rundir/session.log"; exit 1; }
 anchor_pid=""
 
-# The session's own bus goes with it. `dbus-daemon` is the one child that would
-# happily outlive its parent, and a supervisor that leaks one per run is worse
-# than one that starts none — the leak is invisible until something runs out.
-pgrep -f "address=unix:path=$rundir/bus" >/dev/null 2>&1 \
-  && { echo "FAIL: the session's dbus-daemon outlived the session"
-       pgrep -af "address=unix:path=$rundir/bus"; exit 1; }
+# The session's D-Bus bridge (BACKLOG D.1) goes with it: a supervisor that
+# leaks one per run is worse than one that starts none — the leak is invisible
+# until something runs out.
+pgrep -f "endpoint --listen $rundir/bus" >/dev/null 2>&1 \
+  && { echo "FAIL: the session's D-Bus bridge outlived the session"
+       pgrep -af "endpoint --listen $rundir/bus"; exit 1; }
 echo "ok: quit took the services down with the shell (no stray bus)"
 
 echo "all green (the Swift supervisor runs the session)."

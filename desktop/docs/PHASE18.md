@@ -125,8 +125,9 @@ jailed caller is known by the bus it is on, with no pid-to-jid lookup.
 *(2026-10-02: that bus is a `dbus-daemon` per jail, which repeats Phase 8's
 mistake. The design stands, a socket per jail with the portal on it, but the
 socket should be the Swift bridge itself, not a bus with the bridge as a client
-(PRODUCT §5.6, BACKLOG D.1). `live-jail-files.sh` uses `dbus-monitor`, which
-needs a bus; it changes with D.1.)*
+(PRODUCT §5.6, BACKLOG D.1). **Done with D.1:** each jail's bus is an
+`abyss-dbus --endpoint`, its portal on a services socket outside the jail,
+and `live-jail-files.sh` asks from inside with a GLib caller.)*
 `live-jail-files.sh`'s five claims pass in the guest, with gdbus and dbus-monitor
 running inside the jail. Seven faults were injected, and each failed the test.
 P18.5 starts the bus and its bridge for each jail (HANDOFF §2.122).

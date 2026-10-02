@@ -7,8 +7,12 @@
 //
 // The session, in the order it has to start:
 //
-//   bus       dbus-daemon on a socket WE name, so the address is knowable
-//             before it exists and survives a restart of the daemon
+//   bus       ADE's D-Bus bridge (`abyss-dbus --endpoint`, BACKLOG D.1):
+//             applications at the socket DBUS_SESSION_BUS_ADDRESS names, ADE's
+//             services on a private one beside it. A bridge, never a bus —
+//             no application reaches another through it (PRODUCT §5.6). Its
+//             sockets are ones WE name, so the address is knowable before it
+//             exists and survives a restart
 //   portal    abyss-portal (P7.1) — our own portal, for our own apps
 //   bridge    abyss-dbus (P8.2) — the same portal, for everyone else's
 //   desktop   the wallpaper and its icons
@@ -92,15 +96,20 @@ public struct SessionPlan: Equatable, Sendable {
 
 /// Where this session's own bus listens.
 ///
-/// **We name it; we do not ask what it chose.** `dbus-daemon` will happily pick
-/// an address and print it, and every example does it that way — but an address
-/// that is only knowable after the daemon starts is one that *changes when the
-/// daemon restarts*, stranding `DBUS_SESSION_BUS_ADDRESS` in the environment of
-/// every child that already has it. Pinning the socket into the session's own
-/// runtime directory, beside `anchor.sock` and `portal.sock`, makes the address
-/// a property of the session rather than of the process.
+/// **We name it; we do not ask what it chose.** An address that is only
+/// knowable after the bridge starts would *change when it restarts*, stranding
+/// `DBUS_SESSION_BUS_ADDRESS` in the environment of every child that already
+/// has it. Pinning the socket into the session's own runtime directory, beside
+/// `anchor.sock` and `portal.sock`, makes the address a property of the
+/// session rather than of the process.
 public func sessionBusAddress(runtimeDir: String) -> String {
     "unix:path=" + runtimeDir + "/bus"
+}
+
+/// Where ADE's own services meet the bridge (BACKLOG D.1): private, in the
+/// session's 0700 runtime directory. Only they may own names applications call.
+public func bridgeServicesAddress(runtimeDir: String) -> String {
+    "unix:path=" + runtimeDir + "/dbus-services"
 }
 
 /// The socket path inside a `unix:path=…` address, or nil if it is some other
@@ -123,12 +132,6 @@ public func unixSocketPath(ofBusAddress address: String) -> String? {
 ///   - shellBinary: the AquaDemo-shaped binary the three shell components run.
 ///   - serviceDirectory: where `abyss-portal` and `abyss-dbus` live (normally
 ///     beside `anchor` itself).
-///   - dbusDaemon: an absolute path to `dbus-daemon`, or nil if there is none on
-///     this machine — in which case the bus and the bridge are dropped **with a
-///     note**, because a desktop that boots without them still works for our own
-///     apps and must not fail to start over somebody else's file chooser.
-///   - dbusConfig: the `dbus-daemon` config to use — `--session` by default, or
-///     a path when a test needs a bus with no activatable services.
 ///   - runtimeDir: the session's `ABYSS_RUNTIME_DIR`; every socket lands here.
 ///   - display: `WAYLAND_DISPLAY` for the components, if known.
 ///   - compositorSocket: the compositor's own socket, when its path is knowable
@@ -145,8 +148,6 @@ public func unixSocketPath(ofBusAddress address: String) -> String? {
 ///     `desktop`, `menubar`, `dock`).
 public func defaultSession(shellBinary: String,
                            serviceDirectory: String,
-                           dbusDaemon: String?,
-                           dbusConfig: String? = nil,
                            runtimeDir: String,
                            display: String?,
                            compositorSocket: String? = nil,
@@ -169,31 +170,16 @@ public func defaultSession(shellBinary: String,
     let portalSocket = runtimeDir + "/portal.sock"
 
     // ------------------------------------------------------------------ bus
+    // ADE's D-Bus bridge (BACKLOG D.1): ours, so always there — a foreign
+    // application's file chooser and menus never depend on somebody else's
+    // daemon being installed.
+    let servicesSocket = runtimeDir + "/dbus-services"
     if !without.contains("bus") {
-        if let dbusDaemon {
-            let address = sessionBusAddress(runtimeDir: runtimeDir)
-            busAddress = address
-            // `--nofork` because a supervisor's child must be the process it
-            // supervises: let dbus-daemon daemonise and the pollable descriptor
-            // we are holding belongs to a parent that has already exited, so the
-            // session would report the bus as dead a millisecond after starting
-            // it and restart it for ever.
-            //
-            // `--print-address=1` earns its place even though we chose the
-            // address: it goes to anchor's log, so "which bus is this session
-            // on" is answerable from the log alone, and a mismatch with what we
-            // asked for would be visible rather than mysterious.
-            let argv = [dbusDaemon,
-                        dbusConfig.map { "--config-file=" + $0 } ?? "--session",
-                        "--address=" + address,
-                        "--print-address=1",
-                        "--nofork"]
-            components.append(ComponentSpec(name: "bus", argv: argv, env: shared))
-        } else {
-            notes.append("no dbus-daemon on $PATH — this session has no bus, so a"
-                         + " foreign (GTK) app gets no file chooser from us."
-                         + " Our own apps are unaffected.")
-        }
+        busAddress = sessionBusAddress(runtimeDir: runtimeDir)
+        components.append(ComponentSpec(name: "bus",
+                                        argv: [serviceDirectory + "/abyss-dbus", "--endpoint",
+                                               "--listen", busSocket, "--services", servicesSocket],
+                                        env: shared))
     }
 
     // --------------------------------------------------------------- portal
@@ -210,34 +196,31 @@ public func defaultSession(shellBinary: String,
     // "the bridge is up" is made to mean "a foreign app asking for a file will
     // get one", rather than "a process called abyss-dbus exists".
     if !without.contains("bridge") {
-        if let address = busAddress {
-            var needs = [busSocket]
+        if busAddress != nil {
+            var needs = [servicesSocket]
             if !without.contains("portal") { needs.append(portalSocket) }
             var env = shared
-            env["DBUS_SESSION_BUS_ADDRESS"] = address
+            env["DBUS_SESSION_BUS_ADDRESS"] = bridgeServicesAddress(runtimeDir: runtimeDir)
             components.append(ComponentSpec(name: "bridge",
                                             argv: [serviceDirectory + "/abyss-dbus"],
                                             env: env,
                                             requires: needs))
-        } else if without.contains("bus") {
-            notes.append("the bus was left out, so the D-Bus bridge is not"
-                         + " started either — there is nothing for it to own a"
-                         + " name on.")
+        } else {
+            notes.append("the bus was left out, so the D-Bus bridge's portal is not"
+                         + " started either — there is no endpoint for it to serve on.")
         }
-        // The remaining case — a bus was wanted and there is no dbus-daemon —
-        // is already explained by the note above; saying it twice helps nobody.
     }
 
     // ---------------------------------------------------------------- menus
     // GTK's menus, bridged into the bar (PHASE10 P10.6): `abyss-dbus --menus`,
     // its own process because the portal half blocks behind a file dialog. It
     // needs the bus; without one there is nothing to bridge.
-    if !without.contains("menus"), let address = busAddress {
+    if !without.contains("menus"), busAddress != nil {
         var env = shared
-        env["DBUS_SESSION_BUS_ADDRESS"] = address
+        env["DBUS_SESSION_BUS_ADDRESS"] = bridgeServicesAddress(runtimeDir: runtimeDir)
         components.append(ComponentSpec(name: "menus",
                                         argv: [serviceDirectory + "/abyss-dbus", "--menus"],
-                                        env: env, requires: [busSocket]))
+                                        env: env, requires: [servicesSocket]))
     }
 
     // ----------------------------------------------------------------- idle

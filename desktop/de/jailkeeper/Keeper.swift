@@ -9,9 +9,11 @@
 //      does everything in them;
 //   2. the first time, the jail's own Wayland socket, bound inside its runtime
 //      directory from outside and registered with the compositor as a
-//      security context (P18.3); its own bus, and an `abyss-dbus --jail` on it
-//      (P18.4). Both are this process's children by descriptor, so they die
-//      with it;
+//      security context (P18.3); its own D-Bus *bridge* (BACKLOG D.1, never a
+//      bus) listening inside the jail, with the jail's portal — an
+//      `abyss-dbus --jail` — on the bridge's services socket, which is outside
+//      the jail where nothing jailed can reach it (P18.4). Both are this
+//      process's children by descriptor, so they die with it;
 //   3. any argument that names one of the person's files is granted into the
 //      jail first and rewritten to where it is there — a document opened from
 //      the Finder opens, and saves, in place;
@@ -82,7 +84,6 @@ public final class JailKeeper {
     public var jaildSocket = JailWire.defaultSocket
     /// Where abyss-dbus is (this binary's directory).
     public var binDir: String
-    public var dbusDaemon: String?
     public private(set) var held: [String: Held] = [:]
     /// `abyss-appgen` and its arguments, run when `[apps]` changes (P18.6).
     public var appgen: [String]?
@@ -95,12 +96,11 @@ public final class JailKeeper {
     private let say: (String) -> Void
 
     public init(server: Current.Server, display: OpaquePointer?, runtimeDir: String, binDir: String,
-                dbusDaemon: String?, classes: [JailClass] = JailClass.shipped, log: @escaping (String) -> Void) {
+                classes: [JailClass] = JailClass.shipped, log: @escaping (String) -> Void) {
         self.server = server
         self.display = display
         self.runtimeDir = runtimeDir
         self.binDir = binDir
-        self.dbusDaemon = dbusDaemon
         self.classes = classes
         self.say = log
     }
@@ -120,18 +120,17 @@ public final class JailKeeper {
                 guard rc == 0 else { throw JailClient.Refused(description: "the compositor would not take \(opened.name)'s socket (\(-rc))") }
                 h.closeFD = closer
             }
-            // Its bus, and the portal on it.
-            if let dbus = dbusDaemon {
-                let dir = runtimeDir + "/jails/" + cls
-                _ = Spawn.run(["/bin/mkdir", "-p", dir])
-                let conf = dir + "/bus.conf"
-                try write(conf, Self.busConfig(listen: opened.runtime + "/bus"))
-                h.bus = try child([dbus, "--nofork", "--config-file=" + conf], log: dir + "/bus.log")
-                var i = 0
-                while access(opened.runtime + "/bus", F_OK) != 0 && i < 100 { usleep(20_000); i += 1 }
-                h.bridge = try child([binDir + "/abyss-dbus", "--bus", "unix:path=" + opened.runtime + "/bus",
-                                      "--jail", opened.name, "--jaild", jaildSocket], log: dir + "/bridge.log")
-            }
+            // Its D-Bus bridge (never a bus: §5.6), and the jail's portal on
+            // the bridge's services socket — outside the jail.
+            let dir = runtimeDir + "/jails/" + cls
+            _ = Spawn.run(["/bin/mkdir", "-p", dir])
+            let services = dir + "/dbus-services"
+            h.bus = try child([binDir + "/abyss-dbus", "--endpoint", "--listen", opened.runtime + "/bus",
+                               "--services", services], log: dir + "/endpoint.log")
+            var i = 0
+            while access(services, F_OK) != 0 && i < 100 { usleep(20_000); i += 1 }
+            h.bridge = try child([binDir + "/abyss-dbus", "--bus", "unix:path=" + services,
+                                  "--jail", opened.name, "--jaild", jaildSocket], log: dir + "/bridge.log")
         } catch {
             if h.closeFD >= 0 { close(h.closeFD) }
             for var c in [h.bus, h.bridge].compactMap({ $0 }) { _ = ap_child_signal(&c, SIGKILL); _ = ap_child_reap(&c, nil) }
@@ -141,26 +140,6 @@ public final class JailKeeper {
         held[cls] = h
         say("jails: \(opened.name) is jail \(opened.jid); its socket, bus and portal are up")
         return h
-    }
-
-    /// The jail bus's configuration: the jail's applications and its portal,
-    /// nobody else, listening inside the jail's runtime directory.
-    public static func busConfig(listen: String) -> String {
-        """
-        <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
-         "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-        <busconfig>
-          <type>session</type>
-          <listen>unix:path=\(listen)</listen>
-          <auth>EXTERNAL</auth>
-          <policy context="default">
-            <allow send_destination="*" eavesdrop="true"/>
-            <allow eavesdrop="true"/>
-            <allow own="*"/>
-          </policy>
-        </busconfig>
-
-        """
     }
 
     private func child(_ argv: [String], log: String) throws -> ap_child {

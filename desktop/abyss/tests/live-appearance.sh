@@ -15,7 +15,7 @@
 #      and each one's pixels change and come back
 #   3. the portal: abyss-dbus asks the palette again and emits SettingChanged,
 #      decoded by `gdbus monitor` — GLib, the D-Bus library a GTK application
-#      listens with — and ReadOne agrees (skipped without dbus-daemon/gdbus)
+#      listens with — and ReadOne agrees (skipped without gdbus)
 #   4. System Preferences' General pane drives all of it: a click on Trench, a
 #      scheme, a setting dragged and released, and Aqua again — each written to
 #      appearance.ini by the pane and followed by every process. (The window
@@ -41,7 +41,7 @@ work=$(mktemp -d /tmp/abyss-appearance.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
   for p in ${vp_pid:-} ${prefs_pid:-} ${app_pid:-} ${win_pid:-} ${shell_pids:-} ${mon_pid:-} ${bridge_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
-  [ -s "$work/buspid" ] && kill "$(cat "$work/buspid")" 2>/dev/null || true
+  [ -n "${abyss_bridge_pid:-}" ] && kill "$abyss_bridge_pid" 2>/dev/null || true
   [ -n "${KEEP:-}" ] && echo "kept $work" || rm -rf "$work"
 }
 trap cleanup EXIT INT TERM HUP
@@ -84,10 +84,11 @@ grep -q '^Theme: Aqua from ' "$work/ut.err" || fail "undertow did not start in A
 
 # The portal, on a bus of its own, and GLib listening to it.
 portal=0
-if command -v dbus-daemon >/dev/null 2>&1 && command -v gdbus >/dev/null 2>&1; then
+if command -v gdbus >/dev/null 2>&1; then
   portal=1
-  busaddr=$(dbus-daemon --session --fork --print-address=1 --print-pid=3 3>"$work/buspid")
-  env DBUS_SESSION_BUS_ADDRESS="$busaddr" "$root/.build/debug/abyss-dbus" \
+  abyss_bridge_start "$work" || exit 1
+  busaddr="$DBUS_SESSION_BUS_ADDRESS"
+  env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$root/.build/debug/abyss-dbus" \
       > "$work/bridge.out" 2> "$work/bridge.err" &
   bridge_pid=$!
   after "$work/bridge.out" '^ready' 0 "abyss-dbus never came up: $(cat "$work/bridge.err")"
@@ -96,7 +97,7 @@ if command -v dbus-daemon >/dev/null 2>&1 && command -v gdbus >/dev/null 2>&1; t
   mon_pid=$!
   sleep 0.5
 else
-  echo "note: no dbus-daemon or gdbus — section 3 (the portal) is skipped"
+  echo "note: no gdbus — section 3 (the portal) is skipped"
 fi
 ask() {  # ask KEY — org.freedesktop.appearance, as a toolkit reads it
   env DBUS_SESSION_BUS_ADDRESS="$busaddr" gdbus call --session --dest org.freedesktop.portal.Desktop \

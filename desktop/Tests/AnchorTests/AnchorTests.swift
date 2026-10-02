@@ -107,13 +107,11 @@ final class AnchorTests: XCTestCase {
     // MARK: - The default session (P8.4)
 
     /// Build the session a real `anchor` would, on a machine we are not on.
-    private func plan(dbusDaemon: String? = "/usr/bin/dbus-daemon",
-                      compositorSocket: String? = nil,
+    private func plan(compositorSocket: String? = nil,
                       mode: SessionMode = .desktop,
                       without: Set<String> = []) -> SessionPlan {
         defaultSession(shellBinary: "/opt/abyss/AquaDemo",
                        serviceDirectory: "/opt/abyss",
-                       dbusDaemon: dbusDaemon,
                        runtimeDir: "/run/abyss",
                        display: "abyss-0",
                        compositorSocket: compositorSocket,
@@ -160,7 +158,7 @@ final class AnchorTests: XCTestCase {
     /// restart budget.
     func testOnlyTheMenuBarIsPointedAtThePrivilegedSocket() {
         let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss",
-                               dbusDaemon: nil, runtimeDir: "/run/abyss", display: "abyss-0",
+                               runtimeDir: "/run/abyss", display: "abyss-0",
                                compositorSocket: "/run/x/abyss-0",
                                menubarDisplay: "abyss-0-bar", menubarSocket: "/run/x/abyss-0-bar")
         for c in p.components {
@@ -184,7 +182,7 @@ final class AnchorTests: XCTestCase {
     /// and it goes on the privileged socket, the only one offered the lock.
     func testTheLockScreenIsPlannedOnThePrivilegedDisplayAndNotStarted() {
         let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss",
-                               dbusDaemon: nil, runtimeDir: "/run/abyss", display: "abyss-0",
+                               runtimeDir: "/run/abyss", display: "abyss-0",
                                menubarDisplay: "abyss-0-bar")
         let lock = p.lockScreen
         XCTAssertEqual(lock?.argv, ["/opt/abyss/AquaDemo"])
@@ -238,7 +236,7 @@ final class AnchorTests: XCTestCase {
     /// in a desktop session only — and not a component, so never restarted.
     func testTheSetupAssistantIsPlannedOnlyUntilItIsDone() {
         func p(done: Bool, mode: SessionMode = .desktop, without: Set<String> = []) -> SessionPlan {
-            defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss", dbusDaemon: nil,
+            defaultSession(shellBinary: "/opt/abyss/AquaDemo", serviceDirectory: "/opt/abyss",
                            runtimeDir: "/run/abyss", display: "abyss-0", mode: mode, firstRunDone: done, without: without)
         }
         XCTAssertEqual(p(done: false).firstRun?.env["AQUA_SCENE"], "setupassistant")
@@ -267,44 +265,52 @@ final class AnchorTests: XCTestCase {
                        ["bus", "portal", "bridge", "menus", "idle", "jails", "desktop", "menubar", "dock"])
     }
 
-    /// The GTK menu bridge is `abyss-dbus --menus`, on the session's bus, and
-    /// waits for it — and there is none without a bus to bridge (P10.6).
-    func testTheMenuBridgeIsItsOwnProcessOnTheBus() {
+    /// The GTK menu bridge is `abyss-dbus --menus`, one of ADE's services on
+    /// the bridge's private socket, waiting for it — and there is none without
+    /// the bridge (P10.6, BACKLOG D.1).
+    func testTheMenuBridgeIsAServiceOnTheBridgesPrivateSocket() {
         let p = plan()
         let m = p.components.first { $0.name == "menus" }
         XCTAssertEqual(m?.argv, ["/opt/abyss/abyss-dbus", "--menus"])
-        XCTAssertEqual(m?.requires, ["/run/abyss/bus"])
-        XCTAssertEqual(m?.env["DBUS_SESSION_BUS_ADDRESS"], p.busAddress)
-        XCTAssertNil(plan(dbusDaemon: nil).components.first { $0.name == "menus" })
+        XCTAssertEqual(m?.requires, ["/run/abyss/dbus-services"])
+        XCTAssertEqual(m?.env["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/run/abyss/dbus-services")
+        XCTAssertNil(plan(without: ["bus"]).components.first { $0.name == "menus" })
     }
 
-    /// The bridge names both things it cannot work without, as socket paths —
-    /// the only fact about a dependency that can actually be checked.
-    func testTheBridgeWaitsForTheBusAndForThePortal() {
+    /// The portal half waits for both things it cannot work without, as socket
+    /// paths — the bridge's services socket, and abyss-portal.
+    func testThePortalServiceWaitsForTheBridgeAndForThePortal() {
         let bridge = plan().components.first { $0.name == "bridge" }
-        XCTAssertEqual(bridge?.requires, ["/run/abyss/bus", "/run/abyss/portal.sock"])
-        XCTAssertEqual(bridge?.env["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/run/abyss/bus")
+        XCTAssertEqual(bridge?.requires, ["/run/abyss/dbus-services", "/run/abyss/portal.sock"])
+        XCTAssertEqual(bridge?.env["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/run/abyss/dbus-services")
     }
 
     /// The address is ours, and it is inside the session's own runtime directory
     /// beside `anchor.sock` and `portal.sock`.
     ///
-    /// The alternative — let `dbus-daemon` choose and read what it printed — is
-    /// what every example does, and it gives an address that *changes when the
-    /// daemon restarts*, stranding the variable in every child that already has
-    /// it. Pinning is what makes the bus restartable at all.
+    /// The alternative — let the bridge choose and read what it printed — gives
+    /// an address that *changes when it restarts*, stranding the variable in
+    /// every child that already has it. Pinning is what makes it restartable.
     func testTheSessionNamesItsOwnBusRatherThanAskingWhatItChose() {
         let p = plan()
         XCTAssertEqual(p.busAddress, "unix:path=/run/abyss/bus")
         XCTAssertEqual(p.busAddress, sessionBusAddress(runtimeDir: "/run/abyss"))
         let bus = p.components.first { $0.name == "bus" }
-        XCTAssertEqual(bus?.argv.first, "/usr/bin/dbus-daemon")
-        XCTAssertTrue(bus?.argv.contains("--address=unix:path=/run/abyss/bus") == true)
-        // A supervisor's child must be the process it supervises: let it
-        // daemonise and the pollable descriptor belongs to a parent that has
-        // already exited, so the session restarts the bus for ever.
-        XCTAssertTrue(bus?.argv.contains("--nofork") == true)
-        XCTAssertTrue(bus?.argv.contains("--session") == true)
+        XCTAssertEqual(bus?.argv, ["/opt/abyss/abyss-dbus", "--endpoint", "--listen", "/run/abyss/bus",
+                                   "--services", "/run/abyss/dbus-services"])
+    }
+
+    /// **ADE's bridge, never `dbus-daemon`** (PRODUCT §5.6, BACKLOG D.1): the
+    /// bus component is ours and always there — no plan of any mode names
+    /// somebody else's daemon, and none says one is missing.
+    func testTheBusIsADEsBridgeAndNeverDbusDaemon() {
+        for mode in [SessionMode.desktop, .installer, .greeter] {
+            let p = plan(mode: mode)
+            let forbidden = "dbus-daemon"   // PRODUCT §5.6: never in a plan
+            for c in p.components { XCTAssertFalse(c.argv.joined(separator: " ").contains(forbidden), "\(mode) \(c.name)") }
+            XCTAssertFalse(p.notes.contains { $0.contains(forbidden) })
+        }
+        XCTAssertNotNil(plan().busAddress)
     }
 
     /// What applications inherit (P15.3): the bus, and — only while the bridge
@@ -314,37 +320,12 @@ final class AnchorTests: XCTestCase {
     func testApplicationsAreToldToUseThePortalOnlyWhenItIsThere() {
         XCTAssertEqual(plan().applicationEnvironment,
                        ["DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/abyss/bus", "GTK_USE_PORTAL": "1"])
-        XCTAssertEqual(plan(dbusDaemon: nil).applicationEnvironment, [:])
+        XCTAssertEqual(plan(without: ["bus"]).applicationEnvironment, [:])
     }
 
-    func testAConfigFileReplacesTheSystemSessionConfig() {
-        let p = defaultSession(shellBinary: "/opt/abyss/AquaDemo",
-                               serviceDirectory: "/opt/abyss",
-                               dbusDaemon: "/usr/bin/dbus-daemon",
-                               dbusConfig: "/tmp/quiet.conf",
-                               runtimeDir: "/run/abyss",
-                               display: nil)
-        let bus = p.components.first { $0.name == "bus" }
-        XCTAssertTrue(bus?.argv.contains("--config-file=/tmp/quiet.conf") == true)
-        XCTAssertFalse(bus?.argv.contains("--session") == true)
-    }
-
-    /// A box with no `dbus-daemon` still gets a desktop — our own apps never
-    /// needed a bus — but it must **say so**. A desktop that quietly has no file
-    /// chooser for foreign apps is the exact failure this phase exists to fix,
-    /// and a silent omission is indistinguishable from a working one until
-    /// somebody tries to open a file from GIMP.
-    func testWithNoDbusDaemonTheSessionStillBootsAndSaysWhatIsMissing() {
-        let p = plan(dbusDaemon: nil)
-        XCTAssertEqual(p.components.map(\.name), ["portal", "idle", "jails", "desktop", "menubar", "dock"])
-        XCTAssertNil(p.busAddress)
-        XCTAssertEqual(p.notes.count, 1)
-        XCTAssertTrue(p.notes[0].contains("dbus-daemon"), p.notes[0])
-    }
-
-    /// Dropping the bus drops the bridge with it, because a bridge with no bus
-    /// has nothing to own a name on — and that, too, is said out loud rather
-    /// than being a component that silently vanished from the list.
+    /// Dropping the bridge's endpoint drops its portal service with it — there
+    /// is nothing for it to serve on — and that is said out loud rather than
+    /// being a component that silently vanished from the list.
     func testDroppingTheBusDropsTheBridgeAndExplainsItself() {
         let p = plan(without: ["bus"])
         XCTAssertEqual(p.components.map(\.name), ["portal", "idle", "jails", "desktop", "menubar", "dock"])
@@ -352,12 +333,12 @@ final class AnchorTests: XCTestCase {
         XCTAssertTrue(p.notes[0].contains("bridge"), p.notes[0])
     }
 
-    /// Dropping the portal leaves the bridge with only the bus to wait for. It
-    /// is still started: a foreign app then gets an error instead of a picker,
-    /// which is a worse desktop but a truthful one.
-    func testDroppingThePortalLeavesTheBridgeWaitingOnlyForTheBus() {
+    /// Dropping the portal leaves the portal service with only the bridge to
+    /// wait for. It is still started: a foreign app then gets an error instead
+    /// of a picker, which is a worse desktop but a truthful one.
+    func testDroppingThePortalLeavesThePortalServiceWaitingOnlyForTheBridge() {
         let bridge = plan(without: ["portal"]).components.first { $0.name == "bridge" }
-        XCTAssertEqual(bridge?.requires, ["/run/abyss/bus"])
+        XCTAssertEqual(bridge?.requires, ["/run/abyss/dbus-services"])
     }
 
     /// The shell waits for the compositor instead of racing it.
@@ -405,8 +386,8 @@ final class AnchorTests: XCTestCase {
 
     func testTheBusAddressCanBeTurnedBackIntoASocketPath() {
         XCTAssertEqual(unixSocketPath(ofBusAddress: "unix:path=/run/abyss/bus"), "/run/abyss/bus")
-        // dbus-daemon prints the address with its guid appended; the path stops
-        // at the comma.
+        // An address may carry a guid after a comma (the specification's
+        // form); the path stops there.
         XCTAssertEqual(unixSocketPath(ofBusAddress: "unix:path=/run/abyss/bus,guid=abc"),
                        "/run/abyss/bus")
         // An abstract socket has no filesystem path, and pretending otherwise

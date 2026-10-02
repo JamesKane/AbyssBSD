@@ -31,7 +31,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for t in dbus-daemon firefox zenity galculator perl wayland-scanner; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
+for t in firefox zenity galculator perl wayland-scanner; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
 for b in abyss-jaild abyss-jail abyss-portal abyss-dbus abyss-appgen undertow abyssgrab AquaDemo; do [ -x .build/debug/$b ] || swift build; done
 D=.build/debug
 W=1024; H=768

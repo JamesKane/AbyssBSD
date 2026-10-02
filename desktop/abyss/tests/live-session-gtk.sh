@@ -16,10 +16,10 @@
 # What it proves, in order:
 #
 #   1. One command brings up **six components**, and `abyssctl` says so.
-#   2. The session named its own bus — the address is inside the session's own
-#      runtime directory, next to `anchor.sock` and `portal.sock`, rather than
-#      whatever `dbus-daemon` felt like choosing. That is what makes it survive a
-#      restart of the daemon and knowable before the daemon exists.
+#   2. The session named its own bus address — ADE's D-Bus bridge (BACKLOG
+#      D.1), inside the session's own runtime directory next to `anchor.sock`
+#      and `portal.sock`. That is what makes it survive a restart of the
+#      bridge and knowable before the bridge exists.
 #   3. **A child of anchor inherited that address and used it.** `abyss-dbus`
 #      owns `org.freedesktop.portal.Desktop` on the session's bus — which it
 #      could only do by reading the variable anchor exported. This is the
@@ -27,9 +27,8 @@
 #   4. A stock GTK 3 application, given only that address, gets the Finder and a
 #      file it never named — the P8.3 claim, now on a session nobody assembled
 #      by hand.
-#   5. `abyssctl quit` takes the whole thing down: no stray `dbus-daemon`, no
-#      stale sockets. A session supervisor that leaks a bus per run is worse
-#      than none.
+#   5. `abyssctl quit` takes the whole thing down: no stray bridge, no stale
+#      sockets — and at no point was there a `dbus-daemon` (PRODUCT §5.6).
 #
 # Usage: abyss/tests/live-session-gtk.sh
 set -eu
@@ -47,7 +46,6 @@ bridge="$root/.build/debug/abyss-dbus"
 [ -x "$anchor" ] && [ -x "$ctl" ] && [ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$bridge" ] \
   || swift build
 
-command -v dbus-daemon >/dev/null || { echo "FAIL: dbus-daemon not installed"; exit 1; }
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }
 
 W=900
@@ -211,12 +209,8 @@ case "$owner" in
 esac
 
 # ------------------------------------------------------------- 4. a real app
-# An independent decoder watching the same bus (HANDOFF §2.40 — a real monitor,
-# because the Response is addressed to its caller and match rules cannot see it).
-if command -v dbus-monitor >/dev/null; then
-  DBUS_SESSION_BUS_ADDRESS="$bus" dbus-monitor --session > "$work/monitor" 2>&1 &
-  mon_pid=$!
-fi
+# The independent decoder is GLib, in the app: the Response is addressed to it,
+# and ADE's bridge has no monitor for anyone else to watch through.
 
 export WAYLAND_DISPLAY="$sock"
 fifo="$work/vp.fifo"
@@ -281,13 +275,6 @@ grep -q "$chosen" "$work/app.err" \
   && { echo "FAIL: the app named the file itself somewhere"; cat "$work/app.err"; exit 1; }
 echo "ok: it was handed, and read, a file it never named (it named a directory)"
 
-if [ -n "${mon_pid:-}" ]; then
-  grep -E 'destination=:[0-9.]+.*member=Response' "$work/monitor" >/dev/null \
-    || { echo "FAIL: no addressed Response on the session bus"
-         grep Response "$work/monitor"; exit 1; }
-  echo "ok: libdbus saw the Response go past, addressed to the app"
-  kill "$mon_pid" 2>/dev/null || true; mon_pid=""
-fi
 
 # ------------------------------------------------------- 5. and it goes away
 exec 3>&-; fd3open=""
@@ -301,14 +288,16 @@ kill -0 "$anchor_pid" 2>/dev/null \
   && { echo "FAIL: anchor ignored quit"; cat "$work/session.log"; exit 1; }
 anchor_pid=""
 
-# **Processes, first.** A supervisor that leaks a bus per session is worse than
-# one that starts none, because the leak is invisible until the machine runs out
-# of sockets — and `dbus-daemon` is the one child here that would happily outlive
-# its parent.
+# **Processes, first.** A supervisor that leaks a bridge per session is worse
+# than one that starts none: the leak is invisible until the machine runs out of
+# sockets.
 sleep 0.5
-pgrep -f "address=unix:path=$rundir/bus" >/dev/null 2>&1 \
-  && { echo "FAIL: the session's dbus-daemon outlived the session"
-       pgrep -af "address=unix:path=$rundir/bus"; exit 1; }
+pgrep -f "endpoint --listen $rundir/bus" >/dev/null 2>&1 \
+  && { echo "FAIL: the session's D-Bus bridge outlived the session"
+       pgrep -af "endpoint --listen $rundir/bus"; exit 1; }
+forbidden=dbus-daemon   # PRODUCT §5.6: there must never have been one
+pgrep -x "$forbidden" >/dev/null 2>&1 && pgrep -af "$forbidden" | grep -q "$rundir" \
+  && { echo "FAIL: a dbus-daemon belonged to this session (PRODUCT §5.6)"; exit 1; }
 pgrep -f "ABYSS_RUNTIME_DIR=$rundir" >/dev/null 2>&1 \
   && { echo "FAIL: a supervised child outlived the session"
        pgrep -af "$rundir"; exit 1; }

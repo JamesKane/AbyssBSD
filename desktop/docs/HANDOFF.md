@@ -730,6 +730,45 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.126 The bridge: what GLib needed, and a test that enshrined the gap
+(2026-10-02, BACKLOG D.1.)
+
+**The shape.** `abyss-dbus --endpoint` listens twice: applications at the
+address `DBUS_SESSION_BUS_ADDRESS` names, and ADE's services on a private
+socket in the session's 0700 runtime directory. `BridgeRouter` (pure, 17
+tests) carries messages between the two kinds only. An application's call to
+another application is `AccessDenied`. Its broadcast reaches services alone.
+A name it asks for is granted as far as it can tell, and only services can
+call it. `BecomeMonitor` and `StartServiceByName` are refused, and an
+eavesdrop rule is accepted and grants nothing. The services stay separate
+processes, so a hung file dialog never stalls menus.
+
+**What GLib needed that a first cut lacked.** A match rule may name its
+sender by its **well-known** name (`sender='org.freedesktop.portal.Desktop'`,
+as `gdbus monitor --dest` and every portal client subscribe), and a bus
+resolves that to the owner. The router compared unique names only, so
+`SettingChanged` reached nobody. GLib 2.88 also drops signals whose sender
+is not the current owner of the name it subscribed to (its signal-spoofing
+fix), so `GetNameOwner` must answer an application about ADE's names. It
+does. A real GTK application, its global menus, Firefox and the jailed GLib
+caller all work through the bridge.
+
+**The witness changed, by design.** `dbus-monitor` was the tests' independent
+decoder. A bridge that lets nobody watch makes that impossible, so the
+witness is now a GLib *caller* (`abyss/tests/portalcall.c`, GDBus) that hears
+its own addressed `Response`. In a jail it runs from the jail's private home.
+
+**A test enshrined the gap.** `live-medium.sh` asserted "no session bus on
+the medium, and it said so", calling it P8.4's design. A missing file chooser
+for every foreign app was checked as correct. It now asserts that the
+medium's session starts ADE's bridge and names no other bus.
+
+**Two shell traps.** In POSIX `sh`, a prefix assignment before a *function*
+call (`VAR=x f`) can outlive the call, so a helper that ran one command on
+the services socket left the whole script there. Use `env VAR=x cmd`. And
+`gdbus call` writes a variant argument as `"<'text'>"`; `dbus-send` used to
+wrap it for us.
+
 ### 2.125 How a bus got in: a principle that lived only in a plan's goal
 (2026-10-02.)
 

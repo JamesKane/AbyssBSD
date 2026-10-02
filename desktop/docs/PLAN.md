@@ -549,8 +549,8 @@ and two risks spiked on both platforms before the plan was written.
   *is* the bus, brokerless, with a **jailed D-Bus bridge** for foreign apps. A
   bridge is not a bus: ADE answers foreign applications itself, in Swift, and no
   client reaches another through it. The medium never carried `dbus-daemon`, so
-  on metal foreign apps had no file chooser at all. Its replacement is BACKLOG
-  D.1.
+  on metal foreign apps had no file chooser at all. BACKLOG D.1 replaced it
+  the same day: `abyss-dbus --endpoint`.
 
 ---
 

@@ -108,7 +108,7 @@ ship Jaguar as the product**, and a second theme only as proof the format is one
 | Toolkit | `Aqua` over `AquaDraw`: the 10.2 widget set, drawn from **theme data** (tokens, draw lists, chrome, fonts, icons, cursors — Phase 11), FreeType/HarfBuzz text, focus traversal, sheets, menus, undo |
 | Control plane | `CurrentIPC`, `PoolConfig`, `Anchor` (supervisor, session plan), `Vents` (sysctl, sound, battery, devd, network), `Spawn` (the one async-signal-safe way to start a process) |
 | Menus | the menu protocol: an application publishes its **vocabulary**, the bar is its first consumer; GTK (`org.gtk.Menus`) applications appear in the same bar through `abyss-dbus` (Phase 10). **One foreign toolkit, GTK** — Qt's `dbusmenu` path was removed 2026-09-30 (PLAN: one toolkit) |
-| Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus`, the **D-Bus bridge for foreign applications** (`org.freedesktop.portal.*`, including the theme's palette). **A bridge, not a bus** (§5.6); today it still sits on a `dbus-daemon`, which is BACKLOG D.1 |
+| Portals | `abyss-portal` (file chooser returning a *descriptor*, screenshot, notify) + `abyss-dbus`, the **D-Bus bridge for foreign applications** (`org.freedesktop.portal.*`, including the theme's palette). **A bridge, not a bus** (§5.6): `abyss-dbus --endpoint`, since BACKLOG D.1 |
 | Privileged helpers | `abyss-install` and `abyss-settings`: an unprivileged GUI sends a typed plan, a root service checks who is asking and does the writing |
 | Delivery | a live medium that boots, runs `Fathom`, and installs onto an empty disk |
 
@@ -551,7 +551,9 @@ decision (§5.2's "we took a broker we did not like"). It was a mistake, not a
 decision: it contradicted goal 3, and nobody re-read goal 3. On the 12700KF the
 medium carried no `dbus-daemon` at all, so foreign applications had neither a
 file chooser nor global menus, and P18.4–P18.5 had built per-jail buses on the
-same daemon. Replacing it is BACKLOG D.1.
+same daemon. Replacing it is BACKLOG D.1, **done the same day**: `abyss-dbus
+--endpoint` is the bridge, and no `dbus-daemon` remains in the code, the tests
+or the image.
 
 ## 6. Four proposals
 

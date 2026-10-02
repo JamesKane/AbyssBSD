@@ -145,13 +145,6 @@ final class JailDTests: XCTestCase {
         XCTAssertEqual(got.map(\.1), ["/home/a/doc.txt", "/home/a/real.txt", "/home/a/doc.txt"], "resolved")
     }
 
-    func testTheJailsBusListensInsideTheJailAndNowhereElse() {
-        let c = JailKeeper.busConfig(listen: "/r/run/user/bus")
-        XCTAssertTrue(c.contains("<listen>unix:path=/r/run/user/bus</listen>"))
-        XCTAssertEqual(c.components(separatedBy: "<listen>").count, 2, "one listen")
-        XCTAssertTrue(c.contains("<auth>EXTERNAL</auth>"))
-    }
-
     // MARK: - the mount table
 
     func testMountTableParsesFstabLinesAndFindsLeftRoots() {

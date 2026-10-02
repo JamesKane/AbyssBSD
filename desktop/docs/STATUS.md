@@ -10,7 +10,7 @@ where an unmodified GTK 3 application opens a file through the Finder**;
 applications publish their menus to our bar (Phase 10); and **the look is data**
 — Jaguar re-expressed pixel for pixel, and a second theme, Trench, from the same
 interpreter (Phase 11).
-**838 unit tests, 33 live modes and 99 live scripts, green on Linux *and*
+**853 unit tests, 33 live modes and 99 live scripts, green on Linux *and*
 FreeBSD**, and a golden gate of 79 scenes on each. (Different denominators — see
 [HANDOFF §3](HANDOFF.md).)
 **Phase 14 — preferences that write — is COMPLETE** ([PHASE14.md](PHASE14.md)):
@@ -775,11 +775,10 @@ the desktop's `-1` zone paints underneath it, and the Dock overlaps without
 reserving. That usable rectangle is the same §2.26 check `live-session.sh` has
 made against sway since Phase 2 — now made against us.
 
-> **Correction (2026-10-02):** everything below runs the bridge on a
-> `dbus-daemon`, which is a mistake: ADE supplies a *bridge* for foreign
-> applications, never a bus ([PRODUCT §5.6](PRODUCT.md)). The medium never
-> carried one, so on metal foreign apps had no file chooser. BACKLOG D.1
-> replaces it.
+> **Correction (2026-10-02):** everything below ran the bridge on a
+> `dbus-daemon`, which was a mistake: ADE supplies a *bridge* for foreign
+> applications, never a bus ([PRODUCT §5.6](PRODUCT.md)). BACKLOG D.1 replaced
+> it the same day with `abyss-dbus --endpoint`; what follows is history.
 
 **Phase 8 — the D-Bus bridge — is now scoped and half built**
 ([PHASE8.md](PHASE8.md), passes P8.1–P8.4). It deletes PHASE7 §6.7's caveat: a

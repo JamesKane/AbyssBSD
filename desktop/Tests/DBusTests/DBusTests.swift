@@ -1,8 +1,8 @@
 // DBus tests — the wire format's rules, without a bus (PHASE8.md P8.1).
 //
-// What is NOT here: "does a real bus accept this". That is
+// What is NOT here: "does somebody else's D-Bus accept this". That is
 // `abyss/tests/live-dbus.sh`, and it matters that the client on the other end is
-// `dbus-send`/`gdbus` rather than our own encoder — a marshaller tested against
+// GLib's `gdbus` rather than our own encoder — a marshaller tested against
 // its own parser round-trips beautifully and is still wrong (HANDOFF §2.37).
 // These tests pin the rules that make the bytes right in the first place.
 
@@ -230,7 +230,7 @@ final class DBusTests: XCTestCase {
     /// is delivered by the bus only to clients that added a match rule for it,
     /// and GTK's portal client adds *none*: it expects the portal to address the
     /// `Response` to it, the way `xdg-desktop-portal` does. So a correct-looking
-    /// broadcast reaches `dbus-monitor`, reaches any test client that
+    /// broadcast reaches any test client that
     /// subscribed, and never reaches the one caller it was for — which looks
     /// exactly like a portal that never answered (HANDOFF §2.40).
     ///
