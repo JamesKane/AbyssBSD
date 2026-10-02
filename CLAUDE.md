@@ -11,6 +11,7 @@ desktop written in Swift 6 on Wayland. See [README.md](README.md).
 | Build anything on Linux | [docs/BUILDING.md](docs/BUILDING.md) |
 | What's still missing after leaving the Mac | [docs/MIGRATION.md](docs/MIGRATION.md) |
 | Q8B hardware facts, status, hazards | [docs/boards/radxa-dragon-q8b/](docs/boards/radxa-dragon-q8b/README.md), **[lessons.md](docs/boards/radxa-dragon-q8b/lessons.md) first** |
+| Orange Pi 6 Plus (CIX Sky1) survey and bring-up strategy | [docs/boards/orangepi-6-plus/](docs/boards/orangepi-6-plus/README.md) |
 | What goes upstream, and the rules for sending it | [docs/UPSTREAMING.md](docs/UPSTREAMING.md) |
 | Desktop design, roadmap, status, traps | `desktop/docs/`: PRODUCT, PLAN, STATUS, HANDOFF |
 | The GPU driver's glue | `kmod/drm-msm/README.md` |
