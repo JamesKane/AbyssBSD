@@ -1265,6 +1265,101 @@ list dock.icon.agent
   fill #6b4a0c
 end
 
+list dock.icon.textedit
+  # TextEdit: a sheet of lined paper, and a pencil across it.
+  rect w*0.2 w*0.08 w*0.6 w*0.84 w*0.04
+  fill vertical stops 0 #ffffff 1 #e9edf2
+  rect w*0.2 w*0.08 w*0.6 w*0.84 w*0.04
+  stroke #9aa3ad w*0.02
+  path w*0.3 w*0.28 w*0.7 w*0.28
+  and path w*0.3 w*0.4 w*0.7 w*0.4
+  and path w*0.3 w*0.52 w*0.7 w*0.52
+  and path w*0.3 w*0.64 w*0.56 w*0.64
+  stroke #a9c3e6 w*0.025
+  path w*0.5 w*0.86 w*0.84 w*0.52 w*0.92 w*0.6 w*0.58 w*0.94 close
+  fill vertical stops 0 #ffd24a 1 #e0a21a
+  path w*0.5 w*0.86 w*0.58 w*0.94 w*0.46 w*0.98 close
+  fill #3a3a3a
+end
+
+list dock.icon.grab
+  # Grab: a camera, a crosshair in its lens.
+  rect w*0.1 w*0.3 w*0.8 w*0.54 w*0.1
+  fill vertical stops 0 #9aa3ae 1 #4d5560
+  rect w*0.32 w*0.2 w*0.24 w*0.14 w*0.04
+  fill #4d5560
+  circle w*0.5 w*0.57 w*0.2
+  fill vertical stops 0 #26303c 1 #0c1118
+  circle w*0.5 w*0.57 w*0.2
+  stroke #d7dde4 w*0.035
+  path w*0.5 w*0.43 w*0.5 w*0.71
+  and path w*0.36 w*0.57 w*0.64 w*0.57
+  stroke #7fd0ff w*0.025
+end
+
+list dock.icon.activity
+  # Activity Monitor: a dark screen with a green line graph.
+  rect 0 0 w h w*0.22
+  fill vertical stops 0 #3b4048 1 #15181d
+  rect w*0.12 w*0.16 w*0.76 w*0.62 w*0.05
+  fill vertical stops 0 #0b1a12 1 #050c08
+  path w*0.16 w*0.62 w*0.3 w*0.5 w*0.42 w*0.58 w*0.56 w*0.3 w*0.68 w*0.44 w*0.84 w*0.26
+  stroke #57e389 w*0.045 round
+  path w*0.16 w*0.7 w*0.84 w*0.7
+  stroke #57e389/0.35 w*0.015
+  rect 2 2 w-4 h*0.42 w*0.22*0.7
+  fill #ffffff/0.14
+  rect w*0.36 w*0.84 w*0.28 w*0.05 w*0.02
+  fill #ffffff/0.45
+end
+
+list dock.icon.diskutility
+  # Disk Utility: a drive, and a magnifier over it.
+  rect w*0.1 w*0.36 w*0.72 w*0.36 w*0.08
+  fill vertical stops 0 #e6e9ee 1 #9da5b0
+  rect w*0.1 w*0.36 w*0.72 w*0.36 w*0.08
+  stroke #6c7480 w*0.02
+  circle w*0.7 w*0.62 w*0.03
+  fill #3fb24d
+  path w*0.2 w*0.62 w*0.5 w*0.62
+  stroke #6c7480 w*0.025
+  path w*0.66 w*0.42 w*0.86 w*0.2
+  stroke #6b4a2a w*0.07 round
+  circle w*0.56 w*0.52 w*0.17
+  fill #bfe3ff/0.55
+  circle w*0.56 w*0.52 w*0.17
+  stroke #3d4550 w*0.045
+end
+
+list dock.icon.systemprofiler
+  # System Profiler: a chip, and the "i" of information on it.
+  rect w*0.2 w*0.2 w*0.6 w*0.6 w*0.06
+  fill vertical stops 0 #4a5260 1 #20252d
+  path w*0.32 w*0.12 w*0.32 w*0.2
+  and path w*0.44 w*0.12 w*0.44 w*0.2
+  and path w*0.56 w*0.12 w*0.56 w*0.2
+  and path w*0.68 w*0.12 w*0.68 w*0.2
+  and path w*0.32 w*0.8 w*0.32 w*0.88
+  and path w*0.44 w*0.8 w*0.44 w*0.88
+  and path w*0.56 w*0.8 w*0.56 w*0.88
+  and path w*0.68 w*0.8 w*0.68 w*0.88
+  and path w*0.12 w*0.32 w*0.2 w*0.32
+  and path w*0.12 w*0.44 w*0.2 w*0.44
+  and path w*0.12 w*0.56 w*0.2 w*0.56
+  and path w*0.12 w*0.68 w*0.2 w*0.68
+  and path w*0.8 w*0.32 w*0.88 w*0.32
+  and path w*0.8 w*0.44 w*0.88 w*0.44
+  and path w*0.8 w*0.56 w*0.88 w*0.56
+  and path w*0.8 w*0.68 w*0.88 w*0.68
+  stroke #c9a64a w*0.035
+  circle w*0.5 w*0.5 w*0.2
+  fill vertical stops 0 #6fa8ff 1 #1d5bcc
+  circle w*0.5 w*0.39 w*0.035
+  fill #ffffff
+  rect w*0.47 w*0.46 w*0.06 w*0.18 w*0.02
+  fill #ffffff
+end
+
 list dock.icon.trash
   path w*0.30 w*0.34 w*0.70 w*0.34 w*0.64 w*0.74 w*0.36 w*0.74 close
   stroke rgba(0.78, 0.80, 0.85, 1) w*0.05

@@ -352,9 +352,20 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     wears its own tile rather than the generic one.
 
   **Still open:** Agent is not in the default Dock (that is a choice of what
-  the desktop puts in front of everyone), Trench has no Agent art, and Grab,
-  Activity Monitor and Disk Utility have no way in from the UI at all: there
-  is no Applications entry for the desktop's own applications.
+  the desktop puts in front of everyone), and Trench has no Agent art.
+
+  **The desktop's own tiles (same day, asked for).** `Dock.builtins` is one
+  table of the desktop's own applications (token, label, app ID, scene,
+  icon), read by both the pinned tiles and the running ones. TextEdit, Grab,
+  Activity Monitor, Disk Utility and System Profiler joined it, with Aqua
+  icons of their own, so each can be pinned in `dock.ini` and wears its own
+  tile when it runs. Grab, Activity Monitor and Disk Utility had no way in
+  from the UI before. Trench draws the compiled Aqua icons until its art has
+  them. **Found on the way:** System Preferences' tile said
+  `org.abyssbsd.prefs`, but its window says `org.abyssbsd.preferences`, so a
+  running Preferences never lit its pinned tile and got a second, generic
+  one. `live-dock-apps.sh` claim 12 checks both, with 2 faults caught.
+  There is still no Applications folder entry for them.
 - **P18.9 — the crash, first (M).** jaild gives a spawned program the person's
   login-class limits (`setusercontext`), not jaild's own: a jailed process now
   inherits a core limit of 0 (§4.7). When a confined application dies of a

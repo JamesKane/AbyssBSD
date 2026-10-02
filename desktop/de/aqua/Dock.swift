@@ -25,6 +25,7 @@ private let kBtnRight: UInt32 = 0x111
 
 public enum DockIcon: Sendable {
     case finder, browser, mail, music, prefs, genericApp, trash, trashFull, terminal, agent
+    case textedit, grab, activity, diskutility, systemprofiler
     /// An installed application's own icon: its bundle's PNG (P15.2).
     case bundle(String)
 }
@@ -203,6 +204,11 @@ private func drawDockIcon(_ cr: OpaquePointer, _ kind: DockIcon, _ r: Rect) {
     // (JaguarLists, as for any list a theme lacks); the generic one only if
     // even that is gone. A tile never goes blank.
     case .agent: name = Theme.lists["dock.icon.agent"] != nil ? "agent" : "genericApp"
+    case .textedit: name = "textedit"
+    case .grab: name = "grab"
+    case .activity: name = "activity"
+    case .diskutility: name = "diskutility"
+    case .systemprofiler: name = "systemprofiler"
     case .bundle(let path):
         // The application's own icon; the generic one if it has none or it
         // cannot be read — a tile never goes blank.
@@ -240,8 +246,10 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     private var menu: AquaMenu?
     private var popup: Popup?
 
-    /// The tiles `dock.ini`'s `apps` names, in order (P15.2): `finder`,
-    /// `terminal` and `sysprefs` are the desktop's own; anything else is an
+    /// The tiles `dock.ini`'s `apps` names, in order (P15.2): a token in
+    /// `builtins` (`finder`, `terminal`, `sysprefs`, `agent`, `textedit`,
+    /// `grab`, `activity`, `diskutility`, `systemprofiler`) is the desktop's
+    /// own; anything else is an
     /// installed bundle, by name (`Galculator`) or path. Without the key: the
     /// Finder, the browser if one is installed, Terminal (P15.4) and System
     /// Preferences — no placeholder tile that launches nothing (the Browser,
@@ -250,18 +258,27 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         items(tokens: pinTokens(setting: setting, library: library), library: library)
     }
 
+    /// The desktop's own applications: each is this binary in a scene. The
+    /// token pins it in dock.ini; the app ID is the one its window gives the
+    /// compositor (System Preferences' is `org.abyssbsd.preferences`: the tile
+    /// once said `.prefs`, so a running Preferences never lit its own tile).
+    public static let builtins: [(token: String, label: String, appID: String, scene: String, icon: DockIcon)] = [
+        ("finder", "Finder", "org.abyssbsd.finder", "finder", .finder),
+        ("terminal", "Terminal", "org.abyssbsd.terminal", "terminal", .terminal),
+        ("sysprefs", "System Preferences", "org.abyssbsd.preferences", "sysprefs", .prefs),
+        ("agent", "Agent", "org.abyssbsd.agent", "agent", .agent),
+        ("textedit", "TextEdit", "org.abyssbsd.textedit", "textedit", .textedit),
+        ("grab", "Grab", "org.abyssbsd.grab", "grab", .grab),
+        ("activity", "Activity Monitor", "org.abyssbsd.activitymonitor", "activity", .activity),
+        ("diskutility", "Disk Utility", "org.abyssbsd.diskutility", "diskutility", .diskutility),
+        ("systemprofiler", "System Profiler", "org.abyssbsd.systemprofiler", "systemprofiler", .systemprofiler),
+    ]
+
     /// The built-in tile a running window of the desktop's own wears when it
     /// is not pinned (its icon, its name, how to start another), by app ID.
     public static func builtin(appID: String) -> DockItem? {
-        let token: String
-        switch appID {
-        case "org.abyssbsd.finder": token = "finder"
-        case "org.abyssbsd.terminal": token = "terminal"
-        case "org.abyssbsd.prefs": token = "sysprefs"
-        case "org.abyssbsd.agent": token = "agent"
-        default: return nil
-        }
-        guard let i = items(tokens: [token], library: []).first else { return nil }
+        guard let token = builtins.first(where: { $0.appID == appID })?.token,
+              let i = items(tokens: [token], library: []).first else { return nil }
         // Running, not pinned: no pin token, so it leaves the Dock when it quits.
         return DockItem(icon: i.icon, label: i.label, appID: i.appID, command: i.command, environment: i.environment)
     }
@@ -286,25 +303,12 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     public static func items(tokens: [String], library: [InstalledApp]) -> [DockItem] {
         let selfExe = Launcher.selfExecutable()
         return tokens.compactMap { t -> DockItem? in
+            if let b = builtins.first(where: { $0.token == t }) {
+                return DockItem(icon: b.icon, label: b.label, appID: b.appID,
+                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": b.scene],
+                                pinToken: t)
+            }
             switch t {
-            case "finder":
-                return DockItem(icon: .finder, label: "Finder", appID: "org.abyssbsd.finder",
-                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "finder"],
-                                pinToken: t)
-            case "terminal":
-                return DockItem(icon: .terminal, label: "Terminal", appID: "org.abyssbsd.terminal",
-                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "terminal"],
-                                pinToken: t)
-            case "sysprefs":
-                return DockItem(icon: .prefs, label: "System Preferences", appID: "org.abyssbsd.prefs",
-                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "sysprefs"],
-                                pinToken: t)
-            case "agent":
-                // The Agent window (PHASE18 P18.8b): pinned by `agent` in
-                // dock.ini, as the other built-ins are.
-                return DockItem(icon: .agent, label: "Agent", appID: "org.abyssbsd.agent",
-                                command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": "agent"],
-                                pinToken: t)
             default:
                 guard let app = AppLibrary.find(t, in: library) else {
                     Dock.log("dock.ini names \(t), which is not installed")

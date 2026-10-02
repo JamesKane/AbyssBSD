@@ -25,7 +25,11 @@
 #      Clear Menu empties it;
 #  11. with no `apps` in dock.ini, the Dock is the defaults — Finder, Terminal,
 #      System Preferences (no browser in this HOME) — and the Terminal tile
-#      opens Terminal (P15.4).
+#      opens Terminal (P15.4);
+#  12. the desktop's own applications wear their own tiles: a running System
+#      Preferences lights its pinned tile and adds no second one (its window
+#      says `org.abyssbsd.preferences`, which the tile once did not), and a
+#      TextEdit that is not pinned wears "TextEdit", not a generic tile.
 #
 # Usage: abyss/tests/live-dock-apps.sh
 set -eu
@@ -43,7 +47,7 @@ command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, 
 work=$(mktemp -d /tmp/abyss-dockapps.XXXXXX)
 cleanup() {
   exec 3>&- 2>/dev/null || true
-  for p in ${vp_pid:-} ${bar_pid:-} ${finder_pid:-} ${dock_pid:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done
+  for p in ${vp_pid:-} ${bar_pid:-} ${finder_pid:-} ${dock_pid:-} ${ut_pid:-} ${prefs_pid:-} ${te_pid:-}; do kill "$p" 2>/dev/null || true; done
   pkill -f "$work" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -296,5 +300,22 @@ click "Terminal"
 i=0; until [ "$(grep -c '^window org.abyssbsd.terminal/' "$work/ut.out" || true)" -gt "$b" ]; do
   [ $i -ge 150 ] && fail "the Terminal tile opened no Terminal window"; sleep 0.1; i=$((i + 1)); done
 echo "ok: 11. the default Dock is Finder, Terminal, System Preferences, and the Terminal tile opened Terminal"
+
+# ------------------------------------------------------------ 12. the desktop's own, running
+lasttiles() { grep 'Dock: tiles ' "$work/dock.log" | tail -1; }
+env WAYLAND_DISPLAY="$wd" HOME="$home" ABYSS_CONFIG_DIR="$work/cfg" AQUA_SCENE=sysprefs "$aqua" > "$work/prefs.log" 2>&1 &
+prefs_pid=$!
+i=0; until grep -q '^window org.abyssbsd.preferences' "$work/ut.out"; do
+  [ $i -ge 150 ] && fail "System Preferences never mapped"; sleep 0.1; i=$((i + 1)); done
+sleep 1
+[ "$(lasttiles | grep -o 'System Preferences=' | wc -l | tr -d ' ')" = 1 ] \
+  || fail "a running System Preferences is a second tile, not its own: $(lasttiles)"
+grep -q "Dock: running org.abyssbsd.preferences" "$work/dock.log" || fail "the Dock did not see System Preferences running"
+env WAYLAND_DISPLAY="$wd" HOME="$home" ABYSS_CONFIG_DIR="$work/cfg" AQUA_SCENE=textedit "$aqua" > "$work/te.log" 2>&1 &
+te_pid=$!
+i=0; until lasttiles | grep -q 'TextEdit='; do
+  [ $i -ge 150 ] && fail "a running TextEdit does not wear its own tile: $(lasttiles)"; sleep 0.1; i=$((i + 1)); done
+kill "$prefs_pid" "$te_pid" 2>/dev/null || true; prefs_pid= te_pid=
+echo "ok: 12. a running System Preferences lit its own tile (no second), and an unpinned TextEdit wore \"TextEdit\""
 
 echo "all green (the Dock carries installed applications)."
