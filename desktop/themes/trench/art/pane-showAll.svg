@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench pane icon "showAll" (BACKLOG §5): Show All: every pane, as a grid of keys. Drawn for System
+     Preferences in the study's idiom (three-quarter view, a heavy outline,
+     lit from the top left, a soft cast shadow; the "neon" scheme), and
+     imported into icons/prefs.dl with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+    <linearGradient id="gPaper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#f2f0ff"/><stop offset="1" style="stop-color:#b9b2dc"/></linearGradient>
+    <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".45" stop-color="#ffb000"/><stop offset="1" stop-color="#c26f00"/></linearGradient>
+    <linearGradient id="gAmberB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3a32a"/><stop offset="1" stop-color="#8a4f00"/></linearGradient>
+    <linearGradient id="gGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ff3ff"/><stop offset="1" stop-color="#1a5fa0"/></linearGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/>
+  <path d="M6.0 7.0l5.5-1 1 5.4-5.5 1z" fill="#a39acb" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M13.5 7.0l5.5-1 1 5.4-5.5 1z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M21.0 7.0l5.5-1 1 5.4-5.5 1z" fill="#a39acb" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M6.0 14.5l5.5-1 1 5.4-5.5 1z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M13.5 14.5l5.5-1 1 5.4-5.5 1z" fill="#a39acb" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M21.0 14.5l5.5-1 1 5.4-5.5 1z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M6.0 22.0l5.5-1 1 5.4-5.5 1z" fill="#a39acb" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M13.5 22.0l5.5-1 1 5.4-5.5 1z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/><path d="M21.0 22.0l5.5-1 1 5.4-5.5 1z" fill="#a39acb" stroke="#170c2c" stroke-width="1" stroke-linejoin="round"/>
+</svg>

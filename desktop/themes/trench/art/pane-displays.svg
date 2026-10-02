@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench pane icon "displays" (BACKLOG §5): Displays: a monitor, its screen lit. Drawn for System
+     Preferences in the study's idiom (three-quarter view, a heavy outline,
+     lit from the top left, a soft cast shadow; the "neon" scheme), and
+     imported into icons/prefs.dl with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+    <linearGradient id="gPaper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#f2f0ff"/><stop offset="1" style="stop-color:#b9b2dc"/></linearGradient>
+    <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".45" stop-color="#ffb000"/><stop offset="1" stop-color="#c26f00"/></linearGradient>
+    <linearGradient id="gAmberB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3a32a"/><stop offset="1" stop-color="#8a4f00"/></linearGradient>
+    <linearGradient id="gGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ff3ff"/><stop offset="1" stop-color="#1a5fa0"/></linearGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/>
+  <path d="M12.5 23.5l6.5-.8 2.5 4.5-11 1.3z" fill="#2a2150" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M4 6.5L25.5 4l1.5 17.8-21 2.8z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M6.6 8.9L23.2 6.9l1.1 12.8-16.2 2.1z" fill="url(#gGlass)" stroke="#170c2c" stroke-width=".8"/><path d="M7.6 9.6l15-1.8" stroke="#fff" stroke-opacity=".5" stroke-linecap="round"/>
+</svg>

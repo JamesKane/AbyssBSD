@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench pane icon "universalAccess" (BACKLOG §5): Universal Access: a figure, arms open, in a ring. Drawn for System
+     Preferences in the study's idiom (three-quarter view, a heavy outline,
+     lit from the top left, a soft cast shadow; the "neon" scheme), and
+     imported into icons/prefs.dl with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+    <linearGradient id="gPaper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#f2f0ff"/><stop offset="1" style="stop-color:#b9b2dc"/></linearGradient>
+    <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".45" stop-color="#ffb000"/><stop offset="1" stop-color="#c26f00"/></linearGradient>
+    <linearGradient id="gAmberB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3a32a"/><stop offset="1" stop-color="#8a4f00"/></linearGradient>
+    <linearGradient id="gGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ff3ff"/><stop offset="1" stop-color="#1a5fa0"/></linearGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/>
+  <circle cx="16" cy="15" r="11.5" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><circle cx="16" cy="15" r="9.4" fill="none" style="stroke:#00e5ff" stroke-width="1"/>
+  <circle cx="16" cy="9" r="2" fill="#f2f0ff" stroke="#170c2c" stroke-width="0.8" stroke-linejoin="round"/><path d="M9.5 12.4l6.5 1.4 6.5-1.4M16 13.8v4.4l-3 5.2M16 18.2l3 5.2" fill="none" stroke="#f2f0ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

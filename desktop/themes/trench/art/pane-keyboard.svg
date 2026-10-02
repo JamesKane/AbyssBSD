@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench pane icon "keyboard" (BACKLOG §5): Keyboard: a slab of keys. Drawn for System
+     Preferences in the study's idiom (three-quarter view, a heavy outline,
+     lit from the top left, a soft cast shadow; the "neon" scheme), and
+     imported into icons/prefs.dl with abyss/tools/svg2dl. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+    <linearGradient id="gPaper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#f2f0ff"/><stop offset="1" style="stop-color:#b9b2dc"/></linearGradient>
+    <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".45" stop-color="#ffb000"/><stop offset="1" stop-color="#c26f00"/></linearGradient>
+    <linearGradient id="gAmberB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3a32a"/><stop offset="1" stop-color="#8a4f00"/></linearGradient>
+    <linearGradient id="gGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ff3ff"/><stop offset="1" stop-color="#1a5fa0"/></linearGradient>
+  </defs>
+  <ellipse cx="17" cy="28.6" rx="11.5" ry="2.1" fill="#000" opacity=".38"/>
+  <path d="M3 15l20-6 6 4-20 6.2z" fill="#a39acb" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M3 15l6 4.2v3.4L3 18.4z" fill="#2a2150" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/><path d="M9 19.2L29 13v3.4L9 22.6z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M6.4 14.6l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M9.600000000000001 13.64l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M12.8 12.68l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M16.0 11.719999999999999l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M19.200000000000003 10.76l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M8.3 15.85l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M11.500000000000002 14.89l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M14.700000000000001 13.93l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M17.9 12.969999999999999l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M21.1 12.01l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M10.2 17.1l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M13.400000000000002 16.14l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M16.6 15.18l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M19.8 14.219999999999999l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/><path d="M23.000000000000004 13.26l2.2-.66 1.2.8-2.2.68z" fill="#140f2a"/>
+</svg>
