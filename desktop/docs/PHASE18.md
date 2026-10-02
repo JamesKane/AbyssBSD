@@ -403,7 +403,15 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     suites had been run. It is regenerated, and Trench's icon sheet shows the
     compiled Aqua Agent icon, as it does for any list Trench lacks.
 
-  **Not yet:** the 12700KF with a real model.
+  **On the 12700KF with Granite 8B Q4 (same day).** A crasher built on the
+  box, launched confined in `app`, put up Crash Reporter on the desktop
+  (screenshot). Ask the Agent… (`crash.ask`) started `debug` with the core
+  and a link to the binary at its recorded path, and opened the Agent window
+  asking "Why did crasher crash?". Granite ran `bt` once and answered: SIGSEGV
+  at crasher.c:6:12 in `kaboom(p=0x0)`, a null pointer dereferenced. The
+  window said "Confined in debug: one crash, read-only; no network", and the
+  Dock wore the Agent tile. Quit stopped the model; the test files were
+  removed. **P18.9 is complete.**
 - **P18.10 — tools are the vocabulary (M).** A vocabulary bridge per agent
   jail, beside the model socket: Phase 10's `describe`/`validate`/`activate`
   over `CurrentIPC`, for **the applications this session was given** (§6b.2)
