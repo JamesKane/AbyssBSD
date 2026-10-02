@@ -31,6 +31,7 @@
 
 import CurrentIPC
 import CPlatform
+import CProc
 import CJail
 import Jails
 import PoolConfig
@@ -159,18 +160,37 @@ public final class JailService {
     // MARK: - the loop
 
     /// Serve until `once` has answered one request (a test), or for ever.
+    ///
+    /// **Every program a jail runs is this daemon's child** (pdfork), and on
+    /// FreeBSD closing a process descriptor does not reap one (HANDOFF
+    /// §2.108): the person's copy closes, the program dies, and without a
+    /// `waitpid` here it stays a zombie — inside its jail, which then never
+    /// finishes dying (§2.123). So SIGCHLD comes in on a self-pipe, and every
+    /// exited child is reaped.
     public func run(once: Bool = false) {
+        var sigs: [Int32] = [SIGCHLD]
+        let chld = ap_signal_pipe(&sigs, 1)
         while true {
             var fds = [pollfd(fd: server.fd, events: Int16(POLLIN), revents: 0),
-                       pollfd(fd: kq, events: Int16(POLLIN), revents: 0)]
-            let n = fds.withUnsafeMutableBufferPointer { poll($0.baseAddress, nfds_t(kq >= 0 ? 2 : 1), -1) }
+                       pollfd(fd: kq, events: Int16(POLLIN), revents: 0),
+                       pollfd(fd: chld, events: Int16(POLLIN), revents: 0)]
+            let n = fds.withUnsafeMutableBufferPointer { poll($0.baseAddress, nfds_t($0.count), -1) }
             if n < 0 { if errno == EINTR { continue }; return }
+            if chld >= 0, fds[2].revents != 0 { reapChildren(chld) }
             if kq >= 0, fds[1].revents != 0 { reap() }
             if fds[0].revents != 0 {
                 serveOne()
                 if once { return }
             }
         }
+    }
+
+    /// Every child that has exited, waited for.
+    private func reapChildren(_ pipe: Int32) {
+        var b = [UInt8](repeating: 0, count: 64)
+        _ = read(pipe, &b, b.count)
+        var status: Int32 = 0
+        while waitpid(-1, &status, WNOHANG) > 0 {}
     }
 
     /// Jails whose owners let go: tear their roots down.
@@ -435,6 +455,7 @@ public enum JailClient {
 
     public struct Refused: Error, CustomStringConvertible {
         public let description: String
+        public init(description: String) { self.description = description }
     }
 
     static func call(_ m: Msg, socket: String) throws -> Msg {

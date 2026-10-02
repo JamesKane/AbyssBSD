@@ -44,6 +44,12 @@ final class JailsTests: XCTestCase {
         XCTAssertEqual(t.filter { $0.name == "app" }.count, 1, "an override replaces, it does not duplicate")
     }
 
+    func testTheAppsSectionIsNotAClass() {
+        let t = JailClass.table(Config.parse("[apps]\ngalculator = app\n"))
+        XCTAssertFalse(t.contains { $0.name == "apps" })
+        XCTAssertEqual(t.map(\.name), ["app", "app-gl", "app-net"])
+    }
+
     func testAnUnknownNetworkWordKeepsTheSafeValue() {
         let t = JailClass.table(Config.parse("[app]\nnetwork = everything\n"))
         XCTAssertEqual(t.first { $0.name == "app" }!.network, .none)

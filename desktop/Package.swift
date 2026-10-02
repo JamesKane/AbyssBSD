@@ -79,7 +79,8 @@ let package = Package(
                       "wlr-output-management-unstable-v1-protocol.c",
                       "ext-session-lock-v1-protocol.c",
                       "ext-idle-notify-v1-protocol.c",
-                      "cwayland_shm.c"],
+                      "security-context-v1-protocol.c",
+                      "cwayland_shm.c", "cwayland_jail.c"],
             publicHeadersPath: "include"
         ),
         // System cairo (software 2D backend for the Aqua toolkit; cairo-ft
@@ -349,22 +350,28 @@ let package = Package(
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
                 linkerSettings: jailLibraries),
         // abyss-jaild's steps, performer, service and client (P18.2).
-        .target(name: "JailD", dependencies: ["Jails", "CJail", "CurrentIPC", "CPlatform", "Spawn", "PoolConfig"],
+        .target(name: "JailD", dependencies: ["Jails", "CJail", "CProc", "CurrentIPC", "CPlatform", "Spawn", "PoolConfig"],
                 path: "de/jaild"),
         .executableTarget(name: "abyss-jaild", dependencies: ["JailD", "Jails", "CurrentIPC", "PoolConfig"],
                           path: "de/jaildbin"),
-        .executableTarget(name: "abyss-jail", dependencies: ["JailD", "CJail"], path: "de/jailctl"),
+        // The session's half (P18.5): a jail per class, held for the session,
+        // with its Wayland socket, bus and portal; launches into it.
+        .target(name: "JailKeeper", dependencies: ["JailD", "Jails", "CJail", "CProc", "CWayland", "CWaylandClient",
+                                                   "CurrentIPC", "Spawn"], path: "de/jailkeeper"),
+        .executableTarget(name: "abyss-jail", dependencies: ["JailD", "JailKeeper", "CJail", "CPlatform",
+                                                             "CWaylandClient", "CurrentIPC", "Spawn"],
+                          path: "de/jailctl"),
         .target(name: "Pty", dependencies: ["CPlatform", "Spawn"], path: "de/pty"),
         .executableTarget(name: "abyss-vt", dependencies: ["Pty", "Terminal"], path: "de/vtbin"),
         // `.desktop` → `.app` (PHASE15 P15.1): the rules as values, importing
         // nothing, and the tool that walks, rasterises and writes.
         .target(name: "AppBundles", path: "de/appbundles"),
-        .executableTarget(name: "abyss-appgen", dependencies: ["AppBundles", "Spawn"], path: "de/appgen"),
+        .executableTarget(name: "abyss-appgen", dependencies: ["AppBundles", "PoolConfig", "Spawn"], path: "de/appgen"),
         .testTarget(name: "AppBundlesTests", dependencies: ["AppBundles"], path: "Tests/AppBundlesTests"),
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
-        .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "PoolConfig"], path: "Tests/JailsTests"),
+        .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "JailKeeper", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
         // installer's shape: plans as values that import nothing, a wire the
         // pane links without the executor, the runner, and two binaries.

@@ -22,6 +22,7 @@
 #include "wlr-output-management-unstable-v1-client-protocol.h"
 #include "ext-session-lock-v1-client-protocol.h"
 #include "ext-idle-notify-v1-client-protocol.h"
+#include "security-context-v1-client-protocol.h"
 #include "abyss-menu-v1-client-protocol.h"
 #include "abyss-window-v1-client-protocol.h"
 
@@ -67,5 +68,14 @@ static const struct wl_interface *const zwlr_output_manager_v1_iface = &zwlr_out
 static const struct wl_interface *const abyss_menu_manager_v1_iface = &abyss_menu_manager_v1_interface;
 static const struct wl_interface *const abyss_window_manager_v1_iface = &abyss_window_manager_v1_interface;
 static const struct wl_interface *const abyss_menubar_v1_iface = &abyss_menubar_v1_interface;
+
+/*
+ * Register a jail's Wayland socket at `path` with the compositor's
+ * wp_security_context_manager_v1 (PHASE18 P18.5). 0 and *close_out (close it
+ * to stop the compositor listening), or -errno: -ENOENT when the compositor
+ * offers no security contexts.
+ */
+int aw_jail_listen(struct wl_display *d, const char *path, const char *engine,
+                   const char *app_id, const char *instance, int *close_out);
 
 #endif /* ABYSS_CWAYLAND_H */

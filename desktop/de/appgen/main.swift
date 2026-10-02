@@ -1,7 +1,11 @@
 // abyss-appgen — write an application bundle for every installed port that has
 // a desktop entry (PHASE15 P15.1).
 //
-//   abyss-appgen [--from DIR]... [--to DIR] [--dry-run]
+//   abyss-appgen [--from DIR]... [--to DIR] [--jails FILE] [--dry-run]
+//
+// `--jails`: the jails.ini whose `[apps]` says which applications run
+// confined (PHASE18 P18.5) — by default the machine's
+// (/usr/local/etc/abyss/jails.ini) when run as root, the person's otherwise.
 //
 // Reads `*.desktop` from each `--from` (default: /usr/local/share/applications
 // and /usr/share/applications), and writes `<Name>.app` into `--to` —
@@ -19,6 +23,7 @@
 // One line per decision on stdout, for a person and for the live test.
 
 import AppBundles
+import PoolConfig
 import Spawn
 #if canImport(Glibc)
 import Glibc
@@ -37,6 +42,7 @@ func die(_ s: String) -> Never {
 var froms: [String] = []
 var to: String?
 var dryRun = false
+var jailsFile: String?
 var args = CommandLine.arguments.dropFirst()
 while let a = args.popFirst() {
     switch a {
@@ -47,8 +53,11 @@ while let a = args.popFirst() {
         guard let d = args.popFirst() else { die("--to needs a directory") }
         to = d
     case "--dry-run": dryRun = true
+    case "--jails":
+        guard let f = args.popFirst() else { die("--jails needs a file") }
+        jailsFile = f
     case "-h", "--help":
-        say("usage: abyss-appgen [--from DIR]... [--to DIR] [--dry-run]"); exit(0)
+        say("usage: abyss-appgen [--from DIR]... [--to DIR] [--jails FILE] [--dry-run]"); exit(0)
     default: die("unknown option '\(a)'")
     }
 }
@@ -131,6 +140,15 @@ func iconChoice(_ icon: String, _ idx: [String: [String]]) -> AppIconChoice? {
     return IconLookup.choose(from: idx[icon] ?? [])
 }
 
+// MARK: - Confinement (PHASE18 P18.5)
+
+let jailApps: [(String, String)] = {
+    let path = jailsFile ?? (geteuid() == 0 ? "/usr/local/etc/abyss/jails.ini"
+                                            : ((try? Pool.configDir()).map { $0 + "/jails.ini" } ?? ""))
+    guard !path.isEmpty, let text = read(path) else { return [] }
+    return Config.parse(text).pairs("apps")
+}()
+
 // MARK: - Entries
 
 struct Planned { let dir: String; let entry: DesktopEntry; let argv: [String]; let source: String }
@@ -156,6 +174,10 @@ for from in froms {
 
 // MARK: - Write
 
+func jailOf(_ p: Planned) -> String? {
+    p.entry.terminal ? nil : AppBundle.jailClass(entry: p.entry, desktopFile: p.source, apps: jailApps)
+}
+
 if !dryRun, !exists(dest), mkdir(dest, 0o755) != 0 { die("cannot create \(dest)") }
 for p in planned {
     let bundle = dest + "/" + p.dir
@@ -170,14 +192,16 @@ for p in planned {
     case .svg(let f, let size)?: iconWords = "\(f) at \(size)px"
     case nil: iconWords = "none found for '\(p.entry.icon)'"
     }
-    if dryRun { say("would make \(p.dir) from \(p.source) (icon: \(iconWords))"); continue }
+    let confined = jailOf(p).map { ", confined in \($0)" } ?? ""
+    if dryRun { say("would make \(p.dir) from \(p.source) (icon: \(iconWords)\(confined))"); continue }
 
     let tmp = dest + "/.\(stem).app.tmp"
     _ = run(["rm", "-rf", tmp])
     guard mkdir(tmp, 0o755) == 0, mkdir(tmp + "/Contents", 0o755) == 0,
           mkdir(tmp + "/Contents/MacOS", 0o755) == 0, mkdir(tmp + "/Contents/Resources", 0o755) == 0,
           write(tmp + "/Contents/MacOS/" + stem, AppBundle.launcher(argv: p.argv, source: p.source,
-                                                                            terminal: p.entry.terminal ? terminalProgram : nil), mode: 0o755),
+                                                                            terminal: p.entry.terminal ? terminalProgram : nil,
+                                                                            jail: jailOf(p)), mode: 0o755),
           write(tmp + "/" + AppBundle.marker, p.source + "\n"),
           write(tmp + "/" + AppBundle.appIDFile,
                 p.entry.appIDs(desktopFile: p.source).joined(separator: "\n") + "\n") else {
@@ -195,7 +219,7 @@ for p in planned {
     // Into place in one rename; an old copy of ours is moved out first.
     _ = run(["rm", "-rf", bundle])
     guard rename(tmp, bundle) == 0 else { say("FAILED \(p.dir): could not move it into place"); continue }
-    say("made \(p.dir) from \(p.source) (icon: \(icon == nil ? iconWords : iconOK ? iconWords : "none"))")
+    say("made \(p.dir) from \(p.source) (icon: \(icon == nil ? iconWords : iconOK ? iconWords : "none")\(confined))")
 }
 
 // Ours, whose entry has gone.

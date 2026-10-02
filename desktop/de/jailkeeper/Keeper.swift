@@ -1,0 +1,248 @@
+// JailKeeper — the session's half of confinement (PHASE18 P18.5).
+//
+// `abyss-jail serve`, a session component beside the portal and the bridge.
+// It answers `launch class=C argv=…` on the session's `jails` socket:
+//
+//   1. the class's jail, opened from abyss-jaild once and **held for the
+//      session**: pooled, never one per launch (PLAN's cost note). The keeper
+//      holds the owning descriptor, so the jails end with the session, and so
+//      does everything in them;
+//   2. the first time, the jail's own Wayland socket, bound inside its runtime
+//      directory from outside and registered with the compositor as a
+//      security context (P18.3); its own bus, and an `abyss-dbus --jail` on it
+//      (P18.4). Both are this process's children by descriptor, so they die
+//      with it;
+//   3. any argument that names one of the person's files is granted into the
+//      jail first and rewritten to where it is there — a document opened from
+//      the Finder opens, and saves, in place;
+//   4. the program, started in the jail as the person.
+//
+// Anyone in the session may ask it: they are the person already. A jailed
+// process cannot — the socket is in the session's runtime directory, which no
+// jail can see.
+
+import CurrentIPC
+import CProc
+import CWayland
+import CWaylandClient
+import JailD
+import Jails
+import Spawn
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+public enum KeeperWire {
+    public static let service = "jails"
+    public static let engine = "org.abyssbsd.jail"
+}
+
+/// Which arguments of a launch are the person's files (P18.5): an absolute path
+/// to a regular file outside what the jail sees anyway. Pure, given how to
+/// resolve a path.
+public enum LaunchFiles {
+    public static func indices(_ argv: [String], system: [String],
+                               resolve: (String) -> String?) -> [(Int, String)] {
+        var out: [(Int, String)] = []
+        for (i, a) in argv.enumerated().dropFirst() where a.hasPrefix("/") {
+            guard let real = resolve(a) else { continue }
+            if system.contains(where: { JailPlan.under(real, $0) }) { continue }
+            out.append((i, real))
+        }
+        return out
+    }
+
+    /// A path's resolved form if it is a regular file, else nil.
+    public static func regularFile(_ path: String) -> String? {
+        var buf = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)
+        guard realpath(path, &buf) != nil else { return nil }
+        let real = String(decoding: buf.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        var st = stat()
+        guard stat(real, &st) == 0, st.st_mode & S_IFMT == S_IFREG else { return nil }
+        return real
+    }
+}
+
+public final class JailKeeper {
+    public struct Held {
+        public var opened: JailClient.Opened
+        var closeFD: Int32
+        var bus: ap_child?
+        var bridge: ap_child?
+    }
+
+    public var jaildSocket = JailWire.defaultSocket
+    /// Where abyss-dbus is (this binary's directory).
+    public var binDir: String
+    public var dbusDaemon: String?
+    public private(set) var held: [String: Held] = [:]
+    private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String)] = []
+    private let server: Current.Server
+    private let display: OpaquePointer?
+    private let runtimeDir: String
+    private let classes: [JailClass]
+    private let say: (String) -> Void
+
+    public init(server: Current.Server, display: OpaquePointer?, runtimeDir: String, binDir: String,
+                dbusDaemon: String?, classes: [JailClass] = JailClass.shipped, log: @escaping (String) -> Void) {
+        self.server = server
+        self.display = display
+        self.runtimeDir = runtimeDir
+        self.binDir = binDir
+        self.dbusDaemon = dbusDaemon
+        self.classes = classes
+        self.say = log
+    }
+
+    // MARK: - the jail, once per class
+
+    func ensure(_ cls: String) throws -> Held {
+        if let h = held[cls] { return h }
+        let opened = try JailClient.open(cls, socket: jaildSocket)
+        var h = Held(opened: opened, closeFD: -1, bus: nil, bridge: nil)
+        do {
+            // Wayland: a socket of the jail's own, made from outside.
+            if let display, classes.first(where: { $0.name == cls })?.wayland ?? true {
+                let path = opened.runtime + "/" + JailLayout.waylandDisplay
+                var closer: Int32 = -1
+                let rc = aw_jail_listen(display, path, KeeperWire.engine, cls, String(opened.jid), &closer)
+                guard rc == 0 else { throw JailClient.Refused(description: "the compositor would not take \(opened.name)'s socket (\(-rc))") }
+                h.closeFD = closer
+            }
+            // Its bus, and the portal on it.
+            if let dbus = dbusDaemon {
+                let dir = runtimeDir + "/jails/" + cls
+                _ = Spawn.run(["/bin/mkdir", "-p", dir])
+                let conf = dir + "/bus.conf"
+                try write(conf, Self.busConfig(listen: opened.runtime + "/bus"))
+                h.bus = try child([dbus, "--nofork", "--config-file=" + conf], log: dir + "/bus.log")
+                var i = 0
+                while access(opened.runtime + "/bus", F_OK) != 0 && i < 100 { usleep(20_000); i += 1 }
+                h.bridge = try child([binDir + "/abyss-dbus", "--bus", "unix:path=" + opened.runtime + "/bus",
+                                      "--jail", opened.name, "--jaild", jaildSocket], log: dir + "/bridge.log")
+            }
+        } catch {
+            if h.closeFD >= 0 { close(h.closeFD) }
+            for var c in [h.bus, h.bridge].compactMap({ $0 }) { _ = ap_child_signal(&c, SIGKILL); _ = ap_child_reap(&c, nil) }
+            close(opened.jail)
+            throw error
+        }
+        held[cls] = h
+        say("jails: \(opened.name) is jail \(opened.jid); its socket, bus and portal are up")
+        return h
+    }
+
+    /// The jail bus's configuration: the jail's applications and its portal,
+    /// nobody else, listening inside the jail's runtime directory.
+    public static func busConfig(listen: String) -> String {
+        """
+        <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+         "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+        <busconfig>
+          <type>session</type>
+          <listen>unix:path=\(listen)</listen>
+          <auth>EXTERNAL</auth>
+          <policy context="default">
+            <allow send_destination="*" eavesdrop="true"/>
+            <allow eavesdrop="true"/>
+            <allow own="*"/>
+          </policy>
+        </busconfig>
+
+        """
+    }
+
+    private func child(_ argv: [String], log: String) throws -> ap_child {
+        let fd = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o600)
+        defer { if fd >= 0 { close(fd) } }
+        var env: [String] = []
+        var p = environ
+        while let e = p.pointee { env.append(String(cString: e)); p += 1 }
+        var c = ap_child(fd: -1, pid: 0)
+        let rc = Spawn.withCStrings(argv) { a in Spawn.withCStrings(env) { e in ap_child_spawn(a, e, fd, &c) } }
+        guard rc == 0 else { throw JailClient.Refused(description: "cannot start \(argv[0]): \(String(cString: strerror(errno)))") }
+        return c
+    }
+
+    private func write(_ path: String, _ text: String) throws {
+        let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw JailClient.Refused(description: "cannot write \(path)") }
+        defer { close(fd) }
+        let b = Array(text.utf8)
+        _ = b.withUnsafeBufferPointer { Glibc.write(fd, $0.baseAddress, b.count) }
+    }
+
+    // MARK: - launch
+
+    public func launch(_ cls: String, argv: [String]) throws -> UInt64 {
+        guard !argv.isEmpty else { throw JailClient.Refused(description: "nothing to launch") }
+        let h = try ensure(cls)
+        let system = classes.first { $0.name == cls }?.system ?? JailClass.baseSystem
+        var args = argv
+        for (i, real) in LaunchFiles.indices(argv, system: system, resolve: LaunchFiles.regularFile) {
+            // Edited in place when the person may write it; read-only if not.
+            var fd = open(real, O_RDWR | O_CLOEXEC)
+            if fd < 0 { fd = open(real, O_RDONLY | O_CLOEXEC) }
+            guard fd >= 0 else { continue }
+            defer { close(fd) }
+            let g = try JailClient.grant(jail: h.opened.name, path: real, file: fd, socket: jaildSocket)
+            say("jails: \(real) is \(g.inside) in \(h.opened.name)")
+            args[i] = g.inside
+        }
+        let (pid, proc) = try JailClient.spawn(jail: h.opened.jail, argv: args, socket: jaildSocket)
+        procs.append((proc, pid, argv[0], h.opened.name))
+        say("jails: launched \(argv[0]) as pid \(pid) in \(h.opened.name)")
+        return pid
+    }
+
+    // MARK: - the loop
+
+    public func run() {
+        let wlfd = display.map { wl_display_get_fd($0) } ?? -1
+        while true {
+            if let display { _ = wl_display_flush(display) }
+            var fds = [pollfd(fd: server.fd, events: Int16(POLLIN), revents: 0),
+                       pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0)]
+            for p in procs { fds.append(pollfd(fd: p.fd, events: Int16(POLLHUP | POLLIN), revents: 0)) }
+            let n = fds.withUnsafeMutableBufferPointer { poll($0.baseAddress, nfds_t($0.count), -1) }
+            if n < 0 { if errno == EINTR { continue }; return }
+            if wlfd >= 0, fds[1].revents != 0, let display {
+                // The compositor went away: the session is over.
+                if wl_display_dispatch(display) < 0 { say("jails: the compositor is gone"); return }
+            }
+            for (i, p) in procs.enumerated().reversed() where fds[i + 2].revents != 0 {
+                say("jails: \(p.name) (pid \(p.pid)) in \(p.jail) exited")
+                close(p.fd)
+                procs.remove(at: i)
+            }
+            if fds[0].revents != 0 { serveOne() }
+        }
+    }
+
+    private func serveOne() {
+        guard let c = try? server.accept() else { return }
+        defer { close(c) }
+        guard var req = try? Current.receive(on: c) else { return }
+        defer { req.closeFDs() }
+        var reply = Msg()
+        switch req.string("method") {
+        case "launch":
+            do {
+                let pid = try launch(req.string("class") ?? "", argv: JailWire.unlist(req.bytes("argv") ?? []))
+                reply.set("ok", true); reply.set("pid", pid)
+            } catch {
+                say("jails: launch refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "held":
+            reply.set("ok", true)
+            reply.set("jails", bytes: JailWire.list(held.values.map { "\($0.opened.name) jid=\($0.opened.jid)" }.sorted()))
+        default:
+            reply = JailWire.error("unknown method")
+        }
+        try? Current.send(reply, on: c)
+    }
+}

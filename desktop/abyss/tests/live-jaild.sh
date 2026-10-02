@@ -63,9 +63,12 @@ stop() {
   [ -z "$(daemon)" ] || fail "the daemon would not die"
 }
 mounts() { mount -p | awk '{print $2}' | grep -c "^$RB/" || true; }
+# Gone means gone: not even dying (`jls -d`). A jail whose programs are
+# unreaped zombies is removed and never freed (HANDOFF §2.123).
 gone() {  # gone WHY: the jail, its mounts and its root, all gone, within 5 s
-  i=0; while { jls -j "$N" > /dev/null 2>&1 || [ "$(mounts)" != 0 ] || [ -d "$RB/$uid/app" ]; } && [ $i -lt 100 ]; do i=$((i + 1)); sleep 0.05; done
+  i=0; while { jls -d -j "$N" > /dev/null 2>&1 || [ "$(mounts)" != 0 ] || [ -d "$RB/$uid/app" ]; } && [ $i -lt 100 ]; do i=$((i + 1)); sleep 0.05; done
   jls -j "$N" > /dev/null 2>&1 && fail "$1: the jail is still there"
+  jls -d -j "$N" > /dev/null 2>&1 && fail "$1: the jail is removed but still dying: $(ps -axo pid,jid,stat,comm | awk -v j="$(jls -d -j "$N" jid)" '$2 == j' | tr '\n' '|')"
   [ "$(mounts)" = 0 ] || fail "$1: $(mounts) mount(s) left under the roots"
   [ ! -d "$RB/$uid/app" ] || fail "$1: the root directory is left"
 }

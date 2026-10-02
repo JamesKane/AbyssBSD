@@ -211,6 +211,19 @@ final class AnchorTests: XCTestCase {
         XCTAssertFalse(plan(without: ["idle"]).components.contains { $0.name == "idle" })
     }
 
+    /// Confinement's session half (PHASE18 P18.5): `abyss-jail serve`, on the
+    /// ordinary display, waiting for the compositor; a desktop's only.
+    func testTheJailKeeperIsADesktopComponent() {
+        let p = plan(compositorSocket: "/run/x/abyss-0")
+        let jails = p.components.first { $0.name == "jails" }
+        XCTAssertEqual(jails?.argv, ["/opt/abyss/abyss-jail", "serve"])
+        XCTAssertEqual(jails?.env["WAYLAND_DISPLAY"], "abyss-0")
+        XCTAssertEqual(jails?.requires, ["/run/x/abyss-0"])
+        XCTAssertFalse(plan(mode: .installer).components.contains { $0.name == "jails" })
+        XCTAssertFalse(plan(mode: .greeter).components.contains { $0.name == "jails" })
+        XCTAssertFalse(plan(without: ["jails"]).components.contains { $0.name == "jails" })
+    }
+
     /// The login window's session (PHASE16 P16.5b): the window, and nothing
     /// that serves a person who has not logged in yet.
     func testTheGreeterSessionIsTheLoginWindowAlone() {
@@ -251,7 +264,7 @@ final class AnchorTests: XCTestCase {
     /// afterwards and every app launched from the desktop is on no bus at all.
     func testTheSessionStartsInTheOrderItsDependenciesRequire() {
         XCTAssertEqual(plan().components.map(\.name),
-                       ["bus", "portal", "bridge", "menus", "idle", "desktop", "menubar", "dock"])
+                       ["bus", "portal", "bridge", "menus", "idle", "jails", "desktop", "menubar", "dock"])
     }
 
     /// The GTK menu bridge is `abyss-dbus --menus`, on the session's bus, and
@@ -323,7 +336,7 @@ final class AnchorTests: XCTestCase {
     /// somebody tries to open a file from GIMP.
     func testWithNoDbusDaemonTheSessionStillBootsAndSaysWhatIsMissing() {
         let p = plan(dbusDaemon: nil)
-        XCTAssertEqual(p.components.map(\.name), ["portal", "idle", "desktop", "menubar", "dock"])
+        XCTAssertEqual(p.components.map(\.name), ["portal", "idle", "jails", "desktop", "menubar", "dock"])
         XCTAssertNil(p.busAddress)
         XCTAssertEqual(p.notes.count, 1)
         XCTAssertTrue(p.notes[0].contains("dbus-daemon"), p.notes[0])
@@ -334,7 +347,7 @@ final class AnchorTests: XCTestCase {
     /// than being a component that silently vanished from the list.
     func testDroppingTheBusDropsTheBridgeAndExplainsItself() {
         let p = plan(without: ["bus"])
-        XCTAssertEqual(p.components.map(\.name), ["portal", "idle", "desktop", "menubar", "dock"])
+        XCTAssertEqual(p.components.map(\.name), ["portal", "idle", "jails", "desktop", "menubar", "dock"])
         XCTAssertEqual(p.notes.count, 1)
         XCTAssertTrue(p.notes[0].contains("bridge"), p.notes[0])
     }

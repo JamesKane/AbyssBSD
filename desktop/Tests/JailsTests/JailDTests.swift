@@ -4,6 +4,7 @@
 import XCTest
 @testable import JailD
 @testable import Jails
+@testable import JailKeeper
 
 final class JailDTests: XCTestCase {
     let me = JailUser(name: "abyss", uid: 1001, gid: 1001)
@@ -130,6 +131,25 @@ final class JailDTests: XCTestCase {
         XCTAssertEqual(JailSteps.grantName("/a/.."), "file")
         XCTAssertEqual(JailSteps.grantName("/a/."), "file")
         XCTAssertFalse(JailSteps.grantPath(1, source: "/a/..").contains(".."))
+    }
+
+    // MARK: - the session's half (P18.5)
+
+    func testALaunchsFileArgumentsAreThePersonsFilesOnly() {
+        let files: [String: String] = ["/home/a/doc.txt": "/home/a/doc.txt", "/home/a/link": "/home/a/real.txt",
+                                       "/usr/local/share/x.ui": "/usr/local/share/x.ui"]
+        let got = LaunchFiles.indices(["/usr/local/bin/gedit", "--new", "/home/a/doc.txt", "relative.txt",
+                                       "/home/a/link", "/usr/local/share/x.ui", "/home/a/missing", "/home/a/doc.txt"],
+                                      system: JailClass.baseSystem, resolve: { files[$0] })
+        XCTAssertEqual(got.map(\.0), [2, 4, 7], "absolute, existing, outside the system; never argv[0]")
+        XCTAssertEqual(got.map(\.1), ["/home/a/doc.txt", "/home/a/real.txt", "/home/a/doc.txt"], "resolved")
+    }
+
+    func testTheJailsBusListensInsideTheJailAndNowhereElse() {
+        let c = JailKeeper.busConfig(listen: "/r/run/user/bus")
+        XCTAssertTrue(c.contains("<listen>unix:path=/r/run/user/bus</listen>"))
+        XCTAssertEqual(c.components(separatedBy: "<listen>").count, 2, "one listen")
+        XCTAssertTrue(c.contains("<auth>EXTERNAL</auth>"))
     }
 
     // MARK: - the mount table

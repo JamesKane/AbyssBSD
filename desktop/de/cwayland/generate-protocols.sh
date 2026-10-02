@@ -49,6 +49,8 @@ gen wlr-screencopy-unstable-v1
 gen wlr-output-management-unstable-v1
 gen ext-session-lock-v1
 gen ext-idle-notify-v1
+# Jails (PHASE18 P18.5): the session registers each jail's socket.
+gen security-context-v1
 
 gen_server xdg-shell
 gen_server wlr-layer-shell-unstable-v1

@@ -252,6 +252,17 @@ public func defaultSession(shellBinary: String,
                                         env: env, requires: compositorSocket.map { [$0] } ?? []))
     }
 
+    // ---------------------------------------------------------------- jails
+    // Confinement's session half (PHASE18 P18.5): a jail per class, held for
+    // the session, with its own socket, bus and portal; what a confined
+    // application's launcher asks. A Wayland client, so it waits for the
+    // compositor; it registers each jail's socket there. With no abyss-jaild
+    // on the machine it runs and refuses launches, saying why.
+    if mode == .desktop, !without.contains("jails") {
+        components.append(ComponentSpec(name: "jails", argv: [serviceDirectory + "/abyss-jail", "serve"],
+                                        env: shared, requires: compositorSocket.map { [$0] } ?? []))
+    }
+
     // ----------------------------------------------------------------- lock
     var lockScreen: ComponentSpec?
     if mode == .desktop, !without.contains("lock") {

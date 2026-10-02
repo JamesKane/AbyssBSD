@@ -141,7 +141,22 @@ Claims:
 - after a revoke, the file is gone;
 - an unjailed caller still gets its own path (no regression).
 
-**P18.5 — launching confined (S–M).**
+**P18.5 — launching confined (S–M). — DONE 2026-10-02.** The session's half
+is `abyss-jail serve`, the desktop session's `jails` component. It holds a jail
+per class for the session's life, with the jail's own Wayland socket
+(`aw_jail_listen`, security-context), its own bus and its `abyss-dbus --jail`,
+all as its children by descriptor. `abyss-jail launch CLASS -- cmd args` asks
+it, and an argument that names one of the person's files is granted (read-write
+where they may write it) and rewritten. A bundle is confined by
+`X-Abyss-Jail=` in its entry or by `jails.ini`'s `[apps]` (the person's, or
+the machine's at /usr/local/etc/abyss when run as root); `none` keeps one out.
+`abyss-appgen` writes `exec abyss-jail launch …` into its launcher.
+`live-jail-launch.sh` has six claims, green three runs in a row in the guest.
+Six faults were injected, and each failed the test. **Not done here:** the
+"Confined" line in About (it needs the menu protocol to carry a window's
+jail), and regenerating bundles when `[apps]` changes (run `abyss-appgen`).
+Both move to P18.6. Found and fixed: jaild never reaped its programs, so every
+jail stayed dying (HANDOFF §2.123).
 An application's bundle or `.desktop` file declares its class with
 `X-Abyss-Jail=`. `abyssopen`, the Dock and the Finder launch through Anchor,
 which holds the jail and process descriptors in its `kevent`. Confinement is

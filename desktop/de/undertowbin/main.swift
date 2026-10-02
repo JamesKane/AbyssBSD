@@ -652,7 +652,7 @@ case "run":
     var presentedReportAt: UInt64 = 0
     var reportedC6: [Int] = []
     var reportedWindowIslands: [String: Int] = [:]
-    var reportedJails = Set<String>()
+    var reportedJails = Set<ObjectIdentifier>()
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -704,12 +704,15 @@ case "run":
             }
             reportedC6[i] = m.c6.count
         }
-        // A window from a jail (PHASE18 P18.3), said once: which context it
-        // came through.
+        // A window from a jail (PHASE18 P18.3), said once per window: which
+        // context it came through. Per window, not per key — two windows of
+        // one application share a key (P18.5); a window gone is forgotten.
+        let mappedNow = Set(compositor.toplevels.filter { $0.mapped }.map { ObjectIdentifier($0) })
+        reportedJails.formIntersection(mappedNow)
         for t in compositor.toplevels where t.mapped {
             let key = t.placeKey ?? "?"
-            if !reportedJails.contains(key), let j = t.jail {
-                reportedJails.insert(key)
+            if !reportedJails.contains(ObjectIdentifier(t)), let j = t.jail {
+                reportedJails.insert(ObjectIdentifier(t))
                 out("window-jail \(key) engine=\(j.engine) app=\(j.appID) instance=\(j.instance)")
             }
         }

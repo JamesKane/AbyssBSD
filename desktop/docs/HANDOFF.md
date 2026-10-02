@@ -730,6 +730,24 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.123 A jail removed is not a jail gone: reap what it ran
+(2026-10-02, PHASE18 P18.5.)
+
+**Every program in a jail is abyss-jaild's child** (`pdfork`), and on FreeBSD
+closing a process descriptor kills the process but does not reap it (§2.108).
+jaild never called `waitpid`, so each program a jail had run stayed a zombie
+*inside the jail*. The jail was removed, so `jls` stopped listing it, and
+every mount was gone, but it stayed **dying** for ever: `jls -d` showed
+`abyss-1001-app 153 true`, and `ps` showed its zombies with state `ZJ`.
+`live-jaild.sh` had passed for two days because "gone" meant `jls -j` fails.
+Gone now means `jls -d -j` fails too, in both tests. jaild reaps on SIGCHLD
+through a self-pipe in its poll loop. That is safe beside `Spawn.run`, which
+waits for its own child before control returns to the loop.
+
+**Two windows of one application share a key.** undertow said `window-jail`
+once per key, so a second galculator from the same jail was never named. It
+is said once per *window* now, and forgotten when that window goes.
+
 ### 2.122 jailparam_import's lengths are not jail_set's, and a `run` that always said 0
 (2026-10-02, PHASE18 P18.4.)
 

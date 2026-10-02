@@ -236,6 +236,10 @@ if [ "$live" -eq 1 ]; then
   # the portal's descriptor — that file alone, and only as far as it was opened.
   echo "== files into a jail =="
   quiet "$root/abyss/tests/live-jail-files.sh"
+  # Launching confined (P18.5): the session's keeper, a jail per class with
+  # its socket, bus and portal; files in place; a bundle from appgen.
+  echo "== launching confined =="
+  quiet "$root/abyss/tests/live-jail-launch.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

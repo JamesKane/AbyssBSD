@@ -58,7 +58,7 @@ public struct JailClass: Equatable, Sendable {
     public static func table(_ c: Config?) -> [JailClass] {
         var out = shipped
         guard let c else { return out }
-        for section in c.sectionNames where !section.isEmpty {
+        for section in c.sectionNames where !section.isEmpty && section != JailClass.appsSection {
             var k = out.first { $0.name == section } ?? JailClass(name: section)
             if let s = c.string(section, "system") { k.system = words(s) }
             if let s = c.string(section, "devices") { k.devices = words(s) }
@@ -69,6 +69,10 @@ public struct JailClass: Equatable, Sendable {
         }
         return out
     }
+
+    /// `[apps]`: which applications run confined, and in what (P18.5) — read
+    /// by abyss-appgen, not a class.
+    public static let appsSection = "apps"
 
     public static func load(configDir: String? = nil) -> [JailClass] {
         table(try? Pool.load("jails", in: configDir))

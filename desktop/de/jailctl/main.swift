@@ -17,10 +17,24 @@
 //       a test's probe: ask to run in a jail named by NAME rather than held —
 //       jaild must refuse it unless the jail is the caller's own.
 //
+//   abyss-jail serve
+//       the session's half (P18.5): a session component that holds a jail
+//       per class, with its Wayland socket, bus and portal, and launches into
+//       it. Answers on the session's `jails` socket.
+//   abyss-jail launch CLASS -- PROGRAM [ARG...]
+//       ask the session to start PROGRAM confined; an ARG that names one of
+//       your files is granted into the jail and rewritten. What an
+//       application bundle's launcher runs when the application is confined.
+//
 // [--socket PATH] before the command talks to another jaild (a test's).
 
 import CJail
+import CPlatform
+import CWaylandClient
+import CurrentIPC
 import JailD
+import JailKeeper
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -37,6 +51,26 @@ func die(_ s: String) -> Never { emit(2, "abyss-jail: \(s)"); exit(1) }
 var args = Array(CommandLine.arguments.dropFirst())
 var socket = JailWire.defaultSocket
 if args.first == "--socket", args.count > 1 { socket = args[1]; args.removeFirst(2) }
+if args.first == "serve" {
+    var runtime = ""
+    do { runtime = try Current.runtimeDir() } catch { die("no runtime directory: \(error)") }
+    var buf = [CChar](repeating: 0, count: 4096)
+    let n = buf.withUnsafeMutableBufferPointer { ap_self_executable($0.baseAddress!, $0.count) }
+    let me = n > 0 ? String(decoding: buf[0..<Int(n)].map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
+    let binDir = me.lastIndex(of: "/").map { String(me[..<$0]) } ?? "/usr/local/bin"
+    let display = wl_display_connect(nil)
+    if display == nil { emit(2, "abyss-jail: no compositor to register jails with — launched programs get no display") }
+    let server: Current.Server
+    do { server = try Current.Server(service: KeeperWire.service) } catch { die("cannot serve \(KeeperWire.service): \(error)") }
+    signal(SIGPIPE, SIG_IGN)
+    let keeper = JailKeeper(server: server, display: display, runtimeDir: runtime, binDir: binDir,
+                            dbusDaemon: Spawn.resolveExecutable("dbus-daemon"), log: { emit(1, $0) })
+    keeper.jaildSocket = socket
+    emit(1, "jails: ready")
+    keeper.run()
+    server.shutdownAndUnlink()
+    exit(0)
+}
 guard args.count >= 2 else {
     emit(2, "usage: abyss-jail [--socket PATH] run|hold CLASS [-- PROGRAM ARG...] | spawn-by-name NAME -- PROGRAM ARG...")
     exit(2)
@@ -77,6 +111,14 @@ case "hold":
     while read(0, &b, b.count) > 0 {}
     close(j.jail)
     emit(1, "released \(j.name)")
+case "launch":
+    guard !program.isEmpty else { die("launch needs a program after --") }
+    var m = Msg(); m.set("method", "launch"); m.set("class", subject); m.set("argv", bytes: JailWire.list(program))
+    do {
+        let r = try Current.call(KeeperWire.service, m)
+        guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
+        emit(1, "launched \(program[0]) pid=\(r.uint64("pid") ?? 0) confined in \(subject)")
+    } catch { die("the session's jails are not running (\(error))") }
 case "grants":
     do { for g in try JailClient.grants(jail: subject, socket: socket) { emit(1, g) } } catch { die("\(error)") }
 case "revoke":

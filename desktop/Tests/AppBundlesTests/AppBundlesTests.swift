@@ -74,6 +74,28 @@ final class AppBundlesTests: XCTestCase {
         XCTAssertEqual(AppBundle.directoryName(".hidden"), "hidden.app")
     }
 
+    /// A confined application's launcher asks the session to start it in its
+    /// jail (PHASE18 P18.5), files and all; Terminal is never confined.
+    func testAConfinedLauncherGoesThroughTheSessionsJails() {
+        XCTAssertTrue(AppBundle.launcher(argv: ["galculator", DesktopEntry.filesMarker], source: "g.desktop", jail: "app")
+            .hasSuffix("exec abyss-jail launch app -- galculator \"$@\"\n"))
+        XCTAssertTrue(AppBundle.launcher(argv: ["top"], source: "top.desktop", terminal: "/bin/T", jail: "app")
+            .hasSuffix("exec env AQUA_SCENE=terminal /bin/T -e top\n"), "Terminal is the person's own")
+        XCTAssertTrue(AppBundle.launcher(argv: ["x"], source: "x.desktop", jail: "").hasSuffix("exec x\n"))
+    }
+
+    func testWhichApplicationsAreConfinedIsThePersonsChoiceOverTheEntrys() {
+        var e = DesktopEntry.parse("[Desktop Entry]\nType=Application\nName=Z\nExec=zenity\nX-Abyss-Jail=app-gl\n")!
+        XCTAssertEqual(e.jail, "app-gl")
+        let f = "/usr/local/share/applications/org.gnome.Zenity.desktop"
+        XCTAssertEqual(AppBundle.jailClass(entry: e, desktopFile: f, apps: []), "app-gl", "the entry's own ask")
+        XCTAssertEqual(AppBundle.jailClass(entry: e, desktopFile: f, apps: [("org.gnome.Zenity", "app")]), "app")
+        XCTAssertNil(AppBundle.jailClass(entry: e, desktopFile: f, apps: [("org.gnome.Zenity", "none")]), "none keeps it out")
+        e.jail = ""
+        XCTAssertNil(AppBundle.jailClass(entry: e, desktopFile: f, apps: [("galculator", "app")]), "opt-in: not listed, not confined")
+        XCTAssertEqual(AppBundle.jailClass(entry: e, desktopFile: "/x/galculator.desktop", apps: [("galculator", "app")]), "app")
+    }
+
     /// Which running windows are this application's (P15.2): galculator by its
     /// desktop-file ID (which is also its program), Firefox ESR by its
     /// program's name and a suffix, and Fedora's Firefox by its reverse-DNS ID.
