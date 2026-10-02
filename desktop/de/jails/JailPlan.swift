@@ -59,6 +59,7 @@ public struct JailPlan: Equatable, Sendable {
     public var params: [(String, String?)]
     /// The environment a process started in it gets, and nothing else.
     public var env: [(String, String)]
+    public var layout: JailLayout
     /// The private home: a host directory (a ZFS dataset's mountpoint where
     /// there is one, §6.3) mounted at the person's home path inside.
     public var homeSource: String
@@ -73,16 +74,26 @@ public struct JailPlan: Equatable, Sendable {
             && a.copies.map { $0.source + ">" + $0.target } == b.copies.map { $0.source + ">" + $0.target }
             && a.params.map { $0.0 + "=" + ($0.1 ?? "∅") } == b.params.map { $0.0 + "=" + ($0.1 ?? "∅") }
             && a.env.map { $0.0 + "=" + $0.1 } == b.env.map { $0.0 + "=" + $0.1 }
-            && a.homeSource == b.homeSource && a.homeDataset == b.homeDataset
+            && a.homeSource == b.homeSource && a.homeDataset == b.homeDataset && a.layout == b.layout
     }
 }
 extension JailPlan: @unchecked Sendable {}
 
-public enum JailLayout {
-    /// Where roots live on the host: under /var/run, so a reboot leaves none.
-    public static let rootBase = "/var/run/abyss-jails"
-    /// Where private homes live when there is no ZFS (§6.3).
-    public static let homeBase = "/var/db/abyss-jails"
+/// Where jails are kept on the host. `standard` is the machine's; a test
+/// passes temporary directories, and the plan's checks follow the layout it
+/// was made with.
+public struct JailLayout: Equatable, Sendable {
+    /// Where roots live: under /var/run, so a reboot leaves none.
+    public var rootBase: String
+    /// Where private homes live (a ZFS dataset's mountpoint, or a directory, §6.3).
+    public var homeBase: String
+
+    public init(rootBase: String = "/var/run/abyss-jails", homeBase: String = "/var/db/abyss-jails") {
+        self.rootBase = rootBase
+        self.homeBase = homeBase
+    }
+    public static let standard = JailLayout()
+
     /// The runtime directory inside: the jail's own Wayland socket goes here.
     public static let runtime = "/run/user"
     /// Where granted files are mounted (P18.4).
@@ -93,11 +104,12 @@ public enum JailLayout {
 extension JailPlan {
     /// The plan for `user` in `cls`. `pool` is the ZFS pool to keep homes in,
     /// or nil on UFS.
-    public static func make(_ cls: JailClass, for user: JailUser, pool: String? = nil) -> JailPlan {
+    public static func make(_ cls: JailClass, for user: JailUser, pool: String? = nil,
+                            layout: JailLayout = .standard) -> JailPlan {
         let name = "abyss-\(user.uid)-\(cls.name)"
-        let root = "\(JailLayout.rootBase)/\(user.uid)/\(cls.name)"
+        let root = "\(layout.rootBase)/\(user.uid)/\(cls.name)"
         let home = "/home/\(user.name)"
-        let homeSource = "\(JailLayout.homeBase)/\(user.name)/\(cls.name)"
+        let homeSource = "\(layout.homeBase)/\(user.name)/\(cls.name)"
 
         var mounts = [JailMount(kind: .tmpfs, source: "", target: "/", readOnly: false)]
         for dir in cls.system {
@@ -153,7 +165,7 @@ extension JailPlan {
             name: name, root: root, mounts: mounts,
             unhide: cls.devices.flatMap { JailClass.knownDevices[$0] ?? [] },
             dirs: dirs, accounts: accounts, files: files, copies: copies, params: params, env: env,
-            homeSource: homeSource,
+            layout: layout, homeSource: homeSource,
             homeDataset: pool.map { "\($0)/abyss/jails/\(user.name)/\(cls.name)" })
     }
 
@@ -174,13 +186,13 @@ extension JailPlan {
             if Self.under(m.source, hostHome) || Self.under(hostHome, m.source) {
                 out.append("\(m.source) reaches the person's own home")
             }
-            if Self.under(m.source, JailLayout.rootBase) || m.source == "/" || m.source == "/etc"
+            if Self.under(m.source, layout.rootBase) || Self.under(m.source, layout.homeBase) || m.source == "/" || m.source == "/etc"
                 || Self.under(m.source, "/root") || Self.under(m.source, "/var") {
                 out.append("\(m.source) is not a system directory")
             }
         }
-        if Self.under(homeSource, hostHome) || !Self.under(homeSource, JailLayout.homeBase) {
-            out.append("the private home \(homeSource) is not under \(JailLayout.homeBase)")
+        if Self.under(homeSource, hostHome) || !Self.under(homeSource, layout.homeBase) {
+            out.append("the private home \(homeSource) is not under \(layout.homeBase)")
         }
         for f in files where Self.secret(f.path) { out.append("\(f.path) is written into the jail") }
         for c in copies where Self.secret(c.source) || Self.secret(c.target) {
@@ -214,7 +226,7 @@ extension JailPlan {
 
     /// Whether `path` is `dir` or below it (component-wise, so /usr/localx is
     /// not under /usr/local).
-    static func under(_ path: String, _ dir: String) -> Bool {
+    public static func under(_ path: String, _ dir: String) -> Bool {
         guard !dir.isEmpty else { return false }
         let d = dir.hasSuffix("/") && dir.count > 1 ? String(dir.dropLast()) : dir
         return path == d || path.hasPrefix(d == "/" ? "/" : d + "/")

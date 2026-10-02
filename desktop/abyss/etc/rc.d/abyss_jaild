@@ -1,0 +1,50 @@
+#!/bin/sh
+#
+# PROVIDE: abyss_jaild
+# REQUIRE: LOGIN
+# BEFORE: abyss_desktop
+# KEYWORD: shutdown
+#
+# The root half of confinement (desktop/docs/PHASE18.md, P18.2): builds a
+# person's jail of a class and hands them its owning descriptor, starts
+# programs in it as them, and removes it when they let go. At
+# /var/run/abyss-jaild.sock. On ZFS, private homes are datasets in the root's
+# pool (§6.3); elsewhere, directories under /var/db/abyss-jails.
+
+. /etc/rc.subr
+
+name="abyss_jaild"
+rcvar="abyss_jaild_enable"
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+start_precmd="abyss_jaild_prestart"
+start_postcmd="abyss_jaild_poststart"
+
+abyss_jaild_prestart()
+{
+	pool=""
+	if [ "$(mount -p | awk '$2 == "/" { print $3 }')" = zfs ]; then
+		pool=$(mount -p | awk '$2 == "/" { split($1, p, "/"); print p[1] }')
+	fi
+	command_args="-f -P ${pidfile} -o /var/log/abyss-jaild.out /usr/local/bin/abyss-jaild"
+	[ -n "$pool" ] && command_args="$command_args --pool $pool"
+	[ -f /usr/local/etc/abyss/jails.ini ] && command_args="$command_args --classes /usr/local/etc/abyss/jails.ini"
+	return 0
+}
+
+abyss_jaild_poststart()
+{
+	i=0
+	while [ ! -S /var/run/abyss-jaild.sock ] && [ $i -lt 50 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+	if [ -S /var/run/abyss-jaild.sock ]; then
+		echo "abyss: jails are available"
+	else
+		echo "abyss: ABYSS-JAILD NEVER STARTED (see /var/log/abyss-jaild.out)"
+	fi
+}
+
+load_rc_config $name
+: ${abyss_jaild_enable:="NO"}
+run_rc_command "$1"

@@ -730,6 +730,28 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.121 abyss-jaild: a test's fifo, and groups a setuid does not drop
+(2026-10-02, PHASE18 P18.2.)
+
+**A daemon started from a test inherits the test's fifo ends.** `live-jaild.sh`
+holds a jail by keeping a fifo open on fd 4. A daemon restarted with that fd
+open kept the fifo's writer alive, so the hold never saw EOF and never let go:
+a "jail still there" failure that was the test's own. Start background
+helpers with `3>&- 4>&-` (or whatever the test holds).
+
+**`setuid` does not drop supplementary groups.** With `setgroups` removed from
+`ap_jail_spawn` (a fault injected on purpose), a jailed `id -G` printed
+`0 5`: wheel and operator, inherited from the root daemon, in a process with
+the person's uid. The test now asserts the group list is exactly the person's
+own, so that order (`setgroups`, `setgid`, `setuid`, then a check that
+`setuid(0)` fails) is guarded.
+
+**A fault-injection harness that cannot reach the guest reports everything
+"MISSED".** The first run of eight faults went through `sh -c`, where
+`abyss/vm/config.sh` resolves a different ssh key than zsh does. Nothing ran,
+and nothing failed. Have the harness check that the build succeeded and print
+the test's last lines when it reports a miss.
+
 ### 2.120 C2 on metal, parked: what it is not
 (2026-10-02. Parked by decision after a night of DTrace on the 12700KF; read
 this before measuring again.)

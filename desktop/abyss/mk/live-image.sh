@@ -770,6 +770,8 @@ sudo chmod 755 "$de/etc/rc.d/abyss_settings"
 # The session's authenticator (PHASE16 P16.1) and its PAM stack, from the tree
 # — the same files live-authenticator.sh runs against.
 sudo install -m 755 "$root/abyss/etc/rc.d/abyss_loginwindow" "$de/etc/rc.d/abyss_loginwindow"
+# Confinement's root half (PHASE18 P18.2).
+sudo install -m 755 "$root/abyss/etc/rc.d/abyss_jaild" "$de/etc/rc.d/abyss_jaild"
 sudo mkdir -p "$de/etc/pam.d"
 sudo install -m 644 "$root/abyss/etc/pam.d/abyss" "$de/etc/pam.d/abyss"
 # The lid and the buttons, through devd to the daemon (PHASE16 P16.4b).
@@ -812,6 +814,8 @@ abyss_settings_enable="NO"
 # The authenticator answers whoever asks, about themselves — the live user's
 # lock screen too (PHASE16 P16.1).
 abyss_loginwindow_enable="YES"
+# Jails for applications (PHASE18 P18.2): idle until a session asks.
+abyss_jaild_enable="YES"
 
 # **The GPU driver, and the thing that lets an unprivileged session use it.**
 # `kld_list` rather than loader.conf, which is what FreeBSD's own drm-kmod

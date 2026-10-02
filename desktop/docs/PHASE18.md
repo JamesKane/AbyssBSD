@@ -54,7 +54,15 @@ fault injections (a writable system mount, a home outside the dataset, an
 `/etc` with `master.passwd`). The shipped classes are `app` (no network,
 Wayland, ruleset 4), `app-gl`, and `app-net` (host network: a browser).
 
-**P18.2 — `abyss-jaild`, the root half (M).**
+**P18.2 — `abyss-jaild`, the root half (M). — DONE 2026-10-02.** `de/cjail`
+(jail and process descriptors in C, ENOSYS off FreeBSD), `de/jaild` (pure
+build and teardown steps, the performer, the service, the client),
+`abyss-jaild`, `abyss-jail` (a person's client), and `abyss/etc/rc.d/abyss_jaild`
+(enabled on the medium and on installs, with the root's ZFS pool for homes).
+11 unit tests; `live-jaild.sh`'s six claims are green in the guest, three runs
+running. Nine faults were injected into the daemon, and each failed the test.
+Run from its rc.d script in the guest, jaild kept a home as the dataset
+`zroot/abyss/jails/build/app` (HANDOFF §2.121).
 A root daemon, started from rc.d like `abyss_loginwindow`. Its socket is
 private, and it asks the kernel who is calling (`Peer.swift`). It does
 three things, all for the caller's own uid:

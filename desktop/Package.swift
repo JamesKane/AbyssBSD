@@ -18,6 +18,12 @@ let soundLibraries: [LinkerSetting] = []
 #endif
 // OpenPAM is in FreeBSD's base; the Linux dev box has no PAM headers, and the
 // authenticator refuses there (PHASE16 P16.1).
+// libjail (P18.2): base on FreeBSD; Linux has no jails, and CJail is stubs.
+#if os(FreeBSD)
+let jailLibraries: [LinkerSetting] = [.linkedLibrary("jail")]
+#else
+let jailLibraries: [LinkerSetting] = []
+#endif
 #if os(FreeBSD)
 let pamLibraries: [LinkerSetting] = [.linkedLibrary("pam")]
 let utilLibraries: [LinkerSetting] = [.linkedLibrary("util")]
@@ -339,6 +345,15 @@ let package = Package(
         // Jails — what a jail contains, as data, and the plan a root daemon
         // performs (PHASE18). Pure: tested on Linux, where there are no jails.
         .target(name: "Jails", dependencies: ["PoolConfig"], path: "de/jails"),
+        // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
+        .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
+                linkerSettings: jailLibraries),
+        // abyss-jaild's steps, performer, service and client (P18.2).
+        .target(name: "JailD", dependencies: ["Jails", "CJail", "CurrentIPC", "CPlatform", "Spawn", "PoolConfig"],
+                path: "de/jaild"),
+        .executableTarget(name: "abyss-jaild", dependencies: ["JailD", "Jails", "CurrentIPC", "PoolConfig"],
+                          path: "de/jaildbin"),
+        .executableTarget(name: "abyss-jail", dependencies: ["JailD", "CJail"], path: "de/jailctl"),
         .target(name: "Pty", dependencies: ["CPlatform", "Spawn"], path: "de/pty"),
         .executableTarget(name: "abyss-vt", dependencies: ["Pty", "Terminal"], path: "de/vtbin"),
         // `.desktop` → `.app` (PHASE15 P15.1): the rules as values, importing
@@ -349,7 +364,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
-        .testTarget(name: "JailsTests", dependencies: ["Jails", "PoolConfig"], path: "Tests/JailsTests"),
+        .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
         // installer's shape: plans as values that import nothing, a wire the
         // pane links without the executor, the runner, and two binaries.

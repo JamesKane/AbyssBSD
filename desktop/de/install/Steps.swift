@@ -381,6 +381,8 @@ public func rcConf(_ plan: InstallPlan) -> String {
         // The session's authenticator (PHASE16 P16.1): for every account, so
         // anyone's screen can be unlocked — and later, the login window.
         out += "abyss_loginwindow_enable=\"YES\"\n"
+        // Jails for applications (PHASE18 P18.2): idle until a session asks.
+        out += "abyss_jaild_enable=\"YES\"\n"
     }
     return out
 }
