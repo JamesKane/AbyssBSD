@@ -48,10 +48,13 @@ public final class StubBackend: ModelBackend {
 /// A server speaking the same wire — llama.cpp's `llama-server` on loopback.
 public final class HTTPBackend: ModelBackend {
     public let name: String
-    let host: String, port: UInt16, path: String
+    let endpoint: HTTP.Endpoint, path: String
     public init(host: String, port: UInt16, path: String = "/v1/chat/completions") {
-        self.host = host; self.port = port; self.path = path
+        endpoint = .tcp(host: host, port: port); self.path = path
         name = "http://\(host):\(port)\(path)"
+    }
+    public init(socket: String, name: String, path: String = "/v1/chat/completions") {
+        endpoint = .unix(path: socket); self.path = path; self.name = name
     }
     /// `http://HOST:PORT[/path]`.
     public convenience init?(url: String) {
@@ -64,7 +67,7 @@ public final class HTTPBackend: ModelBackend {
         self.init(host: String(hp[0]), port: port, path: path)
     }
     public func complete(_ request: JSON) throws -> JSON {
-        let r = try HTTP.post(host: host, port: port, path: path, json: request)
+        let r = try HTTP.call(endpoint, method: "POST", path: path, json: request)
         guard r.status == 200 else {
             throw HTTP.Failure("the backend said \(r.status): \(String(decoding: r.body.prefix(300), as: UTF8.self))")
         }

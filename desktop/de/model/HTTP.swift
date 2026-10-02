@@ -155,32 +155,81 @@ public enum HTTP {
 
     public static func send(_ r: HTTPResponse, on fd: Int32) throws { try writeAll(fd, r.bytes) }
 
-    /// POST a JSON body to http://HOST:PORT/PATH over TCP and read the reply.
-    public static func post(host: String, port: UInt16, path: String, json: JSON,
-                            timeoutSeconds: Int = 600) throws -> HTTPResponse {
-        var hints = addrinfo()
-        hints.ai_family = AF_UNSPEC
-        #if os(Linux)
-        hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
-        #else
-        hints.ai_socktype = SOCK_STREAM
-        #endif
-        var res: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, String(port), &hints, &res) == 0, let ai = res else { throw Failure("cannot resolve \(host)") }
-        defer { freeaddrinfo(res) }
-        let fd = socket(ai.pointee.ai_family, ai.pointee.ai_socktype, ai.pointee.ai_protocol)
-        guard fd >= 0 else { throw Failure("socket: \(String(cString: strerror(errno)))") }
-        defer { close(fd) }
+    /// Where a server is: loopback TCP, or a unix socket (how `abyss-model`
+    /// runs `llama-server` itself, so a local model has no port at all).
+    public enum Endpoint: Equatable, Sendable {
+        case tcp(host: String, port: UInt16)
+        case unix(path: String)
+        var hostHeader: String {
+            switch self { case let .tcp(h, p): return "\(h):\(p)"; case .unix: return "localhost" }
+        }
+    }
+
+    static func connect(_ to: Endpoint, timeoutSeconds: Int) throws -> Int32 {
+        let fd: Int32
+        switch to {
+        case let .tcp(host, port):
+            var hints = addrinfo()
+            hints.ai_family = AF_UNSPEC
+            #if os(Linux)
+            hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
+            #else
+            hints.ai_socktype = SOCK_STREAM
+            #endif
+            var res: UnsafeMutablePointer<addrinfo>?
+            guard getaddrinfo(host, String(port), &hints, &res) == 0, let ai = res else { throw Failure("cannot resolve \(host)") }
+            defer { freeaddrinfo(res) }
+            fd = socket(ai.pointee.ai_family, ai.pointee.ai_socktype, ai.pointee.ai_protocol)
+            guard fd >= 0 else { throw Failure("socket: \(String(cString: strerror(errno)))") }
+            guard Glibc_connect(fd, ai.pointee.ai_addr, ai.pointee.ai_addrlen) == 0 else {
+                let e = errno; close(fd)
+                throw Failure("connect \(host):\(port): \(String(cString: strerror(e)))")
+            }
+        case let .unix(path):
+            #if os(Linux)
+            fd = socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
+            #else
+            fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            #endif
+            guard fd >= 0 else { throw Failure("socket: \(String(cString: strerror(errno)))") }
+            var sa = sockaddr_un()
+            sa.sun_family = sa_family_t(AF_UNIX)
+            let bytes = Array(path.utf8)
+            guard bytes.count < MemoryLayout.size(ofValue: sa.sun_path) else { close(fd); throw Failure("socket path too long: \(path)") }
+            withUnsafeMutableBytes(of: &sa.sun_path) { dst in for (i, b) in bytes.enumerated() { dst[i] = b } }
+            let ok = withUnsafePointer(to: &sa) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Glibc_connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+            }
+            guard ok == 0 else { let e = errno; close(fd); throw Failure("connect \(path): \(String(cString: strerror(e)))") }
+        }
         _ = ap_socket_nosigpipe(fd)
         var tv = timeval(tv_sec: timeoutSeconds, tv_usec: 0)
         _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
-        guard connect(fd, ai.pointee.ai_addr, ai.pointee.ai_addrlen) == 0 else {
-            throw Failure("connect \(host):\(port): \(String(cString: strerror(errno)))")
-        }
-        let body = Array(json.text.utf8)
-        let head = "POST \(path) HTTP/1.1\r\nHost: \(host):\(port)\r\nContent-Type: application/json\r\n"
-            + "Content-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+        return fd
+    }
+
+    /// One request to `to`, read to EOF.
+    public static func call(_ to: Endpoint, method: String, path: String, json: JSON? = nil,
+                            timeoutSeconds: Int = 600) throws -> HTTPResponse {
+        let fd = try connect(to, timeoutSeconds: timeoutSeconds)
+        defer { close(fd) }
+        let body = json.map { Array($0.text.utf8) } ?? []
+        var head = "\(method) \(path) HTTP/1.1\r\nHost: \(to.hostHeader)\r\n"
+        if json != nil { head += "Content-Type: application/json\r\n" }
+        head += "Content-Length: \(body.count)\r\nConnection: close\r\n\r\n"
         try writeAll(fd, Array(head.utf8) + body)
         return try response(try readAll(fd) { _ in false })
     }
+
+    /// POST a JSON body to http://HOST:PORT/PATH over TCP and read the reply.
+    public static func post(host: String, port: UInt16, path: String, json: JSON,
+                            timeoutSeconds: Int = 600) throws -> HTTPResponse {
+        try call(.tcp(host: host, port: port), method: "POST", path: path, json: json, timeoutSeconds: timeoutSeconds)
+    }
 }
+
+#if canImport(Glibc)
+@inline(__always) func Glibc_connect(_ fd: Int32, _ a: UnsafePointer<sockaddr>?, _ l: socklen_t) -> Int32 { Glibc.connect(fd, a, l) }
+#else
+@inline(__always) func Glibc_connect(_ fd: Int32, _ a: UnsafePointer<sockaddr>?, _ l: socklen_t) -> Int32 { Darwin.connect(fd, a, l) }
+#endif

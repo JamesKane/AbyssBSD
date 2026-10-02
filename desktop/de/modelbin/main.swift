@@ -1,16 +1,19 @@
 // abyss-model — the only way to a model (PHASE18 P18.7).
 //
 //   abyss-model serve --listen PATH --session ID --budget TOKENS --transcript DIR
-//                     (--stub FILE | --backend http://HOST:PORT[/path])
+//                     (--stub FILE | --backend http://HOST:PORT[/path] |
+//                      --local MODEL.gguf [--llama-server PATH] [--context N])
 //       OpenAI-compatible chat completions over the unix socket at PATH, for
 //       one agent session: its budget, its append-only transcript in DIR, and
-//       its backend — canned replies from FILE (a JSON array), or a server
-//       speaking the same wire (llama.cpp's llama-server). The keeper puts
+//       its backend — canned replies from FILE (a JSON array), a server
+//       speaking the same wire, or llama.cpp's llama-server, which abyss-model
+//       runs itself on a private unix socket (P18.7b) and stops when it goes. The keeper puts
 //       PATH inside an agent's jail; the transcript stays outside it.
 //   abyss-model tier
 //       this machine's VRAM and RAM, its tier, and the model proposed for it
 //       (PHASE18 §6b.1).
 
+import CProc
 import CurrentIPC
 import Model
 import Spawn
@@ -41,6 +44,8 @@ func readFile(_ path: String) -> [UInt8]? {
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
+/// llama-server's pid, for the signal handler (which may only call kill and _exit).
+nonisolated(unsafe) var localPid: Int32 = 0
 func opt(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
     return args[i + 1]
@@ -65,6 +70,10 @@ case "serve":
           let budget = opt("--budget").flatMap(Int.init), budget > 0 else {
         die("serve needs --listen PATH --session ID --budget TOKENS --transcript DIR")
     }
+    // The session's directory first: the transcript, and llama-server's
+    // private socket directory inside it.
+    let fd: Int32
+    do { fd = try TranscriptFile.open(dir: dir) } catch { die("\(error)") }
     let backend: ModelBackend
     if let stub = opt("--stub") {
         guard let b = readFile(stub), let j = try? JSON.parse(b), let replies = j.array else {
@@ -74,9 +83,31 @@ case "serve":
     } else if let url = opt("--backend") {
         guard let h = HTTPBackend(url: url) else { die("--backend must be http://HOST:PORT[/path]") }
         backend = h
-    } else { die("serve needs --stub FILE or --backend URL") }
-    let fd: Int32
-    do { fd = try TranscriptFile.open(dir: dir) } catch { die("\(error)") }
+    } else if let model = opt("--local") {
+        let server = opt("--llama-server") ?? Spawn.resolveExecutable("llama-server") ?? "/usr/local/bin/llama-server"
+        let context = opt("--context").flatMap(Int.init) ?? 16384
+        emit(1, "starting llama-server with \(model)")
+        let local: LocalServer
+        do { local = try LocalServer(server: server, model: model, dir: dir + "/llama", context: context) } catch { die("\(error)") }
+        // Stop it on the way out. On FreeBSD the kernel would anyway (a
+        // process descriptor without PD_DAEMON); on Linux this is what does.
+        localPid = local.child.pid
+        for sig in [SIGTERM, SIGINT, SIGHUP] {
+            signal(sig) { s in
+                // Ask it to stop, and wait (5s at most) for it to have — on
+                // FreeBSD our exit closes its process descriptor, and the
+                // kernel would SIGKILL it mid-shutdown. waitpid and nanosleep
+                // only: a signal handler may call nothing else here.
+                if localPid > 0 {
+                    kill(localPid, SIGTERM)
+                    var ts = timespec(tv_sec: 0, tv_nsec: 100_000_000)
+                    for _ in 0..<50 where waitpid(localPid, nil, WNOHANG) == 0 { nanosleep(&ts, nil) }
+                }
+                _exit(128 + s)
+            }
+        }
+        backend = LocalBackend(server: local, model: model)
+    } else { die("serve needs --stub FILE, --backend URL or --local MODEL") }
     signal(SIGPIPE, SIG_IGN)
     let server: Current.Server
     do { server = try Current.Server(path: listen, mode: 0o600) } catch { die("cannot listen at \(listen): \(error)") }

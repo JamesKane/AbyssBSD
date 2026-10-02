@@ -351,7 +351,7 @@ let package = Package(
         .target(name: "Jails", dependencies: ["PoolConfig"], path: "de/jails"),
         // The one wire to a model (PHASE18 P18.7): JSON, minimal HTTP, the
         // session's budget and transcript, backends, and the VRAM tiers.
-        .target(name: "Model", dependencies: ["CPlatform"], path: "de/model"),
+        .target(name: "Model", dependencies: ["CPlatform", "CProc"], path: "de/model"),
         .executableTarget(name: "abyss-model", dependencies: ["Model", "CurrentIPC", "Spawn"], path: "de/modelbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
