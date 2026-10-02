@@ -62,6 +62,7 @@ cat > "$W/stub.json" <<'J'
  {"choices":[{"index":0,"message":{"role":"assistant","content":"It read a null pointer in kaboom()."}}],"usage":{"total_tokens":100}}]
 J
 printf '[debug]\nmodel = stub:%s\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
+: > "$ABYSS_CONFIG_DIR/agents.ini"   # agents on (P18.13): off is this file, absent
 
 # jaild with a core size of 0: what the jailed program must not inherit.
 sudo sh -c "ulimit -c 0; exec '$W/bin/abyss-jaild' --socket '$SOCK' --root-base '$RB' --home-base '$HB'" > "$W/jd.log" 2>&1 &

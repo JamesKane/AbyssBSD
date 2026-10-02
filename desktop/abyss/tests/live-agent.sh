@@ -62,6 +62,7 @@ cat > "$W/stub.json" <<J
  {"choices":[{"index":0,"message":{"role":"assistant","content":"done looking"}}],"usage":{"total_tokens":100}}]
 J
 printf '[agent]\nmodel = stub:%s\nbudget = 250\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
+: > "$ABYSS_CONFIG_DIR/agents.ini"   # agents on (P18.13): off is this file, absent
 
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 &
 await "$W/jd.log" 'answering at' "the daemon did not start"

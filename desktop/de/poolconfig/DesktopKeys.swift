@@ -17,6 +17,9 @@ public enum DesktopKeys {
         ("XF86AudioRaiseVolume", "run: ventsctl volume +5"),
         ("XF86AudioLowerVolume", "run: ventsctl volume -5"),
         ("XF86AudioMute",        "run: ventsctl volume 0"),
+        // The Agent window (PHASE18 P18.13) — a chord only while agents are
+        // on: with no agents.ini the key goes to the application as if unbound.
+        ("Cmd+Alt+A",            "agent"),
         // Islands (PHASE13 §6.4): Mac's Spaces keys; Ctrl-Alt sends the
         // focused window, and Shift goes with it (§6.2). A digit past
         // `islands.ini`'s count does nothing.

@@ -303,6 +303,9 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     public static func items(tokens: [String], library: [InstalledApp]) -> [DockItem] {
         let selfExe = Launcher.selfExecutable()
         return tokens.compactMap { t -> DockItem? in
+            // No Agent tile while agents are off (P18.13): the token stays in
+            // dock.ini, so turning them on again brings it back where it was.
+            if t == "agent", !Agents.on() { return nil }
             if let b = builtins.first(where: { $0.token == t }) {
                 return DockItem(icon: b.icon, label: b.label, appID: b.appID,
                                 command: selfExe.map { [$0] }, environment: ["AQUA_SCENE": b.scene],

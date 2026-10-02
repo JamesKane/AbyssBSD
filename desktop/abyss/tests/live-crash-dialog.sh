@@ -64,6 +64,7 @@ cat > "$W/stub.json" <<'J'
  {"choices":[{"index":0,"message":{"role":"assistant","content":"It read a null pointer in kaboom(), crasher.c line 6."}}],"usage":{"total_tokens":100}}]
 J
 printf '[debug]\nmodel = stub:%s\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
+: > "$ABYSS_CONFIG_DIR/agents.ini"   # agents on (P18.13): off is this file, absent
 
 xml="$root/abyss/tests/wlr-virtual-pointer-unstable-v1.xml"
 wayland-scanner client-header "$xml" "$W/vpointer-proto.h"; wayland-scanner private-code "$xml" "$W/vpointer-proto.c"

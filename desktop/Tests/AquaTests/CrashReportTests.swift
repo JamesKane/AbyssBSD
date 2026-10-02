@@ -14,6 +14,14 @@ final class CrashReportTests: XCTestCase {
         XCTAssertEqual(none.detail, "It ran confined, so nothing else was affected. It was killed by SIGKILL, and left nothing to read.")
     }
 
+    /// Agents off (P18.13): a core, but no Ask the Agent, and no promise of one.
+    func testWithAgentsOffThereIsNoAsk() {
+        let n = CrashNotice(id: 1, app: "galculator", signal: "SIGSEGV", core: true, agents: false)
+        XCTAssertFalse(n.canAsk)
+        XCTAssertEqual(n.detail, "It ran confined, so nothing else was affected. It was killed by SIGSEGV.")
+        XCTAssertTrue(CrashNotice(id: 1, app: "g", signal: "SIGSEGV", core: true, agents: true).canAsk)
+    }
+
     func testAskIsTheDefaultWhenThereIsACore() {
         let l = CrashReportLayout(choices: [.close, .ask], w: 480, h: 180)
         XCTAssertEqual(l.buttons.map { $0.0 }, [.close, .ask])

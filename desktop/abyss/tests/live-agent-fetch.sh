@@ -59,6 +59,7 @@ cat > "$W/stub.json" <<J
  {"choices":[{"index":0,"message":{"role":"assistant","content":"Read it."}}],"usage":{"total_tokens":100}}]
 J
 printf '[agent]\nmodel = stub:%s\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
+: > "$ABYSS_CONFIG_DIR/agents.ini"   # agents on (P18.13): off is this file, absent
 printf 'HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>Plumbers</h1><p>Open on Monday &amp; Tuesday.</p><script>x()</script></body></html>\n' > "$W/page.http"
 
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- &

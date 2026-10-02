@@ -53,6 +53,7 @@ cat > "$W/stub.json" <<'J'
 [{"choices":[{"index":0,"message":{"role":"assistant","content":"The plumber, on Monday."}}],"usage":{"total_tokens":42}}]
 J
 printf '[agent]\nmodel = stub:%s\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
+: > "$ABYSS_CONFIG_DIR/agents.ini"   # agents on (P18.13): off is this file, absent
 printf 'a document\n' > "$W/doc.txt"; printf 'another\n' > "$W/other.txt"
 
 xml="$root/abyss/tests/wlr-virtual-pointer-unstable-v1.xml"
@@ -92,7 +93,7 @@ at() { p=$(echo "$lay" | tr ' ' '\n' | sed -n "s/^$1=//p"); echo "$((${pos%,*} +
 click() { printf 'm %s %s\np\nr\n' $1 $2 >&3; sleep 0.5; }
 
 # ---- 1. what is listed ------------------------------------------------------------
-grep -q "agents: 1 session(s); grants: $APP.1 $APP.2\$" "$W/prefs.log" || fail "the pane read: $(grep 'agents: ' "$W/prefs.log" | tail -1)"
+grep -q "agents: on; 1 session(s); grants: $APP.1 $APP.2\$" "$W/prefs.log" || fail "the pane read: $(grep 'agents: ' "$W/prefs.log" | tail -1)"
 echo "$lay" | grep -q " session.$session=" || fail "the session is not a row: $lay"
 echo "$lay" | grep -q " revoke.$APP.1=" && echo "$lay" | grep -q " revoke.$APP.2=" || fail "the grants have no Revoke: $lay"
 echo "ok: 1. the pane lists the session ($session) from disk, and $APP's grants 1 and 2 from the keeper"
@@ -109,7 +110,7 @@ echo "ok: 2. clicking the session shows it (its digest: what was asked, what the
 click $(at "revoke.$APP.2")
 await "$W/keeper.log" "jails: revoked grant 2 in $APP" "Revoke did not reach the keeper, for grant 2"
 await "$W/prefs.log" "agents: Revoked: $W/other.txt is no longer in $APP." "the pane did not say it was revoked"
-await "$W/prefs.log" "agents: 1 session(s); grants: $APP.1\$" "the pane did not re-read the grants"
+await "$W/prefs.log" "agents: on; 1 session(s); grants: $APP.1\$" "the pane did not re-read the grants"
 left=$(.build/debug/abyss-jail --socket "$SOCK" grants "$APP")
 echo "$left" | grep -q 'other.txt' && fail "jaild still lists the revoked grant: $left"
 echo "$left" | grep -q 'doc.txt' || fail "the other grant went too: $left"

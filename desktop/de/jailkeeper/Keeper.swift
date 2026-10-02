@@ -338,7 +338,8 @@ public final class JailKeeper {
             let app = program.split(separator: "/").last.map(String.init) ?? program
             let shown = Spawn.detached(argv, environment: [
                 "AQUA_SCENE": "crashreport", "ABYSS_CRASH_ID": String(c.id), "ABYSS_CRASH_APP": app,
-                "ABYSS_CRASH_SIGNAL": Crash.signalName(signal), "ABYSS_CRASH_CORE": c.coreDumped ? "1" : "0"])
+                "ABYSS_CRASH_SIGNAL": Crash.signalName(signal), "ABYSS_CRASH_CORE": c.coreDumped ? "1" : "0",
+                "ABYSS_AGENTS": Agents.on() ? "1" : "0"])
             say("jails: crash \(c.id) \(shown ? "shown" : "could not be shown")")
         }
     }
@@ -346,6 +347,7 @@ public final class JailKeeper {
     /// A `debug` session for crash `id`: its core, and its binary if the debug
     /// jail does not see it anyway, granted read-only — that crash, no other.
     public func debug(_ id: Int) throws -> AgentSession {
+        guard Agents.on() else { throw JailClient.Refused(description: "agents are off: there is no agents.ini") }
         guard let c = crashes[id] else { throw JailClient.Refused(description: "there is no crash \(id)") }
         guard c.coreDumped else { throw JailClient.Refused(description: "\(c.summary): there is nothing to read") }
         let cls = "debug"
@@ -386,6 +388,8 @@ public final class JailKeeper {
     }
 
     public func agent(_ cls: String, extra: [String] = []) throws -> AgentSession {
+        // Off is one file, absent (P18.13): no agent process at all.
+        guard Agents.on() else { throw JailClient.Refused(description: "agents are off: there is no agents.ini") }
         guard let k = classes.first(where: { $0.name == cls }), k.agent else {
             throw JailClient.Refused(description: "\(cls) is not an agent class")
         }

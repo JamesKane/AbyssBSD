@@ -24,6 +24,8 @@ final class AgentsPaneTests: XCTestCase {
         XCTAssertEqual(agentsHit(l, s, x: l.sessionRows[1].x + 5, y: l.sessionRows[1].y + 5), .session(1))
         XCTAssertEqual(agentsHit(l, s, x: l.revoke[0].x + 5, y: l.revoke[0].y + 5), .revoke(0))
         XCTAssertNil(agentsHit(l, s, x: l.digest.x + 5, y: l.digest.y + 5), "the digest is read, not pressed")
+        XCTAssertEqual(agentsHit(l, s, x: l.onOff.x + 5, y: l.onOff.y + 5), .onOff)
+        XCTAssertLessThan(l.onOff.y + l.onOff.h, l.sessions.y - 20, "the switch sits above the sessions' heading")
         XCTAssertLessThan(l.sessions.x + l.sessions.w, l.digest.x, "the list and the digest do not overlap")
         XCTAssertLessThan(l.digest.y + l.digest.h, l.grants.y)
     }

@@ -607,6 +607,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             var line = "agents layout"
             for (t, r) in zip(agents.sessions, layout.agents.sessionRows) { line += " session.\(t.id)=\(c(r))" }
             for (g, r) in zip(agents.grants, layout.agents.revoke) { line += " revoke.\(g.jail).\(g.n)=\(c(r))" }
+            line += " onoff=\(c(layout.agents.onOff))"
             SystemPreferencesApp.log(line)
         }
         if dumpLayout, model.view == .pane(PrefsModel.accountsPane), dumpedAccounts != layout.accounts {
@@ -859,13 +860,14 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         let keep = agents.selected.flatMap { agents.sessions.indices.contains($0) ? agents.sessions[$0].id : nil }
         let note = agents.note
         agents = AgentsPaneState()
+        agents.on = Agents.on()
         agents.sessions = AgentsPaneIO.sessions()
         agents.selected = keep.flatMap { k in agents.sessions.firstIndex { $0.id == k } } ?? (agents.sessions.isEmpty ? nil : 0)
         if let i = agents.selected { agents.digest = AgentsPaneIO.digest(agents.sessions[i].id) }
         if let g = AgentsPaneIO.grants() { agents.grants = g } else { agents.note = "The session's jails are not running." }
         if !note.isEmpty { agents.note = note }
         dumpedAgents = nil
-        SystemPreferencesApp.log("agents: \(agents.sessions.count) session(s); grants: "
+        SystemPreferencesApp.log("agents: \(agents.on ? "on" : "off"); \(agents.sessions.count) session(s); grants: "
             + agents.grants.map { "\($0.jail).\($0.n)" }.joined(separator: " "))
         window?.setNeedsDisplay()
     }
@@ -881,6 +883,13 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
 
     private func pressAgents(_ hit: AgentsHit) {
         switch hit {
+        case .onOff:
+            // Off is one file, absent (P18.13): on writes agents.ini, off
+            // removes it.
+            if let why = Agents.set(!agents.on) { agents.note = "Not changed: \(why)" }
+            else { agents.note = Agents.on() ? "Agents are on." : "Agents are off." }
+            SystemPreferencesApp.log("agents: \(agents.note)")
+            loadAgents()
         case .session(let i): selectAgentSession(i)
         case .revoke(let i):
             guard agents.grants.indices.contains(i) else { return }

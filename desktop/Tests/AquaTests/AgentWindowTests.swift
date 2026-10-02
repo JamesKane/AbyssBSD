@@ -4,6 +4,10 @@
 import XCTest
 @testable import Aqua
 import MenuModel
+import PoolConfig
+#if canImport(Glibc)
+import Glibc
+#endif
 
 final class AgentWindowTests: XCTestCase {
     func testATurnShowsTheToolCallsBeforeTheAnswer() {
@@ -31,7 +35,30 @@ final class AgentWindowTests: XCTestCase {
 
     /// `agent` in dock.ini pins Agent; and a running Agent that is not pinned
     /// wears its own tile, not the generic one, and leaves when it quits.
-    func testTheDockKnowsAgent() {
+    /// Off is one file, absent (P18.13): no System ▸ Agent…, no Agent tile.
+    func testOffHidesTheMenuItemAndTheTile() {
+        XCTAssertTrue(MenuBar.systemMenu(agentsOn: true).commands.contains { $0.verb == "system.agent" })
+        XCTAssertFalse(MenuBar.systemMenu(agentsOn: false).commands.contains { $0.verb == "system.agent" })
+        XCTAssertEqual(MenuBar.systemMenu(agentsOn: false).commands.count, MenuBar.systemMenu(agentsOn: true).commands.count - 1,
+                       "and the rest of the menu does not know the difference")
+        withAgents(false) { XCTAssertTrue(Dock.items(tokens: ["agent", "finder"], library: []).map(\.label) == ["Finder"]) }
+        withAgents(true) { XCTAssertEqual(Dock.items(tokens: ["agent", "finder"], library: []).map(\.label), ["Agent", "Finder"]) }
+    }
+
+    /// Run `body` with a config dir in which agents are on or off.
+    func withAgents(_ on: Bool, _ body: () -> Void) {
+        var t = Array("/tmp/abyss-agents-XXXXXX".utf8CString)
+        let dir = String(cString: mkdtemp(&t)!)
+        let old = getenv("ABYSS_CONFIG_DIR").map { String(cString: $0) }
+        setenv("ABYSS_CONFIG_DIR", dir, 1)
+        if on { _ = Agents.set(true, configDir: dir) }
+        body()
+        unlink(dir + "/agents.ini"); rmdir(dir)
+        if let old { setenv("ABYSS_CONFIG_DIR", old, 1) } else { unsetenv("ABYSS_CONFIG_DIR") }
+    }
+
+    func testTheDockKnowsAgent() { withAgents(true) { dockKnowsAgent() } }
+    func dockKnowsAgent() {
         let pinned = Dock.items(tokens: ["agent"], library: [])
         XCTAssertEqual(pinned.count, 1)
         XCTAssertEqual(pinned[0].label, "Agent")
@@ -48,7 +75,8 @@ final class AgentWindowTests: XCTestCase {
 
     /// Every built-in can be pinned, wears its own icon running, and is the
     /// app ID its window really gives (System Preferences': `.preferences`).
-    func testEveryBuiltinHasATile() {
+    func testEveryBuiltinHasATile() { withAgents(true) { everyBuiltinHasATile() } }
+    func everyBuiltinHasATile() {
         for b in Dock.builtins {
             let pinned = Dock.items(tokens: [b.token], library: [])
             XCTAssertEqual(pinned.first?.label, b.label, b.token)

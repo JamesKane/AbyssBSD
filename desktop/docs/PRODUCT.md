@@ -279,9 +279,11 @@ Missing:
   This is §8.5's rule in another dimension — *a budget, not a boolean* — and the
   same instinct that gates effects on C1's miss budget should gate an agent on a
   number the user set.
-- **Off is one file.** Present, and the agent does not start: no menu item, no
-  chord, no spend indicator, no process parked on a crash, and **the rest of the
-  desktop does not know the difference.** For an OS whose thesis 5 is "it just
+- **Off is one file — absent.** Agents are opt-in: without `agents.ini` the
+  agent does not start, and there is no menu item, no chord, no spend
+  indicator, no process parked on a crash, and **the rest of the desktop does
+  not know the difference.** (Decided 2026-10-02; this sentence once said
+  "present", against §10 and PLAN.) For an OS whose thesis 5 is "it just
   works", an agent that cannot be removed is a liability, so this is a rejection
   and it is in §10.
 

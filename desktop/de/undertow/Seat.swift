@@ -1284,6 +1284,9 @@ public final class Seat {
             }
         }
         guard let act = action else { return false }
+        // **No chord while agents are off** (P18.13): the key is the
+        // application's, as if it were not bound at all.
+        if act == .agent, !Agents.on(configDir: compositor.configDir ?? Seat.defaultConfigDir()) { return false }
         consumedKeys.insert(keycode)
         perform(act)
         return true
@@ -1328,6 +1331,10 @@ public final class Seat {
         case .shoalStrip:      compositor.toggleShoalStrip()
         case .islandStep(let d): compositor.stepIsland(d)
         case .moveToIsland(let n, let follow): compositor.moveFocusedWindow(toIsland: n, follow: follow)
+        case .agent:
+            if !Spawn.detached(["AquaDemo"], environment: ["AQUA_SCENE": "agent"]) {
+                Compositor.log("keybind: could not open Agent — AquaDemo not found on PATH")
+            } else { Compositor.log("keybind: Agent") }
         case .run(let words):
             // Said, not swallowed: a binding whose program is not on PATH did
             // nothing at all, and nothing said so (HANDOFF §2.115).

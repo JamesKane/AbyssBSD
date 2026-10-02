@@ -1407,4 +1407,11 @@ final class IdleClockTests: XCTestCase {
         XCTAssertEqual(IdleClock.timeoutNs(prefs: EnergyPrefs(displaySleepMinutes: 10), overrideSeconds: 1.5), 1_500_000_000)
         XCTAssertEqual(IdleClock.timeoutNs(prefs: EnergyPrefs(displaySleepMinutes: 10), overrideSeconds: 0), 0)
     }
+
+    /// The Agent chord (PHASE18 P18.13) is an action of its own, so the
+    /// compositor can let the key through while agents are off.
+    func testTheAgentChordParses() {
+        XCTAssertEqual(KeyBindingParser.parse(action: "agent"), .agent)
+        XCTAssertNotEqual(KeyBindingParser.parse(action: "agent"), .run(["agent"]))
+    }
 }

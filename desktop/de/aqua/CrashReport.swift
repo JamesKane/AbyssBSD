@@ -34,23 +34,28 @@ public struct CrashNotice: Equatable, Sendable {
     public var app: String
     public var signal: String
     public var core: Bool
+    /// Whether agents are on (P18.13): off, there is no Ask the Agent.
+    public var agents: Bool
 
-    public init(id: Int, app: String, signal: String, core: Bool) {
-        self.id = id; self.app = app; self.signal = signal; self.core = core
+    public init(id: Int, app: String, signal: String, core: Bool, agents: Bool = true) {
+        self.id = id; self.app = app; self.signal = signal; self.core = core; self.agents = agents
     }
 
     /// From the keeper's environment (`ABYSS_CRASH_ID`, `_APP`, `_SIGNAL`, `_CORE`).
     public static func fromEnvironment() -> CrashNotice {
         func e(_ n: String) -> String? { getenv(n).map { String(cString: $0) } }
         return CrashNotice(id: Int(e("ABYSS_CRASH_ID") ?? "") ?? 0, app: e("ABYSS_CRASH_APP") ?? "An application",
-                           signal: e("ABYSS_CRASH_SIGNAL") ?? "a signal", core: e("ABYSS_CRASH_CORE") == "1")
+                           signal: e("ABYSS_CRASH_SIGNAL") ?? "a signal", core: e("ABYSS_CRASH_CORE") == "1",
+                           agents: e("ABYSS_AGENTS") == "1")
     }
 
     public var headline: String { "The application \(app) has unexpectedly quit." }
     public var detail: String {
         "It ran confined, so nothing else was affected. It was killed by \(signal)"
-            + (core ? "; an agent can read what it left and say why." : ", and left nothing to read.")
+            + (!core ? ", and left nothing to read." : agents ? "; an agent can read what it left and say why." : ".")
     }
+    /// Whether to offer Ask the Agent: a core to read, and agents on.
+    public var canAsk: Bool { core && agents }
     /// The question the Agent window is opened with.
     public var question: String { "Why did \(app) crash?" }
 }
@@ -133,7 +138,7 @@ public final class CrashReport: WindowDelegate, MenuProvider {
     public init?(display: Display, notice: CrashNotice) {
         self.display = display
         self.notice = notice
-        choices = notice.core ? [.close, .ask] : [.ok]
+        choices = notice.canAsk ? [.close, .ask] : [.ok]
         let name = MenuWire.serviceName(app: "Crash Reporter", pid: getpid())
         if let service = try? MenuService(name: name, provider: self) {
             display.addFileDescriptor(service.fd) { [weak service] in service?.serviceReadable() }
@@ -150,7 +155,7 @@ public final class CrashReport: WindowDelegate, MenuProvider {
     // MARK: Ask the Agent
 
     func ask() {
-        guard notice.core, !asking, let fd = try? Current.connect("jails") else {
+        guard notice.canAsk, !asking, let fd = try? Current.connect("jails") else {
             if !asking { refuse("The session's jails are not running.") }
             return
         }
@@ -255,6 +260,7 @@ public final class CrashReport: WindowDelegate, MenuProvider {
         switch command.verb {
         case CrashVerb.ask:
             if !notice.core { return .disabled("it left nothing to read") }
+            if !notice.agents { return .disabled("agents are off") }
             if asking { return .disabled("an agent is being started") }
             return choices.contains(.ask) ? .enabled : .disabled("this report was answered")
         default: return .enabled

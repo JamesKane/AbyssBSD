@@ -222,6 +222,10 @@ public final class MenuBar: LayerSurfaceDelegate {
         .separator,
         .command(Command("system.preferences", "System Preferences…",
                          summary: "Open System Preferences.")),
+        // The Agent window (PHASE18 P18.13), with its chord — shown only
+        // while agents are on (`systemMenu(agentsOn:)`).
+        .command(Command("system.agent", "Agent…", key: .cmd("a", .option),
+                         summary: "Open the Agent window.")),
         .command(Command("system.dock", "Dock", summary: "Change the Dock.")),
         .command(Command("system.location", "Location", summary: "Change network location.")),
         .separator,
@@ -490,6 +494,15 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// Carry out one of the bar's own commands.
     private func performSystem(_ verb: String) -> CommandResult {
         switch verb {
+        case "system.agent":
+            guard Agents.on() else { return .refused("agents are off: there is no agents.ini") }
+            guard let display = MenuBar.appDisplay else {
+                return .refused("the bar does not know the ordinary display to launch on")
+            }
+            let exe = getenv("ABYSS_APP_BINARY").map { String(cString: $0) }
+                ?? Launcher.selfExecutable() ?? "AquaDemo"
+            return Launcher.launchDetached([exe], extraEnv: ["AQUA_SCENE": "agent", "WAYLAND_DISPLAY": display])
+                ? .ok("Agent") : .refused("could not start Agent")
         case "system.about":
             // About This Mac opened Apple System Profiler; About This
             // Computer opens ours — fastfetch's report, in a window. On the
@@ -604,11 +617,20 @@ public final class MenuBar: LayerSurfaceDelegate {
         return d
     }
 
+    /// The system menu as it stands: without Agent… while agents are off
+    /// (P18.13) — no menu item, and the rest of the menu does not know.
+    public static func systemMenu(agentsOn: Bool) -> Menu {
+        agentsOn ? systemMenu : Menu(systemMenu.title, systemMenu.items.filter {
+            if case .command(let c) = $0 { return c.verb != "system.agent" }
+            return true
+        })
+    }
+
     /// The system menu with Recent Items filled in from `recent.ini`, read now:
     /// the Finder and the Dock write it (P15.2c).
     private func systemMenuNow() -> Menu {
         recentShown = RecentItems.load()
-        let sys = MenuBar.systemMenu
+        let sys = MenuBar.systemMenu(agentsOn: Agents.on())
         return Menu(sys.title, sys.items.map { item in
             if case .command(let c) = item, c.verb == "system.recent" {
                 return .submenu(RecentItems.submenu(recentShown))

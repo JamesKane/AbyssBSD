@@ -83,6 +83,8 @@ public enum KeyAction: Equatable, Sendable {
     case shoalNew, shoalAdd, shoalRemove
     case shoalRecall(Int)
     case shoalStrip
+    /// The Agent window (PHASE18 P18.13): only while agents are on.
+    case agent
 }
 
 /// One row of the table.
@@ -186,6 +188,7 @@ public enum KeyBindingParser {
         case "ebb app":         return .ebb(.app)
         case "island next":     return .islandStep(1)
         case "island previous": return .islandStep(-1)
+        case "agent":           return .agent
         default:
             // `island N`, `move-to-island N`, `move-to-island N follow`.
             let w = a.lowercased().split(separator: " ")

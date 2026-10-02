@@ -661,6 +661,55 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
 - **P18.13 — presence and off (S).** Agent state (working, waiting, idle) on
   the Dock tile, the menu bar and the island switcher. `agents.ini` absent
   means no menu item, no chord, no spend indicator, and no process.
+  - **Decided 2026-10-02: absent is off.** Agents are opt-in; a new account
+    has none. PRODUCT §5.x once said "present, and the agent does not
+    start", against §10, PLAN and this pass; it now says absent.
+  - **P18.13a — off is one file: DONE 2026-10-02.**
+    - `PoolConfig.Agents`: `on()` is `agents.ini` existing in the config
+      directory; `set(_:)` writes it (0600, with a comment saying what it
+      is) or removes it. Everything that would show an agent asks it.
+    - **No process:** the keeper refuses `agent` and `debug` in words
+      ("agents are off: there is no agents.ini"), before any jail, helper or
+      model starts.
+    - **No menu item:** System ▸ **Agent…** (⌥⌘A) exists only while on
+      (`MenuBar.systemMenu(agentsOn:)`); off, the menu is the menu without
+      it.
+    - **No chord:** ⌥⌘A is a key action of its own (`agent` in the table, a
+      default in `DesktopKeys`), so the compositor can tell it apart: off,
+      it lets the key through to the application, as if it were unbound.
+    - **No Ask the Agent:** the keeper tells Crash Reporter whether agents
+      are on (`ABYSS_AGENTS`). Off, a crash with a core says only that it
+      ran confined and what killed it, with OK.
+    - **No tile:** the Dock leaves out the Agent tile while off. The token
+      stays in `dock.ini`, so turning agents on brings it back where it
+      was.
+    - **The switch:** System Preferences ▸ Agents has "Let agents run on
+      this computer" at the top, which writes or removes the file.
+    - **No spend indicator** yet exists outside the Agent window, so there
+      is none to hide; P18.13b's presence is built behind the same check.
+    - **Not yet:** turning agents on does not fetch a model (§6b.1 says it
+      should, with the size and licence shown first). Today the pane turns
+      them on and `jails.ini` names the model.
+    - **Tests:** `AgentsOnOffTests` (absent, on, on twice, 0600, off, off
+      twice; the chord's default), the menu and Dock filtered off in
+      `AgentWindowTests`, `CrashReportTests` (no Ask while off), the chord's
+      parse in `UndertowTests`. **`live-agents-off.sh`**, in the guest:
+      off, a session is refused in words, ⌥⌘A opens nothing and the
+      compositor does not take it, and a crash offers only OK; the pane's
+      switch, clicked, writes `agents.ini`; on, ⌥⌘A opens the Agent window,
+      which gets a session, and a crash offers Ask the Agent; clicked again,
+      the file is gone and a new session is refused. Every agent and crash
+      live test now writes `agents.ini` first.
+    - **Faults, all caught:** the menu keeps Agent… while off; the Dock
+      keeps the tile; Ask offered while off; on is any directory; off
+      leaves the file; the chord fires while off; the keeper starts agents
+      while off; Crash Reporter is not told; the switch never turns off.
+    - 931 unit tests green on Linux and in the guest; the goldens (with the
+      pane's new switch) pixel for pixel on both; the nine agent and crash
+      live tests green in the guest.
+    - **On the box:** the `abyss` account has no `agents.ini`, so after this
+      pass its agents are off until the switch is ticked.
+  - **P18.13b — presence: next.**
 - **P18.14 — the gate (S).** PLAN's verify list:
   - an agent in a jail with exactly one descriptor (the model socket);
   - the transcript showing what it was granted;

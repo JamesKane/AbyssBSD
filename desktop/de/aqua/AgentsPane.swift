@@ -49,6 +49,8 @@ public struct AgentsPaneState: Equatable, Sendable {
     public var digest: [String] = []
     public var grants: [AgentGrantRow] = []
     public var note = ""
+    /// Whether agents are on: `agents.ini` exists (P18.13).
+    public var on = true
     public init() {}
 
     /// Where transcripts are: $HOME/Library/Logs/Agents.
@@ -85,13 +87,16 @@ public struct AgentsLayout: Equatable, Sendable {
     public var grantRows: [Rect] = []
     public var revoke: [Rect] = []
     public var noteY = 0.0
+    /// "Let agents run on this computer" (P18.13).
+    public var onOff = Rect(0, 0, 0, 0)
     public static let maxSessions = 10, maxGrants = 4
 }
 
 public func agentsLayout(body: Rect, _ s: AgentsPaneState) -> AgentsLayout {
     var l = AgentsLayout()
     let left = body.x + 30, w = body.w - 60
-    l.sessions = Rect(left, body.y + 40, 250, Double(AgentsLayout.maxSessions) * 22)
+    l.onOff = Rect(left, body.y + 14, w, 22)
+    l.sessions = Rect(left, body.y + 74, 250, Double(AgentsLayout.maxSessions) * 22)
     for i in 0..<min(s.sessions.count, AgentsLayout.maxSessions) {
         l.sessionRows.append(Rect(left, l.sessions.y + Double(i) * 22, 250, 22))
     }
@@ -107,10 +112,11 @@ public func agentsLayout(body: Rect, _ s: AgentsPaneState) -> AgentsLayout {
 }
 
 public enum AgentsHit: Equatable, Sendable {
-    case session(Int), revoke(Int)
+    case session(Int), revoke(Int), onOff
 }
 
 public func agentsHit(_ l: AgentsLayout, _ s: AgentsPaneState, x: Double, y: Double) -> AgentsHit? {
+    if l.onOff.contains(x, y) { return .onOff }
     for (i, r) in l.revoke.enumerated() where r.contains(x, y) { return .revoke(i) }
     for (i, r) in l.sessionRows.enumerated() where r.contains(x, y) { return .session(i) }
     return nil
@@ -129,6 +135,12 @@ public func paintAgentsPane(_ cr: OpaquePointer, _ l: AgentsLayout, _ s: AgentsP
         Draw.setColor(cr, Color(0.6, 0.6, 0.6)); cairo_set_line_width(cr, 1)
         cairo_rectangle(cr, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1); cairo_stroke(cr)
     }
+    Draw.checkbox(cr, Rect(l.onOff.x, l.onOff.y + 3, 16, 16), checked: s.on)
+    Draw.textLeft(cr, "Let agents run on this computer", x: l.onOff.x + 24, baselineY: l.onOff.y + 15,
+                  color: Theme.bodyText, size: 13)
+    Draw.textLeft(cr, s.on ? "An agent runs only when you ask, confined, and only with what you give it."
+                           : "Off: no Agent window, menu item, chord or Ask the Agent, and no agent runs.",
+                  x: l.onOff.x + 24, baselineY: l.onOff.y + 32, color: Theme.secondaryText, size: 11)
     Draw.textLeft(cr, "What agents did, session by session:", x: l.sessions.x, baselineY: l.sessions.y - 12,
                   color: Theme.bodyText, size: 13)
     box(l.sessions)
