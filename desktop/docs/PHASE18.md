@@ -174,9 +174,24 @@ Live test in the guest:
 - quitting it leaves the jail pooled;
 - logging out removes the jail.
 
-**P18.6 — the gate for 18a (S). — GREEN IN THE GUEST 2026-10-02; the 12700KF
-run waits on BACKLOG D.1**, because the medium has no D-Bus at all and the run
-stopped there. `live-jail-gate.sh` has seven claims, green three runs in a row,
+**P18.6 — the gate for 18a (S). — GREEN IN THE GUEST 2026-10-02; on the
+12700KF, the confinement half holds and the browser half is blocked.**
+Run on the box after D.1:
+- the session started ADE's bridge (9 components, no `dbus-daemon`);
+- `abyss_jaild` ran as an rc.d service on UFS;
+- `[apps]` remade Firefox's bundle confined, and the bundle launched it
+  through the keeper into `abyss-1001-app-net` (jail 1, with `/dev/dri` from
+  `app-net`);
+- confined Firefox fetched the page over the LAN (the server logged it), and
+  undertow named its window as app-net's;
+- the bar logged "frontmost is confined in app-net";
+- with the keeper's launch done, the program's exit was seen and the jail
+  stayed pooled.
+
+**Blocked:** Firefox's window on the box is 1×1, **unconfined too and with
+software GL**, so the Finder step could not be clicked. That is a Firefox on
+undertow-on-DRM defect, never seen in the harness (BACKLOG F.1), and no
+part of 18a. `live-jail-gate.sh` has seven claims, green three runs in a row,
 and four faults were injected, each failing the test. Firefox ESR, confined in
 `app-net` by its bundle, renders a page served over the network. Its file input
 opens the Finder through the jail's portal, and the chosen file comes in as a
