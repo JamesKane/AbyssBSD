@@ -127,7 +127,7 @@ with `abyss/mk/metal.sh push` (PHASE4 §5.11–§5.13):
 |---|---|
 | PHASE11 §6 | the menu-bar rule and layer 5; refuse/warn; icons as data; `calc()` operands — adopted in practice, never confirmed |
 | PHASE14 §6.6 | per-application volume: after the spike, route (a) a small kernel patch or (b) a `virtual_oss` node per application (API-STUDY §3) |
-| PHASE17 | to be scoped: where packages are built, signed and hosted, and who holds the key (PLAN Phase 17, risk 8) |
+| PHASE17 §6 | **1–4 decided 2026-10-02** (pkgbase; a builder VM; GitHub Releases; an offline key through `signing_command`). Still yours: who holds the key and its backup (PLAN risk 8) |
 
 *Settled and dropped (2026-10-02):* U.1–U.4 went before P14.2, as
 recommended; the 12700KF has no Wi-Fi card (§3, item 5).

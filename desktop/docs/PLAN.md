@@ -295,7 +295,7 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | ✅ 2026-09-29 |
 | 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | ✅ 2026-10-01 |
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | ✅ 2026-10-01; resume blocked by the 12700KF's kernel |
-| 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | **next**; the overlay exists, for the board |
+| 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | **next** — scoped in [PHASE17.md](PHASE17.md) (2026-10-02); the overlay exists, for the board |
 | 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | ✅ 2026-10-02 but the gate on metal (the medium), P18.7c and requester 2 |
 
 **Phases 9–12 are mutually independent** — 9, 10 and 11 need nothing from each

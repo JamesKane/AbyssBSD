@@ -23,7 +23,7 @@ gate with a model on the GPU. All wait for the box's USB medium, in other use
 since 2026-10-02.
 **Next: Phase 17, delivery** — a release pipeline from `src/` and the ports
 overlay, `abyss update` on boot environments, Software Update and Install
-Software ([PLAN.md](PLAN.md); not yet scoped). The working list is
+Software, scoped in [PHASE17.md](PHASE17.md) (P17.0–P17.10). The working list is
 [BACKLOG.md](BACKLOG.md). See [What's next](#whats-next).
 
 ## What this is
