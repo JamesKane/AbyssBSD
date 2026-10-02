@@ -730,6 +730,25 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.132 A descriptor of no known type is accept's
+(2026-10-02, PHASE18 P18.14, the gate's descriptor check, in the guest.)
+
+`procstat -f` on the agent showed fd 4 as `?`, no path, two references.
+`fstat` could not name it either. It was not inherited (`abyss-jaild`
+calls `closefrom(3)` before exec, and it appeared outside a jail too). It
+was not the Swift runtime (a trivial Swift program has none). Neither
+`truss` nor `ktrace` showed any call that returned 4 and left it open.
+Stopping the agent under lldb found it: at `listen` there was no fd 4,
+and once it waited in `accept` there was. The kernel stack said
+`solisten_dequeue` ← `kern_accept4`.
+
+**`kern_accept4` reserves the new connection's descriptor before it
+waits.** While a process waits in `accept`, that slot is a file with no
+type yet. It is no leak and no capability, but it looks exactly like an
+unknown descriptor. The gate allows a `?` only while `procstat -k` shows
+the process in `kern_accept4`. An unknown descriptor anywhere else is a
+failure.
+
 ### 2.131 A person takes as long as they take
 (2026-10-02, PHASE18 P18.11, requester 1, on the 12700KF.)
 

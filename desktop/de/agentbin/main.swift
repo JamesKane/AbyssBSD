@@ -18,6 +18,10 @@
 //   abyss-agent continue --listen SOCKET
 //       carry on from where the last question stopped (after the person
 //       allowed more budget); prints as ask does.
+//   abyss-agent tool NAME JSON [--vocab SOCKET] [--fetch SOCKET]
+//       run one tool, as the agent would, with no model: what an agent in
+//       this jail can reach, asked directly (the gate, P18.14). A question
+//       for the person is answered no.
 //   abyss-agent bye --listen SOCKET
 
 import Agent
@@ -61,6 +65,19 @@ func opt(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
     return args[i + 1]
 }
+// One tool, no model (P18.14): the same tools serve builds, run once.
+if args.first == "tool" {
+    guard args.count >= 3, let input = try? JSON.parse(args[2]) else { die("usage: abyss-agent tool NAME JSON [--vocab SOCKET] [--fetch SOCKET]") }
+    var tools = AgentTools.reading
+    if let vocab = opt("--vocab") { tools += AgentTools.vocabulary(socket: vocab) }
+    if let fetch = opt("--fetch") { tools.append(AgentTools.fetch(socket: fetch)) }
+    guard let tool = tools.first(where: { $0.name == args[1] }) else {
+        die("no tool \(args[1]); this agent has: " + tools.map(\.name).joined(separator: " "))
+    }
+    print(tool.run(input))
+    exit(0)
+}
+
 guard let listen = opt("--listen") else {
     emit(2, "usage: abyss-agent serve --model SOCKET --listen SOCKET [--class C] | ask --listen SOCKET TEXT... | bye --listen SOCKET")
     exit(2)

@@ -785,6 +785,62 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
 
   In the guest with the stub and with `llama-server` on the CPU; on the
   12700KF with a local model on the GPU.
+  - **Two of PLAN's words have moved,** on purpose. "Its own `vnet`" went in
+    P18.12: an agent has no network at all, and reaches the web only through
+    the fetch bridge. "Exactly one descriptor" predates the vocabulary and
+    fetch bridges. As checked now: the jail's runtime directory holds the
+    session's four sockets and nothing else. The agent *process* holds one
+    socket, its own, where the window asks it. It opens the model's and the
+    bridges' sockets for each call and closes them. Nothing else it holds
+    is outside its jail.
+  - **P18.14a — the gate in the guest: DONE 2026-10-02.**
+    `live-agent-gate.sh [--model local:MODEL]` runs PLAN's list end to end,
+    as a person meets it. A real model's choices vary, so every claim about
+    confinement is checked on the system, not on what the model said: the
+    descriptors (`procstat`), the jail (`jls`, `jexec`), and the bridges
+    asked directly from inside the jail. For that, `abyss-agent tool NAME
+    JSON` runs one tool, with no model, as the agent would. Claims:
+    1. the agent's jail has no address, and `nc` from inside reaches
+       nothing; its runtime directory holds the four sockets; the agent holds
+       its own socket, `/dev/null` and vnodes under its jail root, and nothing
+       else; and the model answers it;
+    2. an application given from the Agent window is in the transcript, and
+       the bridge, asked from inside the jail, lists it;
+    3. taken back, the transcript says so, the bridge no longer lists it,
+       and refuses a command for it;
+    4. with a budget of one token, the next call is refused, and the window
+       draws the requester with abyss-model's words;
+    5. two crashes; Ask the Agent… on the second starts a debug session
+       whose jail holds that crash's core and binary, read-only, and nothing
+       of the first; the model is offered lldb by the debug session, and
+       never by the agent session (read from the tool lists in each
+       transcript).
+
+    **Green with the stub, and with MiniCPM5-2B on the guest's CPU through
+    `llama-server`** (76 s): it said hello, was stopped by the budget at its
+    next question ("the session's budget of 1 tokens is spent (783 used)"),
+    and its debug session was asked why `crasher2` crashed.
+
+    **Faults, all caught by the claim meant to catch them:**
+    - the agent keeps a second socket open;
+    - the agent's jail on the host's network;
+    - a give not in the transcript;
+    - Take Back that leaves the bridge's grant;
+    - the budget's reason never put up;
+    - lldb for the agent class;
+    - the debug jail given every crash.
+
+    The fifth was first caught only later ("Stop was refused"). The
+    requester's words are logged where they are decided, not where they are
+    drawn, so the gate now also waits for the window's drawn requester.
+    A check that asked `abyss-agent tool` whether lldb exists was replaced
+    for the same reason: it asked the command, not the class.
+  - **A descriptor of no known type** in the agent, found on the way, is
+    `accept(2)`'s: HANDOFF §2.132.
+  - **P18.14b — on the 12700KF, a local model on the GPU: waiting for the
+    medium.** The USB stick is in other use (2026-10-02) and is to be
+    rebuilt. The gate takes `--model`, so the box run is that, once the
+    medium is back.
 
 ## 4. The spikes (2026-10-02, in the FreeBSD 16 guest)
 
