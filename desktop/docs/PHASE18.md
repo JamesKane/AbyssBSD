@@ -648,6 +648,13 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     a person's pause, the page's words to the model). Every unit test (925)
     green on both platforms; every agent, crash and TLS live test green in
     the guest; 7 faults injected, all caught.
+  - **On the 12700KF with Granite (same day).** Asked what `https://example.com`
+    says, Granite called `fetch`. The window asked "Allow the agent to reach
+    example.com?" (screenshot); 10 s later it was allowed. The bridge fetched
+    it over verified TLS (200, 577 bytes), and Granite summed it up in a
+    sentence. The transcript reads `asked`, `permitted`, `fetched`. Quit
+    stopped the model and every bridge. **P18.12 is complete** (the DNS
+    rebinding limit above stands).
 - **P18.13 — presence and off (S).** Agent state (working, waiting, idle) on
   the Dock tile, the menu bar and the island switcher. `agents.ini` absent
   means no menu item, no chord, no spend indicator, and no process.
