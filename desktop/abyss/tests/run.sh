@@ -250,6 +250,10 @@ if [ "$live" -eq 1 ]; then
   # socket (a stand-in; a real model with ABYSS_TEST_GGUF).
   echo "== the one way to a model =="
   quiet "$root/abyss/tests/live-model.sh"
+  # TLS (P18.12a): a server that is not ours, its certificate verified
+  # against a trusted CA and the host's name, or refused with why.
+  echo "== TLS, verified or refused =="
+  quiet "$root/abyss/tests/live-tls.sh"
   # An agent in its jail (P18.8): a session per question-asker, the model
   # through abyss-model, the tools within the jail, the budget stops it.
   echo "== an agent in its jail =="

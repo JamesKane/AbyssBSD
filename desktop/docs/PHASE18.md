@@ -590,6 +590,33 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   (§4.7) whose only route out is an egress proxy outside it, which asks
   (requester 3) before a new host. A remote model never needs this: it goes
   through `abyss-model`.
+
+  **Decided 2026-10-02: a fetch tool through a bridge, not a `vnet` jail.**
+  The agent jail keeps no network at all. Its `fetch` tool asks a bridge
+  outside the jail, which asks the person before each new host
+  (requester 3) and makes the request itself, as abyss-model does for a model
+  and abyss-vocab does for applications. It needs TLS: a small wrapper over
+  base OpenSSL, shared with the remote model (P18.7c).
+
+  Rejected: a `vnet` jail with an epair whose only route out is a proxy. The
+  jail could also reach any host service bound to all addresses (sshd) unless
+  pf or ipfw confined the epair, which means loading a firewall and jaild
+  managing epairs and rules as root. The cost of the choice: only the agent's
+  own tool reaches the network, not programs run in its jail.
+
+  **P18.12a — TLS — DONE 2026-10-02.**
+  - **`de/ctls`** wraps base OpenSSL: verify or fail with why. The peer must
+    chain to a trusted CA (the system's, or a test's file) and name the host;
+    TLS 1.2 at least; SNI sent; no switch to skip verification.
+  - **`HTTP.Endpoint.tls`** and `WebURL` (http/https, no userinfo, host
+    compared without case, redirects resolved). A fetch is HTTP/1.0, so the
+    body ends at close and is never chunked.
+  - **`abyss-model fetch URL [--ca FILE]`**.
+  - Tests: `live-tls.sh` (claims 1–4: a server that is not ours, `openssl
+    s_server`, with certificates the test makes — trusted, untrusted CA,
+    another name — and plain http against `nc`), green on Linux and in the
+    guest; 3 faults injected, all caught. Real `https://example.com` fetched
+    with each system's own CAs.
 - **P18.13 — presence and off (S).** Agent state (working, waiting, idle) on
   the Dock tile, the menu bar and the island switcher. `agents.ini` absent
   means no menu item, no chord, no spend indicator, and no process.

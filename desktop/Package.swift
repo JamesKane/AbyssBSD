@@ -353,7 +353,10 @@ let package = Package(
         .target(name: "Jails", dependencies: ["PoolConfig"], path: "de/jails"),
         // The one wire to a model (PHASE18 P18.7): JSON, minimal HTTP, the
         // session's budget and transcript, backends, and the VRAM tiers.
-        .target(name: "Model", dependencies: ["CPlatform", "CProc"], path: "de/model"),
+        // TLS from the base system's OpenSSL (PHASE18 P18.12a): verify, or fail.
+        .target(name: "CTLS", path: "de/ctls", sources: ["ctls.c"], publicHeadersPath: "include",
+                linkerSettings: [.linkedLibrary("ssl"), .linkedLibrary("crypto")]),
+        .target(name: "Model", dependencies: ["CPlatform", "CProc", "CTLS"], path: "de/model"),
         .executableTarget(name: "abyss-model", dependencies: ["Model", "CProc", "CurrentIPC", "Spawn"], path: "de/modelbin"),
         // The agent runtime, inside its jail (PHASE18 P18.8): the loop, and
         // the tools that read what the jail holds.

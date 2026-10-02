@@ -12,6 +12,9 @@
 //       the keeper raises the budget when the person allows more
 //       (`raise tokens=N`); the agent cannot reach it. The keeper puts
 //       PATH inside an agent's jail; the transcript stays outside it.
+//   abyss-model fetch URL [--ca FILE]
+//       GET an http(s) URL as the fetch bridge does (P18.12a), and print the
+//       status and body: TLS verified against the system's CAs, or FILE's.
 //   abyss-model tier
 //       this machine's VRAM and RAM, its tier, and the model proposed for it
 //       (PHASE18 §6b.1).
@@ -67,6 +70,17 @@ case "tier":
     let mem = MachineMemory(vramMiB: MachineMemory.vram(fromBootMessages: boot), ramMiB: ram)
     let tier = ModelTier.choose(mem)
     emit(1, "vram=\(mem.vramMiB.map { "\($0)M" } ?? "none") ram=\(mem.ramMiB)M tier=\(tier.rawValue) proposed=\(tier.proposed.model) \(tier.proposed.quant) context=\(tier.proposed.context)")
+
+case "fetch":
+    guard args.count >= 2, let url = WebURL(args[1]) else { die("fetch needs an http:// or https:// URL") }
+    var to = url.endpoint
+    if case let .tls(h, p, _) = to, let ca = opt("--ca") { to = .tls(host: h, port: p, cafile: ca) }
+    do {
+        let r = try HTTP.call(to, method: "GET", path: url.path, headers: [("User-Agent", "AbyssBSD")],
+                              version: "1.0", timeoutSeconds: 20)
+        emit(1, "status \(r.status)")
+        emit(1, String(decoding: r.body.prefix(4096), as: UTF8.self))
+    } catch { die("\(url.text): \(error)") }
 
 case "serve":
     guard let listen = opt("--listen"), let session = opt("--session"), let dir = opt("--transcript"),

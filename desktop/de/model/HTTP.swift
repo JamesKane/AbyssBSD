@@ -8,6 +8,7 @@
 // can be read.
 
 import CPlatform
+import CTLS
 
 #if canImport(Glibc)
 import Glibc
@@ -160,15 +161,57 @@ public enum HTTP {
     public enum Endpoint: Equatable, Sendable {
         case tcp(host: String, port: UInt16)
         case unix(path: String)
+        /// TLS over TCP (P18.12a): the certificate must chain to a trusted CA
+        /// (the system's, or `cafile`) and name `host`.
+        case tls(host: String, port: UInt16, cafile: String?)
         var hostHeader: String {
-            switch self { case let .tcp(h, p): return "\(h):\(p)"; case .unix: return "localhost" }
+            switch self {
+            case let .tcp(h, p): return "\(h):\(p)"
+            case let .tls(h, p, _): return p == 443 ? h : "\(h):\(p)"
+            case .unix: return "localhost"
+            }
         }
+    }
+
+    /// Reading and writing one connection, whether plain or TLS.
+    final class Connection {
+        let fd: Int32
+        var tls: OpaquePointer?
+        init(fd: Int32, tls: OpaquePointer?) { self.fd = fd; self.tls = tls }
+        func readAll(_ limit: Int) throws -> [UInt8] {
+            var out: [UInt8] = [], buf = [UInt8](repeating: 0, count: 65536)
+            while true {
+                let n: Int = buf.withUnsafeMutableBytes { b in
+                    if let t = tls { return ap_tls_read(t, b.baseAddress, b.count) }
+                    return read(fd, b.baseAddress, b.count)
+                }
+                if n < 0 {
+                    if tls == nil, errno == EINTR { continue }
+                    throw Failure(tls == nil ? "read: \(String(cString: strerror(errno)))" : "read: the TLS connection failed")
+                }
+                if n == 0 { break }
+                out += buf[0..<n]
+                if out.count > limit { throw Failure("more than \(limit) bytes") }
+            }
+            return out
+        }
+        func writeAll(_ bytes: [UInt8]) throws {
+            if let t = tls {
+                var off = 0
+                while off < bytes.count {
+                    let n = bytes[off...].withUnsafeBytes { ap_tls_write(t, $0.baseAddress, $0.count) }
+                    if n <= 0 { throw Failure("write: the TLS connection failed") }
+                    off += Int(n)
+                }
+            } else { try HTTP.writeAll(fd, bytes) }
+        }
+        deinit { if let t = tls { ap_tls_close(t) }; close(fd) }
     }
 
     static func connect(_ to: Endpoint, timeoutSeconds: Int) throws -> Int32 {
         let fd: Int32
         switch to {
-        case let .tcp(host, port):
+        case let .tcp(host, port), let .tls(host, port, _):
             var hints = addrinfo()
             hints.ai_family = AF_UNSPEC
             #if os(Linux)
@@ -208,17 +251,30 @@ public enum HTTP {
         return fd
     }
 
-    /// One request to `to`, read to EOF.
-    public static func call(_ to: Endpoint, method: String, path: String, json: JSON? = nil,
-                            timeoutSeconds: Int = 600) throws -> HTTPResponse {
+    static func open(_ to: Endpoint, timeoutSeconds: Int) throws -> Connection {
         let fd = try connect(to, timeoutSeconds: timeoutSeconds)
-        defer { close(fd) }
+        guard case let .tls(host, _, cafile) = to else { return Connection(fd: fd, tls: nil) }
+        var err = [CChar](repeating: 0, count: 512)
+        guard let t = ap_tls_open(fd, host, cafile, &err, err.count) else {
+            close(fd)
+            throw Failure(String(decoding: err.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self))
+        }
+        return Connection(fd: fd, tls: t)
+    }
+
+    /// One request to `to`, read to EOF. `version` "1.0" asks a web server
+    /// for a body it ends by closing, never chunked (P18.12's fetch).
+    public static func call(_ to: Endpoint, method: String, path: String, json: JSON? = nil,
+                            headers: [(String, String)] = [], version: String = "1.1",
+                            timeoutSeconds: Int = 600) throws -> HTTPResponse {
+        let c = try open(to, timeoutSeconds: timeoutSeconds)
         let body = json.map { Array($0.text.utf8) } ?? []
-        var head = "\(method) \(path) HTTP/1.1\r\nHost: \(to.hostHeader)\r\n"
+        var head = "\(method) \(path) HTTP/\(version)\r\nHost: \(to.hostHeader)\r\n"
         if json != nil { head += "Content-Type: application/json\r\n" }
+        for (k, v) in headers { head += "\(k): \(v)\r\n" }
         head += "Content-Length: \(body.count)\r\nConnection: close\r\n\r\n"
-        try writeAll(fd, Array(head.utf8) + body)
-        return try response(try readAll(fd) { _ in false })
+        try c.writeAll(Array(head.utf8) + body)
+        return try response(try c.readAll(maxHead + maxBody))
     }
 
     /// POST a JSON body to http://HOST:PORT/PATH over TCP and read the reply.
@@ -233,3 +289,43 @@ public enum HTTP {
 #else
 @inline(__always) func Glibc_connect(_ fd: Int32, _ a: UnsafePointer<sockaddr>?, _ l: socklen_t) -> Int32 { Darwin.connect(fd, a, l) }
 #endif
+
+/// An http or https URL, as a person writes one (P18.12).
+public struct WebURL: Equatable, Sendable {
+    public var https: Bool
+    public var host: String
+    public var port: UInt16
+    public var path: String
+
+    public init?(_ text: String) {
+        let lower = text.lowercased()
+        let rest: Substring
+        if lower.hasPrefix("https://") { https = true; rest = text.dropFirst(8) }
+        else if lower.hasPrefix("http://") { https = false; rest = text.dropFirst(7) }
+        else { return nil }
+        let hostport = rest.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+        var p = String(rest.dropFirst(hostport.count))
+        if let hash = p.firstIndex(of: "#") { p = String(p[..<hash]) }
+        path = p.isEmpty ? "/" : (p.hasPrefix("?") ? "/" + p : p)
+        guard !hostport.contains("@") else { return nil }   // no userinfo: a host is a host
+        let parts = hostport.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        host = String(parts[0]).lowercased()
+        guard !host.isEmpty, host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" }) else { return nil }
+        if parts.count == 2 {
+            guard let n = UInt16(parts[1]), n > 0 else { return nil }
+            port = n
+        } else { port = https ? 443 : 80 }
+    }
+
+    public var endpoint: HTTP.Endpoint { https ? .tls(host: host, port: port, cafile: nil) : .tcp(host: host, port: port) }
+    public var text: String {
+        (https ? "https://" : "http://") + host + (port == (https ? 443 : 80) ? "" : ":\(port)") + path
+    }
+
+    /// A redirect's Location, against this URL.
+    public func resolve(_ location: String) -> WebURL? {
+        if let u = WebURL(location) { return u }
+        guard location.hasPrefix("/") else { return nil }
+        var u = self; u.path = location; return u
+    }
+}
