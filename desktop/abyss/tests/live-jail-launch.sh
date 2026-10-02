@@ -38,11 +38,16 @@ export XDG_RUNTIME_DIR="$W/xdg"; mkdir -m 700 "$XDG_RUNTIME_DIR"
 docs=$(mktemp -d /tmp/abyss-jld.XXXXXX); printf 'original\n' > "$docs/note.txt"
 
 daemon() { pgrep -f "abyss-jaild --socket $SOCK" || true; }
+# The mount points under the roots, for cleanup. From plain `mount`, whose
+# lines are "SOURCE on POINT (TYPE, …)": `mount -p` cannot be split at all when
+# a path has a space — its separator before the mount point is sometimes one
+# space (HANDOFF §2.127).
+mountsunder() { mount | grep -F " on $RB/" | sed -E 's/^.* on (.*) \([a-z0-9]+[,)].*$/\1/'; }
 cleanup() {
   for p in ${kp:-} ${pt:-} ${ut:-}; do kill "$p" 2>/dev/null || true; done
   for p in $(daemon); do sudo kill -9 "$p" 2>/dev/null || true; done
   for j in $(jls name | grep -E '^abyss-[0-9]+-' || true); do sudo jail -r "$j" 2>/dev/null || true; done
-  for m in $(mount -p | awk '{print $2}' | grep "^$RB" | sort -r); do sudo umount -f "$m" 2>/dev/null || true; done
+  mountsunder | sort -r | while IFS= read -r m; do sudo umount -f "$m" 2>/dev/null || true; done
   pkill -f "endpoint --listen $RB" 2>/dev/null || true
   sudo rm -rf "$W" "$docs"
 }
@@ -53,7 +58,11 @@ count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt 200 ]; do i=$((i + 1)); sleep 0.05; done
           [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"; }
 JL() { .build/debug/abyss-jail launch "$@"; }
-mounts() { mount -p | awk '{print $2}' | grep -c "^$RB/" || true; }
+# Counted by mount POINT from plain `mount` (" on $RB/"), never by splitting
+# `mount -p`, whose fields cannot be told apart when a path has a space —
+# `awk '{print $2}'` once counted a left grant as gone (HANDOFF §2.127). And
+# never with jaild's own code, which is what is tested.
+mounts() { mount | grep -cF " on $RB/" || true; }
 
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 &
 await "$W/jd.log" 'answering at' "the daemon did not start"

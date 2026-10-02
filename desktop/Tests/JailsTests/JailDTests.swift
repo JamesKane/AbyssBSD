@@ -147,20 +147,18 @@ final class JailDTests: XCTestCase {
 
     // MARK: - the mount table
 
-    func testMountTableParsesFstabLinesAndFindsLeftRoots() {
-        let text = """
-        zroot/ROOT/default\t/\tzfs\trw\t0 0
-        devfs\t/dev\tdevfs\trw\t0 0
-        tmpfs\t/var/run/abyss-jails/1001/app\ttmpfs\trw\t0 0
-        /usr\t/var/run/abyss-jails/1001/app/usr\tnullfs\tro\t0 0
-        /home/a\\040b\t/mnt/a\\040b\tnullfs\trw\t0 0
-        /usr\t/var/run/abyss-jails/1002/app-net/usr\tnullfs\tro\t0 0
-        """
-        let pts = MountTable.points(text)
-        XCTAssertEqual(pts.count, 6)
-        XCTAssertEqual(pts[4], "/mnt/a b")
+    /// Mount points come from the kernel as whole strings (getmntinfo), so a
+    /// granted "A chosen file.txt" is one path — and teardown finds it under
+    /// its root (HANDOFF §2.127: `mount -p` split it into three).
+    func testLeftRootsAndTeardownFindPathsWithSpaces() {
+        let root = "/var/run/abyss-jails/1001/app-net"
+        let pts = ["/", "/dev", root, root + "/usr", root + "/run/granted/1/A chosen file.txt",
+                   "/var/run/abyss-jails/1002/app/usr", "/mnt/a b"]
         XCTAssertEqual(MountTable.roots(under: "/var/run/abyss-jails", in: pts),
-                       ["/var/run/abyss-jails/1001/app", "/var/run/abyss-jails/1002/app-net"])
+                       [root, "/var/run/abyss-jails/1002/app"])
+        let steps = JailSteps.teardown(root: root, mounted: pts)
+        XCTAssertEqual(steps.first, .run([JailCommands().umount, "-f", root + "/run/granted/1/A chosen file.txt"]),
+                       "the granted file, spaces and all, is unmounted first")
         XCTAssertEqual(MountTable.jailName(root: "/var/run/abyss-jails/1002/app-net", base: "/var/run/abyss-jails"), "abyss-1002-app-net")
         XCTAssertNil(MountTable.jailName(root: "/var/run/abyss-jails/x/app", base: "/var/run/abyss-jails"))
     }

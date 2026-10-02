@@ -64,6 +64,9 @@ public final class Toplevel {
     /// clock's last tick (U.2), in monotonic nanoseconds.
     var hiddenFrameAt: UInt64 = 0
     public internal(set) var maximized = false
+    /// Fullscreen, as undertow last said (BACKLOG F.1): so leaving a state the
+    /// window is not in changes nothing.
+    public internal(set) var fullscreen = false
     /// Whether the compositor draws this window's frame (P9.6). Set when a
     /// client asks through `xdg-decoration` — our own Aqua windows never ask,
     /// because they draw their own chrome and always have.
@@ -860,6 +863,11 @@ public final class Compositor {
         // in this project's history to want the keyboard without wanting the
         // mouse first.
         seat?.focus(t)
+        // **A window that maps fullscreen or maximized is already placed** —
+        // by the state it asked for, at the display's origin or the usable
+        // area's (BACKLOG F.1). A remembered place or the centring below would
+        // move `firefox --kiosk` to where its last ordinary window was.
+        if t.fullscreen || t.maximized { return }
         // A remembered position wins. This is the spatial Finder's whole
         // behaviour — a folder's window reopens where you left it — and it is
         // the thing HANDOFF §2.22 recorded as waiting for a compositor of our
@@ -1082,6 +1090,16 @@ public final class Compositor {
     /// the menu bar, which is the visible symptom of a zone that was arithmetic
     /// and nothing else.
     func setMaximized(_ t: Toplevel, _ on: Bool) {
+        // **Leaving a state you are not in changes nothing** (BACKLOG F.1).
+        // Firefox asks for fullscreen and then, before the first configure
+        // is out, sends `unset_maximized` for a window that was never
+        // maximized. "Restoring" from the box fullscreen had just saved — the
+        // window's pre-map 0×0 — undid the fullscreen size, and `--kiosk`
+        // got a 1×1 window on a 2560×1440 display.
+        if !on && !t.maximized {
+            _ = wlr_xdg_toplevel_set_maximized(t.xdgToplevel, false)
+            return
+        }
         if on {
             if t.restoreBox == nil {
                 t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)
@@ -1140,6 +1158,11 @@ public final class Compositor {
     }
 
     func setFullscreen(_ t: Toplevel, _ on: Bool) {
+        if !on && !t.fullscreen {
+            _ = wlr_xdg_toplevel_set_fullscreen(t.xdgToplevel, false)
+            return
+        }
+        t.fullscreen = on
         if on {
             if t.restoreBox == nil {
                 t.restoreBox = Rect(x: t.x, y: t.y, width: t.width, height: t.height)

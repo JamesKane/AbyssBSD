@@ -11,6 +11,8 @@
 #include <sys/procdesc.h>
 #include <sys/sysctl.h>
 #include <sys/stat.h>
+#include <sys/mount.h>
+#include <sys/ucred.h>
 #include <sys/uio.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -140,6 +142,20 @@ int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
     _exit(127);
 }
 
+long ap_mount_points(char *buf, size_t len) {
+    struct statfs *m;
+    int n = getmntinfo(&m, MNT_NOWAIT);
+    if (n <= 0) return -1;
+    size_t used = 0;
+    for (int i = 0; i < n; i++) {
+        size_t l = strlen(m[i].f_mntonname) + 1;
+        if (used + l > len) { errno = ERANGE; return -1; }
+        memcpy(buf + used, m[i].f_mntonname, l);
+        used += l;
+    }
+    return (long)used;
+}
+
 int ap_procdesc_exited(int procfd) {
     struct pollfd p = { procfd, POLLHUP, 0 };
     return poll(&p, 1, 0) > 0 && (p.revents & POLLHUP) ? 1 : 0;
@@ -180,6 +196,7 @@ int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
     errno = ENOSYS; return -1;
 }
 int ap_procdesc_exited(int procfd) { (void)procfd; return 0; }
+long ap_mount_points(char *buf, size_t len) { (void)buf; (void)len; errno = ENOSYS; return -1; }
 int ap_procdesc_wait(int procfd) { (void)procfd; errno = ENOSYS; return -1; }
 
 #endif

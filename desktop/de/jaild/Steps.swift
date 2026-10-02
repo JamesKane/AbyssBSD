@@ -123,27 +123,9 @@ extension JailSteps {
     }
 }
 
-/// `mount -p`, which prints the mount table as fstab(5) lines.
+/// The mount table, as `JailPerformer.mounted()` reads it from the kernel
+/// (`getmntinfo`), and what is under the jail roots in it.
 public enum MountTable {
-    /// The mount points, in the order the kernel lists them. fstab escapes a
-    /// space in a path as `\040`.
-    public static func points(_ text: String) -> [String] {
-        text.split(separator: "\n").compactMap { line -> String? in
-            let f = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            guard f.count >= 2 else { return nil }
-            return unescape(String(f[1]))
-        }
-    }
-
-    static func unescape(_ s: String) -> String {
-        let b = Array(s.utf8), esc = Array("\\040".utf8)
-        var out: [UInt8] = [], i = 0
-        while i < b.count {
-            if i + 4 <= b.count, Array(b[i..<i + 4]) == esc { out.append(0x20); i += 4 } else { out.append(b[i]); i += 1 }
-        }
-        return String(decoding: out, as: UTF8.self)
-    }
-
     /// The roots under `base` (`<base>/<uid>/<class>`) with anything mounted
     /// in them — what a daemon that died left behind.
     public static func roots(under base: String, in points: [String]) -> [String] {

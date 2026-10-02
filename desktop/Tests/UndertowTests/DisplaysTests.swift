@@ -102,7 +102,11 @@ final class DisplaysTests: XCTestCase {
         let start = Mono.now()
         while Mono.since(start, Mono.now()) < 500_000_000 { c.serveNext(recorders: recs) }
         let frames = recs.map(\.retained)
-        XCTAssertLessThanOrEqual((frames.max() ?? 0) - (frames.min() ?? 0), 1, "frames per output: \(frames)")
+        // A spread of 2, not 1: the half-second window can close between two
+        // outputs' frames, and the busy guest also loses one now and then
+        // ([30, 32, 32] about one run in ten, 2026-10-02). A starved output is
+        // tens of frames behind, which this still catches.
+        XCTAssertLessThanOrEqual((frames.max() ?? 0) - (frames.min() ?? 0), 2, "frames per output: \(frames)")
         for f in frames { XCTAssertEqual(Double(f), 30, accuracy: 3, "frames per output in half a second: \(frames)") }
     }
 }

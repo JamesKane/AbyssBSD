@@ -35,11 +35,16 @@ me=$(id -un) uid=$(id -u) other=jt18
 N="abyss-$uid-app"
 
 daemon() { pgrep -f "abyss-jaild --socket $SOCK" || true; }
+# The mount points under the roots, for cleanup. From plain `mount`, whose
+# lines are "SOURCE on POINT (TYPE, …)": `mount -p` cannot be split at all when
+# a path has a space — its separator before the mount point is sometimes one
+# space (HANDOFF §2.127).
+mountsunder() { mount | grep -F " on $RB/" | sed -E 's/^.* on (.*) \([a-z0-9]+[,)].*$/\1/'; }
 cleanup() {
   exec 3>&- 4>&- 2>/dev/null || true
   for p in $(daemon); do sudo kill -9 "$p" 2>/dev/null || true; done
   for j in $(jls name | grep -E '^abyss-[0-9]+-' || true); do sudo jail -r "$j" 2>/dev/null || true; done
-  for m in $(mount -p | awk '{print $2}' | grep "^$RB" | sort -r); do sudo umount -f "$m" 2>/dev/null || true; done
+  mountsunder | sort -r | while IFS= read -r m; do sudo umount -f "$m" 2>/dev/null || true; done
   pw usershow "$other" > /dev/null 2>&1 && sudo pw userdel "$other" -r 2>/dev/null || true
   sudo rm -rf "$W"
 }
@@ -62,7 +67,11 @@ stop() {
   i=0; while [ -n "$(daemon)" ] && [ $i -lt 100 ]; do i=$((i + 1)); sleep 0.05; done
   [ -z "$(daemon)" ] || fail "the daemon would not die"
 }
-mounts() { mount -p | awk '{print $2}' | grep -c "^$RB/" || true; }
+# Counted by mount POINT from plain `mount` (" on $RB/"), never by splitting
+# `mount -p`, whose fields cannot be told apart when a path has a space —
+# `awk '{print $2}'` once counted a left grant as gone (HANDOFF §2.127). And
+# never with jaild's own code, which is what is tested.
+mounts() { mount | grep -cF " on $RB/" || true; }
 # Gone means gone: not even dying (`jls -d`). A jail whose programs are
 # unreaped zombies is removed and never freed (HANDOFF §2.123).
 gone() {  # gone WHY: the jail, its mounts and its root, all gone, within 5 s

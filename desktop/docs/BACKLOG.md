@@ -25,7 +25,7 @@ or more.
 
 | # | Item | Size | Why here | Verified by |
 |---|---|---|---|---|
-| **F.1** | **`firefox --kiosk` on the 12700KF maps a 1×1 window** (2026-10-02, P18.6's box run; corrected the same day). Without `--kiosk`, Firefox, confined or not, maps and maximises normally on DP-1 2560×1440 (screenshots in the P18.6 run). With it, the window stays 1×1 at the output's centre, confined or not. My first report blamed hardware or software GL too; that run was a crash, not a 1×1. In the headless harness `--kiosk` maps maximised (`live-firefox.sh`). Read first: undertow's handling of a fullscreen request made **before the first commit** on a DRM output (the output a client names, or none), against headless | S–M | `--kiosk` (and any app that asks for fullscreen at start) on real hardware | `firefox --kiosk` full-screen on the box |
+| ~~F.1~~ | ✅ **2026-10-02. A window that starts fullscreen gets the display** (HANDOFF §2.127). Two causes, both in undertow. (1) `firefox --kiosk` sends `unset_maximized` right after asking for fullscreen, and undertow "restored" from the box `setFullscreen` had just saved (the pre-map 0×0), so the configure said fullscreen at 0×0, and Firefox drew 1×1. Leaving a state a window is not in now changes nothing, both ways. (2) Placement on map (a remembered place, or centring) moved a fullscreen or maximised window off the origin its state gave it; it no longer does. On the box, fresh-profile `--kiosk` maps fullscreen at 0,0 2560×1440 | S | | `live-kiosk.sh` (three claims, all three fixes fault-injected) on Linux and in the guest; the box, screenshot |
 | ~~D.1~~ | ✅ **2026-10-02. ADE's D-Bus bridge, with no bus** ([PRODUCT §5.6](PRODUCT.md), HANDOFF §2.125–§2.126). `abyss-dbus --endpoint` is the endpoint. Applications connect at the session's address (or a jail's), ADE's services (the portal, `--menus`) on a private services socket, and messages go between the two kinds and never within one. It is a pure `BridgeRouter`: the driver as the bridge answers it, no client-to-client routing, nothing started by name, no monitors, application names callable only by services. Under it is a non-blocking `BridgeEndpoint` (SASL `EXTERNAL` with the peer's uid checked, descriptors passed). `anchor`'s `bus` component, each jail's bus and every test use it; `check-no-bus.sh` fails the build if the freedesktop daemon or its tools return. One refinement on the scope above: the services stay separate processes on the private socket (crash isolation, as PHASE8 wanted), instead of moving in-process | L | | 17 router tests (seven security rules fault-injected); `live-dbus` (now holding the bridge to not being a bus), `-portal-dbus`, `-gtk`, `-menus-gtk`, `-submenus`, `-palette`, `-appearance`, `-session-gtk`, `-anchor`, `-firefox` and the four jail tests green on Linux and in the guest, with GLib's GDBus and real GTK as the independent clients; the 12700KF run is next |
 | ~~M.1~~ | ✅ **C2 on metal: undertow's part done** (HANDOFF §2.118, §2.119). *Present on damage*: a static screen draws nothing (`live-damage.sh`). Every stage of undertow's frame was traced on the 12700KF under the flood and is on time; the misses that remain (≈100 of 1800 with a drawing client) are flip completions the kernel delivers late, now §6's. Left here: recheck undertow's `wake-late-p99` statistic, which the traces do not reproduce | M | | `metal-bench.sh c2` once §6's driver item is fixed |
 | ~~U.1~~ | ✅ **2026-09-28. Subsurfaces drawn, framed and hit-tested** (HANDOFF §2.71, `live-subsurface.sh`) | M | | done, both platforms |
@@ -177,6 +177,12 @@ per platform).
 
 ## 6. For the FreeBSD fork, not this tree
 
+
+- **WITNESS: a lock-order reversal between nullfs (over UFS) and tmpfs on
+  unmount** (2026-10-02, on the 12700KF's debug kernel, when jaild tore down
+  a jail root: tmpfs → ufs established by `nullfs_unmount`/`vflush`, ufs →
+  tmpfs attempted by `tmpfs_unmount`/`vflush`). A warning, not a panic, and
+  the box carried on. Upstream may know it; worth a look before a release kernel.
 What the review found belongs in the kernel (API-STUDY §3–§4). None is
 scheduled; each is small and self-contained:
 

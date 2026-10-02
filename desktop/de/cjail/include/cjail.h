@@ -47,6 +47,14 @@ int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
                   const char *const *argv, const char *const *envp, const char *cwd,
                   int in, int out, int err, int daemon, int *procfd);
 
+/*
+ * Every mount point, as the kernel has it (getmntinfo(3)), NUL-separated in
+ * `buf`. Returns the bytes used, or -1 with errno (ERANGE: `buf` too small).
+ * Not `mount -p`: that prints a path with a space in it as it is, so a
+ * granted "A chosen file.txt" could not be told from three fields.
+ */
+long ap_mount_points(char *buf, size_t len);
+
 /* Whether a process descriptor's process has exited (POLLHUP). */
 int ap_procdesc_exited(int procfd);
 

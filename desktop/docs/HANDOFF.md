@@ -730,6 +730,43 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.127 Kiosk was undone by a stray unset; `mount -p` cannot be parsed
+(2026-10-02, BACKLOG F.1, and a jaild bug found on the way.)
+
+**`firefox --kiosk` and the restore box.** Firefox asks for fullscreen before
+its first commit, then sends `unset_maximized` for a window that was never
+maximised. `setFullscreen` saved a restore box (the pre-map 0×0), and
+`setMaximized(false)` "restored" it, so the first configure said fullscreen
+at 0×0 and Firefox drew 1×1. Leaving a state a window is not in now changes
+nothing, in both directions (a `fullscreen` flag beside `maximized`). Then
+`place()` moved the fullscreen window to its remembered position from
+`windows.ini` (24,35 on the box). A window that maps fullscreen or maximised
+is now already placed. `live-kiosk.sh` reproduces all of it with a 100-line
+client, and each fix is fault-injected. The first box report ("Firefox is 1×1
+on metal") was wrong. Every failing run had used `--kiosk`, and the
+"software GL too" run had crashed. Look at the window's own commits before
+concluding; undertow logs a window's geometry only when it changes, and
+these runs shared a key.
+
+**`mount -p` cannot be parsed.** jaild found what to unmount from `mount -p`,
+splitting on whitespace and decoding `\040`. FreeBSD prints a path with a
+space *as it is*, and the separator before the mount point is a run of tabs,
+or **one space** when the source is long. So a granted "A chosen file.txt"
+was never seen: teardown logged "its root is gone" with the grant still
+mounted, and the next jail's tmpfs hid it. Every gate run had left one. jaild
+now reads the kernel (`getmntinfo` via `ap_mount_points`). The tests had the
+same blindness: their counter was `mount -p | awk '{print $2}'`. A first fix
+counted with jaild's own code, which the fault then blinded too, so a counter
+must not share code with what it checks. The tests now read plain `mount`
+("SOURCE on POINT (TYPE, …)"). `live-jail-files.sh` saves "saved file.txt",
+and the gate's new claim 8 asserts nothing is left mounted.
+
+**Also seen:** a WITNESS lock-order reversal (nullfs/UFS vs tmpfs) on the
+box's debug kernel during teardown. That's for the fork (BACKLOG §6). And
+`DisplaysTests.testEqualOutputsAreAllServed`, a wall-clock test, failed about
+one run in ten in the guest with spread 2 ([30, 32, 32]). It now allows 2; a
+starved output is tens of frames behind.
+
 ### 2.126 The bridge: what GLib needed, and a test that enshrined the gap
 (2026-10-02, BACKLOG D.1.)
 

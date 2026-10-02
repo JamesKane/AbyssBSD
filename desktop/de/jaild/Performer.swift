@@ -4,6 +4,7 @@
 // stops the run with its reason. What it did is returned either way, so the
 // service can undo a half-built root with the same teardown as a whole one.
 
+import CJail
 import Spawn
 
 #if canImport(Glibc)
@@ -103,9 +104,21 @@ public struct JailPerformer {
         return fchmod(fd, mode_t(mode)) == 0 ? nil : "\(path): \(errText())"
     }
 
-    /// The host's mount points, from `mount -p`.
+    /// The host's mount points, as the kernel has them (`getmntinfo`) — never
+    /// parsed from `mount -p`, which prints a path with spaces as it is
+    /// (HANDOFF §2.127).
     public func mounted() -> [String] {
-        MountTable.points(Spawn.run([commands.mount, "-p"], stderr: .capture).stdoutText)
+        var size = 1 << 16
+        while size <= 1 << 24 {
+            var buf = [CChar](repeating: 0, count: size)
+            let n = ap_mount_points(&buf, size)
+            if n >= 0 {
+                return buf[0..<Int(n)].split(separator: 0).map { String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+            }
+            guard errno == ERANGE else { return [] }
+            size *= 4
+        }
+        return []
     }
 }
 

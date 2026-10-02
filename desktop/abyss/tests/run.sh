@@ -245,6 +245,10 @@ if [ "$live" -eq 1 ]; then
   # row, and bundles remade when [apps] changes.
   echo "== 18a's gate =="
   quiet "$root/abyss/tests/live-jail-gate.sh"
+  # A window that starts fullscreen (F.1): `firefox --kiosk`'s requests, the
+  # whole display, at its origin, whatever it said next.
+  echo "== a window that starts fullscreen =="
+  quiet "$root/abyss/tests/live-kiosk.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

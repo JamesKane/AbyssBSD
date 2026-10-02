@@ -23,7 +23,10 @@
 #   6. with Firefox frontmost, the menu bar's application menu says
 #      "Confined (app-net)", disabled;
 #   7. taking galculator out of [apps] remakes the bundles, and its launcher
-#      is no longer confined.
+#      is no longer confined;
+#   8. when the session's keeper ends, no jail is left live and nothing is
+#      left mounted — the granted file, whose name has a space, included
+#      (every gate run had left one, unseen: HANDOFF §2.127).
 #
 # Usage: abyss/tests/live-jail-gate.sh
 set -eu
@@ -52,13 +55,18 @@ docs="$T/person/home"; mkdir -p "$docs"
 printf '%s\n' "$secret" > "$docs/Chosen file.txt"; printf 'not this one\n' > "$docs/Other.txt"
 
 daemon() { pgrep -f "abyss-jaild --socket $SOCK" || true; }
+# The mount points under the roots, for cleanup. From plain `mount`, whose
+# lines are "SOURCE on POINT (TYPE, …)": `mount -p` cannot be split at all when
+# a path has a space — its separator before the mount point is sometimes one
+# space (HANDOFF §2.127).
+mountsunder() { mount | grep -F " on $RB/" | sed -E 's/^.* on (.*) \([a-z0-9]+[,)].*$/\1/'; }
 cleanup() {
   exec 3>&- 2>/dev/null || true
   for p in ${http:-} ${bar:-} ${vp:-} ${kp:-} ${pt:-} ${ut:-}; do kill "$p" 2>/dev/null || true; done
   pkill -f "firefox.*$T" 2>/dev/null || true
   for p in $(daemon); do sudo kill -9 "$p" 2>/dev/null || true; done
   for j in $(jls name | grep -E '^abyss-[0-9]+-' || true); do sudo jail -r "$j" 2>/dev/null || true; done
-  for m in $(mount -p | awk '{print $2}' | grep "^$RB" | sort -r); do sudo umount -f "$m" 2>/dev/null || true; done
+  mountsunder | sort -r | while IFS= read -r m; do sudo umount -f "$m" 2>/dev/null || true; done
   sudo rm -rf "$T"
 }
 trap cleanup EXIT INT TERM HUP
@@ -202,4 +210,11 @@ i=0; while grep -q 'abyss-jail launch' "$(bundle '*alculator*')" && [ $i -lt 300
 grep -q 'abyss-jail launch' "$(bundle '*alculator*')" && fail "galculator's launcher is still confined after leaving [apps]"
 grep -q '^exec abyss-jail launch app-net -- firefox' "$(bundle 'firefox*')" || fail "Firefox lost its confinement"
 echo "ok: 7. galculator left [apps]: the bundles were made again, and its launcher is not confined"
+# ------------------------------------------------- 8. nothing left behind
+kill "$kp" 2>/dev/null; wait "$kp" 2>/dev/null || true; kp=""
+mounts() { mount | grep -cF " on $RB/" || true; }
+i=0; while { [ "$(mounts)" != 0 ] || jls name | grep -q '^abyss-'; } && [ $i -lt 200 ]; do i=$((i + 1)); sleep 0.05; done
+jls name | grep -q '^abyss-' && fail "a jail is still live after the keeper ended: $(jls name | grep '^abyss-')"
+[ "$(mounts)" = 0 ] || fail "$(mounts) mount(s) left after the keeper ended: $(mount | grep -F " on $RB/" | head -2)"
+echo "ok: 8. the keeper ended: no jail live, nothing mounted — the granted 'Chosen file.txt' included"
 echo "all green (18a's gate: listed applications run confined, reach the network as their class says, get the files they are given, and say so)."

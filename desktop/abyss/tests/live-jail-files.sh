@@ -44,12 +44,17 @@ docs=$(mktemp -d /tmp/abyss-jfd.XXXXXX)
 printf 'the contents\n' > "$docs/doc.txt"; printf 'not chosen\n' > "$docs/secret.txt"
 
 daemon() { pgrep -f "abyss-jaild --socket $SOCK" || true; }
+# The mount points under the roots, for cleanup. From plain `mount`, whose
+# lines are "SOURCE on POINT (TYPE, …)": `mount -p` cannot be split at all when
+# a path has a space — its separator before the mount point is sometimes one
+# space (HANDOFF §2.127).
+mountsunder() { mount | grep -F " on $RB/" | sed -E 's/^.* on (.*) \([a-z0-9]+[,)].*$/\1/'; }
 cleanup() {
   exec 3>&- 2>/dev/null || true
   for p in ${bus:-} ${pt:-} ${br:-}; do kill "$p" 2>/dev/null || true; done
   for p in $(daemon); do sudo kill -9 "$p" 2>/dev/null || true; done
   for j in $(jls name | grep -E '^abyss-[0-9]+-' || true); do sudo jail -r "$j" 2>/dev/null || true; done
-  for m in $(mount -p | awk '{print $2}' | grep "^$RB" | sort -r); do sudo umount -f "$m" 2>/dev/null || true; done
+  mountsunder | sort -r | while IFS= read -r m; do sudo umount -f "$m" 2>/dev/null || true; done
   pw usershow "$other" > /dev/null 2>&1 && sudo pw userdel "$other" -r 2>/dev/null || true
   sudo rm -rf "$W" "$docs"
 }
@@ -60,7 +65,11 @@ await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt 200 ]; d
           [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"; }
 J() { "$W/bin/abyss-jail" --socket "$SOCK" "$@"; }
 inside() { J run app -- "$@" 3>&-; }
-mounts() { mount -p | awk '{print $2}' | grep -c "^$RB/" || true; }
+# Counted by mount POINT from plain `mount` (" on $RB/"), never by splitting
+# `mount -p`, whose fields cannot be told apart when a path has a space —
+# `awk '{print $2}'` once counted a left grant as gone (HANDOFF §2.127). And
+# never with jaild's own code, which is what is tested.
+mounts() { mount | grep -cF " on $RB/" || true; }
 
 pw usershow "$other" > /dev/null 2>&1 || sudo pw useradd "$other" -u 1818 -m -s /bin/sh
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- &
@@ -102,17 +111,17 @@ inside sh -c 'echo x >> /run/granted/1/doc.txt' 2> /dev/null && fail "a file ope
 echo "ok: 1. OpenFile from the jail: the Response names /run/granted/1/doc.txt, the real file, alone, read-only"
 
 # --------------------------------------------------------- 2. SaveFile
-echo "$docs/saved.txt" > "$W/choose"
-ask SaveFile t2 saved.txt
-grep -q '^uri file:///run/granted/2/saved.txt$' "$W/call.log" || fail "the SaveFile Response does not name /run/granted/2/saved.txt: $(tr '\n' ' ' < "$W/call.log")"
-inside sh -c 'echo "written in the jail" > /run/granted/2/saved.txt' || fail "the jail could not write the file it was given to save"
-[ "$(cat "$docs/saved.txt")" = "written in the jail" ] || fail "what the jail wrote is not in the real file: '$(cat "$docs/saved.txt")'"
+echo "$docs/saved file.txt" > "$W/choose"
+ask SaveFile t2 "saved file.txt"   # spaces: the mount table must keep them (HANDOFF §2.127)
+grep -q '^uri file:///run/granted/2/saved%20file.txt$' "$W/call.log" || fail "the SaveFile Response does not name /run/granted/2/saved file.txt: $(tr '\n' ' ' < "$W/call.log")"
+inside sh -c 'echo "written in the jail" > "/run/granted/2/saved file.txt"' || fail "the jail could not write the file it was given to save"
+[ "$(cat "$docs/saved file.txt")" = "written in the jail" ] || fail "what the jail wrote is not in the real file: '$(cat "$docs/saved file.txt")'"
 echo "ok: 2. SaveFile from the jail: granted writable, and the jail's write is in the real file"
 
 # ---------------------------------------------------------- 3. list, revoke
 J grants "$N" > "$W/grants"
 grep -q "^1	ro	/run/granted/1/doc.txt	$docs/doc.txt$" "$W/grants" || fail "grant 1 is not listed as read-only: $(cat "$W/grants")"
-grep -q "^2	rw	/run/granted/2/saved.txt	$docs/saved.txt$" "$W/grants" || fail "grant 2 is not listed as read-write: $(cat "$W/grants")"
+grep -q "^2	rw	/run/granted/2/saved file.txt	$docs/saved file.txt$" "$W/grants" || fail "grant 2 is not listed as read-write: $(cat "$W/grants")"
 J revoke "$N" 1 > /dev/null || fail "revoke failed"
 inside test -e /run/granted/1/doc.txt && fail "a revoked file is still in the jail"
 [ "$(cat "$docs/doc.txt")" = "the contents" ] || fail "revoking changed the real file"
@@ -137,6 +146,6 @@ echo "ok: 4. refused: another file's descriptor, a link, a directory, another pe
 exec 3>&-
 i=0; while { jls -j "$N" > /dev/null 2>&1 || [ "$(mounts)" != 0 ]; } && [ $i -lt 100 ]; do i=$((i + 1)); sleep 0.05; done
 [ "$(mounts)" = 0 ] || fail "$(mounts) mount(s) left after letting go (the grants?)"
-[ "$(cat "$docs/saved.txt")" = "written in the jail" ] || fail "letting go changed a granted file"
+[ "$(cat "$docs/saved file.txt")" = "written in the jail" ] || fail "letting go changed a granted file"
 echo "ok: 5. letting go of the jail took its grants with it; the real files stay"
 echo "all green (a file reaches a jail when it is chosen, that file alone, and only as far as it was opened)."
