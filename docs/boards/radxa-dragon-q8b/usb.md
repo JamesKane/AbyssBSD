@@ -66,8 +66,49 @@ hot-plugged or present at boot: 116 MB/s reading a USB 3 drive.
   so `\_SB.SOID` can't be read at load; it is looked up when the channel
   opens.
 
+- **Acknowledgements** (src `24723bef3a`): each notification is answered
+  with `ALTMODE_PAN_ACK` (0x11, the port as argument) once handled, as
+  Linux does, sent from the driver's task queue (not GLINK's receive
+  callback, where a send could wait on buffers announced on that thread).
+
+## DisplayPort over USB-C (planned)
+
+Not working yet: no USB-C display has been tried. What is known:
+
+- **Wiring** (Radxa's devicetree, `dumps/dt/live.dts`): USB-C port 0 is
+  MDSS0's DP0 (`0xae90000`) through the combo PHY at `0x88eb000`; port 1
+  is DP1 (`0xae98000`) through `0x8903000`, the PHYs whose USB lanes
+  `qcom_pmic_glink` already switches. DP2 (`0xae9a000`) is the HDMI port,
+  through the CH7218A ([gpu-display.md](gpu-display.md)).
+- **The ADSP** negotiates the alternate mode itself. Its notification then
+  says mux 2 (DP, four lanes) or 3 (USB3 + DP, two lanes), SVID `0xff01`,
+  and, in the first byte of the extended data, the pin assignment (bits
+  0-5: 1 = A ... 6 = F), HPD (bit 6) and an HPD IRQ (bit 7).
+  `hw.qcom_pmic_glink.portN` shows them (`usb3+dp, dp pin D, hpd high`).
+
+Still to do, each needing a USB-C display or adapter to try it with:
+
+1. **The PHY's lanes** for DP: four lanes (pin C/E) or two plus USB3
+   (pin D/F), set in the combo PHY's common block as Linux's typec mux
+   does.
+2. **The PHY's DisplayPort side**: its PLL and transmit setup for each
+   link rate (RBR to HBR3), and the AUX PHY. UEFI leaves it unset unless a
+   display was there at boot (Linux: the QMP combo PHY's DP tables for
+   SC8280XP).
+3. **Clocks**: DP0's and DP1's link and pixel clocks in the display clock
+   controller, fed by the PHY's PLL. UEFI set up only DP2's.
+4. **A second output**: msmfb takes over the pipeline UEFI left for HDMI
+   and keeps its PHY, clocks and link; a USB-C display needs its own
+   pipe, mixer, control path and interface, the controller brought up
+   from reset, the sink's capabilities read and the link trained, and
+   hotplug from the notifications above. Or bring up msm's own DP driver,
+   which would want the same PHY and clock support and would drive HDMI
+   the same way.
+
 ## Open
 
-- Device/OTG mode and power delivery aren't supported. DisplayPort
-  alternate mode over USB-C would use the same notifications (mux states
-  2 and 3, HPD in the extended data); not done.
+- Device/OTG mode isn't supported. Power delivery is the ADSP's: it powers
+  devices on both ports (a bus-powered USB 3 drive runs); there is nothing
+  for the host to do unless the board is to take its power over USB-C or
+  swap roles.
+- DisplayPort alternate mode: above.
