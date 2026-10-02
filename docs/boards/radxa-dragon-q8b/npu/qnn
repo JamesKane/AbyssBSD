@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# Run one of QNN's Linux tools, or a Linux program built on QNN, on the NPU:
+#	qnn TOOL [ARGS]
+# TOOL is a name in /usr/local/qnn/bin (qnn-net-run, ...) or a path.  It
+# runs under the Linux layer (the linux and qnn services, see rc.conf(5)).
+#
+Q=/usr/local/qnn
+DSP_SHELLS=/usr/share/qcom/sc8280xp/radxa/dragon-q8b/dsp/cdsp
+
+if [ $# -eq 0 ]; then
+	echo "usage: qnn TOOL [ARGS]" >&2
+	exit 64
+fi
+if [ "$(sysctl -n compat.linux.soc_id 2>/dev/null)" = "" ]; then
+	echo "qnn: the qnn service is not running (service qnn start)" >&2
+	exit 69
+fi
+export LD_LIBRARY_PATH="$Q/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# The board, for the FastRPC library's /usr/share/qcom/conf.d lookup (the
+# devicetree model it reads on Linux): SMBIOS names it on this ACPI board.
+: ${MACHINE_NAME:=$(kenv -q smbios.system.product)}
+export MACHINE_NAME
+# The DSP-side libraries: QNN's for Hexagon v68, and the FastRPC shells.
+export ADSP_LIBRARY_PATH="$Q/dsp;$DSP_SHELLS"
+export DSP_LIBRARY_PATH="$ADSP_LIBRARY_PATH"
+t=$1
+shift
+case $t in
+*/*)	;;
+*)	t=$Q/bin/$t ;;
+esac
+exec "$t" "$@"
