@@ -69,6 +69,15 @@ public final class AgentLoop {
 
     public func ask(_ text: String) -> AgentAnswer {
         messages.append(.object([("role", .string("user")), ("content", .string(text))]))
+        return run()
+    }
+
+    /// Carry on from where the last question stopped — after the person
+    /// allowed more budget (P18.11) — without asking it again: the
+    /// conversation, calls and results so far, goes back to the model as is.
+    public func resume() -> AgentAnswer { run() }
+
+    func run() -> AgentAnswer {
         var calls: [String] = []
         for step in 1...maxSteps {
             let status: Int, body: JSON

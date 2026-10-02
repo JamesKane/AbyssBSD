@@ -7,7 +7,10 @@
 //       one agent session: its budget, its append-only transcript in DIR, and
 //       its backend — canned replies from FILE (a JSON array), a server
 //       speaking the same wire, or llama.cpp's llama-server, which abyss-model
-//       runs itself on a private unix socket (P18.7b) and stops when it goes. The keeper puts
+//       runs itself on a private unix socket (P18.7b) and stops when it goes.
+//       --control PATH (P18.11): a second socket, outside the jail, on which
+//       the keeper raises the budget when the person allows more
+//       (`raise tokens=N`); the agent cannot reach it. The keeper puts
 //       PATH inside an agent's jail; the transcript stays outside it.
 //   abyss-model tier
 //       this machine's VRAM and RAM, its tier, and the model proposed for it
@@ -114,10 +117,31 @@ case "serve":
     signal(SIGPIPE, SIG_IGN)
     let server: Current.Server
     do { server = try Current.Server(path: listen, mode: 0o600) } catch { die("cannot listen at \(listen): \(error)") }
+    var control: Current.Server?
+    if let c = opt("--control") {
+        unlink(c)
+        do { control = try Current.Server(path: c, mode: 0o600) } catch { die("cannot listen at \(c): \(error)") }
+    }
     let s = ModelSession(id: session, budget: budget, backend: backend, transcript: fd)
     emit(1, "ready (session \(session), budget \(budget) tokens, backend \(backend.name))")
     while true {
-        guard let c = try? server.accept() else { continue }
+        var fds = [pollfd(fd: server.fd, events: Int16(POLLIN), revents: 0),
+                   pollfd(fd: control?.fd ?? -1, events: Int16(POLLIN), revents: 0)]
+        if poll(&fds, 2, -1) < 0 { if errno == EINTR { continue }; die("poll: \(String(cString: strerror(errno)))") }
+        if fds[1].revents != 0, let control, let c = try? control.accept() {
+            // The keeper's side: the person allowed more.
+            if let req = try? Current.receive(on: c) {
+                var r = Msg()
+                if req.string("method") == "raise", let n = req.uint64("tokens"), n > 0 {
+                    s.raise(by: Int(n))
+                    r.set("ok", true); r.set("budget", UInt64(s.budget)); r.set("used", UInt64(s.used))
+                    emit(1, "raised by \(n) to \(s.budget)")
+                } else { r.set("ok", false); r.set("error", "the control socket answers raise tokens=N") }
+                try? Current.send(r, on: c)
+            }
+            close(c)
+        }
+        guard fds[0].revents != 0, let c = try? server.accept() else { continue }
         // A slow reply is the model's, not the client's: no receive timeout
         // on the answer, only on reading the request.
         if let req = try? HTTP.readRequest(c) {

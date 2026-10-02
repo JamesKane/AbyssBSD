@@ -13,6 +13,9 @@
 //       ask the agent at SOCKET: one `call=` line per tool as it is called,
 //       then its answer, then `stop=` and `steps=`. Exits 0 when it answered, 3
 //       when the budget stopped it, 4 when the step limit did, 1 otherwise.
+//   abyss-agent continue --listen SOCKET
+//       carry on from where the last question stopped (after the person
+//       allowed more budget); prints as ask does.
 //   abyss-agent bye --listen SOCKET
 
 import Agent
@@ -85,7 +88,7 @@ case "serve":
         guard let req = try? Current.receive(on: c) else { close(c); continue }
         var reply = Msg()
         switch req.string("method") {
-        case "ask":
+        case "ask", "continue":
             // Each tool call as it starts, as an event on the same connection
             // before the reply (the chat window shows it then, not after).
             loop.onCall = { call in
@@ -93,7 +96,8 @@ case "serve":
                 try? Current.send(e, on: c)
             }
             defer { loop.onCall = { _ in } }
-            let a = loop.ask(req.string("text") ?? "")
+            // `continue` (P18.11): on, from where the budget stopped it.
+            let a = req.string("method") == "continue" ? loop.resume() : loop.ask(req.string("text") ?? "")
             reply.set("ok", true)
             reply.set("text", a.text)
             reply.set("stop", a.stop.rawValue)
@@ -114,7 +118,7 @@ case "serve":
         close(c)
     }
 
-case "ask", "bye":
+case "ask", "bye", "continue":
     var m = Msg()
     m.set("method", args[0])
     if args[0] == "ask" {

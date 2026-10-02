@@ -173,6 +173,8 @@ public final class JailKeeper {
                          helpers: [ap_child])] = []
     /// Agent sessions' vocabulary control sockets, by session ID (P18.10).
     private var vocabularies: [String: String] = [:]
+    /// Agent sessions' model control sockets, by session ID (P18.11).
+    private var models: [String: String] = [:]
     /// Crashes seen this session, by number (P18.9).
     public private(set) var crashes: [Int: Crash] = [:]
     /// What shows a crash to the person (P18.9b): AquaDemo's Crash Reporter,
@@ -299,6 +301,8 @@ public final class JailKeeper {
         public var pid: UInt64
         /// Whether applications can be given to it (P18.10).
         public var vocabulary: Bool = false
+        /// Its budget in tokens, and what the person may allow again (P18.11).
+        public var budget: Int = 0
     }
 
     /// `abyss-model serve`'s backend arguments for a class's `model=`.
@@ -399,14 +403,17 @@ public final class JailKeeper {
         // The model, outside the jail, on a socket inside it.
         let modelSock = "model-\(n).sock", agentSock = "agent-\(n).sock"
         let outside = h.opened.runtime + "/" + modelSock
+        let modelControl = transcript + "/model.sock"
         var model = try child([binDir + "/abyss-model", "serve", "--listen", outside, "--session", id,
-                               "--budget", String(k.budget), "--transcript", transcript] + backend,
+                               "--budget", String(k.budget), "--transcript", transcript,
+                               "--control", modelControl] + backend,
                               log: transcript + "/abyss-model.log")   // outside the jail, with the transcript
         func fail(_ why: String) -> JailClient.Refused {
             _ = ap_child_signal(&model, SIGTERM); _ = ap_child_reap(&model, nil)
             return JailClient.Refused(description: why)
         }
         guard waitForSocket(outside, seconds: 300, unless: model) else { throw fail("abyss-model did not start for \(id)") }
+        models[id] = modelControl
 
         // Its vocabulary (P18.10), when the class has one: the bridge outside,
         // answering inside; gives come on a control socket beside the
@@ -454,7 +461,8 @@ public final class JailKeeper {
             throw JailClient.Refused(description: "abyss-agent did not start in \(h.opened.name)")
         }
         say("jails: agent session \(id) in \(h.opened.name): agent pid \(pid), transcript \(transcript)")
-        return AgentSession(id: id, socket: socket, transcript: transcript, pid: pid, vocabulary: k.vocabulary)
+        return AgentSession(id: id, socket: socket, transcript: transcript, pid: pid, vocabulary: k.vocabulary,
+                            budget: k.budget)
     }
 
     /// Give an application to an agent session (P18.10): `app` as a person
@@ -478,6 +486,34 @@ public final class JailKeeper {
         }
         say("jails: gave \(name) (\(service)) to agent session \(session)")
         return name
+    }
+
+    /// One request on a session's control socket, outside its jail.
+    private func control(_ path: String?, _ m: Msg, what: String) throws -> Msg {
+        guard let path else { throw JailClient.Refused(description: "there is no agent session with \(what)") }
+        let fd = try Current.connect(path: path)
+        defer { close(fd) }
+        try Current.send(m, on: fd)
+        let r = try Current.receive(on: fd)
+        guard r.bool("ok") == true else { throw JailClient.Refused(description: r.string("error") ?? "refused") }
+        return r
+    }
+
+    /// The person allowed more (P18.11, requester 4): `tokens` more for the
+    /// session's model. Returns the new budget.
+    public func raise(session: String, tokens: Int) throws -> Int {
+        guard tokens > 0 else { throw JailClient.Refused(description: "a raise needs tokens") }
+        var m = Msg(); m.set("method", "raise"); m.set("tokens", UInt64(tokens))
+        let r = try control(models[session], m, what: "a model \(session)")
+        say("jails: agent session \(session) may use \(tokens) more tokens (budget \(r.uint64("budget") ?? 0))")
+        return Int(r.uint64("budget") ?? 0)
+    }
+
+    /// Take a given application back from a session (P18.11).
+    public func take(session: String, app: String) throws {
+        var m = Msg(); m.set("method", "take"); m.set("app", app)
+        _ = try control(vocabularies[session], m, what: "a vocabulary \(session)")
+        say("jails: took \(app) back from agent session \(session)")
     }
 
     /// Wait for a socket to appear, giving up if `child` exits first.
@@ -569,6 +605,7 @@ public final class JailKeeper {
                 let a = try agent(req.string("class") ?? "")
                 reply.set("ok", true); reply.set("session", a.id); reply.set("socket", a.socket)
                 reply.set("transcript", a.transcript); reply.set("pid", a.pid); reply.set("vocabulary", a.vocabulary)
+                reply.set("budget", UInt64(a.budget))
             } catch {
                 say("jails: agent refused: \(error)")
                 reply = JailWire.error("\(error)")
@@ -578,6 +615,7 @@ public final class JailKeeper {
                 let a = try debug(Int(req.uint64("crash") ?? 0))
                 reply.set("ok", true); reply.set("session", a.id); reply.set("socket", a.socket)
                 reply.set("transcript", a.transcript); reply.set("pid", a.pid); reply.set("vocabulary", a.vocabulary)
+                reply.set("budget", UInt64(a.budget))
             } catch {
                 say("jails: debug refused: \(error)")
                 reply = JailWire.error("\(error)")
@@ -588,6 +626,22 @@ public final class JailKeeper {
                 reply.set("ok", true); reply.set("app", name)
             } catch {
                 say("jails: give refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "raise":
+            do {
+                let b = try raise(session: req.string("session") ?? "", tokens: Int(req.uint64("tokens") ?? 0))
+                reply.set("ok", true); reply.set("budget", UInt64(b))
+            } catch {
+                say("jails: raise refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "take":
+            do {
+                try take(session: req.string("session") ?? "", app: req.string("app") ?? "")
+                reply.set("ok", true)
+            } catch {
+                say("jails: take refused: \(error)")
                 reply = JailWire.error("\(error)")
             }
         case "crashes":

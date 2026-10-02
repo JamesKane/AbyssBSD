@@ -59,6 +59,16 @@ public final class VocabularyBridge {
         return name
     }
 
+    /// The keeper's: take `app` back (P18.11). From now on it is refused as
+    /// anything never given is. Returns whether it had been given.
+    @discardableResult
+    public func take(_ app: String) -> Bool {
+        let had = given.contains { $0.name.lowercased() == app.lowercased() }
+        given.removeAll { $0.name.lowercased() == app.lowercased() }
+        if had { log("taken", [("app", .string(app))]) }
+        return had
+    }
+
     func service(of app: String) -> String? {
         given.first { $0.name.lowercased() == app.lowercased() }?.service
     }

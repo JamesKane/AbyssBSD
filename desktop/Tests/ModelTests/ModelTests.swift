@@ -147,6 +147,21 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(lines().last?["reason"]?.string, "budget")
     }
 
+    /// The person allowed more (P18.11): the next call goes through, and the
+    /// transcript says so.
+    func testARaiseLetsTheNextCallThrough() throws {
+        let (fd, lines) = transcript()
+        let s = ModelSession(id: "r", budget: 100, backend: StubBackend(replies: [reply("a", tokens: 150)]), transcript: fd)
+        XCTAssertEqual(post(s, #"{"messages":[]}"#).status, 200)
+        XCTAssertEqual(post(s, #"{"messages":[]}"#).status, 429)
+        s.raise(by: 100)
+        XCTAssertEqual(s.budget, 200)
+        XCTAssertEqual(post(s, #"{"messages":[]}"#).status, 200, "150 used of 200")
+        XCTAssertEqual(lines().map { $0["kind"]?.string ?? "?" }, ["request", "reply", "refused", "raised", "request", "reply"])
+        s.raise(by: 0)
+        XCTAssertEqual(s.budget, 200, "a raise of nothing changes nothing")
+    }
+
     func testWhatItRefusesAndWhy() throws {
         let (fd, _) = transcript()
         let s = ModelSession(id: "s3", budget: 10, backend: StubBackend(replies: [reply("x", tokens: 11)]), transcript: fd)

@@ -81,7 +81,7 @@ public final class HTTPBackend: ModelBackend {
 
 public final class ModelSession {
     public let id: String
-    public let budget: Int
+    public private(set) var budget: Int
     public private(set) var used = 0
     public private(set) var refusals = 0
     let backend: ModelBackend
@@ -92,6 +92,14 @@ public final class ModelSession {
     public init(id: String, budget: Int, backend: ModelBackend, transcript: Int32,
                 clock: @escaping () -> Double = ModelSession.now) {
         self.id = id; self.budget = budget; self.backend = backend; self.transcript = transcript; self.clock = clock
+    }
+
+    /// The person allowed more (P18.11, requester 4): the budget grows by
+    /// `tokens`, said in the transcript, and the next call goes through.
+    public func raise(by tokens: Int) {
+        guard tokens > 0 else { return }
+        budget += tokens
+        log("raised", [("by", .number(Double(tokens))), ("used", .number(Double(used)))])
     }
 
     public static func now() -> Double {

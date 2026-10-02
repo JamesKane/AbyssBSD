@@ -13,8 +13,9 @@
 #      answered — then the answer (the agent's log and the transcript agree);
 #   3. the Ask button sends the next, and it is answered;
 #   4. a script asks through the vocabulary (`abyssmenu run agent
-#      agent.question text=…`), as a person does; the budget stops it, the window says so in
-#      abyss-model's words, and Ask is then disabled ("there is no agent");
+#      agent.question text=…`), as a person does; the budget stops it and
+#      asks the person (P18.11) — here they say Stop — and Ask is then
+#      disabled ("there is no agent");
 #   5. ⌘Q ends the session: bye, the agent exits, the keeper stops its model;
 #   6. a class with no model: the window says why there is no agent.
 #
@@ -137,6 +138,10 @@ echo "ok: 3. the Ask button sent the next question, and it was answered"
 .build/debug/abyssmenu run agent agent.question "text=and wednesday" > "$W/m1" 2>&1 || fail "abyssmenu's ask was refused: $(cat "$W/m1")"
 await "$W/app.log" 'Agent: asked: and wednesday' "the vocabulary's ask did not reach the agent"
 await "$W/app.log" 'Agent: answered: stop=budget' "the budget did not stop the third question"
+# The budget asks the person now (P18.11); this test's person says Stop.
+await "$W/app.log" 'Agent: requester budget: ' "the budget did not ask the person"
+.build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
+await "$W/app.log" 'Agent: stopped by the person' "Stop did not end the question"
 [ "$(validate)" = "disabled (there is no agent)" ] || fail "Ask after the budget: $(validate)"
 .build/debug/abyssmenu run agent agent.question "text=more" > "$W/m2" 2>&1 && fail "an ask after the budget was taken"
 grep -q 'there is no agent' "$W/m2" || fail "the refused ask does not say why: $(cat "$W/m2")"

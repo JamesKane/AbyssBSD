@@ -282,12 +282,16 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         view.setText(agentTurn(question: "What do I need to do on Monday?",
                                calls: [#"list_directory({"path":"/home/abyss"})"#, #"read_file({"path":"/home/abyss/notes.txt"})"#],
                                answer: "Call the plumber about the kitchen tap."))
-        // AQUA_AGENT_PICKER=1: Give Application…'s list open over it.
+        // AQUA_AGENT_PICKER=1: Give Application…'s list open over it;
+        // AQUA_AGENT_REQUESTER=1: the budget requester (P18.11).
         let picker = getenv("AQUA_AGENT_PICKER") != nil
+        let asking = getenv("AQUA_AGENT_REQUESTER") != nil
         _ = paintAgentWindow(cr, w: cw, h: ch, conversation: view,
-                             status: "Confined in agent: no network; only what you grant it.",
-                             field: picker ? "" : "And on Tuesday?", caret: !picker, canAsk: true,
-                             picker: picker ? ["Activity Monitor", "Grab", "TextEdit"] : nil)
+                             status: asking ? "The agent's budget is spent." : "Confined in agent: no network; only what you grant it.",
+                             field: picker || asking ? "" : "And on Tuesday?", caret: !picker && !asking, canAsk: !asking,
+                             picker: picker ? ["Activity Monitor", "Grab", "TextEdit"] : nil,
+                             requester: asking ? (title: "The agent has used its budget.",
+                                                  body: agentBudgetQuestion("the session's budget of 200000 tokens is spent (200412 used)", budget: 200000)) : nil)
     case .textedit:
         // A fixed document: wrapped lines, a tab, a selection across a line
         // break, and the find bar with its text.

@@ -28,6 +28,11 @@
 //   abyss-jail give SESSION APP
 //       give a running application to an agent session (P18.10): APP as
 //       abyssmenu names it, or its menu service; the agent may then drive it.
+//   abyss-jail raise SESSION TOKENS
+//       allow an agent session TOKENS more (P18.11): what the Agent window's
+//       budget requester sends when the person says Allow.
+//   abyss-jail take SESSION APP
+//       take a given application back from an agent session (P18.11).
 //   abyss-jail crashes
 //       the confined programs that died of a signal this session (P18.9).
 //   abyss-jail debug N
@@ -164,6 +169,15 @@ case "give":
         let r = try Current.call(KeeperWire.service, m)
         guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
         emit(1, "gave \(r.string("app") ?? args[2]) to \(subject)")
+    } catch { die("the session's jails are not running (\(error))") }
+case "raise", "take":
+    guard args.count >= 3 else { die("\(command) needs a session and \(command == "raise" ? "tokens" : "an application")") }
+    var m = Msg(); m.set("method", command); m.set("session", subject)
+    if command == "raise" { m.set("tokens", UInt64(args[2]) ?? 0) } else { m.set("app", args[2]) }
+    do {
+        let r = try Current.call(KeeperWire.service, m)
+        guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
+        emit(1, command == "raise" ? "budget \(r.uint64("budget") ?? 0)" : "took \(args[2]) back")
     } catch { die("the session's jails are not running (\(error))") }
 case "debug":
     var m = Msg(); m.set("method", "debug"); m.set("crash", UInt64(subject) ?? 0)

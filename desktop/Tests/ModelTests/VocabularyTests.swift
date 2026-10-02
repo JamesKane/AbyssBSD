@@ -87,6 +87,20 @@ final class VocabularyTests: XCTestCase {
         XCTAssertTrue(b.given.isEmpty)
     }
 
+    /// Taken back (P18.11): refused from then on, as never given.
+    func testATakenApplicationIsRefusedAgain() throws {
+        let menus = FakeMenus()
+        var logged: [String] = []
+        let b = VocabularyBridge(menus: menus) { kind, _ in logged.append(kind) }
+        _ = try b.give(service: "menus.textedit.42")
+        XCTAssertTrue(b.take("textedit"))
+        XCTAssertFalse(b.take("textedit"), "nothing to take twice")
+        let r = b.handle(msg("activate", app: "TextEdit", verb: "file.save"))
+        XCTAssertEqual(r.string("error"), "TextEdit was not given to this session")
+        XCTAssertTrue(menus.activated.isEmpty)
+        XCTAssertEqual(logged, ["given", "taken", "refused"])
+    }
+
     func testAGiveIsOneRunningCopy() throws {
         let b = VocabularyBridge(menus: FakeMenus())
         XCTAssertThrowsError(try b.give(service: "menus.textedit.999"), "an application that does not answer is not given")

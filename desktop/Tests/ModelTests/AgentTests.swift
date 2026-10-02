@@ -106,6 +106,20 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(AgentLoop(system: "s", tools: [], model: Script([(502, .null)]).call).ask("q").text, "abyss-model said 502")
     }
 
+    /// After the budget stopped a question and the person allowed more, the
+    /// loop carries on from where it was: the question is not asked again.
+    func testResumeCarriesOnWithoutAskingAgain() {
+        let refusal = JSON.object([("error", .object([("type", .string("budget")), ("message", .string("spent"))]))])
+        let s = Script([(200, completion(nil, calls: [("echo", "{}")])), (429, refusal), (200, completion("done"))])
+        let loop = AgentLoop(system: "sys", tools: [echo], model: s.call)
+        XCTAssertEqual(loop.ask("go").stop, .budget)
+        let a = loop.resume()
+        XCTAssertEqual(a.stop, .answered)
+        XCTAssertEqual(a.text, "done")
+        let roles = s.asked.last!["messages"]!.array!.map { $0["role"]?.string ?? "?" }
+        XCTAssertEqual(roles, ["system", "user", "assistant", "tool"], "one question, its call and result — no second user turn")
+    }
+
     func testTheConversationPersistsAcrossQuestions() {
         let s = Script([(200, completion("one")), (200, completion("two"))])
         let loop = AgentLoop(system: "sys", tools: [], model: s.call)

@@ -76,12 +76,22 @@ final class AgentWindowTests: XCTestCase {
         XCTAssertTrue(zip(l.rows, l.rows.dropFirst()).allSatisfy { $0.y + $0.h <= $1.y }, "rows do not overlap")
     }
 
+    func testTheBudgetRequester() {
+        XCTAssertEqual(agentBudgetQuestion("the session's budget of 500 tokens is spent (600 used)", budget: 500),
+                       "The session's budget of 500 tokens is spent (600 used). Let it use another 500 tokens and carry on?")
+        let l = AgentRequesterLayout(in: AgentLayout(w: 560, h: 460).conversation)
+        XCTAssertLessThan(l.stop.x + l.stop.w, l.allow.x, "Stop, then Allow More: the default last")
+        XCTAssertTrue(l.allow.x + l.allow.w <= l.panel.x + l.panel.w && l.allow.y + l.allow.h <= l.panel.y + l.panel.h,
+                      "the buttons are inside the panel")
+    }
+
     func testTheMenusSayWhatTheyDo() {
         let verbs = agentMenuBar().menus.flatMap { $0.items }.compactMap { item -> String? in
             if case .command(let c) = item { return c.verb }; return nil
         }
         XCTAssertEqual(verbs, [AgentVerb.about, AgentVerb.quit, AgentVerb.ask, AgentVerb.question, AgentVerb.clear,
-                               AgentVerb.giveApp, AgentVerb.give, AgentVerb.minimize])
+                               AgentVerb.giveApp, AgentVerb.give, AgentVerb.takeApp, AgentVerb.take,
+                               AgentVerb.allow, AgentVerb.stop, AgentVerb.minimize])
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("q")), AgentVerb.quit)
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("k")), AgentVerb.clear)
     }

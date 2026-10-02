@@ -266,6 +266,10 @@ if [ "$live" -eq 1 ]; then
   # the agent drives it.
   echo "== giving an application from the Agent window =="
   quiet "$root/abyss/tests/live-agent-give.sh"
+  # Requester 4 and Take Back (P18.11a): the budget asks the person, Allow
+  # carries on, Stop stops; a give taken back is refused.
+  echo "== the budget requester, and taking a give back =="
+  quiet "$root/abyss/tests/live-agent-requester.sh"
   # A confined crash (P18.9a): the person's limits, the core kept, one
   # crash granted to a debug agent, lldb on it.
   echo "== a confined crash, read by a debug agent =="

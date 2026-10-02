@@ -489,6 +489,35 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
 
   A sheet for each, and no others. The grants list (P18.4) and the
   transcript are shown in a Preferences pane.
+
+  **P18.11a — requester 4, and taking a give back — DONE 2026-10-02 (in the guest).**
+  - **Requester 4 (budget):** when the budget stops a question, the Agent
+    window puts up a requester over the conversation: "The agent has used its
+    budget", abyss-model's words, and "Let it use another N tokens and carry
+    on?" with **Stop** and **Allow More** (the default, Return).
+  - **Allow More** has the keeper raise the session's budget through
+    abyss-model's control socket (outside the jail; logged as `raised`). The
+    agent then carries on with the same question (`continue`,
+    `AgentLoop.resume`), never asking it again.
+  - **Stop** ends it, saying why.
+  - **Take Back Application…** (and `agent.take app=`) has the keeper tell the
+    session's bridge, which refuses that application from then on as if never
+    given; the transcript says `taken`.
+  - CLI: `abyss-jail raise SESSION TOKENS`, `abyss-jail take SESSION APP`.
+  - Tests: resume, raise and take unit tests; an `agent-budget` golden on both
+    platforms (96 scenes); the Aqua, Model and Jails suites (390 in the guest);
+    `live-agent-requester.sh` claims 1–5, in which Allow More is clicked with a
+    virtual pointer. `live-agent-window.sh` now answers the requester with
+    Stop. 6 faults injected, all caught.
+
+  **Still in P18.11:**
+  - (b) the Preferences pane: transcripts, and grants with revoke.
+  - (c) requester 1, the first write to an existing file. PHASE18 assumed
+    jaild "can see" a writable grant's first open for writing. It cannot ask
+    before one: FreeBSD tells a watcher about a write after it happens
+    (kqueue `NOTE_WRITE`), not before. A decision is pending.
+  - Requesters 2 and 3 wait for the `admin` class and P18.12.
+
 - **P18.12 — network for agents, when a class needs it (M).** A `vnet` jail
   (§4.7) whose only route out is an egress proxy outside it, which asks
   (requester 3) before a new host. A remote model never needs this: it goes
