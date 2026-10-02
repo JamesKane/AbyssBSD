@@ -302,6 +302,17 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   more JailsTests, and `live-agent.sh` (claims 1–6) green in the guest; 10
   faults injected, all caught.
 
+  **On the 12700KF, with a real model (same day).** `[agent] model =
+  local:…/granite-4.2-8b-Q4_K_M.gguf` in the person's `jails.ini`, llama-server
+  on the 6750 XT. Asked to find a notes file in its home and say what was due
+  on Monday, the agent listed `/home`, then `/home/abyss`, read `notes.txt`,
+  and answered correctly: 4 steps in 2.8 s. Asked to read the person's real
+  `~/.config/abyss/jails.ini`, it looked, found no such file (the jail's
+  `/home/abyss` is its own), and said so. `bye` stopped abyss-model and
+  llama-server, and the VRAM came back. The run found two deployment bugs
+  (HANDOFF §2.129): `metal.sh push` left the new binaries out and gave every
+  pushed file to the person, root daemons included.
+
   **P18.8b — the chat window**, ours and outside the jail, talking to the
   agent's socket, is next.
 - **P18.9 — the crash, first (M).** jaild gives a spawned program the person's

@@ -730,6 +730,37 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.129 A push gave root's daemons to the person
+(2026-10-02, P18.8's first run on the 12700KF.)
+
+**`metal.sh push` extracted as root with `tar -xp`, which keeps the
+archive's owners.** The guest's build user is uid 1001, and so is the
+machine's person, so every pushed binary was `abyss:abyss`. That included
+`abyss-jaild` and `abyss-loginwindow`, which run as root: the person could
+replace a root daemon. The image was never affected; it installs with
+`install`, as root. The guest now writes the archive as `root:wheel`
+(`--uid 0 --gid 0 --uname root --gname wheel`), and the push refuses to
+finish if any pushed binary is not root's. The box's files were given back
+to root by hand.
+
+**A push replaced files, not processes.** The session restarts, but the
+root daemons kept their old code. The box's jaild had no `agent` class an
+hour after it was "pushed". The push now restarts `abyss_jaild` while the
+session is stopped (no jail held). `abyss-loginwindow` guards the lock
+screen, so it is left for a reboot, and the push says so.
+
+**`desktop-files.sh` is the one list of what goes on a machine**, for the
+image and the push alike. A new program is not deployed until it is on that
+list: `abyss-model` and `abyss-agent` were missing from it.
+
+**Never expand a multi-line list into a remote command.** `$BINARIES` has
+newlines. Expanded on this side into `metal.sh ssh "… chown … $list"`, each
+line ran on the box as a separate root command: `abyss-install abyss-installctl
+…`, `fathom …`, `abyss-loginwindow abyss-loginctl …`. All three took the next
+name as a bad option and exited; fathom only reported. Nothing was changed,
+and the session's processes were checked unchanged after. Flatten first
+(`tr -s ' \n\t' ' '`), or run the loop on the far side.
+
 ### 2.128 abyss-model: a test must fail, not hang; a descriptor's child dies first
 (2026-10-02, PHASE18 P18.7a/b.)
 

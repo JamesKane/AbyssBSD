@@ -9,7 +9,7 @@
 BINARIES="undertow anchor abyssctl abyss-idle AquaDemo abyss-portal abyss-dbus abyss-theme
           abyss-install abyss-installctl abyssopen abyssgrab abyssnotify ventsctl
           fathom abyss-settings abyss-settingsctl abyss-appgen
-          abyss-loginwindow abyss-loginctl abyss-jaild abyss-jail"
+          abyss-loginwindow abyss-loginctl abyss-jaild abyss-jail abyss-model abyss-agent"
 
 # Data read at run time, from the tree, installed under /usr/local/share/abyss.
 DATA_DIRS="themes fonts"

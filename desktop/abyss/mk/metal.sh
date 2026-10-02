@@ -149,15 +149,31 @@ case "$cmd" in
     # (ETXTBSY), and a half-replaced session is worse than a stopped one.
     metal_stop
     # Guest to machine through this host: the machine's key never leaves it.
+    # **Root's, in the archive.** The guest's build user is uid 1001, and so is
+    # the machine's person; `tar -xp` as root keeps the archive's owners, so a
+    # push once made every binary — abyss-jaild and abyss-loginwindow, which
+    # run as root, among them — the person's to replace (HANDOFF §2.129). The
+    # image installs with `install`, as root; a push must agree.
+    own="--uid 0 --gid 0 --uname root --gname wheel"
     echo "metal: binaries -> $host:/usr/local/bin"
-    guest "cd $ABYSS_GUEST_SRC/.build/debug && tar -cf - $BINARIES" \
+    guest "cd $ABYSS_GUEST_SRC/.build/debug && tar $own -cf - $BINARIES" \
       | there "tar -xpf - -C /usr/local/bin"
     echo "metal: $DATA_DIRS -> $host:/usr/local/share/abyss"
     there "cd /usr/local/share/abyss && rm -rf $DATA_DIRS"
-    guest "cd $ABYSS_GUEST_SRC && tar -cf - $DATA_DIRS" \
+    guest "cd $ABYSS_GUEST_SRC && tar $own -cf - $DATA_DIRS" \
       | there "tar -xpf - -C /usr/local/share/abyss"
     # **A build the stick cannot run is a new stick, not a push.** Say so here,
     # before a session fails to start for a reason buried in its log.
+    # **The root daemons keep their old code** until restarted: tar replaces
+    # the file, not the running process. jaild is restarted here, while the
+    # session is stopped and holds no jail (a push once left the box's jaild
+    # without the `agent` class it had just been given). abyss-loginwindow
+    # guards the lock screen, so it is left for a reboot, and said so.
+    there "service abyss_jaild status >/dev/null 2>&1 && service abyss_jaild restart >/dev/null" \
+      && echo "metal: abyss-jaild restarted"
+    echo "metal: abyss-loginwindow keeps its old code until the machine reboots"
+    notroot=$(there "cd /usr/local/bin && stat -f '%Su %N' $BINARIES | grep -v '^root '" || true)
+    [ -z "$notroot" ] || die "pushed binaries are not root's: $notroot"
     missing=$(there "for b in $BINARIES; do ldd /usr/local/bin/\$b 2>/dev/null | grep 'not found'; done | sort -u")
     if [ -n "$missing" ]; then
       echo "$missing" >&2
