@@ -35,6 +35,8 @@ public final class Menus {
         public var kind: Kind
         public var address: String
         public var appID: String
+        /// The focused window's jail class, or "" (v5, PHASE18 P18.6).
+        public var jail: String = ""
         public static let nothing = Focus(kind: .none, address: "", appID: "")
     }
 
@@ -68,7 +70,7 @@ public final class Menus {
             guard let ctx, let resource else { return }
             let m = Unmanaged<Menus>.fromOpaque(ctx).takeUnretainedValue()
             let f = m.current
-            tw_menubar_send_focused(resource, f.kind.rawValue, f.address, f.appID)
+            tw_menubar_send_focused(resource, f.kind.rawValue, f.address, f.appID, f.jail)
             // And what every display shows (P13.4): the bar's island item.
             for d in m.compositor.layout.displays { m.sendIsland(of: d.name, to: resource) }
             Menus.log("a menu bar bound; told it \(f.describe)")
@@ -239,10 +241,13 @@ public final class Menus {
     public var current: Focus {
         guard let t = compositor.seat?.focused else { return desktop }
         let app = t.appID ?? ""
+        // Ours names the class as the context's app id; another engine is
+        // named for itself (P18.6).
+        let jail = t.jail.map { $0.engine == "org.abyssbsd.jail" ? $0.appID : $0.engine } ?? ""
         guard let e = addresses[t.surface] else {
-            return Focus(kind: .none, address: "", appID: app)
+            return Focus(kind: .none, address: "", appID: app, jail: jail)
         }
-        return Focus(kind: e.kind, address: e.address, appID: app)
+        return Focus(kind: e.kind, address: e.address, appID: app, jail: jail)
     }
 
     /// With no window focused, the desktop is frontmost — and in Jaguar the
@@ -266,7 +271,7 @@ public final class Menus {
         guard f != lastSent else { return }
         lastSent = f
         sentCount += 1
-        tw_menubar_send_focused_all(raw, f.kind.rawValue, f.address, f.appID)
+        tw_menubar_send_focused_all(raw, f.kind.rawValue, f.address, f.appID, f.jail)
         Menus.log("focused \(f.describe) (\(menubarCount) bar\(menubarCount == 1 ? "" : "s"))")
     }
 
@@ -277,7 +282,8 @@ public final class Menus {
 }
 
 extension Menus.Focus {
-    var describe: String {
+    var describe: String { base + (jail.isEmpty ? "" : " (confined in \(jail))") }
+    private var base: String {
         switch kind {
         case .none: return appID.isEmpty ? "nothing" : "\(appID), which publishes no menus"
         case .gtk:  return "\(appID) at \(address.split(separator: "\n", omittingEmptySubsequences: false).joined(separator: " ")) [\(kind)]"

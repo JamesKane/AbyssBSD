@@ -51,7 +51,7 @@
     </request>
   </interface>
 
-  <interface name="abyss_menubar_v1" version="4">
+  <interface name="abyss_menubar_v1" version="5">
     <description summary="the menu bar's view of focus">
       Offered only to clients that connected to the compositor's privileged
       socket (PHASE10 §6.1). It says which application is frontmost and where
@@ -166,5 +166,16 @@
       </description>
       <arg name="id" type="uint"/>
     </request>
+
+    <event name="jail" since="5">
+      <description summary="the window about to be named is confined">
+        Sent immediately before each focused event (PHASE18 P18.6): the jail
+        class the focused window's client came in through — its security
+        context's app id when the engine is AbyssBSD's, the engine's name
+        otherwise — or empty when it is not confined. The bar says so in the
+        application's menu.
+      </description>
+      <arg name="class" type="string"/>
+    </event>
   </interface>
 </protocol>

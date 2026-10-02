@@ -204,10 +204,11 @@ bool tw_jailed_may_bind(const char *interface);
  * (each may be NULL). */
 bool tw_client_jail(struct tw_menus *m, struct wl_client *client,
                     const char **engine, const char **app_id, const char **instance);
+/* `jail`: the focused window's jail class, or "" (v5, PHASE18 P18.6). */
 void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
-                             const char *address, const char *app_id);
+                             const char *address, const char *app_id, const char *jail);
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
-                                 const char *address, const char *app_id);
+                                 const char *address, const char *app_id, const char *jail);
 int tw_menubar_count(struct tw_menus *m);
 /* Islands (v3). Each does nothing for a bar bound at an older version. */
 void tw_menubar_send_island(struct wl_resource *menubar, const char *display, uint32_t island,

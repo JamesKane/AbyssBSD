@@ -196,6 +196,17 @@ public final class DBusPortalService {
                             service: String, title: String, sender: String) {
         log("\(sender) asked for \(kind == .open ? "OpenFile" : "SaveFile")"
             + " (\"\(title)\") → \(path)")
+        // **A jail's folder is not a folder here** (PHASE18 P18.6): what a
+        // jailed caller names as current_folder is a path inside its jail —
+        // its own private home, or nothing at all on the host, or worse, the
+        // same name as the person's real home. The Finder opens where the
+        // person's files are, and the caller learns nothing of them by
+        // naming one.
+        var options = options
+        if grant != nil, let f = options.currentFolder {
+            log("ignoring the jailed caller's folder \(f): it names a place inside its jail")
+            options.currentFolder = nil
+        }
         let request = portalCallMessage(kind: kind, options: options)
         var reply: Msg
         do {

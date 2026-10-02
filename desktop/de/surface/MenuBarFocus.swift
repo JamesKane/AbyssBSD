@@ -19,6 +19,8 @@ public final class MenuBarFocus {
         public let kind: Kind
         public let address: String
         public let appID: String
+        /// The window's jail class, or "" — v5 (PHASE18 P18.6).
+        public var jail: String = ""
     }
 
     /// What a display shows (v3, PHASE13 P13.4).
@@ -63,6 +65,8 @@ public final class MenuBarFocus {
     private let display: Display
     private var proxy: OpaquePointer?
     public private(set) var current: Focus?
+    /// The `jail` event's class, until the `focused` it precedes (v5).
+    private var pendingJail = ""
     /// Called on every `focused` event, including the one sent on bind.
     public var onFocus: (Focus) -> Void = { _ in }
     /// Every display's island, as last told; and a call on each change.
@@ -87,9 +91,16 @@ public final class MenuBarFocus {
             let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
             let f = Focus(kind: Kind(rawValue: kind) ?? .none,
                           address: address.map { String(cString: $0) } ?? "",
-                          appID: appID.map { String(cString: $0) } ?? "")
+                          appID: appID.map { String(cString: $0) } ?? "",
+                          jail: me.pendingJail)
+            me.pendingJail = ""
             me.current = f
             me.onFocus(f)
+        }
+        // v5 (PHASE18 P18.6): sent just before each focused.
+        l.jail = { data, _, cls in
+            guard let data else { return }
+            Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue().pendingJail = cls.map { String(cString: $0) } ?? ""
         }
         // Islands (v3). Every event a v3 compositor may send has a handler:
         // libwayland calls the listener's slot, and an empty one is a crash.

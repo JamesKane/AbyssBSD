@@ -244,6 +244,7 @@ struct abyss_menubar_v1_interface {
 #define ABYSS_MENUBAR_V1_WINDOW 2
 #define ABYSS_MENUBAR_V1_ISLANDS_DONE 3
 #define ABYSS_MENUBAR_V1_SHOAL 4
+#define ABYSS_MENUBAR_V1_JAIL 5
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -265,6 +266,10 @@ struct abyss_menubar_v1_interface {
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_SHOAL_SINCE_VERSION 4
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_JAIL_SINCE_VERSION 5
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -347,6 +352,17 @@ static inline void
 abyss_menubar_v1_send_shoal(struct wl_resource *resource_, const char *display, uint32_t island, uint32_t index, const char *name, uint32_t open)
 {
 	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_SHOAL, display, island, index, name, open);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ * Sends an jail event to the client owning the resource.
+ * @param resource_ The client's resource
+ */
+static inline void
+abyss_menubar_v1_send_jail(struct wl_resource *resource_, const char *class)
+{
+	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_JAIL, class);
 }
 
 #ifdef  __cplusplus

@@ -730,6 +730,33 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.124 FreeBSD's watcher missed edits in place; a jail's folder is not a folder
+(2026-10-02, PHASE18 P18.6.)
+
+**`Pool.Watcher` on FreeBSD watched the config directory's vnode only.** A
+directory's `NOTE_WRITE` fires when an entry is added, removed or renamed, so
+the Pool's atomic stores were seen. A file edited *in place* (`printf >
+jails.ini`, most editors) changes only the file. inotify's `IN_MODIFY` caught
+that on Linux, so every Linux test passed. On FreeBSD it went unseen, for
+`islands.ini`, the theme and `[apps]` alike. The gate found it when the
+keeper never noticed `[apps]` change. The watcher now also watches every
+regular file in the directory, and rescans when the directory changes. A
+unit test edits a file in place and one that arrived later: it fails twice on
+FreeBSD against the old code and passes against the new.
+
+**A jailed caller's `current_folder` is a path in its jail.** Firefox in
+`app-net` sent `/home/build`, its jail home, and the portal opened the Finder
+on the *person's real* `/home/build`, because the name is the same.
+`abyss-dbus --jail` now drops folder hints, and the Finder opens where the
+person's files are.
+
+**Test lessons from the gate:** paths with spaces (bundle names) need `find
+-exec`, not `$(find …) | xargs`. A window key can contain spaces
+(`firefox-esr/Mozilla Firefox`). The Finder is placed by its title, so the
+documents folder has to be named what windows.ini seeds (`home`). A jail's
+home is jaild's to create (its parent is root's), so a test puts files in it
+after the jail is up.
+
 ### 2.123 A jail removed is not a jail gone: reap what it ran
 (2026-10-02, PHASE18 P18.5.)
 

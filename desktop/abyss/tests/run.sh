@@ -240,6 +240,11 @@ if [ "$live" -eq 1 ]; then
   # its socket, bus and portal; files in place; a bundle from appgen.
   echo "== launching confined =="
   quiet "$root/abyss/tests/live-jail-launch.sh"
+  # 18a's gate (P18.6): [apps] → bundles → confined galculator and Firefox;
+  # Firefox over the network, a file through the Finder, the bar's Confined
+  # row, and bundles remade when [apps] changes.
+  echo "== 18a's gate =="
+  quiet "$root/abyss/tests/live-jail-gate.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

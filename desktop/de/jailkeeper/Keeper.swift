@@ -17,6 +17,10 @@
 //      the Finder opens, and saves, in place;
 //   4. the program, started in the jail as the person.
 //
+// And it watches `jails.ini` (P18.6): when its `[apps]` changes — an
+// application put in a jail, or let out — it runs `abyss-appgen` again, so
+// the bundles say so now rather than at the next login.
+//
 // Anyone in the session may ask it: they are the person already. A jailed
 // process cannot — the socket is in the session's runtime directory, which no
 // jail can see.
@@ -27,6 +31,7 @@ import CWayland
 import CWaylandClient
 import JailD
 import Jails
+import PoolConfig
 import Spawn
 
 #if canImport(Glibc)
@@ -79,6 +84,9 @@ public final class JailKeeper {
     public var binDir: String
     public var dbusDaemon: String?
     public private(set) var held: [String: Held] = [:]
+    /// `abyss-appgen` and its arguments, run when `[apps]` changes (P18.6).
+    public var appgen: [String]?
+    private var appsSeen = ""
     private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String)] = []
     private let server: Current.Server
     private let display: OpaquePointer?
@@ -200,20 +208,38 @@ public final class JailKeeper {
 
     // MARK: - the loop
 
+    /// `[apps]` as it stands, one row per line.
+    static func appsRows() -> String {
+        ((try? Pool.load("jails"))?.pairs(JailClass.appsSection) ?? []).map { "\($0.0)=\($0.1)" }.joined(separator: "\n")
+    }
+
+    private func appsMayHaveChanged() {
+        let now = Self.appsRows()
+        guard now != appsSeen else { return }
+        appsSeen = now
+        guard let appgen else { return }
+        say("jails: jails.ini's [apps] changed; making the applications again")
+        _ = Spawn.detached(appgen)
+    }
+
     public func run() {
         let wlfd = display.map { wl_display_get_fd($0) } ?? -1
+        appsSeen = Self.appsRows()
+        let watcher = try? Pool.Watcher()
         while true {
             if let display { _ = wl_display_flush(display) }
             var fds = [pollfd(fd: server.fd, events: Int16(POLLIN), revents: 0),
-                       pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0)]
+                       pollfd(fd: wlfd, events: Int16(POLLIN), revents: 0),
+                       pollfd(fd: watcher?.fileDescriptor ?? -1, events: Int16(POLLIN), revents: 0)]
             for p in procs { fds.append(pollfd(fd: p.fd, events: Int16(POLLHUP | POLLIN), revents: 0)) }
             let n = fds.withUnsafeMutableBufferPointer { poll($0.baseAddress, nfds_t($0.count), -1) }
             if n < 0 { if errno == EINTR { continue }; return }
+            if fds[2].revents != 0, let watcher, watcher.drain() { appsMayHaveChanged() }
             if wlfd >= 0, fds[1].revents != 0, let display {
                 // The compositor went away: the session is over.
                 if wl_display_dispatch(display) < 0 { say("jails: the compositor is gone"); return }
             }
-            for (i, p) in procs.enumerated().reversed() where fds[i + 2].revents != 0 {
+            for (i, p) in procs.enumerated().reversed() where fds[i + 3].revents != 0 {
                 say("jails: \(p.name) (pid \(p.pid)) in \(p.jail) exited")
                 close(p.fd)
                 procs.remove(at: i)

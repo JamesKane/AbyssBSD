@@ -181,6 +181,35 @@ final class PoolConfigTests: XCTestCase {
                       "watcher should wake on an atomic store into its directory")
     }
 
+    /// An edit IN PLACE — what `printf > file` and most editors do — wakes it
+    /// on both platforms (HANDOFF §2.124: FreeBSD's kqueue watched only the
+    /// directory, which an in-place edit does not change). And a file that
+    /// arrives after the watch began is watched too.
+    func testWatcherWakesOnAnEditInPlaceOfAnExistingFile() throws {
+        let dir = makeTempDir()
+        try overwrite(dir + "/jails.ini", "[apps]\nfirefox = app-net\n")
+        let watcher = try Pool.Watcher(in: dir)
+        XCTAssertFalse(try watcher.wait(timeoutMs: 100))
+        try overwrite(dir + "/jails.ini", "[apps]\n")
+        XCTAssertTrue(try watcher.wait(timeoutMs: 2000), "an in-place edit of a file that was there did not wake it")
+        while watcher.drain() {}
+
+        try overwrite(dir + "/later.ini", "a = 1\n")         // arrives: the directory changes
+        XCTAssertTrue(try watcher.wait(timeoutMs: 2000))
+        while watcher.drain() {}
+        try overwrite(dir + "/later.ini", "a = 2\n")         // and is then edited in place
+        XCTAssertTrue(try watcher.wait(timeoutMs: 2000), "an in-place edit of a file that arrived later did not wake it")
+    }
+
+    /// Truncate and rewrite, as a shell's `>` does: no rename, no new entry.
+    private func overwrite(_ path: String, _ text: String) throws {
+        let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard fd >= 0 else { throw NSError(domain: "overwrite", code: Int(errno)) }
+        defer { close(fd) }
+        let b = Array(text.utf8)
+        _ = b.withUnsafeBufferPointer { write(fd, $0.baseAddress, b.count) }
+    }
+
     func testWatcherTimesOutWhenIdle() throws {
         let dir = makeTempDir()
         let watcher = try Pool.Watcher(in: dir)

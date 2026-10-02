@@ -168,7 +168,20 @@ Live test in the guest:
 - quitting it leaves the jail pooled;
 - logging out removes the jail.
 
-**P18.6 — the gate for 18a (S).**
+**P18.6 — the gate for 18a (S). — GREEN IN THE GUEST 2026-10-02; the 12700KF
+run is owed.** `live-jail-gate.sh` has seven claims, green three runs in a row,
+and four faults were injected, each failing the test. Firefox ESR, confined in
+`app-net` by its bundle, renders a page served over the network. Its file input
+opens the Finder through the jail's portal, and the chosen file comes in as a
+read-only grant that the page reads. Also new: menu bar protocol v5 sends
+`jail(class)` before each `focused`, and the application menu's first row says
+"Confined (class)", disabled. That stands in for the About line, since a
+foreign app's About box is its own. The keeper also remakes the bundles when
+`[apps]` changes. Found on the way (HANDOFF §2.124): FreeBSD's config watcher
+missed in-place edits, and a jail's folder hints named host paths. **Known
+limit:** a jailed GTK app's own menus do not reach the global bar, because
+they are on the jail's bus and the menus bridge listens on the session's. That
+is a follow-up (a menus bridge per jail, or the bridge on both buses).
 The stack proof in the guest: galculator and zenity confined, Firefox in
 `app-net`. Then the same on the 12700KF.
 - a confined zenity cannot `ls ~`;

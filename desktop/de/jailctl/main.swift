@@ -66,6 +66,10 @@ if args.first == "serve" {
     let keeper = JailKeeper(server: server, display: display, runtimeDir: runtime, binDir: binDir,
                             dbusDaemon: Spawn.resolveExecutable("dbus-daemon"), log: { emit(1, $0) })
     keeper.jaildSocket = socket
+    // The bundles follow [apps] (P18.6): the same appgen anchor runs at login.
+    if access(binDir + "/abyss-appgen", X_OK) == 0, let home = getenv("HOME") {
+        keeper.appgen = [binDir + "/abyss-appgen", "--to", String(cString: home) + "/Applications"]
+    }
     emit(1, "jails: ready")
     keeper.run()
     server.shutdownAndUnlink()

@@ -211,16 +211,20 @@ static void menubar_bind(struct wl_client *client, void *data, uint32_t version,
 }
 
 void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
-                             const char *address, const char *app_id) {
+                             const char *address, const char *app_id, const char *jail) {
+    /* v5 (PHASE18 P18.6): the jail first, so the bar knows it when it hears
+     * where focus went. */
+    if (wl_resource_get_version(menubar) >= ABYSS_MENUBAR_V1_JAIL_SINCE_VERSION)
+        abyss_menubar_v1_send_jail(menubar, jail ? jail : "");
     abyss_menubar_v1_send_focused(menubar, kind, address ? address : "",
                                   app_id ? app_id : "");
 }
 
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,
-                                 const char *address, const char *app_id) {
+                                 const char *address, const char *app_id, const char *jail) {
     struct wl_resource *r;
     wl_resource_for_each(r, &m->menubars) {
-        tw_menubar_send_focused(r, kind, address, app_id);
+        tw_menubar_send_focused(r, kind, address, app_id, jail);
     }
 }
 
@@ -479,7 +483,7 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
                                          m, manager_bind);
     m->window_global = wl_global_create(display, &abyss_window_manager_v1_interface, 2,
                                         m, window_manager_bind);
-    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 4,
+    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 5,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
     if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global) {

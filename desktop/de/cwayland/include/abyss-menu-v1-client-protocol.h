@@ -238,6 +238,19 @@ struct abyss_menubar_v1_listener {
 		      uint32_t index,
 		      const char *name,
 		      uint32_t open);
+	/**
+	 * the window about to be named is confined
+	 *
+	 * Sent immediately before each focused event (PHASE18 P18.6):
+	 * the jail class the focused window's client came in through —
+	 * its security context's app id when the engine is AbyssBSD's, the
+	 * engine's name otherwise — or empty when it is not confined.
+	 * The bar says so in the application's menu.
+	 * @since 5
+	 */
+	void (*jail)(void *data,
+		     struct abyss_menubar_v1 *abyss_menubar_v1,
+		     const char *class);
 };
 
 /**
@@ -278,6 +291,10 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_SHOAL_SINCE_VERSION 4
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_JAIL_SINCE_VERSION 5
 
 /**
  * @ingroup iface_abyss_menubar_v1

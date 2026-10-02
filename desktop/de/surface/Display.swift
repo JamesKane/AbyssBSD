@@ -402,7 +402,7 @@ public final class Display {
             windowManagerVersion = min(version, 2)
             windowManager = wlBind(registry, name, abyss_window_manager_v1_iface, windowManagerVersion)
         case "abyss_menubar_v1":
-            menubarGlobal = (name, min(version, 4))   // v3: islands, v4: shoals (PHASE13; §2.117)
+            menubarGlobal = (name, min(version, 5))   // v3: islands, v4: shoals (PHASE13; §2.117), v5: jail (P18.6)
         case "xdg_activation_v1":
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.

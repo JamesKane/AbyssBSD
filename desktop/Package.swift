@@ -357,7 +357,7 @@ let package = Package(
         // The session's half (P18.5): a jail per class, held for the session,
         // with its Wayland socket, bus and portal; launches into it.
         .target(name: "JailKeeper", dependencies: ["JailD", "Jails", "CJail", "CProc", "CWayland", "CWaylandClient",
-                                                   "CurrentIPC", "Spawn"], path: "de/jailkeeper"),
+                                                   "CurrentIPC", "PoolConfig", "Spawn"], path: "de/jailkeeper"),
         .executableTarget(name: "abyss-jail", dependencies: ["JailD", "JailKeeper", "CJail", "CPlatform",
                                                              "CWaylandClient", "CurrentIPC", "Spawn"],
                           path: "de/jailctl"),

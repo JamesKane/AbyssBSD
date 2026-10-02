@@ -44,14 +44,49 @@ void awc_watch_close(int fd) {
 #include <sys/time.h>
 #include <fcntl.h>
 
-/* kqueue watches the directory *fd*, so we must keep it open for the watch's
- * life. Stash it alongside the kq fd (returned to the caller) in a small table.
- * Exercised on FreeBSD in Phase 3; the Linux path above is what CI runs today. */
+/* kqueue watches a vnode, not a directory's contents. The directory's own
+ * NOTE_WRITE fires when an entry is added, removed or renamed — so the Pool's
+ * atomic writes (a rename into place) were seen — but a file edited IN PLACE
+ * (`printf > jails.ini`, most editors) changes only the file, and was missed
+ * on FreeBSD while inotify saw it on Linux (HANDOFF §2.124). So every regular
+ * file in the directory is watched too, and the set is rescanned whenever the
+ * directory itself changes. The descriptors live as long as the watch. */
+#include <dirent.h>
+#include <string.h>
+#include <sys/stat.h>
+
 #define AWC_MAX 16
-static struct { int kq; int dirfd; } g_watch[AWC_MAX];
+#define AWC_FILES 128
+static struct {
+    int kq; int dirfd; int nfiles; int files[AWC_FILES];
+} g_watch[AWC_MAX];
+
+static void awc_rescan(int i) {
+    for (int k = 0; k < g_watch[i].nfiles; k++) close(g_watch[i].files[k]);   /* drops its kevent */
+    g_watch[i].nfiles = 0;
+    int d = dup(g_watch[i].dirfd);
+    if (d < 0) return;
+    DIR *dir = fdopendir(d);
+    if (!dir) { close(d); return; }
+    rewinddir(dir);
+    struct dirent *e;
+    while ((e = readdir(dir)) != NULL && g_watch[i].nfiles < AWC_FILES) {
+        if (e->d_name[0] == '.') continue;
+        int f = openat(g_watch[i].dirfd, e->d_name, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW);
+        if (f < 0) continue;
+        struct stat st;
+        if (fstat(f, &st) != 0 || !S_ISREG(st.st_mode)) { close(f); continue; }
+        struct kevent kev;
+        EV_SET(&kev, f, EVFILT_VNODE, EV_ADD | EV_CLEAR,
+               NOTE_WRITE | NOTE_EXTEND | NOTE_DELETE | NOTE_RENAME | NOTE_ATTRIB, 0, NULL);
+        if (kevent(g_watch[i].kq, &kev, 1, NULL, 0, NULL) < 0) { close(f); continue; }
+        g_watch[i].files[g_watch[i].nfiles++] = f;
+    }
+    closedir(dir);
+}
 
 int awc_watch_open(const char *dir) {
-    int dirfd = open(dir, O_RDONLY | O_CLOEXEC);
+    int dirfd = open(dir, O_RDONLY | O_CLOEXEC | O_DIRECTORY);
     if (dirfd < 0) return -1;
     int kq = kqueue();
     if (kq < 0) { close(dirfd); return -1; }
@@ -62,7 +97,11 @@ int awc_watch_open(const char *dir) {
         close(dirfd); close(kq); return -1;
     }
     for (int i = 0; i < AWC_MAX; i++) {
-        if (g_watch[i].kq == 0) { g_watch[i].kq = kq; g_watch[i].dirfd = dirfd; break; }
+        if (g_watch[i].kq == 0) {
+            g_watch[i].kq = kq; g_watch[i].dirfd = dirfd; g_watch[i].nfiles = 0;
+            awc_rescan(i);
+            break;
+        }
     }
     return kq;
 }
@@ -74,15 +113,32 @@ int awc_watch_wait(int kq, int timeout_ms) {
         ts.tv_nsec = (long)(timeout_ms % 1000) * 1000000L;
         tp = &ts;
     }
-    struct kevent ev;
-    int r = kevent(kq, NULL, 0, &ev, 1, tp);
+    struct kevent ev[16];
+    int r = kevent(kq, NULL, 0, ev, 16, tp);
     if (r < 0) return errno == EINTR ? 0 : -1;
-    return r == 0 ? 0 : 1;
+    if (r == 0) return 0;
+    /* Drain what else is queued, and rescan if the directory changed: a file
+     * that arrived is watched from now on, one that went is let go. */
+    int dirchanged = 0;
+    for (;;) {
+        for (int k = 0; k < r; k++)
+            for (int i = 0; i < AWC_MAX; i++)
+                if (g_watch[i].kq == kq && (int)ev[k].ident == g_watch[i].dirfd) dirchanged = 1;
+        struct timespec zero = { 0, 0 };
+        r = kevent(kq, NULL, 0, ev, 16, &zero);
+        if (r <= 0) break;
+    }
+    for (int i = 0; i < AWC_MAX; i++)
+        if (g_watch[i].kq == kq && dirchanged) awc_rescan(i);
+    return 1;
 }
 
 void awc_watch_close(int kq) {
     for (int i = 0; i < AWC_MAX; i++) {
-        if (g_watch[i].kq == kq) { close(g_watch[i].dirfd); g_watch[i].kq = 0; break; }
+        if (g_watch[i].kq == kq) {
+            for (int k = 0; k < g_watch[i].nfiles; k++) close(g_watch[i].files[k]);
+            close(g_watch[i].dirfd); g_watch[i].kq = 0; g_watch[i].nfiles = 0; break;
+        }
     }
     if (kq >= 0) close(kq);
 }

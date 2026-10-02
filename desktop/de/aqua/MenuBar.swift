@@ -169,7 +169,11 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
 
 public final class MenuBar: LayerSurfaceDelegate {
     private var layer: LayerSurface?
-    private var menus: [MenuBarMenu]
+    private var menus: [MenuBarMenu] { didSet { markConfined() } }
+    /// The frontmost window's jail class, or "" (PHASE18 P18.6): said at the
+    /// top of the application's menu, whatever the application published.
+    private var confinedIn = ""
+    private var markingConfined = false
     private let showClock: Bool
     private var clock = ""
     private var layoutCache = MenuBarLayout()
@@ -298,6 +302,8 @@ public final class MenuBar: LayerSurfaceDelegate {
                 default:
                     MenuBar.log("frontmost: \(f.appID) at \(f.address) [\(f.kind)]")
                 }
+                if !f.jail.isEmpty { MenuBar.log("frontmost is confined in \(f.jail)") }
+                self?.confinedIn = f.jail
                 self?.follow(f)
             }
             f.onIsland = { [weak self] i in
@@ -320,6 +326,35 @@ public final class MenuBar: LayerSurfaceDelegate {
     }
 
     // MARK: the frontmost application (P10.4)
+
+    /// The confinement row (PHASE18 P18.6): first in the application's menu
+    /// when its window came from a jail — a status, not a command, so the
+    /// application's own menus (whatever a toolkit published) cannot hide it.
+    static func confinedRow(_ cls: String) -> MenuItem {
+        .command(Command(MenuBar.confinedVerb, "Confined (\(cls))",
+                         summary: "This application runs in a jail of class \(cls): it sees only the files you give it."))
+    }
+    static let confinedVerb = "app.confined"
+
+    /// Put the row into the bold menu, or take it out, as `confinedIn` says.
+    /// Every assignment to `menus` comes through here.
+    private func markConfined() {
+        guard !markingConfined else { return }
+        markingConfined = true
+        defer { markingConfined = false }
+        menus = menus.map { m in
+            guard m.bold else { return m }
+            var items = m.menu.items
+            if case .command(let c)? = items.first, c.verb == MenuBar.confinedVerb {
+                items.removeFirst()
+                if case .separator? = items.first { items.removeFirst() }
+            }
+            if !confinedIn.isEmpty {
+                items = [MenuBar.confinedRow(confinedIn)] + (items.isEmpty ? [] : [.separator]) + items
+            }
+            return MenuBarMenu(Menu(m.menu.title, items), bold: true)
+        }
+    }
 
     /// Show whoever the compositor says is frontmost.
     private func follow(_ f: MenuBarFocus.Focus) {
@@ -413,6 +448,7 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// definition alone. The system menu is the bar's own (P10.8).
     private func enabled(_ command: Command) -> Enablement {
         if command.verb.hasPrefix("system.") { return systemEnablement(command.verb) }
+        if command.verb == MenuBar.confinedVerb { return .disabled("a status: this application runs in a jail") }
         // The island menu's rows are the bar's own, not the application's.
         if IslandMenu.action(command.verb) != nil { return .enabled }
         if service == nil { return MenuBar.staticEnablement(command) }
