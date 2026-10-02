@@ -66,11 +66,22 @@ final class AgentWindowTests: XCTestCase {
         XCTAssertEqual(Set(Dock.builtins.map(\.appID)).count, Dock.builtins.count)
     }
 
+    func testThePickersRowsAreWhereTheyAreDrawn() {
+        let area = AgentLayout(w: 560, h: 460).conversation
+        let l = AgentPickerLayout(in: area, count: 3)
+        XCTAssertEqual(l.rows.count, 3)
+        XCTAssertEqual(l.hit(l.rows[2].x + 5, l.rows[2].y + 5), 2)
+        XCTAssertNil(l.hit(l.panel.x + 2, l.panel.y + 2), "the heading is not a row")
+        XCTAssertTrue(l.rows.allSatisfy { $0.y + $0.h <= l.panel.y + l.panel.h }, "every row inside the panel")
+        XCTAssertTrue(zip(l.rows, l.rows.dropFirst()).allSatisfy { $0.y + $0.h <= $1.y }, "rows do not overlap")
+    }
+
     func testTheMenusSayWhatTheyDo() {
         let verbs = agentMenuBar().menus.flatMap { $0.items }.compactMap { item -> String? in
             if case .command(let c) = item { return c.verb }; return nil
         }
-        XCTAssertEqual(verbs, [AgentVerb.about, AgentVerb.quit, AgentVerb.ask, AgentVerb.question, AgentVerb.clear, AgentVerb.minimize])
+        XCTAssertEqual(verbs, [AgentVerb.about, AgentVerb.quit, AgentVerb.ask, AgentVerb.question, AgentVerb.clear,
+                               AgentVerb.giveApp, AgentVerb.give, AgentVerb.minimize])
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("q")), AgentVerb.quit)
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("k")), AgentVerb.clear)
     }

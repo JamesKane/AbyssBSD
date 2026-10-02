@@ -262,6 +262,10 @@ if [ "$live" -eq 1 ]; then
   # menus, and nothing else.
   echo "== an agent drives what it was given =="
   quiet "$root/abyss/tests/live-agent-vocab.sh"
+  # Giving from the Agent window (P18.10b): Give Application…, a click, and
+  # the agent drives it.
+  echo "== giving an application from the Agent window =="
+  quiet "$root/abyss/tests/live-agent-give.sh"
   # A confined crash (P18.9a): the person's limits, the core kept, one
   # crash granted to a debug agent, lldb on it.
   echo "== a confined crash, read by a debug agent =="

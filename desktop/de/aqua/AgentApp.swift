@@ -30,6 +30,7 @@ import Darwin
 public enum AgentVerb {
     public static let about = "app.about", quit = "app.quit"
     public static let ask = "agent.ask", question = "agent.question", clear = "agent.clear"
+    public static let giveApp = "agent.give-app", give = "agent.give"
     public static let minimize = "window.minimize"
 }
 
@@ -52,6 +53,12 @@ public func agentMenuBar() -> MenuBarModel {
             c(AgentVerb.question, "Ask Question…", nil, "Put a question in the field and ask it.",
               [Argument("text", .string, "The question.")]),
             c(AgentVerb.clear, "Clear Field", .cmd("k"), "Empty the question field."),
+            .separator,
+            // §6b.2: the agent drives only what it is given, one running
+            // application at a time — picked from a list, or named by a script.
+            c(AgentVerb.giveApp, "Give Application…", nil, "Pick a running application for the agent to drive."),
+            c(AgentVerb.give, "Give", nil, "Give the agent a running application, by name.",
+              [Argument("app", .string, "The application, as abyssmenu names it.")]),
         ]),
         Menu("Window", [
             c(AgentVerb.minimize, "Minimize", .cmd("m"), "Put the window in the Dock."),
@@ -74,9 +81,42 @@ public struct AgentLayout: Equatable, Sendable {
     }
 }
 
+/// Give Application…'s list, over the conversation: a heading and a row per
+/// running application. Pure, for the window, the golden and the test.
+public struct AgentPickerLayout: Equatable, Sendable {
+    public let panel: Rect
+    public let rows: [Rect]
+    public static let rowHeight = 24.0
+    public init(in area: Rect, count: Int) {
+        let h = min(area.h - 20, 44 + Double(max(1, count)) * AgentPickerLayout.rowHeight)
+        panel = Rect(area.x + 20, area.y + 10, area.w - 40, h)
+        rows = (0..<count).map { Rect(area.x + 30, area.y + 46 + Double($0) * AgentPickerLayout.rowHeight, area.w - 60, AgentPickerLayout.rowHeight - 2) }
+    }
+    public func hit(_ x: Double, _ y: Double) -> Int? { rows.firstIndex { $0.contains(x, y) } }
+}
+
+@discardableResult
+public func paintAgentPicker(_ cr: OpaquePointer, in area: Rect, names: [String]) -> AgentPickerLayout {
+    let l = AgentPickerLayout(in: area, count: names.count)
+    Draw.setColor(cr, Theme.contentBackground)
+    cairo_rectangle(cr, l.panel.x, l.panel.y, l.panel.w, l.panel.h); cairo_fill(cr)
+    Draw.setColor(cr, Color(0.6, 0.6, 0.6))
+    cairo_set_line_width(cr, 1)
+    cairo_rectangle(cr, l.panel.x + 0.5, l.panel.y + 0.5, l.panel.w - 1, l.panel.h - 1); cairo_stroke(cr)
+    Draw.textLeft(cr, names.isEmpty ? "No other application is running." : "Give an application to the agent:",
+                  x: l.panel.x + 10, baselineY: l.panel.y + 22, color: Theme.bodyText, size: Theme.fontSize, style: .bold)
+    for (i, r) in l.rows.enumerated() {
+        Draw.setColor(cr, Color(1, 1, 1))
+        cairo_rectangle(cr, r.x, r.y, r.w, r.h); cairo_fill(cr)
+        Draw.textLeft(cr, names[i], x: r.x + 10, baselineY: r.y + 16, color: Theme.bodyText, size: Theme.fontSize)
+    }
+    return l
+}
+
 /// The window, from its state: pure, so the golden image is the live window.
 public func paintAgentWindow(_ cr: OpaquePointer, w: Double, h: Double, conversation: TextView,
-                             status: String, field: String, caret: Bool, canAsk: Bool) -> AgentLayout {
+                             status: String, field: String, caret: Bool, canAsk: Bool,
+                             picker: [String]? = nil) -> AgentLayout {
     paintWindowChrome(cr, w: w, h: h, title: "Agent")
     Draw.setColor(cr, Theme.contentBackground)
     cairo_rectangle(cr, 0, Theme.titleBarHeight, w, h - Theme.titleBarHeight); cairo_fill(cr)
@@ -84,6 +124,7 @@ public func paintAgentWindow(_ cr: OpaquePointer, w: Double, h: Double, conversa
     conversation.frame = l.conversation
     conversation.caretOn = false
     conversation.paint(cr, focused: false)
+    if let picker { paintAgentPicker(cr, in: l.conversation, names: picker) }
     Draw.textLeft(cr, status, x: 12, baselineY: l.statusBaseline, color: Theme.bodyText, size: Theme.fontSize)
     Draw.textField(cr, l.field, text: field, caret: caret,
                    placeholder: canAsk ? "Ask the agent…" : "")
@@ -119,9 +160,17 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     private var pending: Int32 = -1
     private var asked = ""
     private var callsSoFar = 0
+    /// The keeper's session ID (for a give), and whether the session can be
+    /// given applications at all: `debug` cannot.
+    private var sessionID = ""
+    private var hasVocabulary = false
+    public private(set) var given: [String] = []
+    /// Give Application…'s list while it is open: names and their services.
+    private var picking: [(name: String, service: String)]?
     private var menuService: MenuService?
     private var menuName = ""
     private var logged = false
+    private var loggedPicker = false
     public var onQuit: () -> Void = { exit(0) }
 
     public static let menuBar = agentMenuBar()
@@ -158,8 +207,49 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     static func log(_ s: String) { ("Agent: " + s + "\n").withCString { _ = write(2, $0, strlen($0)) } }
 
     var readyStatus: String {
-        agentClass == "debug" ? "Confined in debug: one crash, read-only; no network."
-                              : "Confined in \(agentClass): no network; only what you grant it."
+        if agentClass == "debug" { return "Confined in debug: one crash, read-only; no network." }
+        return "Confined in \(agentClass): no network; " + (given.isEmpty ? "only what you grant it." : "given \(given.joined(separator: ", ")).")
+    }
+
+    // MARK: giving applications (P18.10b)
+
+    /// Every other running application that publishes a vocabulary, by its
+    /// own name. Each answers in two seconds or is left out (MenuClient).
+    /// **Never this window itself**: asked while it is answering a menu
+    /// request of its own, it would wait on itself until the timeout.
+    func runningApplications() -> [(name: String, service: String)] {
+        let mine = MenuWire.serviceName(app: "Agent", pid: getpid())
+        return MenuClient.services().filter { $0 != mine }.compactMap { s in
+            (try? MenuClient.describe(s)).map { ($0.model.appName, s) }
+        }.sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
+
+    func openPicker() {
+        picking = runningApplications()
+        AgentApp.log("picker " + (picking ?? []).map(\.name).joined(separator: ", "))
+        loggedPicker = false
+        window?.setNeedsDisplay()
+    }
+
+    /// Ask the keeper to give `app` (a name or a menu service) to this
+    /// session; the answer comes through the poll loop.
+    func give(_ app: String) {
+        picking = nil
+        var m = Msg(); m.set("method", "give"); m.set("session", sessionID); m.set("app", app)
+        let sent = request({ try Current.connect(AgentApp.keeperService) }, m) { [weak self] r in
+            guard let self else { return }
+            guard let r, r.bool("ok") == true, let name = r.string("app") else {
+                self.status = "Not given: \(r?.string("error") ?? "the session's jails did not answer")"
+                AgentApp.log("give refused: \(self.status)")
+                return
+            }
+            if !self.given.contains(name) { self.given.append(name) }
+            self.append("  (you gave the agent \(name))\n")
+            if self.phase == .ready { self.status = self.readyStatus }
+            AgentApp.log("gave \(name)")
+        }
+        if !sent { status = "Not given: the session's jails are not running." }
+        window?.setNeedsDisplay()
     }
 
     // MARK: talking to the keeper and the agent
@@ -205,6 +295,8 @@ public final class AgentApp: WindowDelegate, MenuProvider {
                 return
             }
             self.agentSocket = sock
+            self.sessionID = r.string("session") ?? ""
+            self.hasVocabulary = r.bool("vocabulary") ?? false
             self.phase = .ready
             self.status = self.readyStatus
             AgentApp.log("session \(r.string("session") ?? "") at \(sock)")
@@ -299,7 +391,13 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         cairo_save(cr); cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR); cairo_paint(cr); cairo_restore(cr)
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         let l = paintAgentWindow(cr, w: w, h: h, conversation: conversation, status: status, field: field,
-                                 caret: phase == .ready && caretOn, canAsk: phase == .ready)
+                                 caret: phase == .ready && caretOn && picking == nil, canAsk: phase == .ready,
+                                 picker: picking?.map(\.name))
+        if let p = picking, !loggedPicker {
+            loggedPicker = true
+            let rows = AgentPickerLayout(in: l.conversation, count: p.count).rows
+            AgentApp.log("picker rows " + zip(p, rows).map { "\($0.0.name.replacingSpaces)=\(Int($0.1.x + $0.1.w / 2)),\(Int($0.1.y + $0.1.h / 2))" }.joined(separator: " "))
+        }
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         if !logged {
             logged = true
@@ -320,7 +418,13 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         case .title: w.beginMove(); return
         case .zoom, .pill, .content, .resize: break
         }
-        if AgentLayout(w: Double(size.width), h: Double(size.height)).ask.contains(pointerX, pointerY) { ask() }
+        let layout = AgentLayout(w: Double(size.width), h: Double(size.height))
+        if let p = picking {
+            if let i = AgentPickerLayout(in: layout.conversation, count: p.count).hit(pointerX, pointerY) { give(p[i].service) }
+            else { picking = nil; window?.setNeedsDisplay() }
+            return
+        }
+        if layout.ask.contains(pointerX, pointerY) { ask() }
     }
 
     public func pointerAxis(_ axis: UInt32, value: Double) {
@@ -331,6 +435,10 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         guard event.pressed else { return }
         if event.modifiers.contains(.command) {
             if let press = keyEquivalent(event), let verb = AgentApp.menuBar.verb(for: press) { _ = perform(verb) }
+            return
+        }
+        if picking != nil {
+            if event.keysym == KeySym.escape { picking = nil; window?.setNeedsDisplay() }
             return
         }
         guard phase == .ready else { return }
@@ -358,6 +466,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
             guard !field.trimmingSpaces.isEmpty else { return .refused("the field is empty") }
             ask(); return .ok("")
         case AgentVerb.clear: field = ""; window?.setNeedsDisplay(); return .ok("")
+        case AgentVerb.giveApp: openPicker(); return .ok("")
         case AgentVerb.minimize: _ = window?.minimize(); return .ok("")
         default: return .refused("Agent has no verb \(verb)")
         }
@@ -374,12 +483,19 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         case AgentVerb.ask, AgentVerb.question:
             return phase == .ready ? .enabled
                 : .disabled(phase == .asking ? "the agent is answering" : "there is no agent")
+        case AgentVerb.giveApp, AgentVerb.give:
+            if sessionID.isEmpty { return .disabled(phase == .starting ? "there is no agent yet" : "this session cannot be given applications") }
+            return hasVocabulary ? .enabled : .disabled("\(agentClass) sessions drive no applications")
         default: return .enabled
         }
     }
 
     public func menuPerform(_ command: Command, arguments: [String: String]) -> CommandResult {
         if case .disabled(let why) = menuValidate(command) { return .refused(why) }
+        if command.verb == AgentVerb.give {
+            give(arguments["app"] ?? "")
+            return .ok("")
+        }
         if command.verb == AgentVerb.question {
             field = arguments["text"] ?? ""
             window?.setNeedsDisplay()
@@ -390,6 +506,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
 }
 
 extension String {
+    var replacingSpaces: String { String(map { $0 == " " ? "_" : $0 }) }
     var trimmingSpaces: String {
         var s = Substring(self)
         while s.first == " " { s.removeFirst() }

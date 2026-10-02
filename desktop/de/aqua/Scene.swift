@@ -282,9 +282,12 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         view.setText(agentTurn(question: "What do I need to do on Monday?",
                                calls: [#"list_directory({"path":"/home/abyss"})"#, #"read_file({"path":"/home/abyss/notes.txt"})"#],
                                answer: "Call the plumber about the kitchen tap."))
+        // AQUA_AGENT_PICKER=1: Give Application…'s list open over it.
+        let picker = getenv("AQUA_AGENT_PICKER") != nil
         _ = paintAgentWindow(cr, w: cw, h: ch, conversation: view,
                              status: "Confined in agent: no network; only what you grant it.",
-                             field: "And on Tuesday?", caret: true, canAsk: true)
+                             field: picker ? "" : "And on Tuesday?", caret: !picker, canAsk: true,
+                             picker: picker ? ["Activity Monitor", "Grab", "TextEdit"] : nil)
     case .textedit:
         // A fixed document: wrapped lines, a tab, a selection across a line
         // break, and the find bar with its text.

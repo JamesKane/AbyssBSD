@@ -297,6 +297,8 @@ public final class JailKeeper {
         public var socket: String
         public var transcript: String
         public var pid: UInt64
+        /// Whether applications can be given to it (P18.10).
+        public var vocabulary: Bool = false
     }
 
     /// `abyss-model serve`'s backend arguments for a class's `model=`.
@@ -452,7 +454,7 @@ public final class JailKeeper {
             throw JailClient.Refused(description: "abyss-agent did not start in \(h.opened.name)")
         }
         say("jails: agent session \(id) in \(h.opened.name): agent pid \(pid), transcript \(transcript)")
-        return AgentSession(id: id, socket: socket, transcript: transcript, pid: pid)
+        return AgentSession(id: id, socket: socket, transcript: transcript, pid: pid, vocabulary: k.vocabulary)
     }
 
     /// Give an application to an agent session (P18.10): `app` as a person
@@ -566,7 +568,7 @@ public final class JailKeeper {
             do {
                 let a = try agent(req.string("class") ?? "")
                 reply.set("ok", true); reply.set("session", a.id); reply.set("socket", a.socket)
-                reply.set("transcript", a.transcript); reply.set("pid", a.pid)
+                reply.set("transcript", a.transcript); reply.set("pid", a.pid); reply.set("vocabulary", a.vocabulary)
             } catch {
                 say("jails: agent refused: \(error)")
                 reply = JailWire.error("\(error)")
@@ -575,7 +577,7 @@ public final class JailKeeper {
             do {
                 let a = try debug(Int(req.uint64("crash") ?? 0))
                 reply.set("ok", true); reply.set("session", a.id); reply.set("socket", a.socket)
-                reply.set("transcript", a.transcript); reply.set("pid", a.pid)
+                reply.set("transcript", a.transcript); reply.set("pid", a.pid); reply.set("vocabulary", a.vocabulary)
             } catch {
                 say("jails: debug refused: \(error)")
                 reply = JailWire.error("\(error)")

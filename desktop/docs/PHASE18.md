@@ -453,8 +453,26 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     nothing. The agent, crash and launch live tests stay green. 7 faults
     injected, all caught.
 
-  **P18.10b, next:** giving an application from the Agent window, and the
-  12700KF.
+  **P18.10b — giving, from the Agent window — DONE 2026-10-02 (in the guest).**
+  - **Conversation ▸ Give Application…** lists the other running applications
+    that publish a vocabulary, by their own names, over the conversation; a
+    click gives one. Escape, or a click elsewhere, closes the list.
+  - **Give** (`app=`) is a script's way.
+  - **What the person sees:** the status line names what was given ("given
+    TextEdit"), and the conversation notes each give. A refusal is shown in
+    the keeper's words.
+  - **Some windows cannot give.** A window opened on a session it was handed
+    (Crash Reporter's debug session) has Give disabled ("this session cannot
+    be given applications"), as does a class without a vocabulary.
+  - The list never includes the Agent window: asked while answering a menu
+    request of its own, the window would wait on itself until the timeout, as
+    a fault showed.
+  - Tests: a picker layout test; an `agent-give` golden on both platforms (95
+    scenes); the whole Aqua suite (287) green on both; `live-agent-give.sh`
+    claims 1–5 in the guest (a virtual pointer clicks TextEdit's row; the
+    agent then saves through TextEdit's menu). 5 faults injected, all caught.
+
+  **Not yet:** the 12700KF.
 
 - **P18.11 — the four requesters, the transcript viewer, revocation (M).**
   1. The first write in a session to a file that exists. This is a writable
