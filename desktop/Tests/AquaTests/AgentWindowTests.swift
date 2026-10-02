@@ -2,6 +2,8 @@
 // where the controls are, and the menu's enablement as the session goes.
 
 import XCTest
+import CCairo
+import AppBundles
 @testable import Aqua
 import MenuModel
 import PoolConfig
@@ -137,5 +139,53 @@ final class AgentWindowTests: XCTestCase {
                                AgentVerb.allow, AgentVerb.stop, AgentVerb.minimize])
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("q")), AgentVerb.quit)
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("k")), AgentVerb.clear)
+    }
+
+    /// Every built-in's bundle names an icon both themes draw: a name that
+    /// is not a list drew the generic "A" for System Preferences once.
+    func testEveryBuiltinsThemeIconExists() throws {
+        let root = "/" + String(#filePath).split(separator: "/").dropLast(3).joined(separator: "/")
+        for theme in ["aqua", "trench"] {
+            guard let f = fopen(root + "/themes/\(theme)/icons/dock.dl", "r") else { return XCTFail("no \(theme) dock.dl") }
+            var lists = Set<String>(), buf = [CChar](repeating: 0, count: 4096)
+            while fgets(&buf, Int32(buf.count), f) != nil {
+                let l = String(cString: buf)
+                if l.hasPrefix("list ") { lists.insert(String(l.dropFirst(5).filter { $0 != "\n" })) }
+            }
+            fclose(f)
+            for b in BuiltinApp.all where b.folder != nil {
+                XCTAssertTrue(lists.contains(b.themeIcon), "\(theme) has no \(b.themeIcon) for \(b.name)")
+            }
+        }
+    }
+
+    /// The Dock's built-ins are the shared list's, in its order (P18.13 loose ends).
+    func testTheDockBuiltinsAreTheSharedList() {
+        XCTAssertEqual(Dock.builtins.map(\.token), BuiltinApp.all.map(\.token))
+        XCTAssertEqual(Dock.builtins.map(\.appID), BuiltinApp.all.map(\.appID))
+    }
+
+    /// A bundle may name a theme icon; the Finder and the Dock draw the
+    /// theme's (P18.13 loose ends). The Applications folder's Utilities is read.
+    func testABuiltinsBundleWearsTheThemesIcon() throws {
+        var t = Array("/tmp/abyss-apps-XXXXXX".utf8CString)
+        let dir = String(cString: mkdtemp(&t)!)
+        defer { _ = system("rm -rf '\(dir)'") }
+        let b = dir + "/Utilities/Grab.app"
+        _ = system("mkdir -p '\(b)/Contents/MacOS' && printf 'dock.icon.grab\\n' > '\(b)/Contents/theme-icon' && printf 'org.abyssbsd.grab\\n' > '\(b)/Contents/app-id'")
+        XCTAssertEqual(AppIcon.iconFile(inBundle: b), "theme:dock.icon.grab")
+        let lib = AppLibrary.all(in: [dir])
+        XCTAssertEqual(lib.map(\.name), ["Grab"], "Utilities is read")
+        XCTAssertEqual(lib.first?.icon, "theme:dock.icon.grab")
+        XCTAssertTrue(lib.first?.matches(appID: "org.abyssbsd.grab") ?? false)
+        let s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 64, 64)!, cr = cairo_create(s)!
+        defer { cairo_destroy(cr); cairo_surface_destroy(s) }
+        XCTAssertTrue(AppIcon.draw(cr, path: "theme:dock.icon.grab", Rect(0, 0, 64, 64)))
+        XCTAssertFalse(AppIcon.draw(cr, path: "theme:dock.icon.nothing", Rect(0, 0, 64, 64)), "an icon the theme lacks falls back")
+        cairo_surface_flush(s)
+        let px = cairo_image_surface_get_data(s)!.withMemoryRebound(to: UInt32.self, capacity: 64 * 64) { p in (0..<(64 * 64)).filter { p[$0] != 0 }.count }
+        XCTAssertGreaterThan(px, 500, "the theme's Grab was drawn")
+        _ = system("printf 'builtin:grab\\n' > '\(b)/Contents/abyss-appgen'")
+        XCTAssertEqual(Dock.pinToken(forBundle: b, library: lib), "grab", "dragged in, it pins the built-in")
     }
 }

@@ -20,6 +20,7 @@
 // otherwise re-decode PNGs on every redraw.
 
 import CCairo
+import AppBundles
 
 #if canImport(Glibc)
 import Glibc
@@ -28,6 +29,8 @@ import Darwin
 #endif
 
 public enum AppIcon {
+    /// What `iconFile` returns for a theme icon: never a path on disk.
+    public static let themePrefix = "theme:"
     // Single-threaded UI paints, hence nonisolated(unsafe) — same discipline as
     // Text's shape/face caches.
     nonisolated(unsafe) private static var cache: [String: OpaquePointer?] = [:]
@@ -36,6 +39,15 @@ public enum AppIcon {
     /// above. Pure policy over a directory listing — nil when there's nothing
     /// usable, which is the common case for our own bundles.
     public static func iconFile(inBundle bundle: String) -> String? {
+        // A theme icon named by the bundle (a built-in's, P18.13 loose ends):
+        // `theme:NAME`, which `draw` hands to the theme, so it follows it.
+        if let f = fopen(finderJoin(bundle, AppBundle.themeIconFile), "r") {
+            var buf = [CChar](repeating: 0, count: 128)
+            let line = fgets(&buf, Int32(buf.count), f).map { _ in String(cString: buf) } ?? ""
+            fclose(f)
+            let name = String(line.filter { $0 != "\n" && $0 != " " })
+            if !name.isEmpty { return themePrefix + name }
+        }
         let resources = finderJoin(finderJoin(bundle, "Contents"), "Resources")
         guard finderIsDirectory(resources) else { return nil }
         let names = readDirectory(resources, showHidden: false).map(\.name)
@@ -69,6 +81,12 @@ public enum AppIcon {
     /// Returns false if there's nothing to draw, so callers fall back.
     @discardableResult
     public static func draw(_ cr: OpaquePointer, path: String, _ r: Rect) -> Bool {
+        if path.hasPrefix(themePrefix) {
+            let name = String(path.dropFirst(themePrefix.count))
+            guard Theme.lists[name] != nil else { return false }
+            Draw.icon(name, cr, r)
+            return true
+        }
         guard let img = surface(path) else { return false }
         let iw = Double(cairo_image_surface_get_width(img))
         let ih = Double(cairo_image_surface_get_height(img))

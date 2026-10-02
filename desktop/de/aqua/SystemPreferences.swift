@@ -889,6 +889,18 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             if let why = Agents.set(!agents.on) { agents.note = "Not changed: \(why)" }
             else { agents.note = Agents.on() ? "Agents are on." : "Agents are off." }
             SystemPreferencesApp.log("agents: \(agents.note)")
+            // Agent.app is the person's, in ~/Applications while agents are
+            // on: appgen, beside this binary, adds or removes it now.
+            if let me = Launcher.selfExecutable(), let home = getenv("HOME") {
+                let appgen = String(me.split(separator: "/", omittingEmptySubsequences: false).dropLast()
+                    .joined(separator: "/")) + "/abyss-appgen"
+                if access(appgen, X_OK) == 0 {
+                    // Its default sources, as at login: given none, it would
+                    // take every port's bundle for one whose entry has gone.
+                    _ = Launcher.launchDetached([appgen, "--to", String(cString: home) + "/Applications"],
+                                                extraEnv: [:])
+                }
+            }
             loadAgents()
         case .session(let i): selectAgentSession(i)
         case .revoke(let i):

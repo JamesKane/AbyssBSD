@@ -145,6 +145,11 @@ From HANDOFF §5.3, still true:
 - **Dragging desktop icons** — shell work, not compositor work.
 - **One dialog at a time** in `abyss-portal` (PHASE8 §6.7).
 - **`wlr-data-control`** (PHASE9 §6.7) — when `abyssclip` wants it.
+- **Trench's System Preferences icons** (found 2026-10-02, P18.13c). Trench
+  has art for every Dock and Finder icon but none of the 24 pane icons
+  (`icon.accounts` … `icon.universalAccess`), which fall back to Aqua's. Draw
+  them in the study's idiom and import them with `svg2dl`, as P18.13c did for
+  the Dock.
 - ~~**The installer's disk probe fails on a machine without ZFS**~~ ✅ fixed
   2026-10-01: the probe asks `kldstat -q -m zfs` first, and no ZFS means no
   imported pools (`importedPoolNames`, unit-tested both ways); with ZFS present

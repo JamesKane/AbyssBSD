@@ -1,7 +1,11 @@
 // abyss-appgen — write an application bundle for every installed port that has
 // a desktop entry (PHASE15 P15.1).
 //
-//   abyss-appgen [--from DIR]... [--to DIR] [--jails FILE] [--dry-run]
+//   abyss-appgen [--from DIR]... [--to DIR] [--jails FILE] [--system DIR] [--dry-run]
+//
+// `--system`: the machine's Applications folder (default /Applications). A
+// run into any other folder is a person's, and makes there only the
+// desktop's own applications the machine's folder lacks, and Agent.
 //
 // `--jails`: the jails.ini whose `[apps]` says which applications run
 // confined (PHASE18 P18.5) — by default the machine's
@@ -43,6 +47,7 @@ var froms: [String] = []
 var to: String?
 var dryRun = false
 var jailsFile: String?
+var systemDir = "/Applications"
 var args = CommandLine.arguments.dropFirst()
 while let a = args.popFirst() {
     switch a {
@@ -53,11 +58,14 @@ while let a = args.popFirst() {
         guard let d = args.popFirst() else { die("--to needs a directory") }
         to = d
     case "--dry-run": dryRun = true
+    case "--system":
+        guard let d = args.popFirst() else { die("--system needs a directory") }
+        systemDir = d
     case "--jails":
         guard let f = args.popFirst() else { die("--jails needs a file") }
         jailsFile = f
     case "-h", "--help":
-        say("usage: abyss-appgen [--from DIR]... [--to DIR] [--jails FILE] [--dry-run]"); exit(0)
+        say("usage: abyss-appgen [--from DIR]... [--to DIR] [--jails FILE] [--system DIR] [--dry-run]"); exit(0)
     default: die("unknown option '\(a)'")
     }
 }
@@ -65,7 +73,11 @@ if froms.isEmpty { froms = ["/usr/local/share/applications", "/usr/share/applica
 /// Terminal, for `Terminal=true` entries: the shell binary, installed beside
 /// this one (P15.4). Absent, those entries are skipped and say why.
 let terminalProgram: String? = {
-    guard let me = Spawn.resolveExecutable(CommandLine.arguments[0]) else { return nil }
+    // Absolute: a launcher runs from wherever the Finder or the Dock is, so a
+    // relative argv[0] (`.build/debug/abyss-appgen`) would name nothing there.
+    guard let found = Spawn.resolveExecutable(CommandLine.arguments[0]),
+          let real = realpath(found, nil) else { return nil }
+    let me = String(cString: real); free(real)
     let dir = me.split(separator: "/", omittingEmptySubsequences: false).dropLast().joined(separator: "/")
     let t = (dir.isEmpty ? "." : dir) + "/AquaDemo"
     return access(t, X_OK) == 0 ? t : nil
@@ -222,14 +234,75 @@ for p in planned {
     say("made \(p.dir) from \(p.source) (icon: \(icon == nil ? iconWords : iconOK ? iconWords : "none")\(confined))")
 }
 
-// Ours, whose entry has gone.
+// MARK: - The desktop's own (P18.13 loose ends)
+//
+// A bundle for each of the desktop's own applications, so the Applications
+// folder shows them as a Mac's does (BuiltinApp's layout: Utilities for the
+// utilities, no Finder). Its launcher runs the shell binary in the app's
+// scene; its icon is the theme's (`Contents/theme-icon`), so it follows the
+// theme. Root's run puts them in /Applications. A person's run puts in
+// ~/Applications only what /Applications lacks (a developer's session has
+// no root run), and Agent, which is the person's: there only while their
+// agents are on (P18.13a: off, the rest of the desktop does not know).
+var builtinsMade = Set<String>()   // "Utilities/Terminal.app", "Agent.app"
+func builtinBundle(_ b: BuiltinApp, under folder: String) -> String {
+    let sub = b.folder ?? ""
+    return (sub.isEmpty ? folder : folder + "/" + sub) + "/" + AppBundle.directoryName(b.name)
+}
+let systemApplications = systemDir
+let personal = dest != systemApplications
+let agentsOn = Agents.on()
+if let binary = terminalProgram {
+    for b in BuiltinApp.all where b.folder != nil {
+        if b.token == "agent" {
+            if !personal { say("skip \(b.name): it is the person's, in ~/Applications, while their agents are on"); continue }
+            if !agentsOn { continue }
+        } else if personal, exists(builtinBundle(b, under: systemApplications)) {
+            continue   // /Applications has it
+        }
+        let bundle = builtinBundle(b, under: dest)
+        let rel = String(bundle.dropFirst(dest.count + 1))
+        if exists(bundle), !exists(bundle + "/" + AppBundle.marker) {
+            say("kept \(rel): it is not ours (no \(AppBundle.marker))"); continue
+        }
+        builtinsMade.insert(rel)
+        if dryRun { say("would make \(rel), the desktop's own"); continue }
+        let parent = String(bundle.split(separator: "/", omittingEmptySubsequences: false).dropLast().joined(separator: "/"))
+        if !exists(parent), mkdir(parent, 0o755) != 0 { say("FAILED \(rel): cannot create \(parent)"); continue }
+        let stem = String(AppBundle.directoryName(b.name).dropLast(4))
+        let tmp = parent + "/.\(stem).app.tmp"
+        _ = run(["rm", "-rf", tmp])
+        guard mkdir(tmp, 0o755) == 0, mkdir(tmp + "/Contents", 0o755) == 0, mkdir(tmp + "/Contents/MacOS", 0o755) == 0,
+              write(tmp + "/Contents/MacOS/" + stem, b.launcher(binary: binary), mode: 0o755),
+              write(tmp + "/" + AppBundle.marker, b.marker + "\n"),
+              write(tmp + "/" + AppBundle.appIDFile, b.appID + "\n"),
+              write(tmp + "/" + AppBundle.themeIconFile, b.themeIcon + "\n") else {
+            say("FAILED \(rel): could not write it"); _ = run(["rm", "-rf", tmp]); continue
+        }
+        _ = run(["rm", "-rf", bundle])
+        guard rename(tmp, bundle) == 0 else { say("FAILED \(rel): could not move it into place"); continue }
+        say("made \(rel), the desktop's own (scene \(b.scene))")
+    }
+} else {
+    say("skip the desktop's own applications: there is no AquaDemo beside abyss-appgen")
+}
+
+// Ours, whose entry has gone: a port's whose desktop entry went, or a
+// built-in's not wanted here any more (Agent with agents turned off).
 if !dryRun {
-    for name in list(dest) where name.hasSuffix(".app") && !names.contains(name) {
-        let marker = dest + "/" + name + "/" + AppBundle.marker
-        guard exists(marker) else { continue }
-        let source = read(marker)?.trimmingNewline() ?? "?"     // before it goes with the bundle
-        _ = run(["rm", "-rf", dest + "/" + name])
-        say("removed \(name): its entry \(source) is gone")
+    for sub in ["", "Utilities"] {
+        let dir = sub.isEmpty ? dest : dest + "/" + sub
+        for name in list(dir) where name.hasSuffix(".app") {
+            let rel = sub.isEmpty ? name : sub + "/" + name
+            if sub.isEmpty, names.contains(name) { continue }
+            if builtinsMade.contains(rel) { continue }
+            let marker = dir + "/" + name + "/" + AppBundle.marker
+            guard exists(marker) else { continue }
+            let source = read(marker)?.trimmingNewline() ?? "?"     // before it goes with the bundle
+            _ = run(["rm", "-rf", dir + "/" + name])
+            say(source.hasPrefix("builtin:") ? "removed \(rel): not wanted here now"
+                                             : "removed \(rel): its entry \(source) is gone")
+        }
     }
 }
 

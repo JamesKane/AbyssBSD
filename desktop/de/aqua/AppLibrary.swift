@@ -42,7 +42,8 @@ public enum AppLibrary {
     /// Every bundle in those directories, by name, the first of a name winning.
     public static func all(in dirs: [String] = directories()) -> [InstalledApp] {
         var seen = Set<String>(), out: [InstalledApp] = []
-        for dir in dirs {
+        // Each folder, then its Utilities (Jaguar's: Terminal, Disk Utility…).
+        for dir in dirs.flatMap({ [$0, finderJoin($0, "Utilities")] }) {
             for e in list(dir) where e.hasSuffix(".app") {
                 let name = String(e.dropLast(4))
                 guard !seen.contains(name) else { continue }
@@ -83,7 +84,7 @@ public enum AppLibrary {
         return names.sorted()
     }
 
-    private static func readSmall(_ path: String) -> String? {
+    static func readSmall(_ path: String) -> String? {
         let fd = open(path, O_RDONLY); guard fd >= 0 else { return nil }
         defer { close(fd) }
         var buf = [UInt8](repeating: 0, count: 4096)

@@ -283,17 +283,24 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     /// token pins it in dock.ini; the app ID is the one its window gives the
     /// compositor (System Preferences' is `org.abyssbsd.preferences`: the tile
     /// once said `.prefs`, so a running Preferences never lit its own tile).
-    public static let builtins: [(token: String, label: String, appID: String, scene: String, icon: DockIcon)] = [
-        ("finder", "Finder", "org.abyssbsd.finder", "finder", .finder),
-        ("terminal", "Terminal", "org.abyssbsd.terminal", "terminal", .terminal),
-        ("sysprefs", "System Preferences", "org.abyssbsd.preferences", "sysprefs", .prefs),
-        ("agent", "Agent", "org.abyssbsd.agent", "agent", .agent),
-        ("textedit", "TextEdit", "org.abyssbsd.textedit", "textedit", .textedit),
-        ("grab", "Grab", "org.abyssbsd.grab", "grab", .grab),
-        ("activity", "Activity Monitor", "org.abyssbsd.activitymonitor", "activity", .activity),
-        ("diskutility", "Disk Utility", "org.abyssbsd.diskutility", "diskutility", .diskutility),
-        ("systemprofiler", "System Profiler", "org.abyssbsd.systemprofiler", "systemprofiler", .systemprofiler),
-    ]
+    public static let builtins: [(token: String, label: String, appID: String, scene: String, icon: DockIcon)] =
+        BuiltinApp.all.map { ($0.token, $0.name, $0.appID, $0.scene, dockIcon($0.token)) }
+
+    /// A built-in's tile icon, by its token.
+    static func dockIcon(_ token: String) -> DockIcon {
+        switch token {
+        case "finder": .finder
+        case "terminal": .terminal
+        case "sysprefs": .prefs
+        case "agent": .agent
+        case "textedit": .textedit
+        case "grab": .grab
+        case "activity": .activity
+        case "diskutility": .diskutility
+        case "systemprofiler": .systemprofiler
+        default: .genericApp
+        }
+    }
 
     /// The built-in tile a running window of the desktop's own wears when it
     /// is not pinned (its icon, its name, how to start another), by app ID.
@@ -312,6 +319,10 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
                 out.append(browser.name)
             }
             out.append("terminal")
+            // Agent (P18.8) is pinned by default; while agents are off its
+            // tile is left out (P18.13a), so a person who never turns them
+            // on never sees it.
+            out.append("agent")
             out.append("sysprefs")
             return out
         }
@@ -347,6 +358,12 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     /// bundle regenerated or moved between the two Applications folders stays
     /// pinned), else its path.
     public static func pinToken(forBundle path: String, library: [InstalledApp]) -> String {
+        // A built-in's bundle pins the built-in (P18.13 loose ends): one tile
+        // for Grab, however it was dragged in.
+        if let m = AppLibrary.readSmall(finderJoin(path, AppBundle.marker)), m.hasPrefix("builtin:") {
+            let token = String(m.dropFirst("builtin:".count).filter { $0 != "\n" })
+            if builtins.contains(where: { $0.token == token }) { return token }
+        }
         let base = String(path.split(separator: "/").last ?? Substring(path))
         let name = base.hasSuffix(".app") ? String(base.dropLast(4)) : base
         return AppLibrary.find(name, in: library)?.bundle == path ? name : path

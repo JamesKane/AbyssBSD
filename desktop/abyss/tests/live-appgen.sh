@@ -15,6 +15,13 @@
 #   4. the generated launcher, run as the Finder runs it, puts the application's
 #      window on our compositor (undertow reports it mapped) — and the terminal
 #      program's opens a Terminal window running it;
+#   6. the desktop's own applications (P18.13 loose ends) become bundles
+#      in Jaguar's layout: System Preferences and TextEdit in the folder, the
+#      utilities in Utilities, no Finder; each with its theme icon and app_id.
+#      Agent is there while agents are on and goes when they are turned off,
+#      taking nothing else. A person's run makes only what the machine's
+#      folder lacks, and removes its own copy once the machine has one. A
+#      built-in's launcher, run as the Finder runs it, maps its window;
 #   5. FreeBSD, with galculator installed: its real entry becomes
 #      Galculator.app with a 256 px icon from its hicolor SVG, and running it
 #      maps galculator's window.
@@ -29,6 +36,8 @@ abyss_ensure_runtime_dir
 appgen="$root/.build/debug/abyss-appgen"
 undertow="$root/.build/debug/undertow"
 demo="$root/.build/debug/AquaDemo"
+# What a launcher names: the binary's real path, so it runs from anywhere.
+demo_real=$(realpath "$demo")
 for b in "$appgen" "$undertow" "$demo"; do [ -x "$b" ] || { swift build; break; }; done
 # The SVG half needs rsvg-convert (librsvg; the guest has it with GTK). Without
 # it the fixture's icon is a PNG from the tree, and only the rasterising is not
@@ -90,7 +99,7 @@ for w in "handler.desktop: NoDisplay" "hidden.desktop: Hidden" \
   grep -q "^skip $w" "$work/gen.out" || fail "not skipped with its reason: $w"
 done
 for n in Handler Gone Absent; do [ -e "$apps/$n.app" ] && fail "$n.app was made"; done
-grep -q "^exec env AQUA_SCENE=terminal $demo -e top\$" "$apps/Top.app/Contents/MacOS/Top" \
+grep -q "^exec env AQUA_SCENE=terminal $demo_real -e top\$" "$apps/Top.app/Contents/MacOS/Top" \
   || fail "Top.app does not open top in Terminal: $(cat "$apps/Top.app/Contents/MacOS/Top" 2>&1)"
 echo "ok: 1. an application became a bundle (launcher, icon $([ "$svg" = 1 ] && echo "rasterised from SVG to 256 px" || echo "copied from a PNG"), marker); a terminal program's opens it in Terminal; three others skipped, each with why"
 
@@ -136,6 +145,47 @@ i=0; until grep -q 'Terminal: window: top (pid' "$work/top.log"; do
   [ $i -ge 50 ] && fail "Top.app's Terminal is not running top: $(grep Terminal: "$work/top.log" | head -3)"; sleep 0.1; i=$((i + 1)); done
 kill "$app_pid" 2>/dev/null || true; app_pid=""
 echo "ok: 4. the generated launcher, run as the Finder runs it, mapped the application's window on undertow; Top.app opened a Terminal running top"
+
+# ------------------------------------------------------------ 6. the desktop's own
+export ABYSS_CONFIG_DIR="$work/cfg"; mkdir -p "$ABYSS_CONFIG_DIR"   # agents off: no agents.ini
+own="$work/Own"; sys="$work/System"; mkdir -p "$sys"
+"$appgen" --from "$ents" --to "$own" --system "$sys" > "$work/gen.out" 2>&1 || fail "abyss-appgen (the desktop's own) failed"
+for b in "System Preferences.app:sysprefs:org.abyssbsd.preferences:prefs" "TextEdit.app:textedit:org.abyssbsd.textedit" \
+         "Utilities/Terminal.app:terminal:org.abyssbsd.terminal" "Utilities/Grab.app:grab:org.abyssbsd.grab" \
+         "Utilities/Activity Monitor.app:activity:org.abyssbsd.activitymonitor" \
+         "Utilities/Disk Utility.app:diskutility:org.abyssbsd.diskutility" \
+         "Utilities/System Profiler.app:systemprofiler:org.abyssbsd.systemprofiler"; do
+  rel=${b%%:*}; rest=${b#*:}; tok=${rest%%:*}; id=${rest#*:}
+  ic=$tok; case "$id" in *:*) ic=${id#*:}; id=${id%%:*} ;; esac   # the icon, when it is not the token
+  d="$own/$rel"; stem=$(basename "$rel" .app)
+  [ -x "$d/Contents/MacOS/$stem" ] || fail "no launcher for $rel"
+  grep -q "^AQUA_SCENE=$tok exec $demo_real \"\$@\"\$" "$d/Contents/MacOS/$stem" || fail "$rel's launcher: $(tail -1 "$d/Contents/MacOS/$stem")"
+  [ "$(cat "$d/Contents/theme-icon")" = "dock.icon.$ic" ] || fail "$rel's icon is not the theme's dock.icon.$ic"
+  [ "$(cat "$d/Contents/app-id")" = "$id" ] || fail "$rel's app_id: $(cat "$d/Contents/app-id")"
+  [ "$(cat "$d/Contents/abyss-appgen")" = "builtin:$tok" ] || fail "$rel's marker"
+done
+[ -e "$own/Finder.app" ] || [ -e "$own/Utilities/Finder.app" ] && fail "a Finder.app was made"
+[ -e "$own/Agent.app" ] && fail "Agent.app was made with agents off"
+: > "$ABYSS_CONFIG_DIR/agents.ini"
+"$appgen" --from "$ents" --to "$own" --system "$sys" > "$work/gen.out" 2>&1 || fail "abyss-appgen failed with agents on"
+[ "$(cat "$own/Agent.app/Contents/theme-icon" 2>/dev/null)" = dock.icon.agent ] || fail "no Agent.app with agents on"
+before=$(find "$own" -name '*.app' -prune | sort)
+rm "$ABYSS_CONFIG_DIR/agents.ini"
+"$appgen" --from "$ents" --to "$own" --system "$sys" > "$work/gen.out" 2>&1 || fail "abyss-appgen failed with agents off again"
+grep -q "^removed Agent.app: not wanted here now" "$work/gen.out" || fail "Agent.app was not removed with agents off"
+[ "$(find "$own" -name '*.app' -prune | sort)" = "$(echo "$before" | grep -v '/Agent.app$')" ] || fail "turning agents off removed more than Agent.app"
+# The machine's folder gets Terminal: the person's copy goes, and nothing else.
+"$appgen" --from "$ents" --to "$sys" --system "$sys" > /dev/null 2>&1 || fail "abyss-appgen into the machine's folder failed"
+[ -d "$sys/Utilities/Terminal.app" ] && [ ! -e "$sys/Agent.app" ] || fail "the machine's folder: $(ls "$sys" "$sys/Utilities" 2>&1 | tr '\n' ' ')"
+"$appgen" --from "$ents" --to "$own" --system "$sys" > "$work/gen.out" 2>&1 || fail "abyss-appgen failed after the machine's run"
+[ -e "$own/Utilities/Terminal.app" ] && fail "the person's Terminal.app stayed though the machine's folder has one"
+grep -q "^removed Utilities/Terminal.app: not wanted here now" "$work/gen.out" || fail "the person's Terminal.app was not removed in words"
+"$appgen" --from "$ents" --to "$own" --system "$work/nowhere" > /dev/null 2>&1
+env WAYLAND_DISPLAY="$wd" HOME="$work" "$own/Utilities/Grab.app/Contents/MacOS/Grab" > "$work/grab.log" 2>&1 &
+app_pid=$!
+mapped org.abyssbsd.grab || fail "Grab.app mapped no window: $(tail -3 "$work/grab.log")"
+kill "$app_pid" 2>/dev/null || true; app_pid=""
+echo "ok: 6. the desktop's own: Jaguar's layout with theme icons, no Finder; Agent with agents on and only then; the machine's copies win; Grab.app runs"
 
 # ------------------------------------------------------------ 5. a real port
 kd=/usr/local/share/applications

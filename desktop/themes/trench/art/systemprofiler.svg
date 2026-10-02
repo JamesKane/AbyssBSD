@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trench icon "systemprofiler" (PHASE18 P18.13 loose ends): drawn for the Dock in the
+     study's idiom (three-quarter view, a heavy outline, lit from the top
+     left, a soft cast shadow; the "neon" scheme), and imported with
+     abyss/tools/svg2dl. Aqua's: the machine, looked at closely. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#4a4178"/><stop offset="1" style="stop-color:#211a40"/></linearGradient>
+    <linearGradient id="gPaper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#f2f0ff"/><stop offset="1" style="stop-color:#b9b2dc"/></linearGradient>
+  </defs>
+  <ellipse cx="23" cy="39.5" rx="16" ry="2.8" fill="#000" opacity=".38"/>
+  <path d="M7 11l12-5 12 5-12 5z" fill="#a39acb" stroke="#170c2c" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M7 11l12 5v21L7 32z" fill="url(#gMetal)" stroke="#170c2c" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M19 16l12-5v21l-12 5z" fill="#2a2150" stroke="#170c2c" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M9.5 15.2l7 2.9v1.8l-7-2.9zM9.5 20.4l7 2.9v1.8l-7-2.9z" fill="#140f2a" stroke="#170c2c" stroke-width=".8"/>
+  <circle cx="13" cy="28.4" r="1.2" style="fill:#39ff14" stroke="#170c2c" stroke-width=".6"/>
+  <path d="M8.2 11.3l10.6-4.4" stroke="#fff" stroke-opacity=".5" stroke-linecap="round"/>
+  <path d="M33.8 30.6l4.6 4.8" stroke="#170c2c" stroke-width="4" stroke-linecap="round"/>
+  <path d="M33.8 30.6l4.6 4.8" style="stroke:#ff2bd6" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="29.6" cy="26.2" r="6" style="fill:#00e5ff" fill-opacity=".28" stroke="#170c2c" stroke-width="2.2"/>
+  <circle cx="29.6" cy="26.2" r="4.8" fill="none" stroke="#e8e6ff" stroke-opacity=".7" stroke-width=".8"/>
+</svg>

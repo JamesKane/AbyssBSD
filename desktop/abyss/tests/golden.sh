@@ -78,6 +78,7 @@ installer-confirm|installer|AQUA_INSTALLER_PAGE=confirm
 installer-installing|installer|AQUA_INSTALLER_PAGE=installing
 installer-done|installer|AQUA_INSTALLER_PAGE=done
 wallpaper|wallpaper|
+finder-applications|finder|AQUA_FINDER_PATH=applications
 menubar|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
 menubar@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_SCALE=2
 menubar-system|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=0
@@ -128,6 +129,7 @@ trench-widgets|widgets|ABYSS_THEME=trench
 trench-sysprefs|sysprefs|ABYSS_THEME=trench
 trench-finder|finder|ABYSS_THEME=trench
 trench-finder-list|finder|ABYSS_THEME=trench AQUA_FINDER_VIEW=list
+trench-finder-applications|finder|ABYSS_THEME=trench AQUA_FINDER_PATH=applications
 trench-finder-rename|finder|ABYSS_THEME=trench AQUA_FINDER_STATE=rename
 trench-menubar|menubar|ABYSS_THEME=trench ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2
 trench-dock|dock|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1

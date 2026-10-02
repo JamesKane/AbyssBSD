@@ -9,6 +9,7 @@
 // `MenuModel` likewise (P10.1): an application built on Aqua defines its
 // commands with it, and should not need a second import to do so.
 @_exported import AquaDraw
+import AppBundles
 @_exported import MenuModel
 import CCairo
 import Surface
@@ -330,9 +331,17 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
     case .finder:
         // A fixed synthetic home folder, so the preview is reproducible on any
         // machine (the live FinderWindow reads the real filesystem).
-        let entries = finderSampleEntries()
+        // AQUA_FINDER_PATH=applications pictures /Applications: the desktop's
+        // own, wearing the theme's icons (P18.13 loose ends), Utilities, and a
+        // port's bundle with no icon of its own.
+        let apps = getenv("AQUA_FINDER_PATH").map { String(cString: $0) } == "applications"
+        let entries = apps ? finderSort(BuiltinApp.all.filter { $0.folder == "" }.map {
+                FinderEntry(name: $0.name + ".app", kind: .application, iconPath: AppIcon.themePrefix + $0.themeIcon)
+            } + [FinderEntry(name: "Utilities", kind: .folder),
+                 FinderEntry(name: "Galculator.app", kind: .application)])
+            : finderSampleEntries()
         let listView = getenv("AQUA_FINDER_VIEW").map { String(cString: $0) } == "list"
-        var fs = FinderState(path: "/Users/abyss", entries: entries,
+        var fs = FinderState(path: apps ? "/Applications" : "/Users/abyss", entries: entries,
                              selection: 2, view: listView ? .list : .icon,
                              freeBytes: 39_600_000_000)
         // AQUA_FINDER_STATE pictures what the default never shows (P11.5):

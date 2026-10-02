@@ -775,6 +775,62 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
       `live-islands-bar`, `live-menus` and `live-context` (Force Quit) on
       both; the agent live tests in the guest.
     - **P18.13 is complete.**
+  - **P18.13c — loose ends: the Dock and the Applications folder — DONE
+    2026-10-02.**
+    - **The built-ins as bundles.** The Applications folder held only ports'
+      bundles, so the desktop's own applications appeared nowhere but the
+      Dock. `BuiltinApp` (AppBundles) is now the one list, for the Dock's
+      tiles and for `abyss-appgen`, in Jaguar's layout: System Preferences,
+      TextEdit and Agent in the folder; Terminal, Grab, Activity Monitor,
+      Disk Utility and System Profiler in `Utilities`; no Finder (it lived in
+      CoreServices). Each bundle's launcher runs the shell binary in its
+      scene by its real path, so it runs from anywhere. The same fix mended
+      the ports' Terminal launchers, which named a relative path.
+    - **Whose folder.** Root's run (the medium's build) writes them into
+      `/Applications`. A person's run (every login, and whenever agents are
+      switched) writes into `~/Applications` only what the machine's folder
+      lacks, and removes its copy once the machine has one. Agent is the
+      person's: in `~/Applications` while their agents are on, removed when
+      they are turned off (P18.13a). `--system DIR` names the machine's
+      folder, for tests.
+    - **Icons that follow the theme.** A bundle may name a theme icon
+      (`Contents/theme-icon`), which `AppIcon` draws in place of artwork, so
+      the Finder, the Dock and the Apple menu all show the current theme's.
+      `AppLibrary` reads `Utilities` too. A built-in's bundle dragged to the
+      Dock pins the built-in itself, so there is one tile either way.
+    - **The Dock:** Agent is pinned by default, after Terminal. Its tile is
+      left out while agents are off, so a person who never turns them on
+      never sees it.
+    - **Trench's art:** six Dock icons drawn in the study's idiom and
+      imported with `svg2dl`: Agent, TextEdit, Grab, Activity Monitor, Disk
+      Utility, System Profiler. The Dock and Finder sets are now complete in
+      Trench. Its 24 System Preferences pane icons still fall back to Aqua's
+      (BACKLOG §5).
+    - **Tests:** `BuiltinAppTests` (the layout; the launcher, quoted);
+      `AgentWindowTests`:
+      - the Dock's built-ins are the shared list;
+      - every built-in's icon exists in both themes' Dock sets;
+      - a bundle's theme icon is drawn;
+      - `Utilities` is read;
+      - a dragged built-in pins itself.
+
+      `live-appgen.sh` claim 6 checks:
+      - the layout, the theme icons, app_ids and markers;
+      - Agent only with agents on, and nothing else removed when it goes;
+      - the machine's copy wins;
+      - Grab.app maps its window.
+
+      New goldens: the Applications folder in both themes. Two Trench
+      goldens moved on purpose.
+    - **Faults, all caught:** four in the unit tests (the token taken for the
+      icon, which is how System Preferences first drew the generic "A";
+      Utilities not read; the theme icon ignored; a dragged built-in pinned
+      as a bundle) and four in `live-appgen` (Agent regardless of agents;
+      the machine's copy not looked for; a built-in never cleaned up; a
+      relative binary).
+    - 943 unit tests and 105 goldens green on Linux and in the guest;
+      `live-appgen`, `live-dock-apps` on both, `live-agents-off` in the
+      guest.
 - **P18.14 — the gate (S).** PLAN's verify list:
   - an agent in a jail with exactly one descriptor (the model socket);
   - the transcript showing what it was granted;
