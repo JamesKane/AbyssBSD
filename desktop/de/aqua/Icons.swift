@@ -10,7 +10,7 @@ public enum PrefIcon: Sendable {
     case desktop, dock, general, international, islands, loginItems, myAccount, screenEffects
     case cdsDvds, energySaver, keyboard, mouse
     case internetIcon, sharing
-    case accounts, dateTime, softwareUpdate, universalAccess
+    case accounts, dateTime, softwareUpdate, universalAccess, agents
 }
 
 public enum Icons {
@@ -35,6 +35,7 @@ extension PrefIcon {
         case .general: return "general"
         case .international: return "international"
         case .islands: return "islands"
+        case .agents: return "agents"
         case .loginItems: return "loginItems"
         case .myAccount: return "myAccount"
         case .screenEffects: return "screenEffects"

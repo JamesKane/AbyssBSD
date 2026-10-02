@@ -270,6 +270,8 @@ let package = Package(
                            "Login",
                            // System Profiler.
                            "SystemFacts",
+                           // The Agents pane reads transcripts (PHASE18 P18.11b).
+                           "Model",
                            // The installer's model builds an InstallPlan and
                            // asks the same refusals P5.1 wrote whether a disk
                            // may be chosen. `Install` depends on nothing, so

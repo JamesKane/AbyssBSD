@@ -1824,6 +1824,25 @@ list icon.softwareUpdate
 end
 
 # Islands (PHASE13 P13.7): three islands in a blue sea — Islands, Ebb, Shoals.
+list icon.agents
+  # Agents (PHASE18 P18.11b): the Dock's speech bubble and padlock, on
+  # Preferences' plain ground — someone to ask, asked from inside a jail.
+  rect w*0.1 w*0.14 w*0.8 w*0.52 w*0.14
+  fill vertical stops 0 #79b2ff 1 #1d5bcc
+  path w*0.26 w*0.62 w*0.2 w*0.84 w*0.44 w*0.64 close
+  fill #3d78dc
+  circle w*0.32 w*0.4 w*0.06
+  fill #ffffff
+  circle w*0.5 w*0.4 w*0.06
+  fill #ffffff
+  circle w*0.68 w*0.4 w*0.06
+  fill #ffffff
+  path w*0.665 w*0.72 w*0.665 w*0.64 w*0.815 w*0.64 w*0.815 w*0.72
+  stroke #b07d14 w*0.045 round
+  rect w*0.6 w*0.71 w*0.28 w*0.2 w*0.035
+  fill vertical stops 0 #ffd76a 1 #d99a1e
+end
+
 list icon.islands
   rect w*0.08 h*0.08 (w-2*(w*0.08)) (h-2*(h*0.08)) 4
   fill vertical stops 0 #9cc7f2 1 #2f66b8

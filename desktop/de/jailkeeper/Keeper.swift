@@ -175,6 +175,10 @@ public final class JailKeeper {
     private var vocabularies: [String: String] = [:]
     /// Agent sessions' model control sockets, by session ID (P18.11).
     private var models: [String: String] = [:]
+    /// Grants the keeper made for itself, not for the person — a developer's
+    /// abyss-agent handed into a jail — as "JAIL<TAB>N": not the person's
+    /// files, so not shown as theirs, nor offered to revoke (P18.11b).
+    private var ownGrants: Set<String> = []
     /// Crashes seen this session, by number (P18.9).
     public private(set) var crashes: [Int: Crash] = [:]
     /// What shows a crash to the person (P18.9b): AquaDemo's Crash Reporter,
@@ -446,7 +450,11 @@ public final class JailKeeper {
             let fd = open(agentPath, O_RDONLY | O_CLOEXEC)
             guard fd >= 0 else { throw failAll("cannot open \(agentPath)") }
             defer { close(fd) }
-            do { agentPath = try JailClient.grant(jail: h.opened.name, path: agentPath, file: fd, socket: jaildSocket).inside }
+            do {
+                let g = try JailClient.grant(jail: h.opened.name, path: agentPath, file: fd, socket: jaildSocket)
+                agentPath = g.inside
+                ownGrants.insert("\(h.opened.name)\t\(g.n)")
+            }
             catch { throw failAll("cannot give the jail abyss-agent: \(error)") }
         }
         let (pid, proc): (UInt64, Int32)
@@ -658,6 +666,37 @@ public final class JailKeeper {
                 reply.set("ok", true)
             } catch {
                 say("jails: take refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "grants":
+            // The files given to the session's jails (P18.4), for the
+            // Preferences pane (P18.11b): "JAIL<TAB>N<TAB>ro|rw<TAB>inside<TAB>source".
+            var rows: [String] = []
+            for h in held.values.sorted(by: { $0.opened.name < $1.opened.name }) {
+                for g in (try? JailClient.grants(jail: h.opened.name, socket: jaildSocket)) ?? [] {
+                    let n = g.split(separator: "\t").first.map(String.init) ?? ""
+                    guard !ownGrants.contains(h.opened.name + "\t" + n) else { continue }
+                    rows.append(h.opened.name + "\t" + g)
+                }
+            }
+            reply.set("ok", true)
+            reply.set("grants", bytes: JailWire.list(rows))
+        case "revoke":
+            // A grant taken back, from the Preferences pane: only in a jail
+            // this session holds.
+            let name = req.string("jail") ?? ""
+            guard held.values.contains(where: { $0.opened.name == name }) else {
+                reply = JailWire.error("\(name) is not one of this session's jails"); break
+            }
+            guard !ownGrants.contains("\(name)\t\(req.uint64("grant") ?? 0)") else {
+                reply = JailWire.error("grant \(req.uint64("grant") ?? 0) in \(name) is the desktop's own, not one of your files"); break
+            }
+            do {
+                try JailClient.revoke(jail: name, grant: req.uint64("grant") ?? 0, socket: jaildSocket)
+                say("jails: revoked grant \(req.uint64("grant") ?? 0) in \(name)")
+                reply.set("ok", true)
+            } catch {
+                say("jails: revoke refused: \(error)")
                 reply = JailWire.error("\(error)")
             }
         case "crashes":

@@ -510,8 +510,27 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     virtual pointer. `live-agent-window.sh` now answers the requester with
     Stop. 6 faults injected, all caught.
 
+  **P18.11b — the Agents pane — DONE 2026-10-02 (in the guest).**
+  - **System Preferences ▸ Agents** (System section; `view.pane.agents`) lists
+    the agent sessions from their transcripts on disk, newest first.
+  - **The selected session in sentences** (`Transcript.digest`, in Model):
+    "You asked…", "The agent called…", "You gave the agent TextEdit", "The
+    agent asked to write with TextEdit (Save)", "You allowed…", "Stopped:
+    the session's budget…". The last lines that fit are shown.
+  - **The files given to confined applications**, from the keeper (`grants`),
+    each with **Revoke** (`revoke`, through the keeper to jaild).
+  - **The keeper's own grants are not offered**, a developer's `abyss-agent`
+    handed into an agent jail for instance: they are not the person's files,
+    and revoking one would break the agent. Found when the first live run
+    listed it.
+  - Tests: TranscriptTests and AgentsPaneTests; the Preferences grid and icon
+    sheets re-goldened on both platforms, plus a `sysprefs-agents` golden (98
+    scenes); the Aqua suite (292) green on both; `live-agents-pane.sh` claims
+    1–3 in the guest, with clicks on a session and on the second of two
+    grants' Revoke. 6 faults injected, all caught (one after the test gained
+    a second grant).
+
   **Still in P18.11:**
-  - (b) the Preferences pane: transcripts, and grants with revoke.
   - (c) requester 1, the first write to an existing file. PHASE18 assumed
     jaild "can see" a writable grant's first open for writing. It cannot ask
     before one: FreeBSD tells a watcher about a write after it happens

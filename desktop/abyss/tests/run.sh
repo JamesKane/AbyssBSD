@@ -270,6 +270,10 @@ if [ "$live" -eq 1 ]; then
   # carries on, Stop stops; a give taken back is refused.
   echo "== the budget requester, and taking a give back =="
   quiet "$root/abyss/tests/live-agent-requester.sh"
+  # The Agents pane (P18.11b): sessions from their transcripts, and the
+  # files given to confined applications, with Revoke.
+  echo "== the Agents pane =="
+  quiet "$root/abyss/tests/live-agents-pane.sh"
   # A confined crash (P18.9a): the person's limits, the core kept, one
   # crash granted to a debug agent, lldb on it.
   echo "== a confined crash, read by a debug agent =="

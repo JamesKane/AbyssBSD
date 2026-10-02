@@ -22,6 +22,7 @@ enum IconsRef {
         case .network:        globe(cr, box)
         case .international:   globe(cr, box)
         case .islands:        break   // born a draw list (P13.7): no Swift painter to match
+        case .agents:         break   // born a draw list (PHASE18 P18.11b), likewise
         case .internetIcon:   globe(cr, box)
         case .startupDisk:    drive(cr, box)
         case .general:        doc(cr, box)

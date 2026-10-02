@@ -74,6 +74,7 @@ public enum PrefCatalogue {
         ]),
         ("System", [
             pane(.accounts, "Accounts", "Who can log in to this computer."),
+            pane(.agents, "Agents", "What agents did, and the files given to confined applications."),
             pane(.dateTime, "Date & Time", "The clock, the time zone and network time."),
             pane(.softwareUpdate, "Software Update", "Updates to AbyssBSD."),
             pane(.startupDisk, "Startup Disk", "The disk this computer starts from."),
@@ -122,6 +123,7 @@ public struct PrefsModel: Equatable, Sendable {
         case PrefsModel.energyPane: return "When the computer and the display sleep, and how the processor saves power."
         case PrefsModel.islandsPane: return "How many islands each display has, whether a switch slides, and the keys."
         case PrefsModel.accountsPane: return "Who can log in, who administers this computer, and who logs in automatically."
+        case PrefsModel.agentsPane: return "What each agent session did, and the files given to confined applications, with Revoke."
         default: return "This pane cannot change anything yet."
         }
     }
@@ -140,6 +142,8 @@ public struct PrefsModel: Equatable, Sendable {
     public static let islandsPane = "islands"
     /// Accounts (PHASE16 P16.6a).
     public static let accountsPane = "accounts"
+    /// Agents: transcripts and grants (PHASE18 P18.11b).
+    public static let agentsPane = "agents"
 
     /// Arrow keys on the grid: across a row, then down into the next section
     /// as if the sections were one list — the order a reader walks them.
@@ -182,6 +186,8 @@ public struct PrefsLayout: Equatable, Sendable {
     public var accounts = AccountsLayout()
     /// The Islands pane's controls, when it is showing (P13.7).
     public var islands = IslandsLayout()
+    /// The Agents pane's, when it is showing (PHASE18 P18.11b).
+    public var agents = AgentsLayout()
 
     public static func == (a: PrefsLayout, b: PrefsLayout) -> Bool {
         a.toolbar == b.toolbar && a.showAll == b.showAll && a.toolbarItems == b.toolbarItems
@@ -257,7 +263,8 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
                                    sound: SoundPaneState? = nil,
                                    displays: DisplaysPaneState? = nil,
                                    energy: EnergyPaneState? = nil,
-                                   accounts: AccountsPaneState? = nil) -> PrefsLayout {
+                                   accounts: AccountsPaneState? = nil,
+                                   agents: AgentsPaneState? = nil) -> PrefsLayout {
     var l = prefsLayout(w: w, h: h)
     paintWindowChrome(cr, w: w, h: h, title: model.title)
 
@@ -299,6 +306,10 @@ public func paintSystemPreferences(_ cr: OpaquePointer, w: Double, h: Double,
         let e = energy ?? .sample
         l.energy = energyLayout(body: l.body, profiles: e.profile != nil)
         paintEnergyPane(cr, l.energy, e)
+    case .pane(let id) where id == PrefsModel.agentsPane:
+        let a = agents ?? .sample
+        l.agents = agentsLayout(body: l.body, a)
+        paintAgentsPane(cr, l.agents, a)
     case .pane(let id) where id == PrefsModel.accountsPane:
         let a = accounts ?? .sample
         l.accounts = accountsLayout(body: l.body, a)
@@ -453,6 +464,8 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
     private var accounts = AccountsPaneState()
     private var accountsApplying: Int32?
     private var dumpedAccounts: AccountsLayout?
+    private var agents = AgentsPaneState()
+    private var dumpedAgents: AgentsLayout?
 
     public static let menuBar = systemPreferencesMenuBar()
 
@@ -506,6 +519,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         if v == .pane(PrefsModel.displaysPane) { loadDisplays() }
         if v == .pane(PrefsModel.energyPane) { loadEnergy() }
         if v == .pane(PrefsModel.accountsPane) { loadAccounts() }
+        if v == .pane(PrefsModel.agentsPane) { loadAgents() }
         window?.setTitle(model.title)
         switch v {
         case .all: SystemPreferencesApp.log("showing all")
@@ -529,7 +543,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         layout = paintSystemPreferences(cr, w: w, h: h, model: model,
                                         themes: installedThemes, choice: AppearanceChoice.current(),
                                         dragging: dragging, network: network, sound: sound,
-                                        displays: displays, energy: energy, accounts: accounts)
+                                        displays: displays, energy: energy, accounts: accounts, agents: agents)
         cairo_surface_flush(cs); cairo_destroy(cr); cairo_surface_destroy(cs)
         // Publish what was drawn, so a test clicks it rather than coordinates
         // copied into a script (§2.46).
@@ -585,6 +599,16 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         // `powerd`, `ac.<mode>` and `battery.<mode>` at their controls.
         // The Accounts pane's (P16.6a): each row by account name, the
         // buttons, and the sheet's fields and buttons when one is open.
+        // The Agents pane's (P18.11b): each session by ID, and each grant's
+        // Revoke by its number and jail.
+        if dumpLayout, model.view == .pane(PrefsModel.agentsPane), dumpedAgents != layout.agents {
+            dumpedAgents = layout.agents
+            func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
+            var line = "agents layout"
+            for (t, r) in zip(agents.sessions, layout.agents.sessionRows) { line += " session.\(t.id)=\(c(r))" }
+            for (g, r) in zip(agents.grants, layout.agents.revoke) { line += " revoke.\(g.jail).\(g.n)=\(c(r))" }
+            SystemPreferencesApp.log(line)
+        }
         if dumpLayout, model.view == .pane(PrefsModel.accountsPane), dumpedAccounts != layout.accounts {
             dumpedAccounts = layout.accounts
             func c(_ r: Rect) -> String { "\(Int(r.x + r.w / 2)),\(Int(r.y + r.h / 2))" }
@@ -826,6 +850,58 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
         case .confirm: confirmAccounts()
         }
         window?.setNeedsDisplay()
+    }
+
+    // MARK: Agents (PHASE18 P18.11b)
+
+    /// The sessions on disk, the selected one's digest, and the keeper's grants.
+    private func loadAgents() {
+        let keep = agents.selected.flatMap { agents.sessions.indices.contains($0) ? agents.sessions[$0].id : nil }
+        let note = agents.note
+        agents = AgentsPaneState()
+        agents.sessions = AgentsPaneIO.sessions()
+        agents.selected = keep.flatMap { k in agents.sessions.firstIndex { $0.id == k } } ?? (agents.sessions.isEmpty ? nil : 0)
+        if let i = agents.selected { agents.digest = AgentsPaneIO.digest(agents.sessions[i].id) }
+        if let g = AgentsPaneIO.grants() { agents.grants = g } else { agents.note = "The session's jails are not running." }
+        if !note.isEmpty { agents.note = note }
+        dumpedAgents = nil
+        SystemPreferencesApp.log("agents: \(agents.sessions.count) session(s); grants: "
+            + agents.grants.map { "\($0.jail).\($0.n)" }.joined(separator: " "))
+        window?.setNeedsDisplay()
+    }
+
+    private func selectAgentSession(_ i: Int) {
+        guard agents.sessions.indices.contains(i) else { return }
+        agents.selected = i
+        agents.digest = AgentsPaneIO.digest(agents.sessions[i].id)
+        SystemPreferencesApp.log("agents: showing \(agents.sessions[i].id): "
+            + agents.digest.map { String($0.drop { $0 != " " }.drop { $0 == " " }) }.joined(separator: " | "))
+        window?.setNeedsDisplay()
+    }
+
+    private func pressAgents(_ hit: AgentsHit) {
+        switch hit {
+        case .session(let i): selectAgentSession(i)
+        case .revoke(let i):
+            guard agents.grants.indices.contains(i) else { return }
+            let g = agents.grants[i]
+            if let why = AgentsPaneIO.revoke(g) {
+                agents.note = "Not revoked: \(why)"
+            } else {
+                agents.note = "Revoked: \(g.path) is no longer in \(g.jail)."
+            }
+            SystemPreferencesApp.log("agents: \(agents.note)")
+            loadAgents()
+        }
+    }
+
+    private func agentsKey(_ e: KeyEvent) {
+        guard e.pressed else { return }
+        switch e.keysym {
+        case KeySym.down: selectAgentSession(min((agents.selected ?? -1) + 1, agents.sessions.count - 1))
+        case KeySym.up: selectAgentSession(max((agents.selected ?? 1) - 1, 0))
+        default: break
+        }
     }
 
     private func accountsKey(_ e: KeyEvent) {
@@ -1471,6 +1547,10 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
             if let hit = accountsHit(layout.accounts, accounts, x: pointerX, y: pointerY) { pressAccounts(hit) }
             return
         }
+        if model.view == .pane(PrefsModel.agentsPane) {
+            if let hit = agentsHit(layout.agents, agents, x: pointerX, y: pointerY) { pressAgents(hit) }
+            return
+        }
         if model.view == .pane(PrefsModel.energyPane), let hit = energyHit(layout.energy, x: pointerX, y: pointerY) {
             pressEnergy(hit)
             return
@@ -1544,6 +1624,7 @@ public final class SystemPreferencesApp: WindowDelegate, MenuProvider {
                                                 && (accounts.form != nil || accounts.confirmingDelete)) { show(.all) }
             else if model.view == .pane(PrefsModel.networkPane) { networkKey(event) }
             else if model.view == .pane(PrefsModel.accountsPane) { accountsKey(event) }
+            else if model.view == .pane(PrefsModel.agentsPane) { agentsKey(event) }
             return
         }
         switch event.keysym {
