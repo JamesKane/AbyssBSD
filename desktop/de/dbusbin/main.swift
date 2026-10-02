@@ -72,6 +72,7 @@ var once = false
 var menus = false
 var busAddress: String?, jailName: String?, jaildSocket = JailWire.defaultSocket
 var endpoint = false, listenPath: String?, servicesPath: String?
+var menusClass: String?
 let args = Array(CommandLine.arguments.dropFirst())
 var i = 0
 while i < args.count {
@@ -88,6 +89,12 @@ while i < args.count {
         once = true
     case "--menus":
         menus = true
+    case "--class":
+        // With --menus: be a jail class's menu bridge (PHASE18), on that
+        // jail's bridge (--bus), serving menus-dbus-CLASS to the bar.
+        i += 1
+        guard i < args.count else { die("--class needs a jail class") }
+        menusClass = args[i]
     case "--endpoint":
         endpoint = true
     case "--listen":
@@ -144,12 +151,13 @@ do {
 
 if menus {
     let bridge: GtkMenuBridge
-    do { bridge = try GtkMenuBridge(connection: conn) } catch {
-        die("cannot serve \(GtkMenuBridge.serviceName): \(error)")
+    let menusService = menusClass.map { GtkMenuBridge.serviceName(forJailClass: $0) } ?? GtkMenuBridge.serviceName
+    do { bridge = try GtkMenuBridge(connection: conn, service: menusService) } catch {
+        die("cannot serve \(menusService): \(error)")
     }
     // What it watches and what it pushes (P10.9), for the log a test reads.
     bridge.log = { emit(1, "menus-dbus: \($0)") }
-    emit(1, "ready (menus: \(GtkMenuBridge.serviceName))")
+    emit(1, "ready (menus: \(menusService))")
     while true {
         do { try bridge.step(timeoutMs: 1000) } catch {
             die("the bus connection failed: \(error)")

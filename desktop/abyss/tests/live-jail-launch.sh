@@ -76,7 +76,7 @@ await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 
 # --------------------------------------------------------------- 1. zenity
 JL app -- zenity --info --text "confined" > "$W/l1" 2>&1 || fail "the launch was refused: $(cat "$W/l1")"
-await "$W/keeper.log" "jails: $N is jail [0-9]*; its socket, bus and portal are up" "the keeper did not bring the jail up"
+await "$W/keeper.log" "jails: $N is jail [0-9]*; its socket, bus, portal and menus are up" "the keeper did not bring the jail up"
 jid=$(sed -n "s/jails: $N is jail \([0-9]*\);.*/\1/p" "$W/keeper.log" | head -1)
 await "$W/ut.out" "^window-jail zenity/[^ ]* engine=org.abyssbsd.jail app=app instance=$jid$" \
   "undertow did not name zenity's window as jail $jid's"

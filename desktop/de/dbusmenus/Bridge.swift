@@ -57,6 +57,12 @@ final class MenuWatch {
 public final class GtkMenuBridge {
     public static let serviceName = "menus-dbus"
 
+    /// A jail's menu bridge (PHASE18): GTK applications in a jail publish their
+    /// menus on the jail's own D-Bus bridge, which the session's menu bridge
+    /// cannot reach — so each jail class has one of its own, named for the
+    /// class the bar is told with focus (abyss_menubar_v1 v5's `jail`).
+    public static func serviceName(forJailClass cls: String) -> String { serviceName + "-" + cls }
+
     private let conn: DBusConnection
     private let server: Current.Server
     public private(set) var served = 0

@@ -198,10 +198,13 @@ read-only grant that the page reads. Also new: menu bar protocol v5 sends
 "Confined (class)", disabled. That stands in for the About line, since a
 foreign app's About box is its own. The keeper also remakes the bundles when
 `[apps]` changes. Found on the way (HANDOFF §2.124): FreeBSD's config watcher
-missed in-place edits, and a jail's folder hints named host paths. **Known
-limit:** a jailed GTK app's own menus do not reach the global bar, because
-they are on the jail's bus and the menus bridge listens on the session's. That
-is a follow-up (a menus bridge per jail, or the bridge on both buses).
+missed in-place edits, and a jail's folder hints named host paths. **Menus for jailed apps — done 2026-10-02:** a confined GTK application's
+own menus are on its jail's bus, so each jail has its own menu bridge
+(`abyss-dbus --menus --class CLASS`, started by the keeper beside the jail's
+portal), serving `menus-dbus-CLASS`. The bar asks that service when focus
+says the window is confined (v5's `jail`). The gate's claim 9 has gtkmenu,
+confined: its menus are shown from `menus-dbus-app`, its application menu
+starts with "Confined (app)", and File ▸ Open… reaches GTK in the jail.
 The stack proof in the guest: galculator and zenity confined, Firefox in
 `app-net`. Then the same on the 12700KF.
 - a confined zenity cannot `ls ~`;

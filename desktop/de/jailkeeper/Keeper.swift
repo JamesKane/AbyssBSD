@@ -79,6 +79,8 @@ public final class JailKeeper {
         var closeFD: Int32
         var bus: ap_child?
         var bridge: ap_child?
+        /// The jail's GTK menu bridge, serving `menus-dbus-CLASS` to the bar.
+        var menus: ap_child?
     }
 
     public var jaildSocket = JailWire.defaultSocket
@@ -110,7 +112,7 @@ public final class JailKeeper {
     func ensure(_ cls: String) throws -> Held {
         if let h = held[cls] { return h }
         let opened = try JailClient.open(cls, socket: jaildSocket)
-        var h = Held(opened: opened, closeFD: -1, bus: nil, bridge: nil)
+        var h = Held(opened: opened, closeFD: -1, bus: nil, bridge: nil, menus: nil)
         do {
             // Wayland: a socket of the jail's own, made from outside.
             if let display, classes.first(where: { $0.name == cls })?.wayland ?? true {
@@ -131,14 +133,18 @@ public final class JailKeeper {
             while access(services, F_OK) != 0 && i < 100 { usleep(20_000); i += 1 }
             h.bridge = try child([binDir + "/abyss-dbus", "--bus", "unix:path=" + services,
                                   "--jail", opened.name, "--jaild", jaildSocket], log: dir + "/bridge.log")
+            // And its menu bridge: a confined GTK application's menus are on
+            // this bus, which the session's menu bridge cannot reach.
+            h.menus = try child([binDir + "/abyss-dbus", "--menus", "--bus", "unix:path=" + services,
+                                 "--class", cls], log: dir + "/menus.log")
         } catch {
             if h.closeFD >= 0 { close(h.closeFD) }
-            for var c in [h.bus, h.bridge].compactMap({ $0 }) { _ = ap_child_signal(&c, SIGKILL); _ = ap_child_reap(&c, nil) }
+            for var c in [h.bus, h.bridge, h.menus].compactMap({ $0 }) { _ = ap_child_signal(&c, SIGKILL); _ = ap_child_reap(&c, nil) }
             close(opened.jail)
             throw error
         }
         held[cls] = h
-        say("jails: \(opened.name) is jail \(opened.jid); its socket, bus and portal are up")
+        say("jails: \(opened.name) is jail \(opened.jid); its socket, bus, portal and menus are up")
         return h
     }
 

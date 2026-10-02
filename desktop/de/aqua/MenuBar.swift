@@ -367,6 +367,10 @@ public final class MenuBar: LayerSurfaceDelegate {
             // application's are served by the bridge, told which by target.
             let svc: String, tgt: String?, from: String
             switch f.kind {
+            case .gtk where !f.jail.isEmpty:
+                // A confined GTK application's menus are on its jail's bus,
+                // served by that jail class's own menu bridge (PHASE18).
+                (svc, tgt, from) = ("menus-dbus-" + f.jail, f.address, "menus-dbus-\(f.jail) (GTK, confined)")
             case .gtk:
                 (svc, tgt, from) = ("menus-dbus", f.address, "menus-dbus (GTK)")
             default:

@@ -24,6 +24,10 @@
 #      "Confined (app-net)", disabled;
 #   7. taking galculator out of [apps] remakes the bundles, and its launcher
 #      is no longer confined;
+#   9. a confined GTK application's own menus are in the bar — from its
+#      jail's menu bridge, since its menus are on the jail's bus — with the
+#      Confined row in its application menu, and choosing an item reaches GTK
+#      in the jail;
 #   8. when the session's keeper ends, no jail is left live and nothing is
 #      left mounted — the granted file, whose name has a space, included
 #      (every gate run had left one, unseen: HANDOFF §2.127).
@@ -202,6 +206,37 @@ printf 'm %s %s\np\nr\n' "${xy%,*}" "${xy#*,}" >&3
 await "$T/bar.log" "item 'Confined (app-net)' at [0-9]*,[0-9]* disabled app.confined" "the application menu does not say Confined (app-net)"
 printf 'm 900 400\np\nr\n' >&3
 echo "ok: 6. Firefox frontmost: its application menu says 'Confined (app-net)', disabled"
+
+# --------------------------------------- 9. a confined GTK app's own menus
+# gtkmenu (a stock GtkApplication, live-menus-gtk.sh's) inside the app jail,
+# from the jail's own home. Its menus are on the jail's bus; the jail's menu
+# bridge serves them as menus-dbus-app.
+cc -O0 abyss/tests/gtkmenu.c -ldl -o "$T/gtkmenu" || fail "cannot build gtkmenu"
+cp "$T/gtkmenu" "$HB/$me/app/gtkmenu"
+$D/abyss-jail launch app -- "/home/$me/gtkmenu" > "$T/l-menu" 2>&1 || fail "gtkmenu's launch: $(cat "$T/l-menu")"
+await "$T/bar.log" "showing MenuSpike's menus from menus-dbus-app (GTK, confined)" \
+  "the bar never showed the confined GTK app's menus: $(grep -E 'showing|could not describe' "$T/bar.log" | tail -2)"
+title_at() { grep -F 'MenuBar: titles ' "$T/bar.log" | tail -1 | tr ' ' '\n' | grep "^$1@" | head -1 | cut -d@ -f2 | tr ',' ' '; }
+item_line() {
+  awk -v m="MenuBar: opened $1" 'index($0, m) { buf = ""; on = 1; next }
+       on && /MenuBar: item / { buf = buf $0 "\n"; next }
+       on { on = 0 } END { printf "%s", buf }' "$T/bar.log" | grep -F "'$2'" | tail -1
+}
+click() { printf 'm %s %s\np\nr\n' "$1" "$2" >&3; sleep 0.5; }
+open_menu() { n=$(count "MenuBar: opened $1" "$T/bar.log"); click $(title_at "$1"); await "$T/bar.log" "MenuBar: opened $1" "clicking $1 opened nothing" $((n + 1)); }
+for t in MenuSpike File Edit; do [ -n "$(title_at $t)" ] || fail "the bar has no $t: $(grep -F 'MenuBar: titles ' "$T/bar.log" | tail -1)"; done
+open_menu MenuSpike
+case "$(item_line MenuSpike 'Confined (app)')" in
+  *" disabled app.confined") ;;
+  *) fail "the GTK app's own menu has no Confined (app) row: $(item_line MenuSpike 'Confined (app)')" ;;
+esac
+click $(title_at MenuSpike)
+open_menu File
+xy=$(item_line File "Open…" | sed -n "s/.* at \([0-9]*\),\([0-9]*\) .*/\1 \2/p")
+[ -n "$xy" ] || fail "File has no Open… row"
+click $xy
+await "$T/bar.log" "chose File > Open… (app.open) → ok" "choosing Open… did not reach GTK in the jail: $(grep chose "$T/bar.log" | tail -1)"
+echo "ok: 9. a confined GTK app's menus came from its jail's menu bridge, with 'Confined (app)' first, and File ▸ Open… reached GTK in the jail"
 
 # ----------------------------------------------- 7. [apps] changes the bundles
 printf '[apps]\nfirefox = app-net\n' > "$ABYSS_CONFIG_DIR/jails.ini"
