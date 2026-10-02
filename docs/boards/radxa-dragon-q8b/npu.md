@@ -52,65 +52,36 @@ shows them, and takes them back (1) by hand.
 
 ## Setting it up
 
-The files are in [npu/](npu/). As root unless said otherwise.
+Two ports in this repository's overlay ([ports/](../../../ports/)):
 
-1. **Prerequisites** (already on the Q8B for FastRPC):
-   `/boot/firmware/qcom/sc8280xp/qccdsp8280.mbn` (the CDSP's firmware, from
-   linux-firmware); the FastRPC shells in
-   `/usr/share/qcom/sc8280xp/radxa/dragon-q8b/dsp/cdsp/` (from Radxa's
-   Ubuntu); and `/usr/share/qcom/conf.d/radxa-dragon-q8b.yaml`:
+- **`misc/linux-fastrpc`**, a package like any other: the FastRPC library
+  for Linux programs (built from [the fork](https://github.com/JamesKane/fastrpc),
+  branch `freebsd`, which builds without libbsd, with libyaml, cross-built
+  with LLVM's clang against Rocky 9's sysroot: nothing Linux runs to build
+  it), and the Q8B's DSP files from Radxa's firmware packages (the CDSP's
+  firmware in `/boot/firmware`, the FastRPC shells and the library's
+  configuration in `/usr/local/share/qcom`).
+- **`misc/qairt`**, which **may only be built locally**: Qualcomm's licence
+  allows no standalone redistribution of the SDK (`NO_PACKAGE`). Download the
+  QAIRT SDK from Qualcomm (the licence is yours to accept), unzip it, and
+  build with `QAIRT_SDK` naming it; the port checks it is 2.51.0 build
+  260929181845. It installs QNN's Linux tools and libraries and the v68 DSP
+  libraries in `/usr/local/qnn`, the `qnn` command, the `qnn` rc service and
+  the HTP configuration; with its `CONVERTERS` option (on), the SDK's
+  converters, a Python 3.12 for aarch64 Linux and the packages they import
+  (all distfiles, unpacked with nothing Linux run).
 
-       machines:
-         Radxa Dragon Q8B:
-           DSP_LIBRARY_PATH: sc8280xp/radxa/dragon-q8b/dsp
+The Linux layer must be running before Rocky 9's packages install:
 
-2. **The Linux layer and Rocky 9.** The package's install script wants the
-   layer loaded first:
+    sysrc linux_enable=YES
+    service linux start
+    cd /path/to/AbyssBSD/ports/misc/linux-fastrpc && make install clean
+    cd ../qairt && make QAIRT_SDK=/path/to/qairt/2.51.0.260929 install clean
+    sysrc qnn_enable=YES
+    service qnn start
 
-       sysrc linux_enable=YES
-       service linux start
-       pkg install linux_base-rl9 linux-rl9-devtools
-
-3. **QNN.** Download the QAIRT SDK from Qualcomm (its licence is yours to
-   accept), unzip it, and install the parts that run here (the
-   `aarch64-ubuntu-gcc9.4` tools and libraries, the `hexagon-v68` DSP
-   libraries):
-
-       sh npu/install-qairt.sh /path/to/qairt/2.51.0.260929
-
-4. **The Linux FastRPC library.** QNN's needs `libcdsprpc` for Linux; Rocky's
-   glibc 2.34 is older than the one Ubuntu's copy needs, so build it, as a
-   user, from the fork (which builds without libbsd) and libyaml 0.2.5
-   (https://pyyaml.org/download/libyaml/yaml-0.2.5.tar.gz,
-   SHA-256 `c642ae9b75fee120b2d96c712538bd2cf283228d2337df2cf2988e3c02678ef4`),
-   then install it as root:
-
-       git clone -b freebsd https://github.com/JamesKane/fastrpc
-       sh npu/build-linux-fastrpc.sh fastrpc yaml-0.2.5.tar.gz ~/lxbuild
-       sh npu/build-linux-fastrpc.sh install fastrpc yaml-0.2.5.tar.gz ~/lxbuild
-
-   The install puts only the libraries in `/usr/local/qnn/lib`: the full
-   `make install` would add systemd and udev files to FreeBSD's `/lib`.
-
-5. **The wrapper, the configuration and the service:**
-
-       install -m 555 npu/qnn /usr/local/qnn/bin/qnn
-       ln -sf /usr/local/qnn/bin/qnn /usr/local/bin/qnn
-       install -m 444 npu/htp_config.json npu/htp_netrun.json /usr/local/qnn/etc/
-       install -m 555 npu/qnn.rc /usr/local/etc/rc.d/qnn
-       sysrc qnn_enable=YES
-       service qnn start
-
-6. **The converters** (to convert and quantize models on the board): the
-   SDK's Python tools and modules (it has aarch64 builds of their native
-   parts, for Python 3.12), a Python 3.12 for aarch64 Linux from
-   [python-build-standalone](https://github.com/astral-sh/python-build-standalone)
-   (`cpython-3.12.15+20261001-aarch64-unknown-linux-gnu-install_only.tar.gz`,
-   SHA-256 `6a1b2e68c6fe749b78bbacb8fa42ff9bc844a72de7ed3ee52428f09a42f2ffc1`),
-   and, with the network up, the packages they import:
-
-       sh npu/install-converter.sh /path/to/qairt/2.51.0.260929 \
-           cpython-3.12.15+20261001-aarch64-unknown-linux-gnu-install_only.tar.gz
+(Building from the overlay outside `/usr/ports`, add
+`OVERLAYS=/path/to/AbyssBSD/ports` so `qairt` finds `linux-fastrpc`.)
 
 ## Running
 
@@ -130,7 +101,7 @@ syslog (`/var/log/messages`), QNN's backend included.
 
 ## Models
 
-The converters run here, under the Linux layer (step 6): `qairt-converter`
+The converters run here, under the Linux layer (`CONVERTERS`): `qairt-converter`
 turns an ONNX (or TFLite, TensorFlow, PyTorch) model into a `.dlc`;
 `qairt-quantizer` quantizes it, calibrated on sample inputs, for the v68 HTP,
 which runs fixed point only; `qnn-net-run` loads the `.dlc` through
