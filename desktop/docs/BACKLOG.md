@@ -186,8 +186,9 @@ scheduled; each is small and self-contained:
   (PHASE16 P16.4b, HANDOFF §2.113). **Raised by the 12700KF** (§2.115): its
   board has both kinds and the case button is the fixed one, so on a typical
   desktop board the dialog is never offered;
-- **amdgpu's page-flip news is late under load** (HANDOFF §2.119) — **this is
-  C2 on metal now.** With twelve plain busy loops and no Wayland traffic, a
+- **C2 on metal — parked 2026-10-02** (HANDOFF §2.120: what it is not, and
+  the thread to pull). Formerly "amdgpu's page-flip news is late under load"
+  (HANDOFF §2.119) — **that explanation did not survive the measurements.** With twelve plain busy loops and no Wayland traffic, a
   real-time compositor that woke on time waited 294 ms once for a flip's
   completion. Under C2's flood of socket syscalls, ≈50 completions a run come
   more than half a period late, and ≈100 of 1800 frames are lost. undertow

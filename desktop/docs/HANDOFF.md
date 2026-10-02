@@ -730,6 +730,40 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.120 C2 on metal, parked: what it is not
+(2026-10-02. Parked by decision after a night of DTrace on the 12700KF; read
+this before measuring again.)
+
+**What is established:** with `metal-bench.sh c2` (a drawing client and C2's
+eleven adversaries) about 90 of 1800 frames are lost, mostly commits refused
+because a flip was still pending. Without the adversaries, 0–2. And under the
+flood, undertow's commits reach the kernel anywhere 2–16 ms before the next
+vblank, against 1–4 ms unloaded.
+
+**What it is not**, each measured under the flood:
+
+| suspect | measured | how |
+|---|---|---|
+| undertow's passes, waits, sleep, compose, commit | all on time (µs) | pid provider on the Swift symbols |
+| the scheduler waking undertow | < 8 µs | `sched:::wakeup` → `on-cpu` |
+| texture uploads | ~2 ms in 8 s | 4999 Hz on-CPU profile |
+| amdgpu's interrupt thread | handled every ≤ 16 ms, never starved | fbt `amdgpu_irq_handler` |
+| interrupt → event → undertow reads it | ~30 µs end to end | fbt `dm_pflip_high_irq`, `drm_crtc_send_vblank_event`, `linux_poll_wakeup`; pid `drmHandleEvent` |
+| DRM's commit worker | starts in 8 µs (priority 47), programs in 16–64 µs, no pre-flip sleeps | fbt `commit_work`, `commit_planes_for_stream`, `pause_sbt("lnxsleep")` |
+| stale flip timestamps | none older than their commit | a counter in `pollFlip` (tried and removed) |
+| undertow's vblank prediction | within 1–2 ms of the real vblank | pid `WlrootsOutput.submit` target vs fbt `dm_crtc_high_irq` |
+| Mesa's worker thread | no change with `GALLIUM_THREAD=0` | |
+| one event loop for everything | a separate backend loop cut refusals 52 → 9 and raised misses | tried and dropped |
+
+**The thread to pull next time:** the commits' odd phase. Their targets are
+right (the prediction row), yet they reach the kernel at varying distances
+before the vblank. Follow each `drm_mode_atomic_ioctl` back to its frame (the
+commit sequence and the target `submit` was given) to see which commits are
+early and why. Perhaps some are not frames at all. Also unexplained: undertow's
+own `wake-late-p99` (12–21 ms), which none of the traces reproduce. The
+DTrace scripts' shapes are in this entry's table; the clock calibration and
+the `*8Undertow…` symbol matching are in §2.119.
+
 ### 2.119 Present on damage — and what C2 on metal is really made of
 (BACKLOG M.1. Found by asking why a static screen could miss a frame.)
 
