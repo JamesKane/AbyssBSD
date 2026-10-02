@@ -113,7 +113,18 @@ It keeps `xdg_wm_base`, `wl_seat`, `wl_shm`, `linux-dmabuf`, and
 presentation-time. Fault injection: an unjailed client gets the same list and
 fails the test.
 
-**P18.4 — files go in through the Open panel (M).**
+**P18.4 — files go in through the Open panel (M). — DONE 2026-10-02.** It
+works differently from the sketch below, and better: the proof is
+**`abyss-portal`'s own descriptor** of the chosen file. Until now `abyss-dbus`
+closed it, and now it hands it to jaild's `grant`. jaild checks that the path
+is resolved and names the descriptor's inode, mounts that one file read-only
+unless the descriptor was writable, and checks the inode again through the
+mount. Each jail has **its own D-Bus**, at `/run/user/bus` in the plan's
+environment (with `GTK_USE_PORTAL=1`), served by an `abyss-dbus --jail`. So a
+jailed caller is known by the bus it is on, with no pid-to-jid lookup.
+`live-jail-files.sh`'s five claims pass in the guest, with gdbus and dbus-monitor
+running inside the jail. Seven faults were injected, and each failed the test.
+P18.5 starts the bus and its bridge for each jail (HANDOFF §2.122).
 The D-Bus FileChooser (Phase 8) answers with a URI, so a jailed application
 needs the file **at a path inside its jail**. When the caller is jailed
 (LOCAL_PEERCRED's pid, then its jid), the portal asks `abyss-jaild` to

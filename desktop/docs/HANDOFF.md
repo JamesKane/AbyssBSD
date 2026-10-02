@@ -730,6 +730,36 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.122 jailparam_import's lengths are not jail_set's, and a `run` that always said 0
+(2026-10-02, PHASE18 P18.4.)
+
+**libjail's `jp_valuelen` is not what to send.** For a string parameter,
+`jailparam_import` `strdup`s the value and leaves `jp_valuelen` at the
+parameter's *maximum*: 256 for `name`, 1024 for `path`. `ap_jail_create`
+sent `jp_valuelen`, so it read past the copy and handed the kernel heap
+garbage. That was a heap over-read of up to 1 KiB, and the kernel refused it
+with a bare `EINVAL` (`kern_jail.c` checks `name[len-1] == '\0'` and gives no
+message) whenever the last byte was not zero. A fresh daemon's heap was zero
+there, so it passed for a day. A daemon that had adopted a jail first failed
+every time. How it was found: DTrace showed the `EINVAL` came from
+`kern_jail_set` itself, and its message-less returns are all
+string-termination checks. A dump of each parameter's length and last byte
+then showed `name len=256 last=165`. Send values as `jailparam_set(3)` does:
+`strlen + 1` for a string, and a boolean as its name alone. `ap_jail_create`
+also passes `errmsg` now, so the kernel can say why when it has a reason.
+
+**`abyss-jail run` exited 0 whatever the program did**, so every
+`inside … && fail` in a test was vacuous. It now waits with
+`EVFILT_PROCDESC`/`NOTE_EXIT`, which the descriptor's holder gets whether it is
+the parent or not, and exits with the status (128 + N for a signal).
+`live-jaild.sh` asserts both, `exit 7` and `kill -9`.
+
+**Defence in depth showed itself.** With the path check removed, a forged
+grant was still refused by the second check ("changed while it was being
+granted": the inode through the mount is not the descriptor's). The test
+still failed, because it asserts the *reason* for each refusal, not just that
+one happened.
+
 ### 2.121 abyss-jaild: a test's fifo, and groups a setuid does not drop
 (2026-10-02, PHASE18 P18.2.)
 

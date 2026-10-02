@@ -98,6 +98,8 @@ public struct JailLayout: Equatable, Sendable {
     public static let runtime = "/run/user"
     /// Where granted files are mounted (P18.4).
     public static let granted = "/run/granted"
+    /// The jail's own D-Bus (P18.4): the portal is the only service on it.
+    public static let bus = "/run/user/bus"
     public static let waylandDisplay = "wayland-0"
 }
 
@@ -159,6 +161,11 @@ extension JailPlan {
         ]
         if cls.wayland {
             env += [("WAYLAND_DISPLAY", JailLayout.waylandDisplay), ("GDK_BACKEND", "wayland")]
+            // Files come in through the Open panel (P18.4): GTK asks the
+            // portal on the jail's own bus, which grants the file it was
+            // given — rather than browsing a filesystem that holds nothing.
+            env += [("DBUS_SESSION_BUS_ADDRESS", "unix:path=\(JailLayout.bus)"),
+                    ("GTK_USE_PORTAL", "1"), ("GDK_DEBUG", "portals")]
         }
 
         return JailPlan(

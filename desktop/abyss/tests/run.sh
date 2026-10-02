@@ -232,6 +232,10 @@ if [ "$live" -eq 1 ]; then
   # sees an allowlist, cannot bind past it, and is named as the jail's.
   echo "== a jail's Wayland boundary =="
   quiet "$root/abyss/tests/live-jail-wayland.sh"
+  # Files into a jail (P18.4): chosen in the Open panel, granted by jaild on
+  # the portal's descriptor — that file alone, and only as far as it was opened.
+  echo "== files into a jail =="
+  quiet "$root/abyss/tests/live-jail-files.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

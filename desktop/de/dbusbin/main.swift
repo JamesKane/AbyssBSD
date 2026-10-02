@@ -1,6 +1,11 @@
 // abyss-dbus — the desktop's portal, on the session bus (PHASE8.md P8.2).
 //
 //   abyss-dbus [--portal SERVICE] [--seconds N] [--once]
+//              [--bus ADDRESS --jail NAME [--jaild SOCKET]]
+//
+// With `--jail` it is a jail's portal (PHASE18 P18.4): on that jail's own bus
+// (`--bus`), and a chosen file is granted into the jail by abyss-jaild and
+// answered by the path it has there.
 //
 // Owns `org.freedesktop.portal.Desktop` and answers
 // `org.freedesktop.portal.FileChooser.OpenFile` / `SaveFile` by asking
@@ -16,6 +21,7 @@
 import CurrentIPC
 import DBusPortal
 import DBusMenus
+import JailD
 import PoolConfig
 import Spawn
 
@@ -56,6 +62,7 @@ var once = false
 // `--menus`: be the GTK menu bridge instead (PHASE10 P10.6) — a process of its
 // own, because the portal half blocks while a file dialog is open.
 var menus = false
+var busAddress: String?, jailName: String?, jaildSocket = JailWire.defaultSocket
 let args = Array(CommandLine.arguments.dropFirst())
 var i = 0
 while i < args.count {
@@ -72,8 +79,20 @@ while i < args.count {
         once = true
     case "--menus":
         menus = true
+    case "--bus":
+        i += 1
+        guard i < args.count else { die("--bus needs an address") }
+        busAddress = args[i]
+    case "--jail":
+        i += 1
+        guard i < args.count else { die("--jail needs a jail's name") }
+        jailName = args[i]
+    case "--jaild":
+        i += 1
+        guard i < args.count else { die("--jaild needs a socket path") }
+        jaildSocket = args[i]
     case "-h", "--help":
-        emit(1, "usage: abyss-dbus [--portal SERVICE] [--seconds N] [--once] | --menus")
+        emit(1, "usage: abyss-dbus [--portal SERVICE] [--seconds N] [--once] [--bus ADDRESS --jail NAME [--jaild SOCKET]] | --menus")
         exit(0)
     default:
         die("unknown option '\(args[i])'")
@@ -86,7 +105,7 @@ signal(SIGPIPE, SIG_IGN)
 
 let conn = DBusConnection()
 do {
-    try conn.connect()
+    try conn.connect(address: busAddress)
 } catch {
     die("cannot reach the session bus: \(error)"
         + " (is DBUS_SESSION_BUS_ADDRESS set, and is dbus-daemon running?)")
@@ -108,6 +127,16 @@ if menus {
 }
 
 let service = DBusPortalService(connection: conn, portalService: portal)
+if let jail = jailName {
+    let socket = jaildSocket
+    service.grant = { path, fd in
+        do { return try JailClient.grant(jail: jail, path: path, file: fd, socket: socket).inside } catch {
+            emit(2, "abyss-dbus: \(jail): \(error)")
+            return nil
+        }
+    }
+    emit(2, "abyss-dbus: the portal of \(jail): chosen files are granted into it")
+}
 // What a foreign toolkit is told (P11.10): the loaded theme's palette, from
 // `abyss-theme palette` beside this binary — or Aqua's, and said so.
 if let text = runPalette(), let s = PortalSettings.from(palette: text) {

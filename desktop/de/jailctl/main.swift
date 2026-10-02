@@ -3,9 +3,16 @@
 //   abyss-jail run CLASS -- PROGRAM [ARG...]
 //       open the class's jail, run PROGRAM in it with this terminal, wait for
 //       it, and let go of the jail (if this was its only holder, it goes).
+//       Exits with PROGRAM's status (128 + N if a signal N killed it), so a
+//       test can ask a jail a yes-or-no question.
 //   abyss-jail hold CLASS [-- PROGRAM [ARG...]...]
 //       open it, print "held NAME jid=N root=… runtime=…", start PROGRAM in it
 //       detached if given, and keep the jail until stdin reaches EOF.
+//   abyss-jail grants NAME          the files granted into a jail (P18.4)
+//   abyss-jail revoke NAME N        take grant N back
+//   abyss-jail grant NAME PATH [--fd-of FILE] [--write]
+//       grant PATH, proven by a descriptor of PATH (or, as a test's forgery,
+//       of FILE), opened read-only (or read-write with --write).
 //   abyss-jail spawn-by-name NAME -- PROGRAM [ARG...]
 //       a test's probe: ask to run in a jail named by NAME rather than held —
 //       jaild must refuse it unless the jail is the caller's own.
@@ -49,10 +56,12 @@ case "run":
     do { j = try JailClient.open(subject, socket: socket) } catch { die("\(error)") }
     do {
         let (_, proc) = try JailClient.spawn(jail: j.jail, argv: program, stdin: 0, stdout: 1, stderr: 2, socket: socket)
-        waitFor(proc)
+        let status = ap_procdesc_wait(proc)
         close(proc)
+        close(j.jail)
+        guard status >= 0 else { die("lost track of \(program[0])") }
+        exit(status & 0x7f == 0 ? (status >> 8) & 0xff : 128 + (status & 0x7f))
     } catch { die("\(error)") }
-    close(j.jail)
 case "hold":
     let j: JailClient.Opened
     do { j = try JailClient.open(subject, socket: socket) } catch { die("\(error)") }
@@ -68,6 +77,21 @@ case "hold":
     while read(0, &b, b.count) > 0 {}
     close(j.jail)
     emit(1, "released \(j.name)")
+case "grants":
+    do { for g in try JailClient.grants(jail: subject, socket: socket) { emit(1, g) } } catch { die("\(error)") }
+case "revoke":
+    guard args.count >= 3, let n = UInt64(args[2]) else { die("revoke needs a jail and a grant number") }
+    do { try JailClient.revoke(jail: subject, grant: n, socket: socket); emit(1, "revoked \(n)") } catch { die("\(error)") }
+case "grant":
+    guard args.count >= 3 else { die("grant needs a jail and a path") }
+    let path = args[2]
+    let proof = args.firstIndex(of: "--fd-of").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } ?? path
+    let fd = open(proof, args.contains("--write") ? O_RDWR : O_RDONLY)
+    guard fd >= 0 else { die("cannot open \(proof): \(String(cString: strerror(errno)))") }
+    do {
+        let g = try JailClient.grant(jail: subject, path: path, file: fd, socket: socket)
+        emit(1, "granted \(g.n) at \(g.inside)")
+    } catch { die("\(error)") }
 case "spawn-by-name":
     let desc = ap_jail_desc_by_name(subject)
     guard desc >= 0 else { die("no jail named \(subject) that this user may see") }

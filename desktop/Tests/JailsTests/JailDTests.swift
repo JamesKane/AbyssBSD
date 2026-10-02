@@ -102,6 +102,36 @@ final class JailDTests: XCTestCase {
         XCTAssertTrue(s.dropLast().allSatisfy { isRun($0, [c.umount, "-f"]) })
     }
 
+    // MARK: - grants (P18.4)
+
+    func testAGrantIsOneFileInADirectoryOfItsOwnReadOnlyUnlessWritable() {
+        let root = "/var/run/abyss-jails/1001/app"
+        let ro = JailSteps.grant(root: root, n: 3, source: "/home/abyss/Documents/notes.txt", writable: false)
+        XCTAssertEqual(ro, [
+            .mkdir(root + "/run/granted/3", uid: 0, gid: 0, mode: 0o755),
+            .write(root + "/run/granted/3/notes.txt", contents: "", mode: 0o644),
+            .run([c.mount, "-t", "nullfs", "-o", "ro,nosuid", "/home/abyss/Documents/notes.txt", root + "/run/granted/3/notes.txt"]),
+        ])
+        let rw = JailSteps.grant(root: root, n: 4, source: "/home/abyss/a.txt", writable: true)
+        XCTAssertEqual(rw.last, .run([c.mount, "-t", "nullfs", "-o", "nosuid", "/home/abyss/a.txt", root + "/run/granted/4/a.txt"]))
+        XCTAssertEqual(JailSteps.grantPath(3, source: "/home/abyss/Documents/notes.txt"), "/run/granted/3/notes.txt")
+    }
+
+    func testRevokeUndoesAGrantInReverse() {
+        let root = "/r"
+        XCTAssertEqual(JailSteps.revoke(root: root, n: 2, source: "/h/x.txt"), [
+            .run([c.umount, "-f", "/r/run/granted/2/x.txt"]), .remove("/r/run/granted/2/x.txt"), .rmdir("/r/run/granted/2"),
+        ])
+    }
+
+    func testAGrantsNameCannotClimb() {
+        XCTAssertEqual(JailSteps.grantName("/a/b.txt"), "b.txt")
+        XCTAssertEqual(JailSteps.grantName("/"), "file")
+        XCTAssertEqual(JailSteps.grantName("/a/.."), "file")
+        XCTAssertEqual(JailSteps.grantName("/a/."), "file")
+        XCTAssertFalse(JailSteps.grantPath(1, source: "/a/..").contains(".."))
+    }
+
     // MARK: - the mount table
 
     func testMountTableParsesFstabLinesAndFindsLeftRoots() {

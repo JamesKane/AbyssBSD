@@ -88,7 +88,13 @@ expect=$(printf '%s\n%s\n%s\nhome-writable\n/home/%s\n/run/user' "$uid" "$(id -g
 [ ! -e "$HOME/made-inside" ] || fail "a file made inside appeared in the real home"
 [ "$(stat -f %u "$HB/$me/app/made-inside")" = "$uid" ] || fail "the file made inside is not the person's"
 jls -j "$N" > /dev/null 2>&1 || fail "a run while held let the jail go (it was the holder's, not the run's)"
-echo "ok: 1. the jail is the person (uid $uid, own group only), no secrets, /usr read-only, a private home, no address"
+# A test asks a jail yes-or-no questions by exit status: `run` must pass it
+# through (a run that always said 0 made every "must fail" check vacuous).
+st=0; J run app -- sh -c 'exit 7' || st=$?
+[ "$st" = 7 ] || fail "run reported exit status $st for a program that exited 7"
+st=0; J run app -- sh -c 'kill -9 $$' || st=$?
+[ "$st" = 137 ] || fail "run reported $st for a program killed by signal 9 (expected 137)"
+echo "ok: 1. the jail is the person (uid $uid, own group only), no secrets, /usr read-only, a private home, no address; run passes exit statuses through"
 
 # ------------------------------------------------------- 2. another person
 if sudo -u "$other" "$W/bin/abyss-jail" --socket "$SOCK" spawn-by-name "$N" -- true > "$W/other" 2>&1; then
@@ -121,7 +127,7 @@ echo "ok: 4. a restarted daemon adopted the held jail, and removed it when let g
 
 # --------------------------------------- 5. killed, let go while dead, swept
 rm -f "$W/h3"; hold h3; exec 4>"$W/h3"
-await "$W/h3.out" "^held $N " "the third hold was not granted"
+await "$W/h3.out" "^held $N " "the third hold was not granted: $(cat "$W/h3.out" 2>/dev/null)"
 stop
 exec 4>&-
 await "$W/h3.out" "^released" "the third hold did not let go"

@@ -65,6 +65,9 @@ final class JailsTests: XCTestCase {
         XCTAssertTrue(p.params.contains { $0 == ("devfs_ruleset", "4") })
         XCTAssertEqual(p.env.first { $0.0 == "XDG_RUNTIME_DIR" }?.1, "/run/user")
         XCTAssertEqual(p.env.first { $0.0 == "WAYLAND_DISPLAY" }?.1, "wayland-0")
+        XCTAssertEqual(p.env.first { $0.0 == "DBUS_SESSION_BUS_ADDRESS" }?.1, "unix:path=/run/user/bus",
+                       "the jail's own bus, inside its runtime directory")
+        XCTAssertEqual(p.env.first { $0.0 == "GTK_USE_PORTAL" }?.1, "1")
         XCTAssertNil(p.homeDataset)
         XCTAssertFalse(p.copies.contains { $0.target == "/etc/resolv.conf" }, "no network, no resolver")
         XCTAssertEqual(p.violations(for: cls("app"), hostHome: hostHome), [])

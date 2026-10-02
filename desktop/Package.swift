@@ -592,7 +592,7 @@ let package = Package(
         // that gets a stock GTK app the Finder as its file chooser.
         .executableTarget(
             name: "abyss-dbus",
-            dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC", "Spawn", "PoolConfig"],
+            dependencies: ["DBusPortal", "DBusMenus", "CurrentIPC", "Spawn", "PoolConfig", "JailD"],
             path: "de/dbusbin"
         ),
         // Read the machine through the FreeBSD-native bridges.

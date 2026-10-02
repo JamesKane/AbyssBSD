@@ -9,6 +9,7 @@
 #include <sys/event.h>
 #include <sys/jail.h>
 #include <sys/procdesc.h>
+#include <sys/sysctl.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <fcntl.h>
@@ -25,7 +26,8 @@ int ap_jail_create(const char *const *keys, const char *const *values, int n,
                    int *owning_desc, char *err, size_t errlen) {
     if (n <= 0 || n > 32) { errno = EINVAL; return -1; }
     struct jailparam jp[32];
-    struct iovec iov[2 * 32 + 2];
+    struct iovec iov[2 * 32 + 4];
+    char kmsg[256] = "";
     int ni = 0, made = 0, jid = -1;
     if (err && errlen) err[0] = '\0';
     for (int i = 0; i < n; i++) {
@@ -38,14 +40,33 @@ int ap_jail_create(const char *const *keys, const char *const *values, int n,
             if (err) snprintf(err, errlen, "%s: %s", keys[i], jail_errmsg);
             goto out;
         }
+        /*
+         * As jailparam_set(3) sends them, not as jailparam_import leaves
+         * them: a string's jp_valuelen is the parameter's MAXIMUM (256 for
+         * name, 1024 for path) while jp_value is a strdup of the string, so
+         * sending jp_valuelen read past the copy and handed the kernel heap
+         * garbage — EINVAL whenever the byte at the end was not zero, which
+         * depended on what the daemon had allocated before (HANDOFF §2.122).
+         * A boolean is its name alone.
+         */
         iov[ni].iov_base = jp[i].jp_name; iov[ni++].iov_len = strlen(jp[i].jp_name) + 1;
-        iov[ni].iov_base = jp[i].jp_value; iov[ni++].iov_len = jp[i].jp_valuelen;
+        if (jp[i].jp_flags & (JP_BOOL | JP_NOBOOL)) {
+            iov[ni].iov_base = NULL; iov[ni++].iov_len = 0;
+        } else if ((jp[i].jp_ctltype & CTLTYPE) == CTLTYPE_STRING) {
+            iov[ni].iov_base = jp[i].jp_value; iov[ni++].iov_len = strlen(jp[i].jp_value) + 1;
+        } else {
+            iov[ni].iov_base = jp[i].jp_value; iov[ni++].iov_len = jp[i].jp_valuelen;
+        }
     }
     *owning_desc = -1;
     iov[ni].iov_base = (void *)"desc"; iov[ni++].iov_len = sizeof "desc";
     iov[ni].iov_base = owning_desc; iov[ni++].iov_len = sizeof *owning_desc;
+    /* The kernel says why it refused, here, when it can (vfs_opterror). */
+    iov[ni].iov_base = (void *)"errmsg"; iov[ni++].iov_len = sizeof "errmsg";
+    iov[ni].iov_base = kmsg; iov[ni++].iov_len = sizeof kmsg;
     jid = jail_set(iov, ni, JAIL_CREATE | JAIL_OWN_DESC);
-    if (jid < 0 && err) snprintf(err, errlen, "jail_set: %s", strerror(errno));
+    if (jid < 0 && err)
+        snprintf(err, errlen, "jail_set: %s%s%s", strerror(errno), kmsg[0] ? ": " : "", kmsg);
 out:
     jailparam_free(jp, made);
     return jid;
@@ -124,6 +145,18 @@ int ap_procdesc_exited(int procfd) {
     return poll(&p, 1, 0) > 0 && (p.revents & POLLHUP) ? 1 : 0;
 }
 
+int ap_procdesc_wait(int procfd) {
+    int kq = kqueuex(KQUEUE_CLOEXEC);
+    if (kq < 0) return -1;
+    struct kevent ev, got;
+    EV_SET(&ev, procfd, EVFILT_PROCDESC, EV_ADD, NOTE_EXIT, 0, NULL);
+    int r;
+    do { r = kevent(kq, &ev, 1, &got, 1, NULL); } while (r < 0 && errno == EINTR);
+    close(kq);
+    if (r <= 0) return -1;
+    return (int)got.data;
+}
+
 #else /* not FreeBSD: no jails */
 
 int ap_jail_create(const char *const *keys, const char *const *values, int n,
@@ -147,5 +180,6 @@ int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
     errno = ENOSYS; return -1;
 }
 int ap_procdesc_exited(int procfd) { (void)procfd; return 0; }
+int ap_procdesc_wait(int procfd) { (void)procfd; errno = ENOSYS; return -1; }
 
 #endif

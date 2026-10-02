@@ -50,4 +50,11 @@ int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
 /* Whether a process descriptor's process has exited (POLLHUP). */
 int ap_procdesc_exited(int procfd);
 
+/*
+ * Wait for a process descriptor's process to exit and return its wait(2)
+ * status (EVFILT_PROCDESC, NOTE_EXIT) — which the holder gets, parent or not.
+ * -1 with errno on failure.
+ */
+int ap_procdesc_wait(int procfd);
+
 #endif

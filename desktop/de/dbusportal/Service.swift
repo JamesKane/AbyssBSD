@@ -53,6 +53,12 @@ public final class DBusPortalService {
     public private(set) var served = 0
     /// What we tell a foreign toolkit about how this desktop looks (P8.3).
     public var settings: PortalSettings = .aqua
+    /// For a jail's bus (PHASE18 P18.4): put the chosen file where the caller
+    /// can open it — given the path the person chose and the portal's
+    /// descriptor of it, the path inside the jail, or nil if it could not be
+    /// granted (the chooser then fails, rather than name a file the caller
+    /// cannot reach).
+    public var grant: ((String, Int32) -> String?)?
 
     public init(connection: DBusConnection, portalService: String? = nil) {
         self.conn = connection
@@ -206,7 +212,22 @@ public final class DBusPortalService {
         // in its Response — the answer it defines is a URI — so this one is
         // closed rather than leaked, and the caller opens the path by name.
         // PHASE8.md §6.6 is about exactly this asymmetry.
+        //
+        // **Except in a jail** (PHASE18 P18.4), where the descriptor is the
+        // proof that lets the file in: the caller cannot open the path the
+        // person chose, so it is mounted where the caller can, and that is the
+        // path the answer names.
         if let fd = reply.takeFD("file") {
+            if let grant, reply.bool("ok") == true, let chosen = reply.string("path") {
+                if let inside = grant(chosen, fd) {
+                    log("granted \(chosen) to the jail as \(inside)")
+                    reply.set("path", inside)
+                } else {
+                    log("could not grant \(chosen) to the jail")
+                    reply.set("ok", false)
+                    reply.set("error", "could not be granted")
+                }
+            }
             close(fd)
         }
         reply.closeFDs()

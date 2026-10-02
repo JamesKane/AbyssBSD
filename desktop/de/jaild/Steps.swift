@@ -92,6 +92,37 @@ public enum JailSteps {
     }
 }
 
+extension JailSteps {
+    /// A granted file's name inside: its own, unless that could not be one.
+    public static func grantName(_ source: String) -> String {
+        let base = source.split(separator: "/").last.map(String.init) ?? ""
+        return base.isEmpty || base == "." || base == ".." ? "file" : base
+    }
+
+    /// Where grant `n` of `source` is, inside the jail.
+    public static func grantPath(_ n: Int, source: String) -> String {
+        "\(JailLayout.granted)/\(n)/\(grantName(source))"
+    }
+
+    /// Mount one file into a running jail (P18.4, §4.4): a directory of its
+    /// own, a placeholder to mount over, and nullfs — read-only unless the
+    /// person's own descriptor of it was writable.
+    public static func grant(root: String, n: Int, source: String, writable: Bool,
+                             commands c: JailCommands = JailCommands()) -> [JailStep] {
+        let dir = root + JailLayout.granted + "/\(n)"
+        let target = root + grantPath(n, source: source)
+        return [.mkdir(dir, uid: 0, gid: 0, mode: 0o755),
+                .write(target, contents: "", mode: 0o644),
+                .run([c.mount, "-t", "nullfs", "-o", writable ? "nosuid" : "ro,nosuid", source, target])]
+    }
+
+    /// Take grant `n` back: unmount it, and remove what held it.
+    public static func revoke(root: String, n: Int, source: String, commands c: JailCommands = JailCommands()) -> [JailStep] {
+        let target = root + grantPath(n, source: source)
+        return [.run([c.umount, "-f", target]), .remove(target), .rmdir(root + JailLayout.granted + "/\(n)")]
+    }
+}
+
 /// `mount -p`, which prints the mount table as fstab(5) lines.
 public enum MountTable {
     /// The mount points, in the order the kernel lists them. fstab escapes a
