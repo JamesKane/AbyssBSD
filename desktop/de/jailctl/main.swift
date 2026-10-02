@@ -25,6 +25,11 @@
 //       ask the session for an agent session in CLASS (P18.8): prints
 //       "agent SESSION socket=… transcript=… pid=…"; `abyss-agent ask
 //       --listen SOCKET` then talks to it.
+//   abyss-jail crashes
+//       the confined programs that died of a signal this session (P18.9).
+//   abyss-jail debug N
+//       a `debug` session for crash N, its core granted read-only; prints as
+//       `agent` does.
 //   abyss-jail launch CLASS -- PROGRAM [ARG...]
 //       ask the session to start PROGRAM confined; an ARG that names one of
 //       your files is granted into the jail and rewritten. What an
@@ -82,6 +87,15 @@ if args.first == "serve" {
     server.shutdownAndUnlink()
     exit(0)
 }
+if args.first == "crashes" {
+    var m = Msg(); m.set("method", "crashes")
+    do {
+        let r = try Current.call(KeeperWire.service, m)
+        guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
+        for c in JailWire.unlist(r.bytes("crashes") ?? []) { emit(1, c) }
+        exit(0)
+    } catch { die("the session's jails are not running (\(error))") }
+}
 guard args.count >= 2 else {
     emit(2, "usage: abyss-jail [--socket PATH] run|hold CLASS [-- PROGRAM ARG...] | spawn-by-name NAME -- PROGRAM ARG...")
     exit(2)
@@ -132,6 +146,13 @@ case "launch":
     } catch { die("the session's jails are not running (\(error))") }
 case "agent":
     var m = Msg(); m.set("method", "agent"); m.set("class", subject)
+    do {
+        let r = try Current.call(KeeperWire.service, m)
+        guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
+        emit(1, "agent \(r.string("session") ?? "") socket=\(r.string("socket") ?? "") transcript=\(r.string("transcript") ?? "") pid=\(r.uint64("pid") ?? 0)")
+    } catch { die("the session's jails are not running (\(error))") }
+case "debug":
+    var m = Msg(); m.set("method", "debug"); m.set("crash", UInt64(subject) ?? 0)
     do {
         let r = try Current.call(KeeperWire.service, m)
         guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }

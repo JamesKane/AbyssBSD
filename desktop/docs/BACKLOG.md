@@ -183,6 +183,14 @@ per platform).
   a jail root: tmpfs → ufs established by `nullfs_unmount`/`vflush`, ufs →
   tmpfs attempted by `tmpfs_unmount`/`vflush`). A warning, not a panic, and
   the box carried on. Upstream may know it; worth a look before a release kernel.
+- **lldb asserts on a core whose binary is not where it ran** (2026-10-02,
+  P18.9). Base lldb 21 on 16-CURRENT, given `-c CORE OTHER/PATH` when the
+  core recorded `PATH`, aborts: `Assertion failed: (GetModule().get()),
+  function ResolveContainedAddress, Section.cpp:263`. A release build would
+  likely fail more quietly, but it should load the binary it was given. The
+  desktop works around it (a link at the recorded path, HANDOFF §2.130).
+  Reproduce: build any program, crash it, move the binary, `lldb --batch -c
+  prog.core moved/prog -o bt`. For upstream LLVM or FreeBSD's import.
 What the review found belongs in the kernel (API-STUDY §3–§4). None is
 scheduled; each is small and self-contained:
 

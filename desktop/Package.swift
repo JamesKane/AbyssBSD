@@ -355,11 +355,11 @@ let package = Package(
         .executableTarget(name: "abyss-model", dependencies: ["Model", "CProc", "CurrentIPC", "Spawn"], path: "de/modelbin"),
         // The agent runtime, inside its jail (PHASE18 P18.8): the loop, and
         // the tools that read what the jail holds.
-        .target(name: "Agent", dependencies: ["Model"], path: "de/agent"),
+        .target(name: "Agent", dependencies: ["Model", "Spawn"], path: "de/agent"),
         .executableTarget(name: "abyss-agent", dependencies: ["Agent", "Jails", "Model", "CurrentIPC"], path: "de/agentbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
-                linkerSettings: jailLibraries),
+                linkerSettings: jailLibraries + utilLibraries),
         // abyss-jaild's steps, performer, service and client (P18.2).
         .target(name: "JailD", dependencies: ["Jails", "CJail", "CProc", "CurrentIPC", "CPlatform", "Spawn", "PoolConfig"],
                 path: "de/jaild"),

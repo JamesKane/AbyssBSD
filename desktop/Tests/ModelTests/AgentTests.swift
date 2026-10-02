@@ -135,6 +135,30 @@ final class AgentTests: XCTestCase {
 
     // MARK: - tools
 
+    /// lldb on one crash: the model picks the command, never the target.
+    func testTheLldbToolsTargetIsFixed() throws {
+        var t = Array("/tmp/abyss-lldb-XXXXXX".utf8CString)
+        let dir = String(cString: mkdtemp(&t)!)
+        defer { unlink(dir + "/lldb"); rmdir(dir) }
+        let fake = dir + "/lldb"
+        let fd = open(fake, O_WRONLY | O_CREAT, 0o755)
+        let script = "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done\n"
+        _ = Array(script.utf8).withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        close(fd)
+        let tool = AgentTools.lldb(core: "/run/granted/1/crasher.core", binary: "/run/granted/2/crasher", lldb: fake)
+        XCTAssertEqual(tool.run(.object([("command", .string("bt"))])),
+                       "[--batch][--no-lldbinit][-c][/run/granted/1/crasher.core][/run/granted/2/crasher][-o][bt]")
+        XCTAssertEqual(tool.run(.object([("command", .string("bt; -c /etc/other.core"))])),
+                       "[--batch][--no-lldbinit][-c][/run/granted/1/crasher.core][/run/granted/2/crasher][-o][bt; -c /etc/other.core]",
+                       "the command is one argument: it cannot name another core")
+        XCTAssertEqual(tool.run(.object([("command", .string("bt")), ("core", .string("/etc/other.core")),
+                                         ("binary", .string("/bin/sh"))])),
+                       "[--batch][--no-lldbinit][-c][/run/granted/1/crasher.core][/run/granted/2/crasher][-o][bt]",
+                       "a model that names another core or binary is not heard")
+        XCTAssertEqual(tool.run(.object([])), "error: lldb needs a command")
+        XCTAssertTrue(AgentTools.lldb(core: "c", binary: "b", lldb: dir + "/none").run(.object([("command", .string("bt"))])).hasPrefix("error:"))
+    }
+
     func testTheReadingTools() throws {
         var t = Array("/tmp/abyss-agent-XXXXXX".utf8CString)
         let dir = String(cString: mkdtemp(&t)!)

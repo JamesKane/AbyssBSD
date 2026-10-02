@@ -1,10 +1,13 @@
 // abyss-agent — an agent session, inside its jail (PHASE18 P18.8).
 //
 //   abyss-agent serve --model SOCKET --listen SOCKET [--class CLASS]
+//                     [--core CORE --binary BINARY --crash WHAT]
 //       the loop, answering questions on the socket at --listen (inside the
 //       jail's runtime directory; the keeper hands its outside path to the
 //       chat window). Its only way to a model is abyss-model at --model, and
 //       its tools read only what the jail holds. `bye` ends the session.
+//       With --core and --binary (a `debug` session, P18.9) it also has lldb
+//       on that core, and is told what crashed.
 //   abyss-agent ask --listen SOCKET TEXT...
 //       ask the agent at SOCKET: one `call=` line per tool as it is called,
 //       then its answer, then `stop=` and `steps=`. Exits 0 when it answered, 3
@@ -49,14 +52,24 @@ case "serve":
     // Where its home is, said outright: on the 12700KF, told only "your own
     // home", Granite tried /home/agent, /abyss and / before /home/abyss.
     let home = getenv("HOME").map { String(cString: $0) } ?? "/home"
-    let loop = AgentLoop(
-        system: """
+    var system = """
         You are an agent on the AbyssBSD desktop, working for the person who asked. \
         You run confined, in a jail of class \(cls): you see the system read-only, your own home \
         (\(home)), and only the files the person granted you (under \(JailLayout.granted)). \
         Use the tools to look before you answer. Answer plainly and briefly.
-        """,
-        tools: AgentTools.reading, model: modelOverSocket(modelSocket))
+        """
+    var tools = AgentTools.reading
+    // A debug session (P18.9): one crash, its core and binary granted in.
+    if let core = opt("--core"), let binary = opt("--binary") {
+        tools.append(AgentTools.lldb(core: core, binary: binary))
+        system += " " + """
+        A program crashed: \(opt("--crash") ?? "it was killed by a signal"). \
+        Its core is \(core) and its binary \(binary); the lldb tool runs one command on them. \
+        Find where and why it crashed — start with "bt" — and say so in a short report: \
+        the signal, the frame that faulted with its file and line if known, and the likely cause.
+        """
+    }
+    let loop = AgentLoop(system: system, tools: tools, model: modelOverSocket(modelSocket))
     emit(1, "ready (class \(cls), model at \(modelSocket))")
     while true {
         guard let c = try? server.accept() else { continue }

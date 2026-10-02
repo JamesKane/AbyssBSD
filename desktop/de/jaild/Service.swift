@@ -298,6 +298,10 @@ public final class JailService {
         m.set("name", plan.name)
         m.set("root", plan.root)
         m.set("runtime", plan.root + JailLayout.runtime)
+        // The jail's home as it really is on the host (its source, not its
+        // mount in the root): where a file the jail wrote, a core, can be
+        // named for a grant (P18.9) — a path in a root is refused.
+        m.set("home", plan.homeSource)
         m.set("shared", shared)
         return m
     }
@@ -322,11 +326,19 @@ public final class JailService {
         let env = JailWire.environment(plan: l.plan.env, extra: JailWire.unlist(request.bytes("env") ?? []))
         let home = l.plan.env.first { $0.0 == "HOME" }?.1 ?? "/"
         guard let acct = accountOf(uid) else { return (JailWire.error("uid \(uid) has no account"), []) }
+        // The person's login-class limits, not jaild's own (P18.9): under
+        // some rc setups jaild's core size is 0, and a confined crash would
+        // leave nothing to read.
+        var limits = [UInt8](repeating: 0, count: Int(AP_LIMITS_SIZE))
+        let haveLimits = ap_class_limits(uid, &limits) == 0
+        if !haveLimits { say("jaild: no login class for uid \(uid) (\(errText())): \(argv[0]) keeps jaild's limits") }
         var proc: Int32 = -1
         let pid = withCStrings(argv) { a in withCStrings(env) { e in
-            ap_jail_spawn(jail, uid, acct.user.gid, a, e, home,
-                          request.fd("stdin") ?? -1, request.fd("stdout") ?? -1, request.fd("stderr") ?? -1,
-                          request.bool("daemon") == true ? 1 : 0, &proc)
+            limits.withUnsafeBytes { l in
+                ap_jail_spawn(jail, uid, acct.user.gid, a, e, home,
+                              request.fd("stdin") ?? -1, request.fd("stdout") ?? -1, request.fd("stderr") ?? -1,
+                              request.bool("daemon") == true ? 1 : 0, haveLimits ? l.baseAddress : nil, &proc)
+            }
         } }
         guard pid > 0 else { return (JailWire.error("cannot start \(argv[0]) in \(name): \(errText())"), []) }
         say("jaild: \(argv[0]) is pid \(pid) in \(name)")
@@ -450,6 +462,9 @@ public enum JailClient {
         /// The jail's runtime directory, as the host sees it: bind the jail's
         /// Wayland socket here (P18.3).
         public let runtime: String
+        /// The jail's home's source on the host (P18.9): a core it left is
+        /// here, outside every jail's root.
+        public let home: String
         public let shared: Bool
     }
 
@@ -475,7 +490,8 @@ public enum JailClient {
         var r = try call(m, socket: socket)
         guard let fd = r.takeFD("jail") else { throw Refused(description: "no jail descriptor in the answer") }
         return Opened(jail: fd, jid: r.uint64("jid") ?? 0, name: r.string("name") ?? "", root: r.string("root") ?? "",
-                      runtime: r.string("runtime") ?? "", shared: r.bool("shared") ?? false)
+                      runtime: r.string("runtime") ?? "", home: r.string("home") ?? "",
+                      shared: r.bool("shared") ?? false)
     }
 
     /// Mount `path` into the caller's jail `name`, proven by `file` (the

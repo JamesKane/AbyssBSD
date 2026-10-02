@@ -45,7 +45,23 @@ int ap_jail_removed(int kq);
  */
 int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
                   const char *const *argv, const char *const *envp, const char *cwd,
-                  int in, int out, int err, int daemon, int *procfd);
+                  int in, int out, int err, int daemon, const void *limits, int *procfd);
+
+/*
+ * The resource limits of `uid`'s login class (login.conf(5)), resolved in the
+ * caller — setusercontext(3) allocates, and a pdfork child may only call
+ * async-signal-safe functions — for ap_jail_spawn to set with setrlimit
+ * before it gives up root (PHASE18 P18.9). Without it a jailed program has
+ * jaild's own limits: a core size of 0 under some rc setups, so a crash
+ * leaves nothing to read (§4.7). Start from the caller's own limits, with
+ * the class's values over them, as setusercontext's LOGIN_SETRESOURCES does.
+ * `out` holds AP_LIMITS_SIZE bytes; returns 0, or -1 with errno.
+ */
+#define AP_LIMITS_SIZE 1024
+int ap_class_limits(unsigned uid, void *out);
+
+/* One limit of a set ap_class_limits filled: cur and max, for a test. */
+int ap_limit_of(const void *limits, int resource, unsigned long long *cur, unsigned long long *max);
 
 /*
  * Every mount point, as the kernel has it (getmntinfo(3)), NUL-separated in

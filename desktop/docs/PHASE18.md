@@ -363,6 +363,27 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   binary come in as read-only grants, the agent's tool is `lldb --batch` on
   them, and it writes only a report into the transcript. No network, no
   vocabulary. This is 18b's first visible deliverable.
+
+  **P18.9a — the plumbing — DONE 2026-10-02.**
+  - **jaild gives a spawned program the person's login-class limits**
+    (`ap_class_limits`, applied with `setrlimit` before it gives up root).
+  - **The keeper keeps a crash** when a program it launched dies of a signal:
+    the program, the signal, whether a core was written, and where the core
+    and binary are, named by the home's source (jaild reports it now).
+    `abyss-jail crashes` lists them.
+  - **`abyss-jail debug N`** starts a session in `debug` with that crash's
+    core and binary granted read-only. A home binary is linked at its recorded
+    path, because lldb needs it there.
+  - **The `debug` class's tool is `lldb`**: `--batch` on that core and binary,
+    fixed by the session; the model chooses only the command.
+  - Tests: 5 JailsTests on `Crash`; the lldb tool's tests (the target cannot
+    be moved by the model); `live-crash.sh` claims 1–5 in the guest, with jaild
+    at a core size of 0; the earlier jail and agent live tests stay green. 7
+    faults injected, all caught (one after the test learned to send the
+    argument the fault listened to).
+
+  **P18.9b, next:** the "quit unexpectedly" dialog with **Ask the Agent**,
+  opening the Agent window on that session; then the 12700KF.
 - **P18.10 — tools are the vocabulary (M).** A vocabulary bridge per agent
   jail, beside the model socket: Phase 10's `describe`/`validate`/`activate`
   over `CurrentIPC`, for **the applications this session was given** (§6b.2)

@@ -25,6 +25,11 @@
 // the jail, and `abyss-agent` started in the jail on it. The chat window talks
 // to the agent's socket; when the agent ends, its model goes too.
 //
+// When a program it launched dies of a signal (P18.9), it keeps a crash:
+// what died, how, and where its core is in the jail's home. `debug N` starts
+// a session in the `debug` class with that core, and the binary if the jail
+// does not see it already, granted in read-only — that crash and no other.
+//
 // And it watches `jails.ini` (P18.6): when its `[apps]` changes — an
 // application put in a jail, or let out — it runs `abyss-appgen` again, so
 // the bundles say so now rather than at the next login.
@@ -33,6 +38,7 @@
 // process cannot — the socket is in the session's runtime directory, which no
 // jail can see.
 
+import CJail
 import CurrentIPC
 import CProc
 import CWayland
@@ -79,6 +85,70 @@ public enum LaunchFiles {
     }
 }
 
+/// A confined program that died of a signal (P18.9). Pure, given the wait
+/// status and where things are.
+public struct Crash: Equatable, Sendable {
+    public var id: Int
+    public var program: String
+    public var jail: String
+    public var signal: Int32
+    public var coreDumped: Bool
+    /// The core, as the host sees it (it may not exist: a core size of 0).
+    public var core: String
+    /// The binary inside the jail, and as the host sees it.
+    public var binaryInside: String
+    public var binary: String
+
+    public init(id: Int, program: String, jail: String, signal: Int32, coreDumped: Bool,
+                core: String, binaryInside: String, binary: String) {
+        self.id = id; self.program = program; self.jail = jail; self.signal = signal
+        self.coreDumped = coreDumped; self.core = core; self.binaryInside = binaryInside; self.binary = binary
+    }
+
+    /// The signal and whether a core was written, from a wait(2) status; nil
+    /// for a program that exited on its own, whatever its code.
+    public static func signal(of status: Int32) -> (signal: Int32, core: Bool)? {
+        let sig = status & 0x7f
+        guard sig != 0, sig != 0x7f else { return nil }
+        return (sig, status & 0x80 != 0)
+    }
+
+    /// The kernel's name for its core (`kern.corefile` = `%N.core`): the
+    /// process's name, which is its file's, cut to MAXCOMLEN (19).
+    public static func coreName(_ program: String) -> String {
+        let base = program.split(separator: "/").last.map(String.init) ?? program
+        return String(base.prefix(19)) + ".core"
+    }
+
+    /// Where the binary is inside the jail: as given when absolute, else the
+    /// first of the jail's PATH that has it (asked of the host, which sees
+    /// the jail's root at `root`).
+    public static func binaryInside(_ program: String, root: String,
+                                    path: [String] = ["/bin", "/usr/bin", "/usr/local/bin"]) -> String? {
+        if program.hasPrefix("/") { return program }
+        return path.map { $0 + "/" + program }.first { access(root + $0, X_OK) == 0 }
+    }
+
+    public static func signalName(_ s: Int32) -> String {
+        switch s {
+        case SIGSEGV: return "SIGSEGV"
+        case SIGBUS: return "SIGBUS"
+        case SIGABRT: return "SIGABRT"
+        case SIGILL: return "SIGILL"
+        case SIGFPE: return "SIGFPE"
+        case SIGKILL: return "SIGKILL"
+        case SIGTERM: return "SIGTERM"
+        case SIGTRAP: return "SIGTRAP"
+        default: return "signal \(s)"
+        }
+    }
+
+    /// What it said in a sentence: the debug agent's first line of context.
+    public var summary: String {
+        "\(program) was killed by \(Crash.signalName(signal))" + (coreDumped ? " and left a core" : ", leaving no core")
+    }
+}
+
 public final class JailKeeper {
     public struct Held {
         public var opened: JailClient.Opened
@@ -96,7 +166,9 @@ public final class JailKeeper {
     /// `abyss-appgen` and its arguments, run when `[apps]` changes (P18.6).
     public var appgen: [String]?
     private var appsSeen = ""
-    private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String, model: ap_child?)] = []
+    private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String, model: ap_child?, root: String, home: String)] = []
+    /// Crashes seen this session, by number (P18.9).
+    public private(set) var crashes: [Int: Crash] = [:]
     private var sessions = 0
     /// Where agent transcripts are kept: outside every jail, and past the
     /// session — "the session is the log".
@@ -203,7 +275,7 @@ public final class JailKeeper {
             args[i] = g.inside
         }
         let (pid, proc) = try JailClient.spawn(jail: h.opened.jail, argv: args, socket: jaildSocket)
-        procs.append((proc, pid, argv[0], h.opened.name, nil))
+        procs.append((proc, pid, args[0], h.opened.name, nil, h.opened.root, h.opened.home))
         say("jails: launched \(argv[0]) as pid \(pid) in \(h.opened.name)")
         return pid
     }
@@ -226,7 +298,66 @@ public final class JailKeeper {
         return nil
     }
 
-    public func agent(_ cls: String) throws -> AgentSession {
+    // MARK: - crashes (P18.9)
+
+    private func crashed(_ program: String, jail: String, root: String, home: String, signal: Int32, coreDumped: Bool) {
+        // Named by the home's source, not its mount in the root: jaild grants
+        // nothing from inside a jail's root (no jail-to-jail through a tree).
+        let me = getpwuid(getuid()).map { String(cString: $0.pointee.pw_name) } ?? ""
+        let core = home + "/" + Crash.coreName(program)
+        let inside = Crash.binaryInside(program, root: root) ?? program
+        let homeInside = "/home/" + me
+        let binary = JailPlan.under(inside, homeInside) ? home + inside.dropFirst(homeInside.count) : root + inside
+        let c = Crash(id: crashes.count + 1, program: program, jail: jail, signal: signal,
+                      coreDumped: coreDumped && access(core, R_OK) == 0, core: core,
+                      binaryInside: inside, binary: binary)
+        crashes[c.id] = c
+        say("jails: crash \(c.id): \(c.summary) in \(jail)\(c.coreDumped ? " (core \(core))" : "")")
+    }
+
+    /// A `debug` session for crash `id`: its core, and its binary if the debug
+    /// jail does not see it anyway, granted read-only — that crash, no other.
+    public func debug(_ id: Int) throws -> AgentSession {
+        guard let c = crashes[id] else { throw JailClient.Refused(description: "there is no crash \(id)") }
+        guard c.coreDumped else { throw JailClient.Refused(description: "\(c.summary): there is nothing to read") }
+        let cls = "debug"
+        let h = try ensure(cls)
+        func grant(_ path: String) throws -> String {
+            let fd = open(path, O_RDONLY | O_CLOEXEC)
+            guard fd >= 0 else { throw JailClient.Refused(description: "cannot open \(path)") }
+            defer { close(fd) }
+            return try JailClient.grant(jail: h.opened.name, path: path, file: fd, socket: jaildSocket).inside
+        }
+        let core = try grant(c.core)
+        let system = classes.first { $0.name == cls }?.system ?? JailClass.baseSystem
+        var binary = c.binaryInside
+        if !system.contains(where: { JailPlan.under(c.binaryInside, $0) }) {
+            let granted = try grant(c.binary)
+            // **lldb wants the binary where the core says it ran** (base lldb
+            // 21 asserts in ResolveContainedAddress otherwise; HANDOFF §2.130).
+            // A program from the person's home ran at /home/NAME/…, and the
+            // debug jail's /home/NAME is its own home: a link there, made from
+            // outside in the home's source, to the read-only grant.
+            let me = getpwuid(getuid()).map { String(cString: $0.pointee.pw_name) } ?? ""
+            let homeInside = "/home/" + me
+            if JailPlan.under(c.binaryInside, homeInside), !h.opened.home.isEmpty {
+                let link = h.opened.home + c.binaryInside.dropFirst(homeInside.count)
+                var st = stat()
+                if lstat(link, &st) == 0, st.st_mode & S_IFMT == S_IFLNK { unlink(link) }
+                if lstat(link, &st) != 0, symlink(granted, link) == 0 {
+                    say("jails: \(c.binaryInside) in \(h.opened.name) is a link to \(granted)")
+                } else {
+                    binary = granted   // something of the agent's own is there: lldb may not resolve it
+                }
+            } else {
+                binary = granted
+            }
+        }
+        say("jails: crash \(id)'s core is \(core) in \(h.opened.name), its binary \(binary)")
+        return try agent(cls, extra: ["--core", core, "--binary", binary, "--crash", c.summary])
+    }
+
+    public func agent(_ cls: String, extra: [String] = []) throws -> AgentSession {
         guard let k = classes.first(where: { $0.name == cls }), k.agent else {
             throw JailClient.Refused(description: "\(cls) is not an agent class")
         }
@@ -273,9 +404,9 @@ public final class JailKeeper {
         do {
             (pid, proc) = try JailClient.spawn(jail: h.opened.jail, argv: [
                 agentPath, "serve", "--model", JailLayout.runtime + "/" + modelSock,
-                "--listen", JailLayout.runtime + "/" + agentSock, "--class", cls], socket: jaildSocket)
+                "--listen", JailLayout.runtime + "/" + agentSock, "--class", cls] + extra, socket: jaildSocket)
         } catch { throw fail("cannot start abyss-agent: \(error)") }
-        procs.append((proc, pid, "abyss-agent", h.opened.name, model))
+        procs.append((proc, pid, "abyss-agent", h.opened.name, model, h.opened.root, h.opened.home))
         let socket = h.opened.runtime + "/" + agentSock
         guard waitForSocket(socket, seconds: 30, unless: nil) else {
             throw JailClient.Refused(description: "abyss-agent did not start in \(h.opened.name)")
@@ -331,6 +462,10 @@ public final class JailKeeper {
                 if wl_display_dispatch(display) < 0 { say("jails: the compositor is gone"); return }
             }
             for (i, p) in procs.enumerated().reversed() where fds[i + 3].revents != 0 {
+                let status = ap_procdesc_wait(p.fd)
+                if status >= 0, p.model == nil, let (sig, dumped) = Crash.signal(of: status) {
+                    crashed(p.name, jail: p.jail, root: p.root, home: p.home, signal: sig, coreDumped: dumped)
+                }
                 say("jails: \(p.name) (pid \(p.pid)) in \(p.jail) exited")
                 if var m = p.model {
                     _ = ap_child_signal(&m, SIGTERM)
@@ -368,6 +503,21 @@ public final class JailKeeper {
                 say("jails: agent refused: \(error)")
                 reply = JailWire.error("\(error)")
             }
+        case "debug":
+            do {
+                let a = try debug(Int(req.uint64("crash") ?? 0))
+                reply.set("ok", true); reply.set("session", a.id); reply.set("socket", a.socket)
+                reply.set("transcript", a.transcript); reply.set("pid", a.pid)
+            } catch {
+                say("jails: debug refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "crashes":
+            reply.set("ok", true)
+            reply.set("crashes", bytes: JailWire.list(crashes.keys.sorted().map { id in
+                let c = crashes[id]!
+                return "\(id) \(c.summary) in \(c.jail)"
+            }))
         case "held":
             reply.set("ok", true)
             reply.set("jails", bytes: JailWire.list(held.values.map { "\($0.opened.name) jid=\($0.opened.jid)" }.sorted()))

@@ -730,6 +730,37 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.130 The crash path: limits, a core's real path, and lldb's assertion
+(2026-10-02, PHASE18 P18.9a.)
+
+**A jailed program had jaild's limits.** `ap_jail_spawn` set the uid and
+groups and nothing else, so a confined program inherited jaild's resource
+limits: a core size of 0 when jaild is started that way (`sudo`, some rc
+setups), and so a crash left nothing to read. jaild now resolves the
+person's login class (`ap_class_limits`, in the parent: `login_getpwclass`
+allocates, a pdfork child may not) and the child sets them with `setrlimit`
+while still root. `live-crash.sh` starts jaild with `ulimit -c 0` so the
+claim proves something; the box's rc.d jaild happened to have no limit.
+
+**A core is named by the home's source, not its mount.** jaild refuses to
+grant a path inside a jail's root, rightly: nothing should go from jail to
+jail through a tree. The core is in the app jail's home, whose *source* is
+`HOME_BASE/NAME/CLASS` outside every root. jaild now says where (`home` in
+the open reply), and the keeper names cores and home binaries by it.
+
+**lldb wants the binary where the core says it ran.** Base lldb 21 aborts
+(`GetModule().get()` in `ResolveContainedAddress`) when given a binary at
+any other path, as a grant is (`/run/granted/N/…`). A program from the
+person's home ran at `/home/NAME/…`, and the debug jail's `/home/NAME` is its
+own home, so the keeper puts a link there, from outside in the home's source,
+to the read-only grant. A system binary is already at its path. The lldb bug
+is in BACKLOG §6.
+
+**Assert on the tool's own words.** The first check for SIGSEGV in the
+transcript passed because the *system prompt* names the signal. The test now
+pulls the lldb tool result out of the request (with `awk`: BSD `grep -o`
+with an interval returned nothing) and asserts on that.
+
 ### 2.129 A push gave root's daemons to the person
 (2026-10-02, P18.8's first run on the 12700KF.)
 

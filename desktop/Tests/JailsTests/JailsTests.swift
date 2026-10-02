@@ -5,9 +5,13 @@
 // the test, so a check that stopped checking fails here).
 
 import XCTest
+#if canImport(Glibc)
+import Glibc
+#endif
 @testable import Jails
 import JailKeeper
 import PoolConfig
+import Spawn
 
 final class JailsTests: XCTestCase {
     let me = JailUser(name: "abyss", uid: 1001, gid: 1001)
@@ -81,6 +85,43 @@ final class JailsTests: XCTestCase {
         let h = t.first { $0.name == "helper" }!
         XCTAssertTrue(h.agent)
         XCTAssertEqual(h.budget, JailClass.defaultBudget, "a budget that is not a number keeps the default")
+    }
+
+    // MARK: - crashes (P18.9)
+
+    func testAWaitStatusIsACrashOnlyWhenASignalEndedIt() {
+        XCTAssertEqual(Crash.signal(of: 11 | 0x80)?.signal, 11)
+        XCTAssertEqual(Crash.signal(of: 11 | 0x80)?.core, true)
+        XCTAssertEqual(Crash.signal(of: 9)?.core, false, "SIGKILL: no core")
+        XCTAssertNil(Crash.signal(of: 3 << 8), "exit 3 is a program's own answer, not a crash")
+        XCTAssertNil(Crash.signal(of: 0))
+        XCTAssertNil(Crash.signal(of: 0x7f | (17 << 8)), "stopped is not dead")
+    }
+
+    func testTheCoreIsNamedAsTheKernelNamesIt() {
+        XCTAssertEqual(Crash.coreName("/home/abyss/crasher"), "crasher.core")
+        XCTAssertEqual(Crash.coreName("galculator"), "galculator.core")
+        XCTAssertEqual(Crash.coreName("/x/a-very-long-program-name-indeed"), "a-very-long-program.core",
+                       "the process's name is cut at MAXCOMLEN (19)")
+    }
+
+    func testTheBinaryIsFoundAsTheJailWouldFindIt() throws {
+        var t = Array("/tmp/abyss-crash-XXXXXX".utf8CString)
+        let root = String(cString: mkdtemp(&t)!)
+        defer { _ = Spawn.run(["/bin/rm", "-rf", root]) }
+        _ = Spawn.run(["/bin/mkdir", "-p", root + "/usr/local/bin", root + "/bin"])
+        let fd = open(root + "/usr/local/bin/zenity", O_WRONLY | O_CREAT, 0o755); close(fd)
+        XCTAssertEqual(Crash.binaryInside("zenity", root: root), "/usr/local/bin/zenity")
+        XCTAssertEqual(Crash.binaryInside("/home/abyss/crasher", root: root), "/home/abyss/crasher")
+        XCTAssertNil(Crash.binaryInside("nothere", root: root))
+    }
+
+    func testACrashSaysWhatHappened() {
+        let c = Crash(id: 1, program: "crasher", jail: "abyss-1001-app", signal: SIGSEGV, coreDumped: true,
+                      core: "/r/home/abyss/crasher.core", binaryInside: "/home/abyss/crasher", binary: "/r/home/abyss/crasher")
+        XCTAssertEqual(c.summary, "crasher was killed by SIGSEGV and left a core")
+        var k = c; k.signal = SIGKILL; k.coreDumped = false
+        XCTAssertEqual(k.summary, "crasher was killed by SIGKILL, leaving no core")
     }
 
     func testTheKeepersModelArguments() {

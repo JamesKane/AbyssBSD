@@ -7,6 +7,7 @@
 // (P18.9) are added the same way, as tools.
 
 import Model
+import Spawn
 
 #if canImport(Glibc)
 import Glibc
@@ -68,5 +69,26 @@ public enum AgentTools {
         }
         let more = got > readLimit ? "\n(more from offset \(offset + readLimit))" : ""
         return String(decoding: buf[0..<min(got, readLimit)], as: UTF8.self) + more
+    }
+
+    /// The `debug` class's tool (P18.9): lldb on one crash — its core and its
+    /// binary, both fixed by the session (granted read-only by the keeper), so
+    /// the model chooses the command and never the target. `--batch`: it runs
+    /// the command and exits; the output is cut at readLimit.
+    public static func lldb(core: String, binary: String, lldb: String = "/usr/bin/lldb") -> AgentTool {
+        AgentTool(
+            name: "lldb",
+            description: "Run one lldb command on the crashed program's core, e.g. \"bt\", \"frame select 1\", \"frame variable\", \"register read\", \"image list\".",
+            parameters: .object([("type", .string("object")), ("properties", .object([
+                ("command", .object([("type", .string("string"))]))])), ("required", .array([.string("command")]))])
+        ) { args in
+            guard let command = args["command"]?.string, !command.isEmpty else { return "error: lldb needs a command" }
+            let r = Spawn.run([lldb, "--batch", "--no-lldbinit", "-c", core, binary, "-o", command],
+                              stderr: .merge, limit: readLimit + 1)
+            if let why = r.failure { return "error: lldb could not run: \(why)" }
+            let out = r.stdoutText
+            let cut = out.utf8.count > readLimit ? String(decoding: Array(out.utf8.prefix(readLimit)), as: UTF8.self) + "\n(cut)" : out
+            return r.succeeded ? cut : "lldb exited \(r.code):\n" + cut
+        }
     }
 }

@@ -258,6 +258,10 @@ if [ "$live" -eq 1 ]; then
   # and answered with its tool calls, the budget's words, ⌘Q ends it.
   echo "== the Agent window =="
   quiet "$root/abyss/tests/live-agent-window.sh"
+  # A confined crash (P18.9a): the person's limits, the core kept, one
+  # crash granted to a debug agent, lldb on it.
+  echo "== a confined crash, read by a debug agent =="
+  quiet "$root/abyss/tests/live-crash.sh"
   # A window that starts fullscreen (F.1): `firefox --kiosk`'s requests, the
   # whole display, at its origin, whatever it said next.
   echo "== a window that starts fullscreen =="

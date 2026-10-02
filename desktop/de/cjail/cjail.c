@@ -17,7 +17,10 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <jail.h>
+#include <login_cap.h>
 #include <poll.h>
+#include <pwd.h>
+#include <sys/resource.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -114,9 +117,61 @@ int ap_jail_removed(int kq) {
     }
 }
 
+/* The class capabilities that are limits, and how each is read. */
+static const struct { const char *cap; int resource; char kind; } ap_caps[] = {
+    { "cputime", RLIMIT_CPU, 't' },        { "filesize", RLIMIT_FSIZE, 's' },
+    { "datasize", RLIMIT_DATA, 's' },      { "stacksize", RLIMIT_STACK, 's' },
+    { "coredumpsize", RLIMIT_CORE, 's' },  { "memoryuse", RLIMIT_RSS, 's' },
+    { "memorylocked", RLIMIT_MEMLOCK, 's' }, { "maxproc", RLIMIT_NPROC, 'n' },
+    { "openfiles", RLIMIT_NOFILE, 'n' },   { "sbsize", RLIMIT_SBSIZE, 's' },
+    { "vmemoryuse", RLIMIT_VMEM, 's' },    { "pseudoterminals", RLIMIT_NPTS, 'n' },
+    { "swapuse", RLIMIT_SWAP, 's' },       { "kqueues", RLIMIT_KQUEUES, 'n' },
+    { "umtxp", RLIMIT_UMTXP, 'n' },
+};
+
+static rlim_t ap_cap(login_cap_t *lc, char kind, const char *name, rlim_t def) {
+    switch (kind) {
+    case 't': return (rlim_t)login_getcaptime(lc, name, (quad_t)def, (quad_t)def);
+    case 's': return (rlim_t)login_getcapsize(lc, name, (quad_t)def, (quad_t)def);
+    default:  return (rlim_t)login_getcapnum(lc, name, (quad_t)def, (quad_t)def);
+    }
+}
+
+int ap_class_limits(unsigned uid, void *out) {
+    struct rlimit *lim = out;
+    _Static_assert(sizeof(struct rlimit) * RLIM_NLIMITS <= AP_LIMITS_SIZE, "AP_LIMITS_SIZE");
+    for (int r = 0; r < RLIM_NLIMITS; r++)
+        if (getrlimit(r, &lim[r]) < 0) lim[r].rlim_cur = lim[r].rlim_max = RLIM_INFINITY;
+    struct passwd *pw = getpwuid((uid_t)uid);
+    if (pw == NULL) { errno = ENOENT; return -1; }
+    login_cap_t *lc = login_getpwclass(pw);
+    if (lc == NULL) { errno = ENOENT; return -1; }
+    char name[64];
+    for (size_t i = 0; i < sizeof ap_caps / sizeof ap_caps[0]; i++) {
+        struct rlimit *l = &lim[ap_caps[i].resource];
+        rlim_t cur = ap_cap(lc, ap_caps[i].kind, ap_caps[i].cap, l->rlim_cur);
+        rlim_t max = ap_cap(lc, ap_caps[i].kind, ap_caps[i].cap, l->rlim_max);
+        snprintf(name, sizeof name, "%s-cur", ap_caps[i].cap);
+        cur = ap_cap(lc, ap_caps[i].kind, name, cur);
+        snprintf(name, sizeof name, "%s-max", ap_caps[i].cap);
+        max = ap_cap(lc, ap_caps[i].kind, name, max);
+        if (cur > max) cur = max;
+        l->rlim_cur = cur; l->rlim_max = max;
+    }
+    login_close(lc);
+    return 0;
+}
+
+int ap_limit_of(const void *limits, int resource, unsigned long long *cur, unsigned long long *max) {
+    if (resource < 0 || resource >= RLIM_NLIMITS) { errno = EINVAL; return -1; }
+    const struct rlimit *l = (const struct rlimit *)limits + resource;
+    *cur = (unsigned long long)l->rlim_cur; *max = (unsigned long long)l->rlim_max;
+    return 0;
+}
+
 int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
                   const char *const *argv, const char *const *envp, const char *cwd,
-                  int in, int out, int err, int daemon, int *procfd) {
+                  int in, int out, int err, int daemon, const void *limits, int *procfd) {
     if (uid == 0 || argv == NULL || argv[0] == NULL) { errno = EPERM; return -1; }
     int pfd = -1;
     pid_t pid = pdfork(&pfd, PD_CLOEXEC | (daemon ? PD_DAEMON : 0));
@@ -130,6 +185,11 @@ int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
     for (int i = 0; i < 3; i++) if (fds[i] >= 0 && fds[i] < 3) fds[i] = fcntl(fds[i], F_DUPFD, 3);
     if (jail_attach_jd(desc) < 0) _exit(126);
     setsid();
+    /* The person's limits, while still root (a raised hard limit needs it). */
+    if (limits != NULL) {
+        const struct rlimit *l = limits;
+        for (int r = 0; r < RLIM_NLIMITS; r++) (void)setrlimit(r, &l[r]);
+    }
     gid_t g = (gid_t)gid;
     if (setgroups(1, &g) < 0 || setgid(g) < 0 || setuid((uid_t)uid) < 0) _exit(126);
     if (getuid() != (uid_t)uid || geteuid() != (uid_t)uid || setuid(0) == 0) _exit(126);
@@ -188,11 +248,16 @@ int ap_jail_identify(int desc, int *jid, char *name, size_t namelen) {
 int ap_kqueue(void) { errno = ENOSYS; return -1; }
 int ap_jail_watch(int kq, int desc) { (void)kq; (void)desc; errno = ENOSYS; return -1; }
 int ap_jail_removed(int kq) { (void)kq; return -1; }
+int ap_class_limits(unsigned uid, void *out) { (void)uid; (void)out; errno = ENOSYS; return -1; }
+int ap_limit_of(const void *limits, int resource, unsigned long long *cur, unsigned long long *max) {
+    (void)limits; (void)resource; (void)cur; (void)max; errno = ENOSYS; return -1;
+}
+
 int ap_jail_spawn(int desc, unsigned uid, unsigned gid,
                   const char *const *argv, const char *const *envp, const char *cwd,
-                  int in, int out, int err, int daemon, int *procfd) {
+                  int in, int out, int err, int daemon, const void *limits, int *procfd) {
     (void)desc; (void)daemon; (void)uid; (void)gid; (void)argv; (void)envp; (void)cwd;
-    (void)in; (void)out; (void)err; (void)procfd;
+    (void)in; (void)out; (void)err; (void)limits; (void)procfd;
     errno = ENOSYS; return -1;
 }
 int ap_procdesc_exited(int procfd) { (void)procfd; return 0; }
