@@ -29,13 +29,14 @@ import Darwin
 
 public enum AgentVerb {
     public static let about = "app.about", quit = "app.quit"
-    public static let ask = "agent.ask", clear = "agent.clear"
+    public static let ask = "agent.ask", question = "agent.question", clear = "agent.clear"
     public static let minimize = "window.minimize"
 }
 
 public func agentMenuBar() -> MenuBarModel {
-    func c(_ verb: String, _ title: String, _ key: KeyEquivalent? = nil, _ summary: String) -> MenuItem {
-        .command(Command(verb, title, key: key, summary: summary))
+    func c(_ verb: String, _ title: String, _ key: KeyEquivalent? = nil, _ summary: String,
+           _ args: [Argument] = []) -> MenuItem {
+        .command(Command(verb, title, key: key, arguments: args, summary: summary))
     }
     return MenuBarModel(appName: "Agent", menus: [
         Menu("Agent", [
@@ -45,6 +46,11 @@ public func agentMenuBar() -> MenuBarModel {
         ]),
         Menu("Conversation", [
             c(AgentVerb.ask, "Ask", nil, "Ask the agent what is in the field."),
+            // A script asks as a person does: into the field, then Ask. Its
+            // own verb, as Finder's Go to Folder… is: a declared argument is
+            // required (MenuService.check).
+            c(AgentVerb.question, "Ask Question…", nil, "Put a question in the field and ask it.",
+              [Argument("text", .string, "The question.")]),
             c(AgentVerb.clear, "Clear Field", .cmd("k"), "Empty the question field."),
         ]),
         Menu("Window", [
@@ -304,7 +310,8 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         switch verb {
         case AgentVerb.quit: quit(); return .ok("")
         case AgentVerb.ask:
-            guard phase == .ready, !field.isEmpty else { return .refused("nothing to ask") }
+            guard phase == .ready else { return .refused("there is no agent") }
+            guard !field.trimmingSpaces.isEmpty else { return .refused("the field is empty") }
             ask(); return .ok("")
         case AgentVerb.clear: field = ""; window?.setNeedsDisplay(); return .ok("")
         case AgentVerb.minimize: _ = window?.minimize(); return .ok("")
@@ -317,15 +324,23 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     public func menuValidate(_ command: Command) -> Enablement {
         switch command.verb {
         case AgentVerb.about: return .disabled("Agent has no About box yet")
-        case AgentVerb.ask:
-            return phase == .ready && !field.isEmpty ? .enabled
-                : .disabled(phase == .asking ? "the agent is answering" : phase == .ready ? "the field is empty" : "there is no agent")
+        // Enabled whenever the agent can be asked; an empty field is refused
+        // when run, with its reason. (Enablement is checked before the
+        // arguments are seen, so Ask Question… could not depend on the field.)
+        case AgentVerb.ask, AgentVerb.question:
+            return phase == .ready ? .enabled
+                : .disabled(phase == .asking ? "the agent is answering" : "there is no agent")
         default: return .enabled
         }
     }
 
     public func menuPerform(_ command: Command, arguments: [String: String]) -> CommandResult {
         if case .disabled(let why) = menuValidate(command) { return .refused(why) }
+        if command.verb == AgentVerb.question {
+            field = arguments["text"] ?? ""
+            window?.setNeedsDisplay()
+            return perform(AgentVerb.ask)
+        }
         return perform(command.verb)
     }
 }

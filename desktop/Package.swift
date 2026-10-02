@@ -356,7 +356,7 @@ let package = Package(
         // The agent runtime, inside its jail (PHASE18 P18.8): the loop, and
         // the tools that read what the jail holds.
         .target(name: "Agent", dependencies: ["Model"], path: "de/agent"),
-        .executableTarget(name: "abyss-agent", dependencies: ["Agent", "Model", "CurrentIPC"], path: "de/agentbin"),
+        .executableTarget(name: "abyss-agent", dependencies: ["Agent", "Jails", "Model", "CurrentIPC"], path: "de/agentbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
                 linkerSettings: jailLibraries),

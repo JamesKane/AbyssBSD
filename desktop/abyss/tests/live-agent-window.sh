@@ -7,14 +7,16 @@
 # keyboard and pointer. FreeBSD only; needs passwordless sudo. Claims:
 #
 #   1. the window asks the keeper for a session and says where it runs; Ask
-#      is disabled while the field is empty, and says why;
+#      with an empty field is refused, and says why;
 #   2. a question typed and sent with Return is answered: the window shows
 #      the tool calls and the answer (the agent's log and the transcript
 #      agree);
-#   3. the Ask button sends the next; the budget stops it, the window says so
-#      in abyss-model's words, and Ask is then disabled ("there is no agent");
-#   4. ⌘Q ends the session: bye, the agent exits, the keeper stops its model;
-#   5. a class with no model: the window says why there is no agent.
+#   3. the Ask button sends the next, and it is answered;
+#   4. a script asks through the vocabulary (`abyssmenu run agent
+#      agent.question text=…`), as a person does; the budget stops it, the window says so in
+#      abyss-model's words, and Ask is then disabled ("there is no agent");
+#   5. ⌘Q ends the session: bye, the agent exits, the keeper stops its model;
+#   6. a class with no model: the window says why there is no agent.
 #
 # Usage: abyss/tests/live-agent-window.sh
 set -eu
@@ -52,7 +54,7 @@ await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt 200 ]; d
 validate() { .build/debug/abyssmenu validate agent 2>&1 | sed -n "s/^agent\.ask	//p"; }
 
 # The stub (as live-agent.sh's): two tool calls, then an answer; 100 tokens
-# a reply, a budget of 250 — so the second question is stopped by it.
+# a reply, a budget of 450 — so the third question is stopped by it.
 cat > "$W/stub.json" <<J
 [{"choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[
   {"id":"c1","type":"function","function":{"name":"list_directory","arguments":"{\"path\":\"/home/$me\"}"}},
@@ -60,7 +62,7 @@ cat > "$W/stub.json" <<J
   "usage":{"total_tokens":100}},
  {"choices":[{"index":0,"message":{"role":"assistant","content":"Call the plumber."}}],"usage":{"total_tokens":100}}]
 J
-printf '[agent]\nmodel = stub:%s\nbudget = 250\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
+printf '[agent]\nmodel = stub:%s\nbudget = 450\n' "$W/stub.json" > "$ABYSS_CONFIG_DIR/jails.ini"
 
 # Tools: the virtual pointer and keyboard.
 for t in pointer keyboard; do
@@ -90,12 +92,14 @@ await "$W/ut.out" '^window org.abyssbsd.agent/' "no Agent window on the screen"
 sock=$(sed -n 's/^Agent: session .* at //p' "$W/app.log")
 case "$sock" in "$RB/$uid/agent/run/user/agent-"*.sock) ;; *) fail "the window's agent socket is not in the agent jail: $sock" ;; esac
 grep -q "jails: agent session .* in $N" "$W/keeper.log" || fail "the keeper did not start the session in $N"
-[ "$(validate)" = "disabled (the field is empty)" ] || fail "Ask with an empty field: $(validate)"
+[ "$(validate)" = enabled ] || fail "Ask, with the agent ready: $(validate)"
+.build/debug/abyssmenu run agent agent.ask > "$W/m0" 2>&1 && fail "Ask with an empty field was taken"
+grep -q 'the field is empty' "$W/m0" || fail "an empty Ask does not say why: $(cat "$W/m0")"
 pos=$(grep '^window org.abyssbsd.agent/' "$W/ut.out" | tail -1 | tr ' ' '\n' | grep -E '^[0-9]+,[0-9]+$' | tail -1)
 wx=${pos%,*}; wy=${pos#*,}
 lay=$(grep 'Agent: layout ' "$W/app.log" | tail -1)
 at() { p=$(echo "$lay" | tr ' ' '\n' | sed -n "s/^$1=//p"); echo "$((wx + ${p%,*})) $((wy + ${p#*,}))"; }
-echo "ok: 1. the window got a session in $N; Ask is disabled while the field is empty"
+echo "ok: 1. the window got a session in $N; Ask with an empty field is refused (the field is empty)"
 
 # ---- 2. a question, typed, sent with Return ------------------------------------
 mkfifo "$W/pointer" "$W/keys"
@@ -109,7 +113,6 @@ click $(at field)
 printf 'mine\n' > "$HB/$me/agent/notes.txt"
 printf 't what is due on monday\n' >&4
 sleep 0.5
-[ "$(validate)" = enabled ] || fail "Ask with a question typed: $(validate)"
 printf 'k 28\n' >&4
 await "$W/app.log" 'Agent: asked: what is due on monday' "Return did not send the question"
 await "$W/app.log" 'Agent: answered: stop=answered calls=2 steps=2' "the question was not answered with the two tool calls"
@@ -118,16 +121,24 @@ grep -q '"content":"what is due on monday"' "$t" || fail "the transcript does no
 grep -q '"content":"mine' "$t" || fail "the tool's read of notes.txt did not go back to the model"
 echo "ok: 2. typed and sent with Return: answered after list_directory and read_file, as the transcript says"
 
-# ---- 3. the button, and the budget ------------------------------------------------
+# ---- 3. the button ------------------------------------------------------------------
 printf 't and tuesday\n' >&4
 sleep 0.3
 click $(at ask)
 await "$W/app.log" 'Agent: asked: and tuesday' "the Ask button did not send the question"
-await "$W/app.log" 'Agent: answered: stop=budget' "the budget did not stop the second question"
-[ "$(validate)" = "disabled (there is no agent)" ] || fail "Ask after the budget: $(validate)"
-echo "ok: 3. the Ask button sent it; the budget stopped it, and Ask is disabled (there is no agent)"
+await "$W/app.log" 'Agent: answered: stop=answered' "the button's question was not answered" 2
+echo "ok: 3. the Ask button sent the next question, and it was answered"
 
-# ---- 4. ⌘Q --------------------------------------------------------------------------
+# ---- 4. a script, through the vocabulary; and the budget -------------------------------
+.build/debug/abyssmenu run agent agent.question "text=and wednesday" > "$W/m1" 2>&1 || fail "abyssmenu's ask was refused: $(cat "$W/m1")"
+await "$W/app.log" 'Agent: asked: and wednesday' "the vocabulary's ask did not reach the agent"
+await "$W/app.log" 'Agent: answered: stop=budget' "the budget did not stop the third question"
+[ "$(validate)" = "disabled (there is no agent)" ] || fail "Ask after the budget: $(validate)"
+.build/debug/abyssmenu run agent agent.question "text=more" > "$W/m2" 2>&1 && fail "an ask after the budget was taken"
+grep -q 'there is no agent' "$W/m2" || fail "the refused ask does not say why: $(cat "$W/m2")"
+echo "ok: 4. abyssmenu asked as a person does; the budget stopped it, and Ask is refused (there is no agent)"
+
+# ---- 5. ⌘Q --------------------------------------------------------------------------
 apid=$(sed -n 's/.*: agent pid \([0-9]*\),.*/\1/p' "$W/keeper.log" | head -1)
 printf 'c 64 16\n' >&4
 await "$W/app.log" 'Agent: bye' "⌘Q did not end the session"
@@ -136,11 +147,11 @@ await "$W/keeper.log" "jails: its model stopped" "the keeper did not stop the mo
 i=0; while kill -0 "$ap" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
 kill -0 "$ap" 2>/dev/null && fail "the window did not close"
 ap=
-echo "ok: 4. ⌘Q said bye; the agent exited and the keeper stopped its model"
+echo "ok: 5. ⌘Q said bye; the agent exited and the keeper stopped its model"
 
-# ---- 5. no model -----------------------------------------------------------------------
+# ---- 6. no model -----------------------------------------------------------------------
 env AQUA_SCENE=agent ABYSS_AGENT_CLASS=debug .build/debug/AquaDemo > "$W/app2.log" 2>&1 3>&- 4>&- & ap=$!
 await "$W/app2.log" 'Agent: refused: No agent: no model is set for debug' "the window did not say why there is no agent"
 kill "$ap"; ap=
-echo "ok: 5. a class with no model: the window says why there is no agent"
+echo "ok: 6. a class with no model: the window says why there is no agent"
 echo "all green (the Agent window: a session from the keeper, questions answered with their tool calls, the budget's words, ⌘Q ends it)."

@@ -28,7 +28,7 @@ final class AgentWindowTests: XCTestCase {
         let verbs = agentMenuBar().menus.flatMap { $0.items }.compactMap { item -> String? in
             if case .command(let c) = item { return c.verb }; return nil
         }
-        XCTAssertEqual(verbs, [AgentVerb.about, AgentVerb.quit, AgentVerb.ask, AgentVerb.clear, AgentVerb.minimize])
+        XCTAssertEqual(verbs, [AgentVerb.about, AgentVerb.quit, AgentVerb.ask, AgentVerb.question, AgentVerb.clear, AgentVerb.minimize])
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("q")), AgentVerb.quit)
         XCTAssertEqual(agentMenuBar().verb(for: .cmd("k")), AgentVerb.clear)
     }

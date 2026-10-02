@@ -327,6 +327,15 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   Return and with the button, the budget, ⌘Q, a class with no model), green
   in the guest; 6 faults injected, all caught.
 
+  **On the 12700KF (same day):** the window on the desktop, with Granite 8B
+  Q4 behind it, asked through the vocabulary (`abyssmenu run agent
+  agent.question text=…`; a declared argument is required, so it is its own
+  verb beside Ask, as Finder's Go to Folder… is). It answered from the notes
+  file. Told only "your own home", Granite searched `/home/agent`, `/abyss`
+  and `/` first: 7 calls. With its home and the grants' place in the system
+  prompt it took 2. `⌘Q`/Quit said bye, and the model and llama-server
+  stopped.
+
   **P18.8 is complete.** Not yet: a Dock or Applications entry for Agent (it
   is reachable by `AQUA_SCENE=agent`, as Grab is), and showing tool calls as
   they happen rather than with the answer.

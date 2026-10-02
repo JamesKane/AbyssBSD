@@ -12,6 +12,7 @@
 //   abyss-agent bye --listen SOCKET
 
 import Agent
+import Jails
 import CurrentIPC
 import Model
 
@@ -45,12 +46,15 @@ case "serve":
     unlink(listen)
     let server: Current.Server
     do { server = try Current.Server(path: listen, mode: 0o600) } catch { die("cannot listen at \(listen): \(error)") }
+    // Where its home is, said outright: on the 12700KF, told only "your own
+    // home", Granite tried /home/agent, /abyss and / before /home/abyss.
+    let home = getenv("HOME").map { String(cString: $0) } ?? "/home"
     let loop = AgentLoop(
         system: """
         You are an agent on the AbyssBSD desktop, working for the person who asked. \
-        You run confined, in a jail of class \(cls): you see the system read-only, your own home, \
-        and only the files the person granted you. Use the tools to look before you answer. \
-        Answer plainly and briefly.
+        You run confined, in a jail of class \(cls): you see the system read-only, your own home \
+        (\(home)), and only the files the person granted you (under \(JailLayout.granted)). \
+        Use the tools to look before you answer. Answer plainly and briefly.
         """,
         tools: AgentTools.reading, model: modelOverSocket(modelSocket))
     emit(1, "ready (class \(cls), model at \(modelSocket))")
