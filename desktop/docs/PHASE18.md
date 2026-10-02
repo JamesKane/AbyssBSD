@@ -37,7 +37,7 @@ in order here, and is re-scoped when 18a's gate is green: 18a will change what
 
 ### 18a — applications in jails
 
-**P18.1 — a class is data (S).**
+**P18.1 — a class is data (S). — DONE 2026-10-02.** `de/jails` (`JailClass`, `JailPlan`), 17 tests (every check fault-injected), green on Linux and in the guest; the plan was performed by hand in the guest (§4.5).
 `jails.ini` in PoolConfig. A class names:
 - the system it sees (read-only nullfs of `/bin /lib /libexec /usr`, and a
   generated `/etc` with `passwd`/`group`/`pwd.db` and no `master.passwd`);
@@ -213,6 +213,23 @@ mount -t nullfs ~/granted.txt <jail root>/docs/granted.txt   # jail already runn
 
 **This is the document portal without FUSE.** It is how a URI-only
 FileChooser can still grant one file and no more.
+
+### 4.5 The plan, performed by hand — **it holds; two corrections.**
+
+P18.1's plan for `build` in `app`, done step by step as root in the guest: a
+tmpfs root, the four read-only nullfs mounts, the accounts compiled with
+`pwd_mkdb -p -d <root>/etc`, then `master.passwd` and `spwd.db` deleted, then
+`jail -c … enforce_statfs=2 devfs_ruleset=4 mount.devfs ip4=disable ip6=disable`.
+Inside:
+- `id` is `uid=1001(build) gid=1001(build) groups=1001(build)`: the person,
+  without the wheel membership they have outside;
+- `~` is `/home/build` and is writable, and `/usr` is read-only;
+- there is no `master.passwd`.
+
+The two corrections, now in the plan:
+- `pwd_mkdb` reads `master.passwd(5)` form, so the plan carries the accounts in
+  that form, and a passwd *file* is not part of it;
+- the guest has no `/etc/localtime`, so a missing copy source is skipped.
 
 ## 5. Verification
 

@@ -336,6 +336,9 @@ let package = Package(
         // Disk Utility (PHASE15 P15.8): ZFS datasets and snapshots, read and
         // parsed; changing them is a settings plan.
         .target(name: "Volumes", dependencies: ["Spawn"], path: "de/volumes"),
+        // Jails — what a jail contains, as data, and the plan a root daemon
+        // performs (PHASE18). Pure: tested on Linux, where there are no jails.
+        .target(name: "Jails", dependencies: ["PoolConfig"], path: "de/jails"),
         .target(name: "Pty", dependencies: ["CPlatform", "Spawn"], path: "de/pty"),
         .executableTarget(name: "abyss-vt", dependencies: ["Pty", "Terminal"], path: "de/vtbin"),
         // `.desktop` → `.app` (PHASE15 P15.1): the rules as values, importing
@@ -346,6 +349,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
+        .testTarget(name: "JailsTests", dependencies: ["Jails", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
         // installer's shape: plans as values that import nothing, a wire the
         // pane links without the executor, the runner, and two binaries.
