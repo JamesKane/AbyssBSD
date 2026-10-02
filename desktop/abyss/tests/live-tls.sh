@@ -11,7 +11,10 @@
 #      does not verify, and nothing is fetched;
 #   3. a certificate the CA signed for another name is refused: it does not
 #      name the host;
-#   4. plain http still works, against a server that is not ours (nc).
+#   4. plain http still works, against a server that is not ours (nc);
+#   5. connecting to a given address (what the fetch bridge does with the
+#      address it checked) still verifies the certificate against the host's
+#      name: right name, fetched; wrong name, refused.
 #
 # Usage: abyss/tests/live-tls.sh
 set -eu
@@ -66,4 +69,11 @@ sleep 0.3
 grep -q 'plain and simple' "$W/f4" || fail "plain http's body: $(cat "$W/f4")"
 head -1 "$W/nc.req" | grep -q '^GET /x HTTP/1.0' || fail "the request was not HTTP/1.0: $(head -1 "$W/nc.req")"
 echo "ok: 4. plain http, as HTTP/1.0 (a body the server ends by closing, never chunked)"
+
+# ---- 5. a given address, the name still checked -------------------------------------------
+"$bin" fetch "https://localhost:$port1/" --ca "$W/ca.pem" --address 127.0.0.1 > "$W/f5" 2>&1 || fail "fetching by address failed: $(cat "$W/f5")"
+head -1 "$W/f5" | grep -q '^status 200$' || fail "by address, not a 200: $(head -3 "$W/f5")"
+"$bin" fetch "https://localhost:$port2/" --ca "$W/ca.pem" --address 127.0.0.1 > "$W/f6" 2>&1 && fail "by address, another name's certificate was accepted"
+grep -qi 'hostname mismatch' "$W/f6" || fail "by address, the refusal does not say the name is wrong: $(cat "$W/f6")"
+echo "ok: 5. connected to 127.0.0.1 with the name localhost: verified against the name (fetched; another name refused)"
 echo "all green (TLS verified against a trusted CA and the host's name, or refused with why)."

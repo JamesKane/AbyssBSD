@@ -15,7 +15,7 @@ final class FetchTests: XCTestCase {
 
     func testANewHostIsAskedAboutFirst() {
         var got: [String] = [], logged: [String] = []
-        let b = FetchBridge(resolve: publicDNS, get: { u in got.append(u.text); return self.page(200, "<p>hello</p>") },
+        let b = FetchBridge(resolve: publicDNS, get: { u, _ in got.append(u.text); return self.page(200, "<p>hello</p>") },
                             log: { k, _ in logged.append(k) })
         XCTAssertEqual(b.fetch("https://example.org/a"), .ask(host: "example.org", url: "https://example.org/a"))
         XCTAssertTrue(got.isEmpty, "nothing is fetched before the person answers")
@@ -28,17 +28,17 @@ final class FetchTests: XCTestCase {
     }
 
     func testThisComputersOwnAddressesAreRefused() {
-        let b = FetchBridge(resolve: { h in h == "localhost" ? ["127.0.0.1"] : self.publicDNS(h) }, get: { _ in XCTFail("fetched"); return self.page(200, "") })
+        let b = FetchBridge(resolve: { h in h == "localhost" ? ["127.0.0.1"] : self.publicDNS(h) }, get: { _, _ in XCTFail("fetched"); return self.page(200, "") })
         b.permit("localhost", allow: true); b.permit("home.lan", allow: true)
         guard case .refused(let why) = b.fetch("http://localhost:631/") else { return XCTFail("loopback reached") }
         XCTAssertTrue(why.contains("this computer's or a private network's (127.0.0.1)"))
         guard case .refused = b.fetch("http://home.lan/") else { return XCTFail("a private network reached") }
-        XCTAssertEqual(FetchBridge(allowLocal: true, resolve: { _ in ["127.0.0.1"] }, get: { _ in self.page(200, "ok", type: "text/plain") })
+        XCTAssertEqual(FetchBridge(allowLocal: true, resolve: { _ in ["127.0.0.1"] }, get: { _, _ in self.page(200, "ok", type: "text/plain") })
             .fetchAllowed("http://127.0.0.1:9/"), .page(url: "http://127.0.0.1:9/", status: 200, text: "ok"), "a test may")
     }
 
     func testARedirectToANewHostIsAskedAboutToo() {
-        let b = FetchBridge(resolve: publicDNS, get: { u in
+        let b = FetchBridge(resolve: publicDNS, get: { u, _ in
             u.host == "a.org" ? self.page(301, "", location: "https://b.org/x") : self.page(200, "B", type: "text/plain")
         })
         b.permit("a.org", allow: true)
@@ -47,8 +47,20 @@ final class FetchTests: XCTestCase {
         XCTAssertEqual(b.fetch("https://a.org/"), .page(url: "https://b.org/x", status: 200, text: "B"))
     }
 
+    /// DNS rebinding: the bridge connects to the address it checked, and
+    /// looks the host up once — a second answer cannot slip in a local one.
+    func testItConnectsToTheAddressItChecked() {
+        var lookups = 0, connectedTo: [String?] = []
+        let rebinding: (String) -> [String] = { _ in lookups += 1; return lookups == 1 ? ["93.184.215.14"] : ["127.0.0.1"] }
+        let b = FetchBridge(resolve: rebinding, get: { _, address in connectedTo.append(address); return self.page(200, "ok", type: "text/plain") })
+        b.permit("example.org", allow: true)
+        XCTAssertEqual(b.fetch("https://example.org/"), .page(url: "https://example.org/", status: 200, text: "ok"))
+        XCTAssertEqual(lookups, 1, "one look-up")
+        XCTAssertEqual(connectedTo, ["93.184.215.14"], "the address that was checked")
+    }
+
     func testRedirectsEnd() {
-        let b = FetchBridge(resolve: publicDNS, get: { _ in self.page(302, "", location: "/again") })
+        let b = FetchBridge(resolve: publicDNS, get: { _, _ in self.page(302, "", location: "/again") })
         b.permit("a.org", allow: true)
         XCTAssertEqual(b.fetch("https://a.org/"), .refused("too many redirects"))
         XCTAssertEqual(b.fetch("ftp://a.org/"), .refused("not an http or https URL: ftp://a.org/"))

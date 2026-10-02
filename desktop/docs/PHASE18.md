@@ -637,10 +637,14 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   - **The transcript says it all** (`asked`, `permitted`, `denied`,
     `fetched`, `redirected`, `refused`), and the Agents pane's digest reads
     it.
-  - **Known limit:** the address check resolves the name, then the request
-    connects by name, which resolves again. A DNS server that changes its
-    answer between the two (rebinding) could slip a local address through.
-    Connecting to the address that was checked closes it; a follow-up.
+  - **DNS rebinding — closed the same day.** The bridge once checked a host's
+    addresses and then connected by name, which resolved again, so a DNS
+    answer that changed between the two could slip a local address through.
+    It now resolves once, checks every address, and connects to the first
+    one it checked (`HTTP.call(address:)`), keeping the name for TLS and
+    `Host:`. FetchTests has a rebinding resolver; `live-tls.sh` claim 5
+    proves a given address is still verified against the name; a fault that
+    connects by name again is caught.
   - Tests: FetchTests (asking, local refusals, redirects, page text, what is
     local, the digest), the class flag, the requester's words;
     `live-agent-fetch.sh` claims 1–4 in the guest (no network in the jail;
@@ -653,8 +657,7 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     example.com?" (screenshot); 10 s later it was allowed. The bridge fetched
     it over verified TLS (200, 577 bytes), and Granite summed it up in a
     sentence. The transcript reads `asked`, `permitted`, `fetched`. Quit
-    stopped the model and every bridge. **P18.12 is complete** (the DNS
-    rebinding limit above stands).
+    stopped the model and every bridge. **P18.12 is complete.**
 - **P18.13 — presence and off (S).** Agent state (working, waiting, idle) on
   the Dock tile, the menu bar and the island switcher. `agents.ini` absent
   means no menu item, no chord, no spend indicator, and no process.

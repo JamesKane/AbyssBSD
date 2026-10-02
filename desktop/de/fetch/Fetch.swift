@@ -123,7 +123,8 @@ public enum FetchAnswer: Equatable, Sendable {
 }
 
 public final class FetchBridge {
-    public typealias Get = (WebURL) throws -> HTTPResponse
+    /// One GET of a URL, connecting to `address` (the one checked) when given.
+    public typealias Get = (WebURL, String?) throws -> HTTPResponse
     public private(set) var permitted: Set<String> = []
     let get: Get
     let resolve: (String) -> [String]
@@ -131,10 +132,10 @@ public final class FetchBridge {
     let log: (String, [(String, JSON)]) -> Void
 
     public init(allowLocal: Bool = false, resolve: @escaping (String) -> [String] = Addresses.resolve,
-                get: @escaping Get = { u in
+                get: @escaping Get = { u, address in
                     try HTTP.call(u.endpoint, method: "GET", path: u.path,
                                   headers: [("User-Agent", "AbyssBSD agent"), ("Accept", "text/html, text/plain;q=0.9, */*;q=0.1")],
-                                  version: "1.0", timeoutSeconds: 20)
+                                  version: "1.0", timeoutSeconds: 20, address: address)
                 }, log: @escaping (String, [(String, JSON)]) -> Void = { _, _ in }) {
         self.allowLocal = allowLocal; self.resolve = resolve; self.get = get; self.log = log
     }
@@ -148,13 +149,19 @@ public final class FetchBridge {
     public func fetch(_ text: String) -> FetchAnswer {
         guard var url = WebURL(text) else { return refuse("not an http or https URL: \(text)", url: text) }
         for _ in 0..<4 {
-            if let why = local(url.host) { return refuse(why, url: url.text) }
+            // Resolved once, checked, and that address is the one connected
+            // to: no second look-up for a rebinding DNS answer to change.
+            let address: String?
+            switch check(url.host) {
+            case .refused(let why): return refuse(why, url: url.text)
+            case .ok(let a): address = a
+            }
             guard permitted.contains(url.host) else {
                 log("asked", [("host", .string(url.host)), ("url", .string(url.text))])
                 return .ask(host: url.host, url: url.text)
             }
             let r: HTTPResponse
-            do { r = try get(url) } catch { return refuse("\(url.host) did not answer: \(error)", url: url.text) }
+            do { r = try get(url, address) } catch { return refuse("\(url.host) did not answer: \(error)", url: url.text) }
             if (300...399).contains(r.status), let loc = r.headers.last(where: { $0.0.lowercased() == "location" })?.1 {
                 guard let next = url.resolve(loc) else { return refuse("a redirect to \(loc), which is not a URL", url: url.text) }
                 log("redirected", [("from", .string(url.text)), ("to", .string(next.text))])
@@ -169,14 +176,18 @@ public final class FetchBridge {
         return refuse("too many redirects", url: url.text)
     }
 
-    func local(_ host: String) -> String? {
-        if allowLocal { return nil }
+    enum Check { case ok(String?), refused(String) }
+
+    /// The host's addresses, every one checked; the first is the one to
+    /// connect to. A test that allows local addresses resolves as usual.
+    func check(_ host: String) -> Check {
+        if allowLocal { return .ok(nil) }
         let ips = resolve(host)
-        if ips.isEmpty { return "\(host) does not resolve" }
+        guard let first = ips.first else { return .refused("\(host) does not resolve") }
         if let ip = ips.first(where: Addresses.isLocal) {
-            return "\(host) is this computer's or a private network's (\(ip)): an agent does not reach those"
+            return .refused("\(host) is this computer's or a private network's (\(ip)): an agent does not reach those")
         }
-        return nil
+        return .ok(first)
     }
 
     func refuse(_ why: String, url: String) -> FetchAnswer {

@@ -12,7 +12,7 @@
 //       the keeper raises the budget when the person allows more
 //       (`raise tokens=N`); the agent cannot reach it. The keeper puts
 //       PATH inside an agent's jail; the transcript stays outside it.
-//   abyss-model fetch URL [--ca FILE]
+//   abyss-model fetch URL [--ca FILE] [--address IP]
 //       GET an http(s) URL as the fetch bridge does (P18.12a), and print the
 //       status and body: TLS verified against the system's CAs, or FILE's.
 //   abyss-model tier
@@ -76,8 +76,10 @@ case "fetch":
     var to = url.endpoint
     if case let .tls(h, p, _) = to, let ca = opt("--ca") { to = .tls(host: h, port: p, cafile: ca) }
     do {
+        // --address IP: connect there, the name kept for TLS and Host — what
+        // the fetch bridge does with the address it checked (P18.12b).
         let r = try HTTP.call(to, method: "GET", path: url.path, headers: [("User-Agent", "AbyssBSD")],
-                              version: "1.0", timeoutSeconds: 20)
+                              version: "1.0", timeoutSeconds: 20, address: opt("--address"))
         emit(1, "status \(r.status)")
         emit(1, String(decoding: r.body.prefix(4096), as: UTF8.self))
     } catch { die("\(url.text): \(error)") }

@@ -208,19 +208,27 @@ public enum HTTP {
         deinit { if let t = tls { ap_tls_close(t) }; close(fd) }
     }
 
-    static func connect(_ to: Endpoint, timeoutSeconds: Int) throws -> Int32 {
+    /// `address`: connect to this numeric address rather than resolving the
+    /// host again — the one a caller already checked (the fetch bridge, so a
+    /// DNS answer that changes between the check and the connection cannot
+    /// slip in a local address). The host still names the server for TLS and
+    /// `Host:`.
+    static func connect(_ to: Endpoint, timeoutSeconds: Int, address: String? = nil) throws -> Int32 {
         let fd: Int32
         switch to {
         case let .tcp(host, port), let .tls(host, port, _):
             var hints = addrinfo()
             hints.ai_family = AF_UNSPEC
+            if address != nil { hints.ai_flags = AI_NUMERICHOST }
             #if os(Linux)
             hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
             #else
             hints.ai_socktype = SOCK_STREAM
             #endif
             var res: UnsafeMutablePointer<addrinfo>?
-            guard getaddrinfo(host, String(port), &hints, &res) == 0, let ai = res else { throw Failure("cannot resolve \(host)") }
+            guard getaddrinfo(address ?? host, String(port), &hints, &res) == 0, let ai = res else {
+                throw Failure(address == nil ? "cannot resolve \(host)" : "not an address: \(address!)")
+            }
             defer { freeaddrinfo(res) }
             fd = socket(ai.pointee.ai_family, ai.pointee.ai_socktype, ai.pointee.ai_protocol)
             guard fd >= 0 else { throw Failure("socket: \(String(cString: strerror(errno)))") }
@@ -251,8 +259,8 @@ public enum HTTP {
         return fd
     }
 
-    static func open(_ to: Endpoint, timeoutSeconds: Int) throws -> Connection {
-        let fd = try connect(to, timeoutSeconds: timeoutSeconds)
+    static func open(_ to: Endpoint, timeoutSeconds: Int, address: String? = nil) throws -> Connection {
+        let fd = try connect(to, timeoutSeconds: timeoutSeconds, address: address)
         guard case let .tls(host, _, cafile) = to else { return Connection(fd: fd, tls: nil) }
         var err = [CChar](repeating: 0, count: 512)
         guard let t = ap_tls_open(fd, host, cafile, &err, err.count) else {
@@ -266,8 +274,8 @@ public enum HTTP {
     /// for a body it ends by closing, never chunked (P18.12's fetch).
     public static func call(_ to: Endpoint, method: String, path: String, json: JSON? = nil,
                             headers: [(String, String)] = [], version: String = "1.1",
-                            timeoutSeconds: Int = 600) throws -> HTTPResponse {
-        let c = try open(to, timeoutSeconds: timeoutSeconds)
+                            timeoutSeconds: Int = 600, address: String? = nil) throws -> HTTPResponse {
+        let c = try open(to, timeoutSeconds: timeoutSeconds, address: address)
         let body = json.map { Array($0.text.utf8) } ?? []
         var head = "\(method) \(path) HTTP/\(version)\r\nHost: \(to.hostHeader)\r\n"
         if json != nil { head += "Content-Type: application/json\r\n" }
