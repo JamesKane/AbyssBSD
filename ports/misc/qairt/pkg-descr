@@ -1,0 +1,12 @@
+Qualcomm's AI Runtime (QAIRT), its QNN part, set up to run on a Qualcomm
+SoC's NPU (the HTP in its compute DSP) from FreeBSD: QNN's Linux aarch64
+tools and libraries run under the Linux compatibility layer, calling the
+DSP through qcom_fastrpc_linux and linux-fastrpc's library, with the
+Hexagon v68 libraries the DSP loads.  A qnn command runs QNN's tools, and
+a qnn rc service sets up what they expect.
+
+With the CONVERTERS option, the SDK's model converters and quantizer run
+on the board too, with a Python 3.12 for aarch64 Linux.
+
+Qualcomm's licence allows no standalone redistribution: build this from
+your own download of the SDK (QAIRT_SDK=/path/to/the/unzipped/sdk).

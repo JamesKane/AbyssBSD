@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# PROVIDE: qnn
+# REQUIRE: linux
+# KEYWORD: nojail
+#
+# Qualcomm's QNN (Linux build, in %%PREFIX%%/qnn) on the NPU:
+# qnn_enable="YES" to load qcom_fastrpc_linux and tell Linux programs the
+# SoC ID QNN knows this NPU by.  QNN's Linux libraries do not know SC8280XP
+# (449, hw.soc.soc_id), so the default is QCS6490's, the same Hexagon v68.
+#
+#	qnn_soc_id	SoC ID for /sys/devices/soc0/soc_id (498)
+#
+
+. /etc/rc.subr
+
+name="qnn"
+desc="QNN on the NPU, for Linux programs"
+rcvar="qnn_enable"
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+
+qnn_start()
+{
+	load_kld qcom_fastrpc_linux || return 1
+	sysctl compat.linux.soc_id="${qnn_soc_id}" >/dev/null
+}
+
+qnn_stop()
+{
+	sysctl compat.linux.soc_id= >/dev/null
+}
+
+load_rc_config $name
+
+: ${qnn_enable:="NO"}
+: ${qnn_soc_id:="498"}
+
+run_rc_command "$1"
