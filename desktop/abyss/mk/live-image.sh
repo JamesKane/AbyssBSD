@@ -1135,8 +1135,21 @@ announce_addresses() {
   if [ "$_found" = 0 ]; then
     echo "abyss-live: no network address after 10s —"
     echo "abyss-live: interfaces: $(ifconfig -l 2>/dev/null)"
-  elif [ -s /root/.ssh/authorized_keys ]; then
-    echo "abyss-live: sshd is up for root by key (developer build) — abyss/mk/metal.sh"
+  fi
+  # **sshd now, not in its turn.** A developer build (a key baked in) is for
+  # reaching a machine nobody can see, and sshd comes after this script in
+  # rc's order. With no display (/dev/dri/card* absent, below) the session
+  # runs in the foreground and rc never gets past it — so sshd never started,
+  # on exactly the machine that needed it: a GPU the kernel does not bind
+  # (the Mac Pro's GCN 1.0, PHASE4 §6.2). Found booting a medium in qemu,
+  # 2026-10-02. rc's own start later sees it running and says so.
+  if [ -s /root/.ssh/authorized_keys ]; then
+    service sshd onestatus >/dev/null 2>&1 || service sshd start >/dev/null 2>&1
+    if service sshd onestatus >/dev/null 2>&1; then
+      echo "abyss-live: sshd is up for root by key (developer build) — abyss/mk/metal.sh"
+    else
+      echo "abyss-live: sshd did not start (developer build): service sshd start, at the console"
+    fi
   fi
   {
     echo "AbyssBSD live medium."
