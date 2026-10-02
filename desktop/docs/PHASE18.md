@@ -1,6 +1,6 @@
 # Phase 18 — confinement, then agents (scope)
 
-**Status: scoped 2026-10-02.** PLAN.md's Phase 18 is the goal; this is the
+**Status: scoped 2026-10-02; §6 adopted as recommended the same day.** PLAN.md's Phase 18 is the goal; this is the
 order. Phase 18 needs Phases 7, 10 and 14, and all three are complete.
 
 ## 1. What this phase is
