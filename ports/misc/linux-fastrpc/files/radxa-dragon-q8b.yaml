@@ -1,0 +1,6 @@
+# Where the FastRPC library finds the Radxa Dragon Q8B's DSP files, under
+# its configuration base (/usr/local/share/qcom/): keyed by the board's name,
+# as SMBIOS gives it on FreeBSD and the devicetree's model on Linux.
+machines:
+  Radxa Dragon Q8B:
+    DSP_LIBRARY_PATH: sc8280xp/radxa/dragon-q8b/dsp

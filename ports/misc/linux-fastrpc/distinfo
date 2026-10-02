@@ -1,0 +1,7 @@
+TIMESTAMP = 1790961085
+SHA256 (yaml-0.2.5.tar.gz) = c642ae9b75fee120b2d96c712538bd2cf283228d2337df2cf2988e3c02678ef4
+SIZE (yaml-0.2.5.tar.gz) = 609454
+SHA256 (JamesKane-fastrpc-v1.0.8-2-g0e38ac2_GH0.tar.gz) = 017d4150dc64980685d4eca38b7bb4cc06f7c0adc91fc1997846f1d7e51a9c9d
+SIZE (JamesKane-fastrpc-v1.0.8-2-g0e38ac2_GH0.tar.gz) = 638126
+SHA256 (radxa-pkg-radxa-firmware-0.2.42_GH0.tar.gz) = e0e985a11c78dbbd3a1a475a92c44ed7a39be3cd6804251c81f7e8b7e1ff77b3
+SIZE (radxa-pkg-radxa-firmware-0.2.42_GH0.tar.gz) = 59525815

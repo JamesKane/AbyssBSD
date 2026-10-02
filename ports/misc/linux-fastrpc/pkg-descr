@@ -1,0 +1,10 @@
+The FastRPC user library (libcdsprpc and its kin) built for Linux programs,
+which call Qualcomm DSPs through FreeBSD's /dev/fastrpc-* under the Linux
+compatibility layer (qcom_fastrpc_linux): Qualcomm's QNN runtime, for the
+NPU, among them.  It is built from a fork of github.com/quic/fastrpc that
+also builds without libbsd, for Rocky Linux 9's glibc, with libyaml.
+
+Also the Radxa Dragon Q8B's DSP-side files, from Radxa's firmware packages:
+the compute DSP's firmware, which qcom_adsp(4) starts it with; the FastRPC
+shells and libraries the DSP loads; and the library's configuration that
+points at them.

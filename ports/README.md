@@ -1,7 +1,14 @@
 # ports
 
 A poudriere overlay: each directory replaces the port of the same origin in
-the ports tree it is built against.
+the ports tree it is built against, or, where the tree has none, adds it.
+
+Added here (the Q8B's NPU, see docs/boards/radxa-dragon-q8b/npu.md):
+
+- `misc/linux-fastrpc`: the FastRPC library for Linux programs, and the
+  Q8B's DSP files.
+- `misc/qairt`: Qualcomm's QNN runtime, built from the user's own SDK
+  download (`QAIRT_SDK=`), never packaged (`NO_PACKAGE`).
 
     poudriere ports -c -p abyss -m null -M $PWD/ports
     poudriere bulk -j <jail> -p default -O abyss <origins>
