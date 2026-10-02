@@ -472,7 +472,13 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     claims 1–5 in the guest (a virtual pointer clicks TextEdit's row; the
     agent then saves through TextEdit's menu). 5 faults injected, all caught.
 
-  **Not yet:** the 12700KF.
+  **On the 12700KF with Granite 8B Q4 (same day).** TextEdit open on a note,
+  the Agent window beside it. Give Application… listed Finder and TextEdit
+  on the desktop (screenshot), and TextEdit was given. Asked "Please save the
+  document I have open in TextEdit", Granite called `apps`, `describe_app`
+  and `activate file.save`, and TextEdit wrote the note. The conversation
+  shows the give, the three calls and the answer, and the status read "given
+  TextEdit". Quit stopped the model and the bridge. **P18.10 is complete.**
 
 - **P18.11 — the four requesters, the transcript viewer, revocation (M).**
   1. The first write in a session to a file that exists. This is a writable
