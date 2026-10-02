@@ -12,7 +12,44 @@ directory records what we found, so nobody has to find it again.
 | [usb.md](usb.md) | xHCI on ACPI, USB-C role-switch devices, the DWC3 throughput fix, plug orientation |
 | [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, GPU devfreq, `_LPI` deep idle, power profiles |
 | [gpu-display.md](gpu-display.md) | msmfb (display KMS), sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
+| [npu.md](npu.md) | the compute DSP and NPU: FastRPC, QNN under the Linux layer, model conversion, the two ports |
 | [lessons.md](lessons.md) | **read first**: things that reset the SoC, debugging method, gotchas |
+
+## Final status (2026-10-02)
+
+Everything we could test on this board works and has been verified on it;
+what remains needs hardware we don't have, or is not started.
+
+**Works, verified on the board** (src `24723bef3a` is its default kernel):
+
+- Boots stock GENERIC under ACPI with an empty `loader.conf`; root on NVMe.
+- Both 2.5 GbE ports (~2.2 Gbit/s each way), USB-A, both USB-C ports
+  (SuperSpeed either way round), SD with hot-swap, the RTC, I²C.
+- Power: per-domain cpufreq and powerd, deep idle on by default, 46 thermal
+  sensors with critical shutdown, power profiles, the fan (the ADSP's).
+- Display and GPU: KMS on HDMI with hotplug and DPMS, GL ES 3.2 and Vulkan
+  1.3 on the Adreno 690, the AbyssBSD desktop started at boot.
+- Audio: headphone playback and jack detection, reliable from boot (the
+  intermittent no-sound boot is fixed: 12 of 12 boots, and every boot
+  since).
+- NPU: QNN runs on the compute DSP's HTP from FreeBSD, installed from the
+  `misc/linux-fastrpc` and `misc/qairt` ports; MobileNetV2 converted and
+  quantized on the board, 0.94 ms an image, 79/100 top-1.
+- Warm reboots: none hung in about 20 since the GLINK fix (two before it).
+
+**Open**, and why:
+
+| Item | Blocked on |
+|---|---|
+| DisplayPort over USB-C | A USB-C display or adapter. Notifications are read and acknowledged; the PHY's DP side, DP0/DP1 clocks and a second output remain ([usb.md](usb.md)) |
+| Microphone, headset buttons | A headset with a microphone |
+| Wi-Fi/Bluetooth, camera | Not investigated |
+| Serial console | The header's pins are unread (1.8 V); a console would catch any hang that leaves nothing behind |
+| Warm-boot hangs | None since the GLINK fix; not proven gone |
+| One power-off on pulling the headset (2026-10-01) | Never seen again; unexplained |
+| NPU details | QNN's harmless `GraphHtpSettings option 66` log; the DSP's own log (adspmsgd) is silent; quantization costs MobileNetV2 5 points |
+| `lang/swift6` for aarch64 | Port changes in the ports fork, not yet committed; the bootstrap is a local distfile |
+| Upstreaming | FreeBSD series ([../../UPSTREAMING.md](../../UPSTREAMING.md)); the fastrpc fork to quic/fastrpc; drm/msm and libdrm fixes |
 
 ## Decisions
 
@@ -31,7 +68,7 @@ directory records what we found, so nobody has to find it again.
   attached to the ACPI GPU device, because ACPI routes clocks and power
   through PEP, which is Windows-only.
 
-## Status (2026-09-30)
+## Status (2026-10-02)
 
 | Area | State | Where |
 |---|---|---|
@@ -39,7 +76,7 @@ directory records what we found, so nobody has to find it again.
 | Serial console | Driver works; header pins unread (1.8 V pads) | `uart_dev_qcom_geni.c` |
 | Ethernet ×2, 2.5G/1G/100M/10M | Works: ~2.2 Gbit/s each way, TSO, checksum offload, jumbo, hardware multicast filter | `sys/dev/tcx` |
 | USB-A (multiport) | Works | `generic_xhci_acpi.c` |
-| USB-C ×2 (host) | Works at 112 MB/s, SuperSpeed with the plug either way round (orientation from the ADSP over pmic_glink, src `9ded7b873f`) | `generic_xhci_acpi.c`, `sys/dev/qcom_pmic_glink` |
+| USB-C ×2 (host) | Works at 112 MB/s, SuperSpeed with the plug either way round (orientation from the ADSP over pmic_glink, each notification acknowledged) | `generic_xhci_acpi.c`, `sys/dev/qcom_pmic_glink` |
 | Thermal sensors (46) | Works; critical-temperature shutdown tested (clean shutdown, PSCI power-off) | `sys/dev/qcom_tsens` |
 | CPU frequency, 2 domains | Works; per-domain powerd | `sys/dev/qcom_epss`, `usr.sbin/powerd` |
 | Deep idle (PSCI power-down, C3) | Works, on by default (`balanced` power profile; the kernel picks the always-on timer) | `acpi_cpu.c`, `cpu_suspend.c`, `generic_timer_mem.c`, `kern_clocksource.c` |
@@ -53,8 +90,8 @@ directory records what we found, so nobody has to find it again.
 | USB-C orientation | Works: `qcom_pmic_glink` switches each PHY's lanes to the plug ([usb.md](usb.md)) | `sys/dev/qcom_pmic_glink` |
 | USB-C DisplayPort alt mode | Not done: notifications read and acknowledged; PHY, clocks and a second output to do ([usb.md](usb.md)). Power delivery is the ADSP's: devices on both ports are powered | `sys/dev/qcom_pmic_glink` |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
-| Audio | Headphone playback through `pcm0` and jack detection work (src `85f6f47c54`, in GENERIC); microphone not yet. A boot-time failure (on 1 boot in 3 or 4 the ADSP stopped answering, so no sound until a reboot; a panic before src `c515bf20f4`) came from `qcom_pmic_glink` opening its channel over and over before the ADSP's service was up; fixed in src `657b6698d0` (open once the ADSP announces it), 12 of 12 boots good since | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
-| NPU (compute DSP, Hexagon v68) | **QNN runs on the NPU** ([npu.md](npu.md)): QAIRT 2.51's Linux build on Rocky 9 under the Linux layer, MobileNetV2 converted and quantized on the board classifies in 0.94 ms an image vs 18.8 ms on QNN's CPU backend (79 vs 84 of 100 ImageNet samples right); set up by the `linux` and `qnn` services. Underneath: `qcom_rpmh` and `qcom_adsp` start the CDSP, `qcom_fastrpc` gives Linux's FastRPC interface (`fastrpc_test` passes natively too), `qcom_fastrpc_linux` takes it to Linux programs, `hw.soc` and `linsysfs` show them the SoC | `sys/dev/qcom_fastrpc`, `sys/dev/qcom_rpmh`, `sys/dev/qcom_adsp`, `sys/compat/linsysfs` |
+| Audio | Headphone playback through `pcm0` and jack detection work, in GENERIC; microphone not yet. A boot-time failure (on 1 boot in 3 or 4 the ADSP stopped answering, so no sound until a reboot; a panic before src `c515bf20f4`) came from `qcom_pmic_glink` opening its channel over and over before the ADSP's service was up; fixed in src `657b6698d0` (open once the ADSP announces it), every boot good since | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
+| NPU (compute DSP, Hexagon v68) | **QNN runs on the NPU** ([npu.md](npu.md)), installed from the `misc/linux-fastrpc` and `misc/qairt` ports: QAIRT 2.51's Linux build on Rocky 9 under the Linux layer; MobileNetV2 converted and quantized on the board classifies in 0.94 ms an image vs 18.8 ms on QNN's CPU backend (79 vs 84 of 100 ImageNet samples right). Underneath: `qcom_rpmh` and `qcom_adsp` start the CDSP (its boot votes let go once it is up), `qcom_fastrpc` gives Linux's FastRPC interface (`fastrpc_test` passes natively too), `qcom_fastrpc_linux` takes it to Linux programs, `hw.soc` and `linsysfs` show them the SoC | `sys/dev/qcom_fastrpc`, `sys/dev/qcom_rpmh`, `sys/dev/qcom_adsp`, `sys/compat/linsysfs` |
 | Wi-Fi/BT, camera | Not investigated | — |
 | The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
@@ -259,6 +296,13 @@ What was done (2026-09-30/10-01, ports fork, not yet committed):
   - `sys/dev/qcom_smmu/`
   - `sys/dev/qcom_adsp/` (+ `qcom_adsp.4`)
   - `sys/dev/qcom_geni/qcom_geni_i2c.c` (+ `qcom_geni_i2c.4`)
+  - `sys/dev/qcom_tlmm/qcom_tlmm_acpi.c`
+  - `sys/dev/qcom_glink/` (GLINK, SMEM, IPCC, AOSS, socinfo for `hw.soc`)
+  - `sys/dev/qcom_audio/` (GPR, APM, PRM, LPASS macros, SoundWire,
+    WCD938x, `pcm`)
+  - `sys/dev/qcom_pmic_glink/` (USB-C)
+  - `sys/dev/qcom_rpmh/`
+  - `sys/dev/qcom_fastrpc/` (+ `qcom_fastrpc_linux`)
   - `sys/arm/arm/generic_timer_mem.c`
 - arm64 and ACPI:
   - `cpu_suspend.c` and `locore.S` (PSCI suspend/resume)
@@ -267,6 +311,9 @@ What was done (2026-09-30/10-01, ports fork, not yet committed):
   - `acpi_thermal.c` (ignores zones without `_TMP`)
   - `uart_cpu_acpi.c` (invalid SPCR access width)
   - `generic_xhci_acpi.c` (PNP0CA1, DWC3 threshold)
+  - `sdhci_acpi.c` and `sdhci.c` (the MSM wrapper's power requests, ADMA2
+    without SDMA)
+  - `linsysfs.c` (`/sys/devices/soc0`)
   - `kern_cpu.c` / `sys/cpu.h` (`CPUFREQ_FLAG_DOMAIN`)
   - `usr.sbin/powerd` (per-domain)
 - LinuxKPI:
