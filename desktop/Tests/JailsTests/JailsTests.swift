@@ -67,6 +67,7 @@ final class JailsTests: XCTestCase {
             XCTAssertEqual(k.network, .none, n)
             XCTAssertEqual(k.model, "", n)
             XCTAssertEqual(k.budget, JailClass.defaultBudget, n)
+            XCTAssertEqual(k.vocabulary, n == "agent", "\(n): only agent drives applications; debug reads one crash")
             XCTAssertFalse(JailClass.shipped.filter { !$0.agent }.contains { $0.name == n })
         }
         XCTAssertFalse(cls("app").agent)

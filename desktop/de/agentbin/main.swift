@@ -1,13 +1,14 @@
 // abyss-agent — an agent session, inside its jail (PHASE18 P18.8).
 //
 //   abyss-agent serve --model SOCKET --listen SOCKET [--class CLASS]
-//                     [--core CORE --binary BINARY --crash WHAT]
+//                     [--core CORE --binary BINARY --crash WHAT] [--vocab SOCKET]
 //       the loop, answering questions on the socket at --listen (inside the
 //       jail's runtime directory; the keeper hands its outside path to the
 //       chat window). Its only way to a model is abyss-model at --model, and
 //       its tools read only what the jail holds. `bye` ends the session.
 //       With --core and --binary (a `debug` session, P18.9) it also has lldb
-//       on that core, and is told what crashed.
+//       on that core, and is told what crashed. With --vocab (P18.10) it can
+//       drive the applications this session was given, through the bridge.
 //   abyss-agent ask --listen SOCKET TEXT...
 //       ask the agent at SOCKET: one `call=` line per tool as it is called,
 //       then its answer, then `stop=` and `steps=`. Exits 0 when it answered, 3
@@ -67,6 +68,14 @@ case "serve":
         Its core is \(core) and its binary \(binary); the lldb tool runs one command on them. \
         Find where and why it crashed — start with "bt" — and say so in a short report: \
         the signal, the frame that faulted with its file and line if known, and the likely cause.
+        """
+    }
+    if let vocab = opt("--vocab") {
+        tools += AgentTools.vocabulary(socket: vocab)
+        system += " " + """
+        You can drive the applications the person gave you, by their menus: list them with apps, \
+        read one's commands with describe_app, and run a command with activate. Use only verbs \
+        describe_app lists, and say what you did.
         """
     }
     let loop = AgentLoop(system: system, tools: tools, model: modelOverSocket(modelSocket))

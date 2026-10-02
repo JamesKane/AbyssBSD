@@ -258,6 +258,10 @@ if [ "$live" -eq 1 ]; then
   # and answered with its tool calls, the budget's words, ⌘Q ends it.
   echo "== the Agent window =="
   quiet "$root/abyss/tests/live-agent-window.sh"
+  # The vocabulary (P18.10): an agent drives what it was given, by its
+  # menus, and nothing else.
+  echo "== an agent drives what it was given =="
+  quiet "$root/abyss/tests/live-agent-vocab.sh"
   # A confined crash (P18.9a): the person's limits, the core kept, one
   # crash granted to a debug agent, lldb on it.
   echo "== a confined crash, read by a debug agent =="

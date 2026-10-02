@@ -355,7 +355,11 @@ let package = Package(
         .executableTarget(name: "abyss-model", dependencies: ["Model", "CProc", "CurrentIPC", "Spawn"], path: "de/modelbin"),
         // The agent runtime, inside its jail (PHASE18 P18.8): the loop, and
         // the tools that read what the jail holds.
-        .target(name: "Agent", dependencies: ["Model", "Spawn"], path: "de/agent"),
+        .target(name: "Agent", dependencies: ["Model", "Spawn", "CurrentIPC"], path: "de/agent"),
+        // The vocabulary bridge (P18.10): the applications given to an agent
+        // session, through their own menu services, and no others.
+        .target(name: "Vocabulary", dependencies: ["CurrentIPC", "MenuModel", "MenuWire", "Model"], path: "de/vocab"),
+        .executableTarget(name: "abyss-vocab", dependencies: ["Vocabulary", "CurrentIPC", "Model"], path: "de/vocabbin"),
         .executableTarget(name: "abyss-agent", dependencies: ["Agent", "Jails", "Model", "CurrentIPC"], path: "de/agentbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
@@ -367,7 +371,7 @@ let package = Package(
                           path: "de/jaildbin"),
         // The session's half (P18.5): a jail per class, held for the session,
         // with its Wayland socket, bus and portal; launches into it.
-        .target(name: "JailKeeper", dependencies: ["JailD", "Jails", "CJail", "CProc", "CWayland", "CWaylandClient",
+        .target(name: "JailKeeper", dependencies: ["JailD", "MenuWire", "Jails", "CJail", "CProc", "CWayland", "CWaylandClient",
                                                    "CurrentIPC", "PoolConfig", "Spawn"], path: "de/jailkeeper"),
         .executableTarget(name: "abyss-jail", dependencies: ["JailD", "JailKeeper", "Jails", "CJail", "CPlatform",
                                                              "CWaylandClient", "CurrentIPC", "Spawn"],
@@ -382,7 +386,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
-        .testTarget(name: "ModelTests", dependencies: ["Model", "Agent"], path: "Tests/ModelTests"),
+        .testTarget(name: "ModelTests", dependencies: ["Model", "Agent", "Vocabulary", "MenuModel", "CurrentIPC"], path: "Tests/ModelTests"),
         .testTarget(name: "DBusBridgeTests", dependencies: ["DBusBridge", "DBus"], path: "Tests/DBusBridgeTests"),
         .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "JailKeeper", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the

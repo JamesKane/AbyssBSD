@@ -429,6 +429,33 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   and no others. An agent drives an application exactly as the menu bar and a
   script do. Pixels only for an application that cannot describe itself, and
   not in this phase.
+
+  **P18.10a — the bridge — DONE 2026-10-02 (in the guest).**
+  - **`abyss-vocab`, one per agent session**, started by the keeper beside
+    abyss-model when the class has `vocabulary` (`agent` does; `debug` does
+    not). It answers `apps`, `describe` and `activate` on a socket in the
+    jail, relaying each to the application's own menu service, the same one
+    the bar and `abyssmenu` use.
+  - **Gives** come only on a control socket beside the transcript, outside
+    the jail: the agent cannot give itself anything. A give is one running
+    application, by its menu service (pid and all).
+  - **`abyss-jail give SESSION APP`** is the keeper's give; P18.10b puts it in
+    the Agent window.
+  - **Logged and stopped with the agent:** every give, activation and refusal
+    is a line in the session's transcript, and the bridge stops with the
+    agent.
+  - **The agent's tools** are `apps`, `describe_app` (the verbs with titles,
+    arguments, enablement and summaries) and `activate`. Asking about an
+    application not given is refused by name and never forwarded.
+  - Tests: 5 VocabularyTests and a JailsTests check; `live-agent-vocab.sh`
+    claims 1–6 in the guest. A real TextEdit, given, saves when the agent
+    activates `file.save`; a real Grab, running but not given, captures
+    nothing. The agent, crash and launch live tests stay green. 7 faults
+    injected, all caught.
+
+  **P18.10b, next:** giving an application from the Agent window, and the
+  12700KF.
+
 - **P18.11 — the four requesters, the transcript viewer, revocation (M).**
   1. The first write in a session to a file that exists. This is a writable
      grant's first open for writing, which jaild can see.

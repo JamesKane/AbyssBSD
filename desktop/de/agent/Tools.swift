@@ -6,6 +6,7 @@
 // that could disagree with the first. The vocabulary (P18.10) and lldb
 // (P18.9) are added the same way, as tools.
 
+import CurrentIPC
 import Model
 import Spawn
 
@@ -90,5 +91,50 @@ public enum AgentTools {
             let cut = out.utf8.count > readLimit ? String(decoding: Array(out.utf8.prefix(readLimit)), as: UTF8.self) + "\n(cut)" : out
             return r.succeeded ? cut : "lldb exited \(r.code):\n" + cut
         }
+    }
+
+    /// The vocabulary (P18.10): the applications this session was given,
+    /// through the bridge at `socket`. What the agent may drive is the
+    /// bridge's to say, not these tools'.
+    public static func vocabulary(socket: String) -> [AgentTool] {
+        @Sendable func ask(_ m: Msg) -> String {
+            do {
+                let fd = try Current.connect(path: socket)
+                defer { close(fd) }
+                try Current.send(m, on: fd)
+                let r = try Current.receive(on: fd)
+                if r.bool("ok") != true { return "error: " + (r.string("error") ?? "refused") }
+                return r.string("text") ?? r.string("apps") ?? "ok"
+            } catch { return "error: the vocabulary bridge did not answer: \(error)" }
+        }
+        let appParam: JSON = .object([("type", .string("string")), ("description", .string("The application's name, as apps lists it."))])
+        return [
+            AgentTool(name: "apps", description: "List the applications you were given to drive.",
+                      parameters: .object([("type", .string("object")), ("properties", .object([]))])) { _ in
+                var m = Msg(); m.set("method", "apps")
+                let out = ask(m)
+                return out.isEmpty ? "(none: the person has given you no application)" : out
+            },
+            AgentTool(name: "describe_app",
+                      description: "An application's commands (its menus): each verb, what it does, its arguments, and whether it can run now.",
+                      parameters: .object([("type", .string("object")), ("properties", .object([("app", appParam)])),
+                                           ("required", .array([.string("app")]))])) { a in
+                var m = Msg(); m.set("method", "describe"); m.set("app", a["app"]?.string ?? "")
+                return ask(m)
+            },
+            AgentTool(name: "activate",
+                      description: "Run one of an application's commands by its verb, as choosing it from the menu would.",
+                      parameters: .object([("type", .string("object")), ("properties", .object([
+                          ("app", appParam),
+                          ("verb", .object([("type", .string("string")), ("description", .string("e.g. file.save"))])),
+                          ("arguments", .object([("type", .string("object")), ("description", .string("The verb's arguments, if it has any."))])),
+                      ])), ("required", .array([.string("app"), .string("verb")]))])) { a in
+                var m = Msg(); m.set("method", "activate"); m.set("app", a["app"]?.string ?? ""); m.set("verb", a["verb"]?.string ?? "")
+                if case .object(let kv)? = a["arguments"] {
+                    m.set("arguments", kv.map { "\($0.0)=\($0.1.string ?? $0.1.text)" }.joined(separator: "\n"))
+                }
+                return ask(m)
+            },
+        ]
     }
 }

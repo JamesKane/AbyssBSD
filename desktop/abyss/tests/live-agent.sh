@@ -7,7 +7,8 @@
 #
 #   1. `abyss-jail agent agent` starts a session: the agent runs in the
 #      agent class's jail, which has no address, and whose runtime directory
-#      holds the session's two sockets and nothing else (no display, no bus);
+#      holds the session's sockets — the agent's, the model's, the vocabulary's
+#      (P18.10) — and nothing else (no display, no bus);
 #   2. a question runs the loop — the stub's tool calls are carried out in
 #      the jail, and their results go back to the model: the jail's home is
 #      listed, and a host file is not there to read;
@@ -77,9 +78,9 @@ jid=$(jls -j "$N" jid 2>/dev/null) || fail "no jail $N"
 [ "$(ps -o jid= -p "$apid" | tr -d ' ')" = "$jid" ] || fail "abyss-agent (pid $apid) is not in $N (jid $jid)"
 [ "$(jls -j "$N" ip4)" = disable ] && [ "$(jls -j "$N" ip6)" = disable ] || fail "the agent's jail has an address: ip4=$(jls -j "$N" ip4)"
 inside=$(ls "$RB/$uid/agent/run/user" | tr '\n' ' ')
-[ "$inside" = "agent-1.sock model-1.sock " ] || fail "the agent's runtime directory holds more than its sockets: $inside"
+[ "$inside" = "agent-1.sock model-1.sock vocab-1.sock " ] || fail "the agent's runtime directory holds more than its sockets: $inside"
 grep -q "jails: $N is jail $jid; no display, so no socket or bus" "$W/keeper.log" || fail "the keeper brought up a display or bus for an agent"
-echo "ok: 1. the agent runs in $N (jid $jid): no address, and only its two sockets — no display, no bus"
+echo "ok: 1. the agent runs in $N (jid $jid): no address, and only its own sockets — no display, no bus"
 
 # ---- 2. the loop, in the jail -------------------------------------------------
 printf 'mine\n' > "$HB/$me/agent/marker.txt"

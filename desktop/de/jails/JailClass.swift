@@ -36,10 +36,15 @@ public struct JailClass: Equatable, Sendable {
     /// takes it: `local:MODEL.gguf`, `stub:REPLIES.json` or `http://HOST:PORT`.
     /// Empty: none is set, and an agent session is refused saying so.
     public var model: String
+    /// An agent class's way to the applications a session is given (P18.10):
+    /// a vocabulary bridge beside its model socket. `debug` has none — one
+    /// crash, read-only, and nothing to drive.
+    public var vocabulary: Bool
 
     public init(name: String, system: [String] = JailClass.baseSystem, devices: [String] = [],
                 network: Network = .none, wayland: Bool = true,
-                agent: Bool = false, budget: Int = JailClass.defaultBudget, model: String = "") {
+                agent: Bool = false, budget: Int = JailClass.defaultBudget, model: String = "",
+                vocabulary: Bool = false) {
         self.name = name
         self.system = system
         self.devices = devices
@@ -48,6 +53,7 @@ public struct JailClass: Equatable, Sendable {
         self.agent = agent
         self.budget = budget
         self.model = model
+        self.vocabulary = vocabulary
     }
 
     /// Tokens per agent session, unless the row says otherwise.
@@ -71,7 +77,7 @@ public struct JailClass: Equatable, Sendable {
         // Agents (P18.8): no display, no bus, no devices, no network — a
         // model socket and nothing else. `debug` is the crash path's (P18.9),
         // whose tool is lldb, already in /usr.
-        JailClass(name: "agent", wayland: false, agent: true),
+        JailClass(name: "agent", wayland: false, agent: true, vocabulary: true),
         JailClass(name: "debug", wayland: false, agent: true),
     ]
 
@@ -90,6 +96,7 @@ public struct JailClass: Equatable, Sendable {
             if let b = c.bool(section, "agent") { k.agent = b }
             if let s = c.string(section, "budget"), let n = Int(s), n > 0 { k.budget = n }
             if let s = c.string(section, "model") { k.model = s }
+            if let b = c.bool(section, "vocabulary") { k.vocabulary = b }
             out.removeAll { $0.name == section }
             out.append(k)
         }

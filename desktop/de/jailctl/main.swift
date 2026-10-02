@@ -25,6 +25,9 @@
 //       ask the session for an agent session in CLASS (P18.8): prints
 //       "agent SESSION socket=… transcript=… pid=…"; `abyss-agent ask
 //       --listen SOCKET` then talks to it.
+//   abyss-jail give SESSION APP
+//       give a running application to an agent session (P18.10): APP as
+//       abyssmenu names it, or its menu service; the agent may then drive it.
 //   abyss-jail crashes
 //       the confined programs that died of a signal this session (P18.9).
 //   abyss-jail debug N
@@ -153,6 +156,14 @@ case "agent":
         let r = try Current.call(KeeperWire.service, m)
         guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
         emit(1, "agent \(r.string("session") ?? "") socket=\(r.string("socket") ?? "") transcript=\(r.string("transcript") ?? "") pid=\(r.uint64("pid") ?? 0)")
+    } catch { die("the session's jails are not running (\(error))") }
+case "give":
+    guard args.count >= 3 else { die("give needs a session and an application") }
+    var m = Msg(); m.set("method", "give"); m.set("session", subject); m.set("app", args[2])
+    do {
+        let r = try Current.call(KeeperWire.service, m)
+        guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
+        emit(1, "gave \(r.string("app") ?? args[2]) to \(subject)")
     } catch { die("the session's jails are not running (\(error))") }
 case "debug":
     var m = Msg(); m.set("method", "debug"); m.set("crash", UInt64(subject) ?? 0)
