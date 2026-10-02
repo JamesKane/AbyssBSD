@@ -79,6 +79,9 @@ case "diskutility":
 case "activity":
     // Activity Monitor (PHASE15 P15.7).
     scene = .activity; title = "Activity Monitor"; width = 620; height = 360
+case "agent":
+    // Agent (PHASE18 P18.8b): the chat window.
+    scene = .agent; title = "Agent"; width = 560; height = 460
 case "grab":
     // Grab (PHASE15 P15.6): its main window's size.
     scene = .grab; title = "Grab"; width = 420; height = 150
@@ -169,6 +172,15 @@ if sceneName == "setupassistant" {
         print("AquaDemo: could not open the Setup Assistant."); exit(1)
     }
     app.onQuit = { display.stop() }
+    withExtendedLifetime(app) { display.run() }
+    exit(0)
+}
+if sceneName == "agent" {
+    // Agent (PHASE18 P18.8b): the chat window, outside the jail, talking to an
+    // agent session the keeper starts inside one.
+    guard let app = AgentApp(display: display) else { print("AquaDemo: could not open Agent."); exit(1) }
+    app.onQuit = { display.stop() }
+    installerSay("AquaDemo: Agent is up.")
     withExtendedLifetime(app) { display.run() }
     exit(0)
 }

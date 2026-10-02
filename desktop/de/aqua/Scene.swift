@@ -42,6 +42,7 @@ public enum SceneKind: Sendable {
     case grab        // Grab (PHASE15 P15.6)
     case activity    // Activity Monitor (PHASE15 P15.7)
     case diskutility // Disk Utility (PHASE15 P15.8)
+    case agent       // Agent, the chat window (PHASE18 P18.8b)
 }
 
 /// What the pointer is over in a window's chrome.
@@ -270,6 +271,16 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
         _ = paintActivity(cr, w: cw, h: ch, view: v, userName: { $0 == 0 ? "root" : "abyss" })
     case .grab:
         _ = paintGrabPanel(cr, w: cw, h: ch, status: "Choose what to capture.")
+    case .agent:
+        // A fixed conversation: a question, the tool calls it took, the
+        // answer — and the field with the next question being typed.
+        let view = TextView()
+        view.setText(agentTurn(question: "What do I need to do on Monday?",
+                               calls: [#"list_directory({"path":"/home/abyss"})"#, #"read_file({"path":"/home/abyss/notes.txt"})"#],
+                               answer: "Call the plumber about the kitchen tap."))
+        _ = paintAgentWindow(cr, w: cw, h: ch, conversation: view,
+                             status: "Confined in agent: no network; only what you grant it.",
+                             field: "And on Tuesday?", caret: true, canAsk: true)
     case .textedit:
         // A fixed document: wrapped lines, a tab, a selection across a line
         // break, and the find bar with its text.

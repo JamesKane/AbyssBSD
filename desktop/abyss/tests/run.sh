@@ -254,6 +254,10 @@ if [ "$live" -eq 1 ]; then
   # through abyss-model, the tools within the jail, the budget stops it.
   echo "== an agent in its jail =="
   quiet "$root/abyss/tests/live-agent.sh"
+  # The Agent window (P18.8b): a session from the keeper, a question typed
+  # and answered with its tool calls, the budget's words, ⌘Q ends it.
+  echo "== the Agent window =="
+  quiet "$root/abyss/tests/live-agent-window.sh"
   # A window that starts fullscreen (F.1): `firefox --kiosk`'s requests, the
   # whole display, at its origin, whatever it said next.
   echo "== a window that starts fullscreen =="

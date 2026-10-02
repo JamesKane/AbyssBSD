@@ -313,8 +313,23 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   (HANDOFF §2.129): `metal.sh push` left the new binaries out and gave every
   pushed file to the person, root daemons included.
 
-  **P18.8b — the chat window**, ours and outside the jail, talking to the
-  agent's socket, is next.
+  **P18.8b — the chat window — DONE 2026-10-02.** `AQUA_SCENE=agent`, an
+  AquaDemo mode like Grab (`de/aqua/AgentApp.swift`). It asks the keeper for
+  a session in `agent` (or `$ABYSS_AGENT_CLASS`), then talks to the agent's
+  socket. The conversation shows each tool call as a line before the answer.
+  The status line says where the agent runs, and why it stopped in the words
+  of what stopped it. Nothing waits: the keeper's answer and every reply come
+  through the display's poll loop. Ask is a menu verb (Conversation ▸ Ask)
+  whose enablement says why not ("the field is empty", "the agent is
+  answering", "there is no agent"). Closing or ⌘Q says `bye`. 3
+  AgentWindowTests, an `agent` golden on both platforms, and
+  `live-agent-window.sh` (claims 1–5: typed with a virtual keyboard, sent with
+  Return and with the button, the budget, ⌘Q, a class with no model), green
+  in the guest; 6 faults injected, all caught.
+
+  **P18.8 is complete.** Not yet: a Dock or Applications entry for Agent (it
+  is reachable by `AQUA_SCENE=agent`, as Grab is), and showing tool calls as
+  they happen rather than with the answer.
 - **P18.9 — the crash, first (M).** jaild gives a spawned program the person's
   login-class limits (`setusercontext`), not jaild's own: a jailed process now
   inherits a core limit of 0 (§4.7). When a confined application dies of a
