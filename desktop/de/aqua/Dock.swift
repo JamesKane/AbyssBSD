@@ -130,7 +130,8 @@ public func dockMagnify(count: Int, baseSize S: Double, gap G: Double,
 @discardableResult
 public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
                       items: [DockItem], running: [Bool], pointerX: Double?,
-                      tileSize S: Double, magnify: Bool) -> [DockTileFrame] {
+                      tileSize S: Double, magnify: Bool,
+                      agentBadge: AgentBadge = .none) -> [DockTileFrame] {
     let frames = dockMagnify(count: items.count, baseSize: S, gap: DockMetrics.gap,
                              centerX: w / 2, pointerX: magnify ? pointerX : nil,
                              maxScale: DockMetrics.maxScale,
@@ -163,6 +164,7 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
             let cx = frames[i].centerX, ty = panelBottom - 3
             Draw.paint("dock.running", cr, Rect(cx - 3, ty - 4, 6, 4))
         }
+        if item.appID == "org.abyssbsd.agent" { paintAgentBadge(cr, agentBadge, tile: rect) }
     }
 
     // Label the hovered (most-magnified) tile, in a small tooltip above it.
@@ -173,6 +175,23 @@ public func paintDock(_ cr: OpaquePointer, w: Double, h: Double,
                       bottomY: iconBottom - frames[hi].size - 8)
     }
     return frames
+}
+
+/// The Agent tile's badge (PHASE18 P18.13b), Mail's: at the tile's top
+/// right, a count of sessions waiting for the person, or "…" while one works.
+func paintAgentBadge(_ cr: OpaquePointer, _ badge: AgentBadge, tile: Rect) {
+    let text: String, color: Color
+    switch badge {
+    case .none: return
+    case .working: text = "…"; color = Theme.current.dockBadgeWorking
+    case .waiting(let n): text = n > 99 ? "99+" : String(n); color = Theme.current.dockBadgeWaiting
+    }
+    let d = max(18, tile.w * 0.38)
+    let w = max(d, Draw.textWidth(cr, text, size: d * 0.62, style: .bold) + d * 0.5)
+    let r = Rect(tile.x + tile.w - w + d * 0.15, tile.y - d * 0.15, w, d)
+    Draw.paint("dock.badge", cr, r, colors: ["c": color])
+    Draw.text(cr, text, centerX: r.x + r.w / 2, centerY: r.y + r.h / 2, color: Theme.dockBadgeText,
+              size: d * 0.62, style: .bold)
 }
 
 private func drawDockLabel(_ cr: OpaquePointer, _ text: String,
@@ -242,6 +261,8 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     /// Trash state: whether it holds anything (which tile glyph to draw), the
     /// watcher that keeps that honest, and the open tile menu.
     private var trashFull = false
+    private var presenceWatcher: Pool.Watcher?
+    private var agentBadge = AgentBadge.none
     private var trashWatcher: Pool.Watcher?
     private var menu: AquaMenu?
     private var popup: Popup?
@@ -377,7 +398,26 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
             }
         }
 
+        // Agent presence (PHASE18 P18.13b): the Agent windows say their
+        // sessions' states as files; the Agent tile badges them.
+        if let dir = AgentPresenceIO.dir(), let w = try? Pool.Watcher(in: dir) {
+            presenceWatcher = w
+            display.addFileDescriptor(w.fileDescriptor) { [weak self] in self?.presenceChanged() }
+        }
+        presenceChanged()
+
         acceptDrops(display)
+    }
+
+    /// Re-read the agents' presence; redraw if the badge moved. Off, no badge
+    /// (P18.13a): the tile itself is gone.
+    private func presenceChanged() {
+        _ = presenceWatcher?.drain()
+        let badge = Agents.on() ? AgentBadge(AgentPresenceIO.read()) : .none
+        guard badge != agentBadge else { return }
+        agentBadge = badge
+        Dock.log("agent badge: \(badge)")
+        layer?.setNeedsDisplay()
     }
 
     private func trashChanged() {
@@ -393,6 +433,9 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
     // MARK: ForeignToplevelsDelegate
 
     public func toplevelsChanged(_ tops: [ToplevelInfo]) {
+        // A window gone may be an Agent window killed outright, whose
+        // presence file nothing else would clear (P18.13b).
+        presenceChanged()
         // Bundles written since the last look (a login's appgen, a new port).
         let now = AppLibrary.all()
         if now != library {
@@ -591,7 +634,7 @@ public final class Dock: LayerSurfaceDelegate, ForeignToplevelsDelegate {
         cairo_save(cr); cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR); cairo_paint(cr); cairo_restore(cr)
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER)
         frames = paintDock(cr, w: w, h: h, items: displayItems, running: running,
-                           pointerX: pointerX, tileSize: tileSize, magnify: magnify)
+                           pointerX: pointerX, tileSize: tileSize, magnify: magnify, agentBadge: agentBadge)
         logTiles(width: w)
         cairo_surface_flush(cs)
         cairo_destroy(cr)

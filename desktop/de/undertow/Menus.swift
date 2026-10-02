@@ -118,6 +118,8 @@ public final class Menus {
             for t in c.toplevels where t.mapped && !t.minimized {
                 tw_menubar_send_window(resource, t.id, t.islandDisplay, UInt32(t.island),
                                        t.appID ?? "", t.title ?? "")
+                // Whose it is: the client's pid, as Force Quit finds it (P10.8).
+                tw_menubar_send_window_pid(resource, t.id, tw_client_pid_of(t.xdgToplevel.pointee.resource))
             }
             for (i, s) in c.shoalBook.shoals.enumerated() {
                 let open = s.members.filter { k in c.toplevels.contains { $0.mapped && $0.placeKey == k } }.count

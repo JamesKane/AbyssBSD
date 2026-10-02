@@ -217,6 +217,8 @@ void tw_menubar_send_island_all(struct tw_menus *m, const char *display, uint32_
                                 const char *name, uint32_t count, uint32_t is_main);
 void tw_menubar_send_window(struct wl_resource *menubar, uint32_t id, const char *display,
                             uint32_t island, const char *app_id, const char *title);
+/* v6 (PHASE18 P18.13b): after each window, the pid of the client it belongs to. */
+void tw_menubar_send_window_pid(struct wl_resource *menubar, uint32_t id, int pid);
 void tw_menubar_send_islands_done(struct wl_resource *menubar, const char *names);
 void tw_menubar_send_shoal(struct wl_resource *menubar, const char *display, uint32_t island,
                            uint32_t index, const char *name, uint32_t open);

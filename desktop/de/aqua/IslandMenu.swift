@@ -23,7 +23,8 @@ public enum IslandMenu {
     /// goes to it, wherever it is (the Dock's rule).
     public static func build(display: String, active: Int, count: Int, names: [String],
                              windows: [MenuBarFocus.IslandWindow],
-                             shoals: [MenuBarFocus.ShoalInfo] = []) -> Menu {
+                             shoals: [MenuBarFocus.ShoalInfo] = [],
+                             agents: [AgentPresence] = []) -> Menu {
         var items: [MenuItem] = []
         for n in 1...max(count, 1) {
             let name = n <= names.count && !names[n - 1].isEmpty ? names[n - 1] : "\(n)"
@@ -32,7 +33,10 @@ public enum IslandMenu {
                                           key: n <= 9 ? KeyEquivalent(.character(Character("\(n)")), .control) : nil,
                                           summary: "Show island \(n) on this display.")))
             for w in windows where w.display == display && w.island == n {
-                let label = w.title.isEmpty ? w.appID : w.title
+                var label = w.title.isEmpty ? w.appID : w.title
+                // An agent session's window says its state (PHASE18 P18.13b),
+                // matched by the process that owns it.
+                if w.pid > 0, let a = agents.first(where: { $0.pid == w.pid }) { label += " — " + a.state.words }
                 items.append(.command(Command("island.window.\(w.id)", "        " + label,
                                               summary: "Go to this window.")))
             }

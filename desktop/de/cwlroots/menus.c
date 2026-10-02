@@ -252,6 +252,11 @@ void tw_menubar_send_window(struct wl_resource *menubar, uint32_t id, const char
                                  app_id ? app_id : "", title ? title : "");
 }
 
+void tw_menubar_send_window_pid(struct wl_resource *menubar, uint32_t id, int pid) {
+    if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_WINDOW_PID_SINCE_VERSION) return;
+    abyss_menubar_v1_send_window_pid(menubar, id, pid > 0 ? (uint32_t)pid : 0);
+}
+
 void tw_menubar_send_shoal(struct wl_resource *menubar, const char *display, uint32_t island,
                            uint32_t index, const char *name, uint32_t open) {
     if (wl_resource_get_version(menubar) < ABYSS_MENUBAR_V1_SHOAL_SINCE_VERSION) return;
@@ -483,7 +488,7 @@ struct tw_menus *tw_menus_create(struct wl_display *display, const struct tw_men
                                          m, manager_bind);
     m->window_global = wl_global_create(display, &abyss_window_manager_v1_interface, 2,
                                         m, window_manager_bind);
-    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 5,
+    m->menubar_global = wl_global_create(display, &abyss_menubar_v1_interface, 6,
                                          m, menubar_bind);
     m->gtk_shell_global = wl_global_create(display, &gtk_shell1_interface, 5, m, gtk_shell_bind);
     if (!m->manager_global || !m->window_global || !m->menubar_global || !m->gtk_shell_global) {

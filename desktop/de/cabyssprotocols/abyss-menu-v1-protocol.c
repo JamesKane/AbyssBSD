@@ -73,11 +73,12 @@ static const struct wl_message abyss_menubar_v1_events[] = {
 	{ "islands_done", "3s", abyss_menu_v1_types + 0 },
 	{ "shoal", "4suusu", abyss_menu_v1_types + 0 },
 	{ "jail", "5s", abyss_menu_v1_types + 0 },
+	{ "window_pid", "6uu", abyss_menu_v1_types + 0 },
 };
 
 WL_PRIVATE const struct wl_interface abyss_menubar_v1_interface = {
-	"abyss_menubar_v1", 5,
+	"abyss_menubar_v1", 6,
 	6, abyss_menubar_v1_requests,
-	6, abyss_menubar_v1_events,
+	7, abyss_menubar_v1_events,
 };
 

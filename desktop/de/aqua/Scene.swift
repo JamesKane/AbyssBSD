@@ -143,6 +143,14 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
             paintDesktopIcons(cr, bounds: bounds, entries: desktopSampleEntries(),
                               selection: 1)
         }
+        // AQUA_AGENTS=STATE:N pictures N agent sessions in STATE (P18.13b):
+        // the Agent tile's badge, and the menu bar's Agent item.
+        let pictured: [AgentPresence] = {
+            guard let e = getenv("AQUA_AGENTS").map({ String(cString: $0) }),
+                  let c = e.firstIndex(of: ":"), let st = AgentState(rawValue: String(e[..<c])),
+                  let n = Int(e[e.index(after: c)...]) else { return [] }
+            return (0..<n).map { AgentPresence(pid: Int32(1000 + $0), state: st, about: "") }
+        }()
         if kind == .menubar {
             // The headless render reads the machine the same way the live bar
             // does, so a status item that would appear on screen appears here
@@ -154,11 +162,16 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                          // highlight, P11.5) — 0 is the system menu's mark.
                          openIndex: getenv("AQUA_MENUBAR_OPEN").flatMap { Int(String(cString: $0)) },
                          showClock: true,
-                         status: MenuBarStatus.read())
+                         status: MenuBarStatus.read(),
+                         agent: menuBarAgentLabel(pictured),
+                         agentWaiting: pictured.contains { $0.state == .waiting })
         }
         if kind == .dock {
             let dockH = DockMetrics.surfaceHeight(tileSize: 48)
             var items = Dock.defaultPinned()
+            if !pictured.isEmpty, let b = Dock.builtins.first(where: { $0.token == "agent" }) {
+                items.insert(DockItem(icon: b.icon, label: b.label, appID: b.appID), at: min(3, items.count))
+            }
             items.append(DockItem(icon: .trash, label: "Trash", appID: nil, isTrash: true))
             cairo_save(cr)
             cairo_translate(cr, 0, Double(height) - dockH)
@@ -169,7 +182,8 @@ public func renderScenePNG(path: String, kind: SceneKind, width: Int32,
                       // which cannot run and which the old placeholders hid.
                       running: items.indices.map {
                           getenv("AQUA_DOCK_RUNNING") != nil && $0 % 2 == 0 && !items[$0].isTrash },
-                      pointerX: Double(width) * 0.42, tileSize: 48, magnify: true)
+                      pointerX: Double(width) * 0.42, tileSize: 48, magnify: true,
+                      agentBadge: AgentBadge(pictured))
             cairo_restore(cr)
         }
         cairo_surface_flush(cs)

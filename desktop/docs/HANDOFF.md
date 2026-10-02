@@ -1208,6 +1208,12 @@ check correctly sent it nothing. **Bumping a protocol means bumping the client's
 cap in `Display.swift` too.** Nothing fails loudly: the old version works,
 only without the new features.
 
+**It happened again in P18.13b** (v6, `window_pid`): the compositor sent the
+pid and the bar, still capped at 5, never heard it. A rule written down was
+not enough. The caps for our own protocols are now one table,
+`Display.ourVersions`, and `ProtocolVersionTests` reads each XML and fails
+when a cap and its XML's `version` differ.
+
 ### 2.116 vt(4) switches only to a window somebody has open
 (PHASE16, the login window on the 12700KF.)
 

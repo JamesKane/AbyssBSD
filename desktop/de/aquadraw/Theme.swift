@@ -252,6 +252,11 @@ public struct ThemeTokens: Sendable, Equatable {
     public var dockShelfBorder: Color = Color(0, 0, 0, 0.28)
     public var dockSeparator: Color = Color(0, 0, 0, 0.22)
     public var dockRunningMark: Color = Color(0.1, 0.1, 0.1, 0.85)
+    /// The Agent tile's badge (PHASE18 P18.13b): waiting for the person (a
+    /// count, Mail's red), or working; and its text.
+    public var dockBadgeWaiting: Color = Color(0.85, 0.1, 0.08, 1)
+    public var dockBadgeWorking: Color = Color(0.45, 0.47, 0.5, 1)
+    public var dockBadgeText: Color = Color(1, 1, 1, 1)
     public var dockLabelBackground: Color = Color(0.12, 0.12, 0.14, 0.9)
     public var dockLabelText: Color = Color(1, 1, 1)
 
@@ -408,6 +413,9 @@ public struct ThemeTokens: Sendable, Equatable {
         ("dockShelfBorder", \.dockShelfBorder),
         ("dockSeparator", \.dockSeparator),
         ("dockRunningMark", \.dockRunningMark),
+        ("dockBadgeWaiting", \.dockBadgeWaiting),
+        ("dockBadgeWorking", \.dockBadgeWorking),
+        ("dockBadgeText", \.dockBadgeText),
         ("dockLabelBackground", \.dockLabelBackground),
         ("dockLabelText", \.dockLabelText),
         ("inactiveFrameWash", \.inactiveFrameWash),
@@ -659,6 +667,7 @@ public enum Theme {
     public static var dockShelfBorder: Color { current.dockShelfBorder }
     public static var dockSeparator: Color { current.dockSeparator }
     public static var dockRunningMark: Color { current.dockRunningMark }
+    public static var dockBadgeText: Color { current.dockBadgeText }
     public static var dockLabelBackground: Color { current.dockLabelBackground }
     public static var dockLabelText: Color { current.dockLabelText }
     public static var inactiveFrameWash: Color { current.inactiveFrameWash }

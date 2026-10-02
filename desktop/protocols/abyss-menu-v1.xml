@@ -51,7 +51,7 @@
     </request>
   </interface>
 
-  <interface name="abyss_menubar_v1" version="5">
+  <interface name="abyss_menubar_v1" version="6">
     <description summary="the menu bar's view of focus">
       Offered only to clients that connected to the compositor's privileged
       socket (PHASE10 §6.1). It says which application is frontmost and where
@@ -176,6 +176,18 @@
         application's menu.
       </description>
       <arg name="class" type="string"/>
+    </event>
+
+    <event name="window_pid" since="6">
+      <description summary="the process a listed window belongs to">
+        Sent immediately after each window event of a list_islands answer
+        (PHASE18 P18.13b): the pid of the client that owns the window, from
+        its socket's credentials, or 0 when it is not known. The bar matches
+        a window to a process that has said something of itself (an agent
+        session's presence), to name it in the island menu and to go to it.
+      </description>
+      <arg name="id" type="uint" summary="the window just listed"/>
+      <arg name="pid" type="uint"/>
     </event>
   </interface>
 </protocol>

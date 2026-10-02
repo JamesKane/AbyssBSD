@@ -251,6 +251,22 @@ struct abyss_menubar_v1_listener {
 	void (*jail)(void *data,
 		     struct abyss_menubar_v1 *abyss_menubar_v1,
 		     const char *class);
+	/**
+	 * the process a listed window belongs to
+	 *
+	 * Sent immediately after each window event of a list_islands
+	 * answer (PHASE18 P18.13b): the pid of the client that owns the
+	 * window, from its socket's credentials, or 0 when it is not
+	 * known. The bar matches a window to a process that has said
+	 * something of itself (an agent session's presence), to name it in
+	 * the island menu and to go to it.
+	 * @param id the window just listed
+	 * @since 6
+	 */
+	void (*window_pid)(void *data,
+			   struct abyss_menubar_v1 *abyss_menubar_v1,
+			   uint32_t id,
+			   uint32_t pid);
 };
 
 /**
@@ -295,6 +311,10 @@ abyss_menubar_v1_add_listener(struct abyss_menubar_v1 *abyss_menubar_v1,
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_JAIL_SINCE_VERSION 5
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_WINDOW_PID_SINCE_VERSION 6
 
 /**
  * @ingroup iface_abyss_menubar_v1

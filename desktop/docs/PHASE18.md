@@ -709,7 +709,72 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
       live tests green in the guest.
     - **On the box:** the `abyss` account has no `agents.ini`, so after this
       pass its agents are off until the switch is ticked.
-  - **P18.13b — presence: next.**
+    - **A miss, found in P18.13b:** System ▸ Agent… had no case in the
+      bar's enablement, so it was drawn disabled ("not available yet"). The
+      live test used the chord and never opened the menu. P18.13b's test
+      chooses it from the menu, and a fault that disables it is caught.
+  - **P18.13b — presence: DONE 2026-10-02.**
+    - **Who knows:** only the Agent window knows whether its session is
+      working (a question with the model), waiting (a requester up) or idle.
+      The keeper and the model serve one request at a time and cannot be
+      asked mid-question. So the window says it, as a file:
+      `<runtime dir>/agents/<pid>`, the state and what it is about, written
+      aside and renamed into place (a directory watch sees renames). It is
+      published when the phase, the requester or the question changes, and
+      withdrawn when the session ends or the window quits. A file whose
+      process is gone is ignored and removed when read. No bus, no new
+      service: the watchers the Dock and the desktop already use.
+    - **The Dock:** the Agent tile carries Mail's badge: a red count of
+      sessions waiting, or a grey "…" while one works; idle is the running
+      mark alone. `dock.badge` is a draw list in both themes, coloured by
+      three new tokens (`dockBadgeWaiting`, `dockBadgeWorking`,
+      `dockBadgeText`). The Dock re-reads on the directory's changes and
+      when a window comes or goes.
+    - **The menu bar:** an Agent item, between the status items and the
+      island item, only while a session is open: "Agent", "Agent: Working",
+      "Agent: Waiting" (or "Agent: 2 Waiting") with a red dot. Its menu lists
+      the sessions, the most pressing first ("Waiting for you: Allow more
+      tokens?"); choosing one goes to its window. Then New Agent Window….
+      The bar re-reads on the directory's changes and on its one-second
+      tick, which is what notices agents turned off and a window killed
+      outright.
+    - **The island switcher** (Phase 13's island menu): an Agent window's
+      row says its state ("Agent — Waiting for you"). Matching a window to a
+      session needs the process behind it, so **`abyss_menubar_v1` v6** adds
+      `window_pid`, sent after each listed window: the client's pid, found
+      as Force Quit finds it. The bar binds v6.
+    - **Off** (P18.13a): no item and no badge, whatever a presence file
+      says.
+    - **Found on the way:** the bar bound v5 while the compositor offered
+      v6, so `window_pid` never came (HANDOFF §2.117, a second time). The
+      caps for our own protocols are now one table, `Display.ourVersions`,
+      and `ProtocolVersionTests` holds each to its XML's `version`.
+    - **Tests:** `AgentPresenceTests` (the state from the phase and the
+      requester; the file's text; waiting first; the badge; the item's
+      words and its menu; the island menu's rows matched by pid, never by an
+      unknown one; the directory, with a dead process's file dropped),
+      `ProtocolVersionTests`, and five new goldens (the badge waiting and
+      working, Trench's badge, the item waiting and idle).
+      **`live-agent-presence.sh`**, in the guest, with every process real:
+      no session, no item, and System ▸ Agent… enabled; chosen, the window
+      opens idle ("Agent"); a question out, "Agent: Working" and "…" on the
+      tile; the budget's requester, "Agent: Waiting" and a count, the island
+      menu names the window, and the Agent menu goes to it; Stop, and both
+      go with the file; a window killed outright, and its presence goes;
+      agents off, and no item.
+    - **Faults, all caught:** six in the unit tests (a requester not
+      waiting; working counted as waiting; idle first; a dead process's
+      file kept; an unknown pid matched; two waiting said as one) and seven
+      live (the window never says it; an ended session not withdrawn; the
+      Dock does not watch; the bar's tick does not re-read; the bar ignores
+      off; System ▸ Agent… disabled; the compositor sends no pid). With the
+      tick removed, a killed window was still noticed: the Dock, re-reading
+      when the window went, removed the dead process's file, which the bar's
+      watcher saw. The tick is proved by claim 7, which nothing else covers.
+    - 938 unit tests and 103 goldens green on Linux and in the guest;
+      `live-islands-bar`, `live-menus` and `live-context` (Force Quit) on
+      both; the agent live tests in the guest.
+    - **P18.13 is complete.**
 - **P18.14 — the gate (S).** PLAN's verify list:
   - an agent in a jail with exactly one descriptor (the model socket);
   - the transcript showing what it was granted;

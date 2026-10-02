@@ -38,9 +38,11 @@ public final class MenuBarFocus {
         public let island: Int
         public let appID: String
         public let title: String
-        public init(id: UInt32, display: String, island: Int, appID: String, title: String) {
+        /// The owning client's pid (v6, P18.13b); 0 when not known.
+        public var pid: Int32
+        public init(id: UInt32, display: String, island: Int, appID: String, title: String, pid: Int32 = 0) {
             self.id = id; self.display = display; self.island = island
-            self.appID = appID; self.title = title
+            self.appID = appID; self.title = title; self.pid = pid
         }
     }
 
@@ -120,6 +122,12 @@ public final class MenuBarFocus {
                                            island: Int(island),
                                            appID: appID.map { String(cString: $0) } ?? "",
                                            title: title.map { String(cString: $0) } ?? ""))
+        }
+        // v6 (PHASE18 P18.13b): the pid of the window just listed.
+        l.window_pid = { data, _, id, pid in
+            guard let data else { return }
+            let me = Unmanaged<MenuBarFocus>.fromOpaque(data).takeUnretainedValue()
+            if let i = me.listing.lastIndex(where: { $0.id == id }) { me.listing[i].pid = Int32(bitPattern: pid) }
         }
         l.shoal = { data, _, d, island, index, name, open in
             guard let data else { return }

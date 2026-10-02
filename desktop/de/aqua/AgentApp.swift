@@ -180,6 +180,29 @@ public func agentQuestionLine(_ q: String) -> String { "You: \(q)\n" }
 public func agentCallLine(_ c: String) -> String { "  › \(c)\n" }
 public func agentAnswerLine(_ a: String) -> String { "Agent: \(a)\n\n" }
 
+/// What the window says of its session to the rest of the desktop (P18.13b),
+/// or nil while it has none (starting, or ended). A requester up is waiting,
+/// whatever the phase; a question out is working; otherwise idle.
+public func agentPresenceState(phase: AgentApp.Phase, requester: AgentAsk?) -> AgentState? {
+    switch phase {
+    case .starting, .ended: return nil
+    case _ where requester != nil: return .waiting
+    case .asking: return .working
+    case .ready: return .idle
+    }
+}
+
+/// What a session's presence is about: what the requester asks, else the
+/// question.
+public func agentPresenceAbout(requester: AgentAsk?, asked: String) -> String {
+    switch requester {
+    case .budget?: return "Allow more tokens?"
+    case .write(let app, _, _)?: return "Allow \(app) to write?"
+    case .host(let host, _)?: return "Allow it to reach \(host)?"
+    case nil: return asked
+    }
+}
+
 /// What the window is asking the person (P18.11).
 public enum AgentAsk: Equatable, Sendable {
     /// Requester 4: the budget is spent; abyss-model's words.
@@ -224,7 +247,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
 
     private let display: Display
     private(set) var window: Window?
-    public private(set) var phase = Phase.starting
+    public private(set) var phase = Phase.starting { didSet { publishPresence() } }
     public let conversation = TextView()
     public private(set) var status = "" { didSet { window?.setNeedsDisplay() } }
     public private(set) var field = ""
@@ -232,7 +255,9 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     private var pointerX = 0.0, pointerY = 0.0
     private var agentSocket = ""
     private var pending: Int32 = -1
-    private var asked = ""
+    private var asked = "" { didSet { publishPresence() } }
+    /// What was last said to the desktop, so a redraw does not rewrite it.
+    private var presence: AgentPresence?
     private var callsSoFar = 0
     /// The keeper's session ID (for a give), and whether the session can be
     /// given applications at all: `debug` cannot.
@@ -246,7 +271,7 @@ public final class AgentApp: WindowDelegate, MenuProvider {
     /// The session's budget: what Allow More allows again (P18.11).
     private var sessionBudget = 0
     /// The requester, while it is up (P18.11).
-    public private(set) var requester: AgentAsk?
+    public private(set) var requester: AgentAsk? { didSet { publishPresence() } }
     private var loggedRequester = false
     private var menuService: MenuService?
     private var menuName = ""
@@ -604,7 +629,22 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         window?.setNeedsDisplay()
     }
 
+    /// Say this session's state to the Dock, the menu bar and the island
+    /// menu (P18.13b), when it changes; withdraw it when there is none.
+    private func publishPresence() {
+        guard let state = agentPresenceState(phase: phase, requester: requester) else {
+            if presence != nil { AgentPresenceIO.withdraw(); presence = nil; AgentApp.log("presence: none") }
+            return
+        }
+        let p = AgentPresence(pid: getpid(), state: state, about: agentPresenceAbout(requester: requester, asked: asked))
+        guard p != presence else { return }
+        presence = p
+        AgentPresenceIO.publish(p)
+        AgentApp.log("presence: \(state.rawValue) — \(p.about)")
+    }
+
     func quit() {
+        AgentPresenceIO.withdraw()
         if !agentSocket.isEmpty, let fd = try? Current.connect(path: agentSocket) {
             var m = Msg(); m.set("method", "bye")
             try? Current.send(m, on: fd)

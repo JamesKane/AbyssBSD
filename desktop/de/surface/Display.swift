@@ -42,6 +42,18 @@ final class OutputInfo {
 }
 
 public final class Display {
+    /// The newest version of each of our own protocols this client handles:
+    /// its bind cap (HANDOFF §2.117). Bumping a protocol's XML without this
+    /// left the client on the old version, silently, twice (P13.4, P18.13b),
+    /// so `ProtocolVersionTests` holds each to its XML's `version`.
+    ///   abyss_menubar_v1: v3 islands, v4 shoals (PHASE13), v5 jail (P18.6),
+    ///   v6 window_pid (P18.13b).
+    public static let ourVersions: [String: UInt32] = [
+        "abyss_menu_manager_v1": 1,
+        "abyss_window_manager_v1": 2,
+        "abyss_menubar_v1": 6,
+    ]
+
     let display: OpaquePointer
     let registry: OpaquePointer
 
@@ -397,12 +409,12 @@ public final class Display {
         case "zwlr_foreign_toplevel_manager_v1":
             foreignToplevelManager = (name, min(version, 3))
         case "abyss_menu_manager_v1":
-            menuManager = wlBind(registry, name, abyss_menu_manager_v1_iface, 1)
+            menuManager = wlBind(registry, name, abyss_menu_manager_v1_iface, Display.ourVersions["abyss_menu_manager_v1"]!)
         case "abyss_window_manager_v1":
-            windowManagerVersion = min(version, 2)
+            windowManagerVersion = min(version, Display.ourVersions["abyss_window_manager_v1"]!)
             windowManager = wlBind(registry, name, abyss_window_manager_v1_iface, windowManagerVersion)
         case "abyss_menubar_v1":
-            menubarGlobal = (name, min(version, 5))   // v3: islands, v4: shoals (PHASE13; §2.117), v5: jail (P18.6)
+            menubarGlobal = (name, min(version, Display.ourVersions["abyss_menubar_v1"]!))
         case "xdg_activation_v1":
             // No events on the manager itself, so it binds with no listener;
             // the per-request token object is the thing that reports back.

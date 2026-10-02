@@ -86,8 +86,12 @@ menubar-mute@2x|menubar|ABYSS_FAKE_VOLUME=0 ABYSS_FAKE_BATTERY=0 ABYSS_FAKE_BATT
 menubar-low|menubar|ABYSS_FAKE_VOLUME=20 ABYSS_FAKE_BATTERY=5
 menubar-full|menubar|ABYSS_FAKE_VOLUME=100 ABYSS_FAKE_BATTERY=100 ABYSS_FAKE_BATTERY_CHARGING=1
 menubar-muted@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_MUTED=1 ABYSS_FAKE_BATTERY=80 AQUA_SCALE=2
+menubar-agent-waiting@2x|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_AGENTS=waiting:2 AQUA_SCALE=2
+menubar-agent-idle|menubar|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_AGENTS=idle:1
 dock|dock|
 dock-running@2x|dock|AQUA_DOCK_RUNNING=1 AQUA_SCALE=2
+dock-agent-waiting@2x|dock|AQUA_DOCK_RUNNING=1 AQUA_AGENTS=waiting:2 AQUA_SCALE=2
+dock-agent-working|dock|AQUA_DOCK_RUNNING=1 AQUA_AGENTS=working:1
 notify|notify|
 terminal|terminal|
 terminal@2x|terminal|AQUA_SCALE=2
@@ -127,6 +131,7 @@ trench-finder-list|finder|ABYSS_THEME=trench AQUA_FINDER_VIEW=list
 trench-finder-rename|finder|ABYSS_THEME=trench AQUA_FINDER_STATE=rename
 trench-menubar|menubar|ABYSS_THEME=trench ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2
 trench-dock|dock|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1
+trench-dock-agent|dock|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1 AQUA_AGENTS=waiting:1
 trench-menu|menu|ABYSS_THEME=trench AQUA_MENU_MARKS=1
 trench-frame|frame|ABYSS_THEME=trench
 trench-sheet|sheet|ABYSS_THEME=trench

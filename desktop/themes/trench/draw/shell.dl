@@ -92,6 +92,13 @@ list dock.running
   fill ledOn
 end
 
+# The Agent tile's badge (PHASE18 P18.13b): a lit disc, state in $c.
+list dock.badge
+  circle w/2 h/2 w/2
+  glow $c 5 $gk
+  fill $c
+end
+
 list dock.label
   rect 0 0 w h
   fill vertical stops 0 buttonWhiteTop 1 buttonWhiteBottom

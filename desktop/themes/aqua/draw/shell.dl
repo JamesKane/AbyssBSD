@@ -152,6 +152,15 @@ list dock.running
   fill dockRunningMark
 end
 
+# The Agent tile's badge (PHASE18 P18.13b): a disc at the tile's top right,
+# Mail's count badge; $c is its colour token's value, chosen by state.
+list dock.badge
+  circle w/2 h/2 w/2
+  fill vertical stops 0 shift($c, 0.35) 0.5 $c 1 shift($c, -0.15)
+  circle w/2 h/2 w/2-1
+  stroke rgb(1, 1, 1) 1.5
+end
+
 list dock.label
   rect 0 0 w h 5
   fill dockLabelBackground

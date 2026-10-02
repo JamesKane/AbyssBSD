@@ -245,6 +245,7 @@ struct abyss_menubar_v1_interface {
 #define ABYSS_MENUBAR_V1_ISLANDS_DONE 3
 #define ABYSS_MENUBAR_V1_SHOAL 4
 #define ABYSS_MENUBAR_V1_JAIL 5
+#define ABYSS_MENUBAR_V1_WINDOW_PID 6
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -270,6 +271,10 @@ struct abyss_menubar_v1_interface {
  * @ingroup iface_abyss_menubar_v1
  */
 #define ABYSS_MENUBAR_V1_JAIL_SINCE_VERSION 5
+/**
+ * @ingroup iface_abyss_menubar_v1
+ */
+#define ABYSS_MENUBAR_V1_WINDOW_PID_SINCE_VERSION 6
 
 /**
  * @ingroup iface_abyss_menubar_v1
@@ -363,6 +368,18 @@ static inline void
 abyss_menubar_v1_send_jail(struct wl_resource *resource_, const char *class)
 {
 	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_JAIL, class);
+}
+
+/**
+ * @ingroup iface_abyss_menubar_v1
+ * Sends an window_pid event to the client owning the resource.
+ * @param resource_ The client's resource
+ * @param id the window just listed
+ */
+static inline void
+abyss_menubar_v1_send_window_pid(struct wl_resource *resource_, uint32_t id, uint32_t pid)
+{
+	wl_resource_post_event(resource_, ABYSS_MENUBAR_V1_WINDOW_PID, id, pid);
 }
 
 #ifdef  __cplusplus

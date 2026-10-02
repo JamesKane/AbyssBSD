@@ -49,11 +49,15 @@ public struct MenuBarLayout {
     /// The island item (PHASE13 P13.4), left of the status items; nil with
     /// one island, or no compositor to ask.
     public var islandRect: Rect?
+    /// The Agent item (PHASE18 P18.13b), between the island item and the
+    /// status items; nil with no agent session open.
+    public var agentRect: Rect?
     public init(titleRects: [Rect] = [], clockRect: Rect = Rect(0, 0, 0, 0),
-                volumeRect: Rect? = nil, batteryRect: Rect? = nil, islandRect: Rect? = nil) {
+                volumeRect: Rect? = nil, batteryRect: Rect? = nil, islandRect: Rect? = nil,
+                agentRect: Rect? = nil) {
         self.titleRects = titleRects; self.clockRect = clockRect
         self.volumeRect = volumeRect; self.batteryRect = batteryRect
-        self.islandRect = islandRect
+        self.islandRect = islandRect; self.agentRect = agentRect
     }
 }
 
@@ -77,6 +81,40 @@ public func formatMenuClock(hour24: Int, minute: Int, wday: Int) -> String {
     return "\(day)\(h):\(mm) \(ampm)"
 }
 
+/// The Agent item's words (PHASE18 P18.13b), or nil with no session open:
+/// what the most pressing session is doing — waiting outranks working
+/// outranks idle — and how many wait when more than one does.
+public func menuBarAgentLabel(_ agents: [AgentPresence]) -> String? {
+    guard let top = AgentPresence.sort(agents).first else { return nil }
+    switch top.state {
+    case .idle: return "Agent"
+    case .working: return "Agent: Working"
+    case .waiting:
+        let n = agents.filter { $0.state == .waiting }.count
+        return n > 1 ? "Agent: \(n) Waiting" : "Agent: Waiting"
+    }
+}
+
+/// The Agent item's menu: a row per session, the most pressing first, each
+/// going to its window; then the Agent window for a new one.
+public enum AgentMenu {
+    public static func build(_ agents: [AgentPresence]) -> Menu {
+        var items: [MenuItem] = AgentPresence.sort(agents).map { a in
+            let about = a.about.isEmpty ? "" : ": " + (a.about.count > 48 ? String(a.about.prefix(47)) + "…" : a.about)
+            return .command(Command("agent.go.\(a.pid)", a.state.words + about,
+                                    summary: "Go to this session's window."))
+        }
+        items.append(.separator)
+        items.append(.command(Command("system.agent", "New Agent Window…", summary: "Open the Agent window.")))
+        return Menu("Agent", items)
+    }
+
+    /// `agent.go.PID` → PID.
+    public static func pid(_ verb: String) -> Int32? {
+        verb.hasPrefix("agent.go.") ? Int32(verb.dropFirst("agent.go.".count)) : nil
+    }
+}
+
 /// Compute title/clock geometry. Title widths come from shaped text, so this
 /// needs a cairo context; the component caches the result each render and
 /// hit-tests against it (the "layout is truth" discipline).
@@ -84,7 +122,7 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
                           menus: [MenuBarMenu], clock: String,
                           showClock: Bool,
                           status: MenuBarStatus = MenuBarStatus(),
-                          island: String? = nil) -> MenuBarLayout {
+                          island: String? = nil, agent: String? = nil) -> MenuBarLayout {
     var rects: [Rect] = []
     var x = MenuBarMetrics.leftMargin
     for m in menus {
@@ -108,18 +146,31 @@ public func menuBarLayout(_ cr: OpaquePointer, w: Double, h: Double,
     // the bar's right margin when there is no clock).
     let statusRight = clockRect.w > 0 ? clockRect.x : w - MenuBarMetrics.clockMarginRight
     let items = menuBarStatusLayout(status: status, h: h, rightEdge: statusRight)
-    // The island item sits left of the status items, as one more of them.
+    var left = [items.volume?.x, items.battery?.x].compactMap { $0 }.min() ?? statusRight
+    // The Agent item sits left of the status items (P18.13b): a dot when a
+    // session waits, then its words.
+    var agentRect: Rect? = nil
+    if let agent, !agent.isEmpty {
+        let aw = Draw.textWidth(cr, agent, size: MenuBarMetrics.fontSize, role: .chrome)
+            + 2 * MenuBarMetrics.titlePadX + MenuBarAgentDot.room
+        agentRect = Rect(left - aw - 4, 0, aw, h)
+        left = left - aw - 4
+    }
+    // The island item sits left of those, as one more of them.
     var islandRect: Rect? = nil
     if let island, !island.isEmpty {
-        let left = [items.volume?.x, items.battery?.x].compactMap { $0 }.min() ?? statusRight
         let iw = Draw.textWidth(cr, island, size: MenuBarMetrics.fontSize, role: .chrome)
             + 2 * MenuBarMetrics.titlePadX
         islandRect = Rect(left - iw - 4, 0, iw, h)
     }
     return MenuBarLayout(titleRects: rects, clockRect: clockRect,
                          volumeRect: items.volume, batteryRect: items.battery,
-                         islandRect: islandRect)
+                         islandRect: islandRect, agentRect: agentRect)
 }
+
+/// Room for the Agent item's dot, drawn whatever the state so the words do
+/// not move when a session starts waiting.
+public enum MenuBarAgentDot { public static let room = 12.0, size = 8.0 }
 
 /// Paint the menu bar. `openIndex` (if any) is drawn highlighted in menu blue.
 /// Returns the layout for hit-testing.
@@ -128,11 +179,24 @@ public func paintMenuBar(_ cr: OpaquePointer, w: Double, h: Double,
                          menus: [MenuBarMenu], clock: String,
                          openIndex: Int?, showClock: Bool,
                          status: MenuBarStatus = MenuBarStatus(),
-                         island: String? = nil, islandOpen: Bool = false) -> MenuBarLayout {
+                         island: String? = nil, islandOpen: Bool = false,
+                         agent: String? = nil, agentWaiting: Bool = false,
+                         agentOpen: Bool = false) -> MenuBarLayout {
     Draw.paint("menubar", cr, Rect(0, 0, w, h))
 
     let layout = menuBarLayout(cr, w: w, h: h, menus: menus, clock: clock,
-                               showClock: showClock, status: status, island: island)
+                               showClock: showClock, status: status, island: island, agent: agent)
+    if let r = layout.agentRect, let agent {
+        if agentOpen { Draw.paint("menubar.highlight", cr, Rect(r.x, 0, r.w, h)) }
+        if agentWaiting {
+            let d = MenuBarAgentDot.size
+            Draw.paint("dock.badge", cr, Rect(r.x + MenuBarMetrics.titlePadX, (h - d) / 2, d, d),
+                       colors: ["c": Theme.current.dockBadgeWaiting])
+        }
+        Draw.textLeft(cr, agent, x: r.x + MenuBarMetrics.titlePadX + MenuBarAgentDot.room, baselineY: h - 6.5,
+                      color: agentOpen ? Theme.menuTextOnHighlight : Theme.menuBarText,
+                      size: MenuBarMetrics.fontSize, style: .regular, role: .chrome)
+    }
     if let r = layout.islandRect, let island {
         if islandOpen { Draw.paint("menubar.highlight", cr, Rect(r.x, 0, r.w, h)) }
         Draw.textLeft(cr, island, x: r.x + MenuBarMetrics.titlePadX, baselineY: h - 6.5,
@@ -195,6 +259,12 @@ public final class MenuBar: LayerSurfaceDelegate {
     private var islandLabel: String?
     private var islandOpen = false
     private var loggedIslandItem: String?
+    /// Agent presence (PHASE18 P18.13b): every open session's state, read
+    /// from what the Agent windows say; the item, and whether its menu is open.
+    private var agents: [AgentPresence] = []
+    private var agentOpen = false
+    private var presenceWatcher: Pool.Watcher?
+    private var loggedAgentItem: String?
     /// The frontmost application's menu service, when it has one (P10.4).
     /// Nil means the bar is drawing a definition it cannot ask about: the
     /// Finder's, under a compositor that has no view of focus to give.
@@ -327,6 +397,22 @@ public final class MenuBar: LayerSurfaceDelegate {
             timerFd = fd
             display.addFileDescriptor(fd) { [weak self] in self?.clockTick() }
         }
+        if let dir = AgentPresenceIO.dir(), let w = try? Pool.Watcher(in: dir) {
+            presenceWatcher = w
+            display.addFileDescriptor(w.fileDescriptor) { [weak self] in self?.presenceChanged() }
+        }
+        presenceChanged()
+    }
+
+    /// Re-read the agents' presence; redraw if it moved. Off (P18.13a), no
+    /// item at all.
+    private func presenceChanged() {
+        _ = presenceWatcher?.drain()
+        let now = Agents.on() ? AgentPresenceIO.read() : []
+        guard now != agents else { return }
+        agents = now
+        MenuBar.log("agents: " + (now.isEmpty ? "none" : now.map { "\($0.pid)=\($0.state.rawValue)" }.joined(separator: " ")))
+        layer?.setNeedsDisplay()
     }
 
     // MARK: the frontmost application (P10.4)
@@ -459,6 +545,8 @@ public final class MenuBar: LayerSurfaceDelegate {
         if command.verb == MenuBar.confinedVerb { return .disabled("a status: this application runs in a jail") }
         // The island menu's rows are the bar's own, not the application's.
         if IslandMenu.action(command.verb) != nil { return .enabled }
+        // So are the Agent item's (P18.13b).
+        if AgentMenu.pid(command.verb) != nil { return .enabled }
         if service == nil { return MenuBar.staticEnablement(command) }
         return enablement[command.verb] ?? .disabled("the application did not say")
     }
@@ -482,6 +570,10 @@ public final class MenuBar: LayerSurfaceDelegate {
             return forceQuitTarget == nil ? .disabled("no application is frontmost") : .enabled
         case "system.restart", "system.shut-down":
             return .enabled
+        // P18.13a gave System ▸ Agent… no case, so it was drawn disabled ("not
+        // available yet"); found building P18.13b. Off, it is not in the menu.
+        case "system.agent":
+            return Agents.on() ? .enabled : .disabled("agents are off")
         case "system.recent.clear":
             return recentShown.isEmpty ? .disabled("nothing has been opened yet") : .enabled
         case _ where verb.hasPrefix("system.recent."):
@@ -642,6 +734,7 @@ public final class MenuBar: LayerSurfaceDelegate {
     /// Run a command the person chose, and say what came of it.
     private func choose(_ command: Command, in menuName: String) {
         let what = "\(menuName) > \(command.title) (\(command.verb))"
+        if let pid = AgentMenu.pid(command.verb) { goToAgent(pid: pid, what: what); return }
         if let a = IslandMenu.action(command.verb) {
             let main = focus?.mainIsland?.display ?? ""
             let ok: Bool
@@ -700,6 +793,9 @@ public final class MenuBar: LayerSurfaceDelegate {
     }
 
     private func clockTick() {
+        // An Agent window killed outright cannot withdraw its presence: a
+        // tick re-reads it, and drops a dead process's (P18.13b).
+        presenceChanged()
         var expirations: UInt64 = 0
         _ = withUnsafeMutablePointer(to: &expirations) {
             read(timerFd, $0, MemoryLayout<UInt64>.size)
@@ -742,7 +838,12 @@ public final class MenuBar: LayerSurfaceDelegate {
         cairo_scale(cr, Double(buffer.scale), Double(buffer.scale))
         layoutCache = paintMenuBar(cr, w: w, h: h, menus: menus, clock: clock,
                                    openIndex: openIndex, showClock: showClock,
-                                   status: status, island: islandLabel, islandOpen: islandOpen)
+                                   status: status, island: islandLabel, islandOpen: islandOpen,
+                                   agent: menuBarAgentLabel(agents),
+                                   agentWaiting: agents.contains { $0.state == .waiting }, agentOpen: agentOpen)
+        // Where the Agent item is, and what it says, for a test (§2.46).
+        let agentItem = layoutCache.agentRect.map { "'\(menuBarAgentLabel(agents) ?? "")' at \(Int($0.x + $0.w / 2)),\(Int($0.y + $0.h / 2))" } ?? "none"
+        if agentItem != loggedAgentItem { loggedAgentItem = agentItem; MenuBar.log("agent item \(agentItem)") }
         // Where the island item is, for a test to click (§2.46).
         let item = layoutCache.islandRect.map { "'\(islandLabel ?? "")' at \(Int($0.x + $0.w / 2)),\(Int($0.y + $0.h / 2))" } ?? "none"
         if item != loggedIslandItem { loggedIslandItem = item; MenuBar.log("island item \(item)") }
@@ -765,6 +866,12 @@ public final class MenuBar: LayerSurfaceDelegate {
         if let r = layoutCache.volumeRect, pointerX >= r.x, pointerX < r.x + r.w {
             closeMenu()
             if volumeSlider == nil { openVolumeSlider(r) } else { closeVolumeSlider() }
+            return
+        }
+        if let r = layoutCache.agentRect, pointerX >= r.x, pointerX < r.x + r.w {
+            let wasOpen = agentOpen
+            closeMenu()
+            if !wasOpen { openAgentMenu(r) }
             return
         }
         if let r = layoutCache.islandRect, pointerX >= r.x, pointerX < r.x + r.w {
@@ -965,14 +1072,16 @@ public final class MenuBar: LayerSurfaceDelegate {
         menu = nil
         if openIndex != nil { openIndex = nil; layer?.setNeedsDisplay() }
         if islandOpen { islandOpen = false; layer?.setNeedsDisplay() }
+        if agentOpen { agentOpen = false; layer?.setNeedsDisplay() }
     }
 
     private func menuDismissed() {   // outside click (popup_done), or Escape
         popup = nil
         menu = nil
-        if openIndex != nil || islandOpen {
+        if openIndex != nil || islandOpen || agentOpen {
             openIndex = nil
             islandOpen = false
+            agentOpen = false
             MenuBar.log("closed")
             layer?.setNeedsDisplay()
         }
@@ -982,12 +1091,47 @@ public final class MenuBar: LayerSurfaceDelegate {
 
     /// Ask the compositor where every window is, then show the islands with
     /// theirs — pulled as it opens, like enablement (§6.4).
+    /// The Agent item's menu (P18.13b): the sessions, the most pressing first.
+    private func openAgentMenu(_ r: Rect) {
+        let am = makeMenu(AgentMenu.build(agents), name: "Agent", at: (Int(r.x), Int(r.h)))
+        am.onDismiss = { [weak self] in self?.menuDismissed() }
+        guard let pop = layer?.openPopup(
+            anchorX: Int32(r.x), anchorY: 0, anchorW: Int32(r.w), anchorH: Int32(r.h),
+            width: Int32(max(150, am.preferredWidth)), height: Int32(am.preferredHeight.rounded(.up)),
+            delegate: am)
+        else { return }
+        am.popup = pop
+        menu = am
+        popup = pop
+        agentOpen = true
+        MenuBar.log("opened Agent")
+        MenuBar.logRows(am.items, x: Int(r.x), y: Int(r.h))
+        layer?.setNeedsDisplay()
+    }
+
+    /// Go to the window of the session whose Agent window is process `pid`:
+    /// the compositor says which window that process owns (v6).
+    private func goToAgent(pid: Int32, what: String) {
+        guard let focus else { MenuBar.log("chose \(what) → refused: no compositor to ask"); return }
+        let asked = focus.listIslands { list in
+            guard let w = list.windows.first(where: { $0.pid == pid }) else {
+                MenuBar.log("chose \(what) → refused: no window of process \(pid)"); return
+            }
+            let ok = focus.activateWindow(id: w.id)
+            MenuBar.log("chose \(what) → " + (ok ? "ok, window \(w.id)" : "refused: the compositor cannot activate windows"))
+        }
+        if !asked { MenuBar.log("chose \(what) → refused: the compositor cannot list windows") }
+    }
+
     private func openIslandMenu(_ r: Rect) {
         guard let focus, let main = focus.mainIsland else { return }
         let asked = focus.listIslands { [weak self] list in
             guard let self, self.menu == nil else { return }
+            // Which process owns each window (v6, P18.13b), for a test to see.
+            MenuBar.log("windows " + list.windows.map { "\($0.id)=\($0.appID):\($0.pid)" }.joined(separator: " "))
             let m = IslandMenu.build(display: main.display, active: main.island, count: main.count,
-                                     names: list.names, windows: list.windows, shoals: list.shoals)
+                                     names: list.names, windows: list.windows, shoals: list.shoals,
+                                     agents: self.agents)
             let am = self.makeMenu(m, name: "Islands", at: (Int(r.x), Int(r.h)))
             am.onDismiss = { [weak self] in self?.menuDismissed() }
             guard let pop = self.layer?.openPopup(
