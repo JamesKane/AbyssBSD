@@ -6,10 +6,12 @@ CPU through FastRPC. QNN comes only as Linux (glibc) binaries, so it runs
 under FreeBSD's Linux layer, on Rocky Linux 9's userland (`linux_base-rl9`),
 calling `/dev/fastrpc-cdsp` through `qcom_fastrpc_linux`.
 
-Status (2026-10-02): `qnn-net-run` runs the SDK's Inception V3 example layer
-on the NPU, as root or as a member of `wheel`, with results within one
-quantization step of QNN's CPU backend: 0.94 ms per inference against
-3.78 ms on the CPU.
+Status (2026-10-02): MobileNetV2 (ImageNet, from ONNX), converted and
+quantized to 8 bits on the board itself, classifies on the NPU in 0.94 ms an
+image (0.65 ms of it on the accelerator), against 18.8 ms for the float model
+on QNN's CPU backend; on 100 ImageNet sample images, 79 right first time (95
+in its top five), against the float model's 84 (98). It runs as root or as a
+member of `wheel`.
 
 ## How it fits together
 
@@ -99,12 +101,24 @@ The files are in [npu/](npu/). As root unless said otherwise.
        sysrc qnn_enable=YES
        service qnn start
 
+6. **The converters** (to convert and quantize models on the board): the
+   SDK's Python tools and modules (it has aarch64 builds of their native
+   parts, for Python 3.12), a Python 3.12 for aarch64 Linux from
+   [python-build-standalone](https://github.com/astral-sh/python-build-standalone)
+   (`cpython-3.12.15+20261001-aarch64-unknown-linux-gnu-install_only.tar.gz`,
+   SHA-256 `6a1b2e68c6fe749b78bbacb8fa42ff9bc844a72de7ed3ee52428f09a42f2ffc1`),
+   and, with the network up, the packages they import:
+
+       sh npu/install-converter.sh /path/to/qairt/2.51.0.260929 \
+           cpython-3.12.15+20261001-aarch64-unknown-linux-gnu-install_only.tar.gz
+
 ## Running
 
 `qnn TOOL ARGS` runs a QNN tool from `/usr/local/qnn/bin` (or a Linux
 program, by path) with QNN's libraries, the DSP's search path and the board's
-name for the FastRPC library's configuration. `/dev/fastrpc-cdsp` is
-`root:wheel`, mode 0660.
+name for the FastRPC library's configuration, or one of the SDK's Python
+tools (`qairt-converter`, `qairt-quantizer`) with its Python and modules.
+`/dev/fastrpc-cdsp` is `root:wheel`, mode 0660.
 
     qnn qnn-net-run --backend /usr/local/qnn/lib/libQnnHtp.so \
         --model libqnn_model.so --input_list input_list.txt \
@@ -116,14 +130,41 @@ syslog (`/var/log/messages`), QNN's backend included.
 
 ## Models
 
-QNN's converters (ONNX, TFLite, PyTorch to QNN) run on x86-64 Linux, not
-here. A converted model comes as C++ and a `.bin` of weights, which
-`qnn-model-lib-generator` compiles into a Linux aarch64 `.so` with the SDK's
-`share/QNN/converter/Makefile.ubuntu-aarch64-gcc9.4`: any aarch64 Linux
-toolchain will do, Rocky's here included. The SDK's
-`examples/QNN/converter/models` (the first layer of Inception V3) is the one
-tried so far. The converters can also write a `.dlc`, which `qnn-net-run`
-loads directly (`libQnnModelDlc.so`), preparing the graph on the board.
+The converters run here, under the Linux layer (step 6): `qairt-converter`
+turns an ONNX (or TFLite, TensorFlow, PyTorch) model into a `.dlc`;
+`qairt-quantizer` quantizes it, calibrated on sample inputs, for the v68 HTP,
+which runs fixed point only; `qnn-net-run` loads the `.dlc` through
+`libQnnModelDlc.so` and prepares the graph for the NPU as it starts.
+
+[npu/mobilenet/](npu/mobilenet/) does it for MobileNetV2 from the ONNX model
+zoo, scored on ImageNet sample images (one per class, from
+github.com/EliSchwartz/imagenet-sample-images): every tenth class to score,
+twenty others to calibrate. As a user, in a copy of that directory:
+
+    sh fetch.sh            # the model, the class index, the images, preprocessed
+    qnn qairt-converter --input_network mobilenetv2-12.onnx \
+        --source_model_input_shape input 1,3,224,224 \
+        --onnx_skip_simplification --output_path mnv2.dlc
+    sh quant.sh            # mnv2_q.dlc: 8 bits, 14 MB to 3.6 MB
+    sh run.sh Htp mnv2_q.dlc nchw out_htp \
+        --config_file /usr/local/qnn/etc/htp_netrun.json
+    sh run.sh Cpu mnv2.dlc nchw out_cpu
+
+| | Top-1 | Top-5 | Per image |
+|---|---|---|---|
+| NPU, 8 bits (`mnv2_q.dlc`) | 79/100 | 95/100 | 0.94 ms (0.65 on the HTP) |
+| QNN's CPU backend, float (`mnv2.dlc`) | 84/100 | 98/100 | 18.8 ms |
+
+The two agree on 90 of the 100. Quantizing MobileNetV2 after training costs
+it a few points, here with 20 calibration images. QNN's CPU backend is a
+reference, not the fastest way to run the model on the CPUs.
+
+Inputs are raw float32 files in the model's own layout: the converted
+MobileNetV2 takes NCHW as ONNX did (NHWC scores nothing). A converted model
+can also come as C++ and a `.bin` of weights, which
+`qnn-model-lib-generator` compiles into a Linux aarch64 `.so` (the SDK's
+`share/QNN/converter/Makefile.ubuntu-aarch64-gcc9.4`, with any aarch64 Linux
+toolchain, Rocky's included).
 
 ## Known issues
 

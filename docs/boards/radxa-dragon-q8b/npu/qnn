@@ -2,7 +2,8 @@
 #
 # Run one of QNN's Linux tools, or a Linux program built on QNN, on the NPU:
 #	qnn TOOL [ARGS]
-# TOOL is a name in /usr/local/qnn/bin (qnn-net-run, ...) or a path.  It
+# TOOL is a name in /usr/local/qnn/bin (qnn-net-run, ...), one of the SDK's
+# Python tools in /usr/local/qnn/sdk (qairt-converter, ...), or a path.  It
 # runs under the Linux layer (the linux and qnn services, see rc.conf(5)).
 #
 Q=/usr/local/qnn
@@ -27,7 +28,17 @@ export DSP_LIBRARY_PATH="$ADSP_LIBRARY_PATH"
 t=$1
 shift
 case $t in
-*/*)	;;
-*)	t=$Q/bin/$t ;;
+*/*)	exec "$t" "$@" ;;
 esac
-exec "$t" "$@"
+if [ -x "$Q/bin/$t" ]; then
+	exec "$Q/bin/$t" "$@"
+fi
+# The SDK's Python tools (qairt-converter, qairt-quantizer, ...): with the
+# Python 3.12 they were built for, and the SDK's modules.
+if [ -f "$Q/sdk/bin/aarch64-linux/$t" ]; then
+	export PYTHONPATH="$Q/sdk/lib/python${PYTHONPATH:+:$PYTHONPATH}"
+	export QNN_SDK_ROOT=$Q/sdk
+	exec $Q/python/bin/python3.12 "$Q/sdk/bin/aarch64-linux/$t" "$@"
+fi
+echo "qnn: no tool $t" >&2
+exit 69

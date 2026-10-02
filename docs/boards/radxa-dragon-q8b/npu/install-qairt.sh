@@ -21,4 +21,6 @@ mkdir -p $Q/bin $Q/lib $Q/dsp $Q/etc
 (cd "$sdk/lib/hexagon-v68/unsigned" && tar -cf - .) |
     tar -xf - --no-same-owner -C $Q/dsp
 chown -R root:wheel $Q
+# The zip's modes are 0777: only root writes here.
+chmod -R go-w $Q
 echo "QAIRT from $sdk in $Q"
