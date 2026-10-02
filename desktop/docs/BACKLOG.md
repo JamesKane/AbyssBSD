@@ -4,8 +4,13 @@ _2026-09-28. Gathered from STATUS "What's next", HANDOFF §5, PHASE14's passes, 
 phase docs' "what it leaves", and the API-study review ([API-STUDY.md](API-STUDY.md)).
 This is the list to work from; the phase docs keep the detail._
 
+**Where it stands (2026-10-02):** §1 and §2 are done, Phases 13, 15, 16
+and 18 have closed, and the next phase is 17 (PLAN). What is left here is §3's
+metal items, §5's standing items and §6's kernel items.
+
 **The constraint that shapes it:** the bring-up machine's USB is in use elsewhere
-for now, so **nothing here may need metal to be verified**. Metal work is
+again (2026-10-02, to be rebuilt), so **nothing here may need metal to be
+verified** until it is back. Metal work is
 collected in §3, to be done in one sitting when the machine is free, and the
 work before it is ordered so that sitting tests as much as possible.
 
@@ -120,10 +125,12 @@ with `abyss/mk/metal.sh push` (PHASE4 §5.11–§5.13):
 
 | Where | Question |
 |---|---|
-| here, §1 | **U.1–U.4 before P14.2?** Recommended; P14.2 first costs nothing but leaves the metal sitting with less to test |
 | PHASE11 §6 | the menu-bar rule and layer 5; refuse/warn; icons as data; `calc()` operands — adopted in practice, never confirmed |
-| PHASE14 §6.5 | does the 12700KF have a Wi-Fi card? (§3 can answer it) |
 | PHASE14 §6.6 | per-application volume: after the spike, route (a) a small kernel patch or (b) a `virtual_oss` node per application (API-STUDY §3) |
+| PHASE17 | to be scoped: where packages are built, signed and hosted, and who holds the key (PLAN Phase 17, risk 8) |
+
+*Settled and dropped (2026-10-02):* U.1–U.4 went before P14.2, as
+recommended; the 12700KF has no Wi-Fi card (§3, item 5).
 
 ---
 

@@ -44,9 +44,15 @@ the medium, in the build guest, or in a test. A Qt application a person
 installs still runs — as any Wayland client, with Aqua decorations — but its
 menus stay in its window. Phase history below keeps its Qt passes as written.
 
-### Where this stands (2026-09-30, evening)
+### Where this stands (2026-10-02)
 
-**Phases 0–3, 5–12 and 14 are complete** (Phase 12 but for `Fathom`'s Aqua view).
+**Every phase but 4 and 17 is complete.** Phase 4 (first metal) is most of the
+way, and its remainder waits for the 12700KF's USB medium, which is in other
+use. Phase 17 (delivery) is the one phase not started, and is next. Phase 18,
+the newest, is summarised last below; the paragraphs before it are as each
+phase closed.
+
+**Phases 0–3, 5–12 and 14 are complete (Phase 12 but for `Fathom`'s Aqua view).
 The Jaguar desktop runs on our own Swift compositor on Linux and FreeBSD; GTK
 applications put their menus in our bar and get the Finder through our
 portals; the look is data, with a second theme to prove it; System Preferences
@@ -81,8 +87,23 @@ which this machine's kernel cannot do (BACKLOG §6).
 islands per display with a C6 switch that gates the build, the slide, Ebb in
 three scopes, Shoals and their strip, the menu bar's island menu, and an
 Islands pane. On the 12700KF, C6 holds unloaded. Under C2's adversaries it
-does not, because **C2 does not hold on metal** (HANDOFF §2.118, BACKLOG M.1),
-which is the next thing to fix.
+does not, because **C2 does not hold on metal** (HANDOFF §2.118). undertow's
+part of that is done (present on damage, BACKLOG M.1); what remains is a
+kernel path (amdgpu's flip completions under load), parked as a fork item
+(BACKLOG §6, HANDOFF §2.120).
+**Phase 18, confinement then agents, is complete (2026-10-02)** ([PHASE18.md](PHASE18.md))
+but for its box run. 18a: applications in jails (`abyss-jaild`, the session's
+keeper, classes in `jails.ini`, Firefox confined with the Finder as its file
+chooser through the jail's portal). 18b: agents, opt-in (off is
+`agents.ini` absent): `abyss-model` (local `llama-server`, a budget, a
+transcript), `abyss-agent` in a jail with no network, applications given by
+their menu vocabulary, the web only through a fetch bridge with TLS, a
+requester before each first write, host or overspend, the crash path to a
+`debug` session with lldb, presence on the Dock, the bar and the island menu,
+and PLAN's verify list as one gate (`live-agent-gate.sh`), green with the stub
+and with a real model on the guest's CPU. Left: that gate on the 12700KF's GPU
+(the medium), a remote model backend (P18.7c) and requester 2 (an admin
+class).
 
 **Phase 4 is in flight, most of the way.** On the i7-12700KF / RX 6750 XT the
 medium boots, `amdgpu` binds, typing and the pointer work, and after five
@@ -95,7 +116,7 @@ developer medium is updated in place over ssh (`abyss/mk/metal.sh push`).
 
 **The monorepo move's migration is done** ([MIGRATION.md §5](../../docs/MIGRATION.md)):
 the build VM is 16-CURRENT (a pinned snapshot) and `undertow` is on wlroots
-0.20.2 on both platforms. Phases 13 and 16–18 have not started.
+0.20.2 on both platforms.
 
 *History.* On 2026-09-05 this section recorded the medium booting on the Mac Pro
 (a FAT16 ESP for Apple's firmware, `hw.pci.enable_pcie_hp="0"` against a
@@ -265,17 +286,17 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 6 | `undertow`, the Swift compositor | 2 | 4, 5, 8, 9, 13, 16 | ✅ |
 | 8 | The D-Bus bridge — portals for everyone else | 6, 7 | 10's foreign half, 15 | ✅ |
 | 5 | The installer — a machine with an empty disk | 6, 8 | 4, 12, 17 | ✅ |
-| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — C1 holds on the 12700KF (0/1800 missed); an install on metal and the second row owed ([BACKLOG](BACKLOG.md) §3) |
+| 4 | First metal — real graphics, input and numbers | 5 | 12, 13's C6, 16's power work | **in flight** — C1 holds on the 12700KF (0/1800 missed); an install on metal and the second row owed, waiting for the medium ([BACKLOG](BACKLOG.md) §3) |
 | 9 | The interaction substrate | 6 | 10, 11, 13, 14, 15 | ✅ 2026-09-06 |
 | 10 | The menu protocol | 3, 8; *before* 15 | 15, **18**, and thesis 2 at all | ✅ 2026-09-25 |
 | 11 | The theme system, layers 1–3 | 1; *before* 15 | 15, foreign-app looks, the a11y floor | ✅ 2026-09-25 |
 | 12 | `Fathom` — the medium measures the machine | 5, and Phase 4 steps 0–6 | the hardware matrix, 16's power work, **and Phase 4 itself** | ✅ 2026-09-05, but its Aqua view |
-| 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | C6 waits on Phase 4 |
+| 13 | Islands, Shoals and Ebb — and C6 | 9, 4 | thesis 3's case against tiling | ✅ 2026-10-01; C6 under load waits on C2 on metal (a kernel item) |
 | 14 | Preferences that write | 9, 10, 11 | 15, 16, 17, 18 | ✅ 2026-09-29 |
 | 15 | The application layer | 9, 10, 11, 14 | 17's `pkg` hook, and thesis 1 | ✅ 2026-10-01 |
-| 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | idle done early (BACKLOG U.9) |
-| 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | the overlay exists, for the board |
-| 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | |
+| 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | ✅ 2026-10-01; resume blocked by the 12700KF's kernel |
+| 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | **next**; the overlay exists, for the board |
+| 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | ✅ 2026-10-02 but the gate on metal (the medium), P18.7c and requester 2 |
 
 **Phases 9–12 are mutually independent** — 9, 10 and 11 need nothing from each
 other, and 12 needs only what Phase 4 has already done. Among independent work

@@ -3,45 +3,28 @@
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-09-30. **Phases 0–3, 5–11 and 14 are complete.** The Jaguar desktop
-runs on our own compositor, which holds its frame contract (headless) under eleven hostile
-processes; the portals hand out descriptors; **one command boots a desktop
-where an unmodified GTK 3 application opens a file through the Finder**;
-applications publish their menus to our bar (Phase 10); and **the look is data**
-— Jaguar re-expressed pixel for pixel, and a second theme, Trench, from the same
-interpreter (Phase 11).
-**853 unit tests, 33 live modes and 100 live scripts, green on Linux *and*
-FreeBSD**, and a golden gate of 79 scenes on each. (Different denominators — see
-[HANDOFF §3](HANDOFF.md).)
-**Phase 14 — preferences that write — is COMPLETE** ([PHASE14.md](PHASE14.md)):
-the panes change the machine through a root helper, `undertow` drives several
-displays, and Wi-Fi joins in the harness on a backported `wtap`.
-The suite has lanes now: `run.sh --live` is ~400 s on Linux, and **`run.sh --vm
---live --full` ~1400 s, including the nested-bhyve installs and the reboot
-gate** — the rule for anything touching the
-installer, the medium, the distribution sets or the boot path.
-**Phase 5 — the installer — is COMPLETE** ([PHASE5.md](PHASE5.md), P5.1–P5.5):
-**a machine with an empty disk boots our medium, the Aqua installer comes up on
-it, and it reboots into the Jaguar desktop as the account that was created** —
-on every run of the harness, nested twice over, with no hardware and no human.
-**Phase 4 — first metal — is in flight on an i7-12700KF / RX 6750 XT**
-([PHASE4.md](PHASE4.md), retargeted from the Mac Pro on 2026-09-05, §1.1):
-the stick boots, `amdgpu` binds, and **the Aqua installer is on screen**. Its one
-open result is a failure — **the frame contract does not hold on real hardware**
-(PHASE4 §5.7). **Phase 12 (`Fathom`) was pulled forward** and P12.1–P12.5 are in.
-[PLAN.md](PLAN.md) runs to **Phase 18, ordered by dependency**. After Phase 14,
-[BACKLOG.md](BACKLOG.md) §1–§2 closed the compositor gaps Phase 15's applications need
-(U.1–U.10, U.3b, U.7b) and the installer's keyboard items (T.1–T.3); its §2 is empty.
-**On 2026-09-30 this tree became the monorepo's `desktop/`**, and the distribution's
-base moved to FreeBSD `main` with the Radxa Dragon Q8B (aarch64) as its first board;
-what that leaves for the desktop is in [../../docs/MIGRATION.md](../../docs/MIGRATION.md).
-**Phase 15 — the application layer — is COMPLETE (2026-10-01)**
-([PHASE15.md](PHASE15.md)): bundles from `.desktop` files, a real Dock, Firefox
-ESR, Terminal, TextEdit, Grab, Activity Monitor and Disk Utility. **Phase 16 —
-the session — is scoped** ([PHASE16.md](PHASE16.md), 2026-10-01): an
-authenticator first (nothing unprivileged can check a password), then the lock,
-the idle policy, power, the login window, two users and a first run.
-See [What's next](#whats-next).
+Last updated: 2026-10-02. **Every phase but 4 and 17 is complete**: the
+Jaguar desktop on our own Swift compositor, its applications (Finder,
+Terminal, TextEdit, Grab, Activity Monitor, Disk Utility, System Profiler,
+Firefox ESR), the menu protocol, the theme system with two themes, System
+Preferences that write, the installer, islands, the session (login, lock,
+idle, power, two users), and confinement then agents (Phase 18).
+**943 unit tests, 105 golden scenes and 116 live scripts, green on Linux *and*
+FreeBSD** (the live scripts that need jails, FreeBSD only). The lanes:
+`run.sh --live` is ~400 s on Linux, and **`run.sh --vm --live --full`
+~1400 s, including the nested-bhyve installs and the reboot gate** — the rule
+for anything touching the installer, the medium, the distribution sets or the
+boot path. Since 2026-09-30 this tree is the monorepo's `desktop/`, on a
+FreeBSD `main` fork ([../../docs/MIGRATION.md](../../docs/MIGRATION.md)).
+**Phase 4 — first metal — is most of the way** on an i7-12700KF / RX 6750 XT:
+C1 holds (0 of 1800 frames missed), GL and Vulkan clients render, and the
+session ran there. Owed: an install on metal, P4.5's second row, Phase 18's
+gate with a model on the GPU. All wait for the box's USB medium, in other use
+since 2026-10-02.
+**Next: Phase 17, delivery** — a release pipeline from `src/` and the ports
+overlay, `abyss update` on boot environments, Software Update and Install
+Software ([PLAN.md](PLAN.md); not yet scoped). The working list is
+[BACKLOG.md](BACKLOG.md). See [What's next](#whats-next).
 
 ## What this is
 
@@ -462,8 +445,11 @@ ABYSS_CONFIG_DIR=~/.config/abyss AQUA_SCENE=wallpaper .build/debug/AquaDemo
 
 ## What's next
 
-**Next: Phase 16, the session, from P16.1** ([PHASE16.md](PHASE16.md)). The
-paragraph below is as it stood before Phase 15.
+**Next: Phase 17, delivery** ([PLAN.md](PLAN.md)), starting with its scope
+(a PHASE17.md, as each phase before it had). Alongside it: Phase 4's metal
+items and Phase 18's box gate when the USB medium is back; P18.7c (a remote
+model) and requester 2 when wanted. The paragraphs below are history, as they
+stood before Phase 15.
 
 **Phases 0–3, 5–11 and 14 are complete. Phase 4 is in flight on metal (paused: the
 metal target is moving to the Radxa Dragon Q8B, whose bring-up is done elsewhere);
