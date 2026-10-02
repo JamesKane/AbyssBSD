@@ -204,7 +204,10 @@ own menus are on its jail's bus, so each jail has its own menu bridge
 portal), serving `menus-dbus-CLASS`. The bar asks that service when focus
 says the window is confined (v5's `jail`). The gate's claim 9 has gtkmenu,
 confined: its menus are shown from `menus-dbus-app`, its application menu
-starts with "Confined (app)", and File ▸ Open… reaches GTK in the jail.
+starts with "Confined (app)", and File ▸ Open… reaches GTK in the jail. **On the 12700KF too**
+(same day): gtkmenu confined in `app`, with its menus shown from
+`menus-dbus-app (GTK, confined)`, "Confined (app)" in its application menu
+(screenshot), and File ▸ Open… → ok.
 The stack proof in the guest: galculator and zenity confined, Firefox in
 `app-net`. Then the same on the 12700KF.
 - a confined zenity cannot `ls ~`;
