@@ -40,8 +40,12 @@ wayland-scanner private-code  abyss/tests/virtual-keyboard-unstable-v1.xml \$T/v
 cc -I\$T abyss/tests/vkeyboard.c \$T/vkeyboard-proto.c \$(pkg-config --cflags --libs wayland-client xkbcommon) -o \$T/vkeyboard
 cc -I\$T -Ide/cwayland/include abyss/tests/lockclient.c de/cabyssprotocols/xdg-shell-protocol.c \$T/ext-session-lock-proto.c \$(pkg-config --cflags --libs wayland-client) -o \$T/lockclient
 cc -Ide/cwayland/include abyss/tests/adversary.c de/cabyssprotocols/xdg-shell-protocol.c \$(pkg-config --cflags --libs wayland-client) -o \$T/adversary
+pt=\$protos/stable/presentation-time/presentation-time.xml
+wayland-scanner client-header \$pt \$T/presentation-time-client-protocol.h
+wayland-scanner private-code  \$pt \$T/presentation-time-protocol.c
+cc -I\$T -Ide/cwayland/include abyss/tests/present.c de/cabyssprotocols/xdg-shell-protocol.c \$T/presentation-time-protocol.c \$(pkg-config --cflags --libs wayland-client) -o \$T/present
 EOF
-guest "tar -cf - -C /tmp/metalbench vkeyboard lockclient adversary" < /dev/null \
+guest "tar -cf - -C /tmp/metalbench vkeyboard lockclient adversary present" < /dev/null \
   | box 'rm -rf /tmp/metalbench && mkdir -p /tmp/metalbench && tar -xpf - -C /tmp/metalbench && chmod -R a+rx /tmp/metalbench'
 
 # What runs on the machine, as the live account.
@@ -64,10 +68,18 @@ if [ "$mode" = c2 ]; then
       --socket metalbench --config-dir $T > ut.out 2> ut.err & ut=$!
   i=0; while ! grep -q '^WAYLAND_DISPLAY=' ut.out 2>/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
   export WAYLAND_DISPLAY=metalbench
-  $B/lockclient window ff336699 org.abyssbsd.healthy < hold > /dev/null 2>&1 & echo $! >> pids
+  # The healthy client DRAWS: present.c commits on every frame callback and
+  # asks when each frame was shown — with present-on-damage, a static window
+  # would leave nothing to miss (M.1). One summary per 120 frames, again and
+  # again until undertow ends.
+  ( while kill -0 $ut 2>/dev/null; do $B/present >> present.log 2>&1; done ) & echo $! >> pids
   sleep 6; loose
   wait $ut
+  grep -E 'real-time' ut.err
   grep -E '^(missed=|commits-refused=|present-delivery|wake-late-p99)' ut.out
+  awk '/^present:/ { for (i = 1; i < NF; i++) { if ($i == "presented") p += $(i+1); if ($i == "discarded") d += $(i+1);
+                     if ($i == "max" && $(i+1) > mx) mx = $(i+1) } n++ }
+       END { printf "healthy client: %d run(s), %d presented, %d discarded, worst interval %.1f ms\n", n, p, d, mx / 1e6 }' present.log
 else
   export WAYLAND_DISPLAY=abyss-live-0
   mkfifo vk; $B/vkeyboard < vk > vk.log 2>&1 & echo $! >> pids; exec 4>vk

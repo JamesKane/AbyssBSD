@@ -36,6 +36,8 @@ public struct FrameRecord: Equatable, Sendable {
     public var surfaces: Int32 = 0
     public var missed: Bool = false
     public var degraded: Bool = false
+    /// Nothing changed, so nothing was drawn or sent to the display (M.1).
+    public var idle: Bool = false
 
     public init() {}
 }

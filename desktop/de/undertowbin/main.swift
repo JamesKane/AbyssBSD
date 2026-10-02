@@ -649,6 +649,7 @@ case "run":
     var reportedLock = ""
     var reportedPrimary = 0
     var reportedIslands = ""
+    var presentedReportAt: UInt64 = 0
     var reportedC6: [Int] = []
     var reportedWindowIslands: [String: Int] = [:]
     while unbounded || drawn < frames {
@@ -680,6 +681,12 @@ case "run":
         if stack != reportedStack {
             reportedStack = stack
             out("stack=\(stack)")        // bottom to top
+        }
+        // Frames actually sent to the displays, once a second (BACKLOG M.1):
+        // present-on-damage means a static screen sends none.
+        if Mono.since(presentedReportAt, Mono.now()) >= 1_000_000_000 {
+            presentedReportAt = Mono.now()
+            out("presented \(outs.reduce(0) { $0 + $1.commitsMade })")
         }
         // Islands (PHASE13 P13.1): what each display shows, and where each
         // window is — changes only.

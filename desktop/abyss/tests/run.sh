@@ -153,6 +153,11 @@ sh "$root/abyss/tests/live-undertow-input.sh"
 phase "C2: no client can make us miss a frame"
 sh "$root/abyss/tests/live-undertow-c2.sh"
 
+# Present on damage (BACKLOG M.1): a static screen presents nothing, and every
+# kind of change — a repaint, the pointer, a screenshot's request — is drawn.
+phase "present on damage"
+sh "$root/abyss/tests/live-damage.sh"
+
 # C6 — an island switch reaches the screen within two frames of the key that
 # asked for it, under C2's load (PHASE13 P13.2). Measured to the vblank that
 # showed it, by undertow; it gates the build as C1 does.

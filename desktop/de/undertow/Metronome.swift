@@ -348,6 +348,24 @@ public struct Metronome<O: Output, S: FrameSink> {
         let wakeLate = config.freeRun ? 0 : Mono.since(deadline, latch)
         let stats = sink.latchAndComposite(now: latch, target: target)
         let compositeEnd = Mono.now()
+        // **Nothing changed: nothing to draw, nothing to send** (M.1). The
+        // frame is recorded as idle — not missed, and not fed to the margin,
+        // whose terms are about frames the display has to take. An island
+        // switch that changed nothing visible (one empty island for another)
+        // is on screen already: C6 counts it shown at this vblank.
+        if stats.unchanged {
+            if stats.inputAt != 0 {
+                c6.record(inputAt: stats.inputAt, shownAt: target, periodNs: predictor.periodNs)
+            }
+            r.latch = latch
+            r.compositeEnd = compositeEnd
+            r.costNs = Mono.since(latch, compositeEnd)
+            r.surfaces = stats.surfaces
+            r.idle = true
+            r.missed = false
+            recorder.record(r)
+            return
+        }
         if stats.inputAt != 0 {
             if c6InputAt == 0 { c6InputAt = stats.inputAt }
             c6Target = target

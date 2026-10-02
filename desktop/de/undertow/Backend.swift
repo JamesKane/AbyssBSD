@@ -497,6 +497,9 @@ public final class WlrootsOutput: Output {
     private let session: WlrootsSession
     private let events = OutputEvents()
     private var presentListener: UnsafeMutablePointer<tw_listener>?
+    /// wlroots asking for a frame (`needs_frame`): screencopy waits on one, and
+    /// with present-on-damage a static screen would otherwise never send it.
+    private var needsFrameListener: UnsafeMutablePointer<tw_listener>?
 
     /// commit_seq → the vblank we aimed that commit at, so a present event can
     /// be matched to its target. Small and fixed: only a few frames are ever in
@@ -572,6 +575,8 @@ public final class WlrootsOutput: Output {
     public func detach() {
         tw_listener_free(presentListener)
         presentListener = nil
+        tw_listener_free(needsFrameListener)
+        needsFrameListener = nil
         output = nil
         refusedPending = 0
         while events.pop() != nil {}
@@ -585,12 +590,17 @@ public final class WlrootsOutput: Output {
         lastHeight = o.pointee.height
         gridEpoch = 0
         listen(to: o)
+        scene?.invalidate()          // a new output shows nothing until drawn
         _ = refreshPeriod()
         if asleep { asleep = false; setAsleep(true) }
     }
 
     private func listen(to output: UnsafeMutablePointer<wlr_output>) {
         let me = Unmanaged.passUnretained(self).toOpaque()
+        needsFrameListener = tw_listen(&output.pointee.events.needs_frame, { ctx, _ in
+            guard let ctx else { return }
+            Unmanaged<WlrootsOutput>.fromOpaque(ctx).takeUnretainedValue().scene?.invalidate()
+        }, me)
         presentListener = tw_listen(&output.pointee.events.present, { ctx, data in
             guard let ctx, let data else { return }
             let o = Unmanaged<WlrootsOutput>.fromOpaque(ctx).takeUnretainedValue()
@@ -615,6 +625,7 @@ public final class WlrootsOutput: Output {
         // Free the listener before dropping the context it points at. The
         // opposite order is §2.35's segfault, one layer down.
         tw_listener_free(presentListener)
+        tw_listener_free(needsFrameListener)
     }
 
     /// Read the refresh rate again, after a mode change; returns whether the
@@ -645,6 +656,7 @@ public final class WlrootsOutput: Output {
             Compositor.log("\(name): could not turn \(on ? "off" : "on")")
         }
         asleep = on
+        if !on { scene?.invalidate() }   // awake: the screen is blank until drawn
     }
 
     /// Render and commit a frame. Fire-and-forget: `wlr_output_commit_state`
@@ -680,6 +692,8 @@ public final class WlrootsOutput: Output {
             // the previous frame has not reached the screen yet. A frame lost
             // here never produces a present event, so nothing else counts it.
             commitsRefused &+= 1
+            // And it was never shown: the next frame draws, changed or not.
+            scene?.invalidate()
             // Tell the loop, which otherwise never hears of it: no present
             // event will ever come for this frame.
             if refusedPending < refused.count {

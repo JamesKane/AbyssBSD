@@ -18,6 +18,7 @@
 // the arrays here are already the right shape for that, which is the point of
 // building them this way now.
 
+import AquaDraw
 import CWlroots
 
 /// The compositor's scene: windows latched from the compositor, composited into
@@ -52,6 +53,13 @@ public final class SurfaceScene: FrameSink {
     /// the mark behind the window under the pointer).
     private let fillOn: UnsafeMutableBufferPointer<Bool>
     private let fill: UnsafeMutableBufferPointer<wlr_render_color>
+    /// What the last presented frame was, as one number, and whether the next
+    /// must be drawn whatever it is (M.1: present on damage).
+    private var lastSignature: UInt64 = 0
+    private var forceNext = true
+    /// Draw the next frame even if nothing in it changed: the output is new,
+    /// awake again, refused the last commit, or was asked (screencopy).
+    public func invalidate() { forceNext = true }
     /// The walk's scale and opacity, for a tree drawn as a thumbnail.
     private var walkScale = 1.0
     private var walkAlpha: Float = 1
@@ -164,8 +172,7 @@ public final class SurfaceScene: FrameSink {
                     addTree(m.surface, at: m.display.x, m.display.y)
                 }
             }
-            return FrameStats(surfaces: Int32(count), damageArea: Int64(outputWidth) * Int64(outputHeight),
-                              degraded: false, inputAt: inputAt)
+            return finish(inputAt: inputAt)
         }
         // Paint order, and it is the shell's whole visual grammar:
         //
@@ -221,8 +228,12 @@ public final class SurfaceScene: FrameSink {
         return finish(inputAt: inputAt)
     }
 
-    /// The cull's arithmetic, and the frame's stats.
+    /// The cull's arithmetic, and the frame's stats — and whether anything a
+    /// person could see changed since the last frame presented (M.1).
     private func finish(inputAt: UInt64) -> FrameStats {
+        let sig = signature()
+        let unchanged = !forceNext && sig == lastSignature
+        if !unchanged { lastSignature = sig; forceNext = false }
         var painted: Int32 = 0
         var area: Int64 = 0
         for i in 0..<count {
@@ -236,7 +247,37 @@ public final class SurfaceScene: FrameSink {
                 painted &+= 1
             }
         }
-        return FrameStats(surfaces: painted, damageArea: area, degraded: false, inputAt: inputAt)
+        return FrameStats(surfaces: painted, damageArea: unchanged ? 0 : area, degraded: false,
+                          inputAt: inputAt, unchanged: unchanged)
+    }
+
+    /// Everything this frame would draw, as one number: each entry's texture,
+    /// the client surface and its commit (a texture updated in place keeps its
+    /// pointer, never its commit), where it goes, what part, which way up, how
+    /// opaque, a fill's colour; and what is drawn besides the entries — the
+    /// cursor, the lock's background, the output's size and scale, the theme.
+    /// Built from what is latched, not from a list of everything that might
+    /// change, so a change nobody thought to report still redraws.
+    private func signature() -> UInt64 {
+        var h = FrameHash()
+        h.add(UInt64(count)); h.add(compositor.isLocked ? 1 : 0)
+        h.add(UInt64(UInt32(bitPattern: outputWidth))); h.add(UInt64(UInt32(bitPattern: outputHeight)))
+        h.add(scale.bitPattern); h.add(UInt64(Theme.generation))
+        h.add(compositor.seat?.cursorSignature ?? 0)
+        for i in 0..<count {
+            h.add(UInt64(UInt(bitPattern: texture[i])))
+            if let s = source[i] { h.add(UInt64(UInt(bitPattern: s))); h.add(UInt64(s.pointee.current.seq)) }
+            h.add(UInt64(UInt32(bitPattern: x[i])) << 32 | UInt64(UInt32(bitPattern: y[i])))
+            h.add(UInt64(UInt32(bitPattern: w[i])) << 32 | UInt64(UInt32(bitPattern: self.h[i])))
+            h.add(crop[i].x.bitPattern); h.add(crop[i].y.bitPattern)
+            h.add(crop[i].width.bitPattern); h.add(crop[i].height.bitPattern)
+            h.add(UInt64(turn[i].rawValue)); h.add(UInt64(alpha[i].bitPattern))
+            if fillOn[i] {
+                h.add(UInt64(fill[i].r.bitPattern) << 32 | UInt64(fill[i].g.bitPattern))
+                h.add(UInt64(fill[i].b.bitPattern) << 32 | UInt64(fill[i].a.bitPattern))
+            }
+        }
+        return h.value
     }
 
     // MARK: - Ebb (P13.5)
@@ -527,4 +568,12 @@ public final class SurfaceScene: FrameSink {
             wlr_render_pass_add_texture(pass, &opts)
         }
     }
+}
+
+/// FNV-1a over 64-bit words: cheap, no allocation, and enough to tell one
+/// frame from the next (M.1). A collision would skip one frame that changed —
+/// and the next change redraws it.
+struct FrameHash {
+    var value: UInt64 = 0xcbf2_9ce4_8422_2325
+    @inline(__always) mutating func add(_ v: UInt64) { value = (value ^ v) &* 0x0000_0100_0000_01b3 }
 }

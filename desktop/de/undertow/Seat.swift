@@ -110,6 +110,25 @@ public final class Seat {
         case hidden
     }
     public private(set) var cursorImage: CursorImage = .shape("default")
+    /// Everything the drawn pointer depends on, as one number — where it is,
+    /// what it shows, and a drag's icon — so a frame where only the pointer
+    /// moved is still drawn (M.1).
+    var cursorSignature: UInt64 {
+        var h = FrameHash()
+        h.add(UInt64(bitPattern: Int64(cursorX.rounded(.down))))
+        h.add(UInt64(bitPattern: Int64(cursorY.rounded(.down))))
+        switch cursorImage {
+        case .hidden: h.add(1)
+        case .client:
+            h.add(2)
+            if let s = cursorSurface { h.add(UInt64(UInt(bitPattern: s))); h.add(UInt64(s.pointee.current.seq)) }
+        case .shape(let name): h.add(3); h.add(UInt64(bitPattern: Int64(name.hashValue)))
+        }
+        if let icon = dragIcon, let s = icon.pointee.surface {
+            h.add(UInt64(UInt(bitPattern: s))); h.add(UInt64(s.pointee.current.seq))
+        }
+        return h.value
+    }
     private var cursorSurface: UnsafeMutablePointer<wlr_surface>?
     private var cursorHotX: Int32 = 0, cursorHotY: Int32 = 0
     private var cursorSurfaceListeners: [UnsafeMutablePointer<tw_listener>?] = []

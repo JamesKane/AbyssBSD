@@ -24,6 +24,10 @@
  *       client was given (window mode) — the attack a lock must survive
  *   f   ask a frame callback on the first lock surface (lock mode): prints
  *       `frame` when it comes — a lock screen that animates needs a clock
+ *   r ARGB  repaint the window (window mode) in a new colour — into the SAME
+ *       buffer, reattached and committed, as a toolkit with one shm buffer
+ *       does: the texture's pointer stays, only the commit says it changed
+ *       (BACKLOG M.1's present-on-damage must still draw it)
  *   q   quit — in lock mode, WITHOUT unlocking: the abandoned lock
  *
  * A test helper, not part of the product; built by live-sessionlock.sh.
@@ -67,6 +71,30 @@ static void reg_global(void *d, struct wl_registry *r, uint32_t id, const char *
 }
 static void reg_remove(void *d, struct wl_registry *r, uint32_t id) { (void)d; (void)r; (void)id; }
 static const struct wl_registry_listener reg_listener = { reg_global, reg_remove };
+
+/* The window's buffer and its pixels, kept for `r`. */
+static uint32_t *win_px;
+static int win_n;
+static struct wl_buffer *win_buf;
+
+static struct wl_buffer *solid_kept(int w, int h, uint32_t argb, uint32_t **keep) {
+    int stride = w * 4, size = stride * h;
+    char name[64];
+    snprintf(name, sizeof name, "/lockclient-kept-%d", (int)getpid());
+    int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) { perror("shm_open"); exit(1); }
+    shm_unlink(name);
+    if (ftruncate(fd, size) < 0) { perror("ftruncate"); exit(1); }
+    uint32_t *px = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (px == MAP_FAILED) { perror("mmap"); exit(1); }
+    for (int i = 0; i < w * h; i++) px[i] = argb;
+    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
+    struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
+    wl_shm_pool_destroy(pool);
+    close(fd);
+    *keep = px;
+    return b;
+}
 
 static struct wl_buffer *solid(int w, int h, uint32_t argb) {
     int stride = w * 4, size = stride * h;
@@ -167,7 +195,9 @@ static void xs_configure(void *d, struct xdg_surface *xs, uint32_t s) {
     xdg_surface_ack_configure(xs, s);
     if (sf == window && !window_ready) {
         window_ready = 1;
-        wl_surface_attach(sf, solid(300, 200, colour), 0, 0);
+        win_n = 300 * 200;
+        win_buf = solid_kept(300, 200, colour, &win_px);
+        wl_surface_attach(sf, win_buf, 0, 0);
         wl_surface_damage_buffer(sf, 0, 0, 300, 200);
     } else if (sf != window) {
         wl_surface_attach(sf, solid(100, 60, 0xffff00ff), 0, 0);   /* the popup: magenta */
@@ -241,6 +271,16 @@ int main(int argc, char **argv) {
             case 'l': if (lock_mode && !lock) do_lock(); break;
             case 'u': if (lock) { ext_session_lock_v1_unlock_and_destroy(lock); lock = NULL; wl_display_roundtrip(dpy); printf("unlocked\n"); } break;
             case 'p': if (!lock_mode) open_grabbing_popup(); break;
+            case 'r':
+                if (!lock_mode && win_px) {
+                    uint32_t c = (uint32_t)strtoul(line + 2, NULL, 16);
+                    for (int i = 0; i < win_n; i++) win_px[i] = c;
+                    wl_surface_attach(window, win_buf, 0, 0);
+                    wl_surface_damage_buffer(window, 0, 0, 300, 200);
+                    wl_surface_commit(window);
+                    printf("repainted\n");
+                }
+                break;
             case 'f':
                 if (lock && nlock_surfaces) {
                     struct wl_callback *cb = wl_surface_frame(lock_surfaces[0]);

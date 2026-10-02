@@ -730,6 +730,50 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.119 Present on damage — and what C2 on metal is really made of
+(BACKLOG M.1. Found by asking why a static screen could miss a frame.)
+
+**undertow drew every vblank.** C1 was "a complete frame every vblank", and it
+was taken literally: sixty identical frames a second on a static screen, each
+a GPU pass and a flip that could be refused. The "61–83 missed" of §2.118 were
+mostly frames with nothing new in them. Now the scene hashes what it latched
+(`Scene.signature`) and compares it with the last frame presented. Unchanged
+means no render and no commit; the frame clock still runs for clients.
+
+The hash covers:
+- each entry's texture, client surface and commit sequence, geometry, crop,
+  transform, opacity and fill;
+- the cursor (`Seat.cursorSignature`), the lock state, the output's size and
+  scale, and the theme.
+
+A frame is forced on a new or re-attached output, on waking from display
+sleep, after a refused commit, and on wlroots' `needs_frame`, which is how
+screencopy asks for one. Without that last, a screenshot of a static screen
+never finished (a fault caught it). On a commit the texture pointer alone has
+always changed in this wlroots, so the commit sequence term could not be
+shown necessary; it is kept for a texture updated in place.
+
+**C2 with a client that draws** (`metal-bench.sh c2`'s healthy client is now
+`present.c`, redrawing every frame; `live-undertow-c2.sh` likewise, and it
+fails unless at least 80 % of frames are committed):
+
+| 1800 frames on the 12700KF | wake-late p99 | missed | worst flip-news delay |
+|---|---|---|---|
+| idle | 75 µs | 1 | 14 ms |
+| 12 plain CPU spinners, no Wayland | 59 µs | 7 | **294 ms** |
+| C2's eleven adversaries | 12–15 ms | 71–87 | 35–70 ms |
+
+Two separate things:
+- **The driver's:** with only busy CPUs, undertow wakes on time (real-time,
+  priority 16) and still waited 294 ms once for a flip's completion. amdgpu's
+  page-flip news goes through LinuxKPI, whose task queues run at ordinary
+  priority. BACKLOG §6.
+- **undertow's:** the flood makes undertow itself wake 12–15 ms late, ten times
+  the misses. It is *not* CPU time in undertow: a 4999 Hz profile caught
+  ~22 ms of it in 8 s. Nor is it texture uploads (~2 ms). It is not yet
+  found. A separate event loop for the backend was tried and dropped: it cut
+  refused commits (52 → 9) and raised misses (96).
+
 ### 2.118 C2 does not hold on metal: a flood delays the page flip's news
 (PHASE13 P13.8, measuring C6 on the 12700KF.)
 

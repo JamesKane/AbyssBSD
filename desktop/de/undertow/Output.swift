@@ -90,12 +90,19 @@ public struct FrameStats: Equatable, Sendable {
     /// When an island switch this frame is the first to draw was asked for
     /// (PHASE13 P13.2), or 0. The metronome follows it to the flip: C6.
     public var inputAt: UInt64
+    /// **Nothing visible changed since the last frame presented** (BACKLOG
+    /// M.1): the metronome draws and commits nothing, and the display keeps
+    /// what it has. A static screen costs the GPU nothing and has no frame to
+    /// miss.
+    public var unchanged: Bool
 
-    public init(surfaces: Int32 = 0, damageArea: Int64 = 0, degraded: Bool = false, inputAt: UInt64 = 0) {
+    public init(surfaces: Int32 = 0, damageArea: Int64 = 0, degraded: Bool = false, inputAt: UInt64 = 0,
+                unchanged: Bool = false) {
         self.surfaces = surfaces
         self.damageArea = damageArea
         self.degraded = degraded
         self.inputAt = inputAt
+        self.unchanged = unchanged
     }
 }
 

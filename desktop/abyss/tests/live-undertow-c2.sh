@@ -72,11 +72,24 @@ cc -I "$root/de/cwayland/include" "$root/abyss/tests/adversary.c" \
    "$root/de/cabyssprotocols/xdg-shell-protocol.c" \
    $(pkg-config --cflags --libs wayland-client) -o "$adv_dir/adversary" \
   || { echo "FAIL: could not build the adversary"; exit 1; }
+# A client that DRAWS on every frame (BACKLOG M.1): undertow presents only what
+# changed, so a static healthy window would leave nothing to miss and C2 would
+# pass by doing nothing. present.c redraws on every frame callback and says
+# whether any of its frames was discarded.
+for d in $(pkg-config --variable=pkgdatadir wayland-protocols) /usr/share/wayland-protocols /usr/local/share/wayland-protocols; do
+  [ -f "$d/stable/presentation-time/presentation-time.xml" ] && pxml="$d/stable/presentation-time/presentation-time.xml" && break
+done
+wayland-scanner client-header "$pxml" "$adv_dir/presentation-time-client-protocol.h"
+wayland-scanner private-code  "$pxml" "$adv_dir/presentation-time-protocol.c"
+cc -I"$adv_dir" -I "$root/de/cwayland/include" "$root/abyss/tests/present.c" \
+   "$root/de/cabyssprotocols/xdg-shell-protocol.c" "$adv_dir/presentation-time-protocol.c" \
+   $(pkg-config --cflags --libs wayland-client) -o "$adv_dir/present" \
+  || { echo "FAIL: could not build the drawing client"; exit 1; }
 
 # ------------------------------------------------------------- the compositor
 env -u WAYLAND_DISPLAY "$undertow" run --hz "$HZ" --frames "$FRAMES" \
     --width "$W" --height "$H" --capture-early "$before" --capture "$after" \
-    --assert-missed "$MISS_BUDGET" --assert-windows 1 \
+    --assert-missed "$MISS_BUDGET" \
     --assert-surfaces $((HARD + 3)) \
     > "$work/ut.out" 2> "$work/ut.err" &
 ut_pid=$!
@@ -117,6 +130,10 @@ spawn_adversary zombie
 spawn_adversary deaf
 spawn_adversary churn 0
 echo "ok: $HARD socket-flooders, a zombie, a spinning never-reader and a churner are loose"
+# The drawing client, 120 frames at a time until undertow ends.
+( while kill -0 "$ut_pid" 2>/dev/null; do
+    env WAYLAND_DISPLAY="$wd" "$adv_dir/present" >> "$work/present.log" 2>&1 || break
+  done & echo $! >> "$pidfile" )
 
 rc=0; wait "$ut_pid" 2>/dev/null || rc=$?
 ut_pid=""
@@ -141,9 +158,22 @@ echo "    wake-late p99 $(grep -o 'wake-late-p99-us=[0-9]*' "$work/ut.out" | cut
 surfaces=$(grep -o 'surfaces-created=[0-9]*' "$work/ut.out" | cut -d= -f2)
 echo "ok: the load was real — $surfaces client surfaces created"
 
+# 2b. The frames were real: the screen changed every frame (the drawing
+#     client), so undertow had to commit nearly every one — not idle ones it
+#     could skip — and the drawing client lost none of its frames.
+made=$(grep -o 'commits-refused=[0-9]* of [0-9]*' "$work/ut.out" | awk '{print $3}')
+[ "${made:-0}" -ge $((FRAMES * 8 / 10)) ] \
+  || { echo "FAIL: only ${made:-0} frames were committed of $FRAMES — the screen was not changing, so C2 proved nothing"; exit 1; }
+disc=$(awk '/^present:/ { for (i = 1; i < NF; i++) if ($i == "discarded") d += $(i+1) } END { print d + 0 }' "$work/present.log")
+runs=$(grep -c '^present:' "$work/present.log" || true)
+[ "${runs:-0}" -ge 1 ] && [ "$disc" = 0 ] \
+  || { echo "FAIL: the drawing client ran ${runs:-0} time(s) and lost $disc frame(s)"; exit 1; }
+echo "ok: the screen changed every frame — $made commits of $FRAMES — and the drawing client lost none ($runs runs)"
+
 # 3. The healthy client was still being served at the end. C2 is not "the
 #    compositor survived"; it is "the desktop kept working".
-grep -q '^windows=1' "$work/ut.out" \
+# (1, or 2 while the drawing client's window is between runs.)
+grep -q '^windows=[12]$' "$work/ut.out" \
   || { echo "FAIL: the healthy client's window is gone — it was starved out"
        cat "$work/ut.out" "$work/aqua.log"; exit 1; }
 

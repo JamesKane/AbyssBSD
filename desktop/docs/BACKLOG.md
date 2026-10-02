@@ -25,7 +25,7 @@ or more.
 
 | # | Item | Size | Why here | Verified by |
 |---|---|---|---|---|
-| M.1 | **C2 on metal** (HANDOFF §2.118): undertow serves the backend's events — DRM's page-flip completions — before a flooding client's, or bounds a client's dispatch per frame. On the 12700KF, C2's adversaries cost 61–83 of 1800 frames (0 without them) and push 2–5 % of island switches past C6 | M | C2 and C6 both hold headless and not on hardware; every claim about isolation rests on it | `abyss/mk/metal-bench.sh c2` at 0 missed with the adversaries, then `c6` with no switch over 2 frames — metal, so in a sitting |
+| M.1 | **C2 on metal** (HANDOFF §2.118, §2.119). ✅ *Present on damage* (a static screen draws nothing; `live-damage.sh`). Open: with a client that draws, C2's adversaries still cost 71–87 of 1800 frames, because undertow wakes 12–15 ms late under the flood. The cause is not undertow's CPU time and not texture uploads; next, off-CPU and wake-up tracing. Plus a driver half, in §6 | M | C2 and C6 hold headless and not on hardware; every claim about isolation rests on it | `abyss/mk/metal-bench.sh c2` at ~0 missed with the adversaries and a drawing client, then `c6` with no switch over 2 frames — metal |
 | ~~U.1~~ | ✅ **2026-09-28. Subsurfaces drawn, framed and hit-tested** (HANDOFF §2.71, `live-subsurface.sh`) | M | | done, both platforms |
 | ~~U.2~~ | ✅ **2026-09-28. A minimised window keeps a clock** — 1 Hz, xdg-shell v6 `suspended`, `wm_capabilities` (HANDOFF §2.72, `live-hidden.sh`) | S | | done, both platforms |
 | ~~U.3~~ | ✅ **2026-09-28. `linux-dmabuf`** — GL and Vulkan clients on the AMD iGPU under headless GLES2 `undertow`; screenshots fixed for 24-bit renderers (HANDOFF §2.73, `live-gpu.sh`) | M | | done; GPU half on Linux, pixman half both platforms |
@@ -186,6 +186,11 @@ scheduled; each is small and self-contained:
   (PHASE16 P16.4b, HANDOFF §2.113). **Raised by the 12700KF** (§2.115): its
   board has both kinds and the case button is the fixed one, so on a typical
   desktop board the dialog is never offered;
+- **amdgpu's page-flip news is late under CPU load** (HANDOFF §2.119): with
+  twelve plain busy loops and no Wayland traffic at all, a real-time
+  compositor that woke on time waited 294 ms once for a flip's completion. The
+  path is amdgpu → LinuxKPI task queues at ordinary priority. Seen with
+  `metal-bench.sh c2 --no-adversaries` plus spinners;
 - **S3 resume on the 12700KF (MSI board, RX 6750 XT, igc0) leaves the machine
   dead** (HANDOFF §2.115). With no desktop running, `acpiconf -s 3` from a bare
   console suspends, and the wake brings the screen back, but the keyboard and
