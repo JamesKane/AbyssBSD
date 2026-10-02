@@ -182,7 +182,18 @@ until the Q8B is regression-tested; 2026-10-02):
 - Also: the Qualcomm GLINK clients built into the branch's GENERIC no
   longer wait for a DSP on this board.
 
-### Phase 4: display and desktop, early
+### Phase 4: display and desktop, early (sway runs, 2026-10-02)
+
+On the branch kernel, `drm-kmod`'s `sysfbdrm` (from the Q8B, unchanged)
+drives the UEFI framebuffer (1920x1080 at `0x84800000`), and sway 1.12 from
+packages runs on it with Mesa's llvmpipe (`WLR_RENDERER=pixman` until the
+libdrm fix for boards without a render node is in the package). `fastfetch`
+has no FreeBSD 16 aarch64 package; built from its release source it runs.
+
+Also found: the installer's `/etc/resolv.conf` has no `resolvconf`
+signature, so DHCP never updated it and DNS failed; `resolvconf -u` fixes
+that.
+
 
 `efifb` and our `sysfbdrm` (from the Q8B) give KMS on the GOP framebuffer
 with no display driver, which is enough to run the AbyssBSD desktop with
