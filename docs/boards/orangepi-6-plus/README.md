@@ -159,8 +159,9 @@ panel, the audio DSP, Wi-Fi (no module fitted: nothing on PCIe or USB).
   about 100 GiB from a live USB stick (ext4 can't shrink mounted), leaving
   ~360 GB unallocated for FreeBSD's installer, its swap big enough for
   crash dumps; the ESP (`nvme0n1p1`, 1 GB) is shared. Ubuntu stays as the
-  Linux reference. Status: the benchmark data that filled the disk is
-  deleted (17 GB used); the shrink waits on a live image.
+  Linux reference. Done 2026-10-02: `nvme0n1p2` is 97.7 GiB (sectors
+  2203648–207003647, 17 GB used), and ~367 GiB from sector 207003648 to the
+  end is unallocated.
 - **Serial console:** the 10-pin debug header is 3.3 V, so a common USB-TTL
   adapter works (unlike the Q8B's 1.8 V pads). UART2, the BIOS and kernel
   log, is pin 1 TX, pin 3 RX, pin 5 GND, and is the DBG2 table's `COM2` at
