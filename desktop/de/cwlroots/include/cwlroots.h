@@ -87,6 +87,7 @@
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_session_lock_v1.h>
+#include <wlr/types/wlr_security_context_v1.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/box.h>
@@ -188,6 +189,21 @@ int tw_privileged_socket_add(struct tw_menus *m, const char *path);
 bool tw_client_is_privileged(struct tw_menus *m, struct wl_client *client);
 /* Offer `global` only to the privileged socket's clients (PHASE16 P16.2c). */
 void tw_menus_add_privileged_global(struct tw_menus *m, const struct wl_global *global);
+/*
+ * Jailed clients (PHASE18 P18.3): a client that came in through a socket
+ * registered with wp_security_context_v1 sees only the globals on an
+ * allowlist — what an application needs to draw, take input when focused,
+ * and publish its menus — and none that watch, drive or capture anyone else.
+ * An allowlist, so a global added later is hidden from a jail until someone
+ * decides otherwise. Creates the manager; NULL if it could not.
+ */
+struct wlr_security_context_manager_v1 *tw_menus_enable_jails(struct tw_menus *m);
+/* Whether a jailed client may bind `interface` (the allowlist). */
+bool tw_jailed_may_bind(const char *interface);
+/* Whether `client` is jailed, and its context's engine, app id and instance
+ * (each may be NULL). */
+bool tw_client_jail(struct tw_menus *m, struct wl_client *client,
+                    const char **engine, const char **app_id, const char **instance);
 void tw_menubar_send_focused(struct wl_resource *menubar, uint32_t kind,
                              const char *address, const char *app_id);
 void tw_menubar_send_focused_all(struct tw_menus *m, uint32_t kind,

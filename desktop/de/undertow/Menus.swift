@@ -150,6 +150,19 @@ public final class Menus {
         }
         guard let r = tw_menus_create(display, &hooks) else { return nil }
         raw = r
+        // Jailed clients (PHASE18 P18.3): the session registers each jail's
+        // socket with this, and what comes in through it sees an allowlist.
+        if tw_menus_enable_jails(r) == nil { Compositor.log("no security-context manager: jails cannot be told apart") }
+    }
+
+    /// The security context `surface`'s client came in through, if it is
+    /// jailed (P18.3): engine, app id and instance, any of them "-" if unset.
+    public func jail(of surface: UnsafeMutablePointer<wlr_surface>) -> (engine: String, appID: String, instance: String)? {
+        guard let raw, let res = surface.pointee.resource, let client = wl_resource_get_client(res) else { return nil }
+        var e: UnsafePointer<CChar>?, a: UnsafePointer<CChar>?, i: UnsafePointer<CChar>?
+        guard tw_client_jail(raw, client, &e, &a, &i) else { return nil }
+        func s(_ p: UnsafePointer<CChar>?) -> String { p.map { String(cString: $0) } ?? "-" }
+        return (s(e), s(a), s(i))
     }
 
     /// Display `d`'s island, to one bar or (nil) to every bar.

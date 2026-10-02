@@ -26,6 +26,7 @@ struct tw_menus {
     int nprivileged_globals;
     struct wl_global *gtk_shell_global;   /* P10.6 */
     uint32_t gtk_capabilities;            /* sent on bind */
+    struct wlr_security_context_manager_v1 *security;   /* PHASE18 P18.3 */
     struct wl_list menubars;        /* wl_resource links */
     struct wl_list privileged;      /* struct privileged_client */
     int privileged_fd;
@@ -260,9 +261,56 @@ void tw_menubar_send_islands_done(struct wl_resource *menubar, const char *names
 
 /* ---------------------------------------------------------------- who may see what */
 
+/* What a jailed client may bind (PHASE18 P18.3). Drawing, input while
+ * focused, its own windows and its own menus. Not here, so hidden:
+ * screencopy, virtual pointer and keyboard, input-method (a keyboard by
+ * another name), session lock, layer shell, foreign-toplevel, output
+ * management, idle notification (it watches the person), abyss's window and
+ * menu-bar globals (window_at names other windows), and the security-context
+ * manager itself (a jail does not make more jails). */
+static const char *const jailed_allowlist[] = {
+    "wl_compositor", "wl_subcompositor", "wl_shm", "wl_seat", "wl_output",
+    "wl_data_device_manager", "wl_drm",
+    "xdg_wm_base", "zxdg_decoration_manager_v1", "zxdg_output_manager_v1",
+    "wp_viewporter", "wp_fractional_scale_manager_v1", "wp_presentation",
+    "wp_single_pixel_buffer_manager_v1", "wp_cursor_shape_manager_v1",
+    "wp_linux_drm_syncobj_manager_v1", "zwp_linux_dmabuf_v1",
+    "xdg_activation_v1", "zwp_text_input_manager_v3",
+    "zwp_pointer_constraints_v1", "zwp_relative_pointer_manager_v1",
+    "zwp_idle_inhibit_manager_v1",
+    "gtk_shell1", "abyss_menu_manager_v1",
+};
+
+bool tw_jailed_may_bind(const char *interface) {
+    for (size_t i = 0; i < sizeof jailed_allowlist / sizeof jailed_allowlist[0]; i++)
+        if (strcmp(interface, jailed_allowlist[i]) == 0) return true;
+    return false;
+}
+
+struct wlr_security_context_manager_v1 *tw_menus_enable_jails(struct tw_menus *m) {
+    if (!m) return NULL;
+    if (!m->security) m->security = wlr_security_context_manager_v1_create(m->display);
+    return m->security;
+}
+
+bool tw_client_jail(struct tw_menus *m, struct wl_client *client,
+                    const char **engine, const char **app_id, const char **instance) {
+    if (!m || !m->security || !client) return false;
+    const struct wlr_security_context_v1_state *s =
+        wlr_security_context_manager_v1_lookup_client(m->security, client);
+    if (!s) return false;
+    if (engine) *engine = s->sandbox_engine;
+    if (app_id) *app_id = s->app_id;
+    if (instance) *instance = s->instance_id;
+    return true;
+}
+
 static bool global_filter(const struct wl_client *client, const struct wl_global *global,
                           void *data) {
     struct tw_menus *m = data;
+    /* A jail first: nothing below may widen what it sees. */
+    if (m->security && wlr_security_context_manager_v1_lookup_client(m->security, client))
+        return tw_jailed_may_bind(wl_global_get_interface(global)->name);
     if (global == m->menubar_global)
         return tw_client_is_privileged(m, (struct wl_client *)client);
     for (int i = 0; i < m->nprivileged_globals; i++)

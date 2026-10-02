@@ -1348,3 +1348,11 @@ public final class Compositor {
         wl_display_flush_clients(session.display)
     }
 }
+
+extension Toplevel {
+    /// The jail this window's client came in through, if any (PHASE18 P18.3).
+    public var jail: (engine: String, appID: String, instance: String)? {
+        guard let s = xdgToplevel.pointee.base.pointee.surface else { return nil }
+        return compositor.menus?.jail(of: s)
+    }
+}

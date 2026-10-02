@@ -228,6 +228,10 @@ if [ "$live" -eq 1 ]; then
   # only (it says so on Linux).
   echo "== abyss-jaild =="
   quiet "$root/abyss/tests/live-jaild.sh"
+  # A jail's Wayland boundary (P18.3): a client through a security context
+  # sees an allowlist, cannot bind past it, and is named as the jail's.
+  echo "== a jail's Wayland boundary =="
+  quiet "$root/abyss/tests/live-jail-wayland.sh"
   # And the keys the desktop hears first: a bound one never reaches the focused
   # client, an unbound one always does, and an application may keep a
   # combination for itself (P9.5, and §6.2's decision made into data).

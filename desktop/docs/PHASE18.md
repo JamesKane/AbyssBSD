@@ -86,7 +86,13 @@ Claims:
 - closing the descriptor removes the jail and every mount;
 - killing the daemon leaves no mounts behind on its next start.
 
-**P18.3 — the Wayland boundary (M).**
+**P18.3 — the Wayland boundary (M). — DONE 2026-10-02.** An allowlist of 24
+interfaces in `menus.c`'s global filter, checked before every other rule, with
+undertow creating `wlr_security_context_manager_v1`, and a `window-jail` report
+line. `live-jail-wayland.sh` has five claims, green on Linux and in the guest.
+Five faults were injected, and each failed the test. Combined with P18.2 in the guest,
+zenity ran in a jaild jail on a socket in the jail's runtime directory, and
+undertow named it as the jail's (§4.6).
 undertow gains `wp_security_context_v1` (wlroots 0.20 has it on both
 platforms, §4.3). The session binds a listening socket **inside the jail's
 root** and registers it, with engine `org.abyssbsd.jail`, the app id, and the
@@ -238,6 +244,23 @@ The two corrections, now in the plan:
 - `pwd_mkdb` reads `master.passwd(5)` form, so the plan carries the accounts in
   that form, and a passwd *file* is not part of it;
 - the guest has no `/etc/localtime`, so a missing copy source is skipped.
+
+### 4.6 P18.2 and P18.3 together — **GTK on the allowlist, from a real jail.**
+
+In the guest: `abyss-jail hold app` (jaild as root, temporary roots). Then
+`secctx` (the test's stand-in for the session), as the person, bound
+`<root>/run/user/wayland-0` from outside the jail and registered it, with engine
+`org.abyssbsd.jail`. Then `abyss-jail run app -- zenity --info`. undertow
+reported:
+
+```
+window zenity/Information 224,195 352x209
+window-jail zenity/Information engine=org.abyssbsd.jail app=org.gnome.Zenity instance=1
+```
+
+So GTK draws and maps with only the allowlist's 24 interfaces. The jail
+never saw undertow's runtime directory: its socket is the jail's own, made
+from outside. P18.5 is the same three steps, done by Anchor.
 
 ## 5. Verification
 

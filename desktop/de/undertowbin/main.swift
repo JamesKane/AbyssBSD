@@ -652,6 +652,7 @@ case "run":
     var presentedReportAt: UInt64 = 0
     var reportedC6: [Int] = []
     var reportedWindowIslands: [String: Int] = [:]
+    var reportedJails = Set<String>()
     while unbounded || drawn < frames {
         let ops = "resizes-started=\(compositor.resizesStarted) " +
                   "maximizes=\(compositor.maximizeCount) " +
@@ -702,6 +703,15 @@ case "run":
                 out("island-commit \(outs[i].name) frames=\(s.frames) us=\(s.ns / 1000)")
             }
             reportedC6[i] = m.c6.count
+        }
+        // A window from a jail (PHASE18 P18.3), said once: which context it
+        // came through.
+        for t in compositor.toplevels where t.mapped {
+            let key = t.placeKey ?? "?"
+            if !reportedJails.contains(key), let j = t.jail {
+                reportedJails.insert(key)
+                out("window-jail \(key) engine=\(j.engine) app=\(j.appID) instance=\(j.instance)")
+            }
         }
         for t in compositor.toplevels where t.mapped {
             let key = t.placeKey ?? "?"
