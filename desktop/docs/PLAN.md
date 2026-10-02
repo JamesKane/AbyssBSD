@@ -1195,6 +1195,8 @@ booting the environment it had.
 
 ## Phase 18 — confinement, then agents
 
+**Scoped 2026-10-02: [PHASE18.md](PHASE18.md)** — 18a (applications in jails, P18.1–P18.6) gated before 18b (agents, P18.7–P18.13).
+
 **Needs:** 7 (the portal is the model), **10** (the vocabulary the agent acts
 through — see below), 14 (a network and a credential store).
 **Unblocks:** thesis 4.
