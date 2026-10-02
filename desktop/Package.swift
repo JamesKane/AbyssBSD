@@ -352,7 +352,11 @@ let package = Package(
         // The one wire to a model (PHASE18 P18.7): JSON, minimal HTTP, the
         // session's budget and transcript, backends, and the VRAM tiers.
         .target(name: "Model", dependencies: ["CPlatform", "CProc"], path: "de/model"),
-        .executableTarget(name: "abyss-model", dependencies: ["Model", "CurrentIPC", "Spawn"], path: "de/modelbin"),
+        .executableTarget(name: "abyss-model", dependencies: ["Model", "CProc", "CurrentIPC", "Spawn"], path: "de/modelbin"),
+        // The agent runtime, inside its jail (PHASE18 P18.8): the loop, and
+        // the tools that read what the jail holds.
+        .target(name: "Agent", dependencies: ["Model"], path: "de/agent"),
+        .executableTarget(name: "abyss-agent", dependencies: ["Agent", "Model", "CurrentIPC"], path: "de/agentbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
                 linkerSettings: jailLibraries),
@@ -365,7 +369,7 @@ let package = Package(
         // with its Wayland socket, bus and portal; launches into it.
         .target(name: "JailKeeper", dependencies: ["JailD", "Jails", "CJail", "CProc", "CWayland", "CWaylandClient",
                                                    "CurrentIPC", "PoolConfig", "Spawn"], path: "de/jailkeeper"),
-        .executableTarget(name: "abyss-jail", dependencies: ["JailD", "JailKeeper", "CJail", "CPlatform",
+        .executableTarget(name: "abyss-jail", dependencies: ["JailD", "JailKeeper", "Jails", "CJail", "CPlatform",
                                                              "CWaylandClient", "CurrentIPC", "Spawn"],
                           path: "de/jailctl"),
         .target(name: "Pty", dependencies: ["CPlatform", "Spawn"], path: "de/pty"),
@@ -378,7 +382,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
-        .testTarget(name: "ModelTests", dependencies: ["Model"], path: "Tests/ModelTests"),
+        .testTarget(name: "ModelTests", dependencies: ["Model", "Agent"], path: "Tests/ModelTests"),
         .testTarget(name: "DBusBridgeTests", dependencies: ["DBusBridge", "DBus"], path: "Tests/DBusBridgeTests"),
         .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "JailKeeper", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the

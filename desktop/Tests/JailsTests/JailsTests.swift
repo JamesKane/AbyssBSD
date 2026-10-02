@@ -6,6 +6,7 @@
 
 import XCTest
 @testable import Jails
+import JailKeeper
 import PoolConfig
 
 final class JailsTests: XCTestCase {
@@ -17,7 +18,7 @@ final class JailsTests: XCTestCase {
     // MARK: - classes
 
     func testTheShippedClasses() {
-        XCTAssertEqual(JailClass.shipped.map(\.name), ["app", "app-gl", "app-net"])
+        XCTAssertEqual(JailClass.shipped.map(\.name), ["app", "app-gl", "app-net", "agent", "debug"])
         XCTAssertEqual(cls("app").network, .none)
         XCTAssertEqual(cls("app").devices, [])
         XCTAssertEqual(cls("app-gl").devices, ["dri"])
@@ -47,7 +48,47 @@ final class JailsTests: XCTestCase {
     func testTheAppsSectionIsNotAClass() {
         let t = JailClass.table(Config.parse("[apps]\ngalculator = app\n"))
         XCTAssertFalse(t.contains { $0.name == "apps" })
-        XCTAssertEqual(t.map(\.name), ["app", "app-gl", "app-net"])
+        XCTAssertEqual(t.map(\.name), ["app", "app-gl", "app-net", "agent", "debug"])
+    }
+
+    /// An agent's jail (P18.8) has a model socket and nothing else: no
+    /// display (so no bus), no devices, no network — and no model until the
+    /// person sets one.
+    func testTheAgentClasses() {
+        for n in ["agent", "debug"] {
+            let k = cls(n)
+            XCTAssertTrue(k.agent, n)
+            XCTAssertFalse(k.wayland, n)
+            XCTAssertEqual(k.devices, [], n)
+            XCTAssertEqual(k.network, .none, n)
+            XCTAssertEqual(k.model, "", n)
+            XCTAssertEqual(k.budget, JailClass.defaultBudget, n)
+            XCTAssertFalse(JailClass.shipped.filter { !$0.agent }.contains { $0.name == n })
+        }
+        XCTAssertFalse(cls("app").agent)
+        let plan = JailPlan.make(cls("agent"), for: me)
+        XCTAssertFalse(plan.env.contains { $0.0 == "DBUS_SESSION_BUS_ADDRESS" || $0.0 == "WAYLAND_DISPLAY" },
+                       "an agent's environment names no bus and no display")
+        XCTAssertEqual(plan.violations(for: cls("agent"), hostHome: hostHome), [])
+    }
+
+    func testAnAgentRowsKeys() {
+        let t = JailClass.table(Config.parse("[agent]\nmodel = local:/m/granite.gguf\nbudget = 5000\n[helper]\nagent = yes\nwayland = no\nbudget = nonsense\n"))
+        let a = t.first { $0.name == "agent" }!
+        XCTAssertEqual(a.model, "local:/m/granite.gguf")
+        XCTAssertEqual(a.budget, 5000)
+        XCTAssertFalse(a.wayland, "the override keeps the shipped row's other keys")
+        let h = t.first { $0.name == "helper" }!
+        XCTAssertTrue(h.agent)
+        XCTAssertEqual(h.budget, JailClass.defaultBudget, "a budget that is not a number keeps the default")
+    }
+
+    func testTheKeepersModelArguments() {
+        XCTAssertEqual(JailKeeper.modelArgs("local:/m/a.gguf"), ["--local", "/m/a.gguf"])
+        XCTAssertEqual(JailKeeper.modelArgs("stub:/t/r.json"), ["--stub", "/t/r.json"])
+        XCTAssertEqual(JailKeeper.modelArgs("http://127.0.0.1:8080"), ["--backend", "http://127.0.0.1:8080"])
+        XCTAssertNil(JailKeeper.modelArgs("https://api.example.com"), "remote providers are P18.7c's")
+        XCTAssertNil(JailKeeper.modelArgs("/m/a.gguf"))
     }
 
     func testAnUnknownNetworkWordKeepsTheSafeValue() {

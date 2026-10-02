@@ -284,6 +284,26 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   - `debug`: the same, plus `lldb`.
 
   Tested hermetically against the stub.
+
+  **P18.8a — the runtime, in its jail — DONE 2026-10-02.** The classes
+  `agent` and `debug` are shipped rows: `wayland = no` (so no socket, bus,
+  portal or menus), no devices, no network. They gain `budget` (tokens per
+  session) and `model` (`local:`, `stub:` or `http://`), which the keeper
+  reads from the person's `jails.ini`; what a jail can reach stays jaild's.
+  `abyss-jail agent CLASS` asks the keeper for a session: `abyss-model`
+  started outside the jail for that session alone (transcript and log in
+  `~/Library/Logs/Agents/ID/`), its socket in the jail's runtime directory,
+  and `abyss-agent serve` started in the jail on it. A dev build is handed in
+  as a read-only grant. When the agent ends, the keeper stops its model.
+  `abyss-agent` (`de/agent`) runs the loop: thinking off; 12 steps at most;
+  a 429 from abyss-model ends the question with its words; a bad tool call is
+  the model's to see. Its tools for now are `list_directory` and `read_file`,
+  bounded by the jail rather than by checks of their own. 9 AgentTests, 3
+  more JailsTests, and `live-agent.sh` (claims 1–6) green in the guest; 10
+  faults injected, all caught.
+
+  **P18.8b — the chat window**, ours and outside the jail, talking to the
+  agent's socket, is next.
 - **P18.9 — the crash, first (M).** jaild gives a spawned program the person's
   login-class limits (`setusercontext`), not jaild's own: a jailed process now
   inherits a core limit of 0 (§4.7). When a confined application dies of a

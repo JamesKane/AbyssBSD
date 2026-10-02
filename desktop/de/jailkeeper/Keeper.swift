@@ -19,6 +19,12 @@
 //      the Finder opens, and saves, in place;
 //   4. the program, started in the jail as the person.
 //
+// For an agent class (P18.8) it answers `agent class=C` instead: a session of
+// its own — `abyss-model` started outside the jail for this session alone
+// (its budget, its transcript under ~/Library/Logs/Agents), its socket inside
+// the jail, and `abyss-agent` started in the jail on it. The chat window talks
+// to the agent's socket; when the agent ends, its model goes too.
+//
 // And it watches `jails.ini` (P18.6): when its `[apps]` changes — an
 // application put in a jail, or let out — it runs `abyss-appgen` again, so
 // the bundles say so now rather than at the next login.
@@ -90,7 +96,11 @@ public final class JailKeeper {
     /// `abyss-appgen` and its arguments, run when `[apps]` changes (P18.6).
     public var appgen: [String]?
     private var appsSeen = ""
-    private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String)] = []
+    private var procs: [(fd: Int32, pid: UInt64, name: String, jail: String, model: ap_child?)] = []
+    private var sessions = 0
+    /// Where agent transcripts are kept: outside every jail, and past the
+    /// session — "the session is the log".
+    public var agentLogs: String = (getenv("HOME").map { String(cString: $0) } ?? "/tmp") + "/Library/Logs/Agents"
     private let server: Current.Server
     private let display: OpaquePointer?
     private let runtimeDir: String
@@ -121,6 +131,13 @@ public final class JailKeeper {
                 let rc = aw_jail_listen(display, path, KeeperWire.engine, cls, String(opened.jid), &closer)
                 guard rc == 0 else { throw JailClient.Refused(description: "the compositor would not take \(opened.name)'s socket (\(-rc))") }
                 h.closeFD = closer
+            }
+            // A class without a display (an agent's) has no GTK application,
+            // so no bridge, portal or menus: nothing it does not need.
+            guard classes.first(where: { $0.name == cls })?.wayland ?? true else {
+                held[cls] = h
+                say("jails: \(opened.name) is jail \(opened.jid); no display, so no socket or bus")
+                return h
             }
             // Its D-Bus bridge (never a bus: §5.6), and the jail's portal on
             // the bridge's services socket — outside the jail.
@@ -186,9 +203,98 @@ public final class JailKeeper {
             args[i] = g.inside
         }
         let (pid, proc) = try JailClient.spawn(jail: h.opened.jail, argv: args, socket: jaildSocket)
-        procs.append((proc, pid, argv[0], h.opened.name))
+        procs.append((proc, pid, argv[0], h.opened.name, nil))
         say("jails: launched \(argv[0]) as pid \(pid) in \(h.opened.name)")
         return pid
+    }
+
+    // MARK: - agents (P18.8)
+
+    public struct AgentSession: Equatable {
+        public var id: String
+        /// The agent's socket, as the chat window outside reaches it.
+        public var socket: String
+        public var transcript: String
+        public var pid: UInt64
+    }
+
+    /// `abyss-model serve`'s backend arguments for a class's `model=`.
+    public static func modelArgs(_ spec: String) -> [String]? {
+        if spec.hasPrefix("local:") { return ["--local", String(spec.dropFirst(6))] }
+        if spec.hasPrefix("stub:") { return ["--stub", String(spec.dropFirst(5))] }
+        if spec.hasPrefix("http://") { return ["--backend", spec] }
+        return nil
+    }
+
+    public func agent(_ cls: String) throws -> AgentSession {
+        guard let k = classes.first(where: { $0.name == cls }), k.agent else {
+            throw JailClient.Refused(description: "\(cls) is not an agent class")
+        }
+        guard !k.model.isEmpty else {
+            throw JailClient.Refused(description: "no model is set for \(cls): set model= in jails.ini [\(cls)]")
+        }
+        guard let backend = Self.modelArgs(k.model) else {
+            throw JailClient.Refused(description: "\(cls)'s model= is not local:, stub: or http://: \(k.model)")
+        }
+        let h = try ensure(cls)
+        sessions += 1
+        let n = sessions
+        var t = time(nil), tmv = tm()
+        localtime_r(&t, &tmv)
+        var buf = [CChar](repeating: 0, count: 32)
+        strftime(&buf, buf.count, "%Y%m%d-%H%M%S", &tmv)
+        let id = "\(String(cString: buf))-\(cls)-\(getpid())-\(n)"
+        let transcript = agentLogs + "/" + id
+        _ = Spawn.run(["/bin/mkdir", "-p", "-m", "700", agentLogs, transcript])
+
+        // The model, outside the jail, on a socket inside it.
+        let modelSock = "model-\(n).sock", agentSock = "agent-\(n).sock"
+        let outside = h.opened.runtime + "/" + modelSock
+        var model = try child([binDir + "/abyss-model", "serve", "--listen", outside, "--session", id,
+                               "--budget", String(k.budget), "--transcript", transcript] + backend,
+                              log: transcript + "/abyss-model.log")   // outside the jail, with the transcript
+        func fail(_ why: String) -> JailClient.Refused {
+            _ = ap_child_signal(&model, SIGTERM); _ = ap_child_reap(&model, nil)
+            return JailClient.Refused(description: why)
+        }
+        guard waitForSocket(outside, seconds: 300, unless: model) else { throw fail("abyss-model did not start for \(id)") }
+
+        // The agent, in the jail. A build outside what the jail sees (a
+        // developer's) comes in as a read-only grant, like a document.
+        var agentPath = binDir + "/abyss-agent"
+        if !k.system.contains(where: { JailPlan.under(agentPath, $0) }) {
+            let fd = open(agentPath, O_RDONLY | O_CLOEXEC)
+            guard fd >= 0 else { throw fail("cannot open \(agentPath)") }
+            defer { close(fd) }
+            do { agentPath = try JailClient.grant(jail: h.opened.name, path: agentPath, file: fd, socket: jaildSocket).inside }
+            catch { throw fail("cannot give the jail abyss-agent: \(error)") }
+        }
+        let (pid, proc): (UInt64, Int32)
+        do {
+            (pid, proc) = try JailClient.spawn(jail: h.opened.jail, argv: [
+                agentPath, "serve", "--model", JailLayout.runtime + "/" + modelSock,
+                "--listen", JailLayout.runtime + "/" + agentSock, "--class", cls], socket: jaildSocket)
+        } catch { throw fail("cannot start abyss-agent: \(error)") }
+        procs.append((proc, pid, "abyss-agent", h.opened.name, model))
+        let socket = h.opened.runtime + "/" + agentSock
+        guard waitForSocket(socket, seconds: 30, unless: nil) else {
+            throw JailClient.Refused(description: "abyss-agent did not start in \(h.opened.name)")
+        }
+        say("jails: agent session \(id) in \(h.opened.name): agent pid \(pid), transcript \(transcript)")
+        return AgentSession(id: id, socket: socket, transcript: transcript, pid: pid)
+    }
+
+    /// Wait for a socket to appear, giving up if `child` exits first.
+    private func waitForSocket(_ path: String, seconds: Int, unless child: ap_child?) -> Bool {
+        for _ in 0..<(seconds * 20) {
+            if access(path, F_OK) == 0 { return true }
+            if let c = child {
+                var p = pollfd(fd: c.fd, events: Int16(ap_child_exit_events()), revents: 0)
+                if poll(&p, 1, 0) > 0 { return false }
+            }
+            usleep(50_000)
+        }
+        return false
     }
 
     // MARK: - the loop
@@ -226,6 +332,11 @@ public final class JailKeeper {
             }
             for (i, p) in procs.enumerated().reversed() where fds[i + 3].revents != 0 {
                 say("jails: \(p.name) (pid \(p.pid)) in \(p.jail) exited")
+                if var m = p.model {
+                    _ = ap_child_signal(&m, SIGTERM)
+                    _ = ap_child_reap(&m, nil)
+                    say("jails: its model stopped")
+                }
                 close(p.fd)
                 procs.remove(at: i)
             }
@@ -246,6 +357,15 @@ public final class JailKeeper {
                 reply.set("ok", true); reply.set("pid", pid)
             } catch {
                 say("jails: launch refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "agent":
+            do {
+                let a = try agent(req.string("class") ?? "")
+                reply.set("ok", true); reply.set("session", a.id); reply.set("socket", a.socket)
+                reply.set("transcript", a.transcript); reply.set("pid", a.pid)
+            } catch {
+                say("jails: agent refused: \(error)")
                 reply = JailWire.error("\(error)")
             }
         case "held":

@@ -245,6 +245,15 @@ if [ "$live" -eq 1 ]; then
   # row, and bundles remade when [apps] changes.
   echo "== 18a's gate =="
   quiet "$root/abyss/tests/live-jail-gate.sh"
+  # abyss-model (P18.7): one wire to a model; its budget stops the next
+  # call; its transcript only grows; llama-server run by it, on a private
+  # socket (a stand-in; a real model with ABYSS_TEST_GGUF).
+  echo "== the one way to a model =="
+  quiet "$root/abyss/tests/live-model.sh"
+  # An agent in its jail (P18.8): a session per question-asker, the model
+  # through abyss-model, the tools within the jail, the budget stops it.
+  echo "== an agent in its jail =="
+  quiet "$root/abyss/tests/live-agent.sh"
   # A window that starts fullscreen (F.1): `firefox --kiosk`'s requests, the
   # whole display, at its origin, whatever it said next.
   echo "== a window that starts fullscreen =="

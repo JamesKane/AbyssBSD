@@ -748,6 +748,14 @@ wrong check, or the restored code still carried the fault. Before believing a
 result, **sleep 1 and touch the file** after each edit; check a surprising
 binary with `strings` or by running it.
 
+**A "missed" fault may be a wrong fault.** To remove the keeper's
+`guard isWayland else { …no bus…; return }` (P18.8), the injection set the
+condition to `false`. That always *runs* the else block, which is the
+no-bus path, so nothing changed and the test rightly passed. `true` is what
+removes a guard. Before calling a miss a gap in the test, check that the
+fault changed behaviour; here the binary held the right code and claim 1
+caught the bus at once once the fault was right.
+
 **On FreeBSD, the process descriptor kills the child before it can stop.**
 `abyss-model`'s SIGTERM handler sent `llama-server` SIGTERM and `_exit`ed. The
 exit closed the pdfork descriptor (no `PD_DAEMON`), so the kernel sent

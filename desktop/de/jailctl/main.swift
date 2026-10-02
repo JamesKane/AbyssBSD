@@ -21,6 +21,10 @@
 //       the session's half (P18.5): a session component that holds a jail
 //       per class, with its Wayland socket, bus and portal, and launches into
 //       it. Answers on the session's `jails` socket.
+//   abyss-jail agent CLASS
+//       ask the session for an agent session in CLASS (P18.8): prints
+//       "agent SESSION socket=… transcript=… pid=…"; `abyss-agent ask
+//       --listen SOCKET` then talks to it.
 //   abyss-jail launch CLASS -- PROGRAM [ARG...]
 //       ask the session to start PROGRAM confined; an ARG that names one of
 //       your files is granted into the jail and rewritten. What an
@@ -34,6 +38,7 @@ import CWaylandClient
 import CurrentIPC
 import JailD
 import JailKeeper
+import Jails
 import Spawn
 
 #if canImport(Glibc)
@@ -63,8 +68,10 @@ if args.first == "serve" {
     let server: Current.Server
     do { server = try Current.Server(service: KeeperWire.service) } catch { die("cannot serve \(KeeperWire.service): \(error)") }
     signal(SIGPIPE, SIG_IGN)
+    // The person's jails.ini: an agent class's model and budget are theirs
+    // to set (P18.8). What a jail can reach is jaild's, from the system's.
     let keeper = JailKeeper(server: server, display: display, runtimeDir: runtime, binDir: binDir,
-                            log: { emit(1, $0) })
+                            classes: JailClass.load(), log: { emit(1, $0) })
     keeper.jaildSocket = socket
     // The bundles follow [apps] (P18.6): the same appgen anchor runs at login.
     if access(binDir + "/abyss-appgen", X_OK) == 0, let home = getenv("HOME") {
@@ -122,6 +129,13 @@ case "launch":
         let r = try Current.call(KeeperWire.service, m)
         guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
         emit(1, "launched \(program[0]) pid=\(r.uint64("pid") ?? 0) confined in \(subject)")
+    } catch { die("the session's jails are not running (\(error))") }
+case "agent":
+    var m = Msg(); m.set("method", "agent"); m.set("class", subject)
+    do {
+        let r = try Current.call(KeeperWire.service, m)
+        guard r.bool("ok") == true else { die(r.string("error") ?? "refused") }
+        emit(1, "agent \(r.string("session") ?? "") socket=\(r.string("socket") ?? "") transcript=\(r.string("transcript") ?? "") pid=\(r.uint64("pid") ?? 0)")
     } catch { die("the session's jails are not running (\(error))") }
 case "grants":
     do { for g in try JailClient.grants(jail: subject, socket: socket) { emit(1, g) } } catch { die("\(error)") }

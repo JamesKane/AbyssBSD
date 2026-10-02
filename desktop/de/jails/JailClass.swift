@@ -24,16 +24,34 @@ public struct JailClass: Equatable, Sendable {
     /// gives `/dev/dri/*`, "dsp" gives `/dev/dsp*`.
     public var devices: [String]
     public var network: Network
+    /// A Wayland socket of its own — and with it the D-Bus bridge, portal and
+    /// menu bridge a GTK application needs. A class without one has neither.
     public var wayland: Bool
+    /// An agent class (PHASE18 P18.8): what runs in it is `abyss-agent`, and
+    /// each agent session gets a model socket of its own (`abyss-model`,
+    /// outside the jail) with `budget` tokens and a transcript.
+    public var agent: Bool
+    public var budget: Int
+    /// Where an agent session's model comes from, as `abyss-model serve`
+    /// takes it: `local:MODEL.gguf`, `stub:REPLIES.json` or `http://HOST:PORT`.
+    /// Empty: none is set, and an agent session is refused saying so.
+    public var model: String
 
     public init(name: String, system: [String] = JailClass.baseSystem, devices: [String] = [],
-                network: Network = .none, wayland: Bool = true) {
+                network: Network = .none, wayland: Bool = true,
+                agent: Bool = false, budget: Int = JailClass.defaultBudget, model: String = "") {
         self.name = name
         self.system = system
         self.devices = devices
         self.network = network
         self.wayland = wayland
+        self.agent = agent
+        self.budget = budget
+        self.model = model
     }
+
+    /// Tokens per agent session, unless the row says otherwise.
+    public static let defaultBudget = 200_000
 
     /// The system every class sees unless its row says otherwise. `/usr`
     /// carries `/usr/local`, so ports' toolkits come with it.
@@ -50,6 +68,11 @@ public struct JailClass: Equatable, Sendable {
         JailClass(name: "app"),
         JailClass(name: "app-gl", devices: ["dri"]),
         JailClass(name: "app-net", devices: ["dri", "dsp"], network: .host),
+        // Agents (P18.8): no display, no bus, no devices, no network — a
+        // model socket and nothing else. `debug` is the crash path's (P18.9),
+        // whose tool is lldb, already in /usr.
+        JailClass(name: "agent", wayland: false, agent: true),
+        JailClass(name: "debug", wayland: false, agent: true),
     ]
 
     /// The classes as they stand: the shipped ones, with `jails.ini`'s
@@ -64,6 +87,9 @@ public struct JailClass: Equatable, Sendable {
             if let s = c.string(section, "devices") { k.devices = words(s) }
             if let s = c.string(section, "network") { k.network = Network(rawValue: s.lowercased()) ?? k.network }
             if let b = c.bool(section, "wayland") { k.wayland = b }
+            if let b = c.bool(section, "agent") { k.agent = b }
+            if let s = c.string(section, "budget"), let n = Int(s), n > 0 { k.budget = n }
+            if let s = c.string(section, "model") { k.model = s }
             out.removeAll { $0.name == section }
             out.append(k)
         }
