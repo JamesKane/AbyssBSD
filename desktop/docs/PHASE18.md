@@ -449,6 +449,43 @@ from outside. P18.5 is the same three steps, done by Anchor.
 
    Local stays the default; a remote provider is opt-in, through
    `abyss-model`.
+
+   **Candidates, surveyed 2026-10-02** (released 2026-07-01 or later, open
+   licence, native tool calling, GGUF for llama.cpp). The model is chosen by
+   **the memory the machine has** when agents are turned on:
+
+   | Tier | Machine | Default | Why |
+   |---|---|---|---|
+   | 0 | no usable GPU, or under 6 GB VRAM (CPU inference) | **MiniCPM5-2B**, Q4_K_M (OpenBMB, 2026-09-07, 2.52B dense, Apache 2.0, 128K context) | official GGUF; passes multi-call tool tests at 4-bit through llama.cpp's server |
+   | 1 | 8 GB VRAM | **Granite 4.2 8B**, Q4_K_M (IBM, 2026-08-25, ~9B dense, Apache 2.0, 128K) | native tool calling, a thinking switch, GGUF made with llama.cpp's own converter |
+   | 2 | 12–16 GB VRAM (**the 6750 XT**) | **Granite 4.2 8B at Q8_0** first; a 3B-active MoE as a measured step up (below) | headroom for context; same family, same tool format as tiers 1 and 3 |
+   | 3 | 24 GB+ VRAM | **Granite 4.2 30B**, Q4_K_M (29B dense, Apache 2.0) | the same family's large size |
+
+   **One family across tiers 1–3**, so the tool-call format, chat template and
+   behaviour are the same whatever the machine; MiniCPM5-2B only where an 8B
+   cannot run. The **MoE step up for tier 2**: a ~30–35B model with ~3B
+   active, its experts in system RAM (`llama-server --n-cpu-moe`), which on
+   12 GB cards runs at roughly 40–60 tokens/s in community reports. Candidates
+   are Xing4.0-29B-A4B (China Telecom AI, 2026-09-22, Apache 2.0) and
+   Nex-N2.5-Mini 35B-A3B (Nex AGI, 2026-09-08, Apache 2.0). Nemotron 3.5
+   Lightning (NVIDIA, 2026-08-11) is held back: it is under the OpenMDW
+   licence, and its hybrid architecture's early GGUFs had reported problems.
+
+   **Before any of this is a default, it is measured here.** None of these
+   has run on this project's machines. They must load under ports'
+   `llama-cpp` (build 10975) and `ggml` 0.23.0 with Vulkan on RADV on the
+   6750 XT, drive `abyss-model`'s tool-call path, and fit beside the desktop's
+   own VRAM use. Vendor benchmarks are not evidence. Detecting the VRAM on
+   FreeBSD (Vulkan's heap sizes, or amdgpu's own report) is part of P18.7.
+
+   Sources: [LLM Releases tracker](https://www.llm-releases.com/);
+   [Granite 4.2](https://huggingface.co/blog/ibm-granite/granite-4-2),
+   [its GGUF](https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF);
+   [MiniCPM5-2B](https://github.com/openbmb/minicpm),
+   [its tool-calling tests](https://betterstack.com/community/guides/ai/minicpm5-2b/);
+   [Nemotron 3.5 Lightning sizes](https://runaihome.com/blog/nemotron-35-lightning-consumer-gpu-hardware-guide-2026/);
+   [`--n-cpu-moe`](https://openclawdc.com/blog/llama-cpp-moe-offload-flags-explained/);
+   [weight classes, September 2026](https://dev.to/klukyanov/the-local-llm-weight-classes-september-2026-what-actually-fits-on-your-machine-128d).
 2. **What an agent may drive.** *Recommendation: only the applications a
    session was given*, by dragging an application onto the agent's window or
    picking it from a list. It is the same capability rule as files. "Every
