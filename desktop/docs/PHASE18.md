@@ -247,6 +247,24 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
   refused with its reason (requester 4's raw material). It appends every
   request and reply to the session's **transcript**: JSON lines, append-only,
   outliving the process. We do not write an inference engine.
+
+  **P18.7a — the service — DONE 2026-10-02.** `de/model` (JSON and minimal
+  HTTP/1.1 with no Foundation; `ModelSession`'s budget and transcript; stub
+  and HTTP backends; `MachineMemory`/`ModelTier`) and `abyss-model`
+  (`serve`, `tier`). The budget stops the *next* call: a reply that crosses it
+  is delivered (it is already spent), and the call after is a 429 with its
+  reason that reaches no backend. The transcript is `DIR/transcript.jsonl`,
+  O_APPEND, 0600 in a 0700 directory. Streaming is refused in words, not
+  half-served. 14 unit tests and `live-model.sh` (claims 1–5: curl as the
+  OpenAI client over the unix socket, an `nc` canned server as the backend so
+  neither end is ours), green on Linux and in the guest; 15 faults injected,
+  all caught. On the 12700KF, `abyss-model tier` reads
+  `vram=12272M ram=130893M tier=gpu12` from amdgpu's boot report.
+
+  **Still to do in P18.7:** (b) starting and stopping `llama-server` with a
+  model, and measuring the §6b.1 candidates on the box; (c) the remote
+  backend, which needs TLS that the tree does not have; (d) the keeper
+  putting the socket in an agent's jail, which lands with P18.8.
 - **P18.8 — the agent runtime, in its jail (M).** `abyss-agent` runs the loop,
   model to tool to model, **inside** the agent's jail. It reaches the model
   only through `abyss-model`'s socket, and is started by the keeper like any

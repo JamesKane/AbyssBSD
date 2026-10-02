@@ -349,6 +349,10 @@ let package = Package(
         // ADE's services and never each other. A bridge, not a bus.
         .target(name: "DBusBridge", dependencies: ["DBus", "CPlatform", "CurrentIPC"], path: "de/dbusbridge"),
         .target(name: "Jails", dependencies: ["PoolConfig"], path: "de/jails"),
+        // The one wire to a model (PHASE18 P18.7): JSON, minimal HTTP, the
+        // session's budget and transcript, backends, and the VRAM tiers.
+        .target(name: "Model", dependencies: ["CPlatform"], path: "de/model"),
+        .executableTarget(name: "abyss-model", dependencies: ["Model", "CurrentIPC", "Spawn"], path: "de/modelbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
                 linkerSettings: jailLibraries),
@@ -374,6 +378,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
+        .testTarget(name: "ModelTests", dependencies: ["Model"], path: "Tests/ModelTests"),
         .testTarget(name: "DBusBridgeTests", dependencies: ["DBusBridge", "DBus"], path: "Tests/DBusBridgeTests"),
         .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "JailKeeper", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
