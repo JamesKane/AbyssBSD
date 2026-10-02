@@ -105,6 +105,17 @@ public enum Transcript {
                 out.append(at + "You allowed \(l["by"]?.int ?? 0) more tokens")
             case ("failed", _):
                 out.append(at + "The model did not answer: " + (l["message"]?.string ?? ""))
+            case ("fetch", let e?):
+                let host = l["host"]?.string ?? ""
+                switch e {
+                case "asked": out.append(at + "The agent asked to reach \(host) (\(l["url"]?.string ?? ""))")
+                case "permitted": out.append(at + "You allowed the agent to reach \(host)")
+                case "denied": out.append(at + "You did not allow the agent to reach \(host)")
+                case "fetched": out.append(at + "  Fetched \(l["url"]?.string ?? "") (\(l["status"]?.int ?? 0), \(l["bytes"]?.int ?? 0) bytes)")
+                case "redirected": out.append(at + "  Redirected to \(l["to"]?.string ?? "")")
+                case "refused": out.append(at + "Refused \(l["url"]?.string ?? ""): \(l["reason"]?.string ?? "")")
+                default: break
+                }
             case ("vocabulary", let e?):
                 let app = l["app"]?.string ?? "?"
                 switch e {

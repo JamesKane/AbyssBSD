@@ -66,7 +66,7 @@ public func agentMenuBar() -> MenuBarModel {
               [Argument("app", .string, "The application, as the agent was given it.")]),
             .separator,
             // Requesters 1 and 4 (P18.11): the answer to what is being asked.
-            c(AgentVerb.allow, "Allow", nil, "Allow what the agent is asking: to write with an application, or to use more budget."),
+            c(AgentVerb.allow, "Allow", nil, "Allow what the agent is asking: to write with an application, to reach a host, or to use more budget."),
             c(AgentVerb.stop, "Don't Allow", nil, "Refuse what the agent is asking; a spent budget ends the question."),
         ]),
         Menu("Window", [
@@ -187,6 +187,8 @@ public enum AgentAsk: Equatable, Sendable {
     /// Requester 1: the agent's first command this session that writes one of
     /// the person's files, with this application.
     case write(app: String, verb: String, title: String)
+    /// Requester 3 (P18.12b): the agent's first fetch from this host.
+    case host(String, url: String)
 
     public func text(budget: Int) -> (title: String, body: String, no: String, yes: String) {
         switch self {
@@ -195,6 +197,10 @@ public enum AgentAsk: Equatable, Sendable {
         case .write(let app, let verb, let title):
             return ("Allow the agent to write with \(app)?",
                     "It wants to \(String(title.filter { $0 != "…" })) (\(verb)) in \(app): the first time it would write one of your files this session. Allow \(app) to write for it until the session ends?",
+                    "Don't Allow", "Allow")
+        case .host(let host, let url):
+            return ("Allow the agent to reach \(host)?",
+                    "It wants to fetch \(url): the first time it would reach \(host) this session. Allow it to fetch from \(host) until the session ends?",
                     "Don't Allow", "Allow")
         }
     }
@@ -450,11 +456,18 @@ public final class AgentApp: WindowDelegate, MenuProvider {
             if let r, r.string("event") == "permission" {
                 // Requester 1: the agent waits, on this connection, for the
                 // person's answer.
-                let app = r.string("app") ?? "", verb = r.string("verb") ?? ""
-                self.requester = .write(app: app, verb: verb, title: r.string("title") ?? verb)
+                if r.string("kind") == "host" {
+                    let host = r.string("host") ?? ""
+                    self.requester = .host(host, url: r.string("url") ?? "")
+                    self.status = "The agent is asking to reach \(host)."
+                    AgentApp.log("requester host: \(host)")
+                } else {
+                    let app = r.string("app") ?? "", verb = r.string("verb") ?? ""
+                    self.requester = .write(app: app, verb: verb, title: r.string("title") ?? verb)
+                    self.status = "The agent is asking to write with \(app)."
+                    AgentApp.log("requester write: \(app) \(verb)")
+                }
                 self.loggedRequester = false
-                self.status = "The agent is asking to write with \(app)."
-                AgentApp.log("requester write: \(app) \(verb)")
                 self.window?.setNeedsDisplay()
                 return
             }
@@ -496,8 +509,32 @@ public final class AgentApp: WindowDelegate, MenuProvider {
         window?.setNeedsDisplay()
     }
 
-    func answerYes() { if case .write? = requester { answerWrite(true) } else { allowMore() } }
-    func answerNo() { if case .write? = requester { answerWrite(false) } else { stopAsked() } }
+    /// The person's answer to a host requester (P18.12b): to the keeper (and
+    /// the fetch bridge, outside the jail) first, then to the waiting agent.
+    func answerHost(_ allow: Bool) {
+        guard case .host(let host, _)? = requester else { return }
+        requester = nil
+        let fd = pending
+        var m = Msg(); m.set("method", "permit-host"); m.set("session", sessionID); m.set("host", host); m.set("allow", allow)
+        status = allow ? "Allowing \(host)…" : "Thinking…"
+        let sent = request({ try Current.connect(AgentApp.keeperService) }, m) { [weak self] r in
+            guard let self else { return }
+            let told = r?.bool("ok") == true
+            var a = Msg(); a.set("method", "answer"); a.set("allow", allow && told)
+            if fd >= 0 { try? Current.send(a, on: fd) }
+            self.status = "Thinking…"
+            AgentApp.log(allow && told ? "allowed \(host)" : "did not allow \(host)")
+        }
+        if !sent, fd >= 0 { var a = Msg(); a.set("method", "answer"); a.set("allow", false); try? Current.send(a, on: fd) }
+        window?.setNeedsDisplay()
+    }
+
+    func answerYes() {
+        switch requester { case .write?: answerWrite(true); case .host?: answerHost(true); default: allowMore() }
+    }
+    func answerNo() {
+        switch requester { case .write?: answerWrite(false); case .host?: answerHost(false); default: stopAsked() }
+    }
 
     // MARK: requester 4 — the budget (P18.11)
 

@@ -86,6 +86,9 @@ final class AgentWindowTests: XCTestCase {
         XCTAssertEqual(t.body, "It wants to Save As (file.save-as) in TextEdit: the first time it would write one of your files this session. Allow TextEdit to write for it until the session ends?")
         XCTAssertEqual(t.no, "Don't Allow")
         XCTAssertEqual(AgentAsk.budget("spent").text(budget: 9).yes, "Allow More")
+        let h = AgentAsk.host("example.org", url: "https://example.org/a").text(budget: 0)
+        XCTAssertEqual(h.title, "Allow the agent to reach example.org?")
+        XCTAssertEqual(h.body, "It wants to fetch https://example.org/a: the first time it would reach example.org this session. Allow it to fetch from example.org until the session ends?")
     }
 
     func testTheBudgetRequester() {

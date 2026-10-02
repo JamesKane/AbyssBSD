@@ -617,6 +617,37 @@ Every 18a live test is in `run.sh`, and its Linux leg skips cleanly.
     another name — and plain http against `nc`), green on Linux and in the
     guest; 3 faults injected, all caught. Real `https://example.com` fetched
     with each system's own CAs.
+
+  **P18.12b — the fetch bridge and requester 3 — DONE 2026-10-02 (in the guest).**
+  - **`abyss-fetch`, one per agent session**, started by the keeper beside
+    the vocabulary bridge when the class has `fetch` (`agent` does; `debug`
+    does not). It answers `fetch URL` on a socket in the jail.
+  - **Requester 3:** a host not yet allowed this session is answered
+    `permission`, and the agent passes the question to the window
+    ("Allow the agent to reach example.org?"). The answer goes keeper →
+    bridge (`permit-host`, outside the jail), and only then is the agent told
+    to try again. Don't Allow is not remembered.
+  - **Never this computer's own services**, nor a private network's
+    (loopback, RFC 1918, link-local, CGNAT): refused before any request
+    (`ABYSS_FETCH_ALLOW_LOCAL` opens this for tests only).
+  - **A redirect is followed only to a host that is allowed too**, three at
+    most.
+  - **Pages come back as their words** (markup, scripts and styles removed;
+    16 KB).
+  - **The transcript says it all** (`asked`, `permitted`, `denied`,
+    `fetched`, `redirected`, `refused`), and the Agents pane's digest reads
+    it.
+  - **Known limit:** the address check resolves the name, then the request
+    connects by name, which resolves again. A DNS server that changes its
+    answer between the two (rebinding) could slip a local address through.
+    Connecting to the address that was checked closes it; a follow-up.
+  - Tests: FetchTests (asking, local refusals, redirects, page text, what is
+    local, the digest), the class flag, the requester's words;
+    `live-agent-fetch.sh` claims 1–4 in the guest (no network in the jail;
+    the requester before the server hears anything; Don't Allow; Allow after
+    a person's pause, the page's words to the model). Every unit test (925)
+    green on both platforms; every agent, crash and TLS live test green in
+    the guest; 7 faults injected, all caught.
 - **P18.13 — presence and off (S).** Agent state (working, waiting, idle) on
   the Dock tile, the menu bar and the island switcher. `agents.ini` absent
   means no menu item, no chord, no spend indicator, and no process.

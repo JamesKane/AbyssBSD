@@ -90,7 +90,7 @@ session=$(sed -n 's/^agent \([^ ]*\) .*/\1/p' "$W/a1")
 sock=$(sed -n 's/.* socket=\([^ ]*\) .*/\1/p' "$W/a1")
 transcript=$(sed -n 's/.* transcript=\([^ ]*\) .*/\1/p' "$W/a1")
 inside=$(ls "$RB/$uid/agent/run/user" | tr '\n' ' ')
-[ "$inside" = "agent-1.sock model-1.sock vocab-1.sock " ] || fail "the agent's runtime directory: $inside"
+[ "$inside" = "agent-1.sock fetch-1.sock model-1.sock vocab-1.sock " ] || fail "the agent's runtime directory: $inside"
 [ -S "$transcript/vocabulary.sock" ] || fail "no control socket beside the transcript"
 case "$transcript" in "$RB"*) fail "the control socket is inside the jail" ;; esac
 echo "ok: 1. the session's bridge answers in the jail (vocab-1.sock); its control socket is outside; no application's menu socket is inside"
@@ -134,7 +134,7 @@ echo "ok: 5. a give to no session, or of an application not running, is refused 
 # ---- 6. bye --------------------------------------------------------------------------------
 .build/debug/abyss-agent bye --listen "$sock" > /dev/null
 await "$W/keeper.log" 'jails: its model stopped' "the model did not stop"
-await "$W/keeper.log" 'jails: its vocabulary stopped' "the vocabulary bridge did not stop"
+await "$W/keeper.log" 'jails: its vocabulary and fetch bridges stopped' "the vocabulary bridge did not stop"
 pgrep -f "abyss-vocab serve --listen $RB" > /dev/null && fail "abyss-vocab outlived the agent"
 echo "ok: 6. bye ended the agent, and its model and vocabulary with it"
 echo "all green (an agent drives what it was given, by its menus, and nothing else)."

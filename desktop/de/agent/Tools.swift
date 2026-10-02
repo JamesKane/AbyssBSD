@@ -100,9 +100,7 @@ public enum AgentTools {
     /// that writes until the person is asked — through the window, which tells
     /// the bridge itself — so the tool waits for their answer, and tries once
     /// more if they allowed it. Whether it may write is still the bridge's call.
-    public static func vocabulary(socket: String,
-                                  askPerson: @escaping @Sendable (_ app: String, _ verb: String, _ title: String) -> Bool = { _, _, _ in false })
-        -> [AgentTool] {
+    public static func vocabulary(socket: String, askPerson: @escaping AskPerson = { _ in false }) -> [AgentTool] {
         @Sendable func call(_ m: Msg) -> Result<Msg, Error> {
             Result {
                 let fd = try Current.connect(path: socket)
@@ -149,11 +147,62 @@ public enum AgentTools {
                 let first = call(m)
                 guard case .success(let r) = first, r.bool("permission") == true else { return say(first) }
                 let app = r.string("app") ?? "", title = r.string("title") ?? ""
-                guard askPerson(app, r.string("verb") ?? "", title) else {
+                guard askPerson(PersonQuestion(kind: .write, app: app, verb: r.string("verb") ?? "", title: title)) else {
                     return "refused: the person did not allow \(app) to write for you (\(title))"
                 }
                 return ask(m)
             },
         ]
     }
+
+    /// The fetch tool (P18.12b): a URL through the fetch bridge, the agent's
+    /// only way to the network. A host the person has not allowed is asked
+    /// about first, as a write is (requester 3).
+    public static func fetch(socket: String, askPerson: @escaping AskPerson = { _ in false }) -> AgentTool {
+        @Sendable func call(_ url: String) -> Result<Msg, Error> {
+            Result {
+                let fd = try Current.connect(path: socket)
+                defer { close(fd) }
+                var m = Msg(); m.set("method", "fetch"); m.set("url", url)
+                try Current.send(m, on: fd)
+                return try Current.receive(on: fd)
+            }
+        }
+        @Sendable func say(_ r: Result<Msg, Error>) -> String {
+            switch r {
+            case .failure(let e): return "error: the fetch bridge did not answer: \(e)"
+            case .success(let r):
+                guard r.bool("ok") == true else { return "error: " + (r.string("error") ?? "refused") }
+                return "\(r.string("url") ?? "") (status \(r.uint64("status") ?? 0)):\n" + (r.string("text") ?? "")
+            }
+        }
+        return AgentTool(
+            name: "fetch",
+            description: "Fetch a web page (http or https) and read its text. The person is asked before each new host.",
+            parameters: .object([("type", .string("object")), ("properties", .object([
+                ("url", .object([("type", .string("string")), ("description", .string("e.g. https://example.org/page"))]))])),
+                ("required", .array([.string("url")]))])
+        ) { a in
+            let url = a["url"]?.string ?? ""
+            let first = call(url)
+            guard case .success(let r) = first, r.bool("permission") == true else { return say(first) }
+            let host = r.string("host") ?? ""
+            guard askPerson(PersonQuestion(kind: .host, host: host, url: r.string("url") ?? url)) else {
+                return "refused: the person did not allow you to reach \(host)"
+            }
+            return say(call(url))
+        }
+    }
 }
+
+/// What a tool asks the person through the window (P18.11, P18.12b).
+public struct PersonQuestion: Sendable, Equatable {
+    public enum Kind: String, Sendable { case write, host }
+    public var kind: Kind
+    public var app = "", verb = "", title = ""
+    public var host = "", url = ""
+    public init(kind: Kind, app: String = "", verb: String = "", title: String = "", host: String = "", url: String = "") {
+        self.kind = kind; self.app = app; self.verb = verb; self.title = title; self.host = host; self.url = url
+    }
+}
+public typealias AskPerson = @Sendable (PersonQuestion) -> Bool

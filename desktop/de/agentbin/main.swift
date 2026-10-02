@@ -2,13 +2,15 @@
 //
 //   abyss-agent serve --model SOCKET --listen SOCKET [--class CLASS]
 //                     [--core CORE --binary BINARY --crash WHAT] [--vocab SOCKET]
+//                     [--fetch SOCKET]
 //       the loop, answering questions on the socket at --listen (inside the
 //       jail's runtime directory; the keeper hands its outside path to the
 //       chat window). Its only way to a model is abyss-model at --model, and
 //       its tools read only what the jail holds. `bye` ends the session.
 //       With --core and --binary (a `debug` session, P18.9) it also has lldb
 //       on that core, and is told what crashed. With --vocab (P18.10) it can
-//       drive the applications this session was given, through the bridge.
+//       drive the applications this session was given, through the bridge;
+//       with --fetch (P18.12b), read web pages through the fetch bridge.
 //   abyss-agent ask --listen SOCKET TEXT...
 //       ask the agent at SOCKET: one `call=` line per tool as it is called,
 //       then its answer, then `stop=` and `steps=`. Exits 0 when it answered, 3
@@ -36,6 +38,22 @@ func emit(_ fd: Int32, _ s: String) {
 func die(_ s: String) -> Never { emit(2, "abyss-agent: \(s)"); exit(1) }
 
 let args = Array(CommandLine.arguments.dropFirst())
+
+/// Ask the window on the question's own connection, and wait for its answer
+/// there (P18.11, P18.12b). The window tells the bridge first; this only says
+/// whether to try again.
+@Sendable func askThePerson(_ q: PersonQuestion) -> Bool {
+    let c = asking.fd
+    guard c >= 0 else { return false }
+    var e = Msg(); e.set("event", "permission"); e.set("kind", q.kind.rawValue)
+    e.set("app", q.app); e.set("verb", q.verb); e.set("title", q.title); e.set("host", q.host); e.set("url", q.url)
+    guard (try? Current.send(e, on: c)) != nil else { return false }
+    // **A person takes as long as they take** (HANDOFF §2.131): no timeout.
+    var none = timeval(tv_sec: 0, tv_usec: 0)
+    _ = setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &none, socklen_t(MemoryLayout<timeval>.size))
+    guard let r = try? Current.receive(on: c) else { return false }
+    return r.string("method") == "answer" && r.bool("allow") == true
+}
 /// The connection of the question being answered: where a requester goes.
 final class Asking: @unchecked Sendable { var fd: Int32 = -1 }
 let asking = Asking()
@@ -77,29 +95,16 @@ case "serve":
         """
     }
     if let vocab = opt("--vocab") {
-        tools += AgentTools.vocabulary(socket: vocab, askPerson: { app, verb, title in
-            // Requester 1 (P18.11): ask the window on the question's own
-            // connection, and wait for its answer there. The window tells the
-            // bridge first; this only says whether to try again.
-            let c = asking.fd
-            guard c >= 0 else { return false }
-            var e = Msg(); e.set("event", "permission"); e.set("app", app); e.set("verb", verb); e.set("title", title)
-            guard (try? Current.send(e, on: c)) != nil else { return false }
-            // **A person takes as long as they take.** The connection was
-            // accepted with a 2 s receive timeout (for a request that never
-            // comes); waiting on a person under it gave up while they read the
-            // requester, and the agent carried on as if refused (HANDOFF
-            // §2.131). No timeout for the answer.
-            var none = timeval(tv_sec: 0, tv_usec: 0)
-            _ = setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &none, socklen_t(MemoryLayout<timeval>.size))
-            guard let r = try? Current.receive(on: c) else { return false }
-            return r.string("method") == "answer" && r.bool("allow") == true
-        })
+        tools += AgentTools.vocabulary(socket: vocab, askPerson: askThePerson)
         system += " " + """
         You can drive the applications the person gave you, by their menus: list them with apps, \
         read one's commands with describe_app, and run a command with activate. Use only verbs \
         describe_app lists, and say what you did.
         """
+    }
+    if let fetch = opt("--fetch") {
+        tools.append(AgentTools.fetch(socket: fetch, askPerson: askThePerson))
+        system += " You can read web pages with fetch; the person is asked before each new host, and may say no."
     }
     let loop = AgentLoop(system: system, tools: tools, model: modelOverSocket(modelSocket))
     emit(1, "ready (class \(cls), model at \(modelSocket))")
@@ -163,7 +168,8 @@ case "ask", "bye", "continue":
         while true {
             r = try Current.receive(on: fd)
             if r.string("event") == "permission" {
-                emit(1, "permission=\(r.string("app") ?? "") \(r.string("verb") ?? "")")
+                emit(1, r.string("kind") == "host" ? "permission=host \(r.string("host") ?? "")"
+                                                   : "permission=\(r.string("app") ?? "") \(r.string("verb") ?? "")")
                 var no = Msg(); no.set("method", "answer"); no.set("allow", false)
                 try Current.send(no, on: fd)
                 continue

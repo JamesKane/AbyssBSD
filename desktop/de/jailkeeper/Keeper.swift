@@ -175,6 +175,8 @@ public final class JailKeeper {
     private var vocabularies: [String: String] = [:]
     /// Agent sessions' model control sockets, by session ID (P18.11).
     private var models: [String: String] = [:]
+    /// Agent sessions' fetch bridges' control sockets, by session ID (P18.12b).
+    private var fetches: [String: String] = [:]
     /// Grants the keeper made for itself, not for the person — a developer's
     /// abyss-agent handed into a jail — as "JAIL<TAB>N": not the person's
     /// files, so not shown as theirs, nor offered to revoke (P18.11b).
@@ -438,6 +440,24 @@ public final class JailKeeper {
             vocabularies[id] = control
             vocabArgs = ["--vocab", JailLayout.runtime + "/" + vocabSock]
         }
+        // Its way to the web (P18.12b), when the class has one: the fetch
+        // bridge outside, answering inside; the person's answers come on a
+        // control socket beside the transcript.
+        if k.fetch {
+            let fetchSock = "fetch-\(n).sock"
+            let control = transcript + "/fetch.sock"
+            var f = try child([binDir + "/abyss-fetch", "serve", "--listen", h.opened.runtime + "/" + fetchSock,
+                               "--control", control, "--session", id, "--transcript", transcript],
+                              log: transcript + "/abyss-fetch.log")
+            guard waitForSocket(control, seconds: 10, unless: f) else {
+                _ = ap_child_signal(&f, SIGTERM); _ = ap_child_reap(&f, nil)
+                for var c in helpers { _ = ap_child_signal(&c, SIGTERM); _ = ap_child_reap(&c, nil) }
+                throw fail("abyss-fetch did not start for \(id)")
+            }
+            helpers.append(f)
+            fetches[id] = control
+            vocabArgs += ["--fetch", JailLayout.runtime + "/" + fetchSock]
+        }
         func failAll(_ why: String) -> JailClient.Refused {
             for var c in helpers { _ = ap_child_signal(&c, SIGTERM); _ = ap_child_reap(&c, nil) }
             return fail(why)
@@ -525,6 +545,14 @@ public final class JailKeeper {
         say("jails: \(allow ? "allowed" : "did not allow") \(app) to write for agent session \(session)")
     }
 
+    /// The person's answer to requester 3 (P18.12b): may the session's agent
+    /// reach `host`? Told to its fetch bridge, outside the jail.
+    public func permitHost(session: String, host: String, allow: Bool) throws {
+        var m = Msg(); m.set("method", "permit"); m.set("host", host); m.set("allow", allow)
+        _ = try control(fetches[session], m, what: "a fetch bridge \(session)")
+        say("jails: \(allow ? "allowed" : "did not allow") agent session \(session) to reach \(host)")
+    }
+
     /// Take a given application back from a session (P18.11).
     public func take(session: String, app: String) throws {
         var m = Msg(); m.set("method", "take"); m.set("app", app)
@@ -593,7 +621,7 @@ public final class JailKeeper {
                     _ = ap_child_signal(&c, SIGTERM)
                     _ = ap_child_reap(&c, nil)
                 }
-                if !p.helpers.isEmpty { say("jails: its vocabulary stopped") }
+                if !p.helpers.isEmpty { say("jails: its vocabulary and fetch bridges stopped") }
                 close(p.fd)
                 procs.remove(at: i)
             }
@@ -658,6 +686,14 @@ public final class JailKeeper {
                 reply.set("ok", true)
             } catch {
                 say("jails: permit refused: \(error)")
+                reply = JailWire.error("\(error)")
+            }
+        case "permit-host":
+            do {
+                try permitHost(session: req.string("session") ?? "", host: req.string("host") ?? "", allow: req.bool("allow") == true)
+                reply.set("ok", true)
+            } catch {
+                say("jails: permit-host refused: \(error)")
                 reply = JailWire.error("\(error)")
             }
         case "take":

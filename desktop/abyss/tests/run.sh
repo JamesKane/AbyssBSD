@@ -278,6 +278,10 @@ if [ "$live" -eq 1 ]; then
   # files given to confined applications, with Revoke.
   echo "== the Agents pane =="
   quiet "$root/abyss/tests/live-agents-pane.sh"
+  # Requester 3 (P18.12b): an agent reaches the web only through the fetch
+  # bridge, and only where the person allows.
+  echo "== an agent reaches the web only as the person allows =="
+  quiet "$root/abyss/tests/live-agent-fetch.sh"
   # A confined crash (P18.9a): the person's limits, the core kept, one
   # crash granted to a debug agent, lldb on it.
   echo "== a confined crash, read by a debug agent =="

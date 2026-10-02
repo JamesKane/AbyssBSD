@@ -365,6 +365,10 @@ let package = Package(
         // session, through their own menu services, and no others.
         .target(name: "Vocabulary", dependencies: ["CurrentIPC", "MenuModel", "MenuWire", "Model"], path: "de/vocab"),
         .executableTarget(name: "abyss-vocab", dependencies: ["Vocabulary", "CurrentIPC", "Model"], path: "de/vocabbin"),
+        // The fetch bridge (P18.12b): an agent's only way to the network,
+        // host by host as the person allows.
+        .target(name: "Fetch", dependencies: ["Model"], path: "de/fetch"),
+        .executableTarget(name: "abyss-fetch", dependencies: ["Fetch", "CurrentIPC", "Model"], path: "de/fetchbin"),
         .executableTarget(name: "abyss-agent", dependencies: ["Agent", "Jails", "Model", "CurrentIPC"], path: "de/agentbin"),
         // jail(2), jail and process descriptors (P18.2); ENOSYS off FreeBSD.
         .target(name: "CJail", path: "de/cjail", sources: ["cjail.c"], publicHeadersPath: "include",
@@ -391,7 +395,7 @@ let package = Package(
         .testTarget(name: "TerminalTests", dependencies: ["Terminal"], path: "Tests/TerminalTests"),
         .testTarget(name: "TextModelTests", dependencies: ["TextModel"], path: "Tests/TextModelTests"),
         .testTarget(name: "VolumesTests", dependencies: ["Volumes"], path: "Tests/VolumesTests"),
-        .testTarget(name: "ModelTests", dependencies: ["Model", "Agent", "Vocabulary", "MenuModel", "CurrentIPC"], path: "Tests/ModelTests"),
+        .testTarget(name: "ModelTests", dependencies: ["Model", "Agent", "Vocabulary", "Fetch", "MenuModel", "CurrentIPC"], path: "Tests/ModelTests"),
         .testTarget(name: "DBusBridgeTests", dependencies: ["DBusBridge", "DBus"], path: "Tests/DBusBridgeTests"),
         .testTarget(name: "JailsTests", dependencies: ["Jails", "JailD", "JailKeeper", "PoolConfig"], path: "Tests/JailsTests"),
         // System Preferences' privileged half (PHASE14 P14.3), in the
