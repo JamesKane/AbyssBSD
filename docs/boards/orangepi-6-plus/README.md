@@ -40,7 +40,7 @@ did.
 | PCIe | ECAM (MCFG), 3 `PNP0A08` root ports (CIX `1f6c:0001`) | pci host generic + sky1-pcie | `pci_host_generic_acpi` |
 | NVMe | Micron 2550 (`1344:5416`) | nvme | `nvme` |
 | Ethernet ×2 | RTL8126 5 GbE (`10ec:8126`) on PCIe | r8169 | **`rge(4)`, which knows the 8126** |
-| USB | 6 Cadence USBSSP dual-role controllers (`CIXH2030`/`CIXH2031`, PHYs `CIXH2033`), each an xHCI host (USB 2 + USB 3 bus, 12 root hubs) | cdnsp-sky1, xhci-hcd | **needs glue**: put the controller in host role, then `xhci` |
+| USB | 10 xHCI hosts (`XHC0`–`XHC5`, `USB0`–`USB3`), which the firmware puts in host mode and describes as standard `PNP0D10`; the Cadence dual-role devices (`CIXH2030`/`2031`, PHYs `CIXH2033`) behind them | cdnsp-sky1, xhci-hcd | **works**: `xhci` ×10 on ACPI |
 | USB-C / PD | RTS5453H PD controllers on I²C (`CIXH200D`); DP alt mode through `CIXH2033` | rts5453h | later |
 | UART | 4 SBSA UARTs `ARMH0011` (`0x40b0000`…`0x40d0000`); DBG2 names COM2 at `0x40d0000`; **no SPCR** | sbsa-uart | `uart_pl011` attaches; no automatic serial console |
 | GPIO, I²C, pins | Cadence GPIO (`CIXH1002`/`1003`), Cadence I²C ×7 (`CIXH200B`), pinctrl (`CIXHA016`/`017`) | cdns-* | `cdnc_i2c` (devicetree only: needs an ACPI attachment); GPIO and pinctrl to write |
@@ -86,7 +86,26 @@ sound. To do: redact and commit it under `dumps/`, and record the GOP
 mode and the UART header's pinout and voltage (a console is worth having
 before any risky test).
 
-### Phase 1: boot stock FreeBSD from USB
+### Phase 1: boot stock FreeBSD from USB (booted 2026-10-02)
+
+The 16-CURRENT snapshot memstick (`36d3e711bc62`, 2026-09-28) boots to its
+installer from USB with nothing added, and attaches:
+
+- 12 CPUs (A720 ×8, A520 ×4), GICv3 + ITS, PSCI, SMCCC 1.2, the generic
+  timer (1 GHz) as timecounter and event timer;
+- `efifb` console at 1920×1080, and **`efirtc`**: UEFI's clock works;
+- the four PL011 UARTs (`uart2` is DBG2's COM2 at `0x40d0000`);
+- 13 ACPI thermal zones;
+- three generic ECAM hosts: **`nvme0`/`nda0`** and **`rge0`/`rge1`** (RTL8126
+  rev 2, `if_rge` autoloaded by devmatch), `rge0` getting an address by DHCP;
+- **`xhci` ×10** (see USB above): keyboard, mouse and the stick work.
+
+Not attached, as expected: HDA (`CIXH6020`), display (`CIXH5010`), GPU,
+I²C, GPIO, the CIX USB dual-role devices, SCMI/mailboxes, NPU, VPU. No
+`_LPI` idle and no cpufreq. Messages: only the DSDT's missing `UXC*`
+objects and "Could not update all GPEs". The SMMUs aren't used.
+
+What was planned here:
 
 16-CURRENT GENERIC on a USB stick, booted from UEFI's menu; Ubuntu's NVMe
 untouched. Expect: GIC/ITS, PSCI SMP, generic timer, ACPI, PCIe ECAM,
@@ -102,9 +121,8 @@ the Q8B.
 
 ### Phase 2: the platform
 
-- **USB:** the Cadence USBSSP host glue: set each controller's host role
-  (as Linux's cdnsp-sky1 does) and hand it to `xhci`, on ACPI. Six
-  controllers, twelve buses.
+- **USB:** nothing to do for host mode (phase 1); the USB-C ports'
+  dual-role and DP side come with USB-C.
 - **Ethernet:** `rge` on both 5 GbE ports; measure as for `tcx`.
 - **SMMUv3:** decide bypass or translation for PCIe; watch for the
   event-queue interrupt storm reported on Linux.
