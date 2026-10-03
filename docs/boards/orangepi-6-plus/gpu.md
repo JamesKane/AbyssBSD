@@ -60,15 +60,19 @@ shader_present `0x550555`: as Linux reports.
 
 ## Versions
 
-drm-kmod's DRM core is Linux 6.13; it has `drm_gpuvm`, `drm_exec` and the
-GPU scheduler panthor needs. Linux added the G720 to panthor in 6.18, but
-only as a model name and a firmware path: the CSF code it runs is 6.13's.
-So panthor comes from Linux 6.13, as msm did, with that addition.
+panthor comes from Linux 7.0 (since 2026-10-02; 6.13's rendered single GL
+clients but faulted under sway, predating the G720 and many fixes). Its GPU
+scheduler and `drm_gpuvm` are newer than drm-kmod's (Linux 6.13), so the
+module builds Linux 7.0's own, their symbols prefixed `panthor_`; it also
+brings the GEM shmem helper, which drm-kmod lacks, and io-pgtable-arm, which
+LinuxKPI lacks.
 
-drm-kmod lacks the GEM shmem helper (`drm_gem_shmem_helper.c`), which
-panthor's GEM is built on, and LinuxKPI has no io-pgtable (Arm LPAE page
-tables, which panthor's MMU code uses): both come with the port, as
-msm's glue provided io-pgtable on the Q8B.
+Coherency is as CIX's Linux has it (their patch "add ACE-Lite coherency and
+NC memattr fallback"): ACE-Lite on the bus, the GPU's memory mappings
+non-cacheable (it has no IOMMU), the CPU's write-combined. The load-time
+switches `hw.panthor.sky1_ace_lite` and `hw.panthor.sky1_gpu_nc` turn them
+off, for comparison; with the GPU's memory cacheable, jellyfish runs no
+faster.
 
 Userspace: the board's Mesa 26.2 package already has `panthor_dri.so`
 (Gallium panfrost on the panthor kernel driver); Vulkan (panvk) would
@@ -86,7 +90,22 @@ need the mesa ports' driver list extended, as turnip was for the Q8B.
    `CIXH5000`, powering the GPU, interrupts, firmware loading, runtime PM
    and DVFS stubs (a fixed clock first). Goal: the firmware boots and a
    render node appears.
-3. **Mesa.** GL through `panthor_dri.so`; then panvk.
-4. **Desktop.** sway rendering on the GPU and scanning out through
-   `sysfbdrm` (as msm with `sysfbdrm` on the Q8B); then DVFS through SCMI
-   performance.
+3. **Mesa** (GL done 2026-10-02: GLES 3.1, Mali-G720 MC10). GL through
+   `panthor_dri.so`; then panvk.
+4. **Desktop** (sway on the GPU, 2026-10-02). sway rendering on the GPU and
+   scanning out through `sysfbdrm` (as msm with `sysfbdrm` on the Q8B); then
+   DVFS through SCMI performance. It took two LinuxKPI fixes: fault handlers
+   were given a `pgoff` of 0 (Linux 7.0's shmem helper finds the page by it),
+   and every interrupt ran in the network epoch, so a threaded handler that
+   slept (panthor's MMU fault handler) panicked.
+
+## Performance
+
+glmark2 jellyfish, 800x600 under sway, as on the Q8B: 711 FPS as FreeBSD
+places the work, 2,600 with glmark2 and sway on the big cores. FreeBSD's
+scheduler does not tell the Cortex-A720s (CPUs 0-1, 6-11) from the A520s
+(2-5) and ran both on small cores. Until it does, `/usr/local/bin/bigcores`
+lists the big cores from the boot messages and the desktop runs under
+`cpuset -l "$(bigcores)"` (an alias for `sway` in the user's `.profile`).
+The Q8B managed about 5,800: even pinned, glmark2 keeps a big core 64% busy,
+so the rest is per-frame CPU work, not yet profiled.
