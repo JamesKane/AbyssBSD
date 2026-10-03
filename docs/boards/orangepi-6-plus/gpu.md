@@ -79,7 +79,9 @@ need the mesa ports' driver list extended, as turnip was for the Q8B.
 1. **Power and probe.** A test module powers domain 21 through SCMI over
    SMC and reads GPU_ID, the features and the present masks, to compare
    with Linux's.
-2. **The port.** `drm-panthor-kmod`: panthor from Linux 6.13 (+ G720
+2. **The port** (done 2026-10-02: the CSF firmware boots, interface v3.13
+   and the same build as Linux's, `/dev/dri/renderD128` appears; repository
+   `drm-panthor-kmod`). `drm-panthor-kmod`: panthor from Linux 6.13 (+ G720
    name and firmware), the shmem helper, io-pgtable-arm; glue attaching to
    `CIXH5000`, powering the GPU, interrupts, firmware loading, runtime PM
    and DVFS stubs (a fixed clock first). Goal: the firmware boots and a
