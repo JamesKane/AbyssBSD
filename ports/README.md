@@ -13,5 +13,10 @@ Added here (the Q8B's NPU, see docs/boards/radxa-dragon-q8b/npu.md):
     poudriere ports -c -p abyss -m null -M $PWD/ports
     poudriere bulk -j <jail> -p default -O abyss <origins>
 
+`graphics/libdrm`'s `patch-xf86drm.c` is the FreeBSD platform-device work
+on https://github.com/JamesKane/libdrm, branch `freebsd-missing-node`, until
+it is upstream: Mesa needs it to find the GPU's render node beside a
+separate display driver (sysfbdrm with msm or panthor).
+
 Taken from https://github.com/JamesKane/freebsd-ports, branch freedreno at
 d80cb373e32b645d4d6a8347156c16b5011f65b6, over freebsd-ports 0766e9d7376671c8a404db90a2ac8f9ffdf099a4.
