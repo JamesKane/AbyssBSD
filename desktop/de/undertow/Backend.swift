@@ -268,10 +268,14 @@ public final class WlrootsSession {
             s.startupInputs.append(data.assumingMemoryBound(to: wlr_input_device.self))
         }, me)
 
-        guard wlr_backend_start(b) else {
-            wl_display_destroy(d)
-            throw BackendError.noBackend
-        }
+        // From here every stored property is set, so a throw runs deinit,
+        // which unhooks the listeners above and then destroys the display.
+        // Destroying it here as well did both wrong: wlroots asserted on the
+        // listeners still hooked (wlr_backend_finish) and aborted before the
+        // error was said — on the 2013 Mac Pro, whose display GPU had failed
+        // to initialise — and, had it not, deinit would have destroyed the
+        // display a second time.
+        guard wlr_backend_start(b) else { throw BackendError.noBackend }
         if case .headless(let sizes, _) = kind {
             for sz in sizes { _ = wlr_headless_add_output(b, UInt32(sz.width), UInt32(sz.height)) }
         } else {
@@ -284,10 +288,7 @@ public final class WlrootsSession {
                 _ = wl_event_loop_dispatch(eventLoop, 20)
             }
         }
-        guard !outputs.isEmpty else {
-            wl_display_destroy(d)
-            throw BackendError.noOutput
-        }
+        guard !outputs.isEmpty else { throw BackendError.noOutput }   // deinit tears down
 
         // Give every output a renderer and a mode. Until this commit lands, an
         // output has no buffers and `begin_render_pass` has nothing to draw to.

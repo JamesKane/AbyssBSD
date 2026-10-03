@@ -471,6 +471,18 @@ final class UndertowTests: XCTestCase {
 
     // MARK: - The wlroots bridge (P6.2)
 
+    /// A backend with no output is refused in undertow's own words (found on
+    /// the 2013 Mac Pro, 2026-10-02): the session used to destroy the display
+    /// with its startup listeners still hooked, and wlroots' assertion in
+    /// wlr_backend_finish aborted the process before the error was said.
+    func testNoOutputIsAnErrorNotAnAbort() {
+        XCTAssertThrowsError(try WlrootsSession(headlessOutputs: 0, width: 320, height: 240,
+                                                refreshMilliHz: 60_000)) { e in
+            guard case .noOutput? = e as? BackendError else { return XCTFail("not noOutput: \(e)") }
+            XCTAssertEqual("\(e)", "the backend produced no output")
+        }
+    }
+
     /// The FFI works end to end: a real wlroots session comes up, announces the
     /// outputs we asked for at the size we asked for, and tears down.
     ///
