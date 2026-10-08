@@ -7,6 +7,52 @@ FreeBSD glue for ACPI power, clocks and resets. What is new here is V4L2:
 Linux codecs are V4L2 memory-to-memory devices, and FreeBSD's kernel has
 no V4L2.
 
+**Phases 1-3 done, and encode (2026-10-08):**
+[`vpu-kmod`](https://github.com/JamesKane/vpu-kmod) builds two modules:
+`lkpi_v4l2.ko`, Linux v7.0's V4L2 core and videobuf2 through LinuxKPI,
+and `amvx.ko`, CIX's driver (release 1.0.2) with FreeBSD glue. The codec
+probes (Linlon v5276, four cores, four LSIDs) and registers four mem2mem
+devices: `/dev/video0` decodes (H.263, H.264, HEVC, MPEG-2, MPEG-4, VP8,
+VP9, AV1), `/dev/video1` encodes (H.264, HEVC, VP8, VP9), `/dev/video2`
+and `/dev/video3` do JPEG. Stock FFmpeg (the 9.0.1 package) drives them
+with its `*_v4l2m2m` codecs:
+
+- H.264 and HEVC 1080p and VP9 720p decode **bit-exactly** against
+  FFmpeg's software decoders, timestamps included, about 120 1080p frames
+  a second (with the copy back to system memory);
+- H.264 and HEVC encode from NV12, NV21 or YUV420: H.264 720p
+  53.6/52.1/52.2 dB PSNR (Y/U/V), 1080p 45.8/44.2/44.6; HEVC 1080p
+  46.2/44.9/45.3.
+
+`tools/decode-test.sh` and `tools/encode-test.sh` in vpu-kmod repeat
+these. The board loads the modules at boot (`kld_list`), and a devfs rule
+gives `/dev/video*` to the `video` group (0660).
+
+What it took, besides building V4L2 for LinuxKPI:
+
+- **LinuxKPI** (freebsd-src `orangepi-6-plus`): a kobject added without
+  a parent panicked (Linux puts it at sysfs's top; `kernel_kobj` added);
+  platform devices had no sysfs node, so a kset under one failed;
+  `dma_sync_single_*()` synced only a mapping looked up by its exact
+  start, and nothing for the 1:1 mappings LinuxKPI does not track: on a
+  device that does not snoop the caches (`_CCA` 0, no SMMU) the firmware
+  never saw its message queues or page tables. And a file's poll could
+  wait on one queue only, and `selrecord()`ed each time: V4L2 m2m polls
+  three, and the third panicked `select`. All four affect any LinuxKPI
+  driver; amdgpu was checked on amd64.
+- **V4L2 core**: LinuxKPI names a cdev's `/dev` node after the cdev,
+  Linux after the device: the V4L2 core names its cdev too.
+- **The driver**: on resume each core's memories are repaired (its
+  `REPR` method, as its power resource's `_ON`). The cores' `_PR3`
+  keeps their power resources on in D3, so switching the cores' power
+  would not repeat it. CIX's driver gave NV12, NV21, YUV420 and P010 a
+  V4L2 plane per colour plane, where V4L2 defines one plane with the
+  chroma after the luma (their `M` variants have a plane each). FFmpeg
+  fills them as V4L2 defines, so the encoder read no chroma, and YUV420
+  crashed FFmpeg. On FreeBSD the driver presents them as one plane.
+- Raw `.h264` input gives FFmpeg no timestamps, and it sends 0: use a
+  container. Linux behaves the same.
+
 ## The hardware, from the board's ACPI tables
 
 - `\_SB.VPU0` (`CIXH3010`): two 64 KB register windows, `0x14230000` (the
@@ -14,7 +60,12 @@ no V4L2.
   codec), one interrupt (GSIV `0x166`); `_CCA` 0 (not coherent).
 - Power: ACPI power resources, `PPRS` for the block and `PRS0`-`PRS3` for
   four cores (`CRE0`-`CRE3`), each `_ON` releasing its core through the
-  firmware's `DMRP` (masks 2, 4, 8, `0x10` at `0x14230000`).
+  firmware's `DMRP` (masks 2, 4, 8, `0x10` at `0x14230000`). Each core
+  also has `REPR` (the same memory repair); its `_PR3` lists the same
+  resource as `_PR0`, and the resource's `_STA` is always 0.
+- The hardware's SVN revision is `0xe0c1afe1` (the driver's
+  `MVE_SVN_ENPWOFF`): the cores power off when the codec's reset is
+  asserted, and need memory repair after each power-up.
 - `CLKT`: `vpu_clk` (SCMI clock `0x43`). `RSTL`: `vpu_reset` (RST0 `0x0E`)
   and `vpu_rcsu_reset` (RST0 `0x8E`).
 - `_DSD` `power-domains`: SCMI performance domain 9 (`vpu_dfs`: 150, 300,
@@ -56,20 +107,23 @@ dma-buf), which the driver's V4L2 layer is written against.
 
 ## Plan
 
-1. **The core** (`vpu-kmod`, GPL, out of tree): ACPI glue (power
+1. **The core** (done) (`vpu-kmod`, GPL, out of tree): ACPI glue (power
    resources for the block and four cores, `vpu_clk`, both resets through
    RST0), the driver's core without its V4L2 layer, firmware from
    `/boot/firmware`. Goal: the codec's ID registers, cores counted, a
    firmware blob loaded.
-2. **V4L2 for LinuxKPI**: the V4L2 core and videobuf2 ported, `/dev/video*`
+2. **V4L2 for LinuxKPI** (done): the V4L2 core and videobuf2 ported, `/dev/video*`
    registered, the driver's V4L2 layer on top. Goal: `VIDIOC_QUERYCAP`
-   and the format lists from a native tool (`v4l2-ctl`).
-3. **First decode**: H.264 to NV12, by Arm's `mvx_decoder` under the
-   Linuxulator and by FFmpeg's `h264_v4l2m2m`, the output checked against
-   FFmpeg's software decoder.
-4. **Integration**: mpv and GStreamer, the other codecs, encode, dma-buf
-   export to the display (no copies), DVFS (domain 9), the four cores
-   under several sessions.
+   and the format lists from a native tool (vpu-kmod's `tools/v4l2info`;
+   `v4l2-ctl` does not recognise the device).
+3. **First decode** (done, with FFmpeg's `h264_v4l2m2m`; Arm's
+   `mvx_decoder` under the Linuxulator not tried): H.264 to NV12, the
+   output checked against FFmpeg's software decoder.
+4. **Integration**: done: HEVC, VP9, H.264 and HEVC encode, loading at
+   boot. To do: mpv and GStreamer; the other codecs (AV1, VP8, MPEG,
+   JPEG); dma-buf export to the display (no copies); DVFS (domain 9;
+   the driver's devfreq is stubbed); several sessions on the four cores;
+   USERPTR buffers (`frame_vector` is stubbed); secure video.
 
 ## Open questions
 
@@ -80,5 +134,7 @@ dma-buf), which the driver's V4L2 layer is written against.
   decoders for H.264, HEVC, VP8, VP9, MPEG-1/2/4, H.263 and VC-1, and
   encoders for H.264, HEVC, VP8, MPEG-4 and H.263: with a V4L2 device in
   the kernel, stock FFmpeg and mpv need no rebuild.
+- Why `v4l2-ctl` (v4l-utils 1.23) reports "Unable to detect what device
+  /dev/video0 is": it probably looks for the device in sysfs.
 - The firmware's terms (CIX publishes it in its packages; there is no
   licence file).

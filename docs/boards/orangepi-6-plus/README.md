@@ -14,12 +14,14 @@ in the tree yet (`dmidecode` carries serials to redact first).
 **Status (2026-10-08):** FreeBSD 16-CURRENT runs the board from its NVMe
 with everything above marked as working: the desktop (sway) on the GPU and
 the HDMI port, sound, both 5 GbE ports, deep CPU idle and frequency
-scaling, the SMMUs translating, and the NPU. The kernel side is spread over
-topic branches of freebsd-src, not yet in one branch or in this tree's
-`src`; the board still needs `loader.conf` settings. What's missing: the
-video codec, USB-C display and device mode, the other display outputs,
-I2S and the audio DSP, a serial console without settings. Hardware notes:
-[gpu.md](gpu.md), [npu.md](npu.md).
+scaling, the SMMUs translating, the NPU, and the video codec. The kernel
+side is on freebsd-src's `orangepi-6-plus` branch, which this tree's `src`
+follows; the out-of-tree drivers (panthor, komeda, the NPU's and the
+codec's) are their own repositories. The board still needs `loader.conf`
+settings. What's missing: USB-C display and device mode, the other
+display outputs, I2S and the audio DSP, a serial console without
+settings. Hardware notes: [gpu.md](gpu.md), [npu.md](npu.md),
+[vpu.md](vpu.md).
 
 Board access: Ubuntu at 192.168.0.27, user `jkane`, key login; root needs
 `sudo` (the user's password), so root steps go through a script the user
@@ -59,7 +61,7 @@ did.
 | Display | Linlon DP ×5 (`CIXH5010`) + Trilinear DP TX (`CIXH502F`), eDP panel; monitor on DP-4; UEFI GOP framebuffer handed over | linlondp, simpledrm | **works on DP-4 (HDMI)**: komeda + CIX's DP transmitter through LinuxKPI ([`drm-komeda-kmod`](https://github.com/JamesKane/drm-komeda-kmod)), translated by the SMMU; no EDID behind the PS185 (Linux neither); other outputs and eDP untried |
 | GPU | Immortalis-G720 MC10 (`CIXH5000`), devfreq | panthor | **works**: panthor from Linux 7.0 through LinuxKPI ([`drm-panthor-kmod`](https://github.com/JamesKane/drm-panthor-kmod)), GLES 3.1 in Mesa, sway; DVFS 72–1000 MHz ([gpu.md](gpu.md)) |
 | Audio | HDA controller `CIXH6020` at `0x70c0000` with a Realtek **ALC269VC** codec; I2S ×4, an audio DSP `CIXH6000` | cix-ipbloq-hda | **plays**: `hdac`/`snd_hda` on ACPI; recording and jack sense untested; some boots lose the codec (not understood); no I2S or DSP |
-| Video codec | `CIXH3010` (Arm Mali-V?, "amvx") | amvx_dev | **none** |
+| Video codec | `CIXH3010`, Arm Mali-V (Linlon v5276), four cores | amvx_dev | **decodes and encodes**: [vpu-kmod](https://github.com/JamesKane/vpu-kmod) (CIX's driver and Linux's V4L2 core through LinuxKPI), loaded at boot; FFmpeg's `*_v4l2m2m` decode H.264, HEVC, VP9 bit-exactly and encode H.264, HEVC ([vpu.md](vpu.md)) |
 | NPU | Zhouyi X2 (`CIXH4000`, `CIXH4010` ×3), 30 TOPS | (vendor) | **works**: CIX's driver through LinuxKPI ([`aipu-kmod`](https://github.com/JamesKane/aipu-kmod)), Arm China's user driver ([`aipu-umd`](https://github.com/JamesKane/aipu-umd)), CIX's binary stack and ONNX Runtime under the Linuxulator, DVFS ([npu.md](npu.md)) |
 | Other | TPM (`MSFT0101`), OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM, battery/AC objects | — | none |
 
