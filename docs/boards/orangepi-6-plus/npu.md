@@ -37,6 +37,24 @@ float) convolutions do not compile, a lone quantized BatchNormalization
 comes out wrong without a word, and a Reshape shape's 0 is read as a size.
 aipu-umd's `tools/ort/prepare.py` works around the last three.
 
+**Phase 4 done (2026-10-08):** the NPU's clock is SCMI performance domain 8
+(`npu_dfs`: 400, 600, 800, 1200 MHz; the firmware starts at 1200), through
+`sky1_scmi`'s performance protocol (freebsd-src `sky1-iommu`) and
+`dev.aipu.0.freq` / `freq_levels` (aipu-kmod), as CIX's devfreq with the
+userspace governor. MobileNetV2: 1.46, 1.05, 0.84, 0.72 ms.
+
+Found on the way: FreeBSD's SMMUv3 driver mapped all DMA as **Device**
+memory, so the NPU ran ten times slower translated (7.2 ms at any clock,
+0.68 ms untranslated, CIX's figure 0.91 ms). It now maps Normal memory by
+the device's coherency, as Linux does (write-back for coherent devices,
+non-cacheable for the NPU), and walks its tables cacheably on a coherent
+SMMU. Every translated device benefits.
+
+The firmware has twelve performance domains: the CPU clusters (`lit0`,
+`mid0`/`mid1`, `big0`/`big1`, `dsu0`; the big cores start at 1.9 GHz of a
+possible ~2.6), the GPU's two, NPU, VPU, the CI-700 interconnect and the
+media hub. That is a CPU frequency driver waiting to be written.
+
 Stock Ubuntu on the board has no NPU stack installed (no module, no
 packages): it comes from CIX's and Radxa's package repositories.
 
