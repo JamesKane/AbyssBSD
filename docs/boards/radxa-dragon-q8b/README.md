@@ -60,7 +60,9 @@ what remains needs hardware we don't have, or is not started.
   under ACPI. The DT work is parked on branch `radxa-dragon-q8b-dt` until
   Radxa's DTS is upstream.
 - **"Nothing special."** The image is the normal FreeBSD process: stock
-  GENERIC, an empty `loader.conf`. Anything board-specific in configuration
+  GENERIC, an empty `loader.conf`. (Exception, 2026-10-08: the video
+  codec's DMA goes through iommu(4), so it will need `GENERIC-IOMMU`,
+  GENERIC with `options IOMMU`; see [vpu.md](vpu.md).) Anything board-specific in configuration
   is a bug to fix in a driver.
 - **Licensing.** Linux drivers are reference only; new FreeBSD code is a BSD
   rewrite. The only GPL code is what is adapted from Linux (msm), kept out of

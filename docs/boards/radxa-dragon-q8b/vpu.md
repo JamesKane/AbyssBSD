@@ -72,7 +72,7 @@ the driver's platform data must match.
 |---|---|---|
 | V4L2 core, videobuf2 | `lkpi_v4l2.ko` (vpu-kmod): dma-sg | **videobuf2-dma-contig** (Iris's allocator): `dma_alloc_attrs` with `WRITE_COMBINE` and `NO_KERNEL_MAPPING`, `dma_mmap_attrs`, `dma_get_sgtable` for dma-buf export |
 | Firmware authentication | `qcom_scm`: PAS init, memory setup, auth-and-reset, shutdown | `qcom_scm_mem_protect_video_var()` (the `tz_cp_config` call) |
-| SMMU | `qcom_apps_smmu`: a context bank and page table for a stream, explicit `map`/`map_pages` (FastRPC's DSP streams) | **DMA through it for a LinuxKPI driver**: Iris uses the DMA API throughout. Best as an iommu(4) backend for the MMU-500 (busdma tags that translate, as busdma_iommu does for SMMUv3), so LinuxKPI's DMA needs no change; the IOVA window `0x25800000`-`0xe0000000` |
+| SMMU | `qcom_apps_smmu`: a context bank and page table for a stream, explicit `map`/`map_pages` (FastRPC's DSP streams) | Done (phase 2): `qcom_apps_iommu`, busdma tags that translate for a claimed device, so LinuxKPI's DMA needs no change; the IOVA window `0x25800000`-`0xe0000000`. Needs `GENERIC-IOMMU` |
 | RPMh votes | `qcom_rpmh_arc_vote()` (rails), `qcom_rpmh_bcm_vote()` (bandwidth) | MX/MMCX levels per clock; the video-mem and cpu-cfg BCMs |
 | Clocks, power domains | `qcom_gpucc` (the GPU's clock controller, fixed rates), `qcom_clk` building blocks | **`qcom_videocc`**: MVS0C/MVS0 GDSCs, the MVS0 clocks, `video_pll0` (Lucid 5LPE, unless UEFI left it configured), the GCC video AXI clock and reset |
 | A device to attach | msm owns `\_SB.GPU0` | The codec as its own device: a child added from the SoC table (`\_SB.SOID`), as `qcom_apps_smmu` finds its SMMU, with the registers and interrupt above |
@@ -120,10 +120,19 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
    version: **`0x60100608` (6.16)**, the same over six power cycles, the
    display undisturbed. UEFI leaves the PLL unconfigured and both power
    domains off.
-2. **DMA through the apps SMMU** (freebsd-src): an iommu(4) backend for the
-   MMU-500 on top of `qcom_smmu`'s page tables, giving the codec a
-   translating busdma tag with the IOVA window above. Goal: a test
-   module's DMA buffers map into the codec's context bank.
+2. **DMA through the apps SMMU** (done, 2026-10-08, freebsd-src
+   `1464aadaf7`..`5cf2c7fd99`): `qcom_apps_iommu`, the apps SMMU as an
+   iommu(4) unit for devices whose drivers claim it (their stream ID/mask
+   pairs and an I/O window); `qcom_smmu` page tables that map without
+   sleeping, for busdma; `qcom_apps_smmu` routing several streams to a
+   bank and letting it go. **The codec needs a kernel with `options
+   IOMMU`**: `GENERIC-IOMMU` (GENERIC plus that option; nothing unclaimed
+   is translated). On the board: the hypervisor accepts the codec's
+   streams (`0x2a00` and `0x2a07`, mask `0x400`, bank 7); a 256 KB buffer
+   loads through the claimed tag as one segment at `0x25801000`, all 64
+   pages translating right, nothing left after unload; the regression test
+   and the NPU (FastRPC, 79/100) as before. Found on the way: iommu(4)
+   looped forever reserving a region from 0 (fixed in `1464aadaf7`).
 3. **Firmware boot**: the Iris core through LinuxKPI (in vpu-kmod beside
    `amvx`, sharing `lkpi_v4l2`), PAS 9 into the carve-out, the video memory
    protection call, HFI queues. Goal: `SYS_INIT` answered, the firmware's
