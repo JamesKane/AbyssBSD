@@ -6,16 +6,26 @@ tree (GPL), with FreeBSD glue for what Linux gets from ACPI power domains
 and SCMI; user space as open source rebuilt for FreeBSD where it exists,
 under the Linuxulator where it is binary-only (the Q8B's FastRPC pattern).
 
-**Phase 1 done (2026-10-08):** `aipu-kmod` (local repository): the driver
+**Phase 1 done (2026-10-08):** `aipu-kmod`: the driver
 attaches, reports the NPU (Zhouyi v3, one cluster of three cores, four TECs
 each, 4 MB of GM), and buffers allocate, map, verify and free through
 `/dev/aipu`, translated by the SMMU.
 
-**Phase 2 done (2026-10-08):** `aipu-umd` (local repository): Arm China's
+**Phase 2 done (2026-10-08):** `aipu-umd`: Arm China's
 user-mode driver **4.1.0**, the release CIX's kernel driver 6.2.0 comes from
 (4.2.0 and later changed the ioctl structures), built natively on FreeBSD.
 CIX's MobileNetV2 (model hub, the ELF graph inside its `.cix`) labels
 ImageNet images right, about 7.3 ms each, with `tools/npurun`.
+
+**Phase 3 under way (2026-10-08):** `aipu_linux.ko` (aipu-kmod) gives Linux
+programs `/dev/aipu`. CIX's binary `libnoe` 3.1.2 runs under the Linuxulator
+(Rocky 9 base) on a Linux `libaipudrv` built from aipu-umd with Rocky's g++,
+from C and from CIX's Python wheel (a Linux CPython 3.12), with the native
+results. Two `libnoe` bugs, not FreeBSD's, are worked around in the tools:
+`noe_create_job()` dereferences a configuration the header lets default to
+`nullptr`, and the wheel returns outputs as ndarrays that repeat their
+first element when inputs are given as ndarrays. Left: CIX's ONNX Runtime
+provider.
 
 Stock Ubuntu on the board has no NPU stack installed (no module, no
 packages): it comes from CIX's and Radxa's package repositories.
