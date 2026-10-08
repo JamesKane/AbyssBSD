@@ -11,6 +11,16 @@ strategy, from a read-only survey of the board under its stock Ubuntu
 (26.04, CIX kernel 7.0.0-41-cix, ACPI boot). The survey's raw output is not
 in the tree yet (`dmidecode` carries serials to redact first).
 
+**Status (2026-10-08):** FreeBSD 16-CURRENT runs the board from its NVMe
+with everything above marked as working: the desktop (sway) on the GPU and
+the HDMI port, sound, both 5 GbE ports, deep CPU idle and frequency
+scaling, the SMMUs translating, and the NPU. The kernel side is spread over
+topic branches of freebsd-src, not yet in one branch or in this tree's
+`src`; the board still needs `loader.conf` settings. What's missing: the
+video codec, USB-C display and device mode, the other display outputs,
+I2S and the audio DSP, a serial console without settings. Hardware notes:
+[gpu.md](gpu.md), [npu.md](npu.md).
+
 Board access: Ubuntu at 192.168.0.27, user `jkane`, key login; root needs
 `sudo` (the user's password), so root steps go through a script the user
 runs once (`sky1-collect.sh`).
@@ -28,32 +38,54 @@ carry devicetree-style properties in `_DSD`. No vendor hypervisor: Linux
 runs KVM, so EL2 is the OS's, and nothing polices SMMU writes as the Q8B's
 did.
 
-| Area | Hardware and how ACPI describes it | Linux driver | FreeBSD today |
+| Area | Hardware and how ACPI describes it | Linux driver | FreeBSD (2026-10-08) |
 |---|---|---|---|
-| CPUs | 12 cores, PSCI 1.1 (SMC), PPTT; 6 frequency domains of 2 cores | — | boots (FreeBSD 15 is reported to on the Orion O6) |
-| Interrupts | GICv3 + ITS (GICv4.1), 512 SPIs; Linux applies the workaround for Arm erratum 2941627 | gic-v3 | `gic_v3`, `its`; FreeBSD has no workaround for 2941627: find what it needs |
-| Timers | GTDT; CIX GPT wake-up timer `CIXH1007` | sky1_timer | generic timer; GPT as `generic_timer_mem`-like broadcast later |
-| CPU idle | `_LPI`: LPI-0 standby, LPI-1 core power-down (360 µs), LPI-2 cluster power-down (500 µs) | acpi_idle | **ours from the Q8B** (`acpi_cpu.c` `_LPI`, `cpu_suspend.c`) |
-| CPU frequency | `_CPC`: desired performance a 32-bit SystemMemory register (the SCMI fastchannel, e.g. `0x659009c`), delivered/reference counters FFixedHW (AMU), perf 2520–8192 for 800–2600 MHz | cppc_cpufreq | **none**: the reported "stuck at 1 GHz"; an ACPI CPPC driver is the gap |
-| Thermal | 13 ACPI thermal zones (`_TMP`), processor cooling | acpi-thermal | `acpi_thermal` |
-| IOMMU | SMMUv3 at `0xb010000` (PCIe), `0xb1b0000` (DPU0/1, AEU0, …) | arm-smmu-v3 | `smmu(4)`; a known Sky1 event-queue interrupt storm on Linux |
-| PCIe | ECAM (MCFG), 3 `PNP0A08` root ports (CIX `1f6c:0001`) | pci host generic + sky1-pcie | `pci_host_generic_acpi` |
-| NVMe | Micron 2550 (`1344:5416`) | nvme | `nvme` |
-| Ethernet ×2 | RTL8126 5 GbE (`10ec:8126`) on PCIe | r8169 | **`rge(4)`, which knows the 8126** |
-| USB | 10 xHCI hosts (`XHC0`–`XHC5`, `USB0`–`USB3`), which the firmware puts in host mode and describes as standard `PNP0D10`; the Cadence dual-role devices (`CIXH2030`/`2031`, PHYs `CIXH2033`) behind them | cdnsp-sky1, xhci-hcd | **works**: `xhci` ×10 on ACPI |
-| USB-C / PD | RTS5453H PD controllers on I²C (`CIXH200D`); DP alt mode through `CIXH2033` | rts5453h | later |
+| CPUs | 12 cores, PSCI 1.1 (SMC), PPTT; 6 frequency domains of 2 cores | — | **works**; big.LITTLE placement through the hmp(4) review stack (`hmp-sky1`) |
+| Interrupts | GICv3 + ITS (GICv4.1), 512 SPIs; Linux applies the workaround for Arm erratum 2941627 | gic-v3 | `gic_v3`, `its`; erratum 2941627 still unexamined |
+| Timers | GTDT; CIX GPT wake-up timer `CIXH1007` | sky1_timer | generic timer; **`sky1_gpt`** as the global event timer for deep idle |
+| CPU idle | `_LPI`: LPI-0 standby, LPI-1 core power-down (360 µs), LPI-2 cluster power-down (500 µs) | acpi_idle | **works**: all three states (`acpi_cpu` `_LPI`, from the Q8B) |
+| CPU frequency | `_CPC`: desired performance a 32-bit SystemMemory register (the SCMI fastchannel, e.g. `0x659009c`), delivered/reference counters FFixedHW (AMU), perf 2520–8192 for 800–2600 MHz | cppc_cpufreq | **works**: **`acpi_cppc`**, 800–2600 MHz per `_PSD` domain, `powerd` per domain |
+| Thermal | 13 ACPI thermal zones (`_TMP`), processor cooling | acpi-thermal | **works**: `acpi_thermal`, each CPU domain cooled from its zones; critical shutdown untested |
+| Watchdog | GTDT SBSA generic watchdog | sbsa_gwdt | **works**: **`sbsa_gwdt`** (refreshes through `WOR`: Sky1's refresh frame doesn't) |
+| IOMMU | SMMUv3 at `0xb010000` (PCIe), `0xb1b0000` (DPU0/1, NPU, AEU0, …); IORT RMRs | arm-smmu-v3 | **works, translating by default**: PCIe and named components (display, NPU), RMR identity maps, DMA mapped as Normal memory ([`sky1-iommu`](#branches-and-repositories)) |
+| PCIe | ECAM (MCFG), 3 `PNP0A08` root ports (CIX `1f6c:0001`) | pci host generic + sky1-pcie | **works**: `pci_host_generic_acpi` |
+| NVMe | Micron 2550 (`1344:5416`) | nvme | **works**: `nvme`, host memory buffer, behind the SMMU (relaxed ordering off) |
+| Ethernet ×2 | RTL8126 5 GbE (`10ec:8126`) on PCIe | r8169 | **works**: `rge(4)` |
+| USB | 10 xHCI hosts (`XHC0`–`XHC5`, `USB0`–`USB3`), which the firmware puts in host mode and describes as standard `PNP0D10`; the Cadence dual-role devices (`CIXH2030`/`2031`, PHYs `CIXH2033`) behind them | cdnsp-sky1, xhci-hcd | **works** (host): `xhci` ×10 on ACPI; no device mode |
+| USB-C / PD | RTS5453H PD controllers on I²C (`CIXH200D`); DP alt mode through `CIXH2033` | rts5453h | `rts5453` reports the ports' state; no DP alt mode |
 | UART | 4 SBSA UARTs `ARMH0011` (`0x40b0000`…`0x40d0000`); DBG2 names COM2 at `0x40d0000`; **no SPCR** | sbsa-uart | `uart_pl011` attaches; no automatic serial console |
-| GPIO, I²C, pins | Cadence GPIO (`CIXH1002`/`1003`), Cadence I²C ×7 (`CIXH200B`), pinctrl (`CIXHA016`/`017`) | cdns-* | `cdnc_i2c` (devicetree only: needs an ACPI attachment); GPIO and pinctrl to write |
-| Clocks, resets, power | SCMI over a mailbox (`CIXHA006`, `CIXHA001` ×6, PCCT type 2 at `0x83bf1280`), clock controller `CIXHA010`, resets `CIXHA020`/`021`, PDC `CIXHA019` | scmi, clk-sky1-acpi | none; most of it is reached through AML |
-| Display | Linlon DP ×5 (`CIXH5010`) + Trilinear DP TX (`CIXH502F`), eDP panel; monitor on DP-4; UEFI GOP framebuffer handed over | linlondp, simpledrm | **`efifb` + our `sysfbdrm`** now; Linlon KMS later |
-| GPU | Immortalis-G720 MC10 (`CIXH5000`), devfreq | panthor | none (FreeBSD's panfrost is for older Malis) |
-| Audio | HDA controller `CIXH6020` at `0x70c0000` with a Realtek **ALC269VC** codec; I2S ×4, an audio DSP `CIXH6000` | cix-ipbloq-hda | **`hdac`/`snd_hda` with an ACPI attachment** |
-| Video codec | `CIXH3010` (Arm Mali-V?, "amvx") | amvx_dev | later |
-| NPU | Zhouyi (`CIXH4000`, `CIXH4010` ×3), 30 TOPS | (vendor) | later |
-| Other | TPM (`MSFT0101`), OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM, battery/AC objects | — | — |
+| GPIO, I²C, pins | Cadence GPIO (`CIXH1002`/`1003`), Cadence I²C ×7 (`CIXH200B`), pinctrl (`CIXHA016`/`017`) | cdns-* | **works**: `cdnc_i2c` on ACPI (Linux's receive state machine), `cdns_gpio`; the RX8900 RTC (`rx8803`); writes beyond the FIFO untested; no pinctrl |
+| Clocks, resets, power | SCMI over a mailbox (`CIXHA006`, `CIXHA001` ×6, PCCT type 2 at `0x83bf1280`), clock controller `CIXHA010`, resets `CIXHA020`/`021`, PDC `CIXHA019` | scmi, clk-sky1-acpi | **`cix_mbox`** + **`sky1_scmi`**: clocks, power domains (TF-A), performance domains (DVFS); resets by the reset registers |
+| Display | Linlon DP ×5 (`CIXH5010`) + Trilinear DP TX (`CIXH502F`), eDP panel; monitor on DP-4; UEFI GOP framebuffer handed over | linlondp, simpledrm | **works on DP-4 (HDMI)**: komeda + CIX's DP transmitter through LinuxKPI ([`drm-komeda-kmod`](https://github.com/JamesKane/drm-komeda-kmod)), translated by the SMMU; no EDID behind the PS185 (Linux neither); other outputs and eDP untried |
+| GPU | Immortalis-G720 MC10 (`CIXH5000`), devfreq | panthor | **works**: panthor from Linux 7.0 through LinuxKPI ([`drm-panthor-kmod`](https://github.com/JamesKane/drm-panthor-kmod)), GLES 3.1 in Mesa, sway; DVFS 72–1000 MHz ([gpu.md](gpu.md)) |
+| Audio | HDA controller `CIXH6020` at `0x70c0000` with a Realtek **ALC269VC** codec; I2S ×4, an audio DSP `CIXH6000` | cix-ipbloq-hda | **plays**: `hdac`/`snd_hda` on ACPI; recording and jack sense untested; some boots lose the codec (not understood); no I2S or DSP |
+| Video codec | `CIXH3010` (Arm Mali-V?, "amvx") | amvx_dev | **none** |
+| NPU | Zhouyi X2 (`CIXH4000`, `CIXH4010` ×3), 30 TOPS | (vendor) | **works**: CIX's driver through LinuxKPI ([`aipu-kmod`](https://github.com/JamesKane/aipu-kmod)), Arm China's user driver ([`aipu-umd`](https://github.com/JamesKane/aipu-umd)), CIX's binary stack and ONNX Runtime under the Linuxulator, DVFS ([npu.md](npu.md)) |
+| Other | TPM (`MSFT0101`), OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM, battery/AC objects | — | none |
 
 Firmware bugs seen: the DSDT names `I2C0.UXC0`–`UXC3` (USB-C controllers)
 that don't exist (`AE_NOT_FOUND` at load, harmless on Linux).
+
+## Branches and repositories
+
+Kernel: freebsd-src branch **`orangepi-6-plus`**, FreeBSD `main` of
+2026-09-07 plus the Q8B's `radxa-dragon-q8b` and the Sky1 work on top, in
+one line (it holds what the topic branches `hmp-sky1`, `sky1-audio`,
+`sky1-i2c`, `sky1-gpio`, `sky1-usbc`, `sky1-log`, `sky1-probe` and
+`sky1-iommu` did). Kernel config `GENERIC-HMP-IOMMU` (GENERIC, the hmp(4)
+scheduler stack, `options IOMMU`).
+
+Out of tree, through LinuxKPI (GPL, BSD glue):
+[`drm-komeda-kmod`](https://github.com/JamesKane/drm-komeda-kmod) (display),
+[`drm-panthor-kmod`](https://github.com/JamesKane/drm-panthor-kmod) (GPU),
+[`aipu-kmod`](https://github.com/JamesKane/aipu-kmod) (NPU), on drm-kmod's
+`sysfbdrm`; NPU user space in
+[`aipu-umd`](https://github.com/JamesKane/aipu-umd).
+
+The board still runs with settings: `loader.conf` `kernel="kernel.iommu"`,
+`kern.eventtimer.timer="Sky1 GPT"`, `hw.iommu.dma="1"`,
+`hw.smmu.bypass_named="0"`, `drm.debug="0"`; `rc.conf` C3 idle and the
+branch's `powerd`. Each is a default still to make.
 
 ## The strategy
 
