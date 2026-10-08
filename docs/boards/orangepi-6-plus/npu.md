@@ -17,15 +17,25 @@ user-mode driver **4.1.0**, the release CIX's kernel driver 6.2.0 comes from
 CIX's MobileNetV2 (model hub, the ELF graph inside its `.cix`) labels
 ImageNet images right, about 7.3 ms each, with `tools/npurun`.
 
-**Phase 3 under way (2026-10-08):** `aipu_linux.ko` (aipu-kmod) gives Linux
-programs `/dev/aipu`. CIX's binary `libnoe` 3.1.2 runs under the Linuxulator
-(Rocky 9 base) on a Linux `libaipudrv` built from aipu-umd with Rocky's g++,
-from C and from CIX's Python wheel (a Linux CPython 3.12), with the native
-results. Two `libnoe` bugs, not FreeBSD's, are worked around in the tools:
-`noe_create_job()` dereferences a configuration the header lets default to
-`nullptr`, and the wheel returns outputs as ndarrays that repeat their
-first element when inputs are given as ndarrays. Left: CIX's ONNX Runtime
-provider.
+**Phase 3 done (2026-10-08):** `aipu_linux.ko` (aipu-kmod) gives Linux
+programs `/dev/aipu`, and CIX's binary stack runs under the Linuxulator
+(Rocky 9 base) with the native results:
+
+- `libnoe` 3.1.2, on a Linux `libaipudrv` built from aipu-umd with Rocky's
+  g++, from C and from its Python wheel (a Linux CPython 3.12);
+- ONNX Runtime 1.22 with the Zhouyi provider (`cix-npu-onnxruntime`
+  1.2.0), which compiles ONNX models for the NPU on the board: Python 3.11
+  and conda-forge's libstdc++ 14 (Rocky's is too old); its own `libaipudrv`
+  build matches the driver. MobileNetV2 from the ONNX model zoo, quantized
+  to int8 on the board, ~13.8 ms.
+
+None of the problems found was FreeBSD's. `libnoe`: `noe_create_job()`
+dereferences a configuration its header lets default to `nullptr`, and the
+wheel returns outputs as ndarrays that repeat their first element when
+inputs are ndarrays. The provider's compiler: float depthwise (and larger
+float) convolutions do not compile, a lone quantized BatchNormalization
+comes out wrong without a word, and a Reshape shape's 0 is read as a size.
+aipu-umd's `tools/ort/prepare.py` works around the last three.
 
 Stock Ubuntu on the board has no NPU stack installed (no module, no
 packages): it comes from CIX's and Radxa's package repositories.
@@ -96,7 +106,7 @@ sizes), so the port supports one generation: **3.x**, matching driver
    China's samples, running a graph compiled on an x86-64 Linux host
    (CixBuilder) or a precompiled one from CIX's model hub. This is the
    first test of the whole stack.
-3. **Linux shim:** `/dev/aipu` under the Linuxulator (a Linux ioctl
+3. **Linux shim** (done): `/dev/aipu` under the Linuxulator (a Linux ioctl
    handler; the structs are the same on arm64, so it passes through, as
    `qcom_fastrpc_linux` does), for `libnoe`, the ONNX Runtime provider
    and the Python wheels, all glibc-only.
