@@ -13,6 +13,7 @@ directory records what we found, so nobody has to find it again.
 | [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, GPU devfreq, `_LPI` deep idle, power profiles |
 | [gpu-display.md](gpu-display.md) | msmfb (display KMS), sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
 | [npu.md](npu.md) | the compute DSP and NPU: FastRPC, QNN under the Linux layer, model conversion, the two ports |
+| [vpu.md](vpu.md) | the video codec (Qualcomm Iris, VPU 2.0): hardware, Linux's driver, what FreeBSD lacks, plan (scope) |
 | [lessons.md](lessons.md) | **read first**: things that reset the SoC, debugging method, gotchas |
 
 ## Final status (2026-10-02)
@@ -43,6 +44,7 @@ what remains needs hardware we don't have, or is not started.
 |---|---|
 | DisplayPort over USB-C | A USB-C display or adapter. Notifications are read and acknowledged; the PHY's DP side, DP0/DP1 clocks and a second output remain ([usb.md](usb.md)) |
 | Microphone, headset buttons | A headset with a microphone |
+| Video codec (Iris, decode) | Not started; scoped in [vpu.md](vpu.md): a clock controller driver, DMA through the apps SMMU for LinuxKPI, then Linux's Iris on vpu-kmod's V4L2 port |
 | Wi-Fi/Bluetooth, camera | Not investigated |
 | Serial console | The header's pins are unread (1.8 V); a console would catch any hang that leaves nothing behind |
 | Warm-boot hangs | None since the GLINK fix; not proven gone |
@@ -89,6 +91,7 @@ what remains needs hardware we don't have, or is not started.
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation | Works: `qcom_pmic_glink` switches each PHY's lanes to the plug ([usb.md](usb.md)) | `sys/dev/qcom_pmic_glink` |
 | USB-C DisplayPort alt mode | Not done: notifications read and acknowledged; PHY, clocks and a second output to do ([usb.md](usb.md)). Power delivery is the ADSP's: devices on both ports are powered | `sys/dev/qcom_pmic_glink` |
+| Video codec | Not done: Qualcomm Iris at `0x0AA00000`, inside `\_SB.GPU0`'s resources ([vpu.md](vpu.md)) | — |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio | Headphone playback through `pcm0` and jack detection work, in GENERIC; microphone not yet. A boot-time failure (on 1 boot in 3 or 4 the ADSP stopped answering, so no sound until a reboot; a panic before src `c515bf20f4`) came from `qcom_pmic_glink` opening its channel over and over before the ADSP's service was up; fixed in src `657b6698d0` (open once the ADSP announces it), every boot good since | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
 | NPU (compute DSP, Hexagon v68) | **QNN runs on the NPU** ([npu.md](npu.md)), installed from the `misc/linux-fastrpc` and `misc/qairt` ports: QAIRT 2.51's Linux build on Rocky 9 under the Linux layer; MobileNetV2 converted and quantized on the board classifies in 0.94 ms an image vs 18.8 ms on QNN's CPU backend (79 vs 84 of 100 ImageNet samples right). Underneath: `qcom_rpmh` and `qcom_adsp` start the CDSP (its boot votes let go once it is up), `qcom_fastrpc` gives Linux's FastRPC interface (`fastrpc_test` passes natively too), `qcom_fastrpc_linux` takes it to Linux programs, `hw.soc` and `linsysfs` show them the SoC | `sys/dev/qcom_fastrpc`, `sys/dev/qcom_rpmh`, `sys/dev/qcom_adsp`, `sys/compat/linsysfs` |
