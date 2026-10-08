@@ -111,9 +111,15 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
 ## Plan
 
 0. **Linux check**: done, above.
-1. **Power and clocks** (`qcom_videocc`, BSD, freebsd-src): GCC video AXI
-   clock, MMCX/MX votes, the GDSCs, `video_pll0` and the MVS0 clocks. Goal:
-   the codec's registers read sensibly (its wrapper version).
+1. **Power and clocks** (done, 2026-10-08: `qcom_videocc`, freebsd-src
+   `3dafe231c2`, with `qcom_rpmh_arc_vote_level()`): MX nominal and MMCX
+   turbo (only ever raised: nothing aggregates the APPS votes, and the
+   display runs on UEFI's), the always-on clocks, `video_pll0` at 1599 MHz,
+   the core clock source, MVS0C and its clocks with the resets pulsed, then
+   MVS0 and its clock. `hw.qcom_videocc.test` reads the codec's wrapper
+   version: **`0x60100608` (6.16)**, the same over six power cycles, the
+   display undisturbed. UEFI leaves the PLL unconfigured and both power
+   domains off.
 2. **DMA through the apps SMMU** (freebsd-src): an iommu(4) backend for the
    MMU-500 on top of `qcom_smmu`'s page tables, giving the codec a
    translating busdma tag with the IOVA window above. Goal: a test
@@ -131,8 +137,6 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
 
 ## Open questions
 
-- What UEFI leaves in the videocc: moot for `video_pll0` (Linux programs
-  it at probe; FreeBSD must too), and readable only with MMCX on.
 - Whether the hypervisor allows the codec's streams through a stage 1
   context bank with no changes (the DSPs' did), and what stream `0x2a07` is
   for (Radxa adds it; upstream's devicetree has only `0x2a00`).
