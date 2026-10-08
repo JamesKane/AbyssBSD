@@ -42,7 +42,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 : "${ABYSS_GH:=https://github.com/JamesKane}"
 : "${ABYSS_PORTS_UPSTREAM:=https://github.com/freebsd/freebsd-ports.git}"
 
-: "${ABYSS_SRC_BRANCH:=radxa-dragon-q8b}"
+: "${ABYSS_SRC_BRANCH:=orangepi-6-plus}"
 : "${ABYSS_DRM_BRANCH:=sysfbdrm}"
 : "${ABYSS_FW_BRANCH:=qcom}"
 : "${ABYSS_MSM_BRANCH:=main}"

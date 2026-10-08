@@ -18,7 +18,9 @@ desktop written in Swift 6 on Wayland. See [README.md](README.md).
 
 ## Repositories
 
-- `src/` is a submodule: `JamesKane/freebsd-src`, branch `radxa-dragon-q8b`.
+- `src/` is a submodule: `JamesKane/freebsd-src`, branch `orangepi-6-plus`
+  (the Q8B's `radxa-dragon-q8b` with the Orange Pi 6 Plus work on top; it
+  runs both boards).
 - `kmod/drm/` is `JamesKane/drm-kmod`, branch `sysfbdrm`.
 - `firmware/` is `JamesKane/drm-kmod-firmware`, branch `qcom`.
 

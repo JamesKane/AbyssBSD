@@ -1,7 +1,7 @@
 [submodule "src"]
 	path = src
 	url = https://github.com/JamesKane/freebsd-src.git
-	branch = radxa-dragon-q8b
+	branch = orangepi-6-plus
 [submodule "kmod/drm"]
 	path = kmod/drm
 	url = https://github.com/JamesKane/drm-kmod.git
