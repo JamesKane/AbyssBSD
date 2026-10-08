@@ -44,7 +44,7 @@ what remains needs hardware we don't have, or is not started.
 |---|---|
 | DisplayPort over USB-C | A USB-C display or adapter. Notifications are read and acknowledged; the PHY's DP side, DP0/DP1 clocks and a second output remain ([usb.md](usb.md)) |
 | Microphone, headset buttons | A headset with a microphone |
-| Video codec (Iris, decode) | Not started; scoped in [vpu.md](vpu.md): a clock controller driver, DMA through the apps SMMU for LinuxKPI, then Linux's Iris on vpu-kmod's V4L2 port |
+| Video codec (Iris) | Not started on FreeBSD; on Linux it decodes H.264, HEVC and VP9 bit-exactly (phase 0). Scoped in [vpu.md](vpu.md): a clock controller driver, DMA through the apps SMMU for LinuxKPI, then Linux's Iris on vpu-kmod's V4L2 port |
 | Wi-Fi/Bluetooth, camera | Not investigated |
 | Serial console | The header's pins are unread (1.8 V); a console would catch any hang that leaves nothing behind |
 | Warm-boot hangs | None since the GLINK fix; not proven gone |

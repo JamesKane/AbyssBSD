@@ -24,6 +24,16 @@ dump** is written.
   unmatched. That's a global fault (`sCR0` USFCFG=1, GFIE=1), and the SoC
   resets the instant the GMU leaves reset. (Cost: about 8 power cycles.)
 
+- **Dumping a clock controller's registers under Linux**
+  (`/sys/kernel/debug/regmap/<controller>/registers`, even through `grep`,
+  which still reads them all). Regmap's debugfs bypasses runtime PM: the
+  video clock controller lives in the MMCX power domain, which Linux holds
+  on only while the codec runs. The Iris phase 0 script crashed the board
+  this way within seconds, leaving Ubuntu's journal to recover.
+  `clk_summary` goes through the clock framework and was fine. The same
+  rule holds for FreeBSD drivers: vote the domain on before touching a
+  clock controller.
+
 ## Things that panic or hang
 
 - **`read(2)` on `/dev/mem` for the framebuffer** panics arm64

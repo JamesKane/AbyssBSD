@@ -55,10 +55,12 @@ Radxa's `sc8280xp-radxa-dragon-q8b.dtb`):
 | Firmware | `qcom/vpu/vpu20_p4_gen2_s6.mbn` (2.0 MB, gen2 HFI), what Radxa's devicetree names; also `qcom/sc8280xp/qcvss8280.mbn`, identical to Lenovo's X13s image | Radxa's `radxa-firmware` package (on the board's Ubuntu partition) |
 | Applications | FFmpeg `*_v4l2m2m`, GStreamer `v4l2`, mpv | FreeBSD packages, as on the Orange Pi |
 
-On this chip Iris **decodes only**: H.264, HEVC and VP9 (no AV1 on VPU
-2.0; Radxa's `sc8280xp_data` lists decoder formats only). Encoding would
-need the older `venus` driver (gen1 firmware, HFI 6xx, decoder and encoder),
-which upstream builds only without Iris. It could be a later phase.
+On this chip Iris decodes H.264, HEVC and VP9 (no AV1 on VPU 2.0).
+Radxa's kernel also registers an encoder (H.264, HEVC), although its
+`sc8280xp_data` lists decoder formats only (phase 0, below); FFmpeg's
+encoder crashed against it, so encoding is unproven. The older `venus`
+driver (gen1 firmware, HFI 6xx) is the other route to encoding; upstream
+builds it only without Iris.
 
 Armbian's patch notes that driving the Q8B's gen2 firmware with gen1 HFI
 fails at `SYS_INIT` ("bad packet size (64 should be 20)"): the firmware and
@@ -75,13 +77,40 @@ the driver's platform data must match.
 | Clocks, power domains | `qcom_gpucc` (the GPU's clock controller, fixed rates), `qcom_clk` building blocks | **`qcom_videocc`**: MVS0C/MVS0 GDSCs, the MVS0 clocks, `video_pll0` (Lucid 5LPE, unless UEFI left it configured), the GCC video AXI clock and reset |
 | A device to attach | msm owns `\_SB.GPU0` | The codec as its own device: a child added from the SoC table (`\_SB.SOID`), as `qcom_apps_smmu` finds its SMMU, with the registers and interrupt above |
 
+## Phase 0: Linux on the board (done, 2026-10-08)
+
+Radxa's Ubuntu (7.0.11-7-qcom, FFmpeg 8.0.1), booted once from FreeBSD's
+loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
+
+- **Decode works, bit-exactly**: FFmpeg's `h264_v4l2m2m` (1080p, B-frames),
+  `hevc_v4l2m2m` (1080p) and `vp9_v4l2m2m` (720p), frame MD5s against
+  FFmpeg's software decoders: all match; 120 frames in 0.89, 0.95 and
+  0.47 s. `/dev/video0` (`Iris Decoder`): H.264, HEVC, VP9 to NV12, P010
+  and Qualcomm's compressed `Q08C`/`Q10C`.
+- **An encoder registers too** (`/dev/video1`, `Iris Encoder`: H.264 and
+  HEVC from NV12 or `Q08C`), against what this scope first said. FFmpeg's
+  `h264_v4l2m2m` encoder segfaulted at once, writing nothing; whether
+  FFmpeg or the driver is at fault is not known.
+- **Clocks while running**: `video_pll0` 1599 MHz; `video_cc_mvs0c_clk`
+  799.5 MHz (PLL / 2); `video_cc_mvs0_clk` 533 MHz (PLL / 3, the 533 MHz
+  OPP); `gcc_video_axi0_clk` on. Linux configures `video_pll0` itself at
+  probe (`clk_lucid_pll_configure`), so FreeBSD must too, whatever UEFI
+  leaves.
+- **Power domains**: `mvs0c_gdsc` on (software-controlled), `mvs0_gdsc` on
+  (hardware-controlled, `HW`); RPMh `mx` at level 256 (nominal) and `mmcx`
+  at 384 (turbo), as the 533 MHz OPP requires. The video clock controller
+  is itself in MMCX: **reading its registers with MMCX off resets the SoC**
+  ([lessons.md](lessons.md)).
+- **Bandwidth**: `cpu-cfg` and `video-mem` paths voted (1000 kB/s average
+  when idle).
+- **SMMU**: the apps SMMU (`15000000`, MMU-500, 110 context banks, 36-bit
+  VA), IOMMU group 9.
+- Interrupt 206 (`iris`) counted 835 for the three decodes. The firmware
+  logs no version string.
+
 ## Plan
 
-0. **Linux check** (no code): boot the board's Ubuntu once (`efibootmgr -n`),
-   decode with FFmpeg's `h264_v4l2m2m`, and record what Linux does: the
-   clock rates and PLL state, the votes, the firmware's version string, the
-   SMMU context. This confirms the hardware, firmware and driver before
-   any porting.
+0. **Linux check**: done, above.
 1. **Power and clocks** (`qcom_videocc`, BSD, freebsd-src): GCC video AXI
    clock, MMCX/MX votes, the GDSCs, `video_pll0` and the MVS0 clocks. Goal:
    the codec's registers read sensibly (its wrapper version).
@@ -97,14 +126,13 @@ the driver's platform data must match.
    FFmpeg's `h264_v4l2m2m` checked bit-exactly against software, then HEVC
    and VP9, 4K.
 5. **Integration**: DVFS (the six core-clock levels, rails and bandwidth
-   per level), loading at boot, the firmware in a package; encode through
-   `venus` if wanted.
+   per level), loading at boot, the firmware in a package; the encoder
+   (first why FFmpeg's crashes on Linux).
 
 ## Open questions
 
-- Whether UEFI leaves `video_pll0` and the videocc configured (it starts the
-  display and GPU, not the codec). Phase 0 can read the registers under
-  Linux and under FreeBSD.
+- What UEFI leaves in the videocc: moot for `video_pll0` (Linux programs
+  it at probe; FreeBSD must too), and readable only with MMCX on.
 - Whether the hypervisor allows the codec's streams through a stage 1
   context bank with no changes (the DSPs' did), and what stream `0x2a07` is
   for (Radxa adds it; upstream's devicetree has only `0x2a00`).

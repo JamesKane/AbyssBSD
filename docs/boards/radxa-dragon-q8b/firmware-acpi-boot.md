@@ -100,3 +100,31 @@ msm, stmmac and dwc3. It's the baseline for register diffs and benchmarks:
 Its reference sources:
 - Radxa kernel `github.com/radxa/kernel`, branch `linux-7.0.11`;
 - the firmware DT (`live.dts`) from `/proc/device-tree`.
+
+**Booting Ubuntu once from FreeBSD** (no keyboard needed). The UEFI boot
+variables live in TrustZone (Linux reaches them through `qcom_uefisecapp`),
+so `efibootmgr -n` gets "Function not implemented". Instead FreeBSD's
+loader chain-loads Ubuntu's systemd-boot (`EFI/BOOT/BOOTAA64.EFI` on the
+NVMe's ESP, loader device `disk2p2`), once:
+- `/boot/loader.conf.local` on the NVMe root runs
+  `exec="include /boot/chain-once.lua"`;
+- `/boot/chain-once` is `once="YES"` and then the loader command;
+- `chain-once.lua` overwrites the first line with `once="NO" ` in place (as
+  nextboot does) and only then runs the command, so whatever happens the
+  next boot is FreeBSD's. `once="TEST"` checks the in-place write without
+  chaining; the result is in `kenv chain_once`.
+
+To arm it:
+`printf 'once="YES"\nchain disk2p2:/EFI/BOOT/BOOTAA64.EFI\n' > /boot/chain-once`,
+then reboot. From Ubuntu, `sudo reboot` comes back to FreeBSD.
+
+What doesn't work:
+- `/boot/lua/local.lua` on the NVMe root: the loader runs Lua from the
+  stick's root (whose own `local.lua` finds the NVMe root, above).
+- `exec=` in `nextboot.conf`: the loader runs it before it marks the file
+  used, so every later boot would chain too. (`rc` deletes the file with
+  `nextboot -D`, which hides whether the loader's rewrite worked.)
+
+FreeBSD's `ext2fs` refuses an ext4 that `needs_recovery` (after a crash);
+e2fsprogs' `debugfs` reads it, but not files whose directory entries are
+still only in the journal. Booting Ubuntu replays it.
