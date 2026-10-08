@@ -51,9 +51,10 @@ non-cacheable for the NPU), and walks its tables cacheably on a coherent
 SMMU. Every translated device benefits.
 
 The firmware has twelve performance domains: the CPU clusters (`lit0`,
-`mid0`/`mid1`, `big0`/`big1`, `dsu0`; the big cores start at 1.9 GHz of a
-possible ~2.6), the GPU's two, NPU, VPU, the CI-700 interconnect and the
-media hub. That is a CPU frequency driver waiting to be written.
+`mid0`/`mid1`, `big0`/`big1`, `dsu0`), the GPU's two, NPU, VPU, the CI-700
+interconnect and the media hub. The CPUs' are already driven, through ACPI
+CPPC (`acpi_cppc`, 800 to 2600 MHz under powerd); the GPU's, VPU's and
+interconnect's are not.
 
 Stock Ubuntu on the board has no NPU stack installed (no module, no
 packages): it comes from CIX's and Radxa's package repositories.
