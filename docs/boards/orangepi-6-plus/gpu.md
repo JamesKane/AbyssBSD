@@ -98,6 +98,12 @@ need the mesa ports' driver list extended, as turnip was for the Q8B.
    were given a `pgoff` of 0 (Linux 7.0's shmem helper finds the page by it),
    and every interrupt ran in the network epoch, so a threaded handler that
    slept (panthor's MMU fault handler) panicked.
+5. **DVFS** (done 2026-10-08). The GPU's `_DSD` names SCMI performance
+   domain 0 (`gpu_core`: 72, 216, 350, 600, 800, 1000 MHz; the firmware
+   leaves it at 1000). panthor's devfreq is redone without Linux's devfreq
+   and OPP cores, the same policy (`simple_ondemand`, 45/5, every 50 ms)
+   over `sky1_scmi`'s performance protocol. Idle, the GPU drops to 72 MHz;
+   glmark2 takes it to 1000. `dev.panthor.0.freq_fixed` pins a level.
 
 ## Performance
 
