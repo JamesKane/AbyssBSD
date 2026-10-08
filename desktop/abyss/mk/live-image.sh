@@ -13,6 +13,11 @@
 #   usage: abyss/mk/live-image.sh [--out PATH] [--dist DIR] [--stage DIR]
 #                                 [--build-dir DIR] [--size N] [--keep]
 #                                 [--stay] [--frames N] [--ssh-key PUBKEY]
+#                                 [--kmods DIR]
+#
+# `--kmods` puts the `.ko` files in DIR on the medium in place of the drm-kmod
+# package: a drm-kmod built against the kernel in `--dist`, for testing a
+# LinuxKPI or driver change. The firmware still comes from packages.
 #
 # `--ssh-key` bakes a public key in and starts sshd, so a bring-up machine can be
 # driven from the dev box instead of photographed. **Developer builds only** —
@@ -54,6 +59,7 @@ trace=${ABYSS_LIVE_TRACE:-}
 # it is a thing a developer builds for themselves, never the artifact anybody
 # else is handed, and the key is the one belonging to whoever built it.
 sshkey=${ABYSS_LIVE_SSH_KEY:-}
+kmods=
 
 # **Kept before the loop eats them.** The cache fingerprint has to include the
 # arguments — `--stay`, `--frames` and `--ssh-key` each change what is written
@@ -82,12 +88,15 @@ while [ $# -gt 0 ]; do
     --stay)      stay=1; shift ;;
     --frames)    frames=$2; shift 2 ;;
     --ssh-key)   sshkey=$2; shift 2 ;;
-    -h|--help)   sed -n '2,20p' "$0"; exit 0 ;;
+    --kmods)     kmods=$2; shift 2 ;;
+    -h|--help)   sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "usage: live-image.sh [--out PATH] [--dist DIR] [--size N] [--keep]" >&2; exit 2 ;;
   esac
 done
 
 die() { echo "live-image: $1" >&2; exit 1; }
+[ -z "$kmods" ] || [ -n "$(find "$kmods" -maxdepth 1 -name '*.ko' 2>/dev/null)" ] \
+  || die "no kernel modules in --kmods $kmods"
 
 [ "$(uname -s)" = FreeBSD ] || die "the medium is built on FreeBSD (makefs, mkimg, and an ldd that agrees with it)"
 [ -s "$dist/base.txz" ] && [ -s "$dist/kernel.txz" ] || die "no distribution sets in $dist"
@@ -231,6 +240,7 @@ DLOPEN_LIBS="/usr/local/lib/libEGL_mesa.so.0
 #
 drm_kmod=$(pkg rquery '%dn' drm-kmod 2>/dev/null | grep '^drm-.*-kmod$' | head -1)
 [ -n "$drm_kmod" ] || drm_kmod=drm-66-kmod   # no catalogue to ask: the 15.0 answer
+[ -z "$kmods" ] || drm_kmod=                   # --kmods brings its own
 GPU_PKGS="$drm_kmod seatd
           gpu-firmware-amd-kmod-navy-flounder gpu-firmware-amd-kmod-sienna-cichlid
           gpu-firmware-amd-kmod-dimgrey-cavefish gpu-firmware-amd-kmod-beige-goby
@@ -281,6 +291,11 @@ fingerprint() {
     echo "args:$orig_args"
     for s in base.txz kernel.txz; do
       [ -f "$dist/$s" ] && stat -f '%N %z %m' "$dist/$s" 2>/dev/null
+    done
+    # The modules by content: the path alone is in the arguments, and a rebuilt
+    # drm-kmod at the same path is a different medium.
+    [ -z "$kmods" ] || find "$kmods" -maxdepth 1 -name '*.ko' | sort | while read -r f; do
+      sha256 -q "$f" 2>/dev/null || sha256sum "$f"
     done
     for b in $BINARIES; do
       [ -f "$builddir/$b" ] && { sha256 -q "$builddir/$b" 2>/dev/null || sha256sum "$builddir/$b"; }
@@ -490,6 +505,11 @@ if [ -z "${ABYSS_NO_CACHE:-}" ] && [ -f "$gpu_cache/.complete" ]; then
   say "   (reusing the fetched graphics packages)"
 else
   sudo rm -rf "$gpudir"; sudo mkdir -p "$gpudir"
+fi
+if [ -n "$kmods" ]; then
+  sudo mkdir -p "$de/boot/modules"
+  sudo install -m 555 "$kmods"/*.ko "$de/boot/modules/"
+  say "   drm-kmod from $kmods: $(cd "$kmods" && echo *.ko)"
 fi
 # shellcheck disable=SC2086
 if [ -n "$(sudo find "$gpudir" -name '*.pkg' 2>/dev/null)" ] \
