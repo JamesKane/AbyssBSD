@@ -227,14 +227,18 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
        or MP4 output fails to write its header ("Could not write header"),
        and FFmpeg then hangs stopping the encoder. Remux the raw stream
        afterwards. This may be what crashed FFmpeg on Linux (phase 0).
-     - **The last frame is lost** (29 of 30, 59 of 60, 89 of 90): traced
-       with DTrace, all inputs reach the firmware before the drain command
-       and all come back, but the firmware returns one encoded frame fewer
-       and drains by returning the remaining output buffers empty, without
-       the LAST flag; Iris marks those as errors, and FFmpeg ends there.
-       The firmware's doing: Radxa pairs this VPU 2.0 gen2 firmware with
-       the VPU 3 encoder tables, a combination upstream doesn't support.
-       Not yet compared on Linux.
+     - **FFmpeg loses the last frame** (29 of 30, 59 of 60, 89 of 90).
+       Not the firmware or the port: a V4L2 test program that drains as
+       v4l2-ctl does (`STOP`, then capture until `V4L2_BUF_FLAG_LAST`) gets
+       30 of 30 on FreeBSD, the end marked by an empty `LAST` buffer, and
+       v4l2-ctl gets 30 of 30 on Linux. Iris also returns empty capture
+       buffers flagged `ERROR` (the firmware's empty outputs) along the
+       way; FFmpeg 8.0 (`libavcodec/v4l2_context.c`) ends a drain at the
+       first capture buffer with no bytes, LAST or not, so it stops at one
+       of those while the last frame is still being encoded.
+     - On Linux (Radxa's 7.0.11 kernel, Ubuntu's FFmpeg 8.0.1) FFmpeg's
+       encoder segfaults at once, raw output too, so phase 0's crash isn't
+       about Matroska; v4l2-ctl 1.32 encodes there.
 
    VP9 to FFmpeg's `null` output logs `driver decode error` for 9 of 120
    frames of the test clip: Iris returns VP9's hidden frames (not to be
