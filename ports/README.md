@@ -9,6 +9,10 @@ Added here (the Q8B's NPU, see docs/boards/radxa-dragon-q8b/npu.md):
   Q8B's DSP files.
 - `misc/qairt`: Qualcomm's QNN runtime, built from the user's own SDK
   download (`QAIRT_SDK=`), never packaged (`NO_PACKAGE`).
+- `multimedia/ffmpeg`: FFmpeg 9.0.2 with `patch-libavcodec_v4l2__context.c`,
+  so a V4L2 drain doesn't end at an empty buffer the driver failed (Iris's
+  encoder returns those): without it FFmpeg loses an encode's last frame
+  (docs/boards/radxa-dragon-q8b/vpu.md). For upstream FFmpeg.
 - `multimedia/qcom-iris-firmware`: the video codec's firmware, from
   Radxa's firmware release (see docs/boards/radxa-dragon-q8b/vpu.md);
   packaged for local use only, as Radxa states no terms for it.

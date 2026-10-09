@@ -235,7 +235,11 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
        buffers flagged `ERROR` (the firmware's empty outputs) along the
        way; FFmpeg 8.0 (`libavcodec/v4l2_context.c`) ends a drain at the
        first capture buffer with no bytes, LAST or not, so it stops at one
-       of those while the last frame is still being encoded.
+       of those while the last frame is still being encoded. **Fixed** in
+       the ports overlay's `multimedia/ffmpeg` (9.0.2, patched): an empty
+       buffer flagged `ERROR` and not `LAST` goes back to the driver and
+       the drain goes on. 30/30, 60/60, 90/90 H.264 and 4K HEVC 60/60;
+       decoding as before. To send to FFmpeg upstream.
      - On Linux (Radxa's 7.0.11 kernel, Ubuntu's FFmpeg 8.0.1) FFmpeg's
        encoder segfaults at once, raw output too, so phase 0's crash isn't
        about Matroska; v4l2-ctl 1.32 encodes there.
