@@ -116,7 +116,7 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
 0. **Linux check**: done, above.
 1. **Power and clocks** (done, 2026-10-08: `qcom_videocc`, freebsd-src
    `3dafe231c2`, with `qcom_rpmh_arc_vote_level()`): MX nominal and MMCX
-   turbo (only ever raised: nothing aggregates the APPS votes, and the
+   turbo (then only ever raised: nothing aggregated the APPS votes, and the
    display runs on UEFI's), the always-on clocks, `video_pll0` at 1599 MHz,
    the core clock source, MVS0C and its clocks with the resets pulsed, then
    MVS0 and its clock. `hw.qcom_videocc.test` reads the codec's wrapper
@@ -188,13 +188,19 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
      MMCX levels; Iris's OPP calls pick one, rails raised before the clock
      and lowered after it. The codec runs at 560 MHz decoding (366 MHz in
      between), 240 MHz when it suspends (1.5 s idle), and its rails then
-     drop to floors. Nothing aggregates APPS RPMh votes, so the floors keep
-     what other users need: **MMCX nominal** covers the display UEFI set up
-     (DP2; its MDP clock runs at 300 MHz from `disp0_cc_pll1` at 600 MHz,
-     read from `0xaf00000`; nominal covers MDP to 500 MHz and any DP link
-     rate), MX SVS. Tunables `hw.qcom_videocc.mmcx_floor`/`mx_floor`;
-     `dev.qcom_iris.0.core_hz` shows the rate. Bit-exact as before. The
-     MM1 bandwidth vote is still only raised.
+     drop to what others need. **Votes are aggregated** since freebsd-src
+     `c0c41fe205` (2026-10-09): drivers hold `qcom_rpmh` requests per
+     resource, RPMh gets a rail's highest and a BCM's summed average and
+     highest peak, as on Linux; `hw.qcom_rpmh.votes` lists them. A
+     "firmware" request stands in for what UEFI voted (unreadable) for the
+     display it set up: **MMCX nominal** (DP2; its MDP clock runs at
+     300 MHz from `disp0_cc_pll1` at 600 MHz, read from `0xaf00000`;
+     nominal covers MDP to 500 MHz and any DP link rate), MX SVS, and MM1
+     at its peak (UEFI's bandwidth vote unknown). Decoding 4K, MMCX goes to
+     416 (the codec's), back to 256 when idle. The codec's MM1 request is
+     its peak while Iris asks for bandwidth, none otherwise (vpu-kmod
+     `f693ea1`). `dev.qcom_iris.0.core_hz` shows the rate. Bit-exact as
+     before; the regression snapshot and the FastRPC suite pass.
    - **Loading at boot** (done, 2026-10-09): the board's default kernel
      is `GENERIC-IOMMU` (`/boot/kernel`; GENERIC #138 kept as
      `/boot/kernel.138`); `lkpi_v4l2.ko` and `qcom_iris.ko` in
