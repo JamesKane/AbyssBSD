@@ -1,0 +1,4 @@
+Qualcomm's firmware for the video codec (Iris, VPU 2.0, gen2 HFI) of the
+SC8280XP on the Radxa Dragon Q8B, as Radxa distributes it: the image the
+qcom_iris driver (https://github.com/JamesKane/vpu-kmod) loads through
+TrustZone for hardware H.264, HEVC and VP9 decoding.

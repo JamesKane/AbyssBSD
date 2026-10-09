@@ -195,7 +195,27 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
      rate), MX SVS. Tunables `hw.qcom_videocc.mmcx_floor`/`mx_floor`;
      `dev.qcom_iris.0.core_hz` shows the rate. Bit-exact as before. The
      MM1 bandwidth vote is still only raised.
-   - Loading at boot, the firmware in a package: to do.
+   - **Loading at boot** (done, 2026-10-09): the board's default kernel
+     is `GENERIC-IOMMU` (`/boot/kernel`; GENERIC #138 kept as
+     `/boot/kernel.138`); `lkpi_v4l2.ko` and `qcom_iris.ko` in
+     `/boot/modules`, `kld_list="qcom_iris"` (its dependencies load with
+     it); `/etc/devfs.rules` gives the `video` group `/dev/video*`:
+
+         [localrules=10]
+         add path 'video*' mode 0660 group video
+
+     with `devfs_system_ruleset="localrules"`. A user in `video` decodes
+     right after boot: the glue loads the firmware at attach (vpu-kmod
+     `bb83e6a`), since firmware(9) loads images only for privileged
+     callers and Iris loads its own at the first open. The regression
+     snapshot (`q8b-regress.sh`) matches GENERIC #138's but for the
+     codec's modules; glmark2 equal.
+   - **The firmware in a package** (done, 2026-10-09): the ports overlay's
+     `multimedia/qcom-iris-firmware` installs
+     `/boot/firmware/qcom/vpu/vpu20_p4_gen2_s6.mbn` from Radxa's
+     `radxa-firmware` 0.2.42 (the distfile `misc/linux-fastrpc` uses).
+     Radxa states no terms for the image, so the port builds packages for
+     local use and allows no mirroring (`LICENSE_PERMS=auto-accept`).
    - The encoder (first why FFmpeg's crashes on Linux): to do.
 
    VP9 to FFmpeg's `null` output logs `driver decode error` for 9 of 120

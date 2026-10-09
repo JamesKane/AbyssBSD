@@ -9,6 +9,9 @@ Added here (the Q8B's NPU, see docs/boards/radxa-dragon-q8b/npu.md):
   Q8B's DSP files.
 - `misc/qairt`: Qualcomm's QNN runtime, built from the user's own SDK
   download (`QAIRT_SDK=`), never packaged (`NO_PACKAGE`).
+- `multimedia/qcom-iris-firmware`: the video codec's firmware, from
+  Radxa's firmware release (see docs/boards/radxa-dragon-q8b/vpu.md);
+  packaged for local use only, as Radxa states no terms for it.
 
     poudriere ports -c -p abyss -m null -M $PWD/ports
     poudriere bulk -j <jail> -p default -O abyss <origins>
