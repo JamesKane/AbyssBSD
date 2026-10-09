@@ -180,9 +180,28 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
    freebsd-src `cca7efd203`: it only marks the interrupt disabled, as Linux
    doesn't wait either. Load, decode, unload, reload, decode and unload
    (with `lkpi_v4l2.ko`) all work.
-5. **Integration**: DVFS (the six core-clock levels, rails and bandwidth
-   per level), loading at boot, the firmware in a package; the encoder
-   (first why FFmpeg's crashes on Linux).
+5. **Integration** (in progress):
+   - **DVFS** (done, 2026-10-09; freebsd-src `90554e208c`, vpu-kmod
+     `60d4f77`): `qcom_videocc` knows Linux's six levels (240, 338, 366,
+     444, 533, 560 MHz), each a `video_pll0` rate (the core clock is the
+     PLL / 3: L `0x25`/`0x34`/`0x39`/`0x45`/`0x53`/`0x57`) with its MX and
+     MMCX levels; Iris's OPP calls pick one, rails raised before the clock
+     and lowered after it. The codec runs at 560 MHz decoding (366 MHz in
+     between), 240 MHz when it suspends (1.5 s idle), and its rails then
+     drop to floors. Nothing aggregates APPS RPMh votes, so the floors keep
+     what other users need: **MMCX nominal** covers the display UEFI set up
+     (DP2; its MDP clock runs at 300 MHz from `disp0_cc_pll1` at 600 MHz,
+     read from `0xaf00000`; nominal covers MDP to 500 MHz and any DP link
+     rate), MX SVS. Tunables `hw.qcom_videocc.mmcx_floor`/`mx_floor`;
+     `dev.qcom_iris.0.core_hz` shows the rate. Bit-exact as before. The
+     MM1 bandwidth vote is still only raised.
+   - Loading at boot, the firmware in a package: to do.
+   - The encoder (first why FFmpeg's crashes on Linux): to do.
+
+   VP9 to FFmpeg's `null` output logs `driver decode error` for 9 of 120
+   frames of the test clip (1 with `framemd5`, whose 120 frames still
+   match); the same with the clock pinned, so not DVFS. Not yet checked
+   on Linux.
 
 ## Open questions
 
