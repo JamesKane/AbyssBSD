@@ -174,7 +174,12 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
      VM object LinuxKPI makes only after the driver's mmap, and every
      buffer mmap panicked.
 
-   Still open: unloading `qcom_iris.ko` panics.
+   Unloading `qcom_iris.ko` deadlocked: Iris powers off with
+   `disable_irq_nosync()` holding the lock its threaded handler takes, and
+   LinuxKPI's tore the handler down, waiting for that thread. Fixed in
+   freebsd-src `cca7efd203`: it only marks the interrupt disabled, as Linux
+   doesn't wait either. Load, decode, unload, reload, decode and unload
+   (with `lkpi_v4l2.ko`) all work.
 5. **Integration**: DVFS (the six core-clock levels, rails and bandwidth
    per level), loading at boot, the firmware in a package; the encoder
    (first why FFmpeg's crashes on Linux).
