@@ -216,12 +216,31 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
      `radxa-firmware` 0.2.42 (the distfile `misc/linux-fastrpc` uses).
      Radxa states no terms for the image, so the port builds packages for
      local use and allows no mirroring (`LICENSE_PERMS=auto-accept`).
-   - The encoder (first why FFmpeg's crashes on Linux): to do.
+   - **The encoder** (works, 2026-10-09; no changes needed): FFmpeg's
+     `h264_v4l2m2m` and `hevc_v4l2m2m` encode NV12 at 720p, 1080p and 4K
+     (1080p H.264 at 8 Mbit/s: 7.3x real time). Software decodes the
+     streams cleanly (H.264 High, level 5.0); PSNR against the source
+     43-47 dB (1080p H.264 at 8 Mbit/s: 45.4 dB; HEVC 46.6; 4K at 20 Mbit/s
+     43.2 and 43.6). Two things to know:
+     - **Write raw streams** (`-f h264`, `-f hevc`): FFmpeg's V4L2
+       encoder has no codec headers before the first packet, so Matroska
+       or MP4 output fails to write its header ("Could not write header"),
+       and FFmpeg then hangs stopping the encoder. Remux the raw stream
+       afterwards. This may be what crashed FFmpeg on Linux (phase 0).
+     - **The last frame is lost** (29 of 30, 59 of 60, 89 of 90): traced
+       with DTrace, all inputs reach the firmware before the drain command
+       and all come back, but the firmware returns one encoded frame fewer
+       and drains by returning the remaining output buffers empty, without
+       the LAST flag; Iris marks those as errors, and FFmpeg ends there.
+       The firmware's doing: Radxa pairs this VPU 2.0 gen2 firmware with
+       the VPU 3 encoder tables, a combination upstream doesn't support.
+       Not yet compared on Linux.
 
    VP9 to FFmpeg's `null` output logs `driver decode error` for 9 of 120
-   frames of the test clip (1 with `framemd5`, whose 120 frames still
-   match); the same with the clock pinned, so not DVFS. Not yet checked
-   on Linux.
+   frames of the test clip: Iris returns VP9's hidden frames (not to be
+   shown) as `V4L2_BUF_FLAG_ERROR` buffers by design
+   (`HFI_GEN2_PICTURE_NOSHOW`), and FFmpeg logs each. Harmless: the shown
+   frames match.
 
 ## Open questions
 
