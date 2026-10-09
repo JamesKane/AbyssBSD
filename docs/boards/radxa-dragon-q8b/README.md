@@ -13,7 +13,7 @@ directory records what we found, so nobody has to find it again.
 | [power-thermal-idle.md](power-thermal-idle.md) | EPSS cpufreq, TSENS, per-domain powerd, GPU devfreq, `_LPI` deep idle, power profiles |
 | [gpu-display.md](gpu-display.md) | msmfb (display KMS), sysfbdrm, the Adreno 690 via msm, SMMU, SCM, Mesa, performance |
 | [npu.md](npu.md) | the compute DSP and NPU: FastRPC, QNN under the Linux layer, model conversion, the two ports |
-| [vpu.md](vpu.md) | the video codec (Qualcomm Iris, VPU 2.0): hardware, Linux's driver, what FreeBSD lacks, plan (scope) |
+| [vpu.md](vpu.md) | the video codec (Qualcomm Iris, VPU 2.0): Linux's driver through LinuxKPI, clocks, SMMU, DVFS, FFmpeg |
 | [lessons.md](lessons.md) | **read first**: things that reset the SoC, debugging method, gotchas |
 
 ## Final status (2026-10-02)
@@ -44,8 +44,8 @@ what remains needs hardware we don't have, or is not started.
 |---|---|
 | DisplayPort over USB-C | A USB-C display or adapter. Notifications are read and acknowledged; the PHY's DP side, DP0/DP1 clocks and a second output remain ([usb.md](usb.md)) |
 | Microphone, headset buttons | A headset with a microphone |
-| Video codec (Iris) | Not started on FreeBSD; on Linux it decodes H.264, HEVC and VP9 bit-exactly (phase 0). Scoped in [vpu.md](vpu.md): a clock controller driver, DMA through the apps SMMU for LinuxKPI, then Linux's Iris on vpu-kmod's V4L2 port |
-| Wi-Fi/Bluetooth, camera | Not investigated |
+| Wi-Fi/Bluetooth | A card for the M.2 E-key slot (`wlan-connector` in Radxa's devicetree: PCIe, USB and UART); the board has none: PCIe root ports 5 and 6 are empty on Linux and FreeBSD |
+| Camera | A MIPI camera module; the camera subsystem is `camss@ac5a000` (Windows' ACPI has a camera driver) |
 | Serial console | The header's pins are unread (1.8 V); a console would catch any hang that leaves nothing behind |
 | Warm-boot hangs | None since the GLINK fix; not proven gone |
 | One power-off on pulling the headset (2026-10-01) | Never seen again; unexplained |
@@ -94,11 +94,11 @@ what remains needs hardware we don't have, or is not started.
 | I²C | Works: GENI I²C on ACPI (`\_SB.IC13`, the only engine UEFI set up for I²C); RTC and MAC EEPROM (`0x50`) readable | `sys/dev/qcom_geni/qcom_geni_i2c.c` |
 | USB-C orientation | Works: `qcom_pmic_glink` switches each PHY's lanes to the plug ([usb.md](usb.md)) | `sys/dev/qcom_pmic_glink` |
 | USB-C DisplayPort alt mode | Not done: notifications read and acknowledged; PHY, clocks and a second output to do ([usb.md](usb.md)). Power delivery is the ADSP's: devices on both ports are powered | `sys/dev/qcom_pmic_glink` |
-| Video codec | Not done: Qualcomm Iris at `0x0AA00000`, inside `\_SB.GPU0`'s resources ([vpu.md](vpu.md)) | — |
+| Video codec | Works ([vpu.md](vpu.md)): Qualcomm Iris through LinuxKPI (`qcom_iris.ko`, loaded at boot on the default `GENERIC-IOMMU` kernel); FFmpeg's `*_v4l2m2m` decode H.264, HEVC, VP9 bit-exactly up to 4K and encode H.264/HEVC (the ports overlay's patched FFmpeg keeps the last frame); DVFS with the rails | `sys/dev/qcom_videocc`, `sys/dev/qcom_smmu/qcom_apps_iommu.c`, vpu-kmod |
 | Fan | Works: temperature-controlled by Radxa's ADSP service, which `qcom_adsp` starts | `sys/dev/qcom_adsp` |
 | Audio | Headphone playback through `pcm0` and jack detection work, in GENERIC; microphone not yet. A boot-time failure (on 1 boot in 3 or 4 the ADSP stopped answering, so no sound until a reboot; a panic before src `c515bf20f4`) came from `qcom_pmic_glink` opening its channel over and over before the ADSP's service was up; fixed in src `657b6698d0` (open once the ADSP announces it), every boot good since | `sys/dev/qcom_audio`, `sys/dev/qcom_glink` |
 | NPU (compute DSP, Hexagon v68) | **QNN runs on the NPU** ([npu.md](npu.md)), installed from the `misc/linux-fastrpc` and `misc/qairt` ports: QAIRT 2.51's Linux build on Rocky 9 under the Linux layer; MobileNetV2 converted and quantized on the board classifies in 0.94 ms an image vs 18.8 ms on QNN's CPU backend (79 vs 84 of 100 ImageNet samples right). Underneath: `qcom_rpmh` and `qcom_adsp` start the CDSP (its boot votes let go once it is up), `qcom_fastrpc` gives Linux's FastRPC interface (`fastrpc_test` passes natively too), `qcom_fastrpc_linux` takes it to Linux programs, `hw.soc` and `linsysfs` show them the SoC | `sys/dev/qcom_fastrpc`, `sys/dev/qcom_rpmh`, `sys/dev/qcom_adsp`, `sys/compat/linsysfs` |
-| Wi-Fi/BT, camera | Not investigated | — |
+| Wi-Fi/BT, camera | No hardware fitted: the M.2 E-key slot is empty, no camera module (see above) | — |
 | The AbyssBSD desktop on this board | **Runs** (2026-10-01): `anchor` + `undertow` on DP-1 1920×1080@60 through msmfb, GLES on the Adreno, pointer tracking; started at boot by `abyss_desktop` (`abyss_desktop_user=jkane`; log `/var/log/abyss-desktop.log`; `abyssctl quit` returns to the console). Builds and tests (680 tests: 1 skipped, 1 installer-probe bug) | `lang/swift6` for aarch64 |
 
 ## Clock, I²C, SD and devices
