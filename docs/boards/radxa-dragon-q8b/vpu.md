@@ -1,6 +1,9 @@
-# Video codec: Qualcomm Iris (VPU 2.0) (scope)
+# Video codec: Qualcomm Iris (VPU 2.0)
 
-Scope (2026-10-08) for hardware video decoding on the Q8B. The SC8280XP
+**Status (2026-10-09):** H.264, HEVC and VP9 decode on FreeBSD, bit-exact
+(phase 4, below), on `GENERIC-IOMMU` with vpu-kmod's `qcom_iris.ko`.
+
+Scoped 2026-10-08, for hardware video decoding on the Q8B. The SC8280XP
 has Qualcomm's video codec ("Venus", now "Iris", VPU 2.0). It was missing
 from this board's open items: Windows' ACPI hides it inside the GPU's device,
 because the Windows graphics driver runs it too.
@@ -133,13 +136,45 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
    pages translating right, nothing left after unload; the regression test
    and the NPU (FastRPC, 79/100) as before. Found on the way: iommu(4)
    looped forever reserving a region from 0 (fixed in `1464aadaf7`).
-3. **Firmware boot**: the Iris core through LinuxKPI (in vpu-kmod beside
-   `amvx`, sharing `lkpi_v4l2`), PAS 9 into the carve-out, the video memory
-   protection call, HFI queues. Goal: `SYS_INIT` answered, the firmware's
-   version string.
-4. **First decode**: `videobuf2-dma-contig` for LinuxKPI, `/dev/video*`,
-   FFmpeg's `h264_v4l2m2m` checked bit-exactly against software, then HEVC
-   and VP9, 4K.
+3. **Firmware boot** (done, 2026-10-08): Radxa's Iris as `qcom_iris.ko` in
+   vpu-kmod (`9edbcae`), on `lkpi_v4l2.ko` with `v4l2-mem2mem` and
+   `videobuf2-dma-contig` added (`60fbfde`). FreeBSD glue in
+   `freebsd/iris_freebsd*.c`: the device is found from the SoC ID (449),
+   with the registers and GSIV 206 above; it claims the codec's SMMU streams
+   (coherent), drives `qcom_videocc`, votes MM1 bandwidth once, stands in
+   for the power domains, fixes the clock at 533 MHz, and loads the firmware
+   through PAS 9 into the carve-out. Opening `/dev/video0` boots the
+   firmware: **`video-firmware.2.4.2-39cc47c1… PROD`**, and the decoder's
+   formats (H.264, HEVC, VP9 to NV12, P010, `Q08C`, `Q10C`). freebsd-src
+   fixes on the way:
+   - LinuxKPI coherent DMA addresses aligned as Linux's behind an IOMMU
+     (`e736b55c79`): the firmware refused an unaligned queue table
+     ("invalid setting for uc_region").
+   - LinuxKPI `disable_irq_nosync()` from an interrupt handler
+     (`fc6956c2ce`): it slept, panicking at the firmware's first interrupt.
+   - `qcom_scm_mem_protect_video_var()` (`d5eea743f4`); hardware control
+     of the core's power domain (`1417e27c58`); context bank fault reports,
+     `dev.qcom_apps_iommu.0.faults` (`8139e5c234`).
+4. **First decode** (done, 2026-10-09): FFmpeg's `*_v4l2m2m` decoders on
+   FreeBSD, frame MD5s against FFmpeg's software decoders, 120 frames each:
+
+   | Clip | Result | FreeBSD | Linux (phase 0) |
+   |---|---|---|---|
+   | H.264 1080p, B-frames | match | 0.90 s | 0.89 s |
+   | HEVC 1080p | match | 0.76 s | 0.95 s |
+   | VP9 720p | match | 0.46 s | 0.47 s |
+   | H.264 2160p | match | 3.22 s | |
+
+   Five more H.264 runs matched too, with no SMMU faults. Two more fixes:
+   - LinuxKPI runtime PM status queries without the device's lock
+     (freebsd-src `d1c352d56f`): Iris marks itself busy from its resume
+     callback, and recursed on the lock.
+   - `dma_mmap_attrs()` records the range for LinuxKPI's device pager
+     (vpu-kmod `7889fb1`): it called `remap_pfn_range()`, which needs the
+     VM object LinuxKPI makes only after the driver's mmap, and every
+     buffer mmap panicked.
+
+   Still open: unloading `qcom_iris.ko` panics.
 5. **Integration**: DVFS (the six core-clock levels, rails and bandwidth
    per level), loading at boot, the firmware in a package; the encoder
    (first why FFmpeg's crashes on Linux).
