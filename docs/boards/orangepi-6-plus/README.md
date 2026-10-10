@@ -88,8 +88,11 @@ The board's default kernel is `GENERIC-HMP-IOMMU` built from the pushed
 branch (`d513e50da5`, 2026-10-10), with the out-of-tree modules built
 against it in `/boot/kernel`.  It still runs with settings: `loader.conf`
 `kern.eventtimer.timer="Sky1 GPT"`, `hw.iommu.dma="1"`,
-`hw.smmu.bypass_named="0"`, `drm.debug="0"`; `rc.conf` C3 idle and the
-branch's `powerd`. Each is a default still to make.
+`hw.smmu.bypass_named="0"`, `drm.debug="0"`; `rc.conf` C3 idle, the
+branch's `powerd`, and `kld_list` (display, GPU, sound, video codec, NPU);
+`devfs.rules` for the `video` group (`/dev/video*`) and the `npu` group
+(`/dev/aipu`), applied to the Linuxulator's `/dev` too
+(`devfs_set_rulesets`). Each is a default still to make.
 
 ## The strategy
 

@@ -131,6 +131,14 @@ sizes), so the port supports one generation: **3.x**, matching driver
    and the Python wheels, all glibc-only.
 4. **DVFS:** SCMI performance domain 8 through `sky1_scmi`, in place of
    CIX's private `scmi_device_*_freq` helpers.
+5. **At boot** (done): `aipu.ko` and `aipu_linux.ko` in `/boot/kernel`,
+   in `rc.conf`'s `kld_list`. `/dev/aipu` is `root:npu 0660` by a
+   `devfs.rules` line, in `/dev` and the Linuxulator's `/dev`
+   (`devfs_set_rulesets="/compat/linux/dev=localrules"`; that devfs
+   mount has no ruleset otherwise). The driver asks for 0666, but
+   LinuxKPI's `misc_register()` ignores `misc.mode`, so the node is
+   root-only without the rule. Native and Linux MobileNetV2 runs work as
+   a user in `npu`.
 
 ## Open questions
 
