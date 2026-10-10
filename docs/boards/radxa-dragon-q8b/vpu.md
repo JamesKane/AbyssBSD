@@ -195,12 +195,24 @@ loader ([firmware-acpi-boot.md](firmware-acpi-boot.md)):
      "firmware" request stands in for what UEFI voted (unreadable) for the
      display it set up: **MMCX nominal** (DP2; its MDP clock runs at
      300 MHz from `disp0_cc_pll1` at 600 MHz, read from `0xaf00000`;
-     nominal covers MDP to 500 MHz and any DP link rate), MX SVS, and MM1
-     at its peak (UEFI's bandwidth vote unknown). Decoding 4K, MMCX goes to
-     416 (the codec's), back to 256 when idle. The codec's MM1 request is
-     its peak while Iris asks for bandwidth, none otherwise (vpu-kmod
-     `f693ea1`). `dev.qcom_iris.0.core_hz` shows the rate. Bit-exact as
-     before; the regression snapshot and the FastRPC suite pass.
+     nominal covers MDP to 500 MHz and any DP link rate) and MX SVS.
+     Decoding 4K, MMCX goes to 416 (the codec's), back to 256 when idle.
+     `dev.qcom_iris.0.core_hz` shows the rate. Bit-exact as before; the
+     regression snapshot and the FastRPC suite pass.
+   - **Bandwidth, measured on Linux** (2026-10-09, debugfs's interconnect
+     summary, same display at 1920x1080): the display's path to memory is
+     **MM0** (`qnm_mdp0_0/1`, 311 MB/s average each, 800 MB/s peak), a BCM
+     RPMh keeps alive; **MM1** (rotator, video, camera, `qns_mem_noc_sf`)
+     has no votes at all while the codec idles, and decoding 4K Iris votes
+     only its table's minimum, 1000 kB/s average, no peak, on
+     `qnm_video0`. So: no floor on MM1, and the codec votes what Iris asks,
+     in kB/s, converted as Linux's bcm-voter does (MM1: unit 2400000,
+     width 64 from the command DB; the node 32 bytes, one channel):
+     freebsd-src `d513e50da5` (`qcom_rpmh_req_kbps()`), vpu-kmod
+     `91aec0d`. MM1 reads average 1 decoding 4K, 0 idle, as on Linux.
+     Decoding flat out is ~5% slower than with MM1 at its peak (4K H.264
+     2.98-3.24 s vs 2.81-3.18 s for 120 frames; still 38 fps), as fast as
+     Linux.
    - **Loading at boot** (done, 2026-10-09): the board's default kernel
      is `GENERIC-IOMMU` (`/boot/kernel`; GENERIC #138 kept as
      `/boot/kernel.138`); `lkpi_v4l2.ko` and `qcom_iris.ko` in
