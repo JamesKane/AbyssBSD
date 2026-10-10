@@ -47,7 +47,7 @@ what remains needs hardware we don't have, or is not started.
 | Wi-Fi/Bluetooth | A card for the M.2 E-key slot (`wlan-connector` in Radxa's devicetree: PCIe, USB and UART); the board has none: PCIe root ports 5 and 6 are empty on Linux and FreeBSD |
 | Camera | A MIPI camera module; the camera subsystem is `camss@ac5a000` (Windows' ACPI has a camera driver) |
 | Serial console | The header's pins are unread (1.8 V); a console would catch any hang that leaves nothing behind |
-| Warm-boot hangs | None since the GLINK fix; not proven gone |
+| Warm-boot hangs | None: 30 of 30 warm reboots good (2026-10-10, src `d513e50da5`; each boot checked modules, devices, both DSPs, network, audio, a bit-exact H.264 decode and the boot log). Cold boots are not covered |
 | One power-off on pulling the headset (2026-10-01) | Never seen again; unexplained |
 | NPU details | QNN's harmless `GraphHtpSettings option 66` log; the DSP's own log (adspmsgd) is silent; quantization costs MobileNetV2 5 points |
 | `lang/swift6` for aarch64 | Port changes in the ports fork, not yet committed; the bootstrap is a local distfile |
