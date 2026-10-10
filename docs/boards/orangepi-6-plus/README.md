@@ -84,7 +84,9 @@ Out of tree, through LinuxKPI (GPL, BSD glue):
 `sysfbdrm`; NPU user space in
 [`aipu-umd`](https://github.com/JamesKane/aipu-umd).
 
-The board still runs with settings: `loader.conf` `kernel="kernel.iommu"`,
+The board's default kernel is `GENERIC-HMP-IOMMU` built from the pushed
+branch (`d513e50da5`, 2026-10-10), with the out-of-tree modules built
+against it in `/boot/kernel`.  It still runs with settings: `loader.conf`
 `kern.eventtimer.timer="Sky1 GPT"`, `hw.iommu.dma="1"`,
 `hw.smmu.bypass_named="0"`, `drm.debug="0"`; `rc.conf` C3 idle and the
 branch's `powerd`. Each is a default still to make.
