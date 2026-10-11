@@ -63,7 +63,7 @@ did.
 | Audio | HDA controller `CIXH6020` at `0x70c0000` with a Realtek **ALC269VC** codec; I2S ×4, an audio DSP `CIXH6000` | cix-ipbloq-hda | **plays**: `hdac`/`snd_hda` on ACPI; recording and jack sense untested; codec lost on 3 warm boots on 2026-10-06, not since (30-boot soak 2026-10-11 clean); no I2S or DSP |
 | Video codec | `CIXH3010`, Arm Mali-V (Linlon v5276), four cores | amvx_dev | **decodes and encodes**: [vpu-kmod](https://github.com/JamesKane/vpu-kmod) (CIX's driver and Linux's V4L2 core through LinuxKPI), loaded at boot; FFmpeg's `*_v4l2m2m` decode H.264, HEVC, VP9 bit-exactly and encode H.264, HEVC ([vpu.md](vpu.md)) |
 | NPU | Zhouyi X2 (`CIXH4000`, `CIXH4010` ×3), 30 TOPS | (vendor) | **works**: CIX's driver through LinuxKPI ([`aipu-kmod`](https://github.com/JamesKane/aipu-kmod)), Arm China's user driver ([`aipu-umd`](https://github.com/JamesKane/aipu-umd)), CIX's binary stack and ONNX Runtime under the Linuxulator, DVFS ([npu.md](npu.md)) |
-| Other | TPM (`MSFT0101`, on SPI0 CS0; likely not fitted: no `TPM2` table, the 40-pin header's spidev `TP3` claims the same chip select, and Linux binds neither), OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM, battery/AC objects | — | none |
+| Other | TPM (`MSFT0101`, on SPI0 CS0; likely not fitted: no `TPM2` table, the 40-pin header's spidev `TP3` claims the same chip select, and Linux binds neither), OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM (`CIXH2011`: only PWM0 enabled, the eDP backlight's; no fan device, the thermal zones' `_SCP` are empty, so the fan isn't the OS's to drive), battery/AC objects | — | none |
 
 Firmware bugs seen: the DSDT names `I2C0.UXC0`–`UXC3` (USB-C controllers)
 that don't exist (`AE_NOT_FOUND` at load, harmless on Linux).
