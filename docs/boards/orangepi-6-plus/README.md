@@ -57,13 +57,14 @@ did.
 | USB-C / PD | RTS5453H PD controllers on I²C (`CIXH200D`); DP alt mode through `CIXH2033` | rts5453h | `rts5453` reports the ports' state; no DP alt mode |
 | UART | 4 SBSA UARTs `ARMH0011` (`0x40b0000`…`0x40d0000`); DBG2 names COM2 at `0x40d0000`; **no SPCR** | sbsa-uart | `uart_pl011` attaches; no automatic serial console |
 | GPIO, I²C, pins | Cadence GPIO (`CIXH1002`/`1003`), Cadence I²C ×7 (`CIXH200B`), pinctrl (`CIXHA016`/`017`) | cdns-* | **works**: `cdnc_i2c` on ACPI (Linux's receive state machine), `cdns_gpio`; the RX8900 RTC (`rx8803`); writes beyond the FIFO untested; no pinctrl |
+| SPI | Cadence SPI (`CIXH2001`): SPI0 on the 40-pin header, `num-cs` 2, spidev devices `TP3` (CS0) and `TP4` (CS1) as `SPT0002`, 500 kHz mode 0; SPI1 disabled; pins already muxed by the firmware | spi-cadence, spidev | **works**: `zy7_spi` (Zynq's driver, the same IP) on ACPI, `spigen` on the header devices as `/dev/spigen0.0`/`0.1`; 781 kHz–50 MHz (200 MHz reference, divider 4–256), 8-deep FIFO, all four modes, 16 KB transfers; data not yet checked by loopback. Fixed two `acpi_spibus` bugs on the way: every ACPI child got chip select 0, and a reloaded controller found no children |
 | Clocks, resets, power | SCMI over a mailbox (`CIXHA006`, `CIXHA001` ×6, PCCT type 2 at `0x83bf1280`), clock controller `CIXHA010`, resets `CIXHA020`/`021`, PDC `CIXHA019` | scmi, clk-sky1-acpi | **`cix_mbox`** + **`sky1_scmi`**: clocks, power domains (TF-A), performance domains (DVFS); resets by the reset registers |
 | Display | Linlon DP ×5 (`CIXH5010`) + Trilinear DP TX (`CIXH502F`), eDP panel; monitor on DP-4; UEFI GOP framebuffer handed over | linlondp, simpledrm | **works on DP-4 (HDMI)**: komeda + CIX's DP transmitter through LinuxKPI ([`drm-komeda-kmod`](https://github.com/JamesKane/drm-komeda-kmod)), translated by the SMMU; no EDID behind the PS185 (Linux neither); other outputs and eDP untried |
 | GPU | Immortalis-G720 MC10 (`CIXH5000`), devfreq | panthor | **works**: panthor from Linux 7.0 through LinuxKPI ([`drm-panthor-kmod`](https://github.com/JamesKane/drm-panthor-kmod)), GLES 3.1 in Mesa, sway; DVFS 72–1000 MHz ([gpu.md](gpu.md)) |
 | Audio | HDA controller `CIXH6020` at `0x70c0000` with a Realtek **ALC269VC** codec; I2S ×4, an audio DSP `CIXH6000` | cix-ipbloq-hda | **plays**: `hdac`/`snd_hda` on ACPI; recording and jack sense untested; codec lost on 3 warm boots on 2026-10-06, not since (30-boot soak 2026-10-11 clean); no I2S or DSP |
 | Video codec | `CIXH3010`, Arm Mali-V (Linlon v5276), four cores | amvx_dev | **decodes and encodes**: [vpu-kmod](https://github.com/JamesKane/vpu-kmod) (CIX's driver and Linux's V4L2 core through LinuxKPI), loaded at boot; FFmpeg's `*_v4l2m2m` decode H.264, HEVC, VP9 bit-exactly and encode H.264, HEVC ([vpu.md](vpu.md)) |
 | NPU | Zhouyi X2 (`CIXH4000`, `CIXH4010` ×3), 30 TOPS | (vendor) | **works**: CIX's driver through LinuxKPI ([`aipu-kmod`](https://github.com/JamesKane/aipu-kmod)), Arm China's user driver ([`aipu-umd`](https://github.com/JamesKane/aipu-umd)), CIX's binary stack and ONNX Runtime under the Linuxulator, DVFS ([npu.md](npu.md)) |
-| Other | TPM (`MSFT0101`, on SPI0 CS0; likely not fitted: no `TPM2` table, the 40-pin header's spidev `TP3` claims the same chip select, and Linux binds neither), OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM (`CIXH2011`: only PWM0 enabled, the eDP backlight's; no fan device, the thermal zones' `_SCP` are empty, so the fan isn't the OS's to drive), battery/AC objects | — | none |
+| Other | TPM (`MSFT0101`, on SPI0 CS0): **not fitted**; no `TPM2` table, the 40-pin header's spidev `TP3` claims the same chip select, Linux binds neither, and a TIS read of its ID on CS0 returns only the pull-up's `ff` (2026-10-11); OP-TEE (`CIXHA022`), DMA-350 (`CIXH1006`, `CIXHA014`), PWM (`CIXH2011`: only PWM0 enabled, the eDP backlight's; no fan device, the thermal zones' `_SCP` are empty, so the fan isn't the OS's to drive), battery/AC objects | — | none |
 
 Firmware bugs seen: the DSDT names `I2C0.UXC0`–`UXC3` (USB-C controllers)
 that don't exist (`AE_NOT_FOUND` at load, harmless on Linux).
@@ -95,11 +96,12 @@ Out of tree, through LinuxKPI (GPL, BSD glue):
 [`aipu-umd`](https://github.com/JamesKane/aipu-umd).
 
 The board's default kernel is `GENERIC-HMP-IOMMU` built from the pushed
-branch (`d513e50da5`, 2026-10-10), with the out-of-tree modules built
+branch (`f12c9f4ee6`, 2026-10-11), with the out-of-tree modules built
 against it in `/boot/kernel`.  It still runs with settings: `loader.conf`
 `kern.eventtimer.timer="Sky1 GPT"`, `hw.iommu.dma="1"`,
 `hw.smmu.bypass_named="0"`, `drm.debug="0"`; `rc.conf` C3 idle, the
-branch's `powerd`, and `kld_list` (display, GPU, sound, video codec, NPU);
+branch's `powerd`, and `kld_list` (display, GPU, sound, video codec, NPU,
+`spigen`);
 `devfs.rules` for the `video` group (`/dev/video*`) and the `npu` group
 (`/dev/aipu`), applied to the Linuxulator's `/dev` too
 (`devfs_set_rulesets`). Each is a default still to make.
