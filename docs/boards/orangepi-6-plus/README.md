@@ -68,6 +68,16 @@ did.
 Firmware bugs seen: the DSDT names `I2C0.UXC0`–`UXC3` (USB-C controllers)
 that don't exist (`AE_NOT_FOUND` at load, harmless on Linux).
 
+Memory: the DSDT's `CIXA1019` lists three "no-map" pools in `RSVL`
+(`0xd0000000` 7 MB for the audio DMA controller, `0xd0700000` 7 MB for HDA,
+`0xcde08000` 1 MB for the DSP), but the EFI memory map hands them over as
+free memory, and FreeBSD uses them as RAM. They are carve-outs for CIX's own
+Linux drivers, not memory the firmware keeps: CIX's kernel reserves them (and
+the DSP's 32 MB at `0xce000000`) only when booted with `acpi=force`, from a
+table compiled into it, and its `RSVL` lookup refuses a pool that isn't
+already reserved. Nothing writes there unless a driver puts it to use;
+FreeBSD has no I2S or DSP driver, and its HDA buffers come from the DMA window.
+
 ## Branches and repositories
 
 Kernel: freebsd-src branch **`orangepi-6-plus`**, FreeBSD `main` of
