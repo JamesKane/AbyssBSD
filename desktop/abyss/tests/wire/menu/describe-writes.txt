@@ -1,0 +1,10 @@
+describe
+app "W"
+menu "File"
+  command "file.save" "Save"
+    summary "Save."
+    writes
+    enabled
+  command "file.close" "Close"
+    summary "Close."
+    enabled

@@ -1,0 +1,3 @@
+decode-only
+describe
+malformed "key equivalent with no key"

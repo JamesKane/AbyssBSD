@@ -1,0 +1,6 @@
+activate
+verb "file.go"
+arg "path" "/tmp/ü x"
+arg "times" "2"
+arg "zeta" ""
+arg "ñ" "\"q\""

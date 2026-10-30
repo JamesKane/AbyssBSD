@@ -1,0 +1,3 @@
+decode-only
+describe
+malformed "menu item of unknown kind"

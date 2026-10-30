@@ -143,6 +143,16 @@ From HANDOFF §5.3, still true:
   `.ini` is one long key. Rust's `pool-config` reads it as LF; fix the Swift
   half to match while it still runs, and drop `crlf*` from the fixtures'
   `DIVERGENT` list.
+- **Swift's `Command.retitled` drops `writes`** (found 2026-10-30, porting
+  MenuModel). It rebuilds the command without the flag, so a retitled
+  command that writes would stop asking an agent first (P18.11). Nothing
+  hits it today: only Undo, Redo and Force Quit are retitled. Rust's
+  `menu-model` keeps the flag.
+- **Swift's MenuService blocks on a subscriber that stops reading**
+  (found 2026-10-30). Subscriber sockets are blocking with no send timeout,
+  so once one's buffer fills, `changed()` stalls the application's run loop.
+  Rust's `menu-wire` sets the request timeout as a send timeout and drops
+  the subscriber.
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

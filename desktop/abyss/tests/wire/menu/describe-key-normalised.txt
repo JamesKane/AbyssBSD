@@ -1,0 +1,7 @@
+decode-only
+describe
+app "X"
+menu "M"
+  command "v" "T"
+    summary ""
+    key 3 "char:q" "⇧⌘Q"

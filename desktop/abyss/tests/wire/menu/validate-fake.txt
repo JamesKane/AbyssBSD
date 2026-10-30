@@ -1,0 +1,6 @@
+validate
+"app.about" enabled
+"edit.paste" disabled "the clipboard is empty"
+"file.go" enabled
+"file.oldest" enabled
+"file.open" enabled

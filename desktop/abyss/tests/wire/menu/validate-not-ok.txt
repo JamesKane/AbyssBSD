@@ -1,0 +1,3 @@
+decode-only
+validate
+service "the service said no"

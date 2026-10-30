@@ -1,0 +1,10 @@
+[package]
+name = "menu-wire"
+description = "MenuWire: an application's vocabulary on the control plane: describe, validate, activate, subscribe (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+menu-model = { path = "../menumodel" }

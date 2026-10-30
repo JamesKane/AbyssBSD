@@ -154,6 +154,25 @@ compare and sort by bytes, not canonical equivalence. Ten cases differ from
 Swift for these reasons. Each is listed in the test and pinned as
 `<case>.rust.txt`; the other 19 match.
 
+*menumodel and menuwire, 2026-10-30:* taken together, since the wire is
+made of the model's types. `de/menumodel` (crate `menu-model`) is
+Command.swift: commands, key equivalents, menus, enablement, results and the
+GTK menu address, with no dependencies. `de/menuwire` (crate `menu-wire`) is
+Wire.swift, Service.swift and Client.swift: the same four methods, nested
+`Msg`s and the same checks before `perform`. Swift holds its provider
+weakly; here the application lends itself to each `service_readable` call,
+so "the application has gone" cannot happen. A subscriber gets a send
+timeout, so one that stops reading is dropped rather than blocking the
+application (Swift blocks, BACKLOG §5). Fixtures in `abyss/tests/wire/menu`:
+30 replies and requests (13 re-encoded to the byte, 4 decoded only, 13 that
+both refuse with the same words), plus `service-names.txt`. A key is one
+`char` where Swift's is one Character, and names are slugged a `char` at a
+time. Because of that, a letter with a combining accent is not a key, and
+the service names differ for decomposed accents, İ, a final ς and emoji
+sequences. Those two cases are pinned as `.rust.txt`. Swift's tests ported,
+as well as GtkMenuAddress's round trip (the rest of GtkMenusTests is
+`dbusmenus`, R3).
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +

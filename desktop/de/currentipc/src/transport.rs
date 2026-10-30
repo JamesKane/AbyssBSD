@@ -39,10 +39,10 @@ fn choose_runtime_dir(abyss: Option<&str>, xdg: Option<&str>, uid: u32) -> Strin
 /// `dir`, created if missing, and 0700 either way.
 fn make_private_dir(dir: &str) -> Result<(), Error> {
     // Existing already is success, as mkdir's EEXIST was.
-    if let Err(e) = DirBuilder::new().mode(0o700).create(&dir) {
-        if e.kind() != ErrorKind::AlreadyExists {
-            return Err(Error::system(&e, format!("mkdir {dir}")));
-        }
+    if let Err(e) = DirBuilder::new().mode(0o700).create(dir)
+        && e.kind() != ErrorKind::AlreadyExists
+    {
+        return Err(Error::system(&e, format!("mkdir {dir}")));
     }
     fs::set_permissions(dir, Permissions::from_mode(0o700))
         .map_err(|e| Error::system(&e, format!("chmod 0700 {dir}")))?;

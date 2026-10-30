@@ -1,0 +1,30 @@
+describe
+app "Fake"
+menu "Fake"
+  command "app.about" "About Fake"
+    summary "Say what this is."
+    enabled
+menu "File"
+  command "file.open" "Open"
+    summary "Open it."
+    key 1 "char:o" "⌘O"
+    alternate 1 "down" "⌘↓"
+    enabled
+  separator
+  submenu "Recent"
+    submenu "Older"
+      command "file.oldest" "Oldest"
+        summary "Three deep."
+        key 7 "char:9" "⌥⇧⌘9"
+        enabled
+  command "file.go" "Go…"
+    summary "Go somewhere."
+    argument "path" path "Where."
+    argument "times" integer "How often."
+    enabled
+menu "Edit"
+  command "edit.paste" "Paste"
+    summary "Paste."
+    key 1 "char:v" "⌘V"
+    disabled "the clipboard is empty"
+menu "Empty"

@@ -1,0 +1,3 @@
+decode-only
+activate
+malformed "argument times is not text"

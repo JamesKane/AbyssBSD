@@ -1,0 +1,6 @@
+[package]
+name = "menu-model"
+description = "MenuModel: what an application can do, as a value: commands, key equivalents, menus (Swift: Command.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
