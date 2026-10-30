@@ -83,6 +83,13 @@ if [ "$vm" -eq 1 ]; then
   ABYSS_VM_DIR="$root/abyss/vm"
   export ABYSS_VM_DIR
   . "$root/abyss/vm/config.sh"
+  # --full installs AbyssBSD and boots it under nested bhyve, and a bhyve
+  # guest gets no VMX: that run is the qemu guest's (its qcow2 stays here).
+  if [ "$full" -eq 1 ] && [ "$ABYSS_VMM" = bhyve ]; then
+    echo "run.sh: --full needs nested virtualization, which a bhyve guest lacks;" >&2
+    echo "        run it on the qemu build guest: ABYSS_VMM=qemu abyss/tests/run.sh --vm --full" >&2
+    exit 2
+  fi
   phase "syncing to the FreeBSD VM"
   "$root/abyss/vm/sync.sh"
   phase "abyss/tests/run.sh, in the guest"

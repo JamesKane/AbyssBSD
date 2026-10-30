@@ -163,11 +163,12 @@ esac
 # LAN: the guest's address comes from DHCP and run.sh records it from the
 # serial log. The box has 20 threads and 128 GB, so its guests get more than
 # this host can spare. riscv64 has no bhyve: the rv64 guest is qemu.
-# The builder moved to bhyve on 2026-10-30 (bhyve-migrate.sh); the build
-# guest is still qemu here until it moves the same way.
+# The builder and the build guest moved to bhyve on 2026-10-30
+# (bhyve-migrate.sh). The build guest's qcow2 stays here for --full, which
+# needs nested virtualization (README): ABYSS_VMM=qemu picks it.
 case "$ABYSS_VM_ROLE" in
-  builder) : "${ABYSS_VMM:=bhyve}" ;;
-  *)       : "${ABYSS_VMM:=qemu}" ;;
+  build|builder) : "${ABYSS_VMM:=bhyve}" ;;
+  *)             : "${ABYSS_VMM:=qemu}" ;;
 esac
 if [ "$ABYSS_VMM" = bhyve ]; then
   : "${ABYSS_BHYVE_HOST:=abyss-build}"

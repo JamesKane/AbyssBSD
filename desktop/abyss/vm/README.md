@@ -64,6 +64,12 @@ below.
   (`ip<role>` beside the disks) for `ssh.sh` and the rest, which reach it
   on port 22. The VM's console is `doas cu -l /dev/nmdm-abyss-<name>.1B`
   on the box. riscv64 has no bhyve: the rv64 guest stays qemu.
+- **`--full` stays on qemu.** Its tests install AbyssBSD and boot it under
+  nested bhyve, and a bhyve guest gets no VMX ("processor does not support
+  VMX operation"). The build guest's qcow2 stays here for it:
+  `ABYSS_VMM=qemu abyss/tests/run.sh --vm --full` (run.sh refuses `--full`
+  on bhyve). The two copies share nothing but the source synced into them,
+  so packages installed on one are not on the other.
 
 - **The riscv64 guest** (`ABYSS_VM_ROLE=rv64`, RUST.md R0, §6.10) is
   FreeBSD/riscv64 under TCG: `fetch-image.sh`, `ABYSS_DAEMON=1 ./run.sh`,
