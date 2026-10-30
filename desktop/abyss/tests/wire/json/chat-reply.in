@@ -1,0 +1,7 @@
+ {
+   "id": "c1", "choices": [ { "index": 0, "message": { "role": "assistant", "content": null,
+     "tool_calls": [ { "id": "t1", "type": "function",
+       "function": { "name": "describe", "arguments": "{\"app\":\"TextEdit\"}" } } ] },
+     "finish_reason": "tool_calls" } ],
+   "usage": { "prompt_tokens": 1200, "completion_tokens": 34, "total_tokens": 1234 }
+ }	

@@ -1,0 +1,12 @@
+[package]
+name = "vocabulary"
+description = "Vocabulary: the bridge an agent drives the applications it was given through, by their own menu services (Swift: Bridge.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+menu-model = { path = "../menumodel" }
+menu-wire = { path = "../menuwire" }
+model = { path = "../model" }

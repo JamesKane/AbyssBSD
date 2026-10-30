@@ -1,0 +1,14 @@
+> give menus.textedit.42
+given "TextEdit"
+log given {"app":"TextEdit","service":"menus.textedit.42"}
+> kill menus.textedit.42
+> request describe "TextEdit"
+reply ok=0 error="TextEdit did not answer: gone"
+> request activate "TextEdit" "file.save"
+reply ok=0 error="TextEdit did not answer: gone"
+log activate {"app":"TextEdit","verb":"file.save","failed":"gone"}
+> request activate "TextEdit" "file.close"
+reply ok=0 error="TextEdit did not answer: gone"
+log activate {"app":"TextEdit","verb":"file.close","failed":"gone"}
+> request apps
+reply ok=1 apps="TextEdit"

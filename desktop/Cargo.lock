@@ -96,6 +96,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "model"
+version = "0.1.0"
+
+[[package]]
 name = "pool-config"
 version = "0.1.0"
 dependencies = [
@@ -127,3 +131,13 @@ version = "0.1.0"
 [[package]]
 name = "text-model"
 version = "0.1.0"
+
+[[package]]
+name = "vocabulary"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+ "menu-model",
+ "menu-wire",
+ "model",
+]

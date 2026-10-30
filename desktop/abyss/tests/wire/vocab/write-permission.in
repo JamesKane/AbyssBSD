@@ -1,0 +1,9 @@
+give menus.textedit.42
+request activate "TextEdit" "file.save"
+request activate "TextEdit" "file.close"
+permit TextEdit no
+request activate "TextEdit" "file.save"
+permit textedit yes
+request activate "TextEdit" "file.save"
+request activate "TextEdit" "no.such.verb"
+request activate "TextEdit" ""

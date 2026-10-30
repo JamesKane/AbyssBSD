@@ -1,0 +1,38 @@
+> give menus.grab.7
+given "Grab"
+log given {"app":"Grab","service":"menus.grab.7"}
+> give menus.textedit.42
+given "TextEdit"
+log given {"app":"TextEdit","service":"menus.textedit.42"}
+> give menus.preview.9
+given "Preview"
+log given {"app":"Preview","service":"menus.preview.9"}
+> request apps
+reply ok=1 apps="Grab\nTextEdit\nPreview"
+> give menus.textedit.43
+given "TextEdit"
+log given {"app":"TextEdit","service":"menus.textedit.43"}
+> request apps
+reply ok=1 apps="Grab\nPreview\nTextEdit"
+> give menus.grab.7
+given "Grab"
+log given {"app":"Grab","service":"menus.grab.7"}
+> request apps
+reply ok=1 apps="Preview\nTextEdit\nGrab"
+> take textedit
+taken 1
+log taken {"app":"textedit"}
+> take TextEdit
+taken 0
+> request activate "TextEdit" "file.close"
+reply ok=0 error="TextEdit was not given to this session"
+log refused {"app":"TextEdit","reason":"not given"}
+> take Nobody
+taken 0
+> give menus.nothing.1
+not given: gone
+> request apps
+reply ok=1 apps="Preview\nGrab"
+> request activate "Grab" "capture.screen"
+reply ok=1 text="ok: /home/a/Screen.png"
+log activate {"app":"Grab","verb":"capture.screen","arguments":{},"result":"ok"}

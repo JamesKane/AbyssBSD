@@ -1,0 +1,6 @@
+give menus.textedit.42
+kill menus.textedit.42
+request describe "TextEdit"
+request activate "TextEdit" "file.save"
+request activate "TextEdit" "file.close"
+request apps

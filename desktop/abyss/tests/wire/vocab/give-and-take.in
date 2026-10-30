@@ -1,0 +1,15 @@
+give menus.grab.7
+give menus.textedit.42
+give menus.preview.9
+request apps
+give menus.textedit.43
+request apps
+give menus.grab.7
+request apps
+take textedit
+take TextEdit
+request activate "TextEdit" "file.close"
+take Nobody
+give menus.nothing.1
+request apps
+request activate "Grab" "capture.screen"

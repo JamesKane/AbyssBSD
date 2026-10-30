@@ -1,0 +1,11 @@
+request apps
+give menus.textedit.42
+request apps
+request describe "Grab"
+request activate "Grab" "capture.screen"
+request describe ""
+request describe
+request give
+request nothing "TextEdit"
+request describe "TextEdit"
+request describe "TEXTEDIT"

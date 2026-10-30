@@ -1,0 +1,8 @@
+give menus.preview.9
+give menus.textedit.42
+request describe "Preview"
+request activate "Preview" "go.page" "page=3"
+request activate "Preview" "file.export" "path=/home/a/b c.pdf"
+permit Preview yes
+request activate "Preview" "file.export" "path=/home/a/b c.pdf\nz=last\na==b\n\nno equals\npath=/x \"quoted\" é"
+request activate "TextEdit" "edit.find" "text=a=b\ncase=yes\n=empty key"

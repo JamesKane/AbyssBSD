@@ -204,6 +204,13 @@ From HANDOFF §5.3, still true:
   the person's own `jails.ini`, so this weakens a confinement they set up
   rather than giving anyone else a way in. Compare bytes (`utf8`), as
   Rust's `jails` does; `secret`'s `contains` has the same shape.
+- **The vocabulary bridge runs a write unasked when an application will
+  not describe itself** (found 2026-10-30, porting Vocabulary). Requester
+  1's check is `try? menus.describe(s)`: when that fails, the check is
+  skipped and the verb is activated, so an application that stops answering
+  `describe` but still answers `activate` has a verb that writes run without
+  the person being asked (P18.11). Refuse instead, as Rust's `vocabulary`
+  does, in the words a failed activation already uses.
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

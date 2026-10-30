@@ -1,0 +1,22 @@
+> give menus.preview.9
+given "Preview"
+log given {"app":"Preview","service":"menus.preview.9"}
+> give menus.textedit.42
+given "TextEdit"
+log given {"app":"TextEdit","service":"menus.textedit.42"}
+> request describe "Preview"
+reply ok=1 text="Preview:\n  go.page — \"Go to Page…\" in Go; arguments: page (integer): The page. [disabled: no document]. Show a page.\n  file.export — \"Export…\" in File; arguments: path (path): Where. [enabled]. Write a copy."
+> request activate "Preview" "go.page" "page=3"
+reply ok=1 text="refused: not now"
+log activate {"app":"Preview","verb":"go.page","arguments":{"page":"3"},"result":"refused","why":"not now"}
+> request activate "Preview" "file.export" "path=/home/a/b c.pdf"
+reply ok=0 permission=1 app="Preview" verb="file.export" title="Export…" error="the person has not allowed Preview to write for you yet; they are being asked"
+log asked {"app":"Preview","verb":"file.export","title":"Export…"}
+> permit Preview yes
+log permitted {"app":"Preview"}
+> request activate "Preview" "file.export" "path=/home/a/b c.pdf\nz=last\na==b\n\nno equals\npath=/x \"quoted\" é"
+reply ok=1 text="ok: wrote /x \"quoted\" é"
+log activate {"app":"Preview","verb":"file.export","arguments":{"a":"=b","path":"/x \"quoted\" é","z":"last"},"result":"ok"}
+> request activate "TextEdit" "edit.find" "text=a=b\ncase=yes\n=empty key"
+reply ok=1 text="refused: not now"
+log activate {"app":"TextEdit","verb":"edit.find","arguments":{"":"empty key","case":"yes","text":"a=b"},"result":"refused","why":"not now"}

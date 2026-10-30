@@ -1,0 +1,27 @@
+> request apps
+reply ok=1 apps=""
+> give menus.textedit.42
+given "TextEdit"
+log given {"app":"TextEdit","service":"menus.textedit.42"}
+> request apps
+reply ok=1 apps="TextEdit"
+> request describe "Grab"
+reply ok=0 error="Grab was not given to this session"
+log refused {"app":"Grab","reason":"not given"}
+> request activate "Grab" "capture.screen"
+reply ok=0 error="Grab was not given to this session"
+log refused {"app":"Grab","reason":"not given"}
+> request describe ""
+reply ok=0 error="that application was not given to this session"
+log refused {"app":"","reason":"not given"}
+> request describe
+reply ok=0 error="that application was not given to this session"
+log refused {"app":"","reason":"not given"}
+> request give
+reply ok=0 error="the vocabulary bridge answers apps, describe and activate"
+> request nothing "TextEdit"
+reply ok=0 error="the vocabulary bridge answers apps, describe and activate"
+> request describe "TextEdit"
+reply ok=1 text="TextEdit:\n  file.save — \"Save\" in File [enabled]. Save the document.\n  file.open — \"Open…\" in File; arguments: path (path): The file. [disabled: a document is open]. Open a file.\n  file.close — \"Close\" in File [enabled]. Close the document.\n  edit.find — \"Find…\" in Edit; arguments: text (string): What to find., case (bool): Match case. [enabled]. Find text."
+> request describe "TEXTEDIT"
+reply ok=1 text="TextEdit:\n  file.save — \"Save\" in File [enabled]. Save the document.\n  file.open — \"Open…\" in File; arguments: path (path): The file. [disabled: a document is open]. Open a file.\n  file.close — \"Close\" in File [enabled]. Close the document.\n  edit.find — \"Find…\" in Edit; arguments: text (string): What to find., case (bool): Match case. [enabled]. Find text."

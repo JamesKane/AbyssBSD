@@ -126,7 +126,7 @@ guest, which now has `rust` 1.99.
 
 **R2. Wire and data crates (M).** `current-ipc`, `pool-config`, `menu-wire`,
 `settings`, `settings-wire`, `fathom`, `install`, `install-wire`, `dbus` (the wire half),
-`menu-model`, `text-model`, `jails`, `system-facts`, `vocab`. Pure Rust, no I/O beyond the
+`menu-model`, `text-model`, `jails`, `system-facts`, `model` (its JSON), `vocabulary`. Pure Rust, no I/O beyond the
 socket and the file. Cross-language fixtures (§3.3) go in here.
 
 *currentipc, 2026-10-30:* `de/currentipc` (crate `current-ipc`) is
@@ -276,6 +276,33 @@ read as nothing where Swift's arithmetic traps. Fixtures in
 `abyss/tests/wire/facts`: 26 captures and number lists through every parser
 and formatter, the sample report among them; 25 match Swift to the line,
 and `pci-crlf` is pinned as `.rust.txt` (Swift's CRLF capture is one line).
+
+*vocab, and the JSON half of model, 2026-10-30:* the bridge writes its
+transcript lines in Model's JSON, and JSON is a wire format and pure, so
+`de/model` (crate `model`) begins with JSON.swift alone; HTTP, the session,
+the transcript and the backends join it with `abyss-model` in R3. Numbers
+are written as Swift writes them: whole ones below 9e15 as integers, others
+by Swift's `Double.description` (decimal from 1e-4 to 2^53 inclusive,
+exponential with a signed two-digit exponent outside it), so the two
+transcripts are the same bytes. Parsing is RFC 8259's: Swift's `Double` and
+`UInt32` parsers also take `+1`, `01`, `.5`, `1.` and `\u+abc`.
+`de/vocab` (crate `vocabulary`) is Bridge.swift: what the agent may drive,
+refusals in words, requester 1, and every step a transcript line; the
+`abyss-vocab` binary is R3's. One change: when the application will not say
+whether a verb writes, the verb is not run. Swift's check is a `try?` that,
+failing, runs it unasked (BACKLOG §5); Rust refuses with the words and the
+transcript line Swift gives when the activation itself fails. Fixtures:
+`abyss/tests/wire/json`, 32 texts and 49 doubles by bit pattern (27 and 49
+match; the five Swift-only number and escape forms are pinned), and
+`abyss/tests/wire/vocab`, five scripts against the same fake applications in
+both languages, every reply and every transcript line matching to the byte.
+
+*R2 is done, 2026-10-30.* Fifteen crates beside their Swift targets, each
+with Swift's tests ported and a corpus Swift writes and both read, in
+`abyss/tests/wire/` (current, pool, menu, settings, install, fathom, dbus,
+text, jails, facts, json, vocab). Where Rust reads differently, the case is
+pinned as `<case>.rust.txt` with its reason; where the difference is a Swift
+bug, it is in BACKLOG §5, to fix once the port is done.
 
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,

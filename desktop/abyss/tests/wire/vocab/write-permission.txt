@@ -1,0 +1,25 @@
+> give menus.textedit.42
+given "TextEdit"
+log given {"app":"TextEdit","service":"menus.textedit.42"}
+> request activate "TextEdit" "file.save"
+reply ok=0 permission=1 app="TextEdit" verb="file.save" title="Save" error="the person has not allowed TextEdit to write for you yet; they are being asked"
+log asked {"app":"TextEdit","verb":"file.save","title":"Save"}
+> request activate "TextEdit" "file.close"
+reply ok=1 text="ok"
+log activate {"app":"TextEdit","verb":"file.close","arguments":{},"result":"ok"}
+> permit TextEdit no
+log denied {"app":"TextEdit"}
+> request activate "TextEdit" "file.save"
+reply ok=0 permission=1 app="TextEdit" verb="file.save" title="Save" error="the person has not allowed TextEdit to write for you yet; they are being asked"
+log asked {"app":"TextEdit","verb":"file.save","title":"Save"}
+> permit textedit yes
+log permitted {"app":"textedit"}
+> request activate "TextEdit" "file.save"
+reply ok=1 text="ok"
+log activate {"app":"TextEdit","verb":"file.save","arguments":{},"result":"ok"}
+> request activate "TextEdit" "no.such.verb"
+reply ok=1 text="refused: not now"
+log activate {"app":"TextEdit","verb":"no.such.verb","arguments":{},"result":"refused","why":"not now"}
+> request activate "TextEdit" ""
+reply ok=1 text="refused: not now"
+log activate {"app":"TextEdit","verb":"","arguments":{},"result":"refused","why":"not now"}

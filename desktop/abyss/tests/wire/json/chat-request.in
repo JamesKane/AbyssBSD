@@ -1,0 +1,1 @@
+{"model":"m","messages":[{"role":"user","content":"hi \"there\"\n"}],"tools":[{"type":"function","function":{"name":"menu.activate","parameters":{"type":"object"}}}],"temperature":0.2,"n":1,"stream":false,"x":null}

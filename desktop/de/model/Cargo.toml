@@ -1,0 +1,6 @@
+[package]
+name = "model"
+description = "Model: the one wire to a model; so far its JSON, which the vocabulary bridge's transcript needs (Swift: JSON.swift beside it; HTTP, the session and the backends are R3's)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
