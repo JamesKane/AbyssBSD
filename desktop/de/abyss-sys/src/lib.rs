@@ -10,6 +10,7 @@ use std::ffi::CString;
 
 pub mod platform;
 pub mod poolwatch;
+pub mod proc;
 pub mod spawn;
 pub mod vents;
 pub mod wl;

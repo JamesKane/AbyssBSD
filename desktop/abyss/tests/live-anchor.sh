@@ -197,4 +197,4 @@ pgrep -f "endpoint --listen $rundir/bus" >/dev/null 2>&1 \
        pgrep -af "endpoint --listen $rundir/bus"; exit 1; }
 echo "ok: quit took the services down with the shell (no stray bus)"
 
-echo "all green (the Swift supervisor runs the session)."
+echo "all green (the supervisor runs the session)."

@@ -120,6 +120,18 @@ fn main() {
         println!("cargo:rustc-link-lib=mixer");
     }
 
+    // CProc (src/proc.rs): every child a pollable descriptor, the signal
+    // pipe; setusercontext(3) from libutil on FreeBSD, as SwiftPM links it.
+    let cproc = de.join("cproc");
+    println!("cargo:rerun-if-changed={}", cproc.join("cproc.c").display());
+    cc::Build::new()
+        .file(cproc.join("cproc.c"))
+        .include(cproc.join("include"))
+        .compile("cproc");
+    if target.contains("freebsd") {
+        println!("cargo:rustc-link-lib=util");
+    }
+
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
     // them for CWayland and CAbyssProtocols.

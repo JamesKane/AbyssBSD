@@ -1,0 +1,10 @@
+[package]
+name = "anchor"
+description = "Anchor: session supervision: the restart policy, the session as a plan, and the supervisor's one poll loop (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }

@@ -11,6 +11,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "abyssctl"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+]
+
+[[package]]
+name = "anchor"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+]
+
+[[package]]
+name = "anchorbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "anchor",
+ "current-ipc",
+ "pool-config",
+ "spawn",
+]
+
+[[package]]
 name = "aquadraw"
 version = "0.1.0"
 dependencies = [

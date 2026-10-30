@@ -4,3 +4,5 @@
 # and everything else from .build/debug. live-image.sh installs from there
 # too, so a medium carries what the harness tested.
 ventsctl
+anchor
+abyssctl

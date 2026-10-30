@@ -1,0 +1,17 @@
+[package]
+name = "anchorbin"
+description = "anchor: the session supervisor (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "anchor"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+anchor = { path = "../anchor" }
+current-ipc = { path = "../currentipc" }
+pool-config = { path = "../poolconfig" }
+spawn = { path = "../spawn" }

@@ -1,0 +1,9 @@
+[package]
+name = "abyssctl"
+description = "abyssctl: drive a running session over the control plane (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }

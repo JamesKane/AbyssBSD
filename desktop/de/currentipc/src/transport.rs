@@ -36,7 +36,13 @@ fn choose_runtime_dir(abyss: Option<&str>, xdg: Option<&str>, uid: u32) -> Strin
     }
 }
 
-/// `dir`, created if missing, and 0700 either way.
+/// `dir`, created if missing, and 0700 either way: what `runtime_dir` does
+/// to the directory it chooses, for a caller that was told which (anchor's
+/// `--runtime-dir`).
+pub fn ensure_private_dir(dir: &str) -> Result<(), Error> {
+    make_private_dir(dir)
+}
+
 fn make_private_dir(dir: &str) -> Result<(), Error> {
     // Existing already is success, as mkdir's EEXIST was.
     if let Err(e) = DirBuilder::new().mode(0o700).create(dir)

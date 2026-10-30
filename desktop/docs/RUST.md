@@ -334,6 +334,30 @@ exists, so a medium carries what the harness tested. Fixtures in
 `abyss/tests/wire/vents`: 16 captures through every parser, 15 matching
 Swift and `devd-odd` (a CRLF line) pinned.
 
+*anchor and abyssctl, 2026-10-30.* `de/anchor` (crate `anchor`) is
+Policy.swift, Session.swift and Supervisor.swift: the restart policy, the
+session as a plan, and the one poll loop over process descriptors, the
+control socket, the lock screen's pipe and the signal pipe, with Swift's
+journal lines. `de/anchorbin` is the `anchor` binary, `de/abyssctl` the
+client; `abyss-sys` gains `proc` (cproc.c, libutil on FreeBSD, poll(2)).
+Two changes, both from the swap itself. **The environment is a value**:
+Swift `setenv`s what the session exports, and `set_var` is unsafe in Rust
+2024, so the supervisor holds the session's environment and gives it to
+every child (and `status` reports the bus from it, which is what a child
+sees). **The siblings are found beside the path anchor was run as**, not
+beside the resolved executable: the harness's bin directory links into
+both builds, and `/proc/self/exe` pointed at `target/debug`, where no
+AquaDemo or abyss-portal is. Swift's 31 tests ported. `live-anchor.sh` and
+the scripts that run a session under it (`live-session`, `-session-gtk`,
+`-locksession`, `-xcursor`, `-setup`, `-idlepolicy`, `-power`, `-greeter`,
+`-switchuser`) are green against the Rust binaries on Linux. In the FreeBSD
+guest `live-anchor`, `-xcursor`, `-setup`, `-idlepolicy`, `-greeter` and
+`-switchuser` are green; the menu-bar ones (`-session-gtk`, `-locksession`,
+`-power`, `-islands-bar`) failed there for both languages alike, run after
+run, once the guest had been up a while (Swift passed each just after a
+reboot, and the two anchors give their children the same environment and
+write the same journal), so they are to be rerun on a quiet guest.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

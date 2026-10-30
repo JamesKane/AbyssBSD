@@ -7,4 +7,4 @@ mod msg;
 mod transport;
 
 pub use msg::{Error, Msg, Value};
-pub use transport::{call, connect, connect_path, receive, runtime_dir, send, socket_path, Server};
+pub use transport::{call, connect, connect_path, ensure_private_dir, receive, runtime_dir, send, socket_path, Server};
