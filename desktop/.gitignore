@@ -18,3 +18,6 @@ qemu.pid
 
 # Cargo
 /target/
+
+# Python (abyss/vm/provision-rv64.py, imported by helpers)
+__pycache__/
