@@ -730,6 +730,25 @@ trust `swift build`. (New corollary: it also flags `'namespace' is a keyword`
 in the generated `wlr-layer-shell` header — that param is fine in C, and Swift
 imports the function with its parameter renamed. `swift build` is green.)
 
+### 2.133 An overlay replaces everything it carries, and latest can lose a package
+(2026-10-02, PHASE17 P17.0, on the builder. Written down 2026-10-30.)
+
+**`poudriere bulk -O` doesn't add ports, it replaces them.** Every
+directory in `ports/` replaces the port of the same name in the tree, for
+every build given `-O abyss`. The Q8B's `graphics/libdrm` and `mesa-*`
+went into the amd64 desktop build that way, and `mesa-libs` failed. A board
+fix in a shared overlay is a change to every machine's build. So: one
+overlay per thing being built, and nothing goes into `ports/` that would
+replace a port for a build that doesn't want it. That is why
+`ports/lang/swift6`, a pin that doesn't build, was never committed.
+
+**A package can be missing from FreeBSD's latest set** for days after its
+port moves. On 2026-10-02 swift6 had moved to 6.4.0 and there was no swift6
+package at all. A pin in the overlay doesn't help when the pinned port's own
+dependencies have moved on: 6.3.3 wanted a `libutil.so.9` compat package
+that was gone. A toolchain we build with is one we host ourselves, or pin
+with the whole tree. RUST.md §6.8 pins the Rust toolchain for this reason.
+
 ### 2.132 A descriptor of no known type is accept's
 (2026-10-02, PHASE18 P18.14, the gate's descriptor check, in the guest.)
 

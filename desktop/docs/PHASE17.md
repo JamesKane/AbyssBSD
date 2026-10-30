@@ -3,6 +3,11 @@
 _Scoped 2026-10-02. PLAN's Phase 17 and PRODUCT §6.2–§6.3 say what; this says
 how, in passes, from what the tree has today._
 
+**Status: tabled 2026-10-02, partway through P17.0** (spike 1 answered, spike
+2 not started; §3.1 records what P17.0 found). Since 2026-10-30, ADE is being
+rewritten in Rust (RUST.md). That changes P17.1's build, and the swift6
+problem goes away when R7 retires Swift. It doesn't change the overlay split or the ZFS panic.
+
 **The goal:** the desktop and the base it runs on update as one thing, safely.
 An image built by our own pipeline installs a machine; that machine updates
 itself into a boot environment; and an update that breaks it is undone by
@@ -83,6 +88,44 @@ Sizes: **S** a day or less, **M** a few days, **L** a week or more.
      still writes caches under `$HOME`) succeed in a poudriere build jail?
   2. **pkgbase from our world**: `make packages` on the builder, and
      `pkg -r` installing it into an empty directory that then boots in bhyve.
+
+  **Done so far (bce0679):** `ABYSS_VM_ROLE=builder` in `abyss/vm` gives the
+  builder its own disk (160G), ssh port 2223, 12 cores, 14G, seed and logs,
+  with no scratch disk, and syncs the whole monorepo. Poudriere 3.4.8 runs
+  with `NO_ZFS=yes` (§3.1, finding 3) and `PACKAGE_FETCH_BRANCH=latest`. It
+  has a jail `spike` from the snapshot `base.txz`, and two ports trees,
+  `default` (git main) and `abyss` (null-mounted `ports/`).
+
+### 3.1 What P17.0 found (2026-10-02)
+
+1. **Spike 1: yes.** SwiftPM builds the whole desktop (`swift build -c
+   release`) in a jail as `nobody`, with no network, in 85 s. This was a
+   jail made by hand at `/usr/local/sj` on the builder, not a poudriere
+   build, so P17.1 still owes `poudriere testport`.
+2. **FreeBSD's latest package set had no swift6 package.** The port moved
+   to 6.4.0 on 2026-09-30 and its package hadn't been built. This is the
+   16-CURRENT hazard (HANDOFF §2.133) hitting a build dependency. Pinning
+   6.3.3 in the overlay (`ports/lang/swift6`, from e3d0a712f28e) **doesn't
+   work**, because it wants `libutil.so.9` from a compat package that
+   latest no longer has. The builder has 6.3.3, installed by hand from the
+   build guest's copy (`pkg create`, kept as
+   `abyss-swift-vm/swift6-6.3.3.pkg`) and locked. The options were Swift 6.4
+   (BACKLOG S.6), hosting our own swift6 package, or pinning the whole ports
+   tree. **It goes away when RUST.md R7 retires Swift. Until then, any release built
+   with Swift still needs one of those options.**
+3. **The ZFS panic.** Poudriere destroying its clones panicked the builder's
+   kernel (snapshot 20260928): `VERIFY(tx->tx_txg >
+   spa_syncing_txg(...) || ... tx_sync_thread == curthread)` in
+   `dnode_free_range`, from `dsl_dataset_block_kill`. The log is kept at
+   `abyss-swift-vm/serial-builder-panic-zfs.log`. It is a kernel bug (BACKLOG
+   §6). The builder works around it with `NO_ZFS=yes`.
+4. **The overlay must be split.** `poudriere bulk -O abyss` replaces every
+   port the overlay has, for every build that uses it. So the Q8B's
+   `graphics/libdrm` and `graphics/mesa-*` replaced FreeBSD's in the amd64
+   desktop build, and `mesa-libs` failed (its `spirv-llvm-translator-llvm19`
+   is gone from the tree). The desktop needs an overlay of its own, apart
+   from the board's (HANDOFF §2.133). `ports/` is shared with the board
+   side, so the split is agreed with them first.
 
 - **P17.1 — the desktop as a port (M).** `ports/x11/abyss-desktop`: the
   distfile is `git archive` of `desktop/` at the release commit, made by the

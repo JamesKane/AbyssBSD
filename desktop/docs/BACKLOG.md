@@ -189,6 +189,14 @@ per platform).
 ## 6. For the FreeBSD fork, not this tree
 
 
+- **ZFS panics when poudriere destroys its clones** (2026-10-02, the
+  builder, PHASE17 §3.1). Snapshot 20260928 kernel: `panic:
+  VERIFY((tx)->tx_txg > spa_syncing_txg(...) ||
+  dmu_objset_pool(...)->dp_tx.tx_sync_thread == curthread)` in
+  `dnode_free_range`, from `dsl_dataset_block_kill`. The log is at
+  `abyss-swift-vm/serial-builder-panic-zfs.log`. Worked around with
+  poudriere's `NO_ZFS=yes`. Check it against a newer `main` kernel before
+  reporting it upstream (OpenZFS).
 - **WITNESS: a lock-order reversal between nullfs (over UFS) and tmpfs on
   unmount** (2026-10-02, on the 12700KF's debug kernel, when jaild tore down
   a jail root: tmpfs → ufs established by `nullfs_unmount`/`vflush`, ufs →
