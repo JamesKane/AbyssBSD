@@ -124,7 +124,7 @@ swift test
 # The Rust half (docs/RUST.md R1): built and tested beside the Swift on every
 # pass, on both platforms.
 phase "cargo build"
-cargo build --workspace --examples
+cargo build --workspace --bins --examples
 
 phase "cargo test"
 cargo test --workspace
@@ -142,7 +142,7 @@ export ABYSS_BIN_DIR
 if [ "$(uname -s)" = Linux ] && [ -d "${ABYSS_RV64_SYSROOT:-$root/../../abyss-swift-vm/sysroot-rv64}/usr/local/lib" ]; then
   phase "riscv64 cross-build"
   ( ABYSS_VM_DIR="$root/abyss/vm"; . "$root/abyss/vm/config.sh"
-    "$root/abyss/vm/rv64-cross.sh" cargo "+$ABYSS_RUST_NIGHTLY" build -q --workspace --examples \
+    "$root/abyss/vm/rv64-cross.sh" cargo "+$ABYSS_RUST_NIGHTLY" build -q --workspace --bins --examples \
       -Zbuild-std=std,panic_abort --target riscv64gc-unknown-freebsd )
 fi
 
@@ -166,6 +166,10 @@ sh "$root/abyss/tests/golden-rust.sh"
 # lane because it needs no compositor and takes about a second.
 phase "control plane, two processes"
 sh "$root/abyss/tests/live-ipc.sh"
+
+# The same between Swift and Rust, each end either language (RUST.md R2).
+phase "control plane, Swift and Rust"
+sh "$root/abyss/tests/live-ipc-mixed.sh"
 
 # The compositor's frame contract (C1 + the allocation-free present path). In
 # the default lane on purpose: it needs no compositor, no GPU and no display,

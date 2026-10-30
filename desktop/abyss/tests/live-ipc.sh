@@ -11,6 +11,10 @@
 # anywhere the package builds.
 #
 # Usage: abyss/tests/live-ipc.sh
+#
+# ABYSS_IPC_SERVER / ABYSS_IPC_CLIENT name each end's ipcprobe when they
+# differ: live-ipc-mixed.sh runs the Swift and the Rust ones against each
+# other (docs/RUST.md R2).
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -20,6 +24,8 @@ cd "$root"
 probe="$ABYSS_BIN_DIR/ipcprobe"
 [ -x "$probe" ] || swift build
 [ -x "$probe" ] || { echo "FAIL: no ipcprobe binary at $probe"; exit 1; }
+server_probe=${ABYSS_IPC_SERVER:-$probe}
+client_probe=${ABYSS_IPC_CLIENT:-$probe}
 
 # Deliberately under /tmp rather than $TMPDIR: a unix socket path must fit in
 # sockaddr_un.sun_path (108 bytes on Linux, 104 on FreeBSD), and a CI $TMPDIR
@@ -38,7 +44,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$probe" serve probe > "$srv_log" 2>&1 &
+"$server_probe" serve probe > "$srv_log" 2>&1 &
 srv_pid=$!
 
 # Wait for the socket to exist rather than sleeping a guess.
@@ -52,7 +58,7 @@ done
   || { echo "FAIL: the service never bound its socket"; cat "$srv_log"; exit 1; }
 echo "service listening on $rundir/probe.sock"
 
-"$probe" send probe "$secret" > "$cli_log" 2>&1 \
+"$client_probe" send probe "$secret" > "$cli_log" 2>&1 \
   || { echo "FAIL: the client errored"; cat "$cli_log" "$srv_log"; exit 1; }
 
 # Give the service a moment to finish writing its log and exit.

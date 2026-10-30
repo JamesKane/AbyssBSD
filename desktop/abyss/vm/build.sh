@@ -51,7 +51,7 @@ run "export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && swift bui
 
 # The Rust half (docs/RUST.md R1), from the same synced tree.
 echo "[build] cargo build"
-run "cd $ABYSS_GUEST_SRC && cargo build --workspace --examples > /tmp/abyss-cargo.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo.log; exit \$rc" \
+run "cd $ABYSS_GUEST_SRC && cargo build --workspace --bins --examples > /tmp/abyss-cargo.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo.log; exit \$rc" \
   || { echo "[build] FAILED: cargo build in the guest" >&2; exit 1; }
 
 if [ "$do_test" -eq 1 ]; then

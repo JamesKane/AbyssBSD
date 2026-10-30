@@ -1,0 +1,9 @@
+[package]
+name = "current-ipc"
+description = "CurrentIPC: ADE's control plane, typed messages with descriptors over unix sockets (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true

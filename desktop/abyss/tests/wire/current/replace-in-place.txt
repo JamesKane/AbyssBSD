@@ -1,0 +1,5 @@
+fds 0
+# string "a" = three
+string 61 7468726565
+# string "b" = two
+string 62 74776f

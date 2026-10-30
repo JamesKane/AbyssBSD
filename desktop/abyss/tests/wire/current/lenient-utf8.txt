@@ -1,0 +1,4 @@
+decode-only
+fds 0
+# string "k��" = v�
+string 6befbfbdefbfbd 76efbfbd

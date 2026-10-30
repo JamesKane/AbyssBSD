@@ -1,0 +1,113 @@
+//! The descriptor-passing and peer calls of de/cplatform: SCM_RIGHTS lives
+//! in C because cmsg(3) is all macros (the same reason as for Swift), and
+//! the peer's uid is a different call on each system. Safe wrappers: a
+//! received descriptor comes back owned, so nothing leaks or double-closes.
+
+use libc::{c_int, c_long, c_uint, c_void};
+use std::io;
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+
+/// Most descriptors one call carries (`AP_MAX_FDS`).
+pub const MAX_FDS: usize = 16;
+
+unsafe extern "C" {
+    fn ap_sendmsg_fds(sock: c_int, buf: *const c_void, len: usize, fds: *const c_int, nfds: c_int) -> c_long;
+    fn ap_send_all(sock: c_int, buf: *const c_void, len: usize) -> c_int;
+    fn ap_socket_nosigpipe(sock: c_int) -> c_int;
+    fn ap_recvmsg_fds(
+        sock: c_int,
+        buf: *mut c_void,
+        len: usize,
+        fds: *mut c_int,
+        max_fds: c_int,
+        nfds_out: *mut c_int,
+    ) -> c_long;
+    fn ap_peer_uid(sock: c_int, uid: *mut c_uint) -> c_int;
+}
+
+/// `sendmsg` of `buf` (non-empty: SCM_RIGHTS rides on payload) with `fds`
+/// attached. Sending a number that is not an open descriptor is EBADF, not
+/// undefined behaviour, so the descriptors are plain `RawFd`s the caller
+/// keeps open until this returns.
+pub fn sendmsg_fds(sock: BorrowedFd<'_>, buf: &[u8], fds: &[RawFd]) -> io::Result<usize> {
+    if fds.len() > MAX_FDS {
+        return Err(io::Error::from_raw_os_error(libc::EINVAL));
+    }
+    let n = unsafe {
+        ap_sendmsg_fds(
+            sock.as_raw_fd(),
+            buf.as_ptr() as *const c_void,
+            buf.len(),
+            if fds.is_empty() { std::ptr::null() } else { fds.as_ptr() },
+            fds.len() as c_int,
+        )
+    };
+    if n < 0 { Err(io::Error::last_os_error()) } else { Ok(n as usize) }
+}
+
+/// Write all of `buf` with MSG_NOSIGNAL: a peer that has gone is EPIPE, never
+/// SIGPIPE.
+pub fn send_all(sock: BorrowedFd<'_>, buf: &[u8]) -> io::Result<()> {
+    let rc = unsafe { ap_send_all(sock.as_raw_fd(), buf.as_ptr() as *const c_void, buf.len()) };
+    if rc != 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+}
+
+/// SO_NOSIGPIPE where the system has it; nothing elsewhere.
+pub fn socket_nosigpipe(sock: BorrowedFd<'_>) {
+    unsafe { ap_socket_nosigpipe(sock.as_raw_fd()) };
+}
+
+/// `recvmsg` into `buf`, with whatever descriptors rode along, owned.
+/// `Ok((0, _))` is the peer having closed.
+pub fn recvmsg_fds(sock: BorrowedFd<'_>, buf: &mut [u8]) -> io::Result<(usize, Vec<OwnedFd>)> {
+    let mut raw = [-1 as c_int; MAX_FDS];
+    let mut n_fds: c_int = 0;
+    let n = unsafe {
+        ap_recvmsg_fds(
+            sock.as_raw_fd(),
+            buf.as_mut_ptr() as *mut c_void,
+            buf.len(),
+            raw.as_mut_ptr(),
+            MAX_FDS as c_int,
+            &mut n_fds,
+        )
+    };
+    if n < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // The kernel installed these in our table; each is ours exactly once.
+    let fds = raw[..n_fds.clamp(0, MAX_FDS as c_int) as usize]
+        .iter()
+        .map(|&f| unsafe { OwnedFd::from_raw_fd(f) })
+        .collect();
+    Ok((n as usize, fds))
+}
+
+/// The effective uid of the peer of a connected unix socket.
+pub fn peer_uid(sock: BorrowedFd<'_>) -> io::Result<u32> {
+    let mut uid: c_uint = 0;
+    if unsafe { ap_peer_uid(sock.as_raw_fd(), &mut uid) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(uid)
+}
+
+/// This process's effective uid.
+pub fn euid() -> u32 {
+    unsafe { libc::geteuid() }
+}
+
+/// Whether `fd` is an open descriptor in this process (`fcntl(F_GETFD)`):
+/// for tests that check a descriptor was really closed.
+pub fn fd_is_open(fd: RawFd) -> bool {
+    unsafe { libc::fcntl(fd, libc::F_GETFD) != -1 }
+}
+
+/// Whether `fd` has O_NONBLOCK set.
+pub fn is_nonblocking(fd: BorrowedFd<'_>) -> io::Result<bool> {
+    let flags = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFL) };
+    if flags < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(flags & libc::O_NONBLOCK != 0)
+}

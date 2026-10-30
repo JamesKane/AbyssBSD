@@ -1,0 +1,3 @@
+fds 0
+# string "naïve-ключ" = 日本語 ✓ 🌊 Ünïcödé
+string 6e61c3af76652dd0bad0bbd18ed187 e697a5e69cace8aa9e20e29c9320f09f8c8a20c39c6ec3af63c3b664c3a9

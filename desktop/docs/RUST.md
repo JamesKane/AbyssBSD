@@ -124,6 +124,18 @@ guest, which now has `rust` 1.99.
 `text-model`, `jails`, `system-facts`, `vocab`. Pure Rust, no I/O beyond the
 socket and the file. Cross-language fixtures (§3.3) go in here.
 
+*currentipc, 2026-10-30:* `de/currentipc` (crate `current-ipc`) is
+Msg.swift and Current.swift: the same wire format and framing, received
+descriptors held as `OwnedFd` (closed on drop unless taken), no `unsafe`
+of its own (the SCM_RIGHTS calls are `abyss-sys::platform`, over
+`cplatform.c`). The first cross-language fixtures,
+`abyss/tests/wire/current`: 21 cases Swift writes and both halves check
+(11 decoded and re-encoded, lenient UTF-8 and a duplicate name among them;
+10 malformed frames both refuse). Swift's 17 tests ported. `de/ipcprobe`
+in Rust too, and `live-ipc-mixed.sh` runs Swift and Rust as server and
+client all four ways, a descriptor crossing each time: green on Linux and
+FreeBSD.
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +

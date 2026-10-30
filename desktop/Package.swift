@@ -177,7 +177,9 @@ let package = Package(
         .target(
             name: "CurrentIPC",
             dependencies: ["CPlatform"],
-            path: "de/currentipc"
+            path: "de/currentipc",
+            // Its Rust half (RUST.md R2): Cargo builds it, not SwiftPM.
+            exclude: ["Cargo.toml", "src", "tests"]
         ),
         // D-Bus, spoken natively: the wire format, authentication and dispatch,
         // with no libdbus (discouraged upstream), no GDBus (that means GLib and
@@ -300,7 +302,8 @@ let package = Package(
         .executableTarget(
             name: "ipcprobe",
             dependencies: ["CurrentIPC"],
-            path: "de/ipcprobe"
+            path: "de/ipcprobe",
+            exclude: ["Cargo.toml", "src"]
         ),
         // The C floor under the FreeBSD hardware bridges: sysctlbyname (Swift's
         // libc module surfaces no <sys/sysctl.h>) and the OSS mixer ioctls

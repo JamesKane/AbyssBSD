@@ -88,6 +88,16 @@ fn main() {
     }
     text.compile("ctext");
 
+    // CPlatform (src/platform.rs): descriptor passing, peers, and the rest of
+    // the file SwiftPM compiles; crypt(3) for its password hashing.
+    let cplatform = de.join("cplatform");
+    println!("cargo:rerun-if-changed={}", cplatform.join("cplatform.c").display());
+    cc::Build::new()
+        .file(cplatform.join("cplatform.c"))
+        .include(cplatform.join("include"))
+        .compile("cplatform");
+    println!("cargo:rustc-link-lib=crypt");
+
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
     // them for CWayland and CAbyssProtocols.

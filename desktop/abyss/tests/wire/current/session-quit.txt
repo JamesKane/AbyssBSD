@@ -1,0 +1,5 @@
+fds 0
+# string "method" = Session.Quit
+string 6d6574686f64 53657373696f6e2e51756974
+# string "reason" = user asked
+string 726561736f6e 757365722061736b6564

@@ -1,0 +1,9 @@
+[package]
+name = "ipcprobe"
+description = "Two real processes, one descriptor: CurrentIPC's probe (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
