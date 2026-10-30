@@ -1,0 +1,16 @@
+ports-mgmt/pkg
+security/sudo
+net/rsync
+graphics/wayland
+graphics/wayland-protocols
+x11/libxkbcommon
+x11/pixman
+graphics/cairo
+print/freetype2
+print/harfbuzz
+x11-fonts/dejavu
+graphics/png
+graphics/jpeg-turbo
+sysutils/seatd
+x11-toolkits/wlroots020
+x11-toolkits/gtk30

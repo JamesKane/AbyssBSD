@@ -120,6 +120,15 @@ esac
 : "${ABYSS_SERIAL_LOG:=$ABYSS_VM_HOME/serial$_role.log}"
 : "${ABYSS_PIDFILE:=$ABYSS_VM_HOME/qemu$_role.pid}"
 : "${ABYSS_CONSOLE_SOCK:=$ABYSS_VM_HOME/console$_role.sock}"
+
+# Cross-building for FreeBSD/riscv64 on the host (RUST.md §6.8, §6.9). The
+# sysroot and the package repository come from the builder's rv64 jail
+# (rv64-sysroot.sh); the toolchain is pinned, and bumping it is its own pass.
+: "${ABYSS_RV64_SYSROOT:=$ABYSS_VM_HOME/sysroot-rv64}"
+: "${ABYSS_RV64_PKGS:=$ABYSS_VM_HOME/pkgs-rv64}"
+: "${ABYSS_RUST_NIGHTLY:=nightly-2026-10-04}"
+: "${ABYSS_RV64_HOST_CLANG:=/usr/bin/clang}"
+: "${ABYSS_RV64_HOST_AR:=/usr/bin/llvm-ar}"
 : "${ABYSS_SYNC_ROOT:=$ABYSS_REPO}"
 
 # Disk / paths

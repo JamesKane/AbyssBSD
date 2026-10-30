@@ -173,6 +173,56 @@ is flashed.
   repositories, no `latest` or `quarterly`. `pkg bootstrap` fails in the
   guest. Every port ADE needs is ours to build (R0, first bullet).
 
+**2026-10-30: the cross-build works end to end, and Rust matches the goldens
+on riscv64.**
+
+- **The riscv64 world.** Poudriere jail `rv64` on the builder VM:
+  `poudriere jail -c -j rv64 -a riscv.riscv64 -m src=…/src -b -x`, our
+  `src/` fork cross-built with native-xtools, 1h25m on 12 cores (1600032).
+  qemu-user-static is 3.1.0, the only one packaged, and it is enough.
+- **The packages.** 117 of R0's tree built in about 25 minutes, nothing
+  failing in its own right. What the riscv64 set needs is
+  `vm/rv64-make.conf` (`vm/rv64-build.sh` installs it, makes the jail if
+  missing and runs the bulk of `vm/rv64-ports.list`):
+  - `lang/rust` IGNOREs under qemu-user-static, and three things pulled it
+    in: librsvg2 (gtk3's icons: `DEFAULT_VERSIONS+= librsvg2=legacy`, the C
+    one), and xwayland and libdecor (wlroots020's X11 option: off; ADE has
+    no XWayland, PRODUCT §5.2).
+  - sqlite3's post-install runs `ldd -a` on its binary, which ld-elf cannot
+    do under qemu-user ("mmap of entire address space failed"). Only colord
+    wanted it: gtk30's COLORD option is off.
+  - llvm19 (mesa needs it unconditionally) runs its tablegens under
+    emulation, and twelve at once ran the 14G VM out of memory (code 137):
+    `MAKE_JOBS_NUMBER=4` for it.
+  - ***(mesa, gtk30, wlroots020: building as this is written.)***
+- **Rust's std** cross-builds for `riscv64gc-unknown-freebsd` with
+  `nightly-2026-10-04` and `-Zbuild-std=std,panic_abort`, linked by the
+  host's clang 22 and lld against the sysroot, in about 12 s. Threads, fs
+  and libc run in the guest.
+- **The window, as a scene.** There is no golden of a lone button, and every
+  scene goes through the draw-list interpreter, so the spike ported that:
+  `DrawList.swift` and what `renderDrawListPNG` reaches of Text and Draw,
+  2.8k lines of Rust, `libc` and `cc` only, `unsafe` only in its ffi module,
+  over our unchanged `cdraw` and `ctext` and cairo. Its `drawlist` scene is
+  **identical** to the Swift goldens at 1x and 2x: on Linux against
+  `golden/linux/`, and cross-built and run in the riscv64 guest against
+  `golden/freebsd/` (DejaVu, our packages). 0.55 s a render under TCG.
+- **A latent C bug it found.** `cd_noise_a8` multiplied signed ints past
+  overflow, undefined behaviour that GCC -O2 turned into a different noise
+  tile (18,454 pixels of the anodized panel). SwiftPM's debug builds
+  happened to wrap. Fixed with unsigned arithmetic in `c23ca19`; the goldens
+  stand.
+- **The tooling.** `vm/rv64-sysroot.sh` pulls the jail's world and the
+  repository from the builder and unpacks the packages into
+  `$ABYSS_RV64_SYSROOT`. `vm/rv64-cross.sh` runs a command with cargo, cc
+  and pkg-config aimed at it. `vm/provision-rv64.sh` gives the guest pkg
+  from our repository (`IGNORE_OSVERSION`: the image's world is the stock
+  1600029, ours is 1600032). The guest's build user is in `operator`, so
+  `ssh.sh shutdown -p now` stops it.
+- **Not yet:** a compositor. The scene draws offscreen, the way the golden
+  gate does. A headless undertow on riscv64 needs wlroots020, which is
+  building.
+
 ## 6. Risks and open decisions
 
 **6.1 The targets. — DECIDED 2026-10-30.** The qemu `virt` riscv64 guest

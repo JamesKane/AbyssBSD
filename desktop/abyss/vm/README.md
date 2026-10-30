@@ -45,6 +45,9 @@ below.
 | `fetch-sets.sh` | Download the snapshot's `base.txz`/`kernel.txz`/`src.txz` once, verify them against `config.sh`'s pins, and put them in the guest: `~/dist` for the medium and installer tests, `/usr/src` for the wtap lab. |
 | `build.sh`      | The dev loop: sync, then `swift build` (+ `swift test`) in the guest. |
 | `provision-rv64.sh` | The `rv64` role only (RUST.md R0): set the riscv64 guest up over its serial console, since riscv64 has no CLOUDINIT image. Run once, after the first `ABYSS_DAEMON=1 ./run.sh`. |
+| `rv64-build.sh` | RUST.md R0: on the builder VM, make the poudriere `rv64` jail (our `src/` for riscv64, native-xtools) if missing, install `rv64-make.conf`, and bulk-build `rv64-ports.list`. FreeBSD builds no riscv64 packages. |
+| `rv64-sysroot.sh` | RUST.md R0: pull the builder's riscv64 poudriere jail (world) and package repository to the host, and unpack them into the sysroot the cross-build links against. |
+| `rv64-cross.sh` | Run a command (cargo) with the cross-build environment for FreeBSD/riscv64: host clang/lld, the sysroot, pkg-config. |
 | `ssh.sh`        | SSH in (passes through args/commands).                          |
 | `sync.sh`       | rsync host `desktop/` → guest `~/AbyssBSD/desktop`.             |
 
@@ -53,6 +56,8 @@ below.
 - **The riscv64 guest** (`ABYSS_VM_ROLE=rv64`, RUST.md R0, §6.10) is
   FreeBSD/riscv64 under TCG: `fetch-image.sh`, `ABYSS_DAEMON=1 ./run.sh`,
   `./provision-rv64.sh`, then `./ssh.sh` on port 2224, all with the role set.
+  Its packages are ours (`rv64-sysroot.sh` fetches the repository the
+  provisioner installs from), and `./ssh.sh shutdown -p now` stops it.
   It is ~38x slower than the host and FreeBSD has no riscv64 packages, so
   nothing is built in it: binaries are cross-built on amd64 and copied in.
   Boot it only when RV64 is what is being tested.
