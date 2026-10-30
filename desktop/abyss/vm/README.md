@@ -44,10 +44,18 @@ below.
 | `check.sh`      | Assert the guest is ready: ssh, cloud-init, packages, **the base still the pinned snapshot**, pkg-config, harness tools. |
 | `fetch-sets.sh` | Download the snapshot's `base.txz`/`kernel.txz`/`src.txz` once, verify them against `config.sh`'s pins, and put them in the guest: `~/dist` for the medium and installer tests, `/usr/src` for the wtap lab. |
 | `build.sh`      | The dev loop: sync, then `swift build` (+ `swift test`) in the guest. |
+| `provision-rv64.sh` | The `rv64` role only (RUST.md R0): set the riscv64 guest up over its serial console, since riscv64 has no CLOUDINIT image. Run once, after the first `ABYSS_DAEMON=1 ./run.sh`. |
 | `ssh.sh`        | SSH in (passes through args/commands).                          |
 | `sync.sh`       | rsync host `desktop/` → guest `~/AbyssBSD/desktop`.             |
 
 ## Notes
+
+- **The riscv64 guest** (`ABYSS_VM_ROLE=rv64`, RUST.md R0, §6.10) is
+  FreeBSD/riscv64 under TCG: `fetch-image.sh`, `ABYSS_DAEMON=1 ./run.sh`,
+  `./provision-rv64.sh`, then `./ssh.sh` on port 2224, all with the role set.
+  It is ~38x slower than the host and FreeBSD has no riscv64 packages, so
+  nothing is built in it: binaries are cross-built on amd64 and copied in.
+  Boot it only when RV64 is what is being tested.
 
 - **COW overlay**: `run.sh` boots a qcow2 overlay backed by the pristine image.
   To reset to a clean machine: `rm ../../../../abyss-swift-vm/abyss-build-16.qcow2`

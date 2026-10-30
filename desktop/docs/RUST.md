@@ -61,10 +61,12 @@ Three facts make this cheaper than its size:
    encode. That is how we know two halves of a mixed session agree, and it
    is the only new kind of test this plan adds.
 4. **Same gate as every phase.** Linux and the FreeBSD guest on every pass,
-   the both-platforms rule. The qemu riscv64 guest joins the gate as soon as
-   R0 makes it possible, as a third platform. It runs unit tests and the
-   headless (pixman) live scripts. It never runs `--full`, because under TCG
-   that would take hours.
+   the both-platforms rule. riscv64 joins as a **cross-build**, from amd64,
+   as soon as R0 makes it possible: every pass must still compile and link
+   for `riscv64gc-unknown-freebsd`. The qemu riscv64 guest is not on the
+   per-pass gate. It runs only when RV64 itself is the question (R0's one
+   render, R8's bring-up, a riscv64-only bug), because under TCG it is ~38x
+   slower than the host (§5).
 5. **RV64 runs ADE when the last Swift binary in the session is gone.** Until
    then, amd64 and aarch64 run mixed sessions, and nothing ships worse than
    it does today.
@@ -75,23 +77,28 @@ Sizes follow the PHASE docs (S/M/L). Each pass ends with its crates' unit
 tests ported and passing, plus the live scripts that touch it.
 
 **R0. The spike: Rust, our C libraries, and a window on FreeBSD/riscv64 (S).**
-In a qemu riscv64 FreeBSD 16 guest (`qemu-system-riscv64 -machine virt`,
-OpenSBI + u-boot, virtio disk and net). The boards come in at R8 (§6.1):
-- Is `pkg install rust` available on riscv64, at what version? If not, can we
-  build `lang/rust` ourselves?
-- Are `wlroots 0.20`, `cairo`, `freetype2`, `harfbuzz`, `xkbcommon`, `pixman`,
-  `gtk3` and `seatd` in the riscv64 package set? This blocks any language.
-- Build a Rust binary that links `cwayland` + `cdraw` + `ctext` and draws one
-  Aqua button into a headless compositor. Compare it against the Swift
-  golden.
-- Measure a debug and release build of a ~10k-line crate in the guest. TCG
-  emulation is far slower than either board, so this number only decides
-  whether the guest builds for itself or we cross-build into it (§6.9). It
-  says nothing about the boards.
+Everything is **built on amd64 and cross-compiled**; the qemu riscv64 guest
+(`qemu-system-riscv64 -machine virt`, EDK2, virtio disk and net, the `rv64`
+role in `abyss/vm`) only runs the result. §5 has why:
+- **The C libraries.** FreeBSD builds no ports packages for riscv64, so
+  `wlroots 0.20`, `cairo`, `freetype2`, `harfbuzz`, `xkbcommon`, `pixman`,
+  `gtk3` and `seatd` (and `pkg` itself) are ours to build. Poudriere on the
+  amd64 builder VM, a `riscv.riscv64` jail made with `-x` (native-xtools:
+  the compiler runs on amd64, qemu-user-static only for what a configure
+  script executes). This blocks any language, and it is the long pole.
+- **Rust.** `riscv64gc-unknown-freebsd` is Tier 3: no prebuilt `std`. A
+  pinned nightly with `-Zbuild-std`, or a stage-2 rustc of our own with the
+  target, cross-linking with `clang --target=riscv64-unknown-freebsd` against
+  a **sysroot**: the snapshot's base plus the packages above.
+- **One window.** Cross-build a Rust binary that links `cwayland` + `cdraw` +
+  `ctext` (built by `cc` with the same clang and sysroot), copy it into the
+  guest, draw one Aqua button into a headless compositor there and compare
+  it with the Swift golden. This is the only step that needs the guest.
+- **Cross-build time** of a ~10k-line crate, debug and release, on amd64:
+  the number the per-pass riscv64 check costs.
 
 The answer goes in §5 the way SWIFT-ON-FREEBSD.md recorded P3.2's.
-**If any package in the second bullet is missing, porting it comes before
-R1.**
+**The package build comes before R1.**
 
 **R1. The workspace and the harness (S).** `desktop/Cargo.toml` (workspace),
 `de/<name>/` keeps its directory and gains a `Cargo.toml` beside the Swift
@@ -147,7 +154,24 @@ is flashed.
 
 ## 5. Spike results
 
-*(R0 fills this in.)*
+**2026-10-30: the guest, and two facts that turned R0 into a cross-build.**
+
+- **The guest works.** FreeBSD 16.0-CURRENT riscv64 snapshot
+  20261027-61c70dc16a79 (UFS image), `qemu-system-riscv64 -machine virt
+  -cpu rva22s64`, 8 harts, 8G, EDK2 from the host's `edk2-riscv64` (padded
+  to the 32M flash banks), MTTCG. Boot to `login:` takes about 3 minutes
+  (the snapshot kernel has WITNESS). There is no CLOUDINIT image for
+  riscv64, so `vm/provision-rv64.sh` sets the guest up over its serial
+  console: the build user, the key, sshd on port 2224. Base has clang 21.1.8
+  and ld.lld.
+- **TCG is ~38x slower than the host.** The same `cc -O2 -c` of a generated
+  1500-function file: 1.84 s on the host, 70.5 s in the guest. Building
+  `lang/rust` or the desktop's dependency tree in the guest would take days.
+  So the guest only runs binaries (§3.4, §6.9).
+- **FreeBSD builds no ports packages for riscv64.** `pkg.freebsd.org` has
+  `FreeBSD:{14,15,16}:riscv64` with only `base_*` and `kmods_*`
+  repositories, no `latest` or `quarterly`. `pkg bootstrap` fails in the
+  guest. Every port ADE needs is ours to build (R0, first bullet).
 
 ## 6. Risks and open decisions
 
@@ -194,21 +218,23 @@ on `main` and a merge at the end. Mixed sessions mean every pass ships.
 Bugs found on metal still get fixed in whichever language owns the binary at
 that point. BACKLOG items wait for the port, or are done in Rust.
 
-**6.8 Risk: Rust on FreeBSD/riscv64 is Tier 3.** No upstream CI. A rustc
-regression can break us with no warning. The mitigation is the one Swift got:
-pin the toolchain version in `vm/config.sh`, keep R0's build as a CI job on
-the board or in qemu, and treat a toolchain bump as its own pass.
+**6.8 Risk: Rust on FreeBSD/riscv64 is Tier 3.** No upstream CI, no
+prebuilt `std`. A rustc regression can break us with no warning. The
+mitigation is the one Swift got: pin the toolchain version in `vm/config.sh`,
+keep R0's cross-build as the per-pass riscv64 check, and treat a toolchain
+bump as its own pass.
 
-**6.9 Risk: compile time under emulation.** TCG will be slow. If R0 shows a
-release build of `aqua` in the guest is unworkable, we cross-build from
-amd64 (`--target riscv64gc-unknown-freebsd` with a sysroot taken from the
-guest), copy the binaries in, and test there. That is also the likely
-workflow for the boards. Decide this from R0's numbers, not before.
+**6.9 Cross-build, always. — DECIDED 2026-10-30.** Nothing is compiled in
+the qemu guest: `--target riscv64gc-unknown-freebsd` on amd64 against a
+sysroot of the snapshot's base plus our riscv64 packages, then copy the
+binaries in. The guest runs only when RV64 itself is under test. The boards
+get the same workflow. (R0 measured why: §5.)
 
 **6.10 The qemu guest is a new VM to keep.** It is a third VM next to the
 amd64 build guest. Its disk lives outside the monorepo with the others
-(`$ABYSS_VM_HOME`), and it gets its own `vm/config.sh` stanza (host, port,
-toolchain path).
+(`$ABYSS_VM_HOME`), and it gets its own `vm/config.sh` stanza: the `rv64`
+role (port 2224, its own disk, firmware and console socket). Booted only
+when needed.
 
 ## 7. Verification
 

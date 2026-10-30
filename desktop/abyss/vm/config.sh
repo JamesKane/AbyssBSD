@@ -30,6 +30,21 @@ ABYSS_MONOREPO="$(cd "$ABYSS_REPO/.." && pwd)"
 #                  16 box has passed the same gates; its files keep their
 #                  original, unversioned names.
 : "${ABYSS_FBSD_VERSION:=16.0-CURRENT}"
+: "${ABYSS_VM_ROLE:=build}"
+: "${ABYSS_ARCH:=amd64}"
+# The riscv64 guest (RUST.md R0, §6.10) is its own snapshot: there is no
+# CLOUDINIT image for riscv64, so it boots the plain UFS image and
+# provision-rv64.py sets it up over the serial console. Set first, so the
+# amd64 recipe below leaves these alone.
+if [ "$ABYSS_VM_ROLE" = rv64 ]; then
+  ABYSS_ARCH=riscv64
+  _snap=20261027-61c70dc16a79-290352
+  : "${ABYSS_BASE_PKG_PREFIX:=16.snap${_snap%%-*}}"
+  : "${ABYSS_FBSD_IMG:=FreeBSD-16.0-CURRENT-riscv-riscv64-ufs-${_snap}.qcow2}"
+  : "${ABYSS_FBSD_URL:=https://download.freebsd.org/snapshots/VM-IMAGES/16.0-CURRENT/riscv64/${_snap%%-*}/${ABYSS_FBSD_IMG}.xz}"
+  : "${ABYSS_FBSD_SHA512:=cf7f46a4b86f2ce858286cf16c951299a1acb4aa8300d7dee93428136515c81f4b97a3d807da82ac670945252384315430fa16f206d2f3e9caf491971da5b72e}"
+  : "${ABYSS_SETS_SHA256:=}"
+fi
 case "$ABYSS_FBSD_VERSION" in
   16.0-CURRENT)
     _snap=20260928-36d3e711bc62-289650
@@ -63,7 +78,9 @@ esac
 # pkgbase and poudriere, on more disk and cores, running beside the guest on
 # its own port, disk, seed and logs. Same image, same scripts:
 #   ABYSS_VM_ROLE=builder abyss/vm/make-seed.sh && ABYSS_VM_ROLE=builder ABYSS_DAEMON=1 abyss/vm/run.sh
-: "${ABYSS_VM_ROLE:=build}"
+#
+# `rv64` (RUST.md R0) is FreeBSD/riscv64 under TCG: the Rust port's third
+# gate platform. No KVM, so it is slow; it never runs --full.
 case "$ABYSS_VM_ROLE" in
   build) _role= ;;
   builder)
@@ -80,10 +97,29 @@ case "$ABYSS_VM_ROLE" in
     : "${ABYSS_GUEST_SRC:=/home/build/AbyssBSD}"
     : "${ABYSS_SYNC_ROOT:=$ABYSS_MONOREPO}"
     ;;
-  *) echo "config.sh: no role ABYSS_VM_ROLE=$ABYSS_VM_ROLE (build or builder)" >&2; exit 2 ;;
+  rv64)
+    _role=-rv64
+    : "${ABYSS_DISK:=$ABYSS_VM_HOME/abyss-rv64$_suffix.qcow2}"
+    : "${ABYSS_DISK_SIZE:=60G}"
+    : "${ABYSS_SSH_PORT:=2224}"
+    : "${ABYSS_HOSTNAME:=abyss-rv64}"
+    # TCG runs one host thread per vCPU (MTTCG). The virt machine's EDK2
+    # takes at most 8 harts happily; more buys little under emulation.
+    : "${ABYSS_CPUS:=8}"
+    : "${ABYSS_MEM:=8G}"
+    : "${ABYSS_SCRATCH:=none}"
+    # RVA22 is the Orange Pi RV2's (SpacemiT K1) profile, the older board, so
+    # what runs here runs on both (the K3 is RVA23).
+    : "${ABYSS_RV64_CPU:=rva22s64}"
+    : "${ABYSS_RV64_FW_CODE:=/usr/share/edk2/riscv/RISCV_VIRT_CODE.fd}"
+    : "${ABYSS_RV64_FW_VARS:=/usr/share/edk2/riscv/RISCV_VIRT_VARS.fd}"
+    : "${ABYSS_RV64_VARS:=$ABYSS_VM_HOME/rv64-vars.fd}"
+    ;;
+  *) echo "config.sh: no role ABYSS_VM_ROLE=$ABYSS_VM_ROLE (build, builder or rv64)" >&2; exit 2 ;;
 esac
 : "${ABYSS_SERIAL_LOG:=$ABYSS_VM_HOME/serial$_role.log}"
 : "${ABYSS_PIDFILE:=$ABYSS_VM_HOME/qemu$_role.pid}"
+: "${ABYSS_CONSOLE_SOCK:=$ABYSS_VM_HOME/console$_role.sock}"
 : "${ABYSS_SYNC_ROOT:=$ABYSS_REPO}"
 
 # Disk / paths
