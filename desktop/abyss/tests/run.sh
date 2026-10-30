@@ -94,7 +94,7 @@ if [ "$vm" -eq 1 ]; then
   # the VM's — would never be reported, which is exactly the number a person
   # waiting fifteen minutes wants.
   # shellcheck disable=SC2046
-  ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$remote"
+  ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$remote"
   rc=$?
   phase_end
   exit $rc
