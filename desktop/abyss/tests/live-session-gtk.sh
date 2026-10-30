@@ -38,11 +38,11 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-anchor="$root/.build/debug/anchor"
-ctl="$root/.build/debug/abyssctl"
-undertow="$root/.build/debug/undertow"
-demo="$root/.build/debug/AquaDemo"
-bridge="$root/.build/debug/abyss-dbus"
+anchor="$ABYSS_BIN_DIR/anchor"
+ctl="$ABYSS_BIN_DIR/abyssctl"
+undertow="$ABYSS_BIN_DIR/undertow"
+demo="$ABYSS_BIN_DIR/AquaDemo"
+bridge="$ABYSS_BIN_DIR/abyss-dbus"
 [ -x "$anchor" ] && [ -x "$ctl" ] && [ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$bridge" ] \
   || swift build
 

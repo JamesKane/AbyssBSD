@@ -17,9 +17,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-portal="$root/.build/debug/abyss-portal"
-probe="$root/.build/debug/ipcprobe"
-bin="$root/.build/debug/AquaDemo"
+portal="$ABYSS_BIN_DIR/abyss-portal"
+probe="$ABYSS_BIN_DIR/ipcprobe"
+bin="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$portal" ] && [ -x "$probe" ] && [ -x "$bin" ] || swift build
 
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }

@@ -17,9 +17,10 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 
-bin="$root/.build/debug/undertow"
+bin="$ABYSS_BIN_DIR/undertow"
 [ -x "$bin" ] || swift build
 
 # The composite budget. DESKTOP.md's C1 is 2 ms p99 for the compositor's own

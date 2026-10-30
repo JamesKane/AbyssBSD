@@ -22,7 +22,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-bin="$root/.build/debug"
+bin="$ABYSS_BIN_DIR"
 for b in undertow AquaDemo; do [ -x "$bin/$b" ] || { swift build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

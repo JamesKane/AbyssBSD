@@ -23,13 +23,14 @@
 # Usage: abyss/tests/live-jaild.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-[ -x .build/debug/abyss-jaild ] && [ -x .build/debug/abyss-jail ] || swift build
+[ -x $ABYSS_BIN_DIR/abyss-jaild ] && [ -x $ABYSS_BIN_DIR/abyss-jail ] || swift build
 
 W=$(mktemp -d /tmp/abyss-jd.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild .build/debug/abyss-jail "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild $ABYSS_BIN_DIR/abyss-jail "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jaild.sock"
 me=$(id -un) uid=$(id -u) other=jt18
 N="abyss-$uid-app"

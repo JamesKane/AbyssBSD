@@ -41,10 +41,10 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-portal="$root/.build/debug/abyss-portal"
-bridge="$root/.build/debug/abyss-dbus"
-undertow="$root/.build/debug/undertow"
-demo="$root/.build/debug/AquaDemo"
+portal="$ABYSS_BIN_DIR/abyss-portal"
+bridge="$ABYSS_BIN_DIR/abyss-dbus"
+undertow="$ABYSS_BIN_DIR/undertow"
+demo="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$undertow" ] && [ -x "$demo" ] || swift build
 
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }

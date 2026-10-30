@@ -28,14 +28,15 @@
 # Usage: abyss/tests/live-jail-files.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 for t in gdbus pkg-config; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
-for b in abyss-jaild abyss-jail abyss-portal abyss-dbus; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-portal abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-jf.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild .build/debug/abyss-jail "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild $ABYSS_BIN_DIR/abyss-jail "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 me=$(id -un) uid=$(id -u) other=jt18
 N="abyss-$uid-app"
@@ -82,12 +83,12 @@ runtime="$jroot/run/user"
 # The jail's D-Bus bridge: the jail's applications on the socket inside it,
 # the jail's portal on the services socket outside it — where nothing jailed
 # can reach. No application reaches another through it (PRODUCT §5.6).
-.build/debug/abyss-dbus --endpoint --listen "$runtime/bus" --services "$W/jail-services" > "$W/bus.log" 2>&1 3>&- & bus=$!
+$ABYSS_BIN_DIR/abyss-dbus --endpoint --listen "$runtime/bus" --services "$W/jail-services" > "$W/bus.log" 2>&1 3>&- & bus=$!
 await "$W/bus.log" '^ready' "the jail's bridge did not start"
 # The stand-in picker "chooses" whatever $W/choose names.
 printf '#!/bin/sh\ncat "%s" > "$ABYSS_FINDER_PICK"\n' "$W/choose" > "$W/pick.sh"; chmod 755 "$W/pick.sh"
-ABYSS_PICKER="$W/pick.sh" .build/debug/abyss-portal > "$W/pt.log" 2>&1 3>&- & pt=$!
-.build/debug/abyss-dbus --bus "unix:path=$W/jail-services" --jail "$N" --jaild "$SOCK" > "$W/br.log" 2>&1 3>&- & br=$!
+ABYSS_PICKER="$W/pick.sh" $ABYSS_BIN_DIR/abyss-portal > "$W/pt.log" 2>&1 3>&- & pt=$!
+$ABYSS_BIN_DIR/abyss-dbus --bus "unix:path=$W/jail-services" --jail "$N" --jaild "$SOCK" > "$W/br.log" 2>&1 3>&- & br=$!
 await "$W/br.log" '^ready' "the jail's portal did not start"
 
 # Inside: a GLib caller, built into the jail's own home (it may exec there;

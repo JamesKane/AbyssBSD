@@ -14,8 +14,9 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
-ctl="$root/.build/debug/ventsctl"
+ctl="$ABYSS_BIN_DIR/ventsctl"
 [ -x "$ctl" ] || swift build
 [ -x "$ctl" ] || { echo "FAIL: no ventsctl binary"; exit 1; }
 

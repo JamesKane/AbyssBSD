@@ -282,7 +282,7 @@ fi
 # AQUA_SCALE so the window auto-detects scale from wl_output rather than pinning.
 app_log=$(mktemp)
 env -u AQUA_SCALE $abyss_cfg $finder_env $desktop_env $status_env WAYLAND_DISPLAY="$wd" AQUA_SCENE="$scene" \
-    .build/debug/AquaDemo >/dev/null 2>"$app_log" &
+    $ABYSS_BIN_DIR/AquaDemo >/dev/null 2>"$app_log" &
 app_pid=$!
 
 # Wait for the surface to map. A layer-shell surface (wallpaper) isn't a
@@ -620,7 +620,7 @@ if [ "$click" = "--click" ]; then
     # the Dock's tracker sees a live toplevel. (Done after the screenshot; the
     # tiled window would otherwise cover the Dock.)
     env -u AQUA_SCALE WAYLAND_DISPLAY="$wd" AQUA_SCENE=window \
-        .build/debug/AquaDemo >/dev/null 2>&1 &
+        $ABYSS_BIN_DIR/AquaDemo >/dev/null 2>&1 &
     app2_pid=$!
     seen=0
     for _ in $(seq 1 30); do

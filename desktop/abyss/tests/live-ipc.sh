@@ -14,9 +14,10 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 
-probe="$root/.build/debug/ipcprobe"
+probe="$ABYSS_BIN_DIR/ipcprobe"
 [ -x "$probe" ] || swift build
 [ -x "$probe" ] || { echo "FAIL: no ipcprobe binary at $probe"; exit 1; }
 

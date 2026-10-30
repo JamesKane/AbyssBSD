@@ -21,13 +21,14 @@
 # Usage: abyss/tests/live-agent-fetch.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-af.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u)
 export XDG_RUNTIME_DIR="$W/xdg" ABYSS_RUNTIME_DIR="$W/xdg" ABYSS_CONFIG_DIR="$W/config" HOME="$W/home"
@@ -50,7 +51,7 @@ fail() { echo "FAIL: $1"; for f in keeper.log app.log; do tail -6 "$W/$f" 2>/dev
 count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt 200 ]; do i=$((i + 1)); sleep 0.05; done
           [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"; }
-menu() { .build/debug/abyssmenu run agent "$@" > /dev/null 2>&1; }
+menu() { $ABYSS_BIN_DIR/abyssmenu run agent "$@" > /dev/null 2>&1; }
 
 cat > "$W/stub.json" <<J
 [{"choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[
@@ -65,13 +66,13 @@ printf 'HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>Plumbe
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
     > "$W/ut.out" 2> "$W/ut.err" 3>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-env ABYSS_FETCH_ALLOW_LOCAL=1 .build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- & kp=$!
+env ABYSS_FETCH_ALLOW_LOCAL=1 $ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
-env AQUA_SCENE=agent .build/debug/AquaDemo > "$W/app.log" 2>&1 3>&- & ap=$!
+env AQUA_SCENE=agent $ABYSS_BIN_DIR/AquaDemo > "$W/app.log" 2>&1 3>&- & ap=$!
 await "$W/app.log" 'Agent: session .* at ' "the Agent window got no session"
 t=$(ls -d "$HOME"/Library/Logs/Agents/*-agent-*)/transcript.jsonl
 # nc ends the reply by closing: ncat does by default, FreeBSD's nc with -N.
@@ -80,7 +81,7 @@ nc -l $o 127.0.0.1 "$port" < "$W/page.http" > "$W/server.req" 2>/dev/null & np=$
 sleep 0.3
 
 # ---- 1. no network in the jail --------------------------------------------------------
-if .build/debug/abyss-jail --socket "$SOCK" run agent -- /usr/bin/fetch -q -T 3 -o /dev/null "http://127.0.0.1:$port/" > "$W/inside" 2>&1; then
+if $ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" run agent -- /usr/bin/fetch -q -T 3 -o /dev/null "http://127.0.0.1:$port/" > "$W/inside" 2>&1; then
   fail "a fetch inside the agent's jail connected"
 fi
 [ -s "$W/server.req" ] && fail "the server heard from inside the jail"

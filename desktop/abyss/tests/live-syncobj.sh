@@ -25,7 +25,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
+undertow="$ABYSS_BIN_DIR/undertow"
 [ -x "$undertow" ] || swift build
 
 work=$(mktemp -d /tmp/abyss-syncobj.XXXXXX)

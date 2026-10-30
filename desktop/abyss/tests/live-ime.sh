@@ -21,7 +21,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
+undertow="$ABYSS_BIN_DIR/undertow"
 [ -x "$undertow" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 command -v zenity >/dev/null 2>&1 || { echo "FAIL: no zenity — the test's text-input client (dnf/pkg install zenity)"; exit 1; }

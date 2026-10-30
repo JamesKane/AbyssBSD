@@ -33,9 +33,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-appgen="$root/.build/debug/abyss-appgen"
-undertow="$root/.build/debug/undertow"
-demo="$root/.build/debug/AquaDemo"
+appgen="$ABYSS_BIN_DIR/abyss-appgen"
+undertow="$ABYSS_BIN_DIR/undertow"
+demo="$ABYSS_BIN_DIR/AquaDemo"
 # What a launcher names: the binary's real path, so it runs from anywhere.
 demo_real=$(realpath "$demo")
 for b in "$appgen" "$undertow" "$demo"; do [ -x "$b" ] || { swift build; break; }; done

@@ -23,8 +23,8 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 . "$root/abyss/common.sh"
 
-probe="$root/.build/debug/dbusprobe"
-[ -x "$probe" ] && [ -x "$root/.build/debug/abyss-dbus" ] || swift build
+probe="$ABYSS_BIN_DIR/dbusprobe"
+[ -x "$probe" ] && [ -x "$ABYSS_BIN_DIR/abyss-dbus" ] || swift build
 command -v gdbus >/dev/null || { echo "FAIL: gdbus (GLib) not installed — it is the independent caller"; exit 1; }
 
 work=$(mktemp -d /tmp/abyss-dbus.XXXXXX)

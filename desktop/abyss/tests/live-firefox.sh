@@ -33,12 +33,12 @@ done
   || { echo "SKIP: no Firefox here (the FreeBSD guest has firefox-esr)"; exit 0; }
 for c in gdbus; do command -v $c >/dev/null || { echo "FAIL: $c not installed"; exit 1; }; done
 
-portal="$root/.build/debug/abyss-portal"
-bridge="$root/.build/debug/abyss-dbus"
-undertow="$root/.build/debug/undertow"
-demo="$root/.build/debug/AquaDemo"
-appgen="$root/.build/debug/abyss-appgen"
-grab="$root/.build/debug/abyssgrab"
+portal="$ABYSS_BIN_DIR/abyss-portal"
+bridge="$ABYSS_BIN_DIR/abyss-dbus"
+undertow="$ABYSS_BIN_DIR/undertow"
+demo="$ABYSS_BIN_DIR/AquaDemo"
+appgen="$ABYSS_BIN_DIR/abyss-appgen"
+grab="$ABYSS_BIN_DIR/abyssgrab"
 for b in "$portal" "$bridge" "$undertow" "$demo" "$appgen" "$grab"; do [ -x "$b" ] || { swift build; break; }; done
 
 W=1024; H=768

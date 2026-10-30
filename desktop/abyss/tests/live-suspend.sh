@@ -23,9 +23,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-client="$root/.build/debug/AquaDemo"
-theme="$root/.build/debug/abyss-theme"
+undertow="$ABYSS_BIN_DIR/undertow"
+client="$ABYSS_BIN_DIR/AquaDemo"
+theme="$ABYSS_BIN_DIR/abyss-theme"
 [ -x "$undertow" ] && [ -x "$client" ] && [ -x "$theme" ] || swift build
 
 work=$(mktemp -d /tmp/abyss-susp.XXXXXX)

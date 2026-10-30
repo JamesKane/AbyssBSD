@@ -20,7 +20,8 @@ set -eu
 
 model=$1
 here=$(cd "$(dirname "$0")/../.." && pwd)
-bin=${2:-$here/.build/debug/abyss-model}
+. "$here/abyss/common.sh"
+bin=${2:-$ABYSS_BIN_DIR/abyss-model}
 server=${3:-}
 work=$(mktemp -d /tmp/abyss-measure.XXXXXX)
 cleanup() { [ -n "${mp:-}" ] && kill "$mp" 2>/dev/null; wait 2>/dev/null; rm -rf "$work"; }

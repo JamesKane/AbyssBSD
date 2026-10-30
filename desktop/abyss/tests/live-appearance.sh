@@ -29,9 +29,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-theme="$root/.build/debug/abyss-theme"
-grab="$root/.build/debug/abyssgrab"
+undertow="$ABYSS_BIN_DIR/undertow"
+theme="$ABYSS_BIN_DIR/abyss-theme"
+grab="$ABYSS_BIN_DIR/abyssgrab"
 [ -x "$undertow" ] && [ -x "$theme" ] && [ -x "$grab" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
@@ -88,7 +88,7 @@ if command -v gdbus >/dev/null 2>&1; then
   portal=1
   abyss_bridge_start "$work" || exit 1
   busaddr="$DBUS_SESSION_BUS_ADDRESS"
-  env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$root/.build/debug/abyss-dbus" \
+  env DBUS_SESSION_BUS_ADDRESS="$ABYSS_BRIDGE_SERVICES" "$ABYSS_BIN_DIR/abyss-dbus" \
       > "$work/bridge.out" 2> "$work/bridge.err" &
   bridge_pid=$!
   after "$work/bridge.out" '^ready' 0 "abyss-dbus never came up: $(cat "$work/bridge.err")"
@@ -117,7 +117,7 @@ told() {  # told SCHEME WHY
 # each told of the change by nobody but its own watch. The status items are
 # pinned as the golden gate pins them; the clock is not, so the bar is compared
 # on its left half, where the menus are.
-demo="$root/.build/debug/AquaDemo"
+demo="$ABYSS_BIN_DIR/AquaDemo"
 mkdir -p "$work/desk"
 shell_pids=""
 for scene in wallpaper menubar dock window; do

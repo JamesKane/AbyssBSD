@@ -25,8 +25,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-theme="$root/.build/debug/abyss-theme"
+undertow="$ABYSS_BIN_DIR/undertow"
+theme="$ABYSS_BIN_DIR/abyss-theme"
 [ -x "$undertow" ] && [ -x "$theme" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
@@ -141,7 +141,7 @@ fi
 # is passed here.
 mkdir -p "$work/rt"
 printf '#!/bin/sh\nenv > %s/env.txt\nexec sleep 30\n' "$work" > "$work/dump.sh"; chmod +x "$work/dump.sh"
-env -u XCURSOR_THEME -u XCURSOR_SIZE -u XCURSOR_PATH "$root/.build/debug/anchor" --runtime-dir "$work/rt" \
+env -u XCURSOR_THEME -u XCURSOR_SIZE -u XCURSOR_PATH "$ABYSS_BIN_DIR/anchor" --runtime-dir "$work/rt" \
     --display no-compositor-needed --component "dump=$work/dump.sh" > "$work/anchor.log" 2>&1 &
 an=$!
 i=0; while [ ! -s "$work/env.txt" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done

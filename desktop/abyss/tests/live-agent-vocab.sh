@@ -24,13 +24,14 @@
 # Usage: abyss/tests/live-agent-vocab.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-av.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u)
 N="abyss-$uid-agent"
@@ -74,19 +75,19 @@ printf 'a note\n' > "$W/note.txt"
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width 1024 --height 768 --config-dir "$W/cfg" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width 1024 --height 768 --config-dir "$W/cfg" \
     > "$W/ut.out" 2> "$W/ut.err" & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-env ABYSS_GRAB_DUMP=1 AQUA_SCENE=grab .build/debug/AquaDemo > "$W/grab.log" 2>&1 & gr=$!
-env AQUA_SCENE=textedit .build/debug/AquaDemo "$W/note.txt" > "$W/te.log" 2>&1 & te=$!
+env ABYSS_GRAB_DUMP=1 AQUA_SCENE=grab $ABYSS_BIN_DIR/AquaDemo > "$W/grab.log" 2>&1 & gr=$!
+env AQUA_SCENE=textedit $ABYSS_BIN_DIR/AquaDemo "$W/note.txt" > "$W/te.log" 2>&1 & te=$!
 await "$W/te.log" 'TextEdit: menus on ' "TextEdit did not publish its menus"
 await "$W/grab.log" 'Grab: menus on ' "Grab did not publish its menus"
-.build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 & kp=$!
+$ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 
 # ---- 1. a bridge, inside and out ------------------------------------------------
-.build/debug/abyss-jail agent agent > "$W/a1" 2>&1 || fail "the agent session was refused: $(cat "$W/a1")"
+$ABYSS_BIN_DIR/abyss-jail agent agent > "$W/a1" 2>&1 || fail "the agent session was refused: $(cat "$W/a1")"
 session=$(sed -n 's/^agent \([^ ]*\) .*/\1/p' "$W/a1")
 sock=$(sed -n 's/.* socket=\([^ ]*\) .*/\1/p' "$W/a1")
 transcript=$(sed -n 's/.* transcript=\([^ ]*\) .*/\1/p' "$W/a1")
@@ -97,14 +98,14 @@ case "$transcript" in "$RB"*) fail "the control socket is inside the jail" ;; es
 echo "ok: 1. the session's bridge answers in the jail (vocab-1.sock); its control socket is outside; no application's menu socket is inside"
 
 # ---- 2. give TextEdit -------------------------------------------------------------
-.build/debug/abyss-jail give "$session" textedit > "$W/g1" 2>&1 || fail "give was refused: $(cat "$W/g1")"
+$ABYSS_BIN_DIR/abyss-jail give "$session" textedit > "$W/g1" 2>&1 || fail "give was refused: $(cat "$W/g1")"
 grep -q "^gave TextEdit to $session" "$W/g1" || fail "give said: $(cat "$W/g1")"
 t="$transcript/transcript.jsonl"
 grep -q '"event":"given","app":"TextEdit","service":"menus.textedit.'"$te"'"' "$t" || fail "the transcript does not say TextEdit ($te) was given: $(grep vocabulary "$t")"
 echo "ok: 2. TextEdit (pid $te) was given to the session, and the transcript says so"
 
 # ---- 3 and 4. the agent drives TextEdit, and not Grab ---------------------------------
-.build/debug/abyss-agent ask --listen "$sock" save my note > "$W/q1" 2>&1 || fail "the question failed: $(cat "$W/q1")"
+$ABYSS_BIN_DIR/abyss-agent ask --listen "$sock" save my note > "$W/q1" 2>&1 || fail "the question failed: $(cat "$W/q1")"
 grep '"kind":"request"' "$t" | sed -n 2p > "$W/second"
 [ "$(toolsaid "$W/second" v1)" = "TextEdit" ] || fail "apps did not list TextEdit alone: $(toolsaid "$W/second" v1)"
 toolsaid "$W/second" v2 | grep -q 'file.save — \\"Save\\" in File \[enabled\]' || fail "describe_app did not read TextEdit's menus: $(toolsaid "$W/second" v2 | head -c 400)"
@@ -113,9 +114,9 @@ grep -q '^permission=TextEdit file.save$' "$W/q1" || fail "the save was not aske
 sleep 0.3
 grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved before the person allowed it"
 grep -q '"event":"asked","app":"TextEdit","verb":"file.save","title":"Save"' "$t" || fail "the transcript does not say the person was asked"
-.build/debug/abyss-jail permit "$session" TextEdit yes > /dev/null || fail "permit was refused"
+$ABYSS_BIN_DIR/abyss-jail permit "$session" TextEdit yes > /dev/null || fail "permit was refused"
 grep -q '"event":"permitted","app":"TextEdit"' "$t" || fail "the transcript does not say TextEdit was allowed"
-.build/debug/abyss-agent ask --listen "$sock" save it now > "$W/q2" 2>&1 || fail "the second question failed: $(cat "$W/q2")"
+$ABYSS_BIN_DIR/abyss-agent ask --listen "$sock" save it now > "$W/q2" 2>&1 || fail "the second question failed: $(cat "$W/q2")"
 grep -q '^permission=' "$W/q2" && fail "an allowed application was asked about again"
 await "$W/te.log" "TextEdit: saved $W/note.txt" "TextEdit did not save once allowed"
 echo "ok: 3. apps listed TextEdit; describe_app read its menus; file.save asked the person — refused unasked, nothing written — and saved once allowed"
@@ -126,14 +127,14 @@ grep -q '"event":"refused","app":"Grab","reason":"not given"' "$t" || fail "the 
 echo "ok: 4. Grab, running but not given, was refused by name; it captured nothing, and the transcript says so"
 
 # ---- 5. gives that cannot be ------------------------------------------------------------
-.build/debug/abyss-jail give no-such-session textedit > "$W/g2" 2>&1 && fail "a give to no session was taken"
+$ABYSS_BIN_DIR/abyss-jail give no-such-session textedit > "$W/g2" 2>&1 && fail "a give to no session was taken"
 grep -q 'there is no agent session no-such-session with a vocabulary' "$W/g2" || fail "the refusal does not say why: $(cat "$W/g2")"
-.build/debug/abyss-jail give "$session" diskutility > "$W/g3" 2>&1 && fail "a give of an application that is not running was taken"
+$ABYSS_BIN_DIR/abyss-jail give "$session" diskutility > "$W/g3" 2>&1 && fail "a give of an application that is not running was taken"
 grep -q 'no running application diskutility' "$W/g3" || fail "the refusal does not say why: $(cat "$W/g3")"
 echo "ok: 5. a give to no session, or of an application not running, is refused in words"
 
 # ---- 6. bye --------------------------------------------------------------------------------
-.build/debug/abyss-agent bye --listen "$sock" > /dev/null
+$ABYSS_BIN_DIR/abyss-agent bye --listen "$sock" > /dev/null
 await "$W/keeper.log" 'jails: its model stopped' "the model did not stop"
 await "$W/keeper.log" 'jails: its vocabulary and fetch bridges stopped' "the vocabulary bridge did not stop"
 pgrep -f "abyss-vocab serve --listen $RB" > /dev/null && fail "abyss-vocab outlived the agent"

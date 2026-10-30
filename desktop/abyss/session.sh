@@ -65,7 +65,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir      # FreeBSD sets none; sway refuses without it
-bin="$root/.build/debug/AquaDemo"
+bin="$ABYSS_BIN_DIR/AquaDemo"
 
 # Default mode: nested if there's a compositor to nest inside, else headless.
 if [ -z "$mode" ]; then

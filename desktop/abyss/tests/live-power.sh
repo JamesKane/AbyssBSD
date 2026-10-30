@@ -39,7 +39,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-bin="$root/.build/debug"
+bin="$ABYSS_BIN_DIR"
 for b in undertow AquaDemo abyss-loginstub abyss-loginctl anchor abyssctl abyss-idle; do
   [ -x "$bin/$b" ] || { swift build; break; }
 done

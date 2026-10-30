@@ -23,13 +23,14 @@
 # Usage: abyss/tests/live-agent-give.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow abyssmenu; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-ag2.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u)
 export XDG_RUNTIME_DIR="$W/xdg" ABYSS_RUNTIME_DIR="$W/xdg" ABYSS_CONFIG_DIR="$W/config" HOME="$W/home"
@@ -70,15 +71,15 @@ cc -I"$W" abyss/tests/vpointer.c "$W/vpointer-proto.c" $(pkg-config --cflags --l
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
     > "$W/ut.out" 2> "$W/ut.err" 3>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-env AQUA_SCENE=textedit .build/debug/AquaDemo "$W/note.txt" > "$W/te.log" 2>&1 3>&- & te=$!
+env AQUA_SCENE=textedit $ABYSS_BIN_DIR/AquaDemo "$W/note.txt" > "$W/te.log" 2>&1 3>&- & te=$!
 await "$W/te.log" 'TextEdit: menus on ' "TextEdit did not publish its menus"
-.build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- & kp=$!
+$ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
-env AQUA_SCENE=agent .build/debug/AquaDemo > "$W/app.log" 2>&1 3>&- & ap=$!
+env AQUA_SCENE=agent $ABYSS_BIN_DIR/AquaDemo > "$W/app.log" 2>&1 3>&- & ap=$!
 await "$W/app.log" 'Agent: session .* at ' "the Agent window got no session"
 await "$W/ut.out" '^window org.abyssbsd.agent' "no Agent window on the screen"
 mkfifo "$W/pointer"
@@ -88,8 +89,8 @@ sleep 0.5
 pos=$(grep '^window org.abyssbsd.agent' "$W/ut.out" | tail -1 | tr ' ' '\n' | grep -E '^[0-9]+,[0-9]+$' | tail -1)
 
 # ---- 1. Give Application… -------------------------------------------------------
-[ "$(.build/debug/abyssmenu validate agent | sed -n 's/^agent\.give-app	//p')" = enabled ] || fail "Give Application… is not enabled"
-.build/debug/abyssmenu run agent agent.give-app > /dev/null 2>&1 || fail "Give Application… was refused"
+[ "$($ABYSS_BIN_DIR/abyssmenu validate agent | sed -n 's/^agent\.give-app	//p')" = enabled ] || fail "Give Application… is not enabled"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.give-app > /dev/null 2>&1 || fail "Give Application… was refused"
 await "$W/app.log" 'Agent: picker rows ' "the picker never drew its rows"
 rows=$(grep 'Agent: picker rows ' "$W/app.log" | tail -1)
 echo "$rows" | grep -q ' TextEdit=' || fail "the picker does not list TextEdit: $rows"
@@ -104,7 +105,7 @@ await "$W/app.log" 'Agent: gave TextEdit' "the window did not hear it was given"
 echo "ok: 2. clicking TextEdit's row gave it (menus.textedit.$te), and the window knows"
 
 # ---- 3. the agent drives it -------------------------------------------------------------
-.build/debug/abyssmenu run agent agent.question "text=save my note" > /dev/null 2>&1 || fail "the question was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=save my note" > /dev/null 2>&1 || fail "the question was refused"
 await "$W/app.log" 'Agent: call activate' "the agent did not activate anything"
 # Requester 1 (P18.11): the first save asks the person. Don't Allow first:
 # nothing is written, and the next save asks again. Then Allow.
@@ -113,31 +114,31 @@ grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved before the person 
 # A person reads before they answer: longer than any request's timeout.
 sleep 4
 grep -q 'Agent: call activate.*file.save-as\|Agent: answered' "$W/app.log" && fail "the agent did not wait for the person's answer"
-.build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Don't Allow was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Don't Allow was refused"
 await "$W/app.log" 'Agent: did not allow TextEdit to write' "Don't Allow did not reach the keeper"
 await "$W/app.log" 'Agent: answered: stop=answered' "the question was not answered after Don't Allow"
 sleep 0.3
 grep -q 'TextEdit: saved' "$W/te.log" && fail "TextEdit saved after the person did not allow it"
-.build/debug/abyssmenu run agent agent.question "text=save my note, please" > /dev/null 2>&1 || fail "the second question was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=save my note, please" > /dev/null 2>&1 || fail "the second question was refused"
 await "$W/app.log" 'Agent: requester write: TextEdit file.save' "the next save after Don't Allow was not asked about again" 2
-.build/debug/abyssmenu run agent agent.allow > /dev/null 2>&1 || fail "Allow was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.allow > /dev/null 2>&1 || fail "Allow was refused"
 await "$W/app.log" 'Agent: allowed TextEdit to write' "Allow did not reach the keeper"
 await "$W/te.log" "TextEdit: saved $W/note.txt" "TextEdit did not save for the agent"
 await "$W/app.log" 'Agent: answered: stop=answered' "the question was not answered" 2
 echo "ok: 3. the first save asked the person: Don't Allow wrote nothing and the next save asked again; Allow, and TextEdit saved"
 
 # ---- 4. a give that cannot be -------------------------------------------------------------
-.build/debug/abyssmenu run agent agent.give "app=diskutility" > /dev/null 2>&1 || fail "Give was refused outright"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.give "app=diskutility" > /dev/null 2>&1 || fail "Give was refused outright"
 await "$W/app.log" 'Agent: give refused: Not given: no running application diskutility' "the window did not say why"
 echo "ok: 4. Give of an application that is not running was refused, and the window says why"
 
 # ---- 5. a handed session cannot give ---------------------------------------------------------
 sock=$(sed -n 's/^Agent: session .* at //p' "$W/app.log" | head -1)
-env AQUA_SCENE=agent ABYSS_AGENT_SOCKET="$sock" .build/debug/AquaDemo > "$W/app2.log" 2>&1 3>&- & ap2=$!
+env AQUA_SCENE=agent ABYSS_AGENT_SOCKET="$sock" $ABYSS_BIN_DIR/AquaDemo > "$W/app2.log" 2>&1 3>&- & ap2=$!
 await "$W/app2.log" 'Agent: session (given) at ' "the second window did not take the handed session"
 await "$W/app2.log" 'Agent: menus on ' "the second window published no menus"
 svc=$(sed -n 's/^Agent: menus on //p' "$W/app2.log")
-st=$(.build/debug/abyssmenu validate "$svc" | sed -n 's/^agent\.give-app	//p')
+st=$($ABYSS_BIN_DIR/abyssmenu validate "$svc" | sed -n 's/^agent\.give-app	//p')
 [ "$st" = "disabled (this session cannot be given applications)" ] || fail "a handed session's Give Application…: $st"
 echo "ok: 5. a window on a handed session cannot give: Give is disabled (this session cannot be given applications)"
 echo "all green (an application given from the Agent window, and driven by the agent through its own menus)."

@@ -40,8 +40,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-svc="$root/.build/debug/abyss-install"
-ctl="$root/.build/debug/abyss-installctl"
+svc="$ABYSS_BIN_DIR/abyss-install"
+ctl="$ABYSS_BIN_DIR/abyss-installctl"
 [ -x "$svc" ] && [ -x "$ctl" ] || swift build
 
 work=$(mktemp -d /tmp/abyss-inst.XXXXXX)

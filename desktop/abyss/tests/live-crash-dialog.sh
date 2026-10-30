@@ -22,14 +22,15 @@
 # Usage: abyss/tests/live-crash-dialog.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 [ -x /usr/bin/lldb ] || { echo "FAIL: no /usr/bin/lldb (it is in base)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyss-dbus; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-cd.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 export XDG_RUNTIME_DIR="$W/xdg" ABYSS_RUNTIME_DIR="$W/xdg" ABYSS_CONFIG_DIR="$W/config" HOME="$W/home"
@@ -73,11 +74,11 @@ cc -I"$W" abyss/tests/vpointer.c "$W/vpointer-proto.c" $(pkg-config --cflags --l
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
     > "$W/ut.out" 2> "$W/ut.err" 3>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-.build/debug/abyss-jail --socket "$SOCK" serve > "$K" 2>&1 3>&- & kp=$!
+$ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$K" 2>&1 3>&- & kp=$!
 await "$K" '^jails: ready' "the keeper did not start"
 mkfifo "$W/pointer"
 "$W/vpointer" $SW $SH < "$W/pointer" > "$W/vp.log" 2>&1 & vp=$!
@@ -88,9 +89,9 @@ winat() {  # winat APPID — the window's origin on the screen
 }
 
 # ---- 1. the crash, and the report ---------------------------------------------------
-.build/debug/abyss-jail launch app -- /bin/true > /dev/null 2>&1 || fail "the app jail did not open"
+$ABYSS_BIN_DIR/abyss-jail launch app -- /bin/true > /dev/null 2>&1 || fail "the app jail did not open"
 cp "$W/crasher" "$HB/$me/app/"
-.build/debug/abyss-jail launch app -- "/home/$me/crasher" > /dev/null 2>&1 || fail "the crasher did not launch"
+$ABYSS_BIN_DIR/abyss-jail launch app -- "/home/$me/crasher" > /dev/null 2>&1 || fail "the crasher did not launch"
 await "$K" 'jails: crash 1 shown' "the keeper did not put up a report for the crash"
 await "$K" 'CrashReport: up: crash 1, crasher, SIGSEGV, core yes' "Crash Reporter did not say what crashed"
 await "$K" 'CrashReport: buttons close=.* ask=' "Crash Reporter did not offer Ask the Agent…"
@@ -117,7 +118,7 @@ echo "$lldbsaid" | grep -q 'kaboom' && echo "$lldbsaid" | grep -q 'crasher.c:6' 
 echo "ok: 3. lldb ran on the core (SIGSEGV, kaboom() at crasher.c:6), and the window has the answer"
 
 # ---- 4. no core: OK, no Ask ---------------------------------------------------------------------
-.build/debug/abyss-jail launch app -- /bin/sh -c 'kill -9 $$' > /dev/null 2>&1 || fail "the SIGKILL probe did not launch"
+$ABYSS_BIN_DIR/abyss-jail launch app -- /bin/sh -c 'kill -9 $$' > /dev/null 2>&1 || fail "the SIGKILL probe did not launch"
 await "$K" 'CrashReport: up: crash 2, sh, SIGKILL, core no' "a crash with no core was not reported"
 await "$K" 'CrashReport: buttons ok=' "the no-core report offers more than OK"
 grep 'CrashReport: buttons ok=' "$K" | grep -q 'ask=' && fail "the no-core report offers Ask the Agent…"
@@ -126,7 +127,7 @@ echo "ok: 4. a crash that left no core: reported with OK only (it left nothing t
 # ---- 5. Quit in the Agent window --------------------------------------------------------------------
 apos=$(winat org.abyssbsd.agent); [ -n "$apos" ] || fail "no Agent window on the screen"
 # The window's own Quit, through its menu service, as the bar would.
-.build/debug/abyssmenu run agent app.quit > /dev/null 2>&1 || fail "Agent's Quit was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent app.quit > /dev/null 2>&1 || fail "Agent's Quit was refused"
 await "$K" 'Agent: bye' "Quit did not end the session"
 await "$K" 'jails: its model stopped' "the keeper did not stop the debug session's model"
 echo "ok: 5. Quit in the Agent window ended the debug session, and the keeper stopped its model"

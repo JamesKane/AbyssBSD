@@ -8,8 +8,8 @@
 # than assumed.
 #
 # Usage:
-#   ./build.sh                 # sync + swift build + swift test
-#   ./build.sh --no-test       # sync + swift build
+#   ./build.sh                 # sync + swift and cargo build + both tests
+#   ./build.sh --no-test       # sync + swift and cargo build
 #   ./build.sh --no-sync       # build what is already in the guest
 #   ./build.sh -- <args>       # pass extra args to `swift build` (e.g. -c release)
 set -eu
@@ -49,7 +49,15 @@ echo "[build] swift build ${extra}"
 run "export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && swift build $extra > /tmp/abyss-build.log 2>&1; rc=\$?; $filter < /tmp/abyss-build.log; exit \$rc" \
   || { echo "[build] FAILED: swift build in the guest" >&2; exit 1; }
 
+# The Rust half (docs/RUST.md R1), from the same synced tree.
+echo "[build] cargo build"
+run "cd $ABYSS_GUEST_SRC && cargo build --workspace --examples > /tmp/abyss-cargo.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo.log; exit \$rc" \
+  || { echo "[build] FAILED: cargo build in the guest" >&2; exit 1; }
+
 if [ "$do_test" -eq 1 ]; then
+  echo "[build] cargo test"
+  run "cd $ABYSS_GUEST_SRC && cargo test --workspace > /tmp/abyss-cargo-test.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo-test.log; exit \$rc" \
+    || { echo "[build] FAILED: cargo test in the guest" >&2; exit 1; }
   echo "[build] swift test"
   run "export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && swift test > /tmp/abyss-test.log 2>&1; rc=\$?; $filter < /tmp/abyss-test.log | tail -5; exit \$rc" \
     || { echo "[build] FAILED: swift test in the guest" >&2; exit 1; }

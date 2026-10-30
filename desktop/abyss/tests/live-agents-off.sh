@@ -19,17 +19,18 @@
 # Usage: abyss/tests/live-agents-off.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-off.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 export XDG_RUNTIME_DIR="$W/xdg" ABYSS_RUNTIME_DIR="$W/xdg" ABYSS_CONFIG_DIR="$W/config" HOME="$W/home"
-export PATH="$root/.build/debug:$PATH"   # the compositor opens Agent as AquaDemo, from PATH
+export PATH="$ABYSS_BIN_DIR:$PATH"   # the compositor opens Agent as AquaDemo, from PATH
 mkdir -m 700 "$XDG_RUNTIME_DIR" "$ABYSS_CONFIG_DIR" "$HOME"
 SW=1024 SH=768
 
@@ -68,13 +69,13 @@ cc -I"$W" abyss/tests/vkeyboard.c "$W/vkeyboard-proto.c" $(pkg-config --cflags -
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- 4>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$ABYSS_CONFIG_DIR" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$ABYSS_CONFIG_DIR" \
     > "$W/ut.out" 2> "$W/ut.err" 3>&- 4>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-.build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
+$ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
-env ABYSS_PREFS_DUMP=1 ABYSS_PREFS_PANE=agents AQUA_SCENE=sysprefs .build/debug/AquaDemo > "$W/prefs.log" 2>&1 3>&- 4>&- & pp=$!
+env ABYSS_PREFS_DUMP=1 ABYSS_PREFS_PANE=agents AQUA_SCENE=sysprefs $ABYSS_BIN_DIR/AquaDemo > "$W/prefs.log" 2>&1 3>&- 4>&- & pp=$!
 await "$W/prefs.log" 'agents layout ' "the Agents pane did not draw"
 mkfifo "$W/pointer" "$W/keys"
 "$W/vpointer" $SW $SH < "$W/pointer" > "$W/vp.log" 2>&1 & vp=$!
@@ -88,17 +89,17 @@ onoff=$(grep 'agents layout ' "$W/prefs.log" | tail -1 | tr ' ' '\n' | sed -n 's
 click_onoff() { printf 'm %s %s\np\nr\n' $((${pos%,*} + ${onoff%,*})) $((${pos#*,} + ${onoff#*,})) >&3; sleep 0.6; }
 chord() { printf 'c 72 30\n' >&4; sleep 1; }   # Cmd (64) + Alt (8), and A
 crash() {
-  .build/debug/abyss-jail launch app -- "/home/$me/crasher" > /dev/null 2>&1 || fail "the crasher did not launch"
+  $ABYSS_BIN_DIR/abyss-jail launch app -- "/home/$me/crasher" > /dev/null 2>&1 || fail "the crasher did not launch"
 }
 
 # ---- 1. off ------------------------------------------------------------------------
 grep -q 'agents: off;' "$W/prefs.log" || fail "the pane does not say agents are off"
-.build/debug/abyss-jail agent agent > "$W/a0" 2>&1 && fail "an agent session started with agents off"
+$ABYSS_BIN_DIR/abyss-jail agent agent > "$W/a0" 2>&1 && fail "an agent session started with agents off"
 grep -q 'agents are off: there is no agents.ini' "$W/a0" || fail "the refusal does not say why: $(cat "$W/a0")"
 chord
 grep -q '^window org.abyssbsd.agent' "$W/ut.out" && fail "⌥⌘A opened Agent with agents off"
 grep -q 'keybind: Agent' "$W/ut.err" "$W/ut.out" && fail "the compositor took ⌥⌘A with agents off"
-.build/debug/abyss-jail launch app -- /bin/true > /dev/null 2>&1 || fail "the app jail did not open"
+$ABYSS_BIN_DIR/abyss-jail launch app -- /bin/true > /dev/null 2>&1 || fail "the app jail did not open"
 cp "$W/crasher" "$HB/$me/app/"
 crash
 await "$W/keeper.log" 'CrashReport: buttons ' "the crash was not reported"
@@ -125,7 +126,7 @@ echo "ok: 3. on: ⌥⌘A opened Agent, which got a session; a crash offers Ask t
 click_onoff
 await "$W/prefs.log" 'agents: Agents are off.' "the checkbox did not turn agents off"
 [ -f "$ABYSS_CONFIG_DIR/agents.ini" ] && fail "agents.ini is still there"
-.build/debug/abyss-jail agent agent > "$W/a1" 2>&1 && fail "a session started after agents were turned off"
+$ABYSS_BIN_DIR/abyss-jail agent agent > "$W/a1" 2>&1 && fail "a session started after agents were turned off"
 grep -q 'agents are off' "$W/a1" || fail "the refusal does not say why: $(cat "$W/a1")"
 echo "ok: 4. clicked again: agents.ini is gone, and a new session is refused"
 echo "all green (off is one file, absent: no session, no chord, no Ask; on and off from the pane)."

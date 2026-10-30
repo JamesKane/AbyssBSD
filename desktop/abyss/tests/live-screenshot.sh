@@ -24,10 +24,10 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 out=${1:-}
-portal="$root/.build/debug/abyss-portal"
-client="$root/.build/debug/abyssopen"
-grabber="$root/.build/debug/abyssgrab"
-bin="$root/.build/debug/AquaDemo"
+portal="$ABYSS_BIN_DIR/abyss-portal"
+client="$ABYSS_BIN_DIR/abyssopen"
+grabber="$ABYSS_BIN_DIR/abyssgrab"
+bin="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$portal" ] && [ -x "$client" ] && [ -x "$grabber" ] && [ -x "$bin" ] || swift build
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 

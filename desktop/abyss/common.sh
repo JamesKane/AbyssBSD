@@ -1,6 +1,19 @@
 # shellcheck shell=sh
 # Shared helpers for the AbyssBSD dev/test scripts. Source this; don't run it.
 
+# Where the desktop's binaries are (RUST.md §3.1): every script runs them
+# from $ABYSS_BIN_DIR, never from a build tree by name, so a component
+# changes language by changing the directory its binary is found in. The
+# default is .build/abyss-bin when abyss/mk/bin-dir.sh has made it (SwiftPM's
+# binaries, and Cargo's for what abyss/rust-bins names), else SwiftPM's debug
+# products. The sourcing script has set $root (or $here) to the desktop.
+_abyss_root=${root:-${here:-$(pwd)}}
+if [ -z "${ABYSS_BIN_DIR:-}" ] && [ -d "$_abyss_root/.build/abyss-bin" ]; then
+  ABYSS_BIN_DIR=$_abyss_root/.build/abyss-bin
+fi
+: "${ABYSS_BIN_DIR:=$_abyss_root/.build/debug}"
+export ABYSS_BIN_DIR
+
 # Make sure XDG_RUNTIME_DIR names a usable directory.
 #
 # Wayland needs it: the compositor creates its socket there and clients look for
@@ -30,7 +43,7 @@ abyss_ensure_runtime_dir() {
 #   abyss_bridge_start DIR [ABYSS_DBUS]   — sockets DIR/bus, DIR/dbus-services
 abyss_bridge_start() {
     _dir=$1
-    _bin=${2:-$(cd "$(dirname "${0}")/../.." && pwd)/.build/debug/abyss-dbus}
+    _bin=${2:-$ABYSS_BIN_DIR/abyss-dbus}
     "$_bin" --endpoint --listen "$_dir/bus" --services "$_dir/dbus-services" \
         > "$_dir/bridge-endpoint.log" 2>&1 3>&- 4>&- 5>&- &
     abyss_bridge_pid=$!

@@ -38,9 +38,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-appgen="$root/.build/debug/abyss-appgen"
-undertow="$root/.build/debug/undertow"
-aqua="$root/.build/debug/AquaDemo"
+appgen="$ABYSS_BIN_DIR/abyss-appgen"
+undertow="$ABYSS_BIN_DIR/undertow"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
 for b in "$appgen" "$undertow" "$aqua"; do [ -x "$b" ] || { swift build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

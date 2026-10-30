@@ -34,8 +34,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-grab="$root/.build/debug/abyssgrab"
+undertow="$ABYSS_BIN_DIR/undertow"
+grab="$ABYSS_BIN_DIR/abyssgrab"
 [ -x "$undertow" ] && [ -x "$grab" ] || swift build
 
 W=800

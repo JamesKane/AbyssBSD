@@ -27,8 +27,9 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
-bin="$root/.build/debug/abyss-model"
+bin="$ABYSS_BIN_DIR/abyss-model"
 [ -x "$bin" ] || swift build --product abyss-model
 command -v curl >/dev/null || { echo "FAIL: curl not installed — it is the independent client"; exit 1; }
 

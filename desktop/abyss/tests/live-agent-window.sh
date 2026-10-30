@@ -22,13 +22,14 @@
 # Usage: abyss/tests/live-agent-window.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyssmenu; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-aw.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 N="abyss-$uid-agent"
@@ -52,7 +53,7 @@ fail() { echo "FAIL: $1"; for f in keeper.log app.log; do tail -6 "$W/$f" 2>/dev
 count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt 200 ]; do i=$((i + 1)); sleep 0.05; done
           [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"; }
-validate() { .build/debug/abyssmenu validate agent 2>&1 | sed -n "s/^agent\.ask	//p"; }
+validate() { $ABYSS_BIN_DIR/abyssmenu validate agent 2>&1 | sed -n "s/^agent\.ask	//p"; }
 
 # The stub (as live-agent.sh's): two tool calls, then an answer; 100 tokens
 # a reply, a budget of 450 — so the third question is stopped by it.
@@ -79,17 +80,17 @@ cc -I"$W" abyss/tests/vkeyboard.c "$W/vkeyboard-proto.c" $(pkg-config --cflags -
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- 4>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
     > "$W/ut.out" 2> "$W/ut.err" 3>&- 4>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
 # The stub takes 1.5 s a reply (inherited by abyss-model), so a tool call is
 # on the screen while the answer does not exist yet.
-env ABYSS_MODEL_STUB_DELAY=1500 .build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
+env ABYSS_MODEL_STUB_DELAY=1500 $ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 
 # ---- 1. the window, and its session -------------------------------------------
-env AQUA_SCENE=agent .build/debug/AquaDemo > "$W/app.log" 2>&1 3>&- 4>&- & ap=$!
+env AQUA_SCENE=agent $ABYSS_BIN_DIR/AquaDemo > "$W/app.log" 2>&1 3>&- 4>&- & ap=$!
 await "$W/app.log" 'Agent: session .* at ' "the window did not get a session"
 await "$W/app.log" 'Agent: layout field=' "the window never drew"
 await "$W/ut.out" '^window org.abyssbsd.agent/' "no Agent window on the screen"
@@ -97,7 +98,7 @@ sock=$(sed -n 's/^Agent: session .* at //p' "$W/app.log")
 case "$sock" in "$RB/$uid/agent/run/user/agent-"*.sock) ;; *) fail "the window's agent socket is not in the agent jail: $sock" ;; esac
 grep -q "jails: agent session .* in $N" "$W/keeper.log" || fail "the keeper did not start the session in $N"
 [ "$(validate)" = enabled ] || fail "Ask, with the agent ready: $(validate)"
-.build/debug/abyssmenu run agent agent.ask > "$W/m0" 2>&1 && fail "Ask with an empty field was taken"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.ask > "$W/m0" 2>&1 && fail "Ask with an empty field was taken"
 grep -q 'the field is empty' "$W/m0" || fail "an empty Ask does not say why: $(cat "$W/m0")"
 pos=$(grep '^window org.abyssbsd.agent/' "$W/ut.out" | tail -1 | tr ' ' '\n' | grep -E '^[0-9]+,[0-9]+$' | tail -1)
 wx=${pos%,*}; wy=${pos#*,}
@@ -136,15 +137,15 @@ await "$W/app.log" 'Agent: answered: stop=answered' "the button's question was n
 echo "ok: 3. the Ask button sent the next question, and it was answered"
 
 # ---- 4. a script, through the vocabulary; and the budget -------------------------------
-.build/debug/abyssmenu run agent agent.question "text=and wednesday" > "$W/m1" 2>&1 || fail "abyssmenu's ask was refused: $(cat "$W/m1")"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=and wednesday" > "$W/m1" 2>&1 || fail "abyssmenu's ask was refused: $(cat "$W/m1")"
 await "$W/app.log" 'Agent: asked: and wednesday' "the vocabulary's ask did not reach the agent"
 await "$W/app.log" 'Agent: answered: stop=budget' "the budget did not stop the third question"
 # The budget asks the person now (P18.11); this test's person says Stop.
 await "$W/app.log" 'Agent: requester budget: ' "the budget did not ask the person"
-.build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
 await "$W/app.log" 'Agent: stopped by the person' "Stop did not end the question"
 [ "$(validate)" = "disabled (there is no agent)" ] || fail "Ask after the budget: $(validate)"
-.build/debug/abyssmenu run agent agent.question "text=more" > "$W/m2" 2>&1 && fail "an ask after the budget was taken"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=more" > "$W/m2" 2>&1 && fail "an ask after the budget was taken"
 grep -q 'there is no agent' "$W/m2" || fail "the refused ask does not say why: $(cat "$W/m2")"
 echo "ok: 4. abyssmenu asked as a person does; the budget stopped it, and Ask is refused (there is no agent)"
 
@@ -160,7 +161,7 @@ ap=
 echo "ok: 5. ⌘Q said bye; the agent exited and the keeper stopped its model"
 
 # ---- 6. no model -----------------------------------------------------------------------
-env AQUA_SCENE=agent ABYSS_AGENT_CLASS=debug .build/debug/AquaDemo > "$W/app2.log" 2>&1 3>&- 4>&- & ap=$!
+env AQUA_SCENE=agent ABYSS_AGENT_CLASS=debug $ABYSS_BIN_DIR/AquaDemo > "$W/app2.log" 2>&1 3>&- 4>&- & ap=$!
 await "$W/app2.log" 'Agent: refused: No agent: no model is set for debug' "the window did not say why there is no agent"
 kill "$ap"; ap=
 echo "ok: 6. a class with no model: the window says why there is no agent"

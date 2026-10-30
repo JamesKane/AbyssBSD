@@ -22,9 +22,9 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 out=${1:-}
-undertow="$root/.build/debug/undertow"
-demo="$root/.build/debug/AquaDemo"
-grab="$root/.build/debug/abyssgrab"
+undertow="$ABYSS_BIN_DIR/undertow"
+demo="$ABYSS_BIN_DIR/AquaDemo"
+grab="$ABYSS_BIN_DIR/abyssgrab"
 [ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$grab" ] || swift build
 
 W=800

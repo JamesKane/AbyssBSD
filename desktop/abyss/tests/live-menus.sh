@@ -27,8 +27,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-aqua="$root/.build/debug/AquaDemo"
+undertow="$ABYSS_BIN_DIR/undertow"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$undertow" ] && [ -x "$aqua" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
@@ -123,7 +123,7 @@ open_menu() {  # open_menu TITLE
 if [ -n "${ABYSS_MENUS_SHOT:-}" ]; then
   open_menu File
   sleep 0.5
-  WAYLAND_DISPLAY="$wd" "$root/.build/debug/abyssgrab" "$ABYSS_MENUS_SHOT" \
+  WAYLAND_DISPLAY="$wd" "$ABYSS_BIN_DIR/abyssgrab" "$ABYSS_MENUS_SHOT" \
     || fail "could not grab the screen"
   click $(title_at File)
   echo "ok: grabbed $ABYSS_MENUS_SHOT with File open"
@@ -137,7 +137,7 @@ fi
 open_menu File
 sleep 0.4
 grab="$work/open.ppm"
-WAYLAND_DISPLAY="$wd" "$root/.build/debug/abyssgrab" "$grab" 2>/dev/null \
+WAYLAND_DISPLAY="$wd" "$ABYSS_BIN_DIR/abyssgrab" "$grab" 2>/dev/null \
   || fail "could not grab the screen"
 fx=$(title_at File | cut -d' ' -f1)
 fy=$(item_line File "New Finder Window" | sed -n "s/.* at [0-9]*,\([0-9]*\) .*/\1/p")

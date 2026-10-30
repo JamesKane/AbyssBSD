@@ -26,7 +26,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-bin="$root/.build/debug"
+bin="$ABYSS_BIN_DIR"
 for b in undertow abyssgrab AquaDemo abyss-loginstub anchor abyssctl; do
   [ -x "$bin/$b" ] || { swift build; break; }
 done

@@ -45,8 +45,8 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 . "$root/abyss/common.sh"
 
-daemon="$root/.build/debug/abyss-loginwindow"
-ctl="$root/.build/debug/abyss-loginctl"
+daemon="$ABYSS_BIN_DIR/abyss-loginwindow"
+ctl="$ABYSS_BIN_DIR/abyss-loginctl"
 [ -x "$daemon" ] && [ -x "$ctl" ] || swift build
 
 fail() { echo "FAIL: $1"; [ -s "${work:-/nonexistent}/daemon.log" ] && sed 's/^/  daemon| /' "$work/daemon.log" | tail -8; exit 1; }

@@ -48,8 +48,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-clip="$root/.build/debug/abyssclip"
+undertow="$ABYSS_BIN_DIR/undertow"
+clip="$ABYSS_BIN_DIR/abyssclip"
 [ -x "$undertow" ] && [ -x "$clip" ] || swift build
 
 work=$(mktemp -d /tmp/abyss-clip.XXXXXX)
@@ -131,7 +131,7 @@ echo "ok: ...and nothing reached the clipboard, so the refusal was real"
 # process.
 kill "$copy_pid" 2>/dev/null || true; copy_pid=""
 
-aqua="$root/.build/debug/AquaDemo"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$aqua" ] || fail "no AquaDemo"
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping the Finder half"; exit 0; }
 

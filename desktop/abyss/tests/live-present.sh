@@ -27,7 +27,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
+undertow="$ABYSS_BIN_DIR/undertow"
 [ -x "$undertow" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

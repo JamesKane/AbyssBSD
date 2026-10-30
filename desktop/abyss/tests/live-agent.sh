@@ -22,13 +22,14 @@
 # Usage: abyss/tests/live-agent.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-ag.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 N="abyss-$uid-agent"
@@ -66,11 +67,11 @@ printf '[agent]\nmodel = stub:%s\nbudget = 250\n' "$W/stub.json" > "$ABYSS_CONFI
 
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 &
 await "$W/jd.log" 'answering at' "the daemon did not start"
-env -u WAYLAND_DISPLAY .build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 & kp=$!
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 
 # ---- 1. a session, in the agent's jail --------------------------------------
-.build/debug/abyss-jail agent agent > "$W/a1" 2>&1 || fail "the agent session was refused: $(cat "$W/a1")"
+$ABYSS_BIN_DIR/abyss-jail agent agent > "$W/a1" 2>&1 || fail "the agent session was refused: $(cat "$W/a1")"
 sock=$(sed -n 's/.* socket=\([^ ]*\) .*/\1/p' "$W/a1")
 transcript=$(sed -n 's/.* transcript=\([^ ]*\) .*/\1/p' "$W/a1")
 apid=$(sed -n 's/.* pid=\([0-9]*\)$/\1/p' "$W/a1")
@@ -85,7 +86,7 @@ echo "ok: 1. the agent runs in $N (jid $jid): no address, and only its own socke
 
 # ---- 2. the loop, in the jail -------------------------------------------------
 printf 'mine\n' > "$HB/$me/agent/marker.txt"
-.build/debug/abyss-agent ask --listen "$sock" look around > "$W/q1" 2>&1 || fail "the question failed: $(cat "$W/q1")"
+$ABYSS_BIN_DIR/abyss-agent ask --listen "$sock" look around > "$W/q1" 2>&1 || fail "the question failed: $(cat "$W/q1")"
 [ "$(grep -v '^call=' "$W/q1" | head -1)" = "done looking" ] || fail "the agent's answer: $(cat "$W/q1")"
 [ "$(head -1 "$W/q1" | cut -c1-20)" = "call=list_directory(" ] || fail "the calls did not come first, as they happened: $(cat "$W/q1")"
 grep -q '^stop=answered$' "$W/q1" && grep -q '^steps=2$' "$W/q1" || fail "not answered in 2 steps: $(cat "$W/q1")"
@@ -106,7 +107,7 @@ ls "$RB/$uid/agent/run" | grep -q log && fail "a log is inside the jail: $(ls "$
 echo "ok: 3. the transcript is ~/Library/Logs/Agents/$(basename "$transcript"), 0600 in 0700, outside the jail"
 
 # ---- 4. the budget --------------------------------------------------------------
-st=0; .build/debug/abyss-agent ask --listen "$sock" again > "$W/q2" 2>&1 || st=$?
+st=0; $ABYSS_BIN_DIR/abyss-agent ask --listen "$sock" again > "$W/q2" 2>&1 || st=$?
 [ $st = 3 ] || fail "the second question exited $st, not 3 (budget): $(cat "$W/q2")"
 grep -q "the session's budget of 250 tokens is spent (300 used)" "$W/q2" || fail "the agent does not say why it stopped: $(cat "$W/q2")"
 grep -q '"kind":"refused"' "$t" || fail "the refusal is not in the transcript"
@@ -114,16 +115,16 @@ echo "ok: 4. the budget stopped the next call; the agent said why and exited 3"
 
 # ---- 5. bye ------------------------------------------------------------------------
 mpid=$(pgrep -f "abyss-model serve --listen $RB/$uid/agent/run/user/model-1.sock") || fail "no abyss-model for the session"
-.build/debug/abyss-agent bye --listen "$sock" > /dev/null || fail "bye failed"
+$ABYSS_BIN_DIR/abyss-agent bye --listen "$sock" > /dev/null || fail "bye failed"
 await "$W/keeper.log" "jails: abyss-agent (pid $apid) in $N exited" "the keeper did not see the agent end"
 await "$W/keeper.log" "jails: its model stopped" "the keeper did not stop the session's model"
 kill -0 "$mpid" 2>/dev/null && fail "abyss-model (pid $mpid) outlived its agent"
 echo "ok: 5. bye ended the agent, and the keeper stopped its model"
 
 # ---- 6. refusals ---------------------------------------------------------------------
-.build/debug/abyss-jail agent debug > "$W/r1" 2>&1 && fail "an agent class with no model started a session"
+$ABYSS_BIN_DIR/abyss-jail agent debug > "$W/r1" 2>&1 && fail "an agent class with no model started a session"
 grep -q 'no model is set for debug: set model= in jails.ini \[debug\]' "$W/r1" || fail "the refusal does not say why: $(cat "$W/r1")"
-.build/debug/abyss-jail agent app > "$W/r2" 2>&1 && fail "an application class started an agent"
+$ABYSS_BIN_DIR/abyss-jail agent app > "$W/r2" 2>&1 && fail "an application class started an agent"
 grep -q 'app is not an agent class' "$W/r2" || fail "the refusal does not say why: $(cat "$W/r2")"
 echo "ok: 6. no model, and not an agent's class: both refused in words"
 echo "all green (an agent in its jail: the model through abyss-model, the tools within the jail, the budget stops it)."

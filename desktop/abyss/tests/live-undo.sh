@@ -25,9 +25,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-aqua="$root/.build/debug/AquaDemo"
-menu="$root/.build/debug/abyssmenu"
+undertow="$ABYSS_BIN_DIR/undertow"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
+menu="$ABYSS_BIN_DIR/abyssmenu"
 [ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$menu" ] || swift build
 
 work=$(mktemp -d /tmp/abyss-undo.XXXXXX)

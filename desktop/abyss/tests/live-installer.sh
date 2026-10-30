@@ -34,9 +34,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-client="$root/.build/debug/AquaDemo"
-svc="$root/.build/debug/abyss-install"
+undertow="$ABYSS_BIN_DIR/undertow"
+client="$ABYSS_BIN_DIR/AquaDemo"
+svc="$ABYSS_BIN_DIR/abyss-install"
 [ -x "$undertow" ] && [ -x "$client" ] && [ -x "$svc" ] || swift build
 
 W=1024

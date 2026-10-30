@@ -19,8 +19,9 @@
 # Usage: abyss/tests/live-vt.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
-vt="$root/.build/debug/abyss-vt"
+vt="$ABYSS_BIN_DIR/abyss-vt"
 [ -x "$vt" ] || swift build --product abyss-vt
 work=$(mktemp -d /tmp/abyss-vt.XXXXXX)
 trap 'rm -rf "$work"' EXIT INT TERM HUP

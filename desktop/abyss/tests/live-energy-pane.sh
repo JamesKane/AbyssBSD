@@ -30,11 +30,11 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-client="$root/.build/debug/AquaDemo"
-menu="$root/.build/debug/abyssmenu"
-helper="$root/.build/debug/abyss-settings"
-vents="$root/.build/debug/ventsctl"
+undertow="$ABYSS_BIN_DIR/undertow"
+client="$ABYSS_BIN_DIR/AquaDemo"
+menu="$ABYSS_BIN_DIR/abyssmenu"
+helper="$ABYSS_BIN_DIR/abyss-settings"
+vents="$ABYSS_BIN_DIR/ventsctl"
 for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { swift build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
@@ -223,7 +223,7 @@ if [ "$freebsd" = 1 ]; then
   grep 'energy layout' "$work/app.log" | tail -1 | grep -q 'profile\.' && fail "power-mode radios without profiles"
   # And refused, not attempted: applying a profile on this base changes nothing.
   before=$(cat "$work/rc.conf")
-  out=$(env ABYSS_RUNTIME_DIR="$rundir" "$root/.build/debug/abyss-settingsctl" apply power-profile --profile performance 2>&1) \
+  out=$(env ABYSS_RUNTIME_DIR="$rundir" "$ABYSS_BIN_DIR/abyss-settingsctl" apply power-profile --profile performance 2>&1) \
     && fail "a profile was applied on a base without them: $out"
   case "$out" in *"offers no power profiles"*) ;; *) fail "the refusal: $out" ;; esac
   [ "$(cat "$work/rc.conf")" = "$before" ] || fail "a refused profile still changed rc.conf: $(cat "$work/rc.conf")"

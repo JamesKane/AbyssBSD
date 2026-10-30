@@ -22,8 +22,9 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
-aqua="$root/.build/debug/AquaDemo"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$aqua" ] || swift build
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')

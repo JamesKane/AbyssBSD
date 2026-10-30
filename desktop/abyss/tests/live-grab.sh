@@ -27,10 +27,10 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-aqua="$root/.build/debug/AquaDemo"
-portal="$root/.build/debug/abyss-portal"
-grab="$root/.build/debug/abyssgrab"
+undertow="$ABYSS_BIN_DIR/undertow"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
+portal="$ABYSS_BIN_DIR/abyss-portal"
+grab="$ABYSS_BIN_DIR/abyssgrab"
 for b in "$undertow" "$aqua" "$portal" "$grab"; do [ -x "$b" ] || { swift build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

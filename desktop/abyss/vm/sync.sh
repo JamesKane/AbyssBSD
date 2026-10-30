@@ -16,6 +16,7 @@ rsync -a --delete \
   --exclude '.git' \
   --exclude 'obj/' \
   --exclude '.build/' \
+  --exclude '/target/' \
   --exclude 'abyss-vm/' \
   --exclude 'abyss-swift-vm/' \
   -e "ssh $(abyss_ssh_opts)" \

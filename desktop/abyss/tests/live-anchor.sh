@@ -19,9 +19,9 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 out="${1:-${TMPDIR:-/tmp}/anchor-session.png}"
-anchor="$root/.build/debug/anchor"
-ctl="$root/.build/debug/abyssctl"
-bin="$root/.build/debug/AquaDemo"
+anchor="$ABYSS_BIN_DIR/anchor"
+ctl="$ABYSS_BIN_DIR/abyssctl"
+bin="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$anchor" ] && [ -x "$ctl" ] && [ -x "$bin" ] || swift build
 
 # Short path: a unix socket must fit in sockaddr_un.sun_path (HANDOFF §2.32).

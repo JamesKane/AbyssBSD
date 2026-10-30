@@ -32,8 +32,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-helper="$root/.build/debug/abyss-settings"
-ctl="$root/.build/debug/abyss-settingsctl"
+helper="$ABYSS_BIN_DIR/abyss-settings"
+ctl="$ABYSS_BIN_DIR/abyss-settingsctl"
 [ -x "$helper" ] && [ -x "$ctl" ] || swift build
 
 work=$(mktemp -d /tmp/abyss-settings.XXXXXX)

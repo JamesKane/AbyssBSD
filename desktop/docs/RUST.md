@@ -107,7 +107,17 @@ sources until the Swift is deleted. Add `abyss-sys`, one crate of `extern "C"`
 blocks over the C shims' headers (§6.4), built by `cc` from the same `.c`
 files SwiftPM compiles. `ABYSS_BIN_DIR` in the harness. `vm/build.sh` builds
 both trees. Rust policy: `unsafe` lives only in `*-sys` crates, deps are
-vendored (`cargo vendor`, offline builds for ports, §6.5).
+pinned by `Cargo.lock` (§6.5).
+
+*Done 2026-10-30.* The workspace, `abyss-sys` and `aquadraw`'s Rust half
+came with R0. The harness runs every binary from `$ABYSS_BIN_DIR`
+(`common.sh`; 379 paths rewritten in 117 scripts): `abyss/mk/bin-dir.sh`
+makes `.build/abyss-bin`, a symlink per binary to SwiftPM's build or, for
+each name in `abyss/rust-bins`, to Cargo's, so a binary changes language by
+one line there. `run.sh` builds and tests both trees, makes that directory,
+cross-builds the workspace for riscv64 where the sysroot is, and runs
+`golden-rust.sh` beside `golden.sh`; `vm/build.sh` builds both in the
+guest, which now has `rust` 1.99.
 
 **R2. Wire and data crates (M).** `current-ipc`, `pool-config`, `menu-wire`,
 `settings-wire`, `install-wire`, `dbus` (the wire half), `menu-model`,
@@ -277,8 +287,10 @@ nothing) and others pin down.
 
 **6.5 Dependencies.** *Adopted: `libc`, `cc` (build) and nothing else
 without a reason recorded here.* The Swift tree has no third-party
-dependencies, so we keep it that way. Vendored for offline builds and the
-ports tree.
+dependencies, so we keep it that way. Pinned by `Cargo.lock`, not vendored (decided
+2026-10-30): a vendor directory would be 6.6 MB, nearly all `libc`, and
+FreeBSD ports already build Cargo projects offline, `USES=cargo` fetching
+each crate the lock names as a checksummed distfile (`make cargo-crates`).
 
 **6.6 Mixed sessions or a branch.** *Adopted: mixed sessions on `main`
 (§3).* A long-lived rewrite branch would mean months with no working desktop

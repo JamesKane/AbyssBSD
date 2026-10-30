@@ -121,9 +121,34 @@ swift build
 phase "swift test"
 swift test
 
+# The Rust half (docs/RUST.md R1): built and tested beside the Swift on every
+# pass, on both platforms.
+phase "cargo build"
+cargo build --workspace --examples
+
+phase "cargo test"
+cargo test --workspace
+
+# What the rest of the run starts: SwiftPM's binaries, and Cargo's for each
+# name abyss/rust-bins lists (RUST.md §3.1).
+phase "the binaries the harness runs"
+sh "$root/abyss/mk/bin-dir.sh"
+ABYSS_BIN_DIR=$root/.build/abyss-bin
+export ABYSS_BIN_DIR
+
+# Every pass still compiles and links for FreeBSD/riscv64 (RUST.md §3.4,
+# §6.9): a cross-build, where the sysroot is (the Linux host); the riscv64
+# guest is not on the gate.
+if [ "$(uname -s)" = Linux ] && [ -d "${ABYSS_RV64_SYSROOT:-$root/../../abyss-swift-vm/sysroot-rv64}/usr/local/lib" ]; then
+  phase "riscv64 cross-build"
+  ( ABYSS_VM_DIR="$root/abyss/vm"; . "$root/abyss/vm/config.sh"
+    "$root/abyss/vm/rv64-cross.sh" cargo "+$ABYSS_RUST_NIGHTLY" build -q --workspace --examples \
+      -Zbuild-std=std,panic_abort --target riscv64gc-unknown-freebsd )
+fi
+
 phase "headless Aqua render (smoke)"
 out="${TMPDIR:-/tmp}/aqua-smoke-$$.png"
-AQUA_RENDER_PNG="$out" AQUA_SCALE=2 .build/debug/AquaDemo
+AQUA_RENDER_PNG="$out" AQUA_SCALE=2 $ABYSS_BIN_DIR/AquaDemo
 test -s "$out" && echo "ok: $out" || { echo "FAIL: no PNG produced"; exit 1; }
 rm -f "$out"
 
@@ -131,6 +156,11 @@ rm -f "$out"
 # this platform (PHASE11 P11.1). About a second; the gate Phase 11 is proved by.
 phase "golden images"
 sh "$root/abyss/tests/golden.sh"
+
+# The Rust half against the same goldens: each scene as a PNG, and in a
+# window on a headless sway (RUST.md §3.2).
+phase "golden images, Rust"
+sh "$root/abyss/tests/golden-rust.sh"
 
 # Two real processes handing a descriptor over the control plane. In the default
 # lane because it needs no compositor and takes about a second.

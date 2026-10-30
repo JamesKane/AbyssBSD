@@ -16,8 +16,8 @@ set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 . "$root/abyss/common.sh"
-bridge="$root/.build/debug/abyss-dbus"
-[ -x "$bridge" ] && [ -x "$root/.build/debug/abyss-theme" ] || swift build
+bridge="$ABYSS_BIN_DIR/abyss-dbus"
+[ -x "$bridge" ] && [ -x "$ABYSS_BIN_DIR/abyss-theme" ] || swift build
 command -v gdbus >/dev/null 2>&1 || { echo "SKIP: no gdbus (GLib, the independent reader)"; exit 0; }
 
 rundir=$(mktemp -d /tmp/abyss-palette.XXXXXX)

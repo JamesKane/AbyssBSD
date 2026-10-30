@@ -20,9 +20,9 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 out="${1:-${TMPDIR:-/tmp}/abyss-toast.png}"
-bin="$root/.build/debug/AquaDemo"
-portal="$root/.build/debug/abyss-portal"
-notify="$root/.build/debug/abyssnotify"
+bin="$ABYSS_BIN_DIR/AquaDemo"
+portal="$ABYSS_BIN_DIR/abyss-portal"
+notify="$ABYSS_BIN_DIR/abyssnotify"
 [ -x "$bin" ] && [ -x "$portal" ] && [ -x "$notify" ] || swift build
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }

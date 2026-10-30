@@ -23,18 +23,19 @@
 # Usage: abyss/tests/live-agent-presence.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyssmenu; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-pr.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 export XDG_RUNTIME_DIR="$W/xdg" ABYSS_RUNTIME_DIR="$W/xdg" ABYSS_CONFIG_DIR="$W/config" HOME="$W/home"
 mkdir -m 700 "$XDG_RUNTIME_DIR" "$ABYSS_CONFIG_DIR" "$HOME"
-aqua="$root/.build/debug/AquaDemo"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
 SW=1024 SH=768
 
 daemon() { pgrep -f "abyss-jaild --socket $SOCK" || true; }
@@ -80,12 +81,12 @@ cc -I"$W" abyss/tests/vkeyboard.c "$W/vkeyboard-proto.c" $(pkg-config --cflags -
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- 4>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 priv="abyss-pr-priv-$$"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$ABYSS_CONFIG_DIR" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$ABYSS_CONFIG_DIR" \
     --privileged-socket "$priv" > "$W/ut.out" 2> "$W/ut.err" 3>&- 4>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 wd="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
 export WAYLAND_DISPLAY="$wd"
-env ABYSS_MODEL_STUB_DELAY=1500 .build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
+env ABYSS_MODEL_STUB_DELAY=1500 $ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 3>&- 4>&- & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 env WAYLAND_DISPLAY="$priv" AQUA_SCENE=menubar ABYSS_APP_WAYLAND_DISPLAY="$wd" ABYSS_APP_BINARY="$aqua" \
     "$aqua" > "$W/bar.log" 2>&1 3>&- 4>&- & bar=$!
@@ -132,7 +133,7 @@ apid=$(grep 'MenuBar: agents: ' "$W/bar.log" | tail -1 | sed -n 's/.*agents: \([
 echo "ok: 2. System ▸ Agent… opened the window (pid $apid); its session idle, the item says Agent"
 
 # ---- 3. working ---------------------------------------------------------------------------
-.build/debug/abyssmenu run agent agent.question "text=what is here" > /dev/null 2>&1 || fail "the question was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=what is here" > /dev/null 2>&1 || fail "the question was refused"
 await_item "Agent: Working" "a question out, the item does not say Working"
 await "$W/dock.log" 'Dock: agent badge: working' "a question out, the tile has no working badge"
 echo "ok: 3. a question out: 'Agent: Working' in the bar, … on the tile"
@@ -155,7 +156,7 @@ await "$W/bar.log" "chose Agent > Waiting for you: Allow more tokens? (agent.go.
 echo "ok: 4. waiting: the item and its dot, a count on the tile; the island menu names the window; the Agent menu goes to it"
 
 # ---- 5. Stop: none -----------------------------------------------------------------------------
-.build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
 await_item none "the session ended, the item stays"
 await "$W/dock.log" 'Dock: agent badge: none' "the session ended, the badge stays"
 [ -z "$(ls "$XDG_RUNTIME_DIR/agents")" ] || fail "a presence file is left: $(ls "$XDG_RUNTIME_DIR/agents")"

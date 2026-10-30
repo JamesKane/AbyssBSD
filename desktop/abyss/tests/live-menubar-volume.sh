@@ -21,8 +21,8 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-client="$root/.build/debug/AquaDemo"
+undertow="$ABYSS_BIN_DIR/undertow"
+client="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$undertow" ] && [ -x "$client" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1

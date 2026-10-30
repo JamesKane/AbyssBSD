@@ -34,15 +34,16 @@
 #   the GPU on the box), and longer waits.
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 [ -x /usr/bin/lldb ] || { echo "FAIL: no /usr/bin/lldb (it is in base)"; exit 1; }
 model=""; [ "${1:-}" = --model ] && model=$2
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-gate.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 AG="abyss-$uid-agent" DBG="abyss-$uid-debug"
@@ -92,11 +93,11 @@ cc -I"$W" abyss/tests/vpointer.c "$W/vpointer-proto.c" $(pkg-config --cflags --l
 sudo "$W/bin/abyss-jaild" --socket "$SOCK" --root-base "$RB" --home-base "$HB" > "$W/jd.log" 2>&1 3>&- &
 await "$W/jd.log" 'answering at' "the daemon did not start"
 mkdir -p "$W/cfg"
-env -u WAYLAND_DISPLAY .build/debug/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/undertow run --frames 0 --width $SW --height $SH --config-dir "$W/cfg" \
     > "$W/ut.out" 2> "$W/ut.err" 3>&- & ut=$!
 await "$W/ut.out" '^WAYLAND_DISPLAY=' "undertow never announced a socket"
 export WAYLAND_DISPLAY="$(grep -m1 '^WAYLAND_DISPLAY=' "$W/ut.out" | cut -d= -f2-)"
-.build/debug/abyss-jail --socket "$SOCK" serve > "$K" 2>&1 3>&- & kp=$!
+$ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$K" 2>&1 3>&- & kp=$!
 await "$K" '^jails: ready' "the keeper did not start"
 mkfifo "$W/pointer"
 "$W/vpointer" $SW $SH < "$W/pointer" > "$W/vp.log" 2>&1 & vp=$!
@@ -106,9 +107,9 @@ winat() { grep "^window $1" "$W/ut.out" | tail -1 | tr ' ' '\n' | grep -E '^[0-9
 echo "the model: ${model:-the stub}"
 
 # ---- 1. a jail whose only ways out are its sockets ----------------------------------------
-env AQUA_SCENE=textedit .build/debug/AquaDemo "$W/note.txt" > "$W/te.log" 2>&1 3>&- &
+env AQUA_SCENE=textedit $ABYSS_BIN_DIR/AquaDemo "$W/note.txt" > "$W/te.log" 2>&1 3>&- &
 await "$W/te.log" 'TextEdit: menus on ' "TextEdit did not publish its menus"
-env AQUA_SCENE=agent .build/debug/AquaDemo > "$A" 2>&1 3>&- &
+env AQUA_SCENE=agent $ABYSS_BIN_DIR/AquaDemo > "$A" 2>&1 3>&- &
 await "$A" 'Agent: session .* at ' "the Agent window did not get a session" 1 $long
 apid=$(sed -n 's/.*: agent pid \([0-9]*\),.*/\1/p' "$K" | head -1)
 n=$(sed -n 's/^Agent: session .* at .*\/agent-\([0-9]*\)\.sock$/\1/p' "$A" | head -1)
@@ -140,7 +141,7 @@ bin=$(ps -o command= -p "$apid" | cut -d' ' -f1)
 echo "ok: 1. the agent in $AG: no address, the network unreachable from inside; four sockets in its runtime directory, and the agent holds one (its own), nothing outside its jail"
 
 # ---- the model answers -------------------------------------------------------------------
-.build/debug/abyssmenu run agent agent.question "text=Say hello in one word." > /dev/null 2>&1 || fail "the question was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=Say hello in one word." > /dev/null 2>&1 || fail "the question was refused"
 await "$A" 'Agent: answered: stop=' "the model did not answer" 1 $long
 t=$(ls -d "$HOME"/Library/Logs/Agents/*-agent-*)/transcript.jsonl
 grep -q '"kind":"reply"' "$t" || fail "the transcript has no reply from the model"
@@ -148,7 +149,7 @@ echo "ok: the model answered ($(grep -m1 'Agent: answered: ' "$A" | sed 's/.*ans
 
 # ---- 2. what it was granted, in the transcript ----------------------------------------------
 vs="/run/user/vocab-$n.sock"
-.build/debug/abyssmenu run agent agent.give "app=textedit" > /dev/null 2>&1 || fail "Give was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.give "app=textedit" > /dev/null 2>&1 || fail "Give was refused"
 await "$A" 'Agent: gave TextEdit' "TextEdit was not given"
 grep -q '"kind":"vocabulary","event":"given".*"app":"TextEdit"' "$t" || grep -q '"event":"given".*"TextEdit"' "$t" || fail "the transcript does not say TextEdit was given"
 inside "$AG" "$bin" tool apps '{}' --vocab "$vs" > "$W/t1" 2>&1
@@ -156,7 +157,7 @@ grep -q TextEdit "$W/t1" || fail "from inside the jail, the bridge does not list
 echo "ok: 2. TextEdit given: the transcript says so, and the bridge, asked from inside the jail, lists it"
 
 # ---- 3. a revocation takes effect -------------------------------------------------------------
-.build/debug/abyssmenu run agent agent.take "app=TextEdit" > "$W/tk" 2>&1 || fail "Take Back was refused: $(cat "$W/tk")"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.take "app=TextEdit" > "$W/tk" 2>&1 || fail "Take Back was refused: $(cat "$W/tk")"
 await "$A" 'Agent: took TextEdit back' "TextEdit was not taken back"
 grep -q '"event":"taken".*"TextEdit"' "$t" || fail "the transcript does not say TextEdit was taken back"
 inside "$AG" "$bin" tool apps '{}' --vocab "$vs" > "$W/t2" 2>&1
@@ -169,7 +170,7 @@ echo "ok: 3. taken back: in the transcript; the bridge no longer lists it, and r
 # ---- 4. a budget stop, its reason on screen ---------------------------------------------------
 # The budget is 1 token: the first reply crossed it, so the next call is refused.
 grep -q 'Agent: answered: stop=budget' "$A" || {
-  .build/debug/abyssmenu run agent agent.question "text=And goodbye?" > /dev/null 2>&1 || fail "the second question was refused"
+  $ABYSS_BIN_DIR/abyssmenu run agent agent.question "text=And goodbye?" > /dev/null 2>&1 || fail "the second question was refused"
   await "$A" 'Agent: answered: stop=budget' "the budget did not stop the next call" 1 $long
 }
 await "$A" 'Agent: requester budget: ' "the window did not put the budget's reason up"
@@ -178,15 +179,15 @@ await "$A" 'Agent: requester stop=[0-9]*,[0-9]* allow=' "the window did not draw
 why=$(grep 'Agent: requester budget: ' "$A" | tail -1 | sed 's/.*requester budget: //')
 echo "$why" | grep -q 'budget' || fail "the requester does not give abyss-model's reason: $why"
 grep -q '"kind":"refused"' "$t" || fail "the transcript does not have the refusal"
-.build/debug/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
+$ABYSS_BIN_DIR/abyssmenu run agent agent.stop > /dev/null 2>&1 || fail "Stop was refused"
 echo "ok: 4. the budget stopped the next call; the window's requester says why: $(echo "$why" | cut -c1-70)"
 
 # ---- 5. the crash notice: one crash, not a second ---------------------------------------------
-.build/debug/abyss-jail launch app -- /bin/true > /dev/null 2>&1 || fail "the app jail did not open"
+$ABYSS_BIN_DIR/abyss-jail launch app -- /bin/true > /dev/null 2>&1 || fail "the app jail did not open"
 cp "$W/crasher" "$W/crasher2" "$HB/$me/app/"
-.build/debug/abyss-jail launch app -- "/home/$me/crasher" > /dev/null 2>&1 || fail "the crasher did not launch"
+$ABYSS_BIN_DIR/abyss-jail launch app -- "/home/$me/crasher" > /dev/null 2>&1 || fail "the crasher did not launch"
 await "$K" 'CrashReport: up: crash 1, crasher, SIGSEGV, core yes' "the first crash was not reported"
-.build/debug/abyss-jail launch app -- "/home/$me/crasher2" > /dev/null 2>&1 || fail "the second crasher did not launch"
+$ABYSS_BIN_DIR/abyss-jail launch app -- "/home/$me/crasher2" > /dev/null 2>&1 || fail "the second crasher did not launch"
 await "$K" 'CrashReport: up: crash 2, crasher2, SIGSEGV, core yes' "the second crash was not reported"
 i=0; until [ "$(grep -c '^window org.abyssbsd.crashreport' "$W/ut.out")" -ge 2 ] || [ $i -ge 100 ]; do sleep 0.1; i=$((i + 1)); done
 pos=$(winat org.abyssbsd.crashreport); [ -n "$pos" ] || fail "no Crash Reporter window"
@@ -195,7 +196,7 @@ click $((${pos%,*} + ${b%,*})) $((${pos#*,} + ${b#*,}))
 await "$K" "CrashReport: debug session .* at $RB/$uid/debug/run/user/agent-" "Ask the Agent… did not start a debug session"
 dpid=$(sed -n 's/.*session .*-debug-.* in .*: agent pid \([0-9]*\),.*/\1/p' "$K" | tail -1)
 [ -n "$dpid" ] || dpid=$(pgrep -f "abyss-agent serve .*--class debug" | head -1)
-grants=$(.build/debug/abyss-jail --socket "$SOCK" grants "$DBG" | grep -v '/abyss-agent$' || true)
+grants=$($ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" grants "$DBG" | grep -v '/abyss-agent$' || true)
 echo "$grants" | grep -q 'crasher2' || fail "the debug jail was not given the second crash: $grants"
 echo "$grants" | grep -v crasher2 | grep -q crasher && fail "the debug jail was given the first crash too: $grants"
 [ "$(echo "$grants" | wc -l | tr -d ' ')" = 2 ] || fail "the debug jail holds more than one crash's core and binary: $grants"

@@ -19,14 +19,15 @@
 # Usage: abyss/tests/live-crash.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
+. "$root/abyss/common.sh"
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 [ -x /usr/bin/lldb ] || { echo "FAIL: no /usr/bin/lldb (it is in base)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x .build/debug/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
 
 W=$(mktemp -d /tmp/abyss-cr.XXXXXX); chmod 755 "$W"
-mkdir "$W/bin"; cp .build/debug/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
+mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
 RB="$W/roots" HB="$W/homes" SOCK="$W/jd.sock"
 uid=$(id -u) me=$(id -un)
 APP="abyss-$uid-app" DBG="abyss-$uid-debug"
@@ -49,7 +50,7 @@ fail() { echo "FAIL: $1"; for f in jd.log keeper.log; do tail -6 "$W/$f" 2>/dev/
 count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt 300 ]; do i=$((i + 1)); sleep 0.05; done
           [ "$(count "$2" "$1")" -ge "${4:-1}" ] || fail "$3"; }
-JL() { .build/debug/abyss-jail launch "$@" > "$W/l" 2>&1 || fail "launch $*: $(cat "$W/l")"; }
+JL() { $ABYSS_BIN_DIR/abyss-jail launch "$@" > "$W/l" 2>&1 || fail "launch $*: $(cat "$W/l")"; }
 
 cc -g -O0 abyss/tests/crasher.c -o "$W/crasher" || fail "cannot build the crasher"
 cp "$W/crasher" "$W/crasher2"
@@ -69,7 +70,7 @@ sudo sh -c "ulimit -c 0; exec '$W/bin/abyss-jaild' --socket '$SOCK' --root-base 
 await "$W/jd.log" 'answering at' "the daemon did not start"
 jdpid=$(daemon | head -1)
 [ "$(procstat -l "$jdpid" | awk '$2=="abyss-jaild" && $3=="coredumpsize" {print $4}')" = 0 ] || fail "jaild's core size is not 0: the test proves nothing"
-env -u WAYLAND_DISPLAY .build/debug/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 & kp=$!
+env -u WAYLAND_DISPLAY $ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" serve > "$W/keeper.log" 2>&1 & kp=$!
 await "$W/keeper.log" '^jails: ready' "the keeper did not start"
 
 # ---- 1. the person's limits ------------------------------------------------------
@@ -88,18 +89,18 @@ await "$W/keeper.log" "jails: crash 1: /home/$me/crasher was killed by SIGSEGV a
 [ -s "$HB/$me/app/crasher.core" ] || fail "no core in the jail's home"
 JL app -- /bin/sh -c 'exit 3'
 await "$W/keeper.log" "jails: /bin/sh (pid [0-9]*) in $APP exited" "the exit-3 probe did not run" 2
-[ "$(.build/debug/abyss-jail crashes | wc -l | tr -d ' ')" = 1 ] || fail "an exit 3 was kept as a crash: $(.build/debug/abyss-jail crashes)"
+[ "$($ABYSS_BIN_DIR/abyss-jail crashes | wc -l | tr -d ' ')" = 1 ] || fail "an exit 3 was kept as a crash: $($ABYSS_BIN_DIR/abyss-jail crashes)"
 echo "ok: 2. SIGSEGV is crash 1, its core in the jail's home; an exit of 3 is not a crash"
 
 # ---- 3. debug 1: that crash, read-only, and no other ----------------------------------
 JL app -- "/home/$me/crasher2"
 await "$W/keeper.log" "jails: crash 2: /home/$me/crasher2 was killed by SIGSEGV" "the second crash was not kept"
-.build/debug/abyss-jail debug 1 > "$W/d1" 2>&1 || fail "debug 1 was refused: $(cat "$W/d1")"
+$ABYSS_BIN_DIR/abyss-jail debug 1 > "$W/d1" 2>&1 || fail "debug 1 was refused: $(cat "$W/d1")"
 sock=$(sed -n 's/.* socket=\([^ ]*\) .*/\1/p' "$W/d1")
 transcript=$(sed -n 's/.* transcript=\([^ ]*\) .*/\1/p' "$W/d1")
 case "$sock" in "$RB/$uid/debug/"*) ;; *) fail "the session is not in the debug jail: $sock" ;; esac
 # A developer's abyss-agent is granted in too (P18.8); the crash's grants are the rest.
-grants=$(.build/debug/abyss-jail --socket "$SOCK" grants "$DBG" | grep -v '/abyss-agent$' || true)
+grants=$($ABYSS_BIN_DIR/abyss-jail --socket "$SOCK" grants "$DBG" | grep -v '/abyss-agent$' || true)
 echo "$grants" | grep -q 'crasher.core' && echo "$grants" | grep -q '/crasher ' || echo "$grants" | grep -q '/crasher$' || fail "the debug jail was not given crash 1's core and binary: $grants"
 echo "$grants" | grep -q crasher2 && fail "the debug jail was given the second crash too: $grants"
 [ "$(echo "$grants" | wc -l | tr -d ' ')" = 2 ] || fail "the debug jail holds more than one crash: $grants"
@@ -107,7 +108,7 @@ mount | grep -F " on $RB/$uid/debug/" | grep crasher | grep -vq 'read-only' && f
 echo "ok: 3. debug 1 runs in $DBG with crash 1's core and binary, read-only, and nothing of crash 2"
 
 # ---- 4. lldb on the core ------------------------------------------------------------
-.build/debug/abyss-agent ask --listen "$sock" why did it crash > "$W/q1" 2>&1 || fail "the debug question failed: $(cat "$W/q1")"
+$ABYSS_BIN_DIR/abyss-agent ask --listen "$sock" why did it crash > "$W/q1" 2>&1 || fail "the debug question failed: $(cat "$W/q1")"
 grep -q '^call=lldb' "$W/q1" || fail "the agent did not run lldb: $(cat "$W/q1")"
 t="$transcript/transcript.jsonl"
 grep '"kind":"request"' "$t" | sed -n 2p > "$W/second"
@@ -120,13 +121,13 @@ echo "$lldbsaid" | grep -q 'kaboom' || fail "lldb's backtrace has no kaboom(): $
 echo "$lldbsaid" | grep -q 'crasher.c:6' || fail "lldb's backtrace has no crasher.c:6: $lldbsaid"
 grep -o '"role":"tool","tool_call_id":"c2","content":"[^"]*' "$W/second" | grep -q crasher2 && fail "the debug agent saw the second crash"
 grep -q '"content":"It read a null pointer in kaboom().' "$t" || fail "the report is not in the transcript"
-.build/debug/abyss-agent bye --listen "$sock" > /dev/null
+$ABYSS_BIN_DIR/abyss-agent bye --listen "$sock" > /dev/null
 echo "ok: 4. lldb ran on the core in the jail: the model got SIGSEGV, kaboom() at crasher.c:6; the report is in the transcript"
 
 # ---- 5. no core -------------------------------------------------------------------------
 JL app -- /bin/sh -c 'kill -9 $$'
 await "$W/keeper.log" "jails: crash 3: /bin/sh was killed by SIGKILL, leaving no core" "a SIGKILL was not kept as a crash"
-.build/debug/abyss-jail debug 3 > "$W/d3" 2>&1 && fail "debug ran on a crash with no core"
+$ABYSS_BIN_DIR/abyss-jail debug 3 > "$W/d3" 2>&1 && fail "debug ran on a crash with no core"
 grep -q 'there is nothing to read' "$W/d3" || fail "the refusal does not say why: $(cat "$W/d3")"
 echo "ok: 5. a SIGKILL is a crash with no core, and debug refuses it in words"
 echo "all green (a confined crash: the person's limits, the core kept, one crash granted to a debug agent, lldb on it)."

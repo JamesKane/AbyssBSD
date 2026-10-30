@@ -128,7 +128,7 @@ echo "  supervision: killed the Dock ($dock_pid), it came back as $new_pid"
 #    `undertow` can start one at all: if nothing in it references wlroots'
 #    XWayland entry points, no X server can come from our side, lazily or
 #    otherwise.
-if nm -D --undefined-only "$root/.build/debug/undertow" 2>/dev/null \
+if nm -D --undefined-only "$ABYSS_BIN_DIR/undertow" 2>/dev/null \
      | grep -qi xwayland; then
   echo "FAIL: undertow references wlroots' XWayland — decided against (PHASE9 §6.3)"
   exit 1

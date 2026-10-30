@@ -23,10 +23,10 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-client="$root/.build/debug/AquaDemo"
-menu="$root/.build/debug/abyssmenu"
-helper="$root/.build/debug/abyss-settings"
+undertow="$ABYSS_BIN_DIR/undertow"
+client="$ABYSS_BIN_DIR/AquaDemo"
+menu="$ABYSS_BIN_DIR/abyssmenu"
+helper="$ABYSS_BIN_DIR/abyss-settings"
 for b in "$undertow" "$client" "$menu" "$helper"; do [ -x "$b" ] || { swift build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

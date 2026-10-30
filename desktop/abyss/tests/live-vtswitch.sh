@@ -24,9 +24,9 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-undertow="$root/.build/debug/undertow"
-grab="$root/.build/debug/abyssgrab"
-aqua="$root/.build/debug/AquaDemo"
+undertow="$ABYSS_BIN_DIR/undertow"
+grab="$ABYSS_BIN_DIR/abyssgrab"
+aqua="$ABYSS_BIN_DIR/AquaDemo"
 [ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || swift build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

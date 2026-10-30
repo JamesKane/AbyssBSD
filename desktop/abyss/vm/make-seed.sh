@@ -101,6 +101,9 @@ else
   # an independent
   # wlr-output-management client (P14.7).
   - pkg install -y edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr || true
+  # Rust (docs/RUST.md R1): the desktop's Rust half builds and is tested here
+  # beside the Swift, on every pass.
+  - pkg install -y rust || true
   # Swift toolchain. FreeBSD is not an *official* swift.org target, but ports
   # carries one: the package is \`swift6\` (\`swift\` alone matches nothing, which
   # is why this line used to report a false negative). Confirmed 2026-07-28:
@@ -115,7 +118,7 @@ else
   # Every install above is best-effort (|| true) so one missing port can't wedge
   # first boot — which means a silent miss would otherwise look like success.
   # Record what actually landed; abyss/vm/check.sh asserts on this file.
-  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
+  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr rust swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
   - touch /home/$ABYSS_SSH_USER/.cloud-init-done
   - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
 EOF
