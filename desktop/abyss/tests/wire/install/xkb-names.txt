@@ -1,0 +1,10 @@
+xkb
+xkb "uk.kbd" layout="gb" variant="" exact=1 name="British"
+xkb "us.dvorak.kbd" layout="us" variant="dvorak" exact=1 name="Dvorak"
+xkb "colemak.acc.kbd" layout="us" variant="colemak" exact=1 name="Colemak"
+xkb "de.acc.kbd" layout="de" variant="" exact=0 name="de.acc.kbd"
+xkb "uk.macbook.kbd" layout="gb" variant="" exact=0 name="uk.macbook.kbd"
+xkb ".kbd" layout="kbd" variant="" exact=0 name=".kbd"
+xkb "..fr.kbd" layout="fr" variant="" exact=0 name="..fr.kbd"
+xkb "german" none
+xkb "kbd" none

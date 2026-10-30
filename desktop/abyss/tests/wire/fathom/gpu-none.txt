@@ -1,0 +1,2 @@
+gpu
+absent "no /dev/dri/card*: nothing to display on"

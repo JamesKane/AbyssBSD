@@ -1,0 +1,2 @@
+network
+absent "only loopback: no network device was recognised"

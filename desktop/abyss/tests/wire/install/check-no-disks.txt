@@ -1,0 +1,7 @@
+check
+plan "ada0" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+account "jkane" "J Kane" "$6$fake" groups=["wheel"] shell="/bin/sh"
+machine none
+problem "this machine has no disks, so there is nowhere to install"

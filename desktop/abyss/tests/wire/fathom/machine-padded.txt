@@ -1,0 +1,2 @@
+machine
+present "Micro-Star MS-7D25"

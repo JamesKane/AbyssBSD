@@ -1,0 +1,2 @@
+frame
+present "58 of 300 missed (193 per mille), composite p99 12us, period 16680us; margin dominated by display commit (7000us); MARGIN PINNED AT ITS CEILING, the loop cannot compensate further [hardware clock, DRM]"

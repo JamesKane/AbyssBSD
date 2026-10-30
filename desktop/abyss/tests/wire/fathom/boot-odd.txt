@@ -1,0 +1,2 @@
+boot
+unknown "machdep.bootmethod is \"something else\""

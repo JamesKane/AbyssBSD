@@ -1,0 +1,2 @@
+frame
+present "5 of 300 missed (16 per mille) [hardware clock, DRM]"

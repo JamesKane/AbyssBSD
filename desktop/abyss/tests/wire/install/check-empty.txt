@@ -1,0 +1,8 @@
+decode-only
+check
+plan "" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+machine none
+problem "no disk was chosen"
+problem "nobody could log in to the installed system: set a root password or give an account the wheel group"

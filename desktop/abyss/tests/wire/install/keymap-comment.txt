@@ -1,0 +1,3 @@
+keymap
+assignment "fr.kbd"
+xkb "fr.kbd" layout="fr" variant="" exact=1 name="French"

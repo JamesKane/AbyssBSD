@@ -1,0 +1,2 @@
+boot "amd64"
+unknown "machdep.bootmethod could not be read"

@@ -1,0 +1,2 @@
+machine
+unknown "smbios.system.* is not in the kernel environment"

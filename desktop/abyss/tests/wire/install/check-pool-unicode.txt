@@ -1,0 +1,94 @@
+check
+plan "ada0" pool="école" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+account "jkane" "J Kane" "$6$fake" groups=["wheel"] shell="/bin/sh"
+disk "ada0" bytes=68719476736 descr="QEMU HARDDISK" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine none
+steps
+1. create the GPT [destructive]
+   $ gpart create -s gpt ada0
+2. add the EFI system partition [destructive]
+   $ gpart add -a 1m -s 260M -t efi -l écoleesp ada0
+3. add swap [destructive]
+   $ gpart add -a 1m -s 2048M -t freebsd-swap -l écoleswap ada0
+4. add the pool partition [destructive]
+   $ gpart add -a 1m -t freebsd-zfs -l écolezfs ada0
+5. format the EFI partition [destructive]
+   $ newfs_msdos -F 32 -c 1 /dev/gpt/écoleesp
+6. create the pool [destructive]
+   $ zpool create -f -o altroot=/mnt -o cachefile=/tmp/abyss-install-zpool.cache -O compress=lz4 -O atime=off -O mountpoint=none école /dev/gpt/écolezfs
+7. create école/ROOT
+   $ zfs create -o mountpoint=none école/ROOT
+8. create école/ROOT/default
+   $ zfs create -o mountpoint=/ -o canmount=noauto école/ROOT/default
+9. mount the new root
+   $ zfs mount école/ROOT/default
+10. create école/home
+   $ zfs create -o mountpoint=/home école/home
+11. create école/tmp
+   $ zfs create -o mountpoint=/tmp -o exec=on -o setuid=off école/tmp
+12. create école/usr
+   $ zfs create -o mountpoint=/usr -o canmount=off école/usr
+13. create école/usr/ports
+   $ zfs create -o setuid=off école/usr/ports
+14. create école/usr/src
+   $ zfs create école/usr/src
+15. create école/var
+   $ zfs create -o mountpoint=/var -o canmount=off école/var
+16. create école/var/audit
+   $ zfs create -o exec=off -o setuid=off école/var/audit
+17. create école/var/crash
+   $ zfs create -o exec=off -o setuid=off école/var/crash
+18. create école/var/log
+   $ zfs create -o exec=off -o setuid=off école/var/log
+19. create école/var/mail
+   $ zfs create -o atime=on école/var/mail
+20. create école/var/tmp
+   $ zfs create -o setuid=off école/var/tmp
+21. mark the boot environment
+   $ zpool set bootfs=école/ROOT/default école
+22. extract base.txz
+   $ tar -xpf /usr/freebsd-dist/base.txz -C /mnt
+23. extract kernel.txz
+   $ tar -xpf /usr/freebsd-dist/kernel.txz -C /mnt
+24. make the ESP mount point
+   $ mkdir -p /mnt/boot/efi
+25. mount the EFI partition
+   $ mount -t msdosfs /dev/gpt/écoleesp /mnt/boot/efi
+26. make EFI/BOOT
+   $ mkdir -p /mnt/boot/efi/EFI/BOOT
+27. install the boot loader
+   $ cp /mnt/boot/loader.efi /mnt/boot/efi/EFI/BOOT/BOOTX64.efi
+28. make /boot/zfs
+   $ mkdir -p /mnt/boot/zfs
+29. write the pool cache
+   $ zpool set cachefile=/tmp/abyss-install-zpool.cache école
+30. install the pool cache
+   $ cp /tmp/abyss-install-zpool.cache /mnt/boot/zfs/zpool.cache
+31. write loader.conf
+   > /mnt/boot/loader.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_load="YES"
+     | vfs.root.mountfrom="zfs:école/ROOT/default"
+     | boot_serial="YES"
+     | comconsole_speed="115200"
+     | console="comconsole,vidconsole"
+     | kern.geom.label.disk_ident.enable="0"
+32. write rc.conf
+   > /mnt/etc/rc.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_enable="YES"
+     | hostname="abyss"
+     | ifconfig_DEFAULT="DHCP"
+33. write fstab
+   > /mnt/etc/fstab (644)
+     | # Device	Mountpoint	FStype	Options	Dump	Pass#
+     | /dev/gpt/écoleswap	none	swap	sw	0	0
+34. create the account jkane
+   $ pw -R /mnt useradd -n jkane -m -s /bin/sh -H 0 -c 'J Kane' -G wheel
+   < (on stdin, kept out of argv)
+35. unmount the EFI partition [may fail]
+   $ umount /mnt/boot/efi
+36. export the pool
+   $ zpool export école

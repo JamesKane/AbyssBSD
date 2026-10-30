@@ -1,0 +1,7 @@
+decode-only
+check
+plan "ada0" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="" keymap="" rootpw="$6$r" erase=0 autologin=0
+set "base.txz"
+disk "ada1" bytes=0 descr="" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine none
+problem "there is no disk called ada0; this machine has ada1"

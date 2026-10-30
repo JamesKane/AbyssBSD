@@ -1,0 +1,2 @@
+event
+failed 4 "add swap" "gpart: Device busy\n" ignored=1

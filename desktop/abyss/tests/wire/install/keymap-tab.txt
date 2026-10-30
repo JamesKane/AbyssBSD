@@ -1,0 +1,3 @@
+keymap
+assignment "it.kbd"
+xkb "it.kbd" layout="it" variant="" exact=1 name="Italian"

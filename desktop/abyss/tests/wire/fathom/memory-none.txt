@@ -1,0 +1,2 @@
+memory
+unknown "hw.physmem could not be read"

@@ -147,7 +147,30 @@ From HANDOFF §5.3, still true:
   `Settings.editSysctlConf`, so setting one key drops every other line, and
   a CRLF `wpa_supplicant.conf` gets a second `ctrl_interface`. Rust's
   `settings` splits at LF and treats CR as a blank; drop `sysctl-crlf` and
-  `wpa-crlf` from the settings fixtures' list too.
+  `wpa-crlf` from the settings fixtures' list too. **And `Keymaps`**: a
+  CRLF rc.conf is one line, so the keymap read back is the rest of the file
+  and the desktop types US (`keymap-crlf`); Fathom's probes miss a CRLF
+  capture's modules (`modules-crlf`).
+- **The installer's pool-name rule is not ZFS's** (found 2026-10-30,
+  checked against `zfs_namecheck.c` and `libzfs_pool.c` in `src/`). Both
+  ways it fails do so **after `gpart` has written the disk**. Swift's
+  `isLetter` is Unicode's, so `école` passes (Rust's `install` is ASCII
+  already). And both halves reserve only exact names, where `zpool create`
+  refuses any name *beginning* `mirror`, `raidz`, `draid` or `spare`, so
+  `mirror2` passes the check and fails the install. The other way, ours are
+  stricter than ZFS (`cache`, `c0d0` and spaces are legal there), which is
+  harmless. Fix the prefixes in both.
+- **An install plan's hostname and keymap go into rc.conf unchecked**
+  (found 2026-10-30): `hostname="x\"\nabyss_desktop_user=\"root"` adds a
+  line (`check-hostname-injection` pins it), and a timezone of `../..`
+  copies any file of the new system to `/etc/localtime`. The caller is the
+  person installing, so this is a correctness hole more than a privilege
+  one; refuse a quote, a newline or `..` in both halves.
+- **Swift's installer service traps on sizes from the wire** (found
+  2026-10-30): `minimumDiskBytes` adds the ESP and swap sizes, so a plan
+  with either near `UInt64.max` crashes `problems` in the root service, and
+  a list count or progress index past `Int.max` traps the decoder. Rust's
+  `install` saturates and its wire reads only the fields a message holds.
 - **Swift's `Command.retitled` drops `writes`** (found 2026-10-30, porting
   MenuModel). It rebuilds the command without the flag, so a retitled
   command that writes would stop asking an agent first (P18.11). Nothing

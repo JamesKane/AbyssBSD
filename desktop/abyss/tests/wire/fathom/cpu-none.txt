@@ -1,0 +1,2 @@
+cpu 4
+unknown "hw.model could not be read"

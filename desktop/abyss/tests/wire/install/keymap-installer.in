@@ -1,0 +1,3 @@
+# Written by the AbyssBSD installer.
+zfs_enable="YES"
+keymap="uk.kbd"

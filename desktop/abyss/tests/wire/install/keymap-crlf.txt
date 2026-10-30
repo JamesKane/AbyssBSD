@@ -1,0 +1,3 @@
+keymap
+assignment "uk.kbd\u{d}\nhostname=x\u{d}\n"
+xkb "uk.kbd\u{d}\nhostname=x\u{d}\n" none

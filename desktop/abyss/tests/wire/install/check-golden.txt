@@ -1,0 +1,103 @@
+check
+plan "ada0" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="jaguar" timezone="America/Chicago" keymap="us.kbd" rootpw="$6$root" erase=1 autologin=0
+set "base.txz"
+set "kernel.txz"
+account "jkane" "J Kane" "$6$user" groups=["wheel","operator"] shell="/bin/sh"
+disk "ada0" bytes=68719476736 descr="QEMU HARDDISK" mounted=[] root=0 pools=[] kinds=["efi","ntfs"] free=1048576 table=1
+machine "Apple Inc." "MacPro6,1"
+steps
+1. clear any existing partition table [destructive] [may fail]
+   $ gpart destroy -F ada0
+2. create the GPT [destructive]
+   $ gpart create -s gpt ada0
+3. add the EFI system partition [destructive]
+   $ gpart add -a 1m -s 260M -t efi -l abyssesp ada0
+4. add swap [destructive]
+   $ gpart add -a 1m -s 2048M -t freebsd-swap -l abyssswap ada0
+5. add the pool partition [destructive]
+   $ gpart add -a 1m -t freebsd-zfs -l abysszfs ada0
+6. format the EFI partition [destructive]
+   $ newfs_msdos -F 32 -c 1 /dev/gpt/abyssesp
+7. create the pool [destructive]
+   $ zpool create -f -o altroot=/mnt -o cachefile=/tmp/abyss-install-zpool.cache -O compress=lz4 -O atime=off -O mountpoint=none abyss /dev/gpt/abysszfs
+8. create abyss/ROOT
+   $ zfs create -o mountpoint=none abyss/ROOT
+9. create abyss/ROOT/default
+   $ zfs create -o mountpoint=/ -o canmount=noauto abyss/ROOT/default
+10. mount the new root
+   $ zfs mount abyss/ROOT/default
+11. create abyss/home
+   $ zfs create -o mountpoint=/home abyss/home
+12. create abyss/tmp
+   $ zfs create -o mountpoint=/tmp -o exec=on -o setuid=off abyss/tmp
+13. create abyss/usr
+   $ zfs create -o mountpoint=/usr -o canmount=off abyss/usr
+14. create abyss/usr/ports
+   $ zfs create -o setuid=off abyss/usr/ports
+15. create abyss/usr/src
+   $ zfs create abyss/usr/src
+16. create abyss/var
+   $ zfs create -o mountpoint=/var -o canmount=off abyss/var
+17. create abyss/var/audit
+   $ zfs create -o exec=off -o setuid=off abyss/var/audit
+18. create abyss/var/crash
+   $ zfs create -o exec=off -o setuid=off abyss/var/crash
+19. create abyss/var/log
+   $ zfs create -o exec=off -o setuid=off abyss/var/log
+20. create abyss/var/mail
+   $ zfs create -o atime=on abyss/var/mail
+21. create abyss/var/tmp
+   $ zfs create -o setuid=off abyss/var/tmp
+22. mark the boot environment
+   $ zpool set bootfs=abyss/ROOT/default abyss
+23. extract base.txz
+   $ tar -xpf /usr/freebsd-dist/base.txz -C /mnt
+24. extract kernel.txz
+   $ tar -xpf /usr/freebsd-dist/kernel.txz -C /mnt
+25. make the ESP mount point
+   $ mkdir -p /mnt/boot/efi
+26. mount the EFI partition
+   $ mount -t msdosfs /dev/gpt/abyssesp /mnt/boot/efi
+27. make EFI/BOOT
+   $ mkdir -p /mnt/boot/efi/EFI/BOOT
+28. install the boot loader
+   $ cp /mnt/boot/loader.efi /mnt/boot/efi/EFI/BOOT/BOOTX64.efi
+29. make /boot/zfs
+   $ mkdir -p /mnt/boot/zfs
+30. write the pool cache
+   $ zpool set cachefile=/tmp/abyss-install-zpool.cache abyss
+31. install the pool cache
+   $ cp /tmp/abyss-install-zpool.cache /mnt/boot/zfs/zpool.cache
+32. write loader.conf
+   > /mnt/boot/loader.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_load="YES"
+     | vfs.root.mountfrom="zfs:abyss/ROOT/default"
+     | boot_serial="YES"
+     | comconsole_speed="115200"
+     | console="comconsole,vidconsole"
+     | kern.geom.label.disk_ident.enable="0"
+     | hw.pci.enable_pcie_hp="0"
+33. write rc.conf
+   > /mnt/etc/rc.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_enable="YES"
+     | hostname="jaguar"
+     | ifconfig_DEFAULT="DHCP"
+     | keymap="us.kbd"
+34. write fstab
+   > /mnt/etc/fstab (644)
+     | # Device	Mountpoint	FStype	Options	Dump	Pass#
+     | /dev/gpt/abyssswap	none	swap	sw	0	0
+35. set the time zone to America/Chicago
+   $ cp /mnt/usr/share/zoneinfo/America/Chicago /mnt/etc/localtime
+36. set the root password
+   $ pw -R /mnt usermod root -H 0
+   < (on stdin, kept out of argv)
+37. create the account jkane
+   $ pw -R /mnt useradd -n jkane -m -s /bin/sh -H 0 -c 'J Kane' -G wheel,operator
+   < (on stdin, kept out of argv)
+38. unmount the EFI partition [may fail]
+   $ umount /mnt/boot/efi
+39. export the pool
+   $ zpool export abyss

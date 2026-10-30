@@ -1,0 +1,10 @@
+WAYLAND_DISPLAY=wayland-0
+usable=0,0,2560x1440
+wake-late-p99-us=715
+composite-p99-us=9
+margin-us=8000
+missed=45 of 300
+period-us=16666
+vblank-source=hardware
+backend=drm
+verdict ok

@@ -1,0 +1,2 @@
+frame
+present "0 of 300 missed (0 per mille) [HEADLESS: a synthetic grid, not a hardware measurement]"

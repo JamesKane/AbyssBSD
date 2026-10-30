@@ -1,0 +1,6 @@
+inventory
+disk "nda1" bytes=999653638144 descr="Samsung 990 PRO" mounted=["/data"] root=0 pools=["zroot","tank"] kinds=["efi","freebsd-swap","freebsd-zfs"] free=728576 table=1
+disk "vtbd0" bytes=85899345920 descr="" mounted=["/","/boot/efi"] root=1 pools=[] kinds=[] free=0 table=0
+disk "cd0" bytes=0 descr="" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+pool "zroot"
+machine "Micro-Star" "MS-7D25"

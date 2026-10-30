@@ -1,0 +1,2 @@
+machine
+present "Apple Inc. MacPro6,1"

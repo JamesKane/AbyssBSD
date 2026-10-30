@@ -1,0 +1,8 @@
+render
+Fathom: what this machine is
+========================================
+GPU             [ok]  card0 (+ renderD128)
+Wi-Fi           [--]  no card - "none"...
+Frame contract  [??]  undertow did not report
+----------------------------------------
+1 present, 1 absent, 1 COULD NOT BE ASKED

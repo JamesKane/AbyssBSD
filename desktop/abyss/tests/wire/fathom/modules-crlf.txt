@@ -1,0 +1,2 @@
+modules
+absent "no drm driver loaded"

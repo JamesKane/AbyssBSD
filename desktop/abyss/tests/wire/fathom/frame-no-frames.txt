@@ -1,0 +1,2 @@
+frame
+absent "no frames were presented"

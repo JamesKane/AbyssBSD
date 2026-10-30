@@ -1,0 +1,4 @@
+Installed devices:
+pcm0: <Realtek ALC1220 (Rear Analog)> (play/rec) default
+  pcm1: <Realtek ALC1220 (Front Analog)> (play/rec)
+Default audio device: pcm0

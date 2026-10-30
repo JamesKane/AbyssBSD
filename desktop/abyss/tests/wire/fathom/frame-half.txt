@@ -1,0 +1,2 @@
+frame
+present "0 of 300 missed (0 per mille) [clock hardware, backend unstated]"

@@ -1,0 +1,9 @@
+[package]
+name = "install"
+description = "Install: the install as a value: plan, inventory, refusals and the step list (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+fathom = { path = "../fathom" }

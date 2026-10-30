@@ -1,0 +1,7 @@
+render
+Fathom: what this machine is
+========================================
+GPU      [--]  none
+Network  [ok]  igc0
+----------------------------------------
+1 present, 1 absent

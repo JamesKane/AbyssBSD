@@ -1,0 +1,3 @@
+keymap
+assignment "de.kbd"
+xkb "de.kbd" layout="de" variant="" exact=1 name="German"

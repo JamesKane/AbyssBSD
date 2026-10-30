@@ -1,0 +1,13 @@
+check
+plan "ada0p1" pool="mirror" esp=272629761 swap=3 dist="dist" mountpoint="mnt" hostname="abyss" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "kernel.txz"
+disk "ada0" bytes=68719476736 descr="QEMU HARDDISK" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine none
+problem "ada0p1 is a partition, not a disk — an install takes the whole disk"
+problem "\"mirror\" cannot be a ZFS pool name: that name is reserved by ZFS"
+problem "the EFI partition is 272629761 bytes, which is not a whole number of MiB"
+problem "swap is 3 bytes, which is not a whole number of MiB"
+problem "base.txz has to be extracted first, before kernel.txz"
+problem "the distribution directory must be an absolute path, and \"dist\" is not"
+problem "the mount point must be an absolute path, and \"mnt\" is not"
+problem "nobody could log in to the installed system: set a root password or give an account the wheel group"

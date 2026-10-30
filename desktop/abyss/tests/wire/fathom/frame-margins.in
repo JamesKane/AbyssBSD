@@ -1,0 +1,11 @@
+missed=58 of 300
+composite-p99-us=12
+period-us=16680
+margin-wake-us=300
+margin-cost-us=12
+margin-commit-us=7000
+margin-vblank-us=nope
+margin-safety-us=400
+margin-pinned=yes
+backend=drm
+vblank-source=hardware

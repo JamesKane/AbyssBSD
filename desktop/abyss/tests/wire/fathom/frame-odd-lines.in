@@ -1,0 +1,6 @@
+=x
+missed=
+missed=45  of   300 frames
+ backend = drm=x 
+backend=drm
+backend=headless

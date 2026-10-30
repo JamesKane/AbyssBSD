@@ -1,0 +1,2 @@
+frame
+present "3 of 300 missed (10 per mille) [DRM but NO hardware clock: treat as provisional]"

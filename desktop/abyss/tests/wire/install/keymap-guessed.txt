@@ -1,0 +1,3 @@
+keymap
+assignment "de.acc.kbd"
+xkb "de.acc.kbd" layout="de" variant="" exact=0 name="de.acc.kbd"

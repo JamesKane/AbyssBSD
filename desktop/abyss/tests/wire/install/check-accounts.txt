@@ -1,0 +1,99 @@
+decode-only
+check
+plan "ada0" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+account "ada" "" "*" groups=["wheel","operator"] shell="/bin/sh"
+account "bob" "" "$6$b" groups=[] shell="/bin/csh"
+disk "ada0" bytes=68719476736 descr="" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine none
+steps
+1. create the GPT [destructive]
+   $ gpart create -s gpt ada0
+2. add the EFI system partition [destructive]
+   $ gpart add -a 1m -s 260M -t efi -l abyssesp ada0
+3. add swap [destructive]
+   $ gpart add -a 1m -s 2048M -t freebsd-swap -l abyssswap ada0
+4. add the pool partition [destructive]
+   $ gpart add -a 1m -t freebsd-zfs -l abysszfs ada0
+5. format the EFI partition [destructive]
+   $ newfs_msdos -F 32 -c 1 /dev/gpt/abyssesp
+6. create the pool [destructive]
+   $ zpool create -f -o altroot=/mnt -o cachefile=/tmp/abyss-install-zpool.cache -O compress=lz4 -O atime=off -O mountpoint=none abyss /dev/gpt/abysszfs
+7. create abyss/ROOT
+   $ zfs create -o mountpoint=none abyss/ROOT
+8. create abyss/ROOT/default
+   $ zfs create -o mountpoint=/ -o canmount=noauto abyss/ROOT/default
+9. mount the new root
+   $ zfs mount abyss/ROOT/default
+10. create abyss/home
+   $ zfs create -o mountpoint=/home abyss/home
+11. create abyss/tmp
+   $ zfs create -o mountpoint=/tmp -o exec=on -o setuid=off abyss/tmp
+12. create abyss/usr
+   $ zfs create -o mountpoint=/usr -o canmount=off abyss/usr
+13. create abyss/usr/ports
+   $ zfs create -o setuid=off abyss/usr/ports
+14. create abyss/usr/src
+   $ zfs create abyss/usr/src
+15. create abyss/var
+   $ zfs create -o mountpoint=/var -o canmount=off abyss/var
+16. create abyss/var/audit
+   $ zfs create -o exec=off -o setuid=off abyss/var/audit
+17. create abyss/var/crash
+   $ zfs create -o exec=off -o setuid=off abyss/var/crash
+18. create abyss/var/log
+   $ zfs create -o exec=off -o setuid=off abyss/var/log
+19. create abyss/var/mail
+   $ zfs create -o atime=on abyss/var/mail
+20. create abyss/var/tmp
+   $ zfs create -o setuid=off abyss/var/tmp
+21. mark the boot environment
+   $ zpool set bootfs=abyss/ROOT/default abyss
+22. extract base.txz
+   $ tar -xpf /usr/freebsd-dist/base.txz -C /mnt
+23. extract kernel.txz
+   $ tar -xpf /usr/freebsd-dist/kernel.txz -C /mnt
+24. make the ESP mount point
+   $ mkdir -p /mnt/boot/efi
+25. mount the EFI partition
+   $ mount -t msdosfs /dev/gpt/abyssesp /mnt/boot/efi
+26. make EFI/BOOT
+   $ mkdir -p /mnt/boot/efi/EFI/BOOT
+27. install the boot loader
+   $ cp /mnt/boot/loader.efi /mnt/boot/efi/EFI/BOOT/BOOTX64.efi
+28. make /boot/zfs
+   $ mkdir -p /mnt/boot/zfs
+29. write the pool cache
+   $ zpool set cachefile=/tmp/abyss-install-zpool.cache abyss
+30. install the pool cache
+   $ cp /tmp/abyss-install-zpool.cache /mnt/boot/zfs/zpool.cache
+31. write loader.conf
+   > /mnt/boot/loader.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_load="YES"
+     | vfs.root.mountfrom="zfs:abyss/ROOT/default"
+     | boot_serial="YES"
+     | comconsole_speed="115200"
+     | console="comconsole,vidconsole"
+     | kern.geom.label.disk_ident.enable="0"
+32. write rc.conf
+   > /mnt/etc/rc.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_enable="YES"
+     | hostname="abyss"
+     | ifconfig_DEFAULT="DHCP"
+33. write fstab
+   > /mnt/etc/fstab (644)
+     | # Device	Mountpoint	FStype	Options	Dump	Pass#
+     | /dev/gpt/abyssswap	none	swap	sw	0	0
+34. create the account ada
+   $ pw -R /mnt useradd -n ada -m -s /bin/sh -H 0 -G wheel,operator
+   < (on stdin, kept out of argv)
+35. create the account bob
+   $ pw -R /mnt useradd -n bob -m -s /bin/csh -H 0
+   < (on stdin, kept out of argv)
+36. unmount the EFI partition [may fail]
+   $ umount /mnt/boot/efi
+37. export the pool
+   $ zpool export abyss

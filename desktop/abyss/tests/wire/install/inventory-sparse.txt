@@ -1,0 +1,5 @@
+decode-only
+inventory
+disk "ada1" bytes=0 descr="" mounted=["/a","/b"] root=0 pools=[] kinds=["efi","ntfs"] free=0 table=1
+pool "tank"
+machine none

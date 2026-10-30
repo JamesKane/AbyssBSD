@@ -15,7 +15,6 @@ use settings::{
     AccountAction, EnergyPlan, IPv4, IPv4Config, NetworkPlan, PowerProfile, PowerdMode, SettingsPlan, SettingsRefusal, SignalPlan,
     SoundPlan, VolumeAction, WifiAction, WifiNetwork, WifiPlan,
 };
-use std::collections::BTreeMap;
 
 /// What an apply reports as it happens: the vocabulary both ends share.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -334,23 +333,9 @@ pub fn encode_known(k: &WifiKnown, m: &mut Msg) {
     }
 }
 
-/// The fields named `<prefix><i><suffix>` with `i` below `count`, by `i`:
-/// read from the message, so a count far past what it holds costs nothing
-/// (Swift counts up to it).
-fn indexed<'a>(m: &'a Msg, prefix: &str, suffix: &str, count: u64) -> BTreeMap<u64, &'a Value> {
-    m.fields()
-        .iter()
-        .filter_map(|(name, value)| {
-            let digits = name.strip_prefix(prefix)?.strip_suffix(suffix)?;
-            let i: u64 = digits.parse().ok()?;
-            (i < count && i.to_string() == digits).then_some((i, value))
-        })
-        .collect()
-}
-
 pub fn decode_known(m: &Msg) -> WifiKnown {
     let count = m.u64("wifi.known.count").unwrap_or(0);
-    let networks = indexed(m, "wifi.known.", "", count)
+    let networks = m.indexed("wifi.known.", "", count)
         .into_values()
         .filter_map(|v| if let Value::String(s) = v { Some(s.clone()) } else { None })
         .collect();
@@ -370,7 +355,7 @@ pub fn encode_scan(nets: &[WifiNetwork], m: &mut Msg) {
 
 pub fn decode_scan(m: &Msg) -> Vec<WifiNetwork> {
     let count = m.u64("scan.count").unwrap_or(0);
-    indexed(m, "scan.", ".ssid", count)
+    m.indexed("scan.", ".ssid", count)
         .into_iter()
         .filter_map(|(i, v)| {
             let Value::String(ssid) = v else { return None };

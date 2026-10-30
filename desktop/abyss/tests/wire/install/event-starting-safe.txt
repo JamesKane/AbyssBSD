@@ -1,0 +1,2 @@
+event
+starting 0 1 "mount the new root" destructive=0

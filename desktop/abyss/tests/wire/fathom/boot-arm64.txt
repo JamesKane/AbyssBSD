@@ -1,0 +1,2 @@
+boot "aarch64"
+present "UEFI (arm64 starts only through UEFI)"

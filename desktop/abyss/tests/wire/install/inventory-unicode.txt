@@ -1,0 +1,3 @@
+inventory
+disk "da0" bytes=18446744073709551615 descr="Clé USB \"Ü\"\n" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine "Ünïcode" "✓"

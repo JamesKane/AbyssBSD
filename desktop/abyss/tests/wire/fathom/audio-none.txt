@@ -1,0 +1,2 @@
+audio
+absent "no sound device installed"

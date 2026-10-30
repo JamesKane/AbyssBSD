@@ -1,0 +1,3 @@
+keymap
+assignment "uk.kbd"
+xkb "uk.kbd" layout="gb" variant="" exact=1 name="British"

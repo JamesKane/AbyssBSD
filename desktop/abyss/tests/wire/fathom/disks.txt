@@ -1,0 +1,2 @@
+disks
+present "nvd0 931.5 GiB (Samsung SSD 980); ada0 223.5 GiB"

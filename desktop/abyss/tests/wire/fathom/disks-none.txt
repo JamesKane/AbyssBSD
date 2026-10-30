@@ -1,0 +1,2 @@
+disks
+absent "no disks found: there is nowhere to install"

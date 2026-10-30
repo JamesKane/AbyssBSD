@@ -1,0 +1,2 @@
+frame
+present "45 of 300 missed (150 per mille), composite p99 9us, period 16666us [hardware clock, DRM]"

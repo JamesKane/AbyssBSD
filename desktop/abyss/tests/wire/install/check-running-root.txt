@@ -1,0 +1,8 @@
+check
+plan "ada0" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+account "jkane" "J Kane" "$6$fake" groups=["wheel"] shell="/bin/sh"
+disk "ada0" bytes=68719476736 descr="" mounted=["/","/home"] root=1 pools=[] kinds=[] free=0 table=0
+machine none
+problem "ada0 is the disk this system is running from"

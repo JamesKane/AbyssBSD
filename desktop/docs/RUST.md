@@ -125,7 +125,7 @@ cross-builds the workspace for riscv64 where the sysroot is, and runs
 guest, which now has `rust` 1.99.
 
 **R2. Wire and data crates (M).** `current-ipc`, `pool-config`, `menu-wire`,
-`settings`, `settings-wire`, `install-wire`, `dbus` (the wire half),
+`settings`, `settings-wire`, `fathom`, `install`, `install-wire`, `dbus` (the wire half),
 `menu-model`, `text-model`, `jails`, `system-facts`, `vocab`. Pure Rust, no I/O beyond the
 socket and the file. Cross-language fixtures (§3.3) go in here.
 
@@ -192,6 +192,29 @@ the same way. Four are pinned as `.rust.txt`: hex is digits only (Swift's
 takes a sign, so `+a:…` was a BSSID and `ssid=+f` a name), and CR is a blank
 in both editors (Swift's CRLF file is one line: BACKLOG §5). The Swift
 tests ported, except the runner's, which are `settingsrun`'s.
+
+*fathom, install and installwire, 2026-10-30:* together again, for the
+same reason: the wire is made of `install`'s types, `install` has no I/O
+beyond reading rc.conf for the keymap (`installrun` executes, R3), and its
+loader.conf asks `fathom` whether the machine is a Mac Pro, so the probes
+came too (pure functions over captured text; the `fathom` binary that gathers
+is R3). `de/fathom` (crate `fathom`) is Probe.swift and Report.swift;
+`de/install` (crate `install`) is the plan, the inventory, the refusals word
+for word, the step list and its rendering (the golden list is Swift's, to
+the byte) and the keymap tables; `de/installwire` (crate `install-wire`) is
+Wire.swift. Settings' indexed-list reader moved into `current-ipc` as
+`Msg::indexed`, which both wires use. Rust saturates where Swift traps on a
+size from the wire (an ESP near `UInt64.max` crashed `problems`), and pool
+names are ASCII as ZFS's are. Fixtures in `abyss/tests/wire/install`: 52
+messages and 12 texts. A `check` message is a plan and the machine together,
+and its text is the plan, the machine, the refusals and the steps, so both
+languages are held to the same commands at the same disk. 38 re-encode to
+the byte. Three are pinned as `.rust.txt`: a Unicode pool name (Swift passes
+`école`, which `zpool create` refuses after `gpart` has run), a decomposed
+letter in a full name (quoted in the rendering), and CRLF rc.conf. And
+`abyss/tests/wire/fathom`: 66 captured texts through every probe, two
+pinned (CRLF kldstat, and folding a decomposed accent). The Swift tests
+ported, except `installrun`'s parsers and runner (R3).
 
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,

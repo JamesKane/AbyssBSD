@@ -1,0 +1,92 @@
+check
+plan "ada0" pool="tank" esp=272629760 swap=0 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="abyss" timezone="Europe/London" keymap="" rootpw="$6$r" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+disk "ada0" bytes=17179869184 descr="" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine none
+steps
+1. create the GPT [destructive]
+   $ gpart create -s gpt ada0
+2. add the EFI system partition [destructive]
+   $ gpart add -a 1m -s 260M -t efi -l tankesp ada0
+3. add the pool partition [destructive]
+   $ gpart add -a 1m -t freebsd-zfs -l tankzfs ada0
+4. format the EFI partition [destructive]
+   $ newfs_msdos -F 32 -c 1 /dev/gpt/tankesp
+5. create the pool [destructive]
+   $ zpool create -f -o altroot=/mnt -o cachefile=/tmp/abyss-install-zpool.cache -O compress=lz4 -O atime=off -O mountpoint=none tank /dev/gpt/tankzfs
+6. create tank/ROOT
+   $ zfs create -o mountpoint=none tank/ROOT
+7. create tank/ROOT/default
+   $ zfs create -o mountpoint=/ -o canmount=noauto tank/ROOT/default
+8. mount the new root
+   $ zfs mount tank/ROOT/default
+9. create tank/home
+   $ zfs create -o mountpoint=/home tank/home
+10. create tank/tmp
+   $ zfs create -o mountpoint=/tmp -o exec=on -o setuid=off tank/tmp
+11. create tank/usr
+   $ zfs create -o mountpoint=/usr -o canmount=off tank/usr
+12. create tank/usr/ports
+   $ zfs create -o setuid=off tank/usr/ports
+13. create tank/usr/src
+   $ zfs create tank/usr/src
+14. create tank/var
+   $ zfs create -o mountpoint=/var -o canmount=off tank/var
+15. create tank/var/audit
+   $ zfs create -o exec=off -o setuid=off tank/var/audit
+16. create tank/var/crash
+   $ zfs create -o exec=off -o setuid=off tank/var/crash
+17. create tank/var/log
+   $ zfs create -o exec=off -o setuid=off tank/var/log
+18. create tank/var/mail
+   $ zfs create -o atime=on tank/var/mail
+19. create tank/var/tmp
+   $ zfs create -o setuid=off tank/var/tmp
+20. mark the boot environment
+   $ zpool set bootfs=tank/ROOT/default tank
+21. extract base.txz
+   $ tar -xpf /usr/freebsd-dist/base.txz -C /mnt
+22. extract kernel.txz
+   $ tar -xpf /usr/freebsd-dist/kernel.txz -C /mnt
+23. make the ESP mount point
+   $ mkdir -p /mnt/boot/efi
+24. mount the EFI partition
+   $ mount -t msdosfs /dev/gpt/tankesp /mnt/boot/efi
+25. make EFI/BOOT
+   $ mkdir -p /mnt/boot/efi/EFI/BOOT
+26. install the boot loader
+   $ cp /mnt/boot/loader.efi /mnt/boot/efi/EFI/BOOT/BOOTX64.efi
+27. make /boot/zfs
+   $ mkdir -p /mnt/boot/zfs
+28. write the pool cache
+   $ zpool set cachefile=/tmp/abyss-install-zpool.cache tank
+29. install the pool cache
+   $ cp /tmp/abyss-install-zpool.cache /mnt/boot/zfs/zpool.cache
+30. write loader.conf
+   > /mnt/boot/loader.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_load="YES"
+     | vfs.root.mountfrom="zfs:tank/ROOT/default"
+     | boot_serial="YES"
+     | comconsole_speed="115200"
+     | console="comconsole,vidconsole"
+     | kern.geom.label.disk_ident.enable="0"
+31. write rc.conf
+   > /mnt/etc/rc.conf (644)
+     | # Written by the AbyssBSD installer.
+     | zfs_enable="YES"
+     | hostname="abyss"
+     | ifconfig_DEFAULT="DHCP"
+32. write fstab
+   > /mnt/etc/fstab (644)
+     | # Device	Mountpoint	FStype	Options	Dump	Pass#
+33. set the time zone to Europe/London
+   $ cp /mnt/usr/share/zoneinfo/Europe/London /mnt/etc/localtime
+34. set the root password
+   $ pw -R /mnt usermod root -H 0
+   < (on stdin, kept out of argv)
+35. unmount the EFI partition [may fail]
+   $ umount /mnt/boot/efi
+36. export the pool
+   $ zpool export tank

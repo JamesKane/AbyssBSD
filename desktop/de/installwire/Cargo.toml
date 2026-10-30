@@ -1,0 +1,10 @@
+[package]
+name = "install-wire"
+description = "InstallWire: the install plan, the machine and an install's progress on the control plane (Swift: Wire.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+install = { path = "../install" }

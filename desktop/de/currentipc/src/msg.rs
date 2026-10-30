@@ -18,6 +18,7 @@
 //!
 //! Integers are big-endian: a documented format, not a memory dump.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
@@ -176,6 +177,21 @@ impl Msg {
             Some(Value::Fd(f)) => Some(*f),
             _ => None,
         }
+    }
+
+    /// A list, as `Msg` spells one: the fields named `<prefix><i><suffix>`
+    /// with `i` below `count`, by `i`. Read from the fields the message
+    /// holds, so a count far past them costs nothing (Swift counts up to
+    /// it), and an index spelt with a leading zero is not one.
+    pub fn indexed(&self, prefix: &str, suffix: &str, count: u64) -> BTreeMap<u64, &Value> {
+        self.fields
+            .iter()
+            .filter_map(|(name, value)| {
+                let digits = name.strip_prefix(prefix)?.strip_suffix(suffix)?;
+                let i: u64 = digits.parse().ok()?;
+                (i < count && i.to_string() == digits).then_some((i, value))
+            })
+            .collect()
     }
 
     /// Take a received descriptor out: the field goes, and the caller owns

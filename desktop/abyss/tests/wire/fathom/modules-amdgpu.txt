@@ -1,0 +1,2 @@
+modules
+present "amdgpu, drm loaded"

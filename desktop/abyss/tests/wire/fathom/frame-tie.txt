@@ -1,0 +1,2 @@
+frame
+present "1 of 300 missed (3 per mille); margin dominated by waking late (5us) [clock and backend unstated]"

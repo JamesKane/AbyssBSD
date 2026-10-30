@@ -1,0 +1,2 @@
+event
+failed 5 "create the pool" "" ignored=0
