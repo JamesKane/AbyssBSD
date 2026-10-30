@@ -97,7 +97,18 @@ Out of tree, through LinuxKPI (GPL, BSD glue):
 
 The board's default kernel is `GENERIC-HMP-IOMMU` built from the pushed
 branch (`f12c9f4ee6`, 2026-10-11), with the out-of-tree modules built
-against it in `/boot/kernel`.  It still runs with settings: `loader.conf`
+against it in `/boot/kernel`. **2026-10-30:** the branch merged with FreeBSD `main`
+(`202c6cbdc3f`, `__FreeBSD_version` 1600033), cross-built on Linux with
+the out-of-tree modules rebuilt against it, booted once from
+`/boot/kernel.merge` (`nextboot -k`) with nothing else changed. Against
+the default kernel's boot: the same modules loaded, the same device tree,
+boot messages and attachments; the codec decodes H.264, HEVC and VP9
+bit-exactly (`decode-test.sh`); glmark2 off-screen on panthor (2379) with
+DVFS to 1000 MHz and back; the NPU's MobileNetV2 natively and through
+`libnoe` under the Linuxulator with the recorded labels and scores, under
+1 ms; HDA plays; SPI transfers; CPPC 800 to 2600 MHz; C3 87-100% on idle
+cores (cpu0 stays in C1, as before); thermal, the watchdog. Not yet the
+default: `/boot/kernel` is still `f12c9f4ee6`.  It still runs with settings: `loader.conf`
 `kern.eventtimer.timer="Sky1 GPT"`, `hw.iommu.dma="1"`,
 `hw.smmu.bypass_named="0"`, `drm.debug="0"`; `rc.conf` C3 idle, the
 branch's `powerd`, and `kld_list` (display, GPU, sound, video codec, NPU,

@@ -143,7 +143,9 @@ These build against the kernel's obj dir (`KERNBUILDDIR`), inside
 
 ```sh
 KB=$OBJ$SRC/arm64.aarch64/sys/GENERIC
-bmk() { $MK buildenv BUILDENV_SHELL="make $*"; }
+# buildenv refuses -j ("The buildenv target is incompatible with -j"), so
+# drop the one $MK carries; the inner make takes its own.
+bmk() { $(echo "$MK" | sed 's/ -j[0-9]*//') buildenv BUILDENV_SHELL="make $*"; }
 
 # drm-kmod: dmabuf, drm, sysfbdrm (sysfbdrm is aarch64's default extra)
 bmk -C $ABYSS/kmod/drm -j$(nproc) SYSDIR=$SRC/sys KERNBUILDDIR=$KB \
@@ -158,6 +160,14 @@ bmk -C $ABYSS/firmware KMODS=msmkmsfw -j$(nproc) SYSDIR=$SRC/sys \
 
 *Unverified on Linux:* check how the quoting of `KMODS` survives the
 `BUILDENV_SHELL` round trip.
+
+These recipes are `sh`. Under zsh, `$MK` is one word, not a command line:
+run them with `sh -c '…'` or `setopt sh_word_split`.
+
+The Orange Pi 6 Plus's out-of-tree modules build the same way
+(2026-10-30, Linux), each with `DRMKMOD=$ABYSS/kmod/drm SYSDIR=$SRC/sys
+KERNBUILDDIR=$KB`: `drm-komeda-kmod`, `drm-panthor-kmod`, `vpu-kmod` and
+`aipu-kmod` (their own repositories; clone them outside the monorepo).
 
 **KLD_TIED rule.** After any `__FreeBSD_version` bump (LinuxKPI changes bump
 it), modules built with the kernel, and drm-kmod built with `KERNBUILDDIR`,
