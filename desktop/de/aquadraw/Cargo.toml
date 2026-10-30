@@ -1,0 +1,9 @@
+[package]
+name = "aquadraw"
+description = "AquaDraw's Rust half: the draw-list interpreter (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true

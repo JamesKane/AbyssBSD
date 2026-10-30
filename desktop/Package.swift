@@ -220,7 +220,9 @@ let package = Package(
         .target(
             name: "AquaDraw",
             dependencies: ["CCairo", "CText", "CDraw", "PoolConfig"],
-            path: "de/aquadraw"
+            path: "de/aquadraw",
+            // Its Rust half (RUST.md R1): Cargo builds it, not SwiftPM.
+            exclude: ["Cargo.toml", "src", "examples"]
         ),
         // What an application can do, as a value: commands, key equivalents,
         // menus (PHASE10.md P10.1). Depends on nothing, so the menu wire and a

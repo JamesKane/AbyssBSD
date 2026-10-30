@@ -1,0 +1,13 @@
+[package]
+name = "abyss-sys"
+description = "Hand-written FFI over cairo and ADE's C shims (cdraw, ctext)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+links = "abyss-shims"
+
+[dependencies]
+libc.workspace = true
+
+[build-dependencies]
+cc.workspace = true

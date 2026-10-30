@@ -1,0 +1,16 @@
+# ADE in Rust (docs/RUST.md): one workspace, a crate beside each Swift target
+# it replaces (de/<name>/Cargo.toml), `unsafe` only in *-sys crates, and no
+# dependencies beyond libc and cc (§6.5).
+[workspace]
+resolver = "3"
+members = ["de/abyss-sys", "de/aquadraw"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+libc = "0.2"
+cc = "1"
+abyss-sys = { path = "de/abyss-sys" }
