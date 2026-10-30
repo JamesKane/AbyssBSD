@@ -1,0 +1,4 @@
+The AbyssBSD desktop: a Mac OS X 10.2-style desktop on Wayland, written in
+Swift: its compositor (undertow), session, shell, applications, portals, the
+D-Bus bridge, the installer, the privileged helpers and the agent runtime,
+with the themes and fonts they read at run time.
