@@ -5,6 +5,29 @@
 set -eu
 . "$(dirname "$0")/config.sh"
 
+if [ "$ABYSS_VMM" = bhyve ]; then
+  # On the FreeBSD box (config.sh): send bhyve-run.sh there, start the VM,
+  # and record the address its DHCP lease gives it, for ssh.sh and the rest.
+  h=$ABYSS_BHYVE_HOST
+  name=abyss${_role:--build}$_suffix
+  ssh -o BatchMode=yes "$h" "mkdir -p $ABYSS_BHYVE_HOME"
+  scp -q -o BatchMode=yes "$ABYSS_VM_DIR/bhyve-run.sh" "$h:$ABYSS_BHYVE_HOME/bhyve-run.sh"
+  ssh -o BatchMode=yes "$h" "sh $ABYSS_BHYVE_HOME/bhyve-run.sh $name $ABYSS_BHYVE_CPUS $ABYSS_BHYVE_MEM \
+    $ABYSS_BHYVE_DISK $ABYSS_BHYVE_TAP $ABYSS_BHYVE_MAC"
+  log=$ABYSS_BHYVE_HOME/serial-$name.log
+  echo "[run] waiting for $name's DHCP lease (console: $h:$log)"
+  ip=""
+  for _ in $(seq 120); do
+    ip=$(ssh -o BatchMode=yes "$h" "sed -n 's/.*bound to \([0-9.]*\) .*/\1/p' $log | tail -1")
+    [ -n "$ip" ] && break
+    sleep 5
+  done
+  [ -n "$ip" ] || { echo "[run] no lease in 10 minutes; see $h:$log" >&2; exit 1; }
+  echo "$ip" > "$ABYSS_VM_HOME/ip$_role$_suffix"
+  echo "[run] $name is at $ip (ssh.sh reaches it)"
+  exit 0
+fi
+
 [ -f "$ABYSS_BASE_QCOW" ] || { echo "base image missing; run fetch-image.sh first" >&2; exit 1; }
 # The riscv64 guest has no seed: provision-rv64.py sets it up over the console.
 [ "$ABYSS_ARCH" = riscv64 ] || [ -f "$ABYSS_SEED" ] || { echo "seed missing; run make-seed.sh first" >&2; exit 1; }

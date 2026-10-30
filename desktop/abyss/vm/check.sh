@@ -19,7 +19,7 @@ bad()  { printf '[check] FAIL: %s\n' "$*" >&2; fail=1; }
 
 # --- reachable? ---------------------------------------------------------
 # shellcheck disable=SC2046
-ssh_run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$@"; }
+ssh_run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$@"; }
 
 # First boot is the slow case this script exists for, and it is slow: the cloud
 # image runs freebsd-update, then cloud-init pulls ~100 packages (llvm19 alone

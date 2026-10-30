@@ -41,19 +41,19 @@ for set in base.txz kernel.txz src.txz; do
 done
 
 # shellcheck disable=SC2046
-ssh_run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$@"; }
+ssh_run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$@"; }
 ssh_run 'mkdir -p ~/dist'
 echo "[sets] base.txz kernel.txz -> guest ~/dist"
 # shellcheck disable=SC2046
 rsync -a -e "ssh $(abyss_ssh_opts)" "$ABYSS_SETS_DIR/base.txz" "$ABYSS_SETS_DIR/kernel.txz" \
-  "$ABYSS_SSH_USER@127.0.0.1:dist/"
+  "$ABYSS_SSH_USER@$ABYSS_SSH_HOST:dist/"
 # src.txz unpacks to usr/src, so extracting at / puts it at /usr/src. Only when
 # the guest's copy is a different tarball, because it takes a minute.
 sum=$(sha256sum "$ABYSS_SETS_DIR/src.txz" | awk '{print $1}')
 if [ "$(ssh_run 'cat /usr/src/.abyss-src-sha256 2>/dev/null' || true)" != "$sum" ]; then
   echo "[sets] src.txz -> guest /usr/src"
   # shellcheck disable=SC2046
-  rsync -a -e "ssh $(abyss_ssh_opts)" "$ABYSS_SETS_DIR/src.txz" "$ABYSS_SSH_USER@127.0.0.1:/tmp/src.txz"
+  rsync -a -e "ssh $(abyss_ssh_opts)" "$ABYSS_SETS_DIR/src.txz" "$ABYSS_SSH_USER@$ABYSS_SSH_HOST:/tmp/src.txz"
   # /usr/src is its own ZFS dataset on these images: empty it, never remove it.
   ssh_run "sudo find /usr/src -mindepth 1 -delete && sudo tar -xf /tmp/src.txz -C / && rm /tmp/src.txz \
     && echo $sum | sudo tee /usr/src/.abyss-src-sha256 >/dev/null"

@@ -14,7 +14,7 @@ set -eu
 ABYSS_VM_ROLE=builder
 . "$(dirname "$0")/config.sh"
 # shellcheck disable=SC2046
-bssh() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$@"; }
+bssh() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$@"; }
 src=$ABYSS_GUEST_SRC/src
 
 bssh 'sudo tee /usr/local/etc/poudriere.d/rv64-make.conf >/dev/null' < "$ABYSS_VM_DIR/rv64-make.conf"

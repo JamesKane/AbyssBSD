@@ -1,6 +1,7 @@
 # ADE in Rust: the rewrite (scope)
 
-**Status: scoped 2026-10-30; §6 adopted as recommended the same day.** This replaces "the product is Swift, top
+**Status: scoped 2026-10-30; §6 adopted as recommended the same day; R0 done
+the same day (§5).** This replaces "the product is Swift, top
 to bottom" (PLAN.md, *Decisions locked in*). The reason is one fact: **Swift has
 no RV64 port**, and ADE has to run on RV64 boards. Rust's
 `riscv64gc-unknown-freebsd` exists, but it is Tier 3 (std builds, no host
@@ -194,7 +195,9 @@ on riscv64.**
   - llvm19 (mesa needs it unconditionally) runs its tablegens under
     emulation, and twelve at once ran the 14G VM out of memory (code 137):
     `MAKE_JOBS_NUMBER=4` for it.
-  - ***(mesa, gtk30, wlroots020: building as this is written.)***
+  - gtk30's DOCS run gtkdoc-mkhtml emulated, and it fails: off.
+  - With those, the whole of R0's list and sway 1.12 and grim built: 250
+    packages, mesa 26.2 and llvm19 among them.
 - **Rust's std** cross-builds for `riscv64gc-unknown-freebsd` with
   `nightly-2026-10-04` and `-Zbuild-std=std,panic_abort`, linked by the
   host's clang 22 and lld against the sysroot, in about 12 s. Threads, fs
@@ -219,9 +222,24 @@ on riscv64.**
   from our repository (`IGNORE_OSVERSION`: the image's world is the stock
   1600029, ours is 1600032). The guest's build user is in `operator`, so
   `ssh.sh shutdown -p now` stops it.
-- **Not yet:** a compositor. The scene draws offscreen, the way the golden
-  gate does. A headless undertow on riscv64 needs wlroots020, which is
-  building.
+- **The scene in a compositor.** `abyss-sys` has a Wayland client:
+  libwayland-client, and `wl.c` exporting the requests wayland-scanner emits
+  as `static inline`s (§6.4). The `window` example shows the drawlist scene
+  in an `xdg_toplevel`; `abyss/tests/window-shot.sh` captures it from a
+  headless sway (pixman renderer, no borders) with grim, and
+  `golden-rust.sh` holds it to the same golden as the PNG.
+- **R0 is done (2026-10-30):** `golden-rust.sh --rv64` is green in the
+  guest, PNG and window at 1x and 2x, against `golden/freebsd/`: Rust
+  cross-built on the host, run on FreeBSD/riscv64 under sway 1.12 and
+  wlroots 0.20 that we built, identical to what Swift draws on amd64. 26 s
+  for the run, cross-build included.
+- **Found on the way, in our `src`:** two LinuxKPI DMA changes that only x86
+  and arm64 compile (`bus_dma_id_mapped`), so riscv's GENERIC did not build
+  (fixed); and the fork predated `main`'s riscv TLB shootdown fix
+  (f627ff51b), so on SMP riscv64 a fork corrupted memory whenever OpenSBI
+  booted from a hart other than 0 (sshd failed with "string is too large").
+  The fork is now merged with `main` (1600033); the guest runs it on 8
+  harts.
 
 ## 6. Risks and open decisions
 
@@ -251,7 +269,9 @@ not something this project values over a proven wlroots.
 **6.4 Bindings.** *Adopted: hand-written `extern "C"` over our shim
 headers, no `bindgen`.* The headers are ours and narrow, and this keeps
 libclang off the RV64 build. Generated protocol code stays C, from
-`wayland-scanner`, as it is now. We don't adopt `wayland-rs`: it would
+`wayland-scanner`, as it is now. Its requests are `static inline`s, which
+Swift calls and Rust cannot: `abyss-sys/wl.c` exports one function per
+request Rust uses, from the same generated headers (R0). We don't adopt `wayland-rs`: it would
 replace libwayland semantics that HANDOFF §2.57 (`wl_proxy_destroy` sends
 nothing) and others pin down.
 

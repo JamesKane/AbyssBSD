@@ -48,10 +48,22 @@ below.
 | `rv64-build.sh` | RUST.md R0: on the builder VM, make the poudriere `rv64` jail (our `src/` for riscv64, native-xtools) if missing, install `rv64-make.conf`, and bulk-build `rv64-ports.list`. FreeBSD builds no riscv64 packages. |
 | `rv64-sysroot.sh` | RUST.md R0: pull the builder's riscv64 poudriere jail (world) and package repository to the host, and unpack them into the sysroot the cross-build links against. |
 | `rv64-cross.sh` | Run a command (cargo) with the cross-build environment for FreeBSD/riscv64: host clang/lld, the sysroot, pkg-config. |
+| `bhyve-run.sh` | Runs **on the FreeBSD box**: start a role's VM under bhyve (tap on `bridge0`, fixed MAC, UEFI, console on an nmdm pair copied to a log). `run.sh` sends it there. |
+| `bhyve-migrate.sh` | Move a role's qemu disk to the box as bhyve's sparse raw disk, state and all. |
 | `ssh.sh`        | SSH in (passes through args/commands).                          |
 | `sync.sh`       | rsync host `desktop/` → guest `~/AbyssBSD/desktop`.             |
 
 ## Notes
+
+- **bhyve on the build box** (`ABYSS_VMM=bhyve`, 2026-10-30). The FreeBSD box
+  AbyssBSD-Rust also uses (`ssh abyss-build`: FreeBSD 15.1, 20 threads,
+  128 GB) runs the build and builder roles under bhyve, so they get far more
+  than this host can spare and this host stays quiet. The box bridges
+  `igc0` onto `bridge0` (its `rc.conf`); each VM is a tap on it with a
+  fixed MAC, gets its address from the LAN's DHCP, and `run.sh` records it
+  (`ip<role>` beside the disks) for `ssh.sh` and the rest, which reach it
+  on port 22. The VM's console is `doas cu -l /dev/nmdm-abyss-<name>.1B`
+  on the box. riscv64 has no bhyve: the rv64 guest stays qemu.
 
 - **The riscv64 guest** (`ABYSS_VM_ROLE=rv64`, RUST.md R0, §6.10) is
   FreeBSD/riscv64 under TCG: `fetch-image.sh`, `ABYSS_DAEMON=1 ./run.sh`,

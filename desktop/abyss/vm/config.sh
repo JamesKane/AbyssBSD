@@ -157,6 +157,40 @@ esac
 : "${ABYSS_CPUS:=8}"
 : "${ABYSS_MEM:=16G}"
 
+# Where a VM runs. `qemu` is here, on this host's KVM, reached on a
+# forwarded localhost port. `bhyve` is on the FreeBSD build box
+# (ABYSS_BHYVE_HOST, the ssh alias AbyssBSD-Rust uses too), bridged onto the
+# LAN: the guest's address comes from DHCP and run.sh records it from the
+# serial log. The box has 20 threads and 128 GB, so its guests get more than
+# this host can spare. riscv64 has no bhyve: the rv64 guest is qemu.
+# The builder moved to bhyve on 2026-10-30 (bhyve-migrate.sh); the build
+# guest is still qemu here until it moves the same way.
+case "$ABYSS_VM_ROLE" in
+  builder) : "${ABYSS_VMM:=bhyve}" ;;
+  *)       : "${ABYSS_VMM:=qemu}" ;;
+esac
+if [ "$ABYSS_VMM" = bhyve ]; then
+  : "${ABYSS_BHYVE_HOST:=abyss-build}"
+  : "${ABYSS_BHYVE_HOME:=abyssbsd-vm}"        # on the box, under its home
+  _disk=$(basename "$ABYSS_DISK"); _disk=${_disk%.qcow2}.raw
+  : "${ABYSS_BHYVE_DISK:=$ABYSS_BHYVE_HOME/$_disk}"
+  # A fixed MAC per role, in bhyve's OUI, so the router's lease stays put.
+  case "$ABYSS_VM_ROLE" in
+    build)   : "${ABYSS_BHYVE_MAC:=58:9c:fc:ab:00:01}" "${ABYSS_BHYVE_TAP:=tap51}"
+             : "${ABYSS_BHYVE_CPUS:=8}" "${ABYSS_BHYVE_MEM:=16G}" ;;
+    builder) : "${ABYSS_BHYVE_MAC:=58:9c:fc:ab:00:02}" "${ABYSS_BHYVE_TAP:=tap52}"
+             : "${ABYSS_BHYVE_CPUS:=16}" "${ABYSS_BHYVE_MEM:=48G}" ;;
+    *) echo "config.sh: no bhyve for ABYSS_VM_ROLE=$ABYSS_VM_ROLE" >&2; exit 2 ;;
+  esac
+  ABYSS_SSH_PORT=22
+  _ipfile=$ABYSS_VM_HOME/ip$_role$_suffix
+  if [ -z "${ABYSS_SSH_HOST:-}" ] && [ -f "$_ipfile" ]; then
+    ABYSS_SSH_HOST=$(cat "$_ipfile")
+  fi
+fi
+# The guest's address as ssh sees it.
+: "${ABYSS_SSH_HOST:=127.0.0.1}"
+
 # Source location inside the guest: the desktop only, where it sits in the
 # monorepo. The rest of the monorepo (the FreeBSD fork, drm-kmod) is not synced.
 : "${ABYSS_GUEST_SRC:=/home/${ABYSS_SSH_USER}/AbyssBSD/desktop}"

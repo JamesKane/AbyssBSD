@@ -18,7 +18,7 @@ ABYSS_VM_ROLE=builder
 jail=/usr/local/poudriere/jails/rv64
 repo=/usr/local/poudriere/data/packages/rv64-default/.latest
 # shellcheck disable=SC2046
-bssh() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$@" </dev/null; }
+bssh() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$@" </dev/null; }
 
 bssh "test -d $jail && test -d $repo/All" \
   || { echo "rv64-sysroot: no rv64 jail or packages on the builder (RUST.md R0)" >&2; exit 1; }

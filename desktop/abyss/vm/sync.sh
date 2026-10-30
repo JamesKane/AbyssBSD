@@ -9,14 +9,15 @@ echo "[sync] $ABYSS_SYNC_ROOT/  ->  $ABYSS_SSH_USER@vm:$ABYSS_GUEST_SRC"
 # rsync creates the last directory of the target, never its parents, and the
 # guest copy sits two deep (~/AbyssBSD/desktop) since the monorepo move.
 # shellcheck disable=SC2046
-ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "mkdir -p '$ABYSS_GUEST_SRC'"
+ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "mkdir -p '$ABYSS_GUEST_SRC'"
 # shellcheck disable=SC2046
 rsync -a --delete \
   --exclude '.git/' \
+  --exclude '.git' \
   --exclude 'obj/' \
   --exclude '.build/' \
   --exclude 'abyss-vm/' \
   --exclude 'abyss-swift-vm/' \
   -e "ssh $(abyss_ssh_opts)" \
-  "$ABYSS_SYNC_ROOT/" "$ABYSS_SSH_USER@127.0.0.1:$ABYSS_GUEST_SRC/"
+  "$ABYSS_SYNC_ROOT/" "$ABYSS_SSH_USER@$ABYSS_SSH_HOST:$ABYSS_GUEST_SRC/"
 echo "[sync] done"

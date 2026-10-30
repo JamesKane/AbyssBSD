@@ -25,5 +25,5 @@ fi
 echo "[provision] copying the package repository in"
 # shellcheck disable=SC2046
 tar -C "$ABYSS_RV64_PKGS" -cf - . \
-  | ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" 'rm -rf ~/pkgs && mkdir ~/pkgs && tar -xf - -C ~/pkgs'
+  | ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" 'rm -rf ~/pkgs && mkdir ~/pkgs && tar -xf - -C ~/pkgs'
 prov pkg

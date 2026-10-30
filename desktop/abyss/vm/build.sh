@@ -32,7 +32,7 @@ done
 [ "$do_sync" -eq 1 ] && "$here/sync.sh"
 
 # shellcheck disable=SC2046
-run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$@"; }
+run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$@"; }
 
 # FreeBSD's cairo.pc carries -D_THREAD_SAFE, which SwiftPM refuses to forward
 # ("prohibited flag(s)") and drops. It is benign for us and would otherwise be
