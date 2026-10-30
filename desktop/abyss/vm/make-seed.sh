@@ -20,7 +20,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 cat > "$work/meta-data" <<EOF
-instance-id: abyss-build$_suffix-001
+instance-id: abyss-build$_role$_suffix-001
 local-hostname: $ABYSS_HOSTNAME
 EOF
 
@@ -53,6 +53,27 @@ write_files:
 runcmd:
   - ASSUME_ALWAYS_YES=yes pkg bootstrap -f || true
   - pkg update -f || true
+EOF
+
+# What the role installs, appended to the same runcmd.
+if [ "$ABYSS_VM_ROLE" = builder ]; then
+  # The release pipeline's (PHASE17 P17.0): poudriere builds the overlay;
+  # swift6 builds the desktop outside it, for comparison with the port's build;
+  # git for the ports tree poudriere is given. World and kernel need nothing
+  # beyond base. Every install best-effort, then recorded, as the guest's.
+  cat >> "$work/user-data" <<EOF
+  - pkg install -y sudo rsync git gmake pkgconf poudriere || true
+  # On a line of its own: on 2026-10-02 FreeBSD's latest set had no swift6 at
+  # all (the port had moved to 6.4.0 and its package had not appeared), and a
+  # pkg install fails as a whole. Absent, the pipeline installs the pinned
+  # toolchain itself (PHASE17 P17.0).
+  - pkg install -y swift6 || true
+  - sh -c 'for p in sudo rsync git gmake pkgconf poudriere swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
+  - touch /home/$ABYSS_SSH_USER/.cloud-init-done
+  - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
+EOF
+else
+  cat >> "$work/user-data" <<EOF
   # Base tooling. sudo/rsync are not in FreeBSD base.
   - pkg install -y sudo rsync git gmake pkgconf || true
   # Swift's own runtime/build dependencies (the same set Linux needs):
@@ -98,6 +119,7 @@ runcmd:
   - touch /home/$ABYSS_SSH_USER/.cloud-init-done
   - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
 EOF
+fi
 
 echo "[seed] building Rock Ridge ISO at $ABYSS_SEED"
 ABYSS_SEED="$ABYSS_SEED" META="$work/meta-data" USER_DATA="$work/user-data" \

@@ -32,7 +32,7 @@ waited=0
 until ssh_run true 2>/dev/null; do
   waited=$((waited + 5))
   if [ "$waited" -ge "$ABYSS_CHECK_WAIT" ]; then
-    bad "no ssh after ${ABYSS_CHECK_WAIT}s (is the VM booted? see $ABYSS_VM_HOME/serial.log)"
+    bad "no ssh after ${ABYSS_CHECK_WAIT}s (is the VM booted? see $ABYSS_SERIAL_LOG)"
     exit 1
   fi
   sleep 5
@@ -71,6 +71,15 @@ if [ -n "$ABYSS_BASE_PKG_PREFIX" ]; then
     *" $ABYSS_BASE_PKG_PREFIX"*" $ABYSS_BASE_PKG_PREFIX"*) note "base is the pinned snapshot ($ABYSS_BASE_PKG_PREFIX): $got" ;;
     *) bad "base has moved off the pinned snapshot $ABYSS_BASE_PKG_PREFIX: FreeBSD-runtime/kernel are $got" ;;
   esac
+fi
+
+# --- the builder (PHASE17 P17.0): poudriere on ZFS, and that is all -----
+if [ "$ABYSS_VM_ROLE" = builder ]; then
+  ssh_run 'command -v poudriere >/dev/null' && note "poudriere: $(ssh_run 'pkg query %v poudriere')" || bad "no poudriere"
+  ssh_run 'zpool list -H -o name,free' | while read -r p f; do note "pool $p: $f free"; done
+  note "cores: $(ssh_run 'sysctl -n hw.ncpu'), memory: $(( $(ssh_run 'sysctl -n hw.physmem') / 1073741824 )) GB"
+  [ "$fail" -eq 0 ] && note "builder is ready." || note "builder is NOT ready — see the FAIL lines above."
+  exit "$fail"
 fi
 
 # --- the C substrate SwiftPM will look for ------------------------------

@@ -58,12 +58,40 @@ case "$ABYSS_FBSD_VERSION" in
   *) echo "config.sh: no image recipe for ABYSS_FBSD_VERSION=$ABYSS_FBSD_VERSION" >&2; exit 2 ;;
 esac
 
+# The VM's role. `build` is the desktop's guest: its fast loop, the harness, the
+# medium. `builder` (PHASE17 P17.0) is the release pipeline's: world, kernel,
+# pkgbase and poudriere, on more disk and cores, running beside the guest on
+# its own port, disk, seed and logs. Same image, same scripts:
+#   ABYSS_VM_ROLE=builder abyss/vm/make-seed.sh && ABYSS_VM_ROLE=builder ABYSS_DAEMON=1 abyss/vm/run.sh
+: "${ABYSS_VM_ROLE:=build}"
+case "$ABYSS_VM_ROLE" in
+  build) _role= ;;
+  builder)
+    _role=-builder
+    : "${ABYSS_DISK:=$ABYSS_VM_HOME/abyss-builder$_suffix.qcow2}"
+    : "${ABYSS_DISK_SIZE:=160G}"
+    : "${ABYSS_SSH_PORT:=2223}"
+    : "${ABYSS_HOSTNAME:=abyss-builder}"
+    # The host has 16 cores and 46 GB; the build guest keeps its 8 and 16 GB.
+    : "${ABYSS_CPUS:=12}"
+    : "${ABYSS_MEM:=14G}"
+    : "${ABYSS_SCRATCH:=none}"           # nothing here for an installer to destroy
+    # The whole monorepo: the pipeline builds src/ and ports/ as well as desktop/.
+    : "${ABYSS_GUEST_SRC:=/home/build/AbyssBSD}"
+    : "${ABYSS_SYNC_ROOT:=$ABYSS_MONOREPO}"
+    ;;
+  *) echo "config.sh: no role ABYSS_VM_ROLE=$ABYSS_VM_ROLE (build or builder)" >&2; exit 2 ;;
+esac
+: "${ABYSS_SERIAL_LOG:=$ABYSS_VM_HOME/serial$_role.log}"
+: "${ABYSS_PIDFILE:=$ABYSS_VM_HOME/qemu$_role.pid}"
+: "${ABYSS_SYNC_ROOT:=$ABYSS_REPO}"
+
 # Disk / paths
 : "${ABYSS_IMAGES:=$ABYSS_VM_HOME/images}"
 : "${ABYSS_BASE_QCOW:=$ABYSS_IMAGES/$ABYSS_FBSD_IMG}"          # pristine, never booted
 : "${ABYSS_DISK:=$ABYSS_VM_HOME/abyss-build$_suffix.qcow2}"   # working overlay disk
 : "${ABYSS_DISK_SIZE:=80G}"
-: "${ABYSS_SEED:=$ABYSS_VM_HOME/seed$_suffix.iso}"            # cloud-init cidata (Rock Ridge ISO)
+: "${ABYSS_SEED:=$ABYSS_VM_HOME/seed$_role$_suffix.iso}"            # cloud-init cidata (Rock Ridge ISO)
 : "${ABYSS_SETS_DIR:=$ABYSS_VM_HOME/dist$_suffix}"            # base/kernel/src.txz, host copy
 # A scratch disk for Phase 5: something the installer can be pointed at and
 # destroy. It is a real virtio disk on purpose — `geom disk list` does not show
