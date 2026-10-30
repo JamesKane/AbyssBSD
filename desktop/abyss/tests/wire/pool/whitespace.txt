@@ -1,0 +1,9 @@
+# whitespace: blank, tab-only and space-only lines
+sections 73
+schema_version 0
+# ["s"]
+section 73
+# "k" = "v"
+key 6b 76 u64 - i64 - bool -
+ini 5b735d0a6b203d20760a
+reparsed same

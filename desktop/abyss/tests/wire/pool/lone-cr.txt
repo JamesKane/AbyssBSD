@@ -1,0 +1,11 @@
+# lone-cr: a lone "\r" ends nothing; it is trimmed at the ends
+sections -
+schema_version 0
+# [""]
+section -
+# "[s]\r\nk" = "a\rb"
+key 5b735d0d0a6b 610d62 u64 - i64 - bool -
+# "j" = "2\r\n[t]\r\nx = 1\r\r\ny = 2"
+key 6a 320d0a5b745d0d0a78203d20310d0d0a79203d2032 u64 - i64 - bool -
+ini 5b735d0d0a6b203d20610d620a6a203d20320d0a5b745d0d0a78203d20310d0d0a79203d20320a
+reparsed same

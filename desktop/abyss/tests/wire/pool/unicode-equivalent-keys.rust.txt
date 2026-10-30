@@ -1,0 +1,14 @@
+# unicode-equivalent-keys, as Rust reads it: é and e+U+0301, K and U+212A KELVIN SIGN, are one name each to Swift, two to Rust
+sections 63616665cc81 636166c3a9 73
+schema_version 0
+section 63616665cc81
+key 6a 32 u64 2 i64 2 bool -
+section 636166c3a9
+key 6b 31 u64 1 i64 1 bool true
+section 73
+key 4b 6c6174696e u64 - i64 - bool -
+key 65cc81 6465636f6d706f736564 u64 - i64 - bool -
+key c3a9 707265636f6d706f736564 u64 - i64 - bool -
+key e284aa 6b656c76696e u64 - i64 - bool -
+ini 5b63616665cc815d0a6a203d20320a0a5b636166c3a95d0a6b203d20310a0a5b735d0a4b203d206c6174696e0a65cc81203d206465636f6d706f7365640ac3a9203d20707265636f6d706f7365640ae284aa203d206b656c76696e0a
+reparsed same

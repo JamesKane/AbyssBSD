@@ -1,0 +1,17 @@
+# before-header: keys before any header are the default section
+sections - 73
+schema_version 7
+# [""]
+section -
+# "schema_version" = "7"
+key 736368656d615f76657273696f6e 37 u64 7 i64 7 bool -
+# "top" = "1"
+key 746f70 31 u64 1 i64 1 bool true
+# ["s"]
+section 73
+# "k" = "v"
+key 6b 76 u64 - i64 - bool -
+# "schema_version" = "9"
+key 736368656d615f76657273696f6e 39 u64 9 i64 9 bool -
+ini 736368656d615f76657273696f6e203d20370a746f70203d20310a0a5b735d0a6b203d20760a736368656d615f76657273696f6e203d20390a
+reparsed same

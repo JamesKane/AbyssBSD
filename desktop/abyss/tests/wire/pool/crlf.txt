@@ -1,0 +1,9 @@
+# crlf: CRLF line ends: "\r\n" is one Character, so nothing splits
+sections -
+schema_version 0
+# [""]
+section -
+# "schema_version" = "2\r\n[s]\r\nk = v\r\nn = 5\r\n"
+key 736368656d615f76657273696f6e 320d0a5b735d0d0a6b203d20760d0a6e203d20350d0a u64 - i64 - bool -
+ini 736368656d615f76657273696f6e203d20320d0a5b735d0d0a6b203d20760d0a6e203d20350d0a0a
+reparsed same

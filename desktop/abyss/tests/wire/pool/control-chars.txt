@@ -1,0 +1,13 @@
+# control-chars: a NUL and other controls are ordinary characters
+sections 73
+schema_version 0
+# ["s"]
+section 73
+# "\u{07}bell" = "1"
+key 0762656c6c 31 u64 1 i64 1 bool true
+# "k" = "a\0b"
+key 6b 610062 u64 - i64 - bool -
+# "v" = "x\u{1B}[0m"
+key 76 781b5b306d u64 - i64 - bool -
+ini 5b735d0a0762656c6c203d20310a6b203d206100620a76203d20781b5b306d0a
+reparsed same

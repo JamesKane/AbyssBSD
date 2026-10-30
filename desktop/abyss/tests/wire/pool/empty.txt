@@ -1,0 +1,5 @@
+# empty: an empty file is an empty Config
+sections
+schema_version 0
+ini -
+reparsed same

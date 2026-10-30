@@ -1,0 +1,9 @@
+# cr-before-crlf: "\r\r\n" is a "\r" and a "\r\n"
+sections 73
+schema_version 0
+# ["s"]
+section 73
+# "k" = "v\r\r\nj = w"
+key 6b 760d0d0a6a203d2077 u64 - i64 - bool -
+ini 5b735d0a6b203d20760d0d0a6a203d20770a
+reparsed same

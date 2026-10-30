@@ -1,0 +1,9 @@
+# schema-version-bad: an unparseable schema_version is 0
+sections -
+schema_version 0
+# [""]
+section -
+# "schema_version" = "-1"
+key 736368656d615f76657273696f6e 2d31 u64 - i64 -1 bool -
+ini 736368656d615f76657273696f6e203d202d310a
+reparsed same

@@ -1,0 +1,17 @@
+# unicode-equivalent-keys: canonically equivalent names are one name to Swift
+sections 636166c3a9 73
+schema_version 0
+# ["café"]
+section 636166c3a9
+# "j" = "2"
+key 6a 32 u64 2 i64 2 bool -
+# "k" = "1"
+key 6b 31 u64 1 i64 1 bool true
+# ["s"]
+section 73
+# "K" = "latin"
+key e284aa 6c6174696e u64 - i64 - bool -
+# "é" = "decomposed"
+key c3a9 6465636f6d706f736564 u64 - i64 - bool -
+ini 5b636166c3a95d0a6a203d20320a6b203d20310a0a5b735d0ae284aa203d206c6174696e0ac3a9203d206465636f6d706f7365640a
+reparsed same

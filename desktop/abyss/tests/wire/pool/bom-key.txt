@@ -1,0 +1,11 @@
+# bom-key: a byte-order mark before a key stays on the key
+sections -
+schema_version 0
+# [""]
+section -
+# "schema_version2" = "4"
+key 736368656d615f76657273696f6e32 34 u64 4 i64 4 bool -
+# "﻿schema_version" = "3"
+key efbbbf736368656d615f76657273696f6e 33 u64 3 i64 3 bool -
+ini 736368656d615f76657273696f6e32203d20340aefbbbf736368656d615f76657273696f6e203d20330a
+reparsed same

@@ -3,7 +3,7 @@
 # dependencies beyond libc and cc (§6.5).
 [workspace]
 resolver = "3"
-members = ["de/abyss-sys", "de/aquadraw", "de/currentipc", "de/ipcprobe"]
+members = ["de/abyss-sys", "de/aquadraw", "de/currentipc", "de/ipcprobe", "de/poolconfig"]
 
 [workspace.package]
 version = "0.1.0"

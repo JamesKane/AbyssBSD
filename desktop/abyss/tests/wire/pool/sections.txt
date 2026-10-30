@@ -1,0 +1,43 @@
+# sections: header spacing, nesting, and lines that are not headers
+sections - 546162 5b785d 615d62 696e64656e746564 6b3d76 73 737061636564
+schema_version 0
+# [""]
+section -
+# "c" = "3"
+key 63 33 u64 3 i64 3 bool -
+# "d" = "4"
+key 64 34 u64 4 i64 4 bool -
+# ["Tab"]
+section 546162
+# "b" = "2"
+key 62 32 u64 2 i64 2 bool -
+# ["[x]"]
+section 5b785d
+# "f" = "6"
+key 66 36 u64 6 i64 6 bool -
+# "g" = "7"
+key 67 37 u64 7 i64 7 bool -
+# "h" = "8"
+key 68 38 u64 8 i64 8 bool -
+# ["a]b"]
+section 615d62
+# "e" = "5"
+key 65 35 u64 5 i64 5 bool -
+# ["indented"]
+section 696e64656e746564
+# "i" = "9"
+key 69 39 u64 9 i64 9 bool -
+# ["k=v"]
+section 6b3d76
+# "j" = "10"
+key 6a 3130 u64 10 i64 10 bool -
+# ["s"]
+section 73
+# "k" = "11"
+key 6b 3131 u64 11 i64 11 bool -
+# ["spaced"]
+section 737061636564
+# "a" = "1"
+key 61 31 u64 1 i64 1 bool true
+ini 63203d20330a64203d20340a0a5b5461625d0a62203d20320a0a5b5b785d5d0a66203d20360a67203d20370a68203d20380a0a5b615d625d0a65203d20350a0a5b696e64656e7465645d0a69203d20390a0a5b6b3d765d0a6a203d2031300a0a5b735d0a6b203d2031310a0a5b7370616365645d0a61203d20310a
+reparsed same

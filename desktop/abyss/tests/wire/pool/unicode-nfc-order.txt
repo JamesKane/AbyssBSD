@@ -1,0 +1,35 @@
+# unicode-nfc-order: names in NFC: Swift's order is code-point order
+sections 45636f6c65 73 c389636f6c65 f09f8c8a
+schema_version 0
+# ["Ecole"]
+section 45636f6c65
+# "k" = "2"
+key 6b 32 u64 2 i64 2 bool -
+# ["s"]
+section 73
+# "Z" = "3"
+key 5a 33 u64 3 i64 3 bool -
+# "_" = "8"
+key 5f 38 u64 8 i64 8 bool -
+# "ab" = "2"
+key 6162 32 u64 2 i64 2 bool -
+# "f" = "1"
+key 66 31 u64 1 i64 1 bool true
+# "ä" = "7"
+key c3a4 37 u64 7 i64 7 bool -
+# "é" = "4"
+key c3a9 34 u64 4 i64 4 bool -
+# "日本" = "5"
+key e697a5e69cac 35 u64 5 i64 5 bool -
+# "😀" = "6"
+key f09f9880 36 u64 6 i64 6 bool -
+# ["École"]
+section c389636f6c65
+# "k" = "1"
+key 6b 31 u64 1 i64 1 bool true
+# ["🌊"]
+section f09f8c8a
+# "k" = "3"
+key 6b 33 u64 3 i64 3 bool -
+ini 5b45636f6c655d0a6b203d20320a0a5b735d0a5a203d20330a5f203d20380a6162203d20320a66203d20310ac3a4203d20370ac3a9203d20340ae697a5e69cac203d20350af09f9880203d20360a0a5bc389636f6c655d0a6b203d20310a0a5bf09f8c8a5d0a6b203d20330a
+reparsed same

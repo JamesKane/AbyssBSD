@@ -98,6 +98,15 @@ fn main() {
         .compile("cplatform");
     println!("cargo:rustc-link-lib=crypt");
 
+    // CPoolWatch (src/poolwatch.rs): the config directory watch PoolConfig
+    // uses, inotify or kqueue by #ifdef, as SwiftPM compiles it.
+    let cpoolwatch = de.join("cpoolwatch");
+    println!("cargo:rerun-if-changed={}", cpoolwatch.join("cpoolwatch.c").display());
+    cc::Build::new()
+        .file(cpoolwatch.join("cpoolwatch.c"))
+        .include(cpoolwatch.join("include"))
+        .compile("cpoolwatch");
+
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
     // them for CWayland and CAbyssProtocols.

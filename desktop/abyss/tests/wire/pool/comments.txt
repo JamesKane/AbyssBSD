@@ -1,0 +1,15 @@
+# comments: full-line comments only; an inline # or ; is part of the value
+sections -
+schema_version 0
+# [""]
+section -
+# "j" = "1"
+key 6a 31 u64 1 i64 1 bool true
+# "k" = "v # not a comment"
+key 6b 762023206e6f74206120636f6d6d656e74 u64 - i64 - bool -
+# "m" = "2"
+key 6d 32 u64 2 i64 2 bool -
+# "z" = "; also value"
+key 7a 3b20616c736f2076616c7565 u64 - i64 - bool -
+ini 6a203d20310a6b203d20762023206e6f74206120636f6d6d656e740a6d203d20320a7a203d203b20616c736f2076616c75650a
+reparsed same

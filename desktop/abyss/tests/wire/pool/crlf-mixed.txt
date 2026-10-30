@@ -1,0 +1,15 @@
+# crlf-mixed: LF and CRLF in one file: only the LFs split
+sections -
+schema_version 0
+# [""]
+section -
+# "[s]\r\nb" = "2"
+key 5b735d0d0a62 32 u64 2 i64 2 bool -
+# "a" = "1"
+key 61 31 u64 1 i64 1 bool true
+# "c" = "3\r\n[t]"
+key 63 330d0a5b745d u64 - i64 - bool -
+# "d" = "4\r\n\r\ne = 5"
+key 64 340d0a0d0a65203d2035 u64 - i64 - bool -
+ini 5b735d0d0a62203d20320a61203d20310a63203d20330d0a5b745d0a64203d20340d0a0d0a65203d20350a
+reparsed same

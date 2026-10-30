@@ -1,0 +1,35 @@
+# graphemes: combining marks and joiners on the delimiters
+sections - 7a
+schema_version 0
+# [""]
+section -
+# "a" = "1"
+key 61 31 u64 1 i64 1 bool true
+# "b" = "2"
+key 62 32 u64 2 i64 2 bool -
+# ["z"]
+section 7a
+# " ́k" = "v"
+key 20cc816b 76 u64 - i64 - bool -
+# "#́ not a comment" = "1"
+key 23cc81206e6f74206120636f6d6d656e74 31 u64 1 i64 1 bool true
+# "#️⃣ keycap" = "2"
+key 23efb88fe283a3206b6579636170 32 u64 2 i64 2 bool -
+# ";‍ zwj" = "3"
+key 3be2808d207a776a 33 u64 3 i64 3 bool -
+# "o" = "v ́"
+key 6f 7620cc81 u64 - i64 - bool -
+# "p" = "v\t\u{0301}"
+key 70 7609cc81 u64 - i64 - bool -
+# "r" = "1؀ "
+key 72 31d88020 u64 - i64 - bool -
+# "s" = "2"
+key 73 32 u64 2 i64 2 bool -
+# "t" = "3"
+key 74 33 u64 3 i64 3 bool -
+# "x́" = "y"
+key 78cc81 79 u64 - i64 - bool -
+# "\u{0301}j" = "w"
+key cc816a 77 u64 - i64 - bool -
+ini 61203d20310a62203d20320a0a5b7a5d0a20cc816b203d20760a23cc81206e6f74206120636f6d6d656e74203d20310a23efb88fe283a3206b6579636170203d20320a3be2808d207a776a203d20330a6f203d207620cc810a70203d207609cc810a72203d2031d880200a73203d20320a74203d20330a78cc81203d20790acc816a203d20770a
+reparsed same

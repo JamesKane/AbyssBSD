@@ -1,0 +1,13 @@
+# schema-version: schema_version coerces like any UInt64
+sections - 73
+schema_version 9
+# [""]
+section -
+# "schema_version" = "+9"
+key 736368656d615f76657273696f6e 2b39 u64 9 i64 9 bool -
+# ["s"]
+section 73
+# "schema_version" = "5"
+key 736368656d615f76657273696f6e 35 u64 5 i64 5 bool -
+ini 736368656d615f76657273696f6e203d202b390a0a5b735d0a736368656d615f76657273696f6e203d20350a
+reparsed same

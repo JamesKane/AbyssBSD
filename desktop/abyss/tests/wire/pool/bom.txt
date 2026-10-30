@@ -1,0 +1,13 @@
+# bom: a byte-order mark is a character, so the first header is lost
+sections - 74
+schema_version 0
+# [""]
+section -
+# "k" = "v"
+key 6b 76 u64 - i64 - bool -
+# ["t"]
+section 74
+# "﻿j" = "w"
+key efbbbf6a 77 u64 - i64 - bool -
+ini 6b203d20760a0a5b745d0aefbbbf6a203d20770a
+reparsed same

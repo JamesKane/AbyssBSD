@@ -168,7 +168,9 @@ let package = Package(
         .target(
             name: "PoolConfig",
             dependencies: ["CPoolWatch"],
-            path: "de/poolconfig"
+            path: "de/poolconfig",
+            // Its Rust half (RUST.md R2): Cargo builds it, not SwiftPM.
+            exclude: ["Cargo.toml", "src", "tests"]
         ),
         // The control plane: brokerless unix-socket IPC with typed messages and
         // SCM_RIGHTS fd passing (a Swift rewrite of the sibling's `current`).

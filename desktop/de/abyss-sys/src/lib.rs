@@ -9,6 +9,7 @@ use libc::{c_char, c_double, c_int, c_uint, c_ulong, c_void};
 use std::ffi::CString;
 
 pub mod platform;
+pub mod poolwatch;
 pub mod wl;
 
 // MARK: raw declarations

@@ -1,0 +1,11 @@
+# crlf-split-line: a CRLF in mid-line that is the last thing on it
+sections 73
+schema_version 0
+# ["s"]
+section 73
+# "j" = "w"
+key 6a 77 u64 - i64 - bool -
+# "k" = "v\r\n"
+key 6b 760d0a u64 - i64 - bool -
+ini 5b735d0a6a203d20770a6b203d20760d0a0a
+reparsed same

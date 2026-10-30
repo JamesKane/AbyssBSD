@@ -1,0 +1,19 @@
+# duplicates: a repeated key replaces; a repeated section continues
+sections - 73 74
+schema_version 0
+# [""]
+section -
+# "top" = "1"
+key 746f70 31 u64 1 i64 1 bool true
+# ["s"]
+section 73
+# "j" = "4"
+key 6a 34 u64 4 i64 4 bool -
+# "k" = "3"
+key 6b 33 u64 3 i64 3 bool -
+# ["t"]
+section 74
+# "x" = "2"
+key 78 32 u64 2 i64 2 bool -
+ini 746f70203d20310a0a5b735d0a6a203d20340a6b203d20330a0a5b745d0a78203d20320a
+reparsed same

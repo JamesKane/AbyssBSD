@@ -1,0 +1,19 @@
+# equals: the first = splits; keys and values are trimmed
+sections -
+schema_version 0
+# [""]
+section -
+# "a" = "b=c"
+key 61 623d63 u64 - i64 - bool -
+# "empty" = ""
+key 656d707479 - u64 - i64 - bool -
+# "k" = "=v"
+key 6b 3d76 u64 - i64 - bool -
+# "k2" = "v2"
+key 6b32 7632 u64 - i64 - bool -
+# "spaced" = "value with  spaces"
+key 737061636564 76616c756520776974682020737061636573 u64 - i64 - bool -
+# "url" = "http://x/?a=b&c=d"
+key 75726c 687474703a2f2f782f3f613d6226633d64 u64 - i64 - bool -
+ini 61203d20623d630a656d707479203d200a6b203d203d760a6b32203d2076320a737061636564203d2076616c7565207769746820207370616365730a75726c203d20687474703a2f2f782f3f613d6226633d640a
+reparsed same

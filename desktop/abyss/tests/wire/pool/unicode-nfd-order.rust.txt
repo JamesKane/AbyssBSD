@@ -1,0 +1,10 @@
+# unicode-nfd-order, as Rust reads it: Swift sorts a+U+0301 as á, after f; Rust by bytes, before it
+sections 73
+schema_version 0
+section 73
+key 6162 33 u64 3 i64 3 bool -
+key 61cc8162 32 u64 2 i64 2 bool -
+key 62 34 u64 4 i64 4 bool -
+key 66 31 u64 1 i64 1 bool true
+ini 5b735d0a6162203d20330a61cc8162203d20320a62203d20340a66203d20310a
+reparsed same

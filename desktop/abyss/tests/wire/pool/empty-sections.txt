@@ -1,0 +1,9 @@
+# empty-sections: a header with no keys is not a section
+sections 66756c6c
+schema_version 0
+# ["full"]
+section 66756c6c
+# "k" = "v"
+key 6b 76 u64 - i64 - bool -
+ini 5b66756c6c5d0a6b203d20760a
+reparsed same

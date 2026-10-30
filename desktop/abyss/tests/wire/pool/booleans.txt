@@ -1,0 +1,71 @@
+# booleans: the bool spellings, mixed case and non-ASCII
+sections 62
+schema_version 0
+# ["b"]
+section 62
+# "k10" = "true"
+key 6b3130 74727565 u64 - i64 - bool true
+# "k11" = "TRUE"
+key 6b3131 54525545 u64 - i64 - bool true
+# "k12" = "True"
+key 6b3132 54727565 u64 - i64 - bool true
+# "k13" = "tRuE"
+key 6b3133 74527545 u64 - i64 - bool true
+# "k14" = "yes"
+key 6b3134 796573 u64 - i64 - bool true
+# "k15" = "YES"
+key 6b3135 594553 u64 - i64 - bool true
+# "k16" = "Yes"
+key 6b3136 596573 u64 - i64 - bool true
+# "k17" = "on"
+key 6b3137 6f6e u64 - i64 - bool true
+# "k18" = "On"
+key 6b3138 4f6e u64 - i64 - bool true
+# "k19" = "oN"
+key 6b3139 6f4e u64 - i64 - bool true
+# "k20" = "ON"
+key 6b3230 4f4e u64 - i64 - bool true
+# "k21" = "1"
+key 6b3231 31 u64 1 i64 1 bool true
+# "k22" = "false"
+key 6b3232 66616c7365 u64 - i64 - bool false
+# "k23" = "FALSE"
+key 6b3233 46414c5345 u64 - i64 - bool false
+# "k24" = "no"
+key 6b3234 6e6f u64 - i64 - bool false
+# "k25" = "No"
+key 6b3235 4e6f u64 - i64 - bool false
+# "k26" = "off"
+key 6b3236 6f6666 u64 - i64 - bool false
+# "k27" = "OFF"
+key 6b3237 4f4646 u64 - i64 - bool false
+# "k28" = "0"
+key 6b3238 30 u64 0 i64 0 bool false
+# "k29" = "y"
+key 6b3239 79 u64 - i64 - bool -
+# "k30" = "t"
+key 6b3330 74 u64 - i64 - bool -
+# "k31" = "2"
+key 6b3331 32 u64 2 i64 2 bool -
+# "k32" = "true!"
+key 6b3332 7472756521 u64 - i64 - bool -
+# "k33" = "yes yes"
+key 6b3333 79657320796573 u64 - i64 - bool -
+# "k34" = "ＴＲＵＥ"
+key 6b3334 efbcb4efbcb2efbcb5efbca5 u64 - i64 - bool -
+# "k35" = "İ"
+key 6b3335 c4b0 u64 - i64 - bool -
+# "k36" = "K"
+key 6b3336 e284aa u64 - i64 - bool -
+# "k37" = "oń"
+key 6b3337 6f6ecc81 u64 - i64 - bool -
+# "k38" = "o​n"
+key 6b3338 6fe2808b6e u64 - i64 - bool -
+# "k39" = "01"
+key 6b3339 3031 u64 1 i64 1 bool -
+# "k40" = "00"
+key 6b3430 3030 u64 0 i64 0 bool -
+# "k41" = "-1"
+key 6b3431 2d31 u64 - i64 -1 bool -
+ini 5b625d0a6b3130203d20747275650a6b3131203d20545255450a6b3132203d20547275650a6b3133203d20745275450a6b3134203d207965730a6b3135203d205945530a6b3136203d205965730a6b3137203d206f6e0a6b3138203d204f6e0a6b3139203d206f4e0a6b3230203d204f4e0a6b3231203d20310a6b3232203d2066616c73650a6b3233203d2046414c53450a6b3234203d206e6f0a6b3235203d204e6f0a6b3236203d206f66660a6b3237203d204f46460a6b3238203d20300a6b3239203d20790a6b3330203d20740a6b3331203d20320a6b3332203d2074727565210a6b3333203d20796573207965730a6b3334203d20efbcb4efbcb2efbcb5efbca50a6b3335203d20c4b00a6b3336203d20e284aa0a6b3337203d206f6ecc810a6b3338203d206fe2808b6e0a6b3339203d2030310a6b3430203d2030300a6b3431203d202d310a
+reparsed same

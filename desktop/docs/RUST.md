@@ -136,6 +136,20 @@ in Rust too, and `live-ipc-mixed.sh` runs Swift and Rust as server and
 client all four ways, a descriptor crossing each time: green on Linux and
 FreeBSD.
 
+*poolconfig, 2026-10-30:* `de/poolconfig` (crate `pool-config`) is the nine
+Swift files beside it: the same INI text in and out, the same coercions, the
+same lock, temp file, fsync and rename. The watch is `abyss-sys::poolwatch`
+over `cpoolwatch.c`, its kqueue table behind a mutex (Swift never had two
+threads in it; Rust's tests do). Fixtures in `abyss/tests/wire/pool`: 29
+`.ini` files Swift reads and both check. Swift parses by Character, so Rust
+does too: a CRLF is one Character and never ends a line (a CRLF file is one
+long key in Swift, and so in Rust), U+037E is `;`, and a combining mark or a
+Prepend takes the delimiter beside it along (two tables generated from the
+Swift runtime, `src/graphemes.rs`). `UInt64("-0")` is 0. Not matched: Swift
+compares and sorts names by canonical equivalence, Rust by bytes, so the two
+agree on every file whose section names and keys are NFC. The two cases that
+are not are pinned as `<case>.rust.txt`.
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +

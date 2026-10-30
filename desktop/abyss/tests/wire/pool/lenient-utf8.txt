@@ -1,0 +1,21 @@
+# lenient-utf8: invalid UTF-8 is read leniently, as U+FFFD
+sections 73c3a9 efbfbd
+schema_version 0
+# ["sé"]
+section 73c3a9
+# "k�" = "�("
+key 6befbfbd efbfbd28 u64 - i64 - bool -
+# "ok" = "1"
+key 6f6b 31 u64 1 i64 1 bool true
+# "v" = "�"
+key 76 efbfbd u64 - i64 - bool -
+# "w" = "� ��� ��"
+key 77 efbfbd20efbfbdefbfbdefbfbd20efbfbdefbfbd u64 - i64 - bool -
+# ["�"]
+section efbfbd
+# "x" = "1"
+key 78 31 u64 1 i64 1 bool true
+# "y" = "�����"
+key 79 efbfbdefbfbdefbfbdefbfbdefbfbd u64 - i64 - bool -
+ini 5b73c3a95d0a6befbfbd203d20efbfbd280a6f6b203d20310a76203d20efbfbd0a77203d20efbfbd20efbfbdefbfbdefbfbd20efbfbdefbfbd0a0a5befbfbd5d0a78203d20310a79203d20efbfbdefbfbdefbfbdefbfbdefbfbd0a
+reparsed same
