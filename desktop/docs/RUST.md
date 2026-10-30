@@ -368,8 +368,9 @@ grabber are found beside the path the portal was run as, for anchor's
 reason. Swift's tests ported, with one more: a picker that does choose gets
 its descriptor back, the file's own bytes. `live-portal`, `-sandbox`,
 `-notify`, `-screenshot`, `-grab`, `-gtk`, `-session-gtk` and `-firefox`
-are green against it on Linux, and all but `-session-gtk` (the guest's
-menu-bar trouble, above) in the FreeBSD guest, where `live-sandbox` proves
+are green against it on Linux, and all but `-session-gtk` (not run there,
+for the guest's menu-bar trouble above) in the FreeBSD guest, where
+`live-sandbox` proves
 the capability itself: a Capsicum client reads the file it was handed and
 cannot open its path.
 
