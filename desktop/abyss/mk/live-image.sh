@@ -34,7 +34,11 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 out="/home/$(id -un)/abyss-live.img"
 dist="${ABYSS_DIST_DIR:-/home/$(id -un)/dist}"
 stage="${TMPDIR:-/tmp}/abyss-live-stage"
-builddir="$root/.build/debug"
+# The binaries the harness runs (abyss/mk/bin-dir.sh): each in the language
+# abyss/rust-bins says (RUST.md §3.1), so a medium carries what was tested;
+# SwiftPM's own build where that directory has not been made.
+builddir="$root/.build/abyss-bin"
+[ -d "$builddir" ] || builddir="$root/.build/debug"
 size=3g
 keep=0
 # Whether the medium stays up after its session ends. Off by default so a test

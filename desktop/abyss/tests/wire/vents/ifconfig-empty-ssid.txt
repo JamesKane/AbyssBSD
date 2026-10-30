@@ -1,0 +1,2 @@
+ifconfig
+wifi exists=1 associated=0 ssid=none bssid=none channel=none

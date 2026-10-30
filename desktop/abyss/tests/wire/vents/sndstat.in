@@ -1,0 +1,12 @@
+dev	0	pcm0	Dummy Audio Device	dsp0	1	1	0
+chan	0	dsp0.play.0	-1	<UNUSED>	45	45
+chan	0	dsp0.virtual_play.0	31118	player	30	30
+chan	0	dsp0.virtual_play.1	31119	mpv	80	75
+chan	0	dsp0.record.0	-1	<UNUSED>	45	45
+chan	0	dsp0.virtual_record.0	4242	obs	50	50
+dev	1	pcm1	USB Headset	dsp1	1	0	0
+chan	9	dsp9.play.0	7	lost	1	1
+dev	-1	vdsp	Virtual OSS	vdsp	1	1	1
+dev	x	pcmx	No unit	dspx	1	1	0
+chan	1	dsp1.play.0	not-a-pid	cmd	loud	9
+dev	2	pcm2	Short

@@ -1,0 +1,9 @@
+!system=DEVFS subsystem=CDEV type=CREATE cdev=md0
+!system=GEOM subsystem=DEV type=CREATE cdev=md0
+!system=DEVFS subsystem=CDEV type=DESTROY cdev=md0
++ugen0.2 at port=2 ... on uhub0
+-ugen0.2 at port=2 on uhub0
+? at bus=0 on pci0
+!system=CAM subsystem=periph type=error device=cd0 serial="QM00005" cam_status="0x4cc" scsi_status=2 scsi_sense="70 02 3a 00" CDB="00 00 00 00 00 00 "
+!system=IFNET subsystem=vtnet0 type=LINK_UP
+something devd never sends

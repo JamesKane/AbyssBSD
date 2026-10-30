@@ -105,8 +105,15 @@ int main(void) {
 C
   cc -o "$pw/tuneplayer" "$pw/p.c" || { echo "FAIL: could not build the player"; exit 1; }
   "$pw/tuneplayer" & pp=$!
-  sleep 0.5
-  snd=$("$ctl" sound)
+  # Until it has /dev/dsp open: a fixed half second lost the race under bhyve
+  # (one run in two, for the Swift and the Rust ventsctl alike).
+  i=0
+  while :; do
+    snd=$("$ctl" sound)
+    printf '%s\n' "$snd" | grep -q "^  playing $pp " && break
+    i=$((i + 1)); [ $i -lt 50 ] || break
+    sleep 0.1
+  done
   kill "$pp" 2>/dev/null || true; wait "$pp" 2>/dev/null || true; rm -rf "$pw"
   printf '%s\n' "$snd" | grep -qx "  playing $pp tuneplayer 37:37" || { echo "FAIL: the player ($pp, 37) is not seen playing: $snd"; exit 1; }
   echo "ok: a process playing is seen by pid and name, at the volume it set for itself"

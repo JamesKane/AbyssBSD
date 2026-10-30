@@ -1,0 +1,10 @@
+devd
+event notify "" device=none summary="notify "
+event notify "key" device=none summary="notify key" "key"=""
+event notify "=value" device=none summary="notify =value"
+event notify "a=b=c d=\"\" e=\"unterminated" device=none summary="notify a=b=c d=\"\" e=\"unterminated" "a"="b=c" "d"="" "e"="unterminated"
+event notify "  spaced   out=1\u{9}\u{9}tab=2" device=none summary="notify   spaced   out=1\u{9}\u{9}tab=2" "spaced"="" "out"="1" "tab"="2"
+event attach "" device=none summary="attach ?"
+event detach "\u{9}\u{9}dev0 x" device="dev0" summary="detach dev0"
+event attach "md0 at" device="md0" summary="attach md0"
+event unknown "" device=none summary="event "

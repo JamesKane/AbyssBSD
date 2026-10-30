@@ -1,0 +1,11 @@
+sndstat
+device 0 "pcm0" "Dummy Audio Device" "dsp0" play=1 rec=1 user=0
+  channel "dsp0.play.0" pid=none "" 45:45 playback=1
+  channel "dsp0.virtual_play.0" pid=31118 "player" 30:30 playback=1
+  channel "dsp0.virtual_play.1" pid=31119 "mpv" 80:75 playback=1
+  channel "dsp0.record.0" pid=none "" 45:45 playback=0
+  channel "dsp0.virtual_record.0" pid=4242 "obs" 50:50 playback=0
+  playing 31118 31119
+device 1 "pcm1" "USB Headset" "dsp1" play=1 rec=0 user=0
+  channel "dsp1.play.0" pid=none "" 0:9 playback=1
+  playing

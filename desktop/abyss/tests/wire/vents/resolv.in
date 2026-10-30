@@ -1,0 +1,7 @@
+# generated
+search example.org
+nameserver 10.0.2.3
+nameserver	9.9.9.9
+options edns0
+  nameserver   ::1  
+nameserver

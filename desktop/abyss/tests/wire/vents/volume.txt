@@ -1,0 +1,8 @@
+volume
+volume 0 0:0 encoded=0
+volume 10 10:0 encoded=10
+volume 2570 10:10 encoded=2570
+volume 16737380 100:100 encoded=25700
+volume -1 100:100 encoded=25700
+volume 25700 100:100 encoded=25700
+volume 100 100:0 encoded=100

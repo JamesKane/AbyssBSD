@@ -10,6 +10,8 @@ use std::ffi::CString;
 
 pub mod platform;
 pub mod poolwatch;
+pub mod spawn;
+pub mod vents;
 pub mod wl;
 
 // MARK: raw declarations

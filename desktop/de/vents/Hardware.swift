@@ -97,7 +97,11 @@ extension Vents {
 
         /// An integer sysctl, stored as a 4- or 8-byte native-endian value.
         public static func int(_ name: String) -> Int64? {
-            guard let b = raw(name) else { return nil }
+            raw(name).flatMap(intBytes)
+        }
+
+        /// The integer 4 or 8 native-endian bytes hold.
+        static func intBytes(_ b: [UInt8]) -> Int64? {
             switch b.count {
             case 4:
                 let v = b.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
@@ -118,7 +122,11 @@ extension Vents {
         /// plausible Int64 (19231843050418758). Asking "is it a number?" first
         /// turns every 4- or 8-character string into nonsense.
         public static func display(_ name: String) -> String? {
-            guard let bytes = raw(name) else { return nil }
+            raw(name).map(displayBytes)
+        }
+
+        /// `display`'s rule, for a sysctl's bytes.
+        static func displayBytes(_ bytes: [UInt8]) -> String {
             let body = bytes.last == 0 ? Array(bytes.dropLast()) : bytes
             let printable = body.allSatisfy { $0 == 0x09 || $0 == 0x0a || (0x20..<0x7f).contains($0) }
             if !body.isEmpty && printable {
@@ -127,7 +135,7 @@ extension Vents {
                 return s
             }
             switch bytes.count {
-            case 4, 8: return int(name).map(String.init)
+            case 4, 8: return intBytes(bytes).map(String.init) ?? "<\(bytes.count) bytes>"
             default:   return "<\(bytes.count) bytes>"
             }
         }

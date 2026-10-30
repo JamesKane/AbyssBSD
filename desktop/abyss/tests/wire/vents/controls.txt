@@ -1,0 +1,4 @@
+controls
+control "vol" 75:70 level=75 muted=0 rec=0
+control "pcm" 40:40 level=40 muted=1 rec=0
+control "rec" 75:75 level=75 muted=0 rec=1

@@ -107,6 +107,19 @@ fn main() {
         .include(cpoolwatch.join("include"))
         .compile("cpoolwatch");
 
+    // CVents (src/vents.rs): sysctl, kenv, the OSS mixer, sndstat, the
+    // process table; libnv and libmixer on FreeBSD, as SwiftPM links them.
+    let cvents = de.join("cvents");
+    println!("cargo:rerun-if-changed={}", cvents.join("cvents.c").display());
+    cc::Build::new()
+        .file(cvents.join("cvents.c"))
+        .include(cvents.join("include"))
+        .compile("cvents");
+    if target.contains("freebsd") {
+        println!("cargo:rustc-link-lib=nv");
+        println!("cargo:rustc-link-lib=mixer");
+    }
+
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
     // them for CWayland and CAbyssProtocols.

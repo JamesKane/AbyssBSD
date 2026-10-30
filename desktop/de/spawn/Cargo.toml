@@ -1,0 +1,12 @@
+[package]
+name = "spawn"
+description = "Spawn: start programs safely, detached or run to completion for their output (Swift: Spawn.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+
+[dev-dependencies]
+abyss-sys.workspace = true

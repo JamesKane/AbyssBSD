@@ -1,0 +1,3 @@
+wlan1: flags=8802<BROADCAST,SIMPLEX,MULTICAST>
+	ssid lab channel 1 (2412 MHz 11g)
+	status: no carrier

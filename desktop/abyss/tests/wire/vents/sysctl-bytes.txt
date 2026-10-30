@@ -1,0 +1,10 @@
+display
+display 46726565425344000 "FreeBSD"
+display 08000000 "8"
+display 0800000000000000 "8"
+display 010203 "<3 bytes>"
+display 612076616c7565200a00 "a value"
+display 09610a62 "\u{9}a\nb"
+display 00 "<1 bytes>"
+display ff00 "<2 bytes>"
+display 74657874 "text"

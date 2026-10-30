@@ -1,0 +1,2 @@
+ifconfig
+wifi exists=1 associated=1 ssid="Café Wi-Fi" bssid="00:11:22:33:44:55" channel=6

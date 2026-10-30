@@ -1,0 +1,10 @@
+devd
+event notify "system=DEVFS subsystem=CDEV type=CREATE cdev=md0" device=none summary="notify system=DEVFS subsystem=CDEV type=CREATE cdev=md0" "system"="DEVFS" "subsystem"="CDEV" "type"="CREATE" "cdev"="md0"
+event notify "system=GEOM subsystem=DEV type=CREATE cdev=md0" device=none summary="notify system=GEOM subsystem=DEV type=CREATE cdev=md0" "system"="GEOM" "subsystem"="DEV" "type"="CREATE" "cdev"="md0"
+event notify "system=DEVFS subsystem=CDEV type=DESTROY cdev=md0" device=none summary="notify system=DEVFS subsystem=CDEV type=DESTROY cdev=md0" "system"="DEVFS" "subsystem"="CDEV" "type"="DESTROY" "cdev"="md0"
+event attach "ugen0.2 at port=2 ... on uhub0" device="ugen0.2" summary="attach ugen0.2"
+event detach "ugen0.2 at port=2 on uhub0" device="ugen0.2" summary="detach ugen0.2"
+event nomatch " at bus=0 on pci0" device=none summary="nomatch  at bus=0 on pci0"
+event notify "system=CAM subsystem=periph type=error device=cd0 serial=\"QM00005\" cam_status=\"0x4cc\" scsi_status=2 scsi_sense=\"70 02 3a 00\" CDB=\"00 00 00 00 00 00 \"" device=none summary="notify system=CAM subsystem=periph type=error device=cd0 serial=\"QM00005\" cam_status=\"0x4cc\" scsi_status=2 scsi_sense=\"70 02 3a 00\" CDB=\"00 00 00 00 00 00 \"" "system"="CAM" "subsystem"="periph" "type"="error" "device"="cd0" "serial"="QM00005" "cam_status"="0x4cc" "scsi_status"="2" "scsi_sense"="70 02 3a 00" "CDB"="00 00 00 00 00 00 "
+event notify "system=IFNET subsystem=vtnet0 type=LINK_UP" device=none summary="notify system=IFNET subsystem=vtnet0 type=LINK_UP" "system"="IFNET" "subsystem"="vtnet0" "type"="LINK_UP"
+event unknown "something devd never sends" device=none summary="event something devd never sends"

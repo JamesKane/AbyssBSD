@@ -1,0 +1,7 @@
+   route to: default
+destination: default
+       mask: default
+    gateway: 10.0.2.2
+        fib: 0
+  interface: vtnet0
+      flags: <UP,GATEWAY,DONE,STATIC>

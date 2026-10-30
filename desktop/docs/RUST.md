@@ -313,6 +313,27 @@ bug, it is in BACKLOG §5, to fix once the port is done.
 `jaild`) get the most care because their bugs are privilege bugs. Their Swift
 tests are mostly refusal tests, and those all port.
 
+*vents and ventsctl, 2026-10-30: the first swap.* `abyss/rust-bins` names
+`ventsctl`, so the harness and the media run Cargo's. Under it: `de/spawn`
+(crate `spawn`; Spawn.swift), `de/vents` (crate `vents`; the six Vents
+files) and `de/ventsctl`, with `abyss-sys` gaining `vents` (cvents.c built
+as SwiftPM builds it, libnv and libmixer on FreeBSD, and the getifaddrs,
+poll and getpwuid calls) and `spawn` (the double fork behind `detached`,
+built before it as Swift does; `run` is std's `Command`, a thread a stream,
+so neither pipe can block the other). Swift's tests ported, and the
+`waitpid(-1)` checks are a test binary of their own, since Rust's tests run
+in parallel. `ventsctl`'s output and exit codes are Swift's, command for
+command, on Linux and in the FreeBSD guest; `live-vents.sh` is green there
+against real sysctls, `snd_dummy`'s mixer, devd events from an md(4) disk
+and the routing socket. It was also flaky, for both languages: the player
+it watches for had half a second to open `/dev/dsp`, which under bhyve is
+one run in two; it now waits up to five. A devd line is now held as bytes
+until its newline (Swift decoded each read, so a character split across two
+reads was lost). `live-image.sh` installs from `.build/abyss-bin` where it
+exists, so a medium carries what the harness tested. Fixtures in
+`abyss/tests/wire/vents`: 16 captures through every parser, 15 matching
+Swift and `devd-odd` (a CRLF line) pinned.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

@@ -1,0 +1,6 @@
+ctl	vol	75	70	0	0
+ctl	pcm	40	40	1	0
+ctl	rec	75	75	0	1
+garbage
+ctl	bad	x	1	0	0
+ctl	short	1	1	0

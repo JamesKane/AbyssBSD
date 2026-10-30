@@ -1,0 +1,2 @@
+route
+router "10.0.2.2" "vtnet0"

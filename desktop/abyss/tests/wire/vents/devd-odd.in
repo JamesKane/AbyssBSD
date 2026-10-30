@@ -1,0 +1,8 @@
+!
+!key
+!=value
+!a=b=c d="" e="unterminated
+!  spaced   out=1		tab=2
++
+-		dev0 x
++md0 at
