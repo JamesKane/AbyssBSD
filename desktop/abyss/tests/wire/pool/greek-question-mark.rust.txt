@@ -1,0 +1,10 @@
+# greek-question-mark, as Rust reads it: U+037E is canonically ; to Swift, a key's first letter to Rust
+sections 73 74
+schema_version 0
+section 73
+key 6b cdbe u64 - i64 - bool -
+key cdbe20677265656b 31 u64 1 i64 1 bool true
+section 74
+key cdbecc81 32 u64 2 i64 2 bool -
+ini 5b735d0a6b203d20cdbe0acdbe20677265656b203d20310a0a5b745d0acdbecc81203d20320a
+reparsed same

@@ -1,0 +1,20 @@
+# graphemes, as Rust reads it: a combining mark hides a delimiter from Swift, not from Rust
+sections 77d880 7a cc8178
+schema_version 0
+section 77d880
+key 74 33 u64 3 i64 3 bool -
+section 7a
+key 6d cc812078 u64 - i64 - bool -
+key 6f 7620cc81 u64 - i64 - bool -
+key 70 7609cc81 u64 - i64 - bool -
+key 71d880 31 u64 1 i64 1 bool true
+key 72 31d880 u64 - i64 - bool -
+key 73 32 u64 2 i64 2 bool -
+key 78cc81 79 u64 - i64 - bool -
+key cc816a 77 u64 - i64 - bool -
+key cc816b 76 u64 - i64 - bool -
+section cc8178
+key 61 31 u64 1 i64 1 bool true
+key 62 32 u64 2 i64 2 bool -
+ini 5b77d8805d0a74203d20330a0a5b7a5d0a6d203d20cc8120780a6f203d207620cc810a70203d207609cc810a71d880203d20310a72203d2031d8800a73203d20320a78cc81203d20790acc816a203d20770acc816b203d20760a0a5bcc81785d0a61203d20310a62203d20320a
+reparsed same

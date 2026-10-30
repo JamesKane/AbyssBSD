@@ -138,6 +138,11 @@ recommended; the 12700KF has no Wi-Fi card (§3, item 5).
 
 From HANDOFF §5.3, still true:
 
+- **Swift's PoolConfig can't read a CRLF file** (decided 2026-10-30, after
+  the Rust port). Swift splits by Character, and `"\r\n"` is one, so a CRLF
+  `.ini` is one long key. Rust's `pool-config` reads it as LF; fix the Swift
+  half to match while it still runs, and drop `crlf*` from the fixtures'
+  `DIVERGENT` list.
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

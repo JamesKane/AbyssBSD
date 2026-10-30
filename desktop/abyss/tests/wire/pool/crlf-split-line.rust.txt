@@ -1,0 +1,8 @@
+# crlf-split-line, as Rust reads it: Swift never ends a line at CRLF (one Character); Rust does
+sections 73
+schema_version 0
+section 73
+key 6a 77 u64 - i64 - bool -
+key 6b 76 u64 - i64 - bool -
+ini 5b735d0a6a203d20770a6b203d20760a
+reparsed same

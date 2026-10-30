@@ -1,0 +1,11 @@
+# lone-cr, as Rust reads it: Rust trims a CR beside a CRLF; Swift sees one Character
+sections 73 74
+schema_version 0
+section 73
+key 6a 32 u64 2 i64 2 bool -
+key 6b 610d62 u64 - i64 - bool -
+section 74
+key 78 31 u64 1 i64 1 bool true
+key 79 32 u64 2 i64 2 bool -
+ini 5b735d0a6a203d20320a6b203d20610d620a0a5b745d0a78203d20310a79203d20320a
+reparsed same

@@ -15,7 +15,12 @@ A rewrite of `desktop/de/` from Swift to Rust that keeps **every wire format,
 on-disk format, protocol, binary name and behaviour**. The Swift tree is the
 specification. Its tests, live scripts and goldens are the acceptance criteria.
 This is not a redesign. Anything we want to change waits until the port is
-done, so that a failing live script always means a porting bug.
+done, so that a failing live script always means a porting bug. *But not
+Swift's quirks* (decided 2026-10-30): where Swift's answer on odd input comes
+from the language (Characters, canonical equivalence, `UInt64("-0")`) rather
+than from ADE's design, Rust does the plain thing, and the fixture pins
+Rust's answer beside Swift's as `<case>.rust.txt`. Everything ADE itself
+writes reads the same in both.
 
 It is also not the old Rust DE coming back. `AbyssBSD-old` (tide, current,
 pool, vents, anchor, 28.6k lines, frozen 2026-06-27) predates four months of
@@ -141,14 +146,13 @@ Swift files beside it: the same INI text in and out, the same coercions, the
 same lock, temp file, fsync and rename. The watch is `abyss-sys::poolwatch`
 over `cpoolwatch.c`, its kqueue table behind a mutex (Swift never had two
 threads in it; Rust's tests do). Fixtures in `abyss/tests/wire/pool`: 29
-`.ini` files Swift reads and both check. Swift parses by Character, so Rust
-does too: a CRLF is one Character and never ends a line (a CRLF file is one
-long key in Swift, and so in Rust), U+037E is `;`, and a combining mark or a
-Prepend takes the delimiter beside it along (two tables generated from the
-Swift runtime, `src/graphemes.rs`). `UInt64("-0")` is 0. Not matched: Swift
-compares and sorts names by canonical equivalence, Rust by bytes, so the two
-agree on every file whose section names and keys are NFC. The two cases that
-are not are pinned as `<case>.rust.txt`.
+`.ini` files Swift reads and both check. Rust reads plain text where Swift
+reads Characters (§1, its quirks): lines end at `\n` and CR is trimmed, so a
+CRLF file reads (Swift's is one long key, BACKLOG §5); a combining mark does
+not hide a delimiter; U+037E is not `;`; `"-0"` is no `UInt64`; and names
+compare and sort by bytes, not canonical equivalence. Ten cases differ from
+Swift for these reasons. Each is listed in the test and pinned as
+`<case>.rust.txt`; the other 19 match.
 
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,

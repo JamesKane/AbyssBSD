@@ -4,12 +4,11 @@
 //! `<case>.txt`: the sections, keys, values and typed reads, in order, and
 //! the same toINI() text. `#` lines are for people, and not compared.
 //!
-//! Except where exact agreement would take Unicode normalization, which Rust
-//! does not have without a dependency (§6.5): Swift compares and sorts
-//! section names and keys by canonical equivalence, Rust byte for byte. The
-//! two agree on every file whose names are in NFC. The cases in `DIVERGENT`
-//! are the ones that are not: each must still differ from Swift (so fixing
-//! it shows), and must match its `<case>.rust.txt`, what Rust does instead,
+//! Except where Swift's answer is a quirk of Swift's strings (RUST.md §1):
+//! Characters, where CRLF is one and a combining mark takes a delimiter
+//! along, canonical equivalence, and `UInt64("-0")`. Rust reads bytes. The
+//! cases in `DIVERGENT` are those: each must still differ from Swift (so a
+//! change shows), and must match its `<case>.rust.txt`, what Rust does,
 //! written by this test with ABYSS_WIRE_UPDATE=1. `diff <case>.txt
 //! <case>.rust.txt` is the divergence.
 
@@ -20,6 +19,14 @@ use std::path::PathBuf;
 const DIVERGENT: &[(&str, &str)] = &[
     ("unicode-equivalent-keys", "é and e+U+0301, K and U+212A KELVIN SIGN, are one name each to Swift, two to Rust"),
     ("unicode-nfd-order", "Swift sorts a+U+0301 as á, after f; Rust by bytes, before it"),
+    ("crlf", "Swift never ends a line at CRLF (one Character); Rust does"),
+    ("crlf-mixed", "Swift never ends a line at CRLF (one Character); Rust does"),
+    ("crlf-split-line", "Swift never ends a line at CRLF (one Character); Rust does"),
+    ("cr-before-crlf", "Swift never ends a line at CRLF (one Character); Rust does"),
+    ("lone-cr", "Rust trims a CR beside a CRLF; Swift sees one Character"),
+    ("graphemes", "a combining mark hides a delimiter from Swift, not from Rust"),
+    ("greek-question-mark", "U+037E is canonically ; to Swift, a key's first letter to Rust"),
+    ("numbers", "Swift's UInt64(\"-0\") is 0; Rust's is no number"),
 ];
 
 fn dir() -> PathBuf {
@@ -78,7 +85,7 @@ fn the_fixtures_are_what_rust_reads_and_writes() {
     cases.sort();
     assert!(cases.len() >= 29, "only {} cases", cases.len());
     let update = std::env::var_os("ABYSS_WIRE_UPDATE").is_some();
-    let (mut same, mut divergent) = (0, 0);
+    let (mut same, mut divergent, mut wrong) = (0, 0, Vec::new());
     for case in &cases {
         let swift = facts(&fs::read_to_string(d.join(format!("{case}.txt"))).unwrap());
         let c = load(case, Some(d.to_str().unwrap())).unwrap_or_else(|e| panic!("{case}: {e}"));
@@ -93,9 +100,9 @@ fn the_fixtures_are_what_rust_reads_and_writes() {
             assert_eq!(rust, pinned, "{case}: not what {case}.rust.txt says Rust does");
             divergent += 1;
         } else {
-            assert_eq!(rust, swift, "{case}: what Pool.load makes of the file");
-            same += 1;
+            if rust == swift { same += 1 } else { wrong.push(case.as_str()) }
         }
     }
+    assert!(wrong.is_empty(), "not what Pool.load makes of the file: {wrong:?}");
     eprintln!("{same} cases as Swift reads them, {divergent} known divergent");
 }

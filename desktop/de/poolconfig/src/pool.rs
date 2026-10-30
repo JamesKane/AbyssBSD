@@ -82,6 +82,7 @@ pub(crate) fn atomic_write(dir: &str, domain: &str, bytes: &[u8]) -> Result<(), 
 
     let lock = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .mode(0o644)
@@ -125,10 +126,10 @@ pub(crate) fn make_dirs(path: &str) -> Result<(), Error> {
         partial.push('/');
         partial.push_str(component);
         let p = if path.starts_with('/') { &partial[..] } else { &partial[1..] };
-        if let Err(e) = DirBuilder::new().mode(0o700).create(p) {
-            if e.kind() != ErrorKind::AlreadyExists {
-                return Err(io_error(format!("mkdir {p}"), &e));
-            }
+        if let Err(e) = DirBuilder::new().mode(0o700).create(p)
+            && e.kind() != ErrorKind::AlreadyExists
+        {
+            return Err(io_error(format!("mkdir {p}"), &e));
         }
     }
     Ok(())

@@ -8,12 +8,10 @@ mod agents;
 mod config;
 mod desktop_keys;
 mod energy;
-mod graphemes;
 mod islands;
 mod keyboard;
 mod pool;
 mod setup;
-mod text;
 
 pub use agents::Agents;
 pub use config::{parse_i64, parse_u64, Config};
