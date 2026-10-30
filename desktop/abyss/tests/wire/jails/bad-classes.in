@@ -1,0 +1,19 @@
+[odd-device]
+devices = dri mem
+[root]
+system = /
+[etc]
+system = /bin, /etc
+[var]
+system = /bin /var/db /root/tools
+[jails]
+system = /var/run/abyss-jails/1002/app
+[home]
+system = /usr /home/abyss/Documents
+[homes]
+system = /home
+[slash]
+system = /usr/local/ /lib
+[empty]
+system =
+devices =

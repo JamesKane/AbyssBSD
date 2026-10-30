@@ -255,6 +255,19 @@ composed é does not find a decomposed one (Swift compares by canonical
 equivalence), and a backward find from the end of the text finds the last
 match, where Swift's finds nothing (BACKLOG §5).
 
+*jails, 2026-10-30:* `de/jails` (crate `jails`) is JailClass.swift and
+JailPlan.swift: the classes as `jails.ini` rows over the shipped five, and a
+class plus a person made into the plan `jaild` performs (mounts, devices,
+the generated `/etc`, parameters, environment), with the violations a root
+daemon checks first. `jaild` and the keeper, and their tests, are R3. The
+paths are compared by bytes, where Swift's `hasPrefix` and `contains` are by
+Character: a component beginning with a combining mark joins the `/` before
+it, so to Swift a class mounting `/home/abyss/◌́docs` does not reach the
+person's home (BACKLOG §5). Fixtures in `abyss/tests/wire/jails`: seven
+`jails.ini` files, each made into its classes, every class's plan for a
+person and that plan's violations; six match Swift to the line, and
+`combining-home` is pinned as `.rust.txt`.
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +

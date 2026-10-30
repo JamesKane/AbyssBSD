@@ -1,0 +1,19 @@
+[app]
+devices = dsp
+[editor]
+network = HOST
+wayland = no
+[agent]
+model = local:/m/granite.gguf
+budget = 5000
+[helper]
+agent = yes
+wayland = maybe
+budget = nonsense
+vocabulary = yes
+fetch = true
+[apps]
+galculator = app
+[app-net]
+network = everything
+devices = dri,dsp	dri

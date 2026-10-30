@@ -1,0 +1,345 @@
+classes abyss 1001 1001 /home/abyss tank
+class "app-gl" system=["/bin","/lib","/libexec","/usr"] devices=["dri"] network=none wayland=1 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-1001-app-gl" root="/var/run/abyss-jails/1001/app-gl"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/app-gl" "/home/abyss" rw
+unhide ["dri","dri/*","drm","drm/*"]
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-1001-app-gl"
+param "path" "/var/run/abyss-jails/1001/app-gl"
+param "host.hostname" "abyss-1001-app-gl"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/abyss/app-gl" dataset="tank/abyss/jails/abyss/app-gl"
+class "debug" system=["/bin","/lib","/libexec","/usr"] devices=[] network=none wayland=0 agent=1 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-1001-debug" root="/var/run/abyss-jails/1001/debug"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/debug" "/home/abyss" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-1001-debug"
+param "path" "/var/run/abyss-jails/1001/debug"
+param "host.hostname" "abyss-1001-debug"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+home "/var/db/abyss-jails/abyss/debug" dataset="tank/abyss/jails/abyss/debug"
+class "agent" system=["/bin","/lib","/libexec","/usr"] devices=[] network=none wayland=0 agent=1 budget=5000 model="local:/m/granite.gguf" vocabulary=1 fetch=1
+plan "abyss-1001-agent" root="/var/run/abyss-jails/1001/agent"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/agent" "/home/abyss" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-1001-agent"
+param "path" "/var/run/abyss-jails/1001/agent"
+param "host.hostname" "abyss-1001-agent"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+home "/var/db/abyss-jails/abyss/agent" dataset="tank/abyss/jails/abyss/agent"
+class "app" system=["/bin","/lib","/libexec","/usr"] devices=["dsp"] network=none wayland=1 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-1001-app" root="/var/run/abyss-jails/1001/app"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/app" "/home/abyss" rw
+unhide ["dsp*","mixer*","sndstat"]
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-1001-app"
+param "path" "/var/run/abyss-jails/1001/app"
+param "host.hostname" "abyss-1001-app"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/abyss/app" dataset="tank/abyss/jails/abyss/app"
+class "app-net" system=["/bin","/lib","/libexec","/usr"] devices=["dri","dsp","dri"] network=host wayland=1 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-1001-app-net" root="/var/run/abyss-jails/1001/app-net"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/app-net" "/home/abyss" rw
+unhide ["dri","dri/*","drm","drm/*","dsp*","mixer*","sndstat","dri","dri/*","drm","drm/*"]
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+copy "/etc/resolv.conf" "/etc/resolv.conf"
+param "name" "abyss-1001-app-net"
+param "path" "/var/run/abyss-jails/1001/app-net"
+param "host.hostname" "abyss-1001-app-net"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "inherit"
+param "ip6" "inherit"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/abyss/app-net" dataset="tank/abyss/jails/abyss/app-net"
+class "editor" system=["/bin","/lib","/libexec","/usr"] devices=[] network=host wayland=0 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-1001-editor" root="/var/run/abyss-jails/1001/editor"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/editor" "/home/abyss" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+copy "/etc/resolv.conf" "/etc/resolv.conf"
+param "name" "abyss-1001-editor"
+param "path" "/var/run/abyss-jails/1001/editor"
+param "host.hostname" "abyss-1001-editor"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "inherit"
+param "ip6" "inherit"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+home "/var/db/abyss-jails/abyss/editor" dataset="tank/abyss/jails/abyss/editor"
+class "helper" system=["/bin","/lib","/libexec","/usr"] devices=[] network=none wayland=1 agent=1 budget=200000 model="" vocabulary=1 fetch=1
+plan "abyss-1001-helper" root="/var/run/abyss-jails/1001/helper"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/abyss/helper" "/home/abyss" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/abyss" 1001 700
+dir "/run" 0 755
+dir "/run/user" 1001 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\nabyss:*:1001:1001::0:0:abyss:/home/abyss:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\nabyss:*:1001:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-1001-helper"
+param "path" "/var/run/abyss-jails/1001/helper"
+param "host.hostname" "abyss-1001-helper"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/abyss"
+env "USER" "abyss"
+env "LOGNAME" "abyss"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/abyss/helper" dataset="tank/abyss/jails/abyss/helper"

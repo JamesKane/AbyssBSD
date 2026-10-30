@@ -195,6 +195,14 @@ From HANDOFF §5.3, still true:
   can begin, and spends its tries getting back: with the caret at the end of
   "ab", finding "ab" backward finds nothing. Reset to the last possible
   start, as Rust's `text-model` does (`find-backward-end`).
+- **Swift's jail plan lets a path in the person's home through** (found
+  2026-10-30, porting Jails). `JailPlan.under` uses `hasPrefix`, which is by
+  Character, so in `/home/abyss/◌́docs` the accent joins the `/` before it
+  and the path is not "under" `/home/abyss`: a class that mounts it is not
+  refused for reaching the person's own home (`combining-home`). The row is
+  the person's own `jails.ini`, so this weakens a confinement they set up
+  rather than giving anyone else a way in. Compare bytes (`utf8`), as
+  Rust's `jails` does; `secret`'s `contains` has the same shape.
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

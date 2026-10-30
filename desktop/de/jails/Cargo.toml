@@ -1,0 +1,9 @@
+[package]
+name = "jails"
+description = "Jails: what a jail contains, as data, and the plan a root daemon performs (Swift: JailClass.swift and JailPlan.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+pool-config = { path = "../poolconfig" }

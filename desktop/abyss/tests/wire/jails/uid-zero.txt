@@ -1,0 +1,252 @@
+classes toor 0 0 /root none
+class "app" system=["/bin","/lib","/libexec","/usr"] devices=[] network=none wayland=1 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-0-app" root="/var/run/abyss-jails/0/app"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/toor/app" "/home/toor" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/toor" 0 700
+dir "/run" 0 755
+dir "/run/user" 0 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\ntoor:*:0:0::0:0:toor:/home/toor:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\ntoor:*:0:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-0-app"
+param "path" "/var/run/abyss-jails/0/app"
+param "host.hostname" "abyss-0-app"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/toor"
+env "USER" "toor"
+env "LOGNAME" "toor"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/toor/app" dataset=none
+violation "toor has uid 0"
+class "app-gl" system=["/bin","/lib","/libexec","/usr"] devices=["dri"] network=none wayland=1 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-0-app-gl" root="/var/run/abyss-jails/0/app-gl"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/toor/app-gl" "/home/toor" rw
+unhide ["dri","dri/*","drm","drm/*"]
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/toor" 0 700
+dir "/run" 0 755
+dir "/run/user" 0 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\ntoor:*:0:0::0:0:toor:/home/toor:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\ntoor:*:0:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-0-app-gl"
+param "path" "/var/run/abyss-jails/0/app-gl"
+param "host.hostname" "abyss-0-app-gl"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/toor"
+env "USER" "toor"
+env "LOGNAME" "toor"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/toor/app-gl" dataset=none
+violation "toor has uid 0"
+class "app-net" system=["/bin","/lib","/libexec","/usr"] devices=["dri","dsp"] network=host wayland=1 agent=0 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-0-app-net" root="/var/run/abyss-jails/0/app-net"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/toor/app-net" "/home/toor" rw
+unhide ["dri","dri/*","drm","drm/*","dsp*","mixer*","sndstat"]
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/toor" 0 700
+dir "/run" 0 755
+dir "/run/user" 0 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\ntoor:*:0:0::0:0:toor:/home/toor:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\ntoor:*:0:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+copy "/etc/resolv.conf" "/etc/resolv.conf"
+param "name" "abyss-0-app-net"
+param "path" "/var/run/abyss-jails/0/app-net"
+param "host.hostname" "abyss-0-app-net"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "inherit"
+param "ip6" "inherit"
+env "HOME" "/home/toor"
+env "USER" "toor"
+env "LOGNAME" "toor"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+env "WAYLAND_DISPLAY" "wayland-0"
+env "GDK_BACKEND" "wayland"
+env "DBUS_SESSION_BUS_ADDRESS" "unix:path=/run/user/bus"
+env "GTK_USE_PORTAL" "1"
+env "GDK_DEBUG" "portals"
+home "/var/db/abyss-jails/toor/app-net" dataset=none
+violation "toor has uid 0"
+class "agent" system=["/bin","/lib","/libexec","/usr"] devices=[] network=none wayland=0 agent=1 budget=200000 model="" vocabulary=1 fetch=1
+plan "abyss-0-agent" root="/var/run/abyss-jails/0/agent"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/toor/agent" "/home/toor" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/toor" 0 700
+dir "/run" 0 755
+dir "/run/user" 0 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\ntoor:*:0:0::0:0:toor:/home/toor:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\ntoor:*:0:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-0-agent"
+param "path" "/var/run/abyss-jails/0/agent"
+param "host.hostname" "abyss-0-agent"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/toor"
+env "USER" "toor"
+env "LOGNAME" "toor"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+home "/var/db/abyss-jails/toor/agent" dataset=none
+violation "toor has uid 0"
+class "debug" system=["/bin","/lib","/libexec","/usr"] devices=[] network=none wayland=0 agent=1 budget=200000 model="" vocabulary=0 fetch=0
+plan "abyss-0-debug" root="/var/run/abyss-jails/0/debug"
+mount tmpfs "" "/" rw
+mount nullfs "/bin" "/bin" ro
+mount nullfs "/lib" "/lib" ro
+mount nullfs "/libexec" "/libexec" ro
+mount nullfs "/usr" "/usr" ro
+mount devfs "" "/dev" rw
+mount nullfs "/var/db/abyss-jails/toor/debug" "/home/toor" rw
+unhide []
+dir "/etc" 0 755
+dir "/usr" 0 755
+dir "/libexec" 0 755
+dir "/lib" 0 755
+dir "/bin" 0 755
+dir "/var" 0 755
+dir "/var/run" 0 755
+dir "/dev" 0 555
+dir "/tmp" 0 1777
+dir "/home" 0 755
+dir "/home/toor" 0 700
+dir "/run" 0 755
+dir "/run/user" 0 700
+dir "/run/granted" 0 755
+accounts "root:*:0:0::0:0:Charlie &:/root:/usr/sbin/nologin\ntoor:*:0:0::0:0:toor:/home/toor:/bin/sh\n"
+file "/etc/group" "wheel:*:0:root\ntoor:*:0:\n"
+copy "/etc/nsswitch.conf" "/etc/nsswitch.conf"
+copy "/etc/libmap.conf" "/etc/libmap.conf"
+copy "/etc/localtime" "/etc/localtime"
+copy "/var/run/ld-elf.so.hints" "/var/run/ld-elf.so.hints"
+param "name" "abyss-0-debug"
+param "path" "/var/run/abyss-jails/0/debug"
+param "host.hostname" "abyss-0-debug"
+param "persist"
+param "enforce_statfs" "2"
+param "devfs_ruleset" "4"
+param "ip4" "disable"
+param "ip6" "disable"
+env "HOME" "/home/toor"
+env "USER" "toor"
+env "LOGNAME" "toor"
+env "SHELL" "/bin/sh"
+env "PATH" "/bin:/usr/bin:/usr/local/bin"
+env "TMPDIR" "/tmp"
+env "XDG_RUNTIME_DIR" "/run/user"
+home "/var/db/abyss-jails/toor/debug" dataset=none
+violation "toor has uid 0"

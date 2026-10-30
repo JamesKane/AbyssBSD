@@ -1,0 +1,8 @@
+[plus]
+budget = +5
+[minus]
+budget = -3
+[zero]
+budget = 0
+[big]
+budget = 9223372036854775807
