@@ -1,0 +1,12 @@
+bytes
+bytes 0 "0 B"
+bytes 1 "1 B"
+bytes 1023 "1023 B"
+bytes 1024 "1.00 KiB"
+bytes 1536 "1.50 KiB"
+bytes 1048575 "1024.00 KiB"
+bytes 1048576 "1.00 MiB"
+bytes 16706928640 "15.56 GiB"
+bytes 1099511627776 "1.00 TiB"
+bytes 1125899906842624 "1024.00 TiB"
+bytes 18446744073709551615 "16777216.00 TiB"

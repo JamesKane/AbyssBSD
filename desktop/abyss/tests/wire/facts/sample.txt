@@ -1,0 +1,22 @@
+sample
+ada@jaguar
+----------
+OS: AbyssBSD on FreeBSD 16.0-CURRENT aarch64
+Kernel: FreeBSD 16.0-CURRENT
+Uptime: 2 days, 3 hours, 14 mins
+Packages: 412 (pkg)
+Shell: sh
+Desktop: AbyssBSD Aqua
+Window Manager: undertow
+Theme: Jaguar
+Terminal: Terminal
+Locale: en_US.UTF-8
+Host: Radxa Computer Co., Ltd. Radxa Dragon Q8B
+CPU: ARM Cortex-A78C r0p0 (8)
+GPU: Qualcomm Adreno (msm)
+Memory: 3.12 GiB / 15.47 GiB (20%)
+Swap: 0 B / 2.00 GiB (0%)
+Disk (/): 18.40 GiB / 112.30 GiB (16%) - zfs
+Display: DP-1 1920×1080 @ 60 Hz
+Local IP: 192.168.1.40/24 (tcx0)
+Battery: unknown

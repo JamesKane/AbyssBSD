@@ -1,0 +1,4 @@
+vgapci0@pci0:0:1:0:	vendor=0x1 device=0x2
+    vendor = 'A 'odd' one'
+    device = 'x'
+    device = 'only one

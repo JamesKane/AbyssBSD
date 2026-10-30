@@ -1,0 +1,10 @@
+frequency
+frequency 0 "0 MHz"
+frequency 800 "800 MHz"
+frequency 999 "999 MHz"
+frequency 1000 "1.00 GHz"
+frequency 1005 "1.00 GHz"
+frequency 1004 "1.00 GHz"
+frequency 2710 "2.71 GHz"
+frequency 3999 "4.00 GHz"
+frequency -5 "-5 MHz"

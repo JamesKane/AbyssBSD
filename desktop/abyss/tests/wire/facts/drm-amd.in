@@ -1,0 +1,3 @@
+ 1 1 0 0 kernel
+ 9 1 0 0 amdgpu.ko
+10 1 0 0 drm.ko

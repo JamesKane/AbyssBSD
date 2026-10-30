@@ -1,0 +1,2 @@
+drm
+driver "AMD Radeon (amdgpu)"

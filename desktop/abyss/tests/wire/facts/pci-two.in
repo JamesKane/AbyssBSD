@@ -1,0 +1,28 @@
+vgapci0@pci0:3:0:0:	class=0x030000 rev=0xc1 hdr=0x00 vendor=0x1002 device=0x73df subvendor=0x1849 subdevice=0x5219
+    vendor     = 'Advanced Micro Devices, Inc. [AMD/ATI]'
+    device     = 'Navi 22 [Radeon RX 6700/6700 XT/6750 XT / 6800M/6850M XT]'
+    class      = display
+    subclass   = VGA
+hdac0@pci0:3:0:1:	class=0x040300 rev=0x00 hdr=0x00 vendor=0x1002 device=0xab28 subvendor=0x1849 subdevice=0xab28
+    vendor     = 'Advanced Micro Devices, Inc. [AMD/ATI]'
+    device     = 'Navi 21/23 HDMI/DP Audio Controller'
+    class      = multimedia
+    subclass   = HDA
+vgapci1@pci0:0:2:0:	class=0x030000 rev=0x0c hdr=0x00 vendor=0x8086 device=0x4680
+    vendor     = 'Intel Corporation'
+    device     = 'AlderLake-S GT1 [UHD Graphics 770]'
+    class      = display
+none0@pci0:9:0:0:	class=0x030200 rev=0xa1 hdr=0x00 vendor=0x10de device=0x2484
+    vendor     = 'NVIDIA Corporation'
+    device     = 'GA104 [GeForce RTX 3070]'
+    class      = display
+    subclass   = 3D
+vgapci2@pci0:0:3:0:	class=0x030000 rev=0x00 hdr=0x00 vendor=0x1af4 device=0x1050
+    vendor     = 'Red Hat, Inc.'
+    device     = 'Virtio 1.0 GPU'
+    class      = display
+vgapci3@pci0:0:4:0:	class=0x030000
+    vendor     = '  Matrox  Electronics'
+    device     = 'G200eR2'
+vgapci4@pci0:0:5:0:	class=0x030000 vendor=0x102b
+    vendor     = 'nobody'

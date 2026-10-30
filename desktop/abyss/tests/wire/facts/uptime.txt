@@ -1,0 +1,13 @@
+uptime
+uptime -5 "0 mins"
+uptime 0 "0 mins"
+uptime 59 "0 mins"
+uptime 60 "1 min"
+uptime 61 "1 min"
+uptime 3600 "1 hour"
+uptime 3661 "1 hour, 1 min"
+uptime 86399 "23 hours, 59 mins"
+uptime 86400 "1 day"
+uptime 90360 "1 day, 1 hour, 6 mins"
+uptime 184860 "2 days, 3 hours, 21 mins"
+uptime 9223372036854775807 "106751991167300 days, 15 hours, 30 mins"

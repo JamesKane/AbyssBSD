@@ -1,0 +1,2 @@
+pci
+display "PCI display 0x1:0x2"

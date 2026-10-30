@@ -268,6 +268,15 @@ person's home (BACKLOG §5). Fixtures in `abyss/tests/wire/jails`: seven
 person and that plan's violations; six match Swift to the line, and
 `combining-home` is pinned as `.rust.txt`.
 
+*systemfacts, 2026-10-30:* `de/systemfacts` (crate `system-facts`) is
+SystemFacts.swift: the facts and their report, fastfetch's formatting, and
+the parsers over what the gatherer captured (`pciconf -lv`, `kldstat`,
+`ofwdump`, `swapinfo`, the page counts, `kern.boottime`). Sizes saturate or
+read as nothing where Swift's arithmetic traps. Fixtures in
+`abyss/tests/wire/facts`: 26 captures and number lists through every parser
+and formatter, the sample report among them; 25 match Swift to the line,
+and `pci-crlf` is pinned as `.rust.txt` (Swift's CRLF capture is one line).
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +

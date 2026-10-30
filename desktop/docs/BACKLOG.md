@@ -150,7 +150,8 @@ From HANDOFF §5.3, still true:
   `wpa-crlf` from the settings fixtures' list too. **And `Keymaps`**: a
   CRLF rc.conf is one line, so the keymap read back is the rest of the file
   and the desktop types US (`keymap-crlf`); Fathom's probes miss a CRLF
-  capture's modules (`modules-crlf`).
+  capture's modules (`modules-crlf`), and SystemFacts reads a CRLF
+  `pciconf -lv` as one line (`pci-crlf`).
 - **The installer's pool-name rule is not ZFS's** (found 2026-10-30,
   checked against `zfs_namecheck.c` and `libzfs_pool.c` in `src/`). Both
   ways it fails do so **after `gpart` has written the disk**. Swift's

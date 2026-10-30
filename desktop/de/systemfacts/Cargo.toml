@@ -1,0 +1,6 @@
+[package]
+name = "system-facts"
+description = "SystemFacts: what this computer is, fastfetch's list: pure parsing and formatting for System Profiler (Swift: SystemFacts.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

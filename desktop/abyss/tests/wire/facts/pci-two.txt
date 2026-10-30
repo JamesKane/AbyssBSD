@@ -1,0 +1,6 @@
+pci
+display "AMD Navi 22 [Radeon RX 6700/6700 XT/6750 XT / 6800M/6850M XT]"
+display "Intel AlderLake-S GT1 [UHD Graphics 770]"
+display "NVIDIA GA104 [GeForce RTX 3070]"
+display "QEMU Virtio 1.0 GPU"
+display "Matrox G200eR2"

@@ -1,0 +1,2 @@
+pci
+display "AMD Navi 22 [Radeon RX 6700/6700 XT/6750 XT / 6800M/6850M XT]"
