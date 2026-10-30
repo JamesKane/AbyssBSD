@@ -1,16 +1,19 @@
 //! DBus in Rust (RUST.md R2), the wire half: the type system, the
 //! marshalling rules and the message (PHASE8 P8.1), ported from Value.swift,
 //! Marshal.swift and Message.swift beside it, and the bus address from
-//! Connection.swift. The connection itself, SASL and dispatch, is R3.
+//! Connection.swift; and (R3) the connection itself: SASL, Hello, calls and
+//! what arrives.
 //!
 //! **No library**: not libdbus, not GDBus (GLib), not sd-bus (systemd).
 //! And no bus: ADE's bridge answers for its own services and nothing else
 //! (PRODUCT §5.6). This is the format both ends of it speak.
 
+mod connection;
 mod marshal;
 mod message;
 mod value;
 
+pub use connection::{Connection, Received, DRIVER, DRIVER_PATH};
 pub use marshal::{Marshaller, Unmarshaller, MAX_DEPTH};
 pub use message::{Flags, Message, MessageType};
 pub use value::{alignment_of, split_signature, Value};

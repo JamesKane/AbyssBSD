@@ -1,0 +1,11 @@
+[package]
+name = "dbusportal"
+description = "DBusPortal: org.freedesktop.portal.FileChooser and Settings, answered by abyss-portal and the theme (Swift: Portal, Settings and Service.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+dbus = { path = "../dbus" }
+pool-config = { path = "../poolconfig" }

@@ -1,6 +1,10 @@
 [package]
 name = "dbus"
-description = "DBus, the wire half: values, marshalling, messages and bus addresses, with no bus (Swift: Value, Marshal and Message.swift beside it)"
+description = "DBus, the wire half: values, marshalling, messages and bus addresses, with no bus, and a connection to the bridge (Swift: the *.swift beside it)"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+libc.workspace = true

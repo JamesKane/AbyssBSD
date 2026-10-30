@@ -1,0 +1,9 @@
+[package]
+name = "dbusprobe"
+description = "dbusprobe: drive the DBus connection against a real bridge, with GLib's gdbus as the other end (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+dbus = { path = "../dbus" }

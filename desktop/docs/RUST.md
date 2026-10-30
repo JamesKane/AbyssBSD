@@ -374,6 +374,35 @@ for the guest's menu-bar trouble above) in the FreeBSD guest, where
 the capability itself: a Capsicum client reads the file it was handed and
 cannot open its path.
 
+*abyss-dbus, 2026-10-30.* `dbus` gains the connection (Connection.swift):
+SASL, Hello, calls and what arrives. `de/dbusbridge` is Router.swift and
+Endpoint.swift, the bridge that is not a bus; `de/dbusportal` the
+FileChooser and Settings (Portal, Settings and Service.swift);
+`de/dbusmenus` GTK's menus as MenuWire (GtkMenus and Bridge.swift);
+`de/dbusbin` is `abyss-dbus` in its three modes, and `de/dbusprobe` the
+probe the live scripts drive against GLib's `gdbus`. **Nothing is
+dispatched inside a call**: Swift runs handlers and signal callbacks while
+a caller waits for its own reply; here what arrives meanwhile is queued,
+and the next `receive` hands it to the connection's owner, which answers in
+order, on its own stack. A message comes with the descriptors it declared,
+owned, so they close with it. The bridge's fan-out is in connection order
+(Swift's came from a dictionary), and **a message carrying descriptors now
+gets through it**: Swift took `ap_sendmsg_fds`'s byte count for an error
+and dropped or stalled the receiver (BACKLOG §5). jaild's `grant` is one
+call, kept in `abyss-dbus` until jaild's turn; `abyss-theme` is found
+beside the path it was run as, for anchor's reason; and the accent's drift
+test reads `Theme.swift`'s `menuHighlight` until the theme is in Rust.
+Swift's 50 tests ported, with two more (a quote inside a match rule, and a
+refused call that expected no reply gets none). On Linux `live-dbus`,
+`-portal-dbus`, `-gtk`, `-palette`, `-appearance`, `-menus-gtk`,
+`-submenus`, `-session-gtk` and `-firefox` are green against it. In the
+FreeBSD guest `live-dbus`, `-portal-dbus`, `-gtk`, `-palette`,
+`-appearance`, `-firefox`, `-jail-files` and `-jail-launch` are green; the
+menu-bar ones (`-menus-gtk`, `-submenus`, `-session-gtk`) and the crash
+reporter's (`-crash-dialog`, `-agents-off`, `-agent-gate`) failed there
+for Swift as well, the menu-bar ones each at a different step, so they join
+the rerun on a quiet guest.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

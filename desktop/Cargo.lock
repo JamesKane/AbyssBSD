@@ -63,6 +63,61 @@ dependencies = [
 [[package]]
 name = "dbus"
 version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "libc",
+]
+
+[[package]]
+name = "dbusbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "dbus",
+ "dbusbridge",
+ "dbusmenus",
+ "dbusportal",
+ "pool-config",
+]
+
+[[package]]
+name = "dbusbridge"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "dbus",
+ "libc",
+]
+
+[[package]]
+name = "dbusmenus"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "dbus",
+ "libc",
+ "menu-model",
+ "menu-wire",
+]
+
+[[package]]
+name = "dbusportal"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+ "dbus",
+ "pool-config",
+]
+
+[[package]]
+name = "dbusprobe"
+version = "0.1.0"
+dependencies = [
+ "dbus",
+]
 
 [[package]]
 name = "fathom"

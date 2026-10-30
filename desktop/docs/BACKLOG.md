@@ -190,6 +190,14 @@ From HANDOFF §5.3, still true:
   `(` is an empty struct) and reads only a variant's first type. Rust's
   `dbus` parses signatures and limits depth to the specification's 64; port
   both to the Swift reader while it is the one running.
+- **Swift's D-Bus bridge cannot forward a descriptor** (found 2026-10-30,
+  porting the endpoint). `BridgeEndpoint.flush` treats `ap_sendmsg_fds`
+  returning 0 as sent, but it returns the byte count, so every message with
+  an `h` in it reads as a failed write: the receiver is dropped, or, if
+  `errno` happens to say EAGAIN, its queue never moves again. Nothing ADE
+  serves passes one through the bridge today; a GTK app that does
+  (`OpenURI` with a descriptor, say) would lose its connection. Rust's
+  `dbusbridge` counts the bytes and sends the rest plain.
 - **TextEdit's Find Previous misses from the end of the text** (found
   2026-10-30, porting TextModel). `TextModel.find(backward:)` starts at
   the selection's start minus one, which can be past the last place a match

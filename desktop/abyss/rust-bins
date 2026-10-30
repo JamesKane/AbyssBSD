@@ -7,3 +7,5 @@ ventsctl
 anchor
 abyssctl
 abyss-portal
+abyss-dbus
+dbusprobe

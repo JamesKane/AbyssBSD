@@ -1,0 +1,12 @@
+[package]
+name = "dbusbridge"
+description = "DBusBridge: ADE's D-Bus bridge, applications to the desktop's services and never to each other (Swift: Router.swift and Endpoint.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+dbus = { path = "../dbus" }
+libc.workspace = true
