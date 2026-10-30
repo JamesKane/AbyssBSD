@@ -1,0 +1,14 @@
+> text "ab"
+= "ab" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 2
+= "ab" anchor=0:2 caret=0:2 dirty=0 undo=none redo=none
+> find "ab" backward
+found 0:0-0:2
+> text "xx ab"
+= "xx ab" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 5
+= "xx ab" anchor=0:5 caret=0:5 dirty=0 undo=none redo=none
+> find "ab" backward
+found 0:3-0:5
+> find "x" backward
+found 0:1-0:2

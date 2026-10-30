@@ -1,0 +1,8 @@
+text "e"
+caret 0 1
+insert "\u{301}"
+clusters
+move left
+move left
+undo
+clusters

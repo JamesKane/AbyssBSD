@@ -1,0 +1,7 @@
+text "ab"
+caret 0 2
+find "ab" backward
+text "xx ab"
+caret 0 5
+find "ab" backward
+find "x" backward

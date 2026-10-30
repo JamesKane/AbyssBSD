@@ -1,0 +1,33 @@
+text "one two, three\nfour"
+caret 0 0
+move word-right
+move word-right
+move word-right
+move word-right
+move word-left
+move word-left
+move line-start extend
+move right
+move left extend
+move left
+move doc-end
+move doc-start extend
+move line-end
+move right
+move right
+move left
+move left
+text "don't snake_case 42nd café-crème  \u{3b1}\u{3b2}\u{3b3} ..."
+caret 0 0
+move word-right
+move word-right
+move word-right
+move word-right
+move word-right
+move word-right
+move word-right
+move word-left
+move word-left
+move word-left
+target word-left 0 0
+target word-right 0 99

@@ -1,0 +1,24 @@
+> text "one\ntwo\nthree"
+= "one\ntwo\nthree" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> select 0 1 2 2
+= "one\ntwo\nthree" anchor=0:1 caret=2:2 dirty=0 undo=none redo=none
+> insert "X\nY\nZ\n" paste
+= "oX\nY\nZ\nree" anchor=3:0 caret=3:0 dirty=1 undo="Paste" redo=none
+> undo
+= "one\ntwo\nthree" anchor=0:1 caret=2:2 dirty=0 undo=none redo="Paste"
+> redo
+= "oX\nY\nZ\nree" anchor=3:0 caret=3:0 dirty=1 undo="Paste" redo=none
+> select 1 0 2 0
+= "oX\nY\nZ\nree" anchor=1:0 caret=2:0 dirty=1 undo="Paste" redo=none
+> backspace
+= "oX\nZ\nree" anchor=1:0 caret=1:0 dirty=1 undo="Delete" redo=none
+> undo
+= "oX\nY\nZ\nree" anchor=1:0 caret=2:0 dirty=1 undo="Paste" redo="Delete"
+> caret 2 5
+= "oX\nY\nZ\nree" anchor=2:1 caret=2:1 dirty=1 undo="Paste" redo="Delete"
+> insert "\r\n"
+= "oX\nY\nZ\n\nree" anchor=3:0 caret=3:0 dirty=1 undo="Typing" redo=none
+> insert "\r"
+= "oX\nY\nZ\n\n\nree" anchor=4:0 caret=4:0 dirty=1 undo="Typing" redo=none
+> undo
+= "oX\nY\nZ\nree" anchor=2:1 caret=2:1 dirty=1 undo="Paste" redo="Typing"

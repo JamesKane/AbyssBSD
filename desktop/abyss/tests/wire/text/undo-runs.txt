@@ -1,0 +1,50 @@
+> text "hello world"
+= "hello world" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 5
+= "hello world" anchor=0:5 caret=0:5 dirty=0 undo=none redo=none
+> insert "!"
+= "hello! world" anchor=0:6 caret=0:6 dirty=1 undo="Typing" redo=none
+> insert "?"
+= "hello!? world" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo=none
+> caret 0 0
+= "hello!? world" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo=none
+> insert "a"
+= "ahello!? world" anchor=0:1 caret=0:1 dirty=1 undo="Typing" redo=none
+> caret 0 7
+= "ahello!? world" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo=none
+> insert "b"
+= "ahello!b? world" anchor=0:8 caret=0:8 dirty=1 undo="Typing" redo=none
+> undo
+= "ahello!? world" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo="Typing"
+> undo
+= "hello!? world" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo="Typing"
+> caret 0 11
+= "hello!? world" anchor=0:11 caret=0:11 dirty=1 undo="Typing" redo="Typing"
+> backspace
+= "hello!? wold" anchor=0:10 caret=0:10 dirty=1 undo="Delete" redo=none
+> backspace
+= "hello!? wld" anchor=0:9 caret=0:9 dirty=1 undo="Delete" redo=none
+> backspace word
+= "hello!? ld" anchor=0:8 caret=0:8 dirty=1 undo="Delete" redo=none
+> undo
+= "hello!? world" anchor=0:11 caret=0:11 dirty=1 undo="Typing" redo="Delete"
+> caret 0 0
+= "hello!? world" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo="Delete"
+> delete
+= "ello!? world" anchor=0:0 caret=0:0 dirty=1 undo="Delete" redo=none
+> delete
+= "llo!? world" anchor=0:0 caret=0:0 dirty=1 undo="Delete" redo=none
+> delete word
+= "!? world" anchor=0:0 caret=0:0 dirty=1 undo="Delete" redo=none
+> undo
+= "hello!? world" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo="Delete"
+> select 0 0 0 4
+= "hello!? world" anchor=0:0 caret=0:4 dirty=1 undo="Typing" redo="Delete"
+> insert "" cut
+= "o!? world" anchor=0:0 caret=0:0 dirty=1 undo="Cut" redo=none
+> insert "x" other "Replace"
+= "xo!? world" anchor=0:1 caret=0:1 dirty=1 undo="Replace" redo=none
+> undo
+= "o!? world" anchor=0:0 caret=0:0 dirty=1 undo="Cut" redo="Replace"
+> undo
+= "hello!? world" anchor=0:0 caret=0:4 dirty=1 undo="Typing" redo="Cut"

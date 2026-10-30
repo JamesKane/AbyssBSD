@@ -1,0 +1,48 @@
+> text "abc"
+= "abc" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> save
+= "abc" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 3
+= "abc" anchor=0:3 caret=0:3 dirty=0 undo=none redo=none
+> insert " "
+= "abc " anchor=0:4 caret=0:4 dirty=1 undo="Typing" redo=none
+> insert "d"
+= "abc d" anchor=0:5 caret=0:5 dirty=1 undo="Typing" redo=none
+> insert "e"
+= "abc de" anchor=0:6 caret=0:6 dirty=1 undo="Typing" redo=none
+> insert "f"
+= "abc def" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo=none
+> caret 0 0
+= "abc def" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo=none
+> insert "X"
+= "Xabc def" anchor=0:1 caret=0:1 dirty=1 undo="Typing" redo=none
+> undo
+= "abc def" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo="Typing"
+> undo
+= "abc" anchor=0:3 caret=0:3 dirty=0 undo=none redo="Typing"
+> redo
+= "abc def" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo="Typing"
+> backspace
+= "abc de" anchor=0:6 caret=0:6 dirty=1 undo="Delete" redo=none
+> backspace
+= "abc d" anchor=0:5 caret=0:5 dirty=1 undo="Delete" redo=none
+> undo
+= "abc def" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo="Delete"
+> select 0 0 0 3
+= "abc def" anchor=0:0 caret=0:3 dirty=1 undo="Typing" redo="Delete"
+> insert "ABC" paste
+= "ABC def" anchor=0:3 caret=0:3 dirty=1 undo="Paste" redo=none
+> undo
+= "abc def" anchor=0:0 caret=0:3 dirty=1 undo="Typing" redo="Paste"
+> redo
+= "ABC def" anchor=0:3 caret=0:3 dirty=1 undo="Paste" redo=none
+> undo
+= "abc def" anchor=0:0 caret=0:3 dirty=1 undo="Typing" redo="Paste"
+> undo
+= "abc" anchor=0:3 caret=0:3 dirty=0 undo=none redo="Typing"
+> undo
+= "abc" anchor=0:3 caret=0:3 dirty=0 undo=none redo="Typing"
+> undo
+= "abc" anchor=0:3 caret=0:3 dirty=0 undo=none redo="Typing"
+> redo
+= "abc def" anchor=0:7 caret=0:7 dirty=1 undo="Typing" redo="Paste"

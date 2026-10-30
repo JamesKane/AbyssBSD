@@ -189,6 +189,12 @@ From HANDOFF §5.3, still true:
   `(` is an empty struct) and reads only a variant's first type. Rust's
   `dbus` parses signatures and limits depth to the specification's 64; port
   both to the Swift reader while it is the one running.
+- **TextEdit's Find Previous misses from the end of the text** (found
+  2026-10-30, porting TextModel). `TextModel.find(backward:)` starts at
+  the selection's start minus one, which can be past the last place a match
+  can begin, and spends its tries getting back: with the caret at the end of
+  "ab", finding "ab" backward finds nothing. Reset to the last possible
+  start, as Rust's `text-model` does (`find-backward-end`).
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

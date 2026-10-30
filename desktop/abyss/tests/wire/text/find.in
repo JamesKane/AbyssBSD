@@ -1,0 +1,15 @@
+text "Cat hat\ncat"
+caret 0 0
+find "cat"
+select 0 0 0 3
+find "cat"
+select 1 0 1 3
+find "cat"
+find "cat" case
+find "hat" backward
+find "dog"
+find ""
+find "t\nc"
+find "CAT" backward case
+find "Cat hat\ncat"
+find "Cat hat\ncat!"

@@ -1,0 +1,28 @@
+text "the quick brown fox\n\nabcdefghij"
+layout 10
+row 0 10
+row 0 19
+x 0 13
+at 1 2
+at 0 99
+at 1 99
+at 9 0
+at -1 3
+vertical 0 3 1 3
+vertical 0 3 -1 3
+vertical 3 5 1 0
+text "abcdefghijklm"
+layout 5
+text "a\tb\tc d"
+layout 6
+x 0 3
+text "\u{4e2d}\u{6587}\u{5b57}\u{7b26}\u{4e32} ok"
+layout 5
+at 1 1
+at 1 2
+text "e\u{301}e\u{301} \u{1f469}\u{200d}\u{1f467}"
+layout 3
+x 0 4
+text "   "
+layout 1
+layout 0

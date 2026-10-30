@@ -1,0 +1,14 @@
+text "a"
+caret 0 1
+insert "b"
+save
+undo
+caret 0 0
+insert "z" other "Change"
+undo
+redo
+save
+insert "q"
+save
+insert "r"
+undo

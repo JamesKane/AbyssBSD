@@ -1,0 +1,24 @@
+> text "a\n\n  b  \n"
+= "a\n\n  b  \n" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 1
+= "a\n\n  b  \n" anchor=0:1 caret=0:1 dirty=0 undo=none redo=none
+> move word-right
+= "a\n\n  b  \n" anchor=1:0 caret=1:0 dirty=0 undo=none redo=none
+> move word-right
+= "a\n\n  b  \n" anchor=2:3 caret=2:3 dirty=0 undo=none redo=none
+> move word-right
+= "a\n\n  b  \n" anchor=2:5 caret=2:5 dirty=0 undo=none redo=none
+> move word-left
+= "a\n\n  b  \n" anchor=2:2 caret=2:2 dirty=0 undo=none redo=none
+> move word-left
+= "a\n\n  b  \n" anchor=2:0 caret=2:0 dirty=0 undo=none redo=none
+> move word-left
+= "a\n\n  b  \n" anchor=1:0 caret=1:0 dirty=0 undo=none redo=none
+> move word-left
+= "a\n\n  b  \n" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> target left 0 0
+target 0:0
+> target right 3 0
+target 3:0
+> target line-end 2 1
+target 2:5

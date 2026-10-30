@@ -1,0 +1,16 @@
+> text "e"
+= "e" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 1
+= "e" anchor=0:1 caret=0:1 dirty=0 undo=none redo=none
+> insert "\u{301}"
+= "é" anchor=0:2 caret=0:2 dirty=1 undo="Typing" redo=none
+> clusters
+line 0: "e" "́"
+> move left
+= "é" anchor=0:1 caret=0:1 dirty=1 undo="Typing" redo=none
+> move left
+= "é" anchor=0:0 caret=0:0 dirty=1 undo="Typing" redo=none
+> undo
+= "e" anchor=0:1 caret=0:1 dirty=0 undo=none redo="Typing"
+> clusters
+line 0: "e"

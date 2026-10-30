@@ -1,0 +1,24 @@
+text "abc"
+save
+caret 0 3
+insert " "
+insert "d"
+insert "e"
+insert "f"
+caret 0 0
+insert "X"
+undo
+undo
+redo
+backspace
+backspace
+undo
+select 0 0 0 3
+insert "ABC" paste
+undo
+redo
+undo
+undo
+undo
+undo
+redo

@@ -1,0 +1,28 @@
+> text "a"
+= "a" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 1
+= "a" anchor=0:1 caret=0:1 dirty=0 undo=none redo=none
+> insert "b"
+= "ab" anchor=0:2 caret=0:2 dirty=1 undo="Typing" redo=none
+> save
+= "ab" anchor=0:2 caret=0:2 dirty=0 undo="Typing" redo=none
+> undo
+= "a" anchor=0:1 caret=0:1 dirty=1 undo=none redo="Typing"
+> caret 0 0
+= "a" anchor=0:0 caret=0:0 dirty=1 undo=none redo="Typing"
+> insert "z" other "Change"
+= "za" anchor=0:1 caret=0:1 dirty=1 undo="Change" redo=none
+> undo
+= "a" anchor=0:0 caret=0:0 dirty=1 undo=none redo="Change"
+> redo
+= "za" anchor=0:1 caret=0:1 dirty=1 undo="Change" redo=none
+> save
+= "za" anchor=0:1 caret=0:1 dirty=0 undo="Change" redo=none
+> insert "q"
+= "zqa" anchor=0:2 caret=0:2 dirty=1 undo="Typing" redo=none
+> save
+= "zqa" anchor=0:2 caret=0:2 dirty=0 undo="Typing" redo=none
+> insert "r"
+= "zqra" anchor=0:3 caret=0:3 dirty=1 undo="Typing" redo=none
+> undo
+= "zqa" anchor=0:2 caret=0:2 dirty=0 undo="Typing" redo="Typing"

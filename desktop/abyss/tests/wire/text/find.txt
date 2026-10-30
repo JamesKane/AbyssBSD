@@ -1,0 +1,30 @@
+> text "Cat hat\ncat"
+= "Cat hat\ncat" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 0
+= "Cat hat\ncat" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> find "cat"
+found 0:0-0:3
+> select 0 0 0 3
+= "Cat hat\ncat" anchor=0:0 caret=0:3 dirty=0 undo=none redo=none
+> find "cat"
+found 1:0-1:3
+> select 1 0 1 3
+= "Cat hat\ncat" anchor=1:0 caret=1:3 dirty=0 undo=none redo=none
+> find "cat"
+found 0:0-0:3
+> find "cat" case
+found 1:0-1:3
+> find "hat" backward
+found 0:4-0:7
+> find "dog"
+found none
+> find ""
+found none
+> find "t\nc"
+found 0:6-1:1
+> find "CAT" backward case
+found none
+> find "Cat hat\ncat"
+found 0:0-1:3
+> find "Cat hat\ncat!"
+found none

@@ -1,0 +1,28 @@
+> text "hello\nworld"
+= "hello\nworld" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 5
+= "hello\nworld" anchor=0:5 caret=0:5 dirty=0 undo=none redo=none
+> insert " there\nbig"
+= "hello there\nbig\nworld" anchor=1:3 caret=1:3 dirty=1 undo="Typing" redo=none
+> select 0 5 2 0
+= "hello there\nbig\nworld" anchor=0:5 caret=2:0 dirty=1 undo="Typing" redo=none
+> backspace
+= "helloworld" anchor=0:5 caret=0:5 dirty=1 undo="Delete" redo=none
+> caret 0 5
+= "helloworld" anchor=0:5 caret=0:5 dirty=1 undo="Delete" redo=none
+> insert "\n"
+= "hello\nworld" anchor=1:0 caret=1:0 dirty=1 undo="Typing" redo=none
+> delete
+= "hello\norld" anchor=1:0 caret=1:0 dirty=1 undo="Delete" redo=none
+> caret 1 0
+= "hello\norld" anchor=1:0 caret=1:0 dirty=1 undo="Delete" redo=none
+> backspace
+= "helloorld" anchor=0:5 caret=0:5 dirty=1 undo="Delete" redo=none
+> replace 0 2 0 99 "LP!"
+= "heLP!" anchor=0:5 caret=0:5 dirty=1 undo="Change" redo=none
+> replace 9 9 9 9 "end"
+= "heLP!end" anchor=0:8 caret=0:8 dirty=1 undo="Change" redo=none
+> caret 99 99
+= "heLP!end" anchor=0:8 caret=0:8 dirty=1 undo="Change" redo=none
+> caret -1 3
+= "heLP!end" anchor=0:3 caret=0:3 dirty=1 undo="Change" redo=none

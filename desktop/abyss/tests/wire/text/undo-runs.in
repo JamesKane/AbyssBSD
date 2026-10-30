@@ -1,0 +1,25 @@
+text "hello world"
+caret 0 5
+insert "!"
+insert "?"
+caret 0 0
+insert "a"
+caret 0 7
+insert "b"
+undo
+undo
+caret 0 11
+backspace
+backspace
+backspace word
+undo
+caret 0 0
+delete
+delete
+delete word
+undo
+select 0 0 0 4
+insert "" cut
+insert "x" other "Replace"
+undo
+undo

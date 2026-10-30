@@ -1,0 +1,12 @@
+text "one\ntwo\nthree"
+select 0 1 2 2
+insert "X\nY\nZ\n" paste
+undo
+redo
+select 1 0 2 0
+backspace
+undo
+caret 2 5
+insert "\r\n"
+insert "\r"
+undo

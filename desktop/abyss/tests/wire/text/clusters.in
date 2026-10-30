@@ -1,0 +1,16 @@
+text "a\r\nb\rc\nd"
+clusters
+text "e\u{301}x\u{1f1eb}\u{1f1f7}\u{1f1e9}\u{1f1ea}\u{1f1fa}"
+clusters
+text "\u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467} \u{1f44d}\u{1f3fd} 1\u{fe0f}\u{20e3} \u{2764}\u{fe0f}"
+clusters
+text "\u{1100}\u{1161}\u{11a8} \u{ac00}\u{11a8} \u{d55c}\u{ae00}"
+clusters
+text "\u{915}\u{94d}\u{937} \u{e01}\u{e33} \u{646}\u{651}\u{64e}"
+clusters
+text "a\u{200d}b \u{1f3f3}\u{fe0f}\u{200d}\u{1f308} \t\u{7f}\u{0}"
+clusters
+text ""
+clusters
+text "\n\n"
+clusters

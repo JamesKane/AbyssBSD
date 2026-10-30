@@ -1,0 +1,14 @@
+text "hello\nworld"
+caret 0 5
+insert " there\nbig"
+select 0 5 2 0
+backspace
+caret 0 5
+insert "\n"
+delete
+caret 1 0
+backspace
+replace 0 2 0 99 "LP!"
+replace 9 9 9 9 "end"
+caret 99 99
+caret -1 3

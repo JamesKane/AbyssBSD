@@ -1,0 +1,66 @@
+> text "one two, three\nfour"
+= "one two, three\nfour" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 0
+= "one two, three\nfour" anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> move word-right
+= "one two, three\nfour" anchor=0:3 caret=0:3 dirty=0 undo=none redo=none
+> move word-right
+= "one two, three\nfour" anchor=0:7 caret=0:7 dirty=0 undo=none redo=none
+> move word-right
+= "one two, three\nfour" anchor=0:14 caret=0:14 dirty=0 undo=none redo=none
+> move word-right
+= "one two, three\nfour" anchor=1:4 caret=1:4 dirty=0 undo=none redo=none
+> move word-left
+= "one two, three\nfour" anchor=1:0 caret=1:0 dirty=0 undo=none redo=none
+> move word-left
+= "one two, three\nfour" anchor=0:9 caret=0:9 dirty=0 undo=none redo=none
+> move line-start extend
+= "one two, three\nfour" anchor=0:9 caret=0:0 dirty=0 undo=none redo=none
+> move right
+= "one two, three\nfour" anchor=0:9 caret=0:9 dirty=0 undo=none redo=none
+> move left extend
+= "one two, three\nfour" anchor=0:9 caret=0:8 dirty=0 undo=none redo=none
+> move left
+= "one two, three\nfour" anchor=0:8 caret=0:8 dirty=0 undo=none redo=none
+> move doc-end
+= "one two, three\nfour" anchor=1:4 caret=1:4 dirty=0 undo=none redo=none
+> move doc-start extend
+= "one two, three\nfour" anchor=1:4 caret=0:0 dirty=0 undo=none redo=none
+> move line-end
+= "one two, three\nfour" anchor=0:14 caret=0:14 dirty=0 undo=none redo=none
+> move right
+= "one two, three\nfour" anchor=1:0 caret=1:0 dirty=0 undo=none redo=none
+> move right
+= "one two, three\nfour" anchor=1:1 caret=1:1 dirty=0 undo=none redo=none
+> move left
+= "one two, three\nfour" anchor=1:0 caret=1:0 dirty=0 undo=none redo=none
+> move left
+= "one two, three\nfour" anchor=0:14 caret=0:14 dirty=0 undo=none redo=none
+> text "don't snake_case 42nd café-crème  \u{3b1}\u{3b2}\u{3b3} ..."
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> caret 0 0
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:0 caret=0:0 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:5 caret=0:5 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:16 caret=0:16 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:21 caret=0:21 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:26 caret=0:26 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:32 caret=0:32 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:37 caret=0:37 dirty=0 undo=none redo=none
+> move word-right
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:41 caret=0:41 dirty=0 undo=none redo=none
+> move word-left
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:34 caret=0:34 dirty=0 undo=none redo=none
+> move word-left
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:27 caret=0:27 dirty=0 undo=none redo=none
+> move word-left
+= "don't snake_case 42nd café-crème  αβγ ..." anchor=0:22 caret=0:22 dirty=0 undo=none redo=none
+> target word-left 0 0
+target 0:0
+> target word-right 0 99
+target 0:99

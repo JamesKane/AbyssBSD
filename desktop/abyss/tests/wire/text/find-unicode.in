@@ -1,0 +1,12 @@
+text "Stra\u{df}e STRASSE \u{130}stanbul istanbul \u{3a3}\u{3c3}\u{3c2}"
+caret 0 0
+find "stra\u{df}e"
+find "\u{130}stanbul" case
+find "i\u{307}stanbul"
+find "\u{3c3}"
+find "e\u{301}"
+text "caf\u{e9} cafe\u{301}"
+caret 0 0
+find "e"
+find "\u{e9}"
+find "e\u{301}"

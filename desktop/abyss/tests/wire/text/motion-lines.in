@@ -1,0 +1,12 @@
+text "a\n\n  b  \n"
+caret 0 1
+move word-right
+move word-right
+move word-right
+move word-left
+move word-left
+move word-left
+move word-left
+target left 0 0
+target right 3 0
+target line-end 2 1

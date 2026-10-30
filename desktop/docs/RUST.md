@@ -234,6 +234,27 @@ addresses. The 10 valid messages re-encode to the byte, descriptors
 included; a big-endian peer's message, a bool of 2 and ignored header
 fields are decode-only and read the same; six are pinned as `.rust.txt`.
 
+*textmodel, 2026-10-30:* `de/textmodel` (crate `text-model`) is
+TextModel.swift and TextLayout.swift: editing, motion, undo, find and
+wrapping. Swift's text is lines of Characters, so a caret never lands
+inside an é written as e + accent, and Rust's std has no grapheme
+clusters. Rather than a dependency (§6.5), `gen-graphemes.py` generates the
+UAX #29 properties from the Unicode Character Database (Fedora's
+`unicode-ucd`, 18.0) into `src/grapheme_tables.rs`, which is committed, and
+`grapheme.rs` is the rules; every case of the UCD's own GraphemeBreakTest.txt
+passes. Swift 6.3's tables are older, so the two could differ on a
+character added since, and Unicode 18's conjunct rule (a virama joins the
+next consonant with no consonant before it) is newer than Swift's. A line is
+its text and its cluster ends, and an edit joins clusters without
+re-segmenting, as Swift's arrays do: an accent typed after its letter is a
+column of its own until the text is read again, which keeps Undo exact.
+Fixtures in `abyss/tests/wire/text`: 14 editing scripts Swift runs and
+records, command by command, and Rust replays (clusters of every kind,
+motion, ranges, undo runs, find, layout). Two are pinned as `.rust.txt`: a
+composed é does not find a decomposed one (Swift compares by canonical
+equivalence), and a backward find from the end of the text finds the last
+match, where Swift's finds nothing (BACKLOG §5).
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +
