@@ -1,0 +1,3 @@
+decode-only
+message fds=0
+malformed "unknown message type 5"

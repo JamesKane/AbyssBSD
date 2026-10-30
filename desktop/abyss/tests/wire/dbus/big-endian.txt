@@ -1,0 +1,10 @@
+decode-only
+message fds=0
+type signal flags=0 serial=5
+path "/x"
+interface "i.f"
+member "S"
+declared-fds 0
+body
+u 16909060
+sends 

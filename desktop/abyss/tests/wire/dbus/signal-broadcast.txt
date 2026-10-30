@@ -1,0 +1,11 @@
+message fds=0
+type signal flags=0 serial=21
+path "/org/freedesktop/portal/desktop"
+interface "org.freedesktop.portal.Settings"
+member "SettingChanged"
+declared-fds 0
+body
+s "org.freedesktop.appearance"
+s "accent-color"
+v (d 0x3fd0000000000000 d 0x3fcf9f9f9f9f9fa0 d 0x3ff0000000000000)
+sends 

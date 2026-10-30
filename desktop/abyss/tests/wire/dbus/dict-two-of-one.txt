@@ -1,0 +1,3 @@
+decode-only
+message fds=0
+malformed "dict entry needs exactly two types"

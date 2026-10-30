@@ -1,0 +1,9 @@
+message fds=0
+type error flags=0 serial=12
+error-name "org.freedesktop.DBus.Error.Failed"
+reply-serial 11
+destination ":1.9"
+declared-fds 0
+body
+s "no \"such\"\nthing"
+sends 

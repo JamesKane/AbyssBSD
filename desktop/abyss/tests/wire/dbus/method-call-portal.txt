@@ -1,0 +1,13 @@
+message fds=0
+type method_call flags=2 serial=7
+path "/org/freedesktop/portal/desktop"
+interface "org.freedesktop.portal.FileChooser"
+member "OpenFile"
+destination "org.freedesktop.portal.Desktop"
+sender ":1.42"
+declared-fds 0
+body
+s ""
+s "Open a file"
+a{sv} [{s "handle_token" v s "abyss1"}, {s "multiple" v b 0}, {s "modal" v b 1}, {s "count" v u 3}, {s "filters" v a(sa(us)) [(s "Images" a(us) [(u 0 s "*.png"), (u 1 s "image/jpeg")])]}]
+sends 

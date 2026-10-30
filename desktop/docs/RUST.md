@@ -216,6 +216,24 @@ letter in a full name (quoted in the rendering), and CRLF rc.conf. And
 pinned (CRLF kldstat, and folding a decomposed accent). The Swift tests
 ported, except `installrun`'s parsers and runner (R3).
 
+*dbus, the wire half, 2026-10-30:* `de/dbus` (crate `dbus`) is
+Value.swift, Marshal.swift and Message.swift, and the bus address from
+Connection.swift; the connection itself (SASL, dispatch, descriptors over
+the socket) is R3's, with `dbusbridge`. The bytes are Swift's, alignment
+origins and all. What Swift reads that is not a value, Rust refuses: a
+signature is parsed, not split (an unbalanced one, `()`, a dict entry not of
+two types, a variant of more than one type), and values nest at most 64
+deep, as the specification says. Swift's array of `()` loops for ever and
+its nested variants run the stack out; both are unit tests here, since the
+Swift writer cannot survive them. Marshalling returns errors where Swift
+traps (a signature past 255 bytes) or writes a lie (an array whose items
+are not its element type). A decoded message's `fds` is empty, its
+descriptors being in its body, so it re-encodes to itself (the bridge clears
+Swift's by hand). Fixtures in `abyss/tests/wire/dbus`: 43 messages, 8
+addresses. The 10 valid messages re-encode to the byte, descriptors
+included; a big-endian peer's message, a bool of 2 and ignored header
+fields are decode-only and read the same; six are pinned as `.rust.txt`.
+
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,
 `dbusportal`, `dbusmenus`; `login` daemon (`abyss-loginwindow`) +

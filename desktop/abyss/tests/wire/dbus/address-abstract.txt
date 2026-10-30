@@ -1,0 +1,2 @@
+address
+path "/tmp/dbus-AbCdEf" abstract=1

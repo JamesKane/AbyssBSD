@@ -1,0 +1,28 @@
+message fds=0
+type signal flags=0 serial=4294967295
+path "/a"
+interface "i.f"
+member "Every"
+declared-fds 0
+body
+y 254
+b 1
+b 0
+q 65535
+i -42
+u 4000000000
+t 16045690984503098046
+d 0x8000000000000000
+d 0x7ff8000000000001
+d 0xffefffffffffffff
+s ""
+s "ünïcödé ✓"
+o "/"
+g "a{sv}(i)"
+as []
+at [t 1, t 2]
+aaas [aas [as [s "deep"]], aas []]
+(y 1 (t 2) {s "k" i 3})
+v v y 9
+a{ys} [{y 1 s "one"}]
+sends 

@@ -1,0 +1,9 @@
+message fds=0
+type method_call flags=3 serial=1
+path "/org/freedesktop/DBus"
+interface "org.freedesktop.DBus"
+member "Hello"
+destination "org.freedesktop.DBus"
+declared-fds 0
+body
+sends 

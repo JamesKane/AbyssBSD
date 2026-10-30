@@ -181,6 +181,14 @@ From HANDOFF §5.3, still true:
   so once one's buffer fills, `changed()` stalls the application's run loop.
   Rust's `menu-wire` sets the request timeout as a send timeout and drops
   the subscriber.
+- **Swift's D-Bus reader can be hung or crashed by a peer** (found
+  2026-10-30, porting the wire half). An array of `()` (any length) reads
+  nothing per element and loops for ever, and variants nested a few
+  thousand deep run the stack out: either stops `abyss-dbus` for every
+  application on the session. It also splits any signature (an unbalanced
+  `(` is an empty struct) and reads only a variant's first type. Rust's
+  `dbus` parses signatures and limits depth to the specification's 64; port
+  both to the Swift reader while it is the one running.
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

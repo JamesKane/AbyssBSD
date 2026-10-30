@@ -1,0 +1,11 @@
+message fds=0
+type signal flags=0 serial=20
+path "/org/freedesktop/portal/desktop/request/1_42/abyss1"
+interface "org.freedesktop.portal.Request"
+member "Response"
+destination ":1.42"
+declared-fds 0
+body
+u 0
+a{sv} [{s "uris" v v as [s "file:///home/a/b%20c.png"]}]
+sends 

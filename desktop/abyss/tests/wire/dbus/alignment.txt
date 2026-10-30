@@ -1,0 +1,16 @@
+message fds=0
+type signal flags=0 serial=2
+path "/abcde"
+interface "i"
+member "M"
+declared-fds 0
+body
+y 1
+t 2
+y 3
+q 4
+y 5
+u 6
+y 7
+(y 8)
+sends 
