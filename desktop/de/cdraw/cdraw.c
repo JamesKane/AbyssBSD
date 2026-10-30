@@ -48,9 +48,14 @@ void cd_noise_a8(uint8_t *a, int w, int h, int stride, uint32_t seed, int alpha)
      * grain — enough texture to read as anodized metal, and wraps at the tile. */
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            uint32_t g = hash(seed ^ (uint32_t)(x * 73856093) ^ (uint32_t)(y * 19349663));
-            uint32_t c1 = hash(seed + 1 + (uint32_t)((x / 4) * 83492791) ^ (uint32_t)((y / 4) * 2654435761U));
-            uint32_t c2 = hash(seed + 2 + (uint32_t)((x / 2) * 3266489917U) ^ (uint32_t)((y / 2) * 668265263));
+            /* Unsigned before the multiply: these products overflow an int
+             * from x = 30, which is undefined, and an optimizer then makes a
+             * different tile (GCC -O2 did, RUST.md R0). Unsigned wraps, and
+             * gives the values the -O0 goldens were drawn with. */
+            uint32_t ux = (uint32_t)x, uy = (uint32_t)y;
+            uint32_t g = hash(seed ^ (ux * 73856093U) ^ (uy * 19349663U));
+            uint32_t c1 = hash(seed + 1 + ((ux / 4) * 83492791U) ^ ((uy / 4) * 2654435761U));
+            uint32_t c2 = hash(seed + 2 + ((ux / 2) * 3266489917U) ^ ((uy / 2) * 668265263U));
             int v = (int)((g & 0xff) / 2 + (c1 & 0xff) / 3 + (c2 & 0xff) / 6);   /* 0..255 */
             a[y * stride + x] = (uint8_t)(v * alpha / 255);
         }

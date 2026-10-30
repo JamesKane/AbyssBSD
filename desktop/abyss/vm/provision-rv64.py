@@ -77,6 +77,9 @@ def main():
     c.sh("mkdir -p /usr/local/etc/pkg/repos")
     c.sh("echo 'FreeBSD-base: { enabled: no }' > /usr/local/etc/pkg/repos/FreeBSD.conf")
     c.sh(f"pw usershow {user} >/dev/null 2>&1 || pw useradd {user} -m -G wheel -s /bin/sh -w no")
+    # operator: shutdown(8) is setuid for it, so `ssh.sh shutdown -p now`
+    # stops the guest with no sudo (there is no pkg to install it from).
+    c.sh(f"pw groupmod operator -m {user}")
     c.sh(f"install -d -o {user} -g {user} -m 700 /home/{user}/.ssh")
     c.sh(f"echo '{pub}' > /home/{user}/.ssh/authorized_keys")
     c.sh(f"chown {user}:{user} /home/{user}/.ssh/authorized_keys")
