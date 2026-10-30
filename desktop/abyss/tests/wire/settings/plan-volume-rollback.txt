@@ -1,0 +1,5 @@
+plan
+volume rollback "zroot/home@s1"
+steps
+1. run zfs rollback zroot/home@s1
+   $ zfs rollback zroot/home@s1

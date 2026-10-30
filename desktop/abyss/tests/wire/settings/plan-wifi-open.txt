@@ -1,0 +1,11 @@
+plan
+wifi "wtap1" "wlan1" join "Library" open
+steps
+1. add network "Library" to wpa_supplicant.conf
+   (the helper edits the file itself)
+2. set wlans_wtap1="wlan1" in rc.conf
+   $ sysrc -f /etc/rc.conf wlans_wtap1=wlan1
+3. set ifconfig_wlan1="WPA DHCP" in rc.conf
+   $ sysrc -f /etc/rc.conf ifconfig_wlan1=WPA DHCP
+4. restart the netif service for wlan1
+   $ service netif restart wlan1

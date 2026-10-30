@@ -1,0 +1,13 @@
+wpa-edit "x" none
+---
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid=486f6d6
+}
+network={
+	ssid=+f
+}
+network={
+	ssid="
+}
+---

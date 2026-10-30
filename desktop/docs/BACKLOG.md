@@ -142,7 +142,12 @@ From HANDOFF §5.3, still true:
   the Rust port). Swift splits by Character, and `"\r\n"` is one, so a CRLF
   `.ini` is one long key. Rust's `pool-config` reads it as LF; fix the Swift
   half to match while it still runs, and drop `crlf*` from the fixtures'
-  `DIVERGENT` list.
+  `DIVERGENT` list. **Settings' editors have the same bug, and it loses
+  data** (found 2026-10-30): a CRLF `sysctl.conf` is one line to
+  `Settings.editSysctlConf`, so setting one key drops every other line, and
+  a CRLF `wpa_supplicant.conf` gets a second `ctrl_interface`. Rust's
+  `settings` splits at LF and treats CR as a blank; drop `sysctl-crlf` and
+  `wpa-crlf` from the settings fixtures' list too.
 - **Swift's `Command.retitled` drops `writes`** (found 2026-10-30, porting
   MenuModel). It rebuilds the command without the flag, so a retitled
   command that writes would stop asking an agent first (P18.11). Nothing

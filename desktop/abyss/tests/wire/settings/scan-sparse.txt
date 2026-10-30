@@ -1,0 +1,4 @@
+decode-only
+scan
+network "one" "" 0 0 secured=0
+network "two" "" 11 -70 secured=0

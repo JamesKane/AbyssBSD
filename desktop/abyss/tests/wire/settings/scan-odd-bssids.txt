@@ -1,0 +1,3 @@
+scan
+network "Doubled colon" "aa::bb:cc:dd:ee:ff" 1 10 secured=1
+network "Signed hex" "+a:bb:cc:dd:ee:ff" 1 10 secured=1

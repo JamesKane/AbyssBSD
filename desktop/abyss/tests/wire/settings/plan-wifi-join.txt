@@ -1,0 +1,11 @@
+plan
+wifi "iwn0" "wlan0" join "Café Wi-Fi" psk="f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e"
+steps
+1. add network "Café Wi-Fi" to wpa_supplicant.conf
+   (the helper edits the file itself)
+2. set wlans_iwn0="wlan0" in rc.conf
+   $ sysrc -f /etc/rc.conf wlans_iwn0=wlan0
+3. set ifconfig_wlan0="WPA DHCP" in rc.conf
+   $ sysrc -f /etc/rc.conf ifconfig_wlan0=WPA DHCP
+4. restart the netif service for wlan0
+   $ service netif restart wlan0

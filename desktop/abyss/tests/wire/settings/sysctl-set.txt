@@ -1,0 +1,10 @@
+sysctl-edit "hw.snd.default_unit" "1"
+value "3"
+---
+# kernel settings
+security.bsd.see_other_uids=0
+hw.snd.default_unit=1
+kern.foo=1
+
+---
+value "1"

@@ -1,0 +1,8 @@
+decode-only
+plan
+sound 3
+steps
+1. set hw.snd.default_unit="3" in sysctl.conf
+   (the helper edits the file itself)
+2. run sysctl hw.snd.default_unit=3
+   $ sysctl hw.snd.default_unit=3

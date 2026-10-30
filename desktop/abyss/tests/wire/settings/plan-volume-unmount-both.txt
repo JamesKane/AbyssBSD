@@ -1,0 +1,6 @@
+decode-only
+plan
+volume unmount-dataset "p/d"
+steps
+1. run zfs unmount p/d
+   $ zfs unmount p/d

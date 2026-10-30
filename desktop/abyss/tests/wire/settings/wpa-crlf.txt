@@ -1,0 +1,15 @@
+wpa-edit "Work" none
+---
+ctrl_interface=/var/run/wpa_supplicant
+# by hand
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid="Home"
+	psk="hunter22"
+}
+network={
+	ssid="Work"
+	key_mgmt=NONE
+}
+
+---

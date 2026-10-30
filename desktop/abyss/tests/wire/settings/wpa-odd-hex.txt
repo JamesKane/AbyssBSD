@@ -1,0 +1,15 @@
+wpa-edit "x" none
+before "\u{f}"
+---
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid=486f6d6
+}
+network={
+	ssid=+f
+}
+network={
+	ssid="
+}
+---
+after "\u{f}"

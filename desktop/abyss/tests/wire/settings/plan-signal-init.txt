@@ -1,0 +1,3 @@
+plan
+signal 1 force=0 started=0 "init"
+problem "pid 1 is init: quitting it would stop the machine"

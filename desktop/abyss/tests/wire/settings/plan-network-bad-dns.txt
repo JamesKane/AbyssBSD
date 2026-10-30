@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "example.com is not an IPv4 address (a name server)"

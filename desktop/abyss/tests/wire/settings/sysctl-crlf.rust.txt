@@ -1,0 +1,8 @@
+sysctl-edit "kern.foo" "2"
+value "1"
+---
+kern.foo=2
+kern.bar=1
+
+---
+value "2"

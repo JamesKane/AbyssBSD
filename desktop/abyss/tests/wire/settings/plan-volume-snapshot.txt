@@ -1,0 +1,5 @@
+plan
+volume snapshot "zroot/home" "abyss-2026-10-01"
+steps
+1. run zfs snapshot zroot/home@abyss-2026-10-01
+   $ zfs snapshot zroot/home@abyss-2026-10-01

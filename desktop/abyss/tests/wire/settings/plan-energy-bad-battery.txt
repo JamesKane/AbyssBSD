@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "powerd has no mode eco (it has: adaptive, hiadaptive, min, max)"

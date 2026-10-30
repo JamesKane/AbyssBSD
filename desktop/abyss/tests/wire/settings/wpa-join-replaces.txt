@@ -1,0 +1,17 @@
+wpa-edit "Home" "ssid=486f6d65\npsk=f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e"
+before "Home"
+before "Work"
+---
+# by hand
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid=486f6d65
+	psk=f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e
+}
+network={
+	ssid="Work"
+	key_mgmt=NONE
+}
+---
+after "Home"
+after "Work"

@@ -1,0 +1,4 @@
+update_config=1
+network={
+	ssid="Cut"
+	key_mgmt=NONE

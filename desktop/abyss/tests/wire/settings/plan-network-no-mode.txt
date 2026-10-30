@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "a network plan must say DHCP or manual"

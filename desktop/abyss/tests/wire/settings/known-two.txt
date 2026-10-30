@@ -1,0 +1,5 @@
+known
+device "wtap1"
+interface "wlan0"
+network "abyss-lab"
+network "Café \"Wi-Fi\""

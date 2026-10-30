@@ -1,0 +1,6 @@
+scan
+network "abyss-lab" "00:98:9a:98:96:97" 1 10 secured=1
+network "Café Wi-Fi 5G" "aa:bb:cc:dd:ee:02" 40 -48 secured=1
+network "Library" "aa:bb:cc:dd:ee:03" 6 -70 secured=0
+network "Privacy only" "aa:bb:cc:dd:ee:04" 11 -70 secured=1
+network "Tied" "aa:bb:cc:dd:ee:05" 11 -70 secured=0

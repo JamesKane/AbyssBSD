@@ -1,0 +1,16 @@
+decode-only
+plan
+network "em0" manual 10.0.0.5/24 router=none dns=
+steps
+1. set ifconfig_em0="inet 10.0.0.5 netmask 255.255.255.0" in rc.conf
+   $ sysrc -f /etc/rc.conf ifconfig_em0=inet 10.0.0.5 netmask 255.255.255.0
+2. remove defaultrouter from rc.conf
+   $ sysrc -f /etc/rc.conf -x defaultrouter
+3. remove name_servers from resolvconf.conf
+   $ sysrc -f /etc/resolvconf.conf -x name_servers
+4. restart the netif service for em0
+   $ service netif restart em0
+5. restart the routing service
+   $ service routing restart
+6. run resolvconf -u
+   $ resolvconf -u

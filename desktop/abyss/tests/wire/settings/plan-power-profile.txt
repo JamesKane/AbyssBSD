@@ -1,0 +1,9 @@
+plan
+power-profile power-saver
+steps
+1. set power_profile="power-saver" in rc.conf
+   $ sysrc -f /etc/rc.conf power_profile=power-saver
+2. remove powerd_flags from rc.conf
+   $ sysrc -f /etc/rc.conf -x powerd_flags
+3. start the power_profile service
+   $ service power_profile start

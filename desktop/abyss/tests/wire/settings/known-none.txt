@@ -1,0 +1,3 @@
+known
+device "iwn0"
+interface none

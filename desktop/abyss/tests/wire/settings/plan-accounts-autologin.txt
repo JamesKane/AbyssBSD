@@ -1,0 +1,9 @@
+plan
+accounts autologin "ada"
+steps
+1. set abyss_desktop_enable="YES" in rc.conf
+   $ sysrc -f /etc/rc.conf abyss_desktop_enable=YES
+2. set abyss_desktop_user="ada" in rc.conf
+   $ sysrc -f /etc/rc.conf abyss_desktop_user=ada
+3. set abyss_loginwindow_greeter="NO" in rc.conf
+   $ sysrc -f /etc/rc.conf abyss_loginwindow_greeter=NO

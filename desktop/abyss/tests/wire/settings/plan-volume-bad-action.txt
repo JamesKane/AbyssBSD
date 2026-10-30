@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "destroy is not something Disk Utility does"

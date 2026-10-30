@@ -1,0 +1,2 @@
+event
+starting 1 3 "set powerd_enable=\"YES\" in rc.conf"

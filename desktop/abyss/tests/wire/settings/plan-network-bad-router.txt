@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "gateway is not a router's IPv4 address"

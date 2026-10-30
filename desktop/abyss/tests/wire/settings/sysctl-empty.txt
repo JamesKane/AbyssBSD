@@ -1,0 +1,7 @@
+sysctl-edit "a.b" "2"
+value none
+---
+a.b=2
+
+---
+value "2"

@@ -1,0 +1,5 @@
+plan
+signal 77 force=1 started=-5 "Ünïcode ✓"
+steps
+1. run kill -s KILL 77
+   $ kill -s KILL 77

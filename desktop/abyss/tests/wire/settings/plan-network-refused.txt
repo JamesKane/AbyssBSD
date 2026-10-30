@@ -1,0 +1,7 @@
+plan
+network "lo0" manual 10.0.0.255/24 router=10.0.1.1 dns=1.1.1.1,1.0.0.1,8.8.8.8,224.0.0.1
+problem "lo0 is not a wired interface's name"
+problem "10.0.0.255 is the network's broadcast address"
+problem "the router 10.0.1.1 is not on 10.0.0.255's network (/24) — it could not be reached"
+problem "4 name servers: the resolver uses three at most"
+problem "224.0.0.1 cannot be a name server"

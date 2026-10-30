@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "there is no displays plan (there is: energy, network, power-profile, sound, wifi)"

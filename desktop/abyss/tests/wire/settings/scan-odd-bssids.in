@@ -1,0 +1,3 @@
+SSID/MESH ID                      BSSID              CHAN RATE    S:N     INT CAPS
+Doubled colon                     aa::bb:cc:dd:ee:ff   1   11M   10:10    100 EP   RSN
+Signed hex                        +a:bb:cc:dd:ee:ff    1   11M   10:10    100 EP   RSN

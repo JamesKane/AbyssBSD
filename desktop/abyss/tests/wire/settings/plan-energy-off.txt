@@ -1,0 +1,9 @@
+plan
+energy powerd=0 ac=hiadaptive battery=adaptive from-profile=0
+steps
+1. set powerd_enable="NO" in rc.conf
+   $ sysrc -f /etc/rc.conf powerd_enable=NO
+2. remove powerd_flags from rc.conf
+   $ sysrc -f /etc/rc.conf -x powerd_flags
+3. onestop the powerd service
+   $ service powerd onestop

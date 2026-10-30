@@ -1,0 +1,3 @@
+plan
+volume snapshot "zroot/../etc" "-rf"
+problem "zroot/../etc is not a dataset's name"

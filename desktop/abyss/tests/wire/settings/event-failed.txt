@@ -1,0 +1,2 @@
+event
+failed 2 "stop the powerd service" "not running" ignored=1

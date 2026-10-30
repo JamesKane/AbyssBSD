@@ -1,0 +1,6 @@
+decode-only
+plan
+signal 42 force=0 started=-1 "x"
+steps
+1. run kill -s TERM 42
+   $ kill -s TERM 42

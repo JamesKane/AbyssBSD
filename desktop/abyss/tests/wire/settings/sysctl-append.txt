@@ -1,0 +1,9 @@
+sysctl-edit "hw.snd.default_unit" "2"
+value none
+---
+#hw.snd.default_unit=5
+kern.foo=1
+hw.snd.default_unit=2
+
+---
+value "2"

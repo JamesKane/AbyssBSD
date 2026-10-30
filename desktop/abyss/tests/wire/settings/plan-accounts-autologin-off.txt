@@ -1,0 +1,9 @@
+plan
+accounts autologin none
+steps
+1. set abyss_desktop_enable="NO" in rc.conf
+   $ sysrc -f /etc/rc.conf abyss_desktop_enable=NO
+2. remove abyss_desktop_user from rc.conf
+   $ sysrc -f /etc/rc.conf -x abyss_desktop_user
+3. set abyss_loginwindow_greeter="YES" in rc.conf
+   $ sysrc -f /etc/rc.conf abyss_loginwindow_greeter=YES

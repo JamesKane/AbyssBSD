@@ -1,0 +1,5 @@
+plan
+signal 4242 force=0 started=1700000000 "sleep"
+steps
+1. run kill -s TERM 4242
+   $ kill -s TERM 4242

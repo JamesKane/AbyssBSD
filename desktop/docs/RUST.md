@@ -125,8 +125,8 @@ cross-builds the workspace for riscv64 where the sysroot is, and runs
 guest, which now has `rust` 1.99.
 
 **R2. Wire and data crates (M).** `current-ipc`, `pool-config`, `menu-wire`,
-`settings-wire`, `install-wire`, `dbus` (the wire half), `menu-model`,
-`text-model`, `jails`, `system-facts`, `vocab`. Pure Rust, no I/O beyond the
+`settings`, `settings-wire`, `install-wire`, `dbus` (the wire half),
+`menu-model`, `text-model`, `jails`, `system-facts`, `vocab`. Pure Rust, no I/O beyond the
 socket and the file. Cross-language fixtures (§3.3) go in here.
 
 *currentipc, 2026-10-30:* `de/currentipc` (crate `current-ipc`) is
@@ -172,6 +172,26 @@ the service names differ for decomposed accents, İ, a final ς and emoji
 sequences. Those two cases are pinned as `.rust.txt`. Swift's tests ported,
 as well as GtkMenuAddress's round trip (the rest of GtkMenusTests is
 `dbusmenus`, R3).
+
+*settings and settingswire, 2026-10-30:* together, as the menus were: the
+wire is made of the plan's types, and `settings` has no I/O (it decides and
+compiles; `settingsrun` executes, R3), so it joins R2. `de/settings` (crate
+`settings`) is Settings.swift, Wifi.swift and WifiKey.swift: the plans, their
+refusals word for word, the steps and their rendering, the sysctl.conf and
+wpa_supplicant.conf editors, the scan parser, and PBKDF2-SHA1 for the PSK.
+Swift's one-field wrappers (`VolumePlan`, `AccountPlan`, `PowerProfilePlan`)
+are the enum's payloads here, and `pw`'s root is an argument rather than
+Swift's global. `de/settingswire` (crate `settings-wire`) is Wire.swift. A
+list's count is not trusted: Swift traps on a count or an index past
+`Int.max` and counts up to whatever it is told, while Rust reads the indexed
+fields the message holds. Fixtures in `abyss/tests/wire/settings`: 87
+messages and 17 texts. A plan's text is the plan, its refusals and the steps
+`check` renders, so both languages are held to the same commands from the
+same request. 41 re-encode to the byte; the rest are decode-only or refused,
+the same way. Four are pinned as `.rust.txt`: hex is digits only (Swift's
+takes a sign, so `+a:…` was a BSSID and `ssid=+f` a name), and CR is a blank
+in both editors (Swift's CRLF file is one line: BACKLOG §5). The Swift
+tests ported, except the runner's, which are `settingsrun`'s.
 
 **R3. Daemons and tools (L), in this order, each a swap of one binary:**
 `vents` + `ventsctl`; `anchor` + `abyssctl`; `portal`; `dbus`, `dbusbridge`,

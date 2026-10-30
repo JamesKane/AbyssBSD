@@ -1,0 +1,10 @@
+[package]
+name = "settings-wire"
+description = "SettingsWire: the settings plan, its events and Wi-Fi's answers on the control plane (Swift: Wire.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+settings = { path = "../settings" }

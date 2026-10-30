@@ -1,0 +1,5 @@
+# kernel settings
+security.bsd.see_other_uids=0
+ hw.snd.default_unit = 0  # the card
+kern.foo=1
+hw.snd.default_unit=3

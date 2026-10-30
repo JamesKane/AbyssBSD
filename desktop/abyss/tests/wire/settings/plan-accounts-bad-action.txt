@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "rename is not something the Accounts pane does"

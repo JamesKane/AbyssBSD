@@ -1,0 +1,5 @@
+plan
+volume mount "zroot/data"
+steps
+1. run zfs mount zroot/data
+   $ zfs mount zroot/data

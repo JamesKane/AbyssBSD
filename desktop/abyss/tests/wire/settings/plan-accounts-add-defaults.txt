@@ -1,0 +1,6 @@
+decode-only
+plan
+accounts add "ada" "" "$6$salt$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ./abcdefgh" admin=0
+steps
+1. create the account ada
+   $ pw -R / useradd -n ada -m -s /bin/sh -G audio,video -H 0

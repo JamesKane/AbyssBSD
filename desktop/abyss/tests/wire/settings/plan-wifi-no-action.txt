@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "a Wi-Fi plan must say join or forget"

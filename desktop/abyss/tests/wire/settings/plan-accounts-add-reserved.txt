@@ -1,0 +1,3 @@
+plan
+accounts add "root" "" "$6$salt$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ./abcdefgh" admin=0
+problem "root is one of the system's accounts"

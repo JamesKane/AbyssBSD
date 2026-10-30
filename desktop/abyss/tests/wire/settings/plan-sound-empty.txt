@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "a sound plan must say which device is the default"

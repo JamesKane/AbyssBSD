@@ -1,0 +1,9 @@
+wpa-edit "a\"\n}\nnetwork={ssid=\"x" "ssid=61220a7d0a6e6574776f726b3d7b737369643d2278\nkey_mgmt=NONE"
+---
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid=61220a7d0a6e6574776f726b3d7b737369643d2278
+	key_mgmt=NONE
+}
+---
+after "a\"\n}\nnetwork={ssid=\"x"

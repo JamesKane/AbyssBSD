@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "a power-profile plan must name power-saver, balanced or performance"

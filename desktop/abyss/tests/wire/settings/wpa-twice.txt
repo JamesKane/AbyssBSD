@@ -1,0 +1,16 @@
+wpa-edit "Home" "ssid=486f6d65\nkey_mgmt=NONE"
+before "Home"
+before "Home"
+before "Work"
+---
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid=486f6d65
+	key_mgmt=NONE
+}
+network={
+	ssid="Work"
+}
+---
+after "Home"
+after "Work"

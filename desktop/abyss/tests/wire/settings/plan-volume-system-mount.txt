@@ -1,0 +1,3 @@
+plan
+volume unmount "/usr"
+problem "/usr is the system's own, and is not unmounted"

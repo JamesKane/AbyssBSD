@@ -1,0 +1,22 @@
+wpa-edit "Café" "ssid=436166c3a9\n\nkey_mgmt=NONE\n"
+before "Home"
+before "Work"
+---
+# by hand
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid="Home"
+	psk="hunter22"
+}
+network={
+	ssid="Work"
+	key_mgmt=NONE
+}
+network={
+	ssid=436166c3a9
+	key_mgmt=NONE
+}
+---
+after "Home"
+after "Work"
+after "Café"

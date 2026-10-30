@@ -1,0 +1,13 @@
+plan
+wifi "iwn0" "wlan0" join "a\"\n}\nnetwork={" open
+steps
+1. add network "a"
+}
+network={" to wpa_supplicant.conf
+   (the helper edits the file itself)
+2. set wlans_iwn0="wlan0" in rc.conf
+   $ sysrc -f /etc/rc.conf wlans_iwn0=wlan0
+3. set ifconfig_wlan0="WPA DHCP" in rc.conf
+   $ sysrc -f /etc/rc.conf ifconfig_wlan0=WPA DHCP
+4. restart the netif service for wlan0
+   $ service netif restart wlan0

@@ -1,0 +1,5 @@
+plan
+volume unmount "/media/stick"
+steps
+1. run umount /media/stick
+   $ umount /media/stick

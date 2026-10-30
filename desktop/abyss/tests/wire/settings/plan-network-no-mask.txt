@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "no subnet mask is not a subnet mask"

@@ -1,0 +1,5 @@
+plan
+accounts add "bob" "" "$6$salt$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ./abcdefgh" admin=0
+steps
+1. create the account bob
+   $ pw -R / useradd -n bob -m -s /bin/sh -G audio,video -H 0

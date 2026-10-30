@@ -1,0 +1,3 @@
+scan
+network "x y" "00:11:22:33:44:55" 6 -48 secured=1
+network "Ü" "" 0 12 secured=0

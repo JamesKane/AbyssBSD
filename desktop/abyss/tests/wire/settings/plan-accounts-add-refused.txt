@@ -1,0 +1,5 @@
+plan
+accounts add "Root" "a:b" "hunter2" admin=0
+problem "\"Root\" is not an account name (lower-case letters, digits, _ and -, starting with a letter, at most 16)"
+problem "a full name cannot contain a colon, a comma or a new line"
+problem "the password did not arrive hashed"

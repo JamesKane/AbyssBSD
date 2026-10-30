@@ -1,0 +1,5 @@
+plan
+volume unmount-dataset "zroot/data"
+steps
+1. run zfs unmount zroot/data
+   $ zfs unmount zroot/data

@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "10.0.0.05 is not an IPv4 address"

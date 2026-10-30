@@ -1,0 +1,15 @@
+plan
+network "igc0" dhcp dns=
+steps
+1. set ifconfig_igc0="SYNCDHCP" in rc.conf
+   $ sysrc -f /etc/rc.conf ifconfig_igc0=SYNCDHCP
+2. remove defaultrouter from rc.conf
+   $ sysrc -f /etc/rc.conf -x defaultrouter
+3. remove name_servers from resolvconf.conf
+   $ sysrc -f /etc/resolvconf.conf -x name_servers
+4. restart the netif service for igc0
+   $ service netif restart igc0
+5. restart the routing service
+   $ service routing restart
+6. run resolvconf -u
+   $ resolvconf -u

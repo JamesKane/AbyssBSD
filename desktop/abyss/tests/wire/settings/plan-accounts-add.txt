@@ -1,0 +1,5 @@
+plan
+accounts add "ada" "Ada Lovelace" "$6$salt$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ./abcdefgh" admin=1
+steps
+1. create the account ada, an administrator
+   $ pw -R / useradd -n ada -m -s /bin/sh -G wheel,operator,audio,video -H 0 -c Ada Lovelace

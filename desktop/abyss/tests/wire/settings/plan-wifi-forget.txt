@@ -1,0 +1,7 @@
+plan
+wifi "iwn0" "wlan0" forget "Café Wi-Fi"
+steps
+1. forget network "Café Wi-Fi" in wpa_supplicant.conf
+   (the helper edits the file itself)
+2. run wpa_cli -i wlan0 reconfigure
+   $ wpa_cli -i wlan0 reconfigure

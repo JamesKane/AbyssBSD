@@ -1,0 +1,6 @@
+decode-only
+known
+device "iwn0"
+interface none
+network "first"
+network "third"

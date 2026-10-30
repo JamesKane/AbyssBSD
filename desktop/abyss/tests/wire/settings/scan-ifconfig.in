@@ -1,0 +1,11 @@
+SSID/MESH ID                      BSSID              CHAN RATE    S:N     INT CAPS
+abyss-lab                         00:98:9a:98:96:97    1   11M   10:10    100 EP   RSN
+Café Wi-Fi 5G                     aa:bb:cc:dd:ee:01   36   54M  -61:-95   100 EP   RSN HTCAP WME
+Café Wi-Fi 5G                     aa:bb:cc:dd:ee:02   40   54M  -48:-95   100 EP   RSN HTCAP WME
+Library                           aa:bb:cc:dd:ee:03    6   54M  -70:-95   100 E    WME
+Privacy only                      aa:bb:cc:dd:ee:04   11   54M  -70:-95   100 EP
+Tied                              aa:bb:cc:dd:ee:05   11   54M  -70:-95   100 E
+Tied                              aa:bb:cc:dd:ee:06   12   54M  -70:-95   100 E
+short row                         aa:bb:cc:dd:ee:07   11   54M
+                                  aa:bb:cc:dd:ee:08   11   54M  -70:-95   100 E
+bad channel                       aa:bb:cc:dd:ee:09   x    54M  -70:-95   100 E

@@ -1,0 +1,5 @@
+plan
+accounts delete "ada" remove-home=0
+steps
+1. delete the account ada, keeping its home folder
+   $ pw -R / userdel -n ada

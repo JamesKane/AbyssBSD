@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "a snapshot needs a dataset and a name"

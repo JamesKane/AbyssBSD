@@ -1,0 +1,12 @@
+wpa-edit "Work" none
+before "Home"
+before "Work"
+---
+# by hand
+ctrl_interface=/var/run/wpa_supplicant
+network={
+	ssid="Home"
+	psk="hunter22"
+}
+---
+after "Home"

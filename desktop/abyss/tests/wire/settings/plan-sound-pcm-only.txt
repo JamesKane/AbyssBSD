@@ -1,0 +1,3 @@
+decode-only
+plan
+refused "pcm is not a sound device (pcm0, pcm1 …)"
