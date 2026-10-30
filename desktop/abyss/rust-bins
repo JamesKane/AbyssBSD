@@ -9,3 +9,6 @@ abyssctl
 abyss-portal
 abyss-dbus
 dbusprobe
+abyss-loginwindow
+abyss-loginctl
+abyss-loginstub

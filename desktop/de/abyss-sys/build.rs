@@ -132,6 +132,18 @@ fn main() {
         println!("cargo:rustc-link-lib=util");
     }
 
+    // CPAM (src/pam.rs): the authenticator's PAM conversation; OpenPAM is
+    // FreeBSD's base, and without its headers the C says so instead.
+    let cpam = de.join("cpam");
+    println!("cargo:rerun-if-changed={}", cpam.join("cpam.c").display());
+    cc::Build::new()
+        .file(cpam.join("cpam.c"))
+        .include(cpam.join("include"))
+        .compile("cpam");
+    if target.contains("freebsd") {
+        println!("cargo:rustc-link-lib=pam");
+    }
+
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
     // them for CWayland and CAbyssProtocols.

@@ -21,6 +21,8 @@ struct ApChild {
 unsafe extern "C" {
     fn ap_child_exit_events() -> c_int;
     fn ap_child_spawn(argv: *const *const c_char, envp: *const *const c_char, stdout_fd: c_int, out: *mut ApChild) -> c_int;
+    fn ap_child_spawn_as(user: *const c_char, argv: *const *const c_char, envp: *const *const c_char, stdout_fd: c_int, out: *mut ApChild) -> c_int;
+    fn ap_vt_activate(vt: c_int) -> c_int;
     fn ap_child_signal(c: *const ApChild, sig: c_int) -> c_int;
     fn ap_child_reap(c: *mut ApChild, status: *mut c_int) -> c_int;
     fn ap_signal_pipe(sigs: *const c_int, count: c_int) -> c_int;
@@ -45,6 +47,18 @@ impl Child {
     /// PATH) with `envp` (`KEY=VALUE`), stdout and stderr onto `stdout` when
     /// given.
     pub fn spawn(argv: &[String], envp: &[String], stdout: Option<BorrowedFd<'_>>) -> io::Result<Child> {
+        Child::start(None, argv, envp, stdout)
+    }
+
+    /// `spawn`, as `user` (P16.5b): the account's groups, limits and uid,
+    /// in its home, before execve. Root may spawn as anyone, anyone else
+    /// only as themselves; ENOENT for no such account, EPERM for another's.
+    pub fn spawn_as(user: &str, argv: &[String], envp: &[String], stdout: Option<BorrowedFd<'_>>) -> io::Result<Child> {
+        Child::start(Some(user), argv, envp, stdout)
+    }
+
+    fn start(user: Option<&str>, argv: &[String], envp: &[String], stdout: Option<BorrowedFd<'_>>) -> io::Result<Child> {
+        let user = user.map(CString::new).transpose()?;
         let c = |v: &[String]| v.iter().map(|s| CString::new(s.as_bytes())).collect::<Result<Vec<_>, _>>();
         let (args, envs) = (c(argv)?, c(envp)?);
         if args.is_empty() {
@@ -55,7 +69,11 @@ impl Child {
         let mut ep: Vec<*const c_char> = envs.iter().map(|e| e.as_ptr()).collect();
         ep.push(std::ptr::null());
         let mut raw = ApChild { fd: -1, pid: -1 };
-        let rc = unsafe { ap_child_spawn(ap.as_ptr(), ep.as_ptr(), stdout.map_or(-1, |f| f.as_raw_fd()), &mut raw) };
+        let out = stdout.map_or(-1, |f| f.as_raw_fd());
+        let rc = match &user {
+            Some(u) => unsafe { ap_child_spawn_as(u.as_ptr(), ap.as_ptr(), ep.as_ptr(), out, &mut raw) },
+            None => unsafe { ap_child_spawn(ap.as_ptr(), ep.as_ptr(), out, &mut raw) },
+        };
         if rc != 0 { Err(io::Error::last_os_error()) } else { Ok(Child { raw }) }
     }
 
@@ -84,6 +102,11 @@ impl Child {
         let mut status = 0;
         (unsafe { ap_child_reap(&mut self.raw, &mut status) } == 0).then_some(status)
     }
+}
+
+/// Bring virtual terminal `vt` (1-based) to the front and wait for it.
+pub fn vt_activate(vt: i32) -> io::Result<()> {
+    if unsafe { ap_vt_activate(vt) } == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
 /// A pipe carrying the number of each of `sigs` as one byte, from a handler

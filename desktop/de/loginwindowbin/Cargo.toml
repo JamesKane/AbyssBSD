@@ -1,0 +1,15 @@
+[package]
+name = "loginwindowbin"
+description = "abyss-loginwindow: the root daemon: the session's password check, power, and the login window's sessions (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-loginwindow"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+login = { path = "../login" }

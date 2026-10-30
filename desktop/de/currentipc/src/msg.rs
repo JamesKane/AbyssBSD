@@ -194,6 +194,16 @@ impl Msg {
             .collect()
     }
 
+    /// Remove a bytes field and hand its bytes over: the only copy, for a
+    /// caller that must wipe them (a password).
+    pub fn take_bytes(&mut self, name: &str) -> Option<Vec<u8>> {
+        let i = self.fields.iter().position(|f| f.0 == name && matches!(f.1, Value::Bytes(_)))?;
+        match self.fields.remove(i).1 {
+            Value::Bytes(b) => Some(b),
+            _ => None,
+        }
+    }
+
     /// Take a received descriptor out: the field goes, and the caller owns
     /// it. None for a field that is not a descriptor this message received.
     pub fn take_fd(&mut self, name: &str) -> Option<OwnedFd> {

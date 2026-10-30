@@ -1,0 +1,12 @@
+[package]
+name = "login"
+description = "Login: the session's authenticator, the root daemon's loop and the login window's sessions (Swift: Login, Service and Sessions.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+libc.workspace = true
+spawn = { path = "../spawn" }

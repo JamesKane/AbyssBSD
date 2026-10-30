@@ -8,10 +8,12 @@
 use libc::{c_char, c_double, c_int, c_uint, c_ulong, c_void};
 use std::ffi::CString;
 
+pub mod pam;
 pub mod platform;
 pub mod poolwatch;
 pub mod proc;
 pub mod spawn;
+pub mod users;
 pub mod vents;
 pub mod wl;
 

@@ -3,7 +3,7 @@
 # dependencies beyond libc and cc (§6.5).
 [workspace]
 resolver = "3"
-members = ["de/abyss-sys", "de/abyssctl", "de/anchor", "de/anchorbin", "de/aquadraw", "de/currentipc", "de/dbus", "de/dbusbin", "de/dbusbridge", "de/dbusmenus", "de/dbusportal", "de/dbusprobe", "de/fathom", "de/install", "de/installwire", "de/ipcprobe", "de/jails", "de/menumodel", "de/menuwire", "de/model", "de/poolconfig", "de/portal", "de/portalbin", "de/settings", "de/settingswire", "de/spawn", "de/systemfacts", "de/textmodel", "de/vents", "de/ventsctl", "de/vocab"]
+members = ["de/abyss-sys", "de/abyssctl", "de/anchor", "de/anchorbin", "de/aquadraw", "de/currentipc", "de/dbus", "de/dbusbin", "de/dbusbridge", "de/dbusmenus", "de/dbusportal", "de/dbusprobe", "de/fathom", "de/install", "de/installwire", "de/ipcprobe", "de/jails", "de/login", "de/loginctl", "de/loginstub", "de/loginwindowbin", "de/menumodel", "de/menuwire", "de/model", "de/poolconfig", "de/portal", "de/portalbin", "de/settings", "de/settingswire", "de/spawn", "de/systemfacts", "de/textmodel", "de/vents", "de/ventsctl", "de/vocab"]
 
 [workspace.package]
 version = "0.1.0"

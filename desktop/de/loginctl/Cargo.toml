@@ -1,0 +1,15 @@
+[package]
+name = "loginctl"
+description = "abyss-loginctl: ask the authenticator, from a shell (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-loginctl"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+login = { path = "../login" }

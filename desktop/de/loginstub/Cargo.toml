@@ -1,0 +1,15 @@
+[package]
+name = "loginstub"
+description = "abyss-loginstub: a stand-in authenticator for tests: the real service, PAM replaced by a password file (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-loginstub"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+login = { path = "../login" }

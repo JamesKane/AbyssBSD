@@ -165,6 +165,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
+name = "login"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "libc",
+ "spawn",
+]
+
+[[package]]
+name = "loginctl"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "login",
+]
+
+[[package]]
+name = "loginstub"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "login",
+]
+
+[[package]]
+name = "loginwindowbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "login",
+]
+
+[[package]]
 name = "menu-model"
 version = "0.1.0"
 

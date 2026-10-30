@@ -403,6 +403,30 @@ reporter's (`-crash-dialog`, `-agents-off`, `-agent-gate`) failed there
 for Swift as well, the menu-bar ones each at a different step, so they join
 the rerun on a quiet guest.
 
+*login, 2026-10-30.* `de/login` (crate `login`) is Login.swift,
+Service.swift and Sessions.swift: the authenticator and its limiter, the
+wire, the accounts the window offers, the clients, and the root daemon's
+loop with its power policy and the greeter's sessions. `de/loginwindowbin`
+is `abyss-loginwindow`, `de/loginctl` `abyss-loginctl`, and
+`de/loginstub` `abyss-loginstub`, the test stand-in that serves the same
+service with PAM replaced by a password file; it swaps with the other two,
+because it is what puts the real service under test without root.
+`abyss-sys` gains `pam` (cpam.c, OpenPAM on FreeBSD), `users` (the
+password and group databases) and `Child::spawn_as` and `vt_activate`.
+**The password is taken out of the request**, by `Msg::take_bytes`, and
+that copy wiped when the answer is known: Swift wiped a copy of the bytes
+and left the message's own. A name that is no account is keyed by a
+stable hash, and passwd and group files are read by line, CR or not.
+Swift's 16 tests ported, with three more (the password leaves the
+request, every power action's wire name, accounts and auto-login from
+their files). `live-authenticator`, `-lockscreen`, `-locksession`,
+`-power`, `-idlepolicy`, `-greeter`, `-loginwindow` and `-switchuser` are
+green against it on Linux. In the FreeBSD guest all but `-locksession`
+and `-power` are, `live-authenticator` among them: root, OpenPAM, two
+throwaway accounts each asking as itself, and sessions started as their
+own uids. The two failed there for Swift as well, at different steps:
+the menu-bar trouble again.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts
