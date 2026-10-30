@@ -8,8 +8,11 @@
 #                                       # the running riscv64 guest, against
 #                                       # golden/freebsd/ (RUST.md R0)
 #
-# Only `drawlist` so far: the scene needs no theme. Each ported scene joins
-# the list as it is ported, and the Swift gate keeps every one.
+# Each scene is drawn twice: to a PNG, and in a Wayland window that
+# window-shot.sh captures from a headless sway (needs sway and grim), both
+# held to the scene's one golden. Only `drawlist` so far: the scene needs no
+# theme. Each ported scene joins the list as it is ported, and the Swift
+# gate keeps every one.
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -23,38 +26,49 @@ mkdir -p "$work/home" "$work/cfg"
 cc -O1 "$root/abyss/tests/pngdiff.c" $(pkg-config --cflags --libs cairo) \
    -o "$work/pngdiff" || { echo "FAIL: could not build pngdiff"; exit 1; }
 
-# name | example | arguments after the output file
-scenes='drawlist|drawlist|1
-drawlist@2x|drawlist|2'
+# name | golden | how (png or window) | scale
+scenes='drawlist|drawlist|png|1
+drawlist@2x|drawlist@2x|png|2
+drawlist-window|drawlist|window|1
+drawlist-window@2x|drawlist@2x|window|2'
 
 if [ "$rv64" = 1 ]; then
   vm="$root/abyss/vm"
   . "$vm/config.sh"
   target=riscv64gc-unknown-freebsd
   "$vm/rv64-cross.sh" cargo "+$ABYSS_RUST_NIGHTLY" build -q --release \
-    -Zbuild-std=std,panic_abort --target "$target" --example drawlist
+    -Zbuild-std=std,panic_abort --target "$target" --example drawlist --example window
   bin="$root/target/$target/release/examples"
   dir="$root/abyss/tests/golden/freebsd"
   rssh() { ABYSS_VM_ROLE=rv64 "$vm/ssh.sh" "$@"; }
   rssh 'rm -rf ~/golden-rust && mkdir -p ~/golden-rust/home ~/golden-rust/cfg' </dev/null
-  tar -C "$bin" -cf - drawlist | rssh 'tar -xf - -C ~/golden-rust'
+  tar -C "$bin" -cf - drawlist window | rssh 'tar -xf - -C ~/golden-rust'
   rssh 'cat > ~/golden-rust/drawlist-sample.dl' < abyss/tests/drawlist-sample.dl
+  rssh 'cat > ~/golden-rust/window-shot.sh' < abyss/tests/window-shot.sh
 else
-  cargo build -q --release --example drawlist
+  cargo build -q --release --example drawlist --example window
   bin="$root/target/release/examples"
   dir="$root/abyss/tests/golden/$(uname -s | tr '[:upper:]' '[:lower:]')"
 fi
 
-echo "$scenes" | while IFS='|' read -r name example args; do
+echo "$scenes" | while IFS='|' read -r name golden how scale; do
   out="$work/$name.png"
+  # The scene's size in points, for the window's rectangle.
+  size="520 200"
   if [ "$rv64" = 1 ]; then
-    rssh "cd ~/golden-rust && env -i HOME=\$PWD/home ABYSS_CONFIG_DIR=\$PWD/cfg LANG=C.UTF-8 TZ=UTC \
-      ./$example drawlist-sample.dl out.png $args >/dev/null && cat out.png" </dev/null > "$out"
-  else
+    if [ "$how" = png ]; then
+      rssh "cd ~/golden-rust && env -i HOME=\$PWD/home ABYSS_CONFIG_DIR=\$PWD/cfg LANG=C.UTF-8 TZ=UTC \
+        ./drawlist drawlist-sample.dl out.png $scale >/dev/null && cat out.png" </dev/null > "$out"
+    else
+      rssh "cd ~/golden-rust && sh window-shot.sh ./window drawlist-sample.dl $scale $size out.png >&2 && cat out.png" </dev/null > "$out" || true
+    fi
+  elif [ "$how" = png ]; then
     env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" LANG=C.UTF-8 TZ=UTC \
-      "$bin/$example" abyss/tests/drawlist-sample.dl "$out" $args >/dev/null
+      "$bin/drawlist" abyss/tests/drawlist-sample.dl "$out" "$scale" >/dev/null
+  else
+    sh abyss/tests/window-shot.sh "$bin/window" abyss/tests/drawlist-sample.dl "$scale" $size "$out" || true
   fi
-  if "$work/pngdiff" "$out" "$dir/$name.png" "$work/$name.diff.png" >"$work/$name.log"; then
+  if "$work/pngdiff" "$out" "$dir/$golden.png" "$work/$name.diff.png" >"$work/$name.log"; then
     echo "  ok: $name"
   else
     echo "moved: $name — $(cat "$work/$name.log")"

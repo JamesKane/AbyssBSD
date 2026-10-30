@@ -14,3 +14,5 @@ graphics/jpeg-turbo
 sysutils/seatd
 x11-toolkits/wlroots020
 x11-toolkits/gtk30
+x11-wm/sway
+x11/grim

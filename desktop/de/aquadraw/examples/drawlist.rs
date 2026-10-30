@@ -5,9 +5,8 @@
 //!   cargo run --example drawlist -- <list.dl> <out.png> [scale]
 
 use abyss_sys::{self as ffi, Context, Surface};
-use aquadraw::drawlist::{DrawListFile, DrawState, Role};
-use aquadraw::runner::{DrawContext, Rect, Runner};
-use aquadraw::text::Text;
+use aquadraw::drawlist::DrawListFile;
+use aquadraw::scene;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -39,39 +38,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let Some(mut fonts) = Text::new(scale) else {
+    let Some(mut runner) = scene::runner(scale) else {
         eprintln!("drawlist: no fonts (the toy-text fallback is not ported)");
         return ExitCode::FAILURE;
     };
-    // What AquaDemo's Theme.use does with the aqua theme's [fonts]: none of
-    // these is installed, so every role draws with CText's default chain.
-    fonts.use_roles(&[
-        (Role::Interface, "Lucida Grande"),
-        (Role::Chrome, "Lucida Grande"),
-        (Role::Readout, "Lucida Grande"),
-        (Role::Mono, "Monaco"),
-    ]);
-    let mut runner = Runner::new(fonts);
-
-    let (w, h) = (520, 200);
-    let cs = Surface::image(ffi::FORMAT_ARGB32, w * scale, h * scale);
+    let cs = Surface::image(ffi::FORMAT_ARGB32, scene::WIDTH * scale, scene::HEIGHT * scale);
     let cr = Context::new(&cs);
-    cr.scale(scale as f64, scale as f64);
-    cr.set_source_rgb(0.04, 0.04, 0.094); // Plan Neo's void
-    cr.paint();
-    let mut draw = |name: &str, r: Rect, state: DrawState, label: &str| {
-        if let Some(l) = file.get(name) {
-            runner.run(l, &cr, &DrawContext::new(r, state, label));
-        }
-    };
-    draw("mui-button", Rect::new(20.0, 20.0, 120.0, 28.0), DrawState::NORMAL, "Save");
-    draw("mui-button", Rect::new(160.0, 20.0, 120.0, 28.0), DrawState::PRESSED, "Use");
-    draw("mui-button", Rect::new(300.0, 20.0, 120.0, 28.0), DrawState::FOCUSED, "Cancel");
-    draw("brushed", Rect::new(20.0, 70.0, 260.0, 26.0), DrawState::NORMAL, "");
-    draw("anodized", Rect::new(300.0, 70.0, 200.0, 110.0), DrawState::NORMAL, "");
-    draw("knob", Rect::new(30.0, 118.0, 54.0, 54.0), DrawState::NORMAL, "");
-    draw("led", Rect::new(110.0, 138.0, 14.0, 14.0), DrawState::NORMAL, "");
-    draw("lcd", Rect::new(150.0, 124.0, 120.0, 40.0), DrawState::NORMAL, "");
+    scene::drawlist(&cr, scale, &file, &mut runner);
     cs.flush();
     if cs.write_png(out) {
         ExitCode::SUCCESS

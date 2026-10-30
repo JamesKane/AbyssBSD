@@ -17,6 +17,10 @@ use std::process::Command;
 const PACKAGES: &[&str] = &["cairo", "freetype2", "harfbuzz", "fontconfig"];
 
 fn pkg_config(args: &[&str]) -> Vec<String> {
+    pkg_config_of(args, PACKAGES)
+}
+
+fn pkg_config_of(args: &[&str], packages: &[&str]) -> Vec<String> {
     let target = env::var("TARGET").unwrap_or_default();
     let target_var = format!("PKG_CONFIG_{}", target.replace('-', "_"));
     let tool = env::var(&target_var)
@@ -24,14 +28,14 @@ fn pkg_config(args: &[&str]) -> Vec<String> {
         .unwrap_or_else(|_| "pkg-config".to_string());
     let out = Command::new(&tool)
         .args(args)
-        .args(PACKAGES)
+        .args(packages)
         .output()
         .unwrap_or_else(|e| panic!("could not run {tool}: {e}"));
     if !out.status.success() {
         panic!(
             "{tool} {} {} failed: {}",
             args.join(" "),
-            PACKAGES.join(" "),
+            packages.join(" "),
             String::from_utf8_lossy(&out.stderr)
         );
     }
@@ -83,6 +87,36 @@ fn main() {
         }
     }
     text.compile("ctext");
+
+    // The Wayland client (src/wl.rs): the requests wl.c exports, over the
+    // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
+    // them for CWayland and CAbyssProtocols.
+    let cwayland = de.join("cwayland");
+    let protocols = de.join("cabyssprotocols");
+    let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    for f in [here.join("wl.c"), protocols.join("xdg-shell-protocol.c"), cwayland.join("cwayland_shm.c")] {
+        println!("cargo:rerun-if-changed={}", f.display());
+    }
+    let mut wl = cc::Build::new();
+    wl.file(here.join("wl.c"))
+        .file(protocols.join("xdg-shell-protocol.c"))
+        .file(cwayland.join("cwayland_shm.c"))
+        .include(cwayland.join("include"));
+    for flag in pkg_config_of(&["--cflags"], &["wayland-client"]) {
+        if let Some(dir) = flag.strip_prefix("-I") {
+            wl.include(dir);
+        } else {
+            wl.flag(&flag);
+        }
+    }
+    wl.compile("abw");
+    for flag in pkg_config_of(&["--libs"], &["wayland-client"]) {
+        if let Some(dir) = flag.strip_prefix("-L") {
+            println!("cargo:rustc-link-search=native={dir}");
+        } else if let Some(lib) = flag.strip_prefix("-l") {
+            println!("cargo:rustc-link-lib={lib}");
+        }
+    }
 
     // Link: cairo (cairo-ft lives in libcairo) and the text stack.
     for flag in pkg_config(&["--libs"]) {

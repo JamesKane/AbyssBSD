@@ -6,4 +6,5 @@
 pub mod color;
 pub mod drawlist;
 pub mod runner;
+pub mod scene;
 pub mod text;
