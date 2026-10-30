@@ -5,6 +5,7 @@
 
 use crate::{cairo_surface_t, Surface, FORMAT_ARGB32};
 use libc::{c_char, c_int, c_void};
+use std::cell::Cell;
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::time::{Duration, Instant};
@@ -92,22 +93,24 @@ struct ToplevelListener {
     close: unsafe extern "C" fn(*mut c_void, P),
 }
 
-/// What the listeners write, boxed so its address is stable.
+/// What the listeners write. libwayland holds a pointer to it while Rust
+/// reads it too, so its fields are Cells, written through a shared
+/// reference: a `&mut` from that pointer would alias the Box's.
 #[derive(Default)]
 struct State {
-    compositor: Option<(u32, u32)>,
-    shm: Option<(u32, u32)>,
-    wm_base: Option<(u32, u32)>,
-    configured: bool,
-    closed: bool,
+    compositor: Cell<Option<(u32, u32)>>,
+    shm: Cell<Option<(u32, u32)>>,
+    wm_base: Cell<Option<(u32, u32)>>,
+    configured: Cell<bool>,
+    closed: Cell<bool>,
 }
 
 unsafe extern "C" fn on_global(data: *mut c_void, _r: P, name: u32, iface: *const c_char, version: u32) {
-    let st = unsafe { &mut *(data as *mut State) };
+    let st = unsafe { &*(data as *const State) };
     match unsafe { CStr::from_ptr(iface) }.to_bytes() {
-        b"wl_compositor" => st.compositor = Some((name, version)),
-        b"wl_shm" => st.shm = Some((name, version)),
-        b"xdg_wm_base" => st.wm_base = Some((name, version)),
+        b"wl_compositor" => st.compositor.set(Some((name, version))),
+        b"wl_shm" => st.shm.set(Some((name, version))),
+        b"xdg_wm_base" => st.wm_base.set(Some((name, version))),
         _ => {}
     }
 }
@@ -117,11 +120,11 @@ unsafe extern "C" fn on_ping(_d: *mut c_void, base: P, serial: u32) {
 }
 unsafe extern "C" fn on_xdg_configure(data: *mut c_void, s: P, serial: u32) {
     unsafe { abw_xdg_surface_ack_configure(s, serial) };
-    unsafe { (*(data as *mut State)).configured = true };
+    unsafe { (*(data as *const State)).configured.set(true) };
 }
 unsafe extern "C" fn on_toplevel_configure(_d: *mut c_void, _t: P, _w: i32, _h: i32, _s: *mut c_void) {}
 unsafe extern "C" fn on_close(data: *mut c_void, _t: P) {
-    unsafe { (*(data as *mut State)).closed = true };
+    unsafe { (*(data as *const State)).closed.set(true) };
 }
 
 static REGISTRY: RegistryListener = RegistryListener { global: on_global, global_remove: on_global_remove };
@@ -151,14 +154,14 @@ impl ShmWindow {
         if display.is_null() {
             return Err("no Wayland display".into());
         }
-        let mut state = Box::<State>::default();
-        let sp = &mut *state as *mut State as *mut c_void;
+        let state = Box::<State>::default();
+        let sp = &*state as *const State as *mut c_void;
         let registry = unsafe { abw_display_get_registry(display) };
         unsafe {
             wl_proxy_add_listener(registry, &REGISTRY as *const _ as *const c_void, sp);
             wl_display_roundtrip(display);
         }
-        let (Some(c), Some(s), Some(x)) = (state.compositor, state.shm, state.wm_base) else {
+        let (Some(c), Some(s), Some(x)) = (state.compositor.get(), state.shm.get(), state.wm_base.get()) else {
             unsafe { wl_display_disconnect(display) };
             return Err("the compositor lacks wl_compositor, wl_shm or xdg_wm_base".into());
         };
@@ -178,12 +181,12 @@ impl ShmWindow {
             abw_xdg_toplevel_set_title(toplevel, t.as_ptr());
             abw_xdg_toplevel_set_app_id(toplevel, a.as_ptr());
             abw_surface_commit(surface);
-            while !state.configured && !state.closed {
+            while !state.configured.get() && !state.closed.get() {
                 if wl_display_dispatch(display) < 0 {
                     break;
                 }
             }
-            if !state.configured {
+            if !state.configured.get() {
                 wl_display_disconnect(display);
                 return Err("the toplevel was never configured".into());
             }
@@ -254,7 +257,7 @@ impl ShmWindow {
     pub fn run_for(&mut self, secs: f64) -> bool {
         let deadline = Instant::now() + Duration::from_secs_f64(secs);
         let fd = unsafe { wl_display_get_fd(self.display) };
-        while !self.state.closed {
+        while !self.state.closed.get() {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
                 break;
@@ -270,7 +273,7 @@ impl ShmWindow {
     }
 
     pub fn closed(&self) -> bool {
-        self.state.closed
+        self.state.closed.get()
     }
 }
 
