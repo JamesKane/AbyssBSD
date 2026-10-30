@@ -133,6 +133,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+]
+
+[[package]]
+name = "portalbin"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+ "portal",
+]
+
+[[package]]
 name = "settings"
 version = "0.1.0"
 

@@ -358,6 +358,21 @@ run, once the guest had been up a while (Swift passed each just after a
 reboot, and the two anchors give their children the same environment and
 write the same journal), so they are to be rerun on a quiet guest.
 
+*portal, 2026-10-30.* `de/portal` (crate `portal`) is Portal.swift and
+Service.swift: the request type with nowhere to put a path to open, the
+outcome rules (exit status and result file read together), the PNG check,
+and the service that runs the picker or `abyssgrab`, opens what was chosen
+and hands back the descriptor. `de/portalbin` is `abyss-portal`.
+`ap_run_and_wait` became std's `Command::status`, and the picker and the
+grabber are found beside the path the portal was run as, for anchor's
+reason. Swift's tests ported, with one more: a picker that does choose gets
+its descriptor back, the file's own bytes. `live-portal`, `-sandbox`,
+`-notify`, `-screenshot`, `-grab`, `-gtk`, `-session-gtk` and `-firefox`
+are green against it on Linux, and all but `-session-gtk` (the guest's
+menu-bar trouble, above) in the FreeBSD guest, where `live-sandbox` proves
+the capability itself: a Capsicum client reads the file it was handed and
+cannot open its path.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

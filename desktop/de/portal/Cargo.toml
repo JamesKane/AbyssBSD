@@ -1,0 +1,10 @@
+[package]
+name = "portal"
+description = "Portal: the brokerless file chooser, notifications and screenshot, a descriptor per human decision (Swift: Portal.swift and Service.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
