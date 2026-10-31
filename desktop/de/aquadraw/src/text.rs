@@ -21,6 +21,14 @@ pub enum Style {
     BoldItalic = 3,
 }
 
+/// The glyphs a menu's key column is made of (P10.4). Missing, they draw as
+/// empty boxes.
+pub const MENU_GLYPHS: &str = "⌘⇧⌥⌃⌫⌦↑↓←→↩⎋⇥";
+
+/// What a program with no fonts says, in place of `announcement` (the toy-text
+/// fallback Swift drew with is not ported).
+pub const NO_FONTS: &str = "Text: NO FONTS — install DejaVu";
+
 pub struct Metrics {
     pub ascent: f64,
     pub descent: f64,
@@ -110,6 +118,34 @@ impl Text {
         self.upper_roles = upper.clone();
         self.tracking_roles = tracking.clone();
         self.shape_cache.clear();
+    }
+
+    /// Text.announce's line: what the text stack got. On a development box
+    /// one dull line; on a live medium, the difference between "the desktop
+    /// came up" and "you can read it" — a medium with no fonts passed every
+    /// pixel check (PHASE5 P5.3), and live-medium.sh reads this instead.
+    pub fn announcement(&self) -> String {
+        let styles: Vec<&str> = [(Style::Bold, "bold"), (Style::Italic, "italic"), (Style::BoldItalic, "bold-italic")]
+            .into_iter()
+            .filter(|(s, _)| ffi::font_style_available(*s as i32))
+            .map(|(_, n)| n)
+            .collect();
+        let gaps = Text::missing(MENU_GLYPHS);
+        let mut line = format!("Text: {} face(s)", ffi::font_face_count());
+        if !styles.is_empty() {
+            line += &format!(" ({})", styles.join(", "));
+        }
+        // Said, not silent (§2.45): a menu whose key column is boxes looks
+        // like it works in every test that does not read it.
+        if !gaps.is_empty() {
+            line += &format!("; NO GLYPHS for {gaps} — menu key equivalents will be boxes");
+        }
+        line
+    }
+
+    /// Which characters of `s` no loaded face can draw.
+    pub fn missing(s: &str) -> String {
+        s.chars().filter(|c| !ffi::font_covers(*c)).collect()
     }
 
     pub fn px(&self, size: f64) -> i32 {
@@ -202,5 +238,23 @@ impl Text {
     pub fn text_width(&mut self, s: &str, size: f64, style: Style, role: Role) -> f64 {
         let px = self.px(size);
         Text::width(&self.shape(s, px, style, role)) / self.render_scale as f64
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What live-medium.sh reads: a face count, and no gaps where the
+    /// development box's fonts have every menu glyph.
+    #[test]
+    fn the_text_stack_says_what_it_got() {
+        let Some(t) = Text::new(1) else { return };
+        let line = t.announcement();
+        assert!(line.starts_with("Text: ") && line.contains(" face(s)"), "{line}");
+        let n: i32 = line["Text: ".len()..].split(' ').next().unwrap().parse().unwrap();
+        assert!(n >= 1, "{line}");
+        assert_eq!(Text::missing("Aa"), "");
+        assert_eq!(Text::missing("\u{378}"), "\u{378}", "an unassigned codepoint is no face's");
     }
 }

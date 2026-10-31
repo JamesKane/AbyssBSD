@@ -17,9 +17,12 @@ fn main() {
     // The look is a file (P11.2): loaded before a pixel is painted, and
     // announced, or that it fell back.
     let Some(tk) = Toolkit::new(scale, None) else {
-        eprintln!("AquaDemo: no fonts (the toy-text fallback is not ported)");
+        eprintln!("{}", aquadraw::text::NO_FONTS);
         exit(1)
     };
+    // Say what the text stack got, before anything draws (PHASE5 P5.3):
+    // live-medium.sh reads it.
+    eprintln!("{}", tk.runner.borrow().text.announcement());
     let scene = env("AQUA_SCENE");
     // Render-only scenes for the golden gate: an open menu, the icons, the
     // draw-list sheet.

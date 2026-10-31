@@ -172,6 +172,9 @@ unsafe extern "C" {
 
     // de/ctext
     fn at_font_init() -> c_int;
+    fn at_font_face_count() -> c_int;
+    fn at_font_covers(cp: std::ffi::c_uint) -> c_int;
+    fn at_font_style_available(style: c_int) -> c_int;
     fn at_font_face(idx: c_int) -> *mut c_void;
     fn at_font_shape_role(text: *const c_char, len: c_int, px: c_int, style: c_int, role: c_int, out: *mut AtGlyph, cap: c_int) -> c_int;
     fn at_font_ascent_role(px: c_int, role: c_int) -> c_double;
@@ -537,6 +540,21 @@ impl Drop for Context {
 
 pub fn font_init() -> bool {
     unsafe { at_font_init() != 0 }
+}
+
+/// How many faces CText loaded (0 if none).
+pub fn font_face_count() -> i32 {
+    unsafe { at_font_face_count() }
+}
+
+/// Whether any loaded face has a glyph for `c`.
+pub fn font_covers(c: char) -> bool {
+    unsafe { at_font_covers(c as u32) != 0 }
+}
+
+/// Whether `style` (AT_*) loaded a face of its own, not the regular one.
+pub fn font_style_available(style: i32) -> bool {
+    unsafe { at_font_style_available(style) != 0 }
 }
 
 /// Make a directory's font files known to fontconfig (a theme's fonts,
