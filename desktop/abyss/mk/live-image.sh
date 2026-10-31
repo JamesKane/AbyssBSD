@@ -17,7 +17,9 @@
 #
 # `--kmods` puts the `.ko` files in DIR on the medium in place of the drm-kmod
 # package: a drm-kmod built against the kernel in `--dist`, for testing a
-# LinuxKPI or driver change. The firmware still comes from packages.
+# LinuxKPI or driver change. Without it, in the monorepo, abyss/mk/gpu-kmods.sh
+# builds them from kmod/drm and firmware/. Firmware comes from packages only
+# when DIR carries none.
 #
 # `--ssh-key` bakes a public key in and starts sshd, so a bring-up machine can be
 # driven from the dev box instead of photographed. **Developer builds only** —
@@ -106,6 +108,13 @@ die() { echo "live-image: $1" >&2; exit 1; }
 [ -s "$dist/base.txz" ] && [ -s "$dist/kernel.txz" ] || die "no distribution sets in $dist"
 [ -x "$builddir/undertow" ] || die "no build in $builddir — run swift build first"
 sudo -n true 2>/dev/null || die "this needs passwordless sudo (it extracts a base system)"
+# The GPU modules — drm-kmod and the AMD firmware — come from the monorepo's
+# forks, built against the sets' own kernel sources (abyss/mk/gpu-kmods.sh),
+# unless --kmods brings its own. Packages are built for whatever kernel the
+# repository has reached, which a pinned set's kernel refuses.
+if [ -z "$kmods" ] && [ -f "$root/../kmod/drm/Makefile" ] && [ -f "$root/../firmware/Makefile" ]; then
+  kmods=$(sh "$root/abyss/mk/gpu-kmods.sh") || die "the GPU modules did not build (abyss/mk/gpu-kmods.sh)"
+fi
 if [ -n "$sshkey" ]; then
   [ -r "$sshkey" ] || die "no readable public key at $sshkey"
   # A private key here would be baked onto a stick and handed around. The check
@@ -251,6 +260,10 @@ GPU_PKGS="$drm_kmod seatd
           gpu-firmware-amd-kmod-tahiti gpu-firmware-amd-kmod-pitcairn
           gpu-firmware-amd-kmod-verde gpu-firmware-amd-kmod-oland
           gpu-firmware-amd-kmod-hainan"
+# Modules that bring the firmware too (gpu-kmods.sh's do) leave only seatd.
+if [ -n "$kmods" ] && [ -n "$(find "$kmods" -maxdepth 1 -name 'amdgpu_*_bin.ko' 2>/dev/null | head -1)" ]; then
+  GPU_PKGS="seatd"
+fi
 
 # The desktop, as a distribution set. Named to match `InstallPlan.desktopSet`,
 # which is what makes rc.conf on the installed machine turn the desktop on.
@@ -513,7 +526,7 @@ fi
 if [ -n "$kmods" ]; then
   sudo mkdir -p "$de/boot/modules"
   sudo install -m 555 "$kmods"/*.ko "$de/boot/modules/"
-  say "   drm-kmod from $kmods: $(cd "$kmods" && echo *.ko)"
+  say "   kernel modules from $kmods: $(cd "$kmods" && ls *.ko | grep -v '_bin\.ko$' | tr '\n' ' ')and $(cd "$kmods" && ls *_bin.ko 2>/dev/null | wc -l | tr -d ' ') firmware"
 fi
 # shellcheck disable=SC2086
 if [ -n "$(sudo find "$gpudir" -name '*.pkg' 2>/dev/null)" ] \

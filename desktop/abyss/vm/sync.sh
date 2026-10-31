@@ -21,4 +21,14 @@ rsync -a --delete \
   --exclude 'abyss-swift-vm/' \
   -e "ssh $(abyss_ssh_opts)" \
   "$ABYSS_SYNC_ROOT/" "$ABYSS_SSH_USER@$ABYSS_SSH_HOST:$ABYSS_GUEST_SRC/"
+# A guest given only desktop/ also gets the forks the medium's GPU modules
+# are built from (abyss/mk/gpu-kmods.sh), beside it as in the monorepo.
+if [ "$ABYSS_SYNC_ROOT" != "$ABYSS_MONOREPO" ]; then
+  for m in kmod/drm firmware; do
+    [ -f "$ABYSS_MONOREPO/$m/Makefile" ] || continue
+    ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "mkdir -p '$ABYSS_GUEST_SRC/../$m'"
+    rsync -a --delete --exclude '.git' --exclude 'obj/' -e "ssh $(abyss_ssh_opts)" \
+      "$ABYSS_MONOREPO/$m/" "$ABYSS_SSH_USER@$ABYSS_SSH_HOST:$ABYSS_GUEST_SRC/../$m/"
+  done
+fi
 echo "[sync] done"
