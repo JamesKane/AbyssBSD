@@ -2,13 +2,14 @@
 
 **A FreeBSD for people who want a Mac-style desktop, not a handbook.**
 
-AbyssBSD is FreeBSD with a complete desktop on top: a faithful clone of
-Mac OS X 10.2 "Jaguar" Aqua, written in Rust and running on Wayland on our
-own compositor. It comes with a graphical installer and runs on a range of
-machines, including Arm boards. The pinstripes, gel buttons, global menu bar
-and magnifying Dock are all there, but the target is the look, not 10.2's
-feature set. Underneath it's still FreeBSD: its ports, ZFS, jails and
-Capsicum.
+AbyssBSD is FreeBSD with a complete desktop on top, written in Rust and
+running on Wayland on our own compositor. It comes with a graphical
+installer and runs on a range of machines, including Arm boards. Mac OS X
+10.2 "Jaguar" was one of its design guides, and its default theme, Aqua,
+brings the pinstripes and gel buttons along with the global menu bar and
+magnifying Dock. But it's not a clone: themes are data, and the desktop
+looks however the theme says. Underneath it's still FreeBSD: its ports,
+ZFS, jails and Capsicum.
 
 What it stands for:
 

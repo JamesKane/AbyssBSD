@@ -4,8 +4,9 @@
 
 **AbyssBSD** is a fork of FreeBSD `main` whose headline feature is a
 **new desktop environment written in Rust** (in Swift 6 until 2026-10; see
-below), styled as a faithful clone of
-**Mac OS X 10.2 "Jaguar" Aqua**, running on **Wayland**, with a Fedora/Anaconda-style
+below), running on **Wayland**. **Mac OS X 10.2 "Jaguar" Aqua** was the
+first design guide and is the default theme; since Phase 11 the look is a
+theme, not the product (PRODUCT §8), with a Fedora/Anaconda-style
 graphical installer. The bring-up target was the **Mac Pro 2013 (MacPro6,1)**;
 since 2026-09-05 it is an **Intel i7-12700KF with an AMD Radeon RX 6750 XT**
 (PHASE4 §1.1), with the Mac Pro kept as the matrix's second row. The desktop lives

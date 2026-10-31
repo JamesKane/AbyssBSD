@@ -1111,7 +1111,10 @@ had still been pushing SwiftPM's binaries). R7h deleted Package.swift, the
 311 Swift files, Tests/, the module maps and the flag-carrier C
 directories; aquadraw finds `themes/` beside Cargo.toml. R7i took swift6
 out of the VM seed and check.sh, and retired SWIFT-ON-FREEBSD.md and
-SWIFT-6.4.md. Left: the `--full` gate on the first pure-Rust build.
+SWIFT-6.4.md. R7j gave the guest's `cargo test` a runtime directory
+(undertow binds a Wayland socket). The first pure-Rust build (1c6f143)
+passed `--vm --live --full`: 2165 s, 1038 unit tests, 35 of 35 live modes,
+both nested installs booted. **R7 is done.**
 
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
