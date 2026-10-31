@@ -1,6 +1,6 @@
 [package]
 name = "abyssgrab"
-description = "abyssgrab: capture an output to a PNG or PPM (Swift: main.swift beside it)"
+description = "abyssgrab: capture an output to a PNG or PPM"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

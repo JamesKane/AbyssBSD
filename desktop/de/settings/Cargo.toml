@@ -1,6 +1,6 @@
 [package]
 name = "settings"
-description = "Settings: what System Preferences may ask the machine to change, as plans, refusals and steps (Swift: *.swift beside it)"
+description = "Settings: what System Preferences may ask the machine to change, as plans, refusals and steps"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

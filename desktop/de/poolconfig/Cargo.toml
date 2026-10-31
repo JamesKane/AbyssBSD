@@ -1,6 +1,6 @@
 [package]
 name = "pool-config"
-description = "PoolConfig: ADE's ~/.config/abyss/*.ini, read, written atomically and watched (Swift: *.swift beside it)"
+description = "PoolConfig: ADE's ~/.config/abyss/*.ini, read, written atomically and watched"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "dbusmenus"
-description = "DBusMenus: GTK applications' menus (org.gtk.Menus and Actions) served to the bar as MenuWire (Swift: GtkMenus.swift and Bridge.swift beside it)"
+description = "DBusMenus: GTK applications' menus (org.gtk.Menus and Actions) served to the bar as MenuWire"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

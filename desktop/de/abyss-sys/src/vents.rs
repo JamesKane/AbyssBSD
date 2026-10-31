@@ -1,6 +1,6 @@
 //! de/cvents, and the libc calls Vents makes directly: the C floor under
 //! the FreeBSD hardware bridges. sysctl, kenv, the OSS mixer, sndstat and
-//! the process table are C (cvents.c, as SwiftPM builds it); getifaddrs,
+//! the process table are C (cvents.c); getifaddrs,
 //! poll and getpwuid are libc's. Everything comes back owned or copied, so
 //! nothing above this file holds a pointer.
 

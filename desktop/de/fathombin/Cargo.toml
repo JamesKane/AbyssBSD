@@ -1,6 +1,6 @@
 [package]
 name = "fathombin"
-description = "fathom: run the probes on this machine and report (Swift: main.swift beside it)"
+description = "fathom: run the probes on this machine and report"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

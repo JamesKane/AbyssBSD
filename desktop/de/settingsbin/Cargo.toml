@@ -1,6 +1,6 @@
 [package]
 name = "settingsbin"
-description = "abyss-settings: System Preferences' privileged half (Swift: main.swift beside it)"
+description = "abyss-settings: System Preferences' privileged half"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

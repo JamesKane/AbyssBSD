@@ -1,6 +1,6 @@
 [package]
 name = "aquademo"
-description = "AquaDemo: the toolkit's scenes, offscreen or in a window (Swift: main.swift beside it)"
+description = "AquaDemo: the toolkit's scenes, offscreen or in a window"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

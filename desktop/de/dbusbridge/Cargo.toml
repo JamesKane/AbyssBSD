@@ -1,6 +1,6 @@
 [package]
 name = "dbusbridge"
-description = "DBusBridge: ADE's D-Bus bridge, applications to the desktop's services and never to each other (Swift: Router.swift and Endpoint.swift beside it)"
+description = "DBusBridge: ADE's D-Bus bridge, applications to the desktop's services and never to each other"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

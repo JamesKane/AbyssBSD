@@ -1,6 +1,6 @@
 [package]
 name = "fetchbin"
-description = "abyss-fetch: an agent session's fetch bridge (Swift: main.swift beside it)"
+description = "abyss-fetch: an agent session's fetch bridge"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

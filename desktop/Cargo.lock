@@ -227,6 +227,7 @@ dependencies = [
 name = "dbusportal"
 version = "0.1.0"
 dependencies = [
+ "aquadraw",
  "current-ipc",
  "dbus",
  "pool-config",

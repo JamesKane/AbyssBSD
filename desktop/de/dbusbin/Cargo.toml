@@ -1,6 +1,6 @@
 [package]
 name = "dbusbin"
-description = "abyss-dbus: ADE's D-Bus bridge, the desktop's portal on it, and the GTK menu bridge (Swift: main.swift beside it)"
+description = "abyss-dbus: ADE's D-Bus bridge, the desktop's portal on it, and the GTK menu bridge"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

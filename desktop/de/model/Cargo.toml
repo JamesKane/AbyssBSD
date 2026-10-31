@@ -1,6 +1,6 @@
 [package]
 name = "model"
-description = "Model: the one wire to a model: its JSON and HTTP, the session's budget and transcript, the backends (Swift: *.swift beside it)"
+description = "Model: the one wire to a model: its JSON and HTTP, the session's budget and transcript, the backends"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

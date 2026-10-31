@@ -1,6 +1,6 @@
 [package]
 name = "terminal"
-description = "Terminal: the VT parser, the screen model, selection and keys, pure (Swift: *.swift beside it)"
+description = "Terminal: the VT parser, the screen model, selection and keys, pure"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

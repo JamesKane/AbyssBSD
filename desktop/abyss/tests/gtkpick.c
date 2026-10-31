@@ -11,7 +11,7 @@
  *   1. This repository does not acquire a build dependency on GTK. DESKTOP.md
  *      §1 rejects the stack outright ("No GTK … it pulls in D-Bus"), and it
  *      would be a poor joke for the test that proves we need none of it to be
- *      the thing that links it. Nothing in `Package.swift` changes for this file.
+ *      the thing that links it. Nothing in the Cargo workspace changes for this file.
  *   2. It builds wherever the GTK *runtime* is installed, with no -devel package
  *      on either platform. The dev box has libgtk-3.so.0 and no headers; the
  *      guest has both. One `cc` line works on each.

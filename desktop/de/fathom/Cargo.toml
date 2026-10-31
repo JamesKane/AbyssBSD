@@ -1,6 +1,6 @@
 [package]
 name = "fathom"
-description = "Fathom: what this machine is, as a value: probes over captured text and the report (Swift: Probe.swift and Report.swift beside it)"
+description = "Fathom: what this machine is, as a value: probes over captured text and the report"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

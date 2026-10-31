@@ -1,6 +1,6 @@
 [package]
 name = "jailkeeper"
-description = "JailKeeper: the session's half of confinement: a jail per class, its socket, bridge and portal, and launches into it (Swift: Keeper.swift beside it)"
+description = "JailKeeper: the session's half of confinement: a jail per class, its socket, bridge and portal, and launches into it"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

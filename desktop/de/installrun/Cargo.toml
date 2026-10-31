@@ -1,6 +1,6 @@
 [package]
 name = "install-run"
-description = "InstallRun: the installer's privileged half, its probe, its authority and its runner (Swift: *.swift beside it)"
+description = "InstallRun: the installer's privileged half, its probe, its authority and its runner"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

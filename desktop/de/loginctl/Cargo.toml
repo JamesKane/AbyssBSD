@@ -1,6 +1,6 @@
 [package]
 name = "loginctl"
-description = "abyss-loginctl: ask the authenticator, from a shell (Swift: main.swift beside it)"
+description = "abyss-loginctl: ask the authenticator, from a shell"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

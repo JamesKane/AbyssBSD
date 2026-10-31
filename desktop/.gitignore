@@ -1,10 +1,6 @@
-# SwiftPM
+# SwiftPM's build directory, left behind in trees from before R7h
 /.build/
-.build/
 *.o
-*.swiftmodule
-.swiftpm/
-Package.resolved
 
 # Editors
 .idea/

@@ -1,6 +1,6 @@
 [package]
 name = "settings-run"
-description = "SettingsRun: the settings helper's privileged half, its authority and its staged runner (Swift: Service.swift beside it)"
+description = "SettingsRun: the settings helper's privileged half, its authority and its staged runner"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

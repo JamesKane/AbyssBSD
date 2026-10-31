@@ -1,8 +1,7 @@
-// Build the two C shims the Swift toolkit uses (de/cdraw, de/ctext), straight
-// from the repository, and link cairo/freetype/harfbuzz/fontconfig through
-// pkg-config — the same split SwiftPM makes in Package.swift (CDraw has no
-// dependencies; CText compiles against freetype2, harfbuzz and fontconfig;
-// AquaDraw links cairo).
+// Build the desktop's C shims (de/c*), straight from the repository, and
+// link cairo/freetype/harfbuzz/fontconfig through pkg-config (cdraw has no
+// dependencies; ctext compiles against freetype2, harfbuzz and fontconfig;
+// the drawing links cairo).
 //
 // Cross-building: the cc crate honours CC / CC_<target> / CFLAGS /
 // CFLAGS_<target> / AR. pkg-config is run as `$PKG_CONFIG` (or
@@ -61,7 +60,7 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_{}", target.replace('-', "_"));
 
-    // The shims SwiftPM compiles, from their own directories beside this one.
+    // The shims, from their own directories beside this one.
     let de = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
     let cdraw = de.join("cdraw");
     let ctext = de.join("ctext");
@@ -93,7 +92,7 @@ fn main() {
     text.compile("ctext");
 
     // CPlatform (src/platform.rs): descriptor passing, peers, and the rest of
-    // the file SwiftPM compiles; crypt(3) for its password hashing.
+    // cplatform.c; crypt(3) for its password hashing.
     let cplatform = de.join("cplatform");
     println!("cargo:rerun-if-changed={}", cplatform.join("cplatform.c").display());
     cc::Build::new()
@@ -103,7 +102,7 @@ fn main() {
     println!("cargo:rustc-link-lib=crypt");
 
     // CPoolWatch (src/poolwatch.rs): the config directory watch PoolConfig
-    // uses, inotify or kqueue by #ifdef, as SwiftPM compiles it.
+    // uses, inotify or kqueue by #ifdef.
     let cpoolwatch = de.join("cpoolwatch");
     println!("cargo:rerun-if-changed={}", cpoolwatch.join("cpoolwatch.c").display());
     cc::Build::new()
@@ -112,7 +111,7 @@ fn main() {
         .compile("cpoolwatch");
 
     // CVents (src/vents.rs): sysctl, kenv, the OSS mixer, sndstat, the
-    // process table; libnv and libmixer on FreeBSD, as SwiftPM links them.
+    // process table; libnv and libmixer on FreeBSD.
     let cvents = de.join("cvents");
     println!("cargo:rerun-if-changed={}", cvents.join("cvents.c").display());
     cc::Build::new()
@@ -125,7 +124,7 @@ fn main() {
     }
 
     // CProc (src/proc.rs): every child a pollable descriptor, the signal
-    // pipe; setusercontext(3) from libutil on FreeBSD, as SwiftPM links it.
+    // pipe; setusercontext(3) from libutil on FreeBSD.
     let cproc = de.join("cproc");
     println!("cargo:rerun-if-changed={}", cproc.join("cproc.c").display());
     cc::Build::new()
@@ -172,7 +171,7 @@ fn main() {
     }
 
     // CWlroots (src/wlr.rs), with the `wlroots` feature: the listener
-    // trampoline SwiftPM compiles for undertow, and the accessors Rust needs
+    // trampoline undertow's listeners go through, and the accessors Rust needs
     // because it cannot read wlroots' headers (tw-access.h, RUST.md R4b).
     if env::var_os("CARGO_FEATURE_WLROOTS").is_some() {
         let cwlroots = de.join("cwlroots");
@@ -181,7 +180,7 @@ fn main() {
             println!("cargo:rerun-if-changed={}", cwlroots.join(f).display());
         }
         // And the menus (menus.c, P10.3) over the protocols' generated code,
-        // as SwiftPM builds CWlroots over CAbyssProtocols.
+        //.
         let protocols = de.join("cabyssprotocols");
         w.file(cwlroots.join("cwlroots.c")).file(cwlroots.join("access.c")).file(cwlroots.join("menus.c")).include(cwlroots.join("include"));
         // The protocols' tables are the client library's, below: one copy
@@ -222,8 +221,8 @@ fn main() {
     cc::Build::new().file(here_dir().join("guard.c")).compile("abguard");
 
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
-    // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
-    // them for CWayland and CAbyssProtocols.
+    // scanner's xdg-shell code and cwayland's shm helper (de/cwayland,
+    // de/cabyssprotocols).
     let cwayland = de.join("cwayland");
     let protocols = de.join("cabyssprotocols");
     let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());

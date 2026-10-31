@@ -1,6 +1,6 @@
 [package]
 name = "idlebin"
-description = "abyss-idle: the session's idle policy and power agent (Swift: main.swift beside it)"
+description = "abyss-idle: the session's idle policy and power agent"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

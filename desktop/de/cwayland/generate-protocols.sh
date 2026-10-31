@@ -4,7 +4,7 @@
 #
 # Phase 1 generates xdg-shell only. To add a protocol, drop its XML in
 # protocols/ and add a line below; the generated .h goes in include/, the .c
-# alongside this script (and must be listed in Package.swift's CWayland sources).
+# alongside this script (abyss-sys/build.rs compiles them).
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -65,7 +65,7 @@ gen_server cursor-shape-v1
 # Protocols this project defines (PHASE10.md P10.3). Nobody links an
 # implementation for us, so the interface tables are generated too — ONCE, into
 # CAbyssProtocols, because a client copy and a server copy would be the same
-# symbol twice in any binary with both halves (every `swift test` build). The
+# symbol twice in any binary with both halves (every test build). The
 # client header goes where clients look, the server header where undertow does.
 gen_ours() {
     name=$1

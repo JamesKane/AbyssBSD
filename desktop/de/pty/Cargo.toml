@@ -1,6 +1,6 @@
 [package]
 name = "pty"
-description = "Pty: a program on a pseudo-terminal, read and written through the master (Swift: Pty.swift beside it)"
+description = "Pty: a program on a pseudo-terminal, read and written through the master"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

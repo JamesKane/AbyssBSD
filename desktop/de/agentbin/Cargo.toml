@@ -1,6 +1,6 @@
 [package]
 name = "agentbin"
-description = "abyss-agent: an agent session, inside its jail (Swift: main.swift beside it)"
+description = "abyss-agent: an agent session, inside its jail"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

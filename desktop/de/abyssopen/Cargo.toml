@@ -1,6 +1,6 @@
 [package]
 name = "abyssopen"
-description = "abyssopen: the point of the portal, demonstrated from inside Capsicum (Swift: main.swift beside it)"
+description = "abyssopen: the point of the portal, demonstrated from inside Capsicum"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

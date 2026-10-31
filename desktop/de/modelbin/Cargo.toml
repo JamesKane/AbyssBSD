@@ -1,6 +1,6 @@
 [package]
 name = "modelbin"
-description = "abyss-model: the only way to a model (Swift: main.swift beside it)"
+description = "abyss-model: the only way to a model"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

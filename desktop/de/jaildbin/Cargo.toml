@@ -1,6 +1,6 @@
 [package]
 name = "jaildbin"
-description = "abyss-jaild: the root half of confinement (Swift: main.swift beside it)"
+description = "abyss-jaild: the root half of confinement"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

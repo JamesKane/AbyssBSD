@@ -1,6 +1,6 @@
 [package]
 name = "vents"
-description = "Vents: the machine through FreeBSD's own facilities (sysctl, kenv, OSS, devd, the routing socket, sndstat, the process table), without privilege (Swift: *.swift beside it)"
+description = "Vents: the machine through FreeBSD's own facilities (sysctl, kenv, OSS, devd, the routing socket, sndstat, the process table), without privilege"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -1,5 +1,5 @@
-# ADE in Rust (docs/RUST.md): one workspace, a crate beside each Swift target
-# it replaces (de/<name>/Cargo.toml), `unsafe` only in *-sys crates, and no
+# ADE (docs/RUST.md): one workspace, a crate per component
+# (de/<name>/Cargo.toml), `unsafe` only in *-sys crates, and no
 # dependencies beyond libc and cc (§6.5).
 [workspace]
 resolver = "3"

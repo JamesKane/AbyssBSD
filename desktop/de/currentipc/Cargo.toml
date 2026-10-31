@@ -1,6 +1,6 @@
 [package]
 name = "current-ipc"
-description = "CurrentIPC: ADE's control plane, typed messages with descriptors over unix sockets (Swift: *.swift beside it)"
+description = "CurrentIPC: ADE's control plane, typed messages with descriptors over unix sockets"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "settingsctl"
-description = "abyss-settingsctl: the settings helper's command-line face (Swift: main.swift beside it)"
+description = "abyss-settingsctl: the settings helper's command-line face"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

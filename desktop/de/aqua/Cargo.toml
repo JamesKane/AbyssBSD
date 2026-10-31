@@ -1,6 +1,6 @@
 [package]
 name = "aqua"
-description = "Aqua: the toolkit's widgets, windows and scenes (Swift: *.swift beside it)"
+description = "Aqua: the toolkit's widgets, windows and scenes"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -67,7 +67,7 @@ trap cleanup EXIT
 export ABYSS_RUNTIME_DIR="$rundir"
 
 # ------------------------------------------------------------------- the app
-# Built here rather than by SwiftPM on purpose: `Package.swift` does not learn
+# Built here rather than by Cargo on purpose: the workspace does not learn
 # about GTK for this. See the header of gtkpick.c.
 
 app="$work/gtkpick"

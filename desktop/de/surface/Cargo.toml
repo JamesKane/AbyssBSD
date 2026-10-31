@@ -1,6 +1,6 @@
 [package]
 name = "surface"
-description = "Surface: the toolkit's Wayland client (Swift: *.swift beside it)"
+description = "Surface: the toolkit's Wayland client"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

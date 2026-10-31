@@ -1,6 +1,6 @@
 [package]
 name = "abyssnotify"
-description = "abyssnotify: post a desktop notification, the brokerless notify-send (Swift: main.swift beside it)"
+description = "abyssnotify: post a desktop notification, the brokerless notify-send"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "loginwindowbin"
-description = "abyss-loginwindow: the root daemon: the session's password check, power, and the login window's sessions (Swift: main.swift beside it)"
+description = "abyss-loginwindow: the root daemon: the session's password check, power, and the login window's sessions"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

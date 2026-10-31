@@ -1,6 +1,6 @@
 [package]
 name = "agent"
-description = "Agent: the loop (model, tool, model, until it answers) and its tools, inside an agent jail (Swift: Loop.swift and Tools.swift beside it)"
+description = "Agent: the loop (model, tool, model, until it answers) and its tools, inside an agent jail"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

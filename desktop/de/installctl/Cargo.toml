@@ -1,6 +1,6 @@
 [package]
 name = "installctl"
-description = "abyss-installctl: the installer's command-line face (Swift: main.swift beside it)"
+description = "abyss-installctl: the installer's command-line face"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

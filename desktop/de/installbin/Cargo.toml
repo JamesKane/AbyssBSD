@@ -1,6 +1,6 @@
 [package]
 name = "installbin"
-description = "abyss-install: the installer's privileged half (Swift: main.swift beside it)"
+description = "abyss-install: the installer's privileged half"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

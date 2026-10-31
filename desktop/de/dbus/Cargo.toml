@@ -1,6 +1,6 @@
 [package]
 name = "dbus"
-description = "DBus, the wire half: values, marshalling, messages and bus addresses, with no bus, and a connection to the bridge (Swift: the *.swift beside it)"
+description = "DBus, the wire half: values, marshalling, messages and bus addresses, with no bus, and a connection to the bridge"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

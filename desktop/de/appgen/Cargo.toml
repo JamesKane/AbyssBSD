@@ -1,6 +1,6 @@
 [package]
 name = "appgen"
-description = "abyss-appgen: an application bundle for every installed port with a desktop entry (Swift: main.swift beside it)"
+description = "abyss-appgen: an application bundle for every installed port with a desktop entry"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "spawn"
-description = "Spawn: start programs safely, detached or run to completion for their output (Swift: Spawn.swift beside it)"
+description = "Spawn: start programs safely, detached or run to completion for their output"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

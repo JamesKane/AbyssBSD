@@ -243,17 +243,12 @@ fn the_accent_colour_is_three_doubles_in_range() {
     assert!(c.iter().all(|x| (0.0..=1.0).contains(x)), "{c:?}");
 }
 
-/// …and it is the colour the desktop selects things with. The theme is not
-/// in Rust yet, so the drift guard reads the Swift theme's source: change
-/// `menuHighlight` there and this fails.
+/// …and it is the colour the desktop selects things with: change Jaguar's
+/// `menu_highlight` and this fails.
 #[test]
 fn the_accent_colour_matches_the_aqua_theme() {
-    let theme = include_str!("../../aquadraw/Theme.swift");
-    let line = theme.lines().find(|l| l.contains("public var menuHighlight: Color = Color(hex: 0x")).expect("menuHighlight in Theme.swift");
-    let hex = line.split("0x").nth(1).unwrap().trim_end_matches(')');
-    let n = u32::from_str_radix(hex, 16).unwrap();
-    let want: Vec<f64> = [n >> 16, (n >> 8) & 0xff, n & 0xff].iter().map(|c| f64::from(*c) / 255.0).collect();
-    assert_eq!(accent(), want, "the Settings accent colour has drifted from Theme.menuHighlight");
+    let c = aquadraw::tokens::ThemeTokens::jaguar().menu_highlight;
+    assert_eq!(accent(), vec![c.r, c.g, c.b], "the Settings accent colour has drifted from Theme.menuHighlight");
 }
 
 // MARK: the theme's palette (P11.10)

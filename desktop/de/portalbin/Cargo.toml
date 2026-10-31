@@ -1,6 +1,6 @@
 [package]
 name = "portalbin"
-description = "abyss-portal: host the session's portal service (Swift: main.swift beside it)"
+description = "abyss-portal: host the session's portal service"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

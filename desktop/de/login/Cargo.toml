@@ -1,6 +1,6 @@
 [package]
 name = "login"
-description = "Login: the session's authenticator, the root daemon's loop and the login window's sessions (Swift: Login, Service and Sessions.swift beside it)"
+description = "Login: the session's authenticator, the root daemon's loop and the login window's sessions"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

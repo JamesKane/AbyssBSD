@@ -1,6 +1,6 @@
 [package]
 name = "install"
-description = "Install: the install as a value: plan, inventory, refusals and the step list (Swift: *.swift beside it)"
+description = "Install: the install as a value: plan, inventory, refusals and the step list"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

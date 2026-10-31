@@ -1,6 +1,6 @@
 [package]
 name = "fetch"
-description = "Fetch: the fetch bridge, an agent's only way to the network (Swift: Fetch.swift beside it)"
+description = "Fetch: the fetch bridge, an agent's only way to the network"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

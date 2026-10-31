@@ -1,6 +1,6 @@
 [package]
 name = "ventsctl"
-description = "ventsctl: read the machine through the FreeBSD-native bridges (Swift: main.swift beside it)"
+description = "ventsctl: read the machine through the FreeBSD-native bridges"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

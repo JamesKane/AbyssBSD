@@ -1,6 +1,6 @@
 [package]
 name = "jaild"
-description = "JailD: abyss-jaild's steps, performer, service and client (Swift: *.swift beside it)"
+description = "JailD: abyss-jaild's steps, performer, service and client"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

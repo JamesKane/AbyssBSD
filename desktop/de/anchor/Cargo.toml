@@ -1,6 +1,6 @@
 [package]
 name = "anchor"
-description = "Anchor: session supervision: the restart policy, the session as a plan, and the supervisor's one poll loop (Swift: *.swift beside it)"
+description = "Anchor: session supervision: the restart policy, the session as a plan, and the supervisor's one poll loop"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

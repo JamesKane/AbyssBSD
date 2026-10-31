@@ -4,8 +4,8 @@
  * wayland-scanner emits every request as a `static inline` in its headers,
  * which Swift calls directly (HANDOFF §2.1) and Rust cannot call at all. Each
  * one here is the generated inline, given a name Rust can link; the opcodes
- * and argument packing stay the scanner's, from the same headers SwiftPM
- * compiles (RUST.md §6.4). One line per request as Rust starts using it.
+ * and argument packing stay the scanner's, from its generated headers
+ * (RUST.md §6.4). One line per request as Rust starts using it.
  */
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"

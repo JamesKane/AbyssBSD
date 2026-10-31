@@ -1,6 +1,6 @@
 [package]
 name = "text-model"
-description = "TextModel: multi-line text being edited, as grapheme clusters: editing, motion, undo, find and wrapping (Swift: TextModel.swift and TextLayout.swift beside it)"
+description = "TextModel: multi-line text being edited, as grapheme clusters: editing, motion, undo, find and wrapping"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

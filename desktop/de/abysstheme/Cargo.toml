@@ -1,6 +1,6 @@
 [package]
 name = "abysstheme"
-description = "abyss-theme: the loaded theme, for things that do not draw (Swift: main.swift beside it)"
+description = "abyss-theme: the loaded theme, for things that do not draw"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "anchorbin"
-description = "anchor: the session supervisor (Swift: main.swift beside it)"
+description = "anchor: the session supervisor"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

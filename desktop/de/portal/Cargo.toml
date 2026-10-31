@@ -1,6 +1,6 @@
 [package]
 name = "portal"
-description = "Portal: the brokerless file chooser, notifications and screenshot, a descriptor per human decision (Swift: Portal.swift and Service.swift beside it)"
+description = "Portal: the brokerless file chooser, notifications and screenshot, a descriptor per human decision"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

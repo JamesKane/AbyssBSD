@@ -1,6 +1,6 @@
 [package]
 name = "vocabbin"
-description = "abyss-vocab: an agent session's vocabulary bridge (Swift: main.swift beside it)"
+description = "abyss-vocab: an agent session's vocabulary bridge"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
