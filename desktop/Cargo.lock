@@ -124,10 +124,31 @@ name = "fathom"
 version = "0.1.0"
 
 [[package]]
+name = "fathombin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "fathom",
+ "spawn",
+ "vents",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
+
+[[package]]
+name = "idlebin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "login",
+ "pool-config",
+ "spawn",
+]
 
 [[package]]
 name = "install"

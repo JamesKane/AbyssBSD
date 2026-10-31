@@ -1,0 +1,16 @@
+[package]
+name = "fathombin"
+description = "fathom: run the probes on this machine and report (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fathom"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+probes = { package = "fathom", path = "../fathom" }
+spawn = { path = "../spawn" }
+vents = { path = "../vents" }

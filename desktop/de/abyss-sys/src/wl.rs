@@ -345,3 +345,63 @@ impl Drop for Display {
         unsafe { wl_display_disconnect(self.0) };
     }
 }
+
+#[repr(C)]
+struct abw_idle {
+    _p: [u8; 0],
+}
+
+unsafe extern "C" {
+    fn wl_display_dispatch_pending(d: *mut wl_display) -> c_int;
+    fn abw_idle_new(d: *mut wl_display) -> *mut abw_idle;
+    fn abw_idle_arm(i: *mut abw_idle, slot: c_int, ms: u32) -> c_int;
+    fn abw_idle_disarm(i: *mut abw_idle, slot: c_int);
+    fn abw_idle_take(i: *mut abw_idle) -> u32;
+    fn abw_idle_free(i: *mut abw_idle);
+}
+
+impl Display {
+    /// Dispatch what is already queued, without reading: before a poll, so
+    /// an event a roundtrip queued is not left waiting for the next byte.
+    pub fn dispatch_pending(&self) -> bool {
+        unsafe { wl_display_dispatch_pending(self.0) >= 0 }
+    }
+}
+
+/// The compositor's idleness (ext-idle-notify v1): two slots, each a
+/// timeout that, reached, sets its bit for [`Idle::take`] after a dispatch.
+/// One idea of idle: a video that holds the displays awake holds this too
+/// (HANDOFF §2.86).
+pub struct Idle<'a> {
+    raw: *mut abw_idle,
+    _display: std::marker::PhantomData<&'a Display>,
+}
+
+impl<'a> Idle<'a> {
+    /// None when the compositor offers no ext-idle-notify.
+    pub fn new(display: &'a Display) -> Option<Idle<'a>> {
+        let raw = unsafe { abw_idle_new(display.0) };
+        (!raw.is_null()).then(|| Idle { raw, _display: std::marker::PhantomData })
+    }
+
+    /// Slot `slot` (0 or 1) goes idle after `ms` without input; false when
+    /// there is no seat to watch.
+    pub fn arm(&self, slot: i32, ms: u32) -> bool {
+        unsafe { abw_idle_arm(self.raw, slot, ms) == 0 }
+    }
+
+    pub fn disarm(&self, slot: i32) {
+        unsafe { abw_idle_disarm(self.raw, slot) }
+    }
+
+    /// The slots that went idle since the last take, as bits (1 << slot).
+    pub fn take(&self) -> u32 {
+        unsafe { abw_idle_take(self.raw) }
+    }
+}
+
+impl Drop for Idle<'_> {
+    fn drop(&mut self) {
+        unsafe { abw_idle_free(self.raw) }
+    }
+}

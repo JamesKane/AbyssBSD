@@ -164,13 +164,16 @@ fn main() {
     let protocols = de.join("cabyssprotocols");
     let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     // With the keeper's half of wp_security_context_v1 (cwayland_jail.c,
-    // P18.5) and that protocol's code.
+    // P18.5), abyss-idle's ext-idle-notify (idle.c, P16.3), and those
+    // protocols' code.
     for f in [
         here.join("wl.c"),
         protocols.join("xdg-shell-protocol.c"),
         cwayland.join("cwayland_shm.c"),
         cwayland.join("cwayland_jail.c"),
         cwayland.join("security-context-v1-protocol.c"),
+        here.join("idle.c"),
+        cwayland.join("ext-idle-notify-v1-protocol.c"),
     ] {
         println!("cargo:rerun-if-changed={}", f.display());
     }
@@ -180,6 +183,8 @@ fn main() {
         .file(cwayland.join("cwayland_shm.c"))
         .file(cwayland.join("cwayland_jail.c"))
         .file(cwayland.join("security-context-v1-protocol.c"))
+        .file(here.join("idle.c"))
+        .file(cwayland.join("ext-idle-notify-v1-protocol.c"))
         .include(cwayland.join("include"));
     for flag in pkg_config_of(&["--cflags"], &["wayland-client"]) {
         if let Some(dir) = flag.strip_prefix("-I") {

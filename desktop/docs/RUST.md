@@ -501,6 +501,22 @@ group has run against a real jail yet**; that is the guest's, with
 `live-jaild`, `-jail-gate`, `-jail-files`, `-jail-launch`, `-crash*` and
 the `-agent*` scripts.
 
+*fathom and idle, 2026-10-30.* `de/fathombin` is `fathom`: the half that
+looks (sysctl, kenv, `kldstat`, `ifconfig -l`, /dev/dri, /dev/sndstat,
+`--measure`, `--save` to the stick's ESP) over the probes `fathom` has
+had since R2. One difference: a /dev/dri that exists and cannot be read
+is `unknown`, where Swift read every failure to list it as no GPU. On
+Linux its report is byte for byte Swift's, exit status included.
+`de/idlebin` is `abyss-idle`: the idle policy (lock when the display
+sleeps, ask the machine to sleep after the computer's delay) and the
+session's power agent on the daemon's `watch` connection. Its
+ext-idle-notify comes from `abyss-sys::wl::Idle`, over a small C shim
+(`idle.c`: the notifier, a seat and two slots), since the toolkit that
+carries it in Swift is R5's. `live-idlepolicy`, `-idle`, `-power`,
+`-greeter` and `-switchuser` are green against it on Linux, the first
+with undertow's real idle notifications. `live-medium`, fathom's, builds
+a medium and is not run.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts
