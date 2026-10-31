@@ -23,7 +23,7 @@ fn main() {
     let scene = env("AQUA_SCENE");
     // Render-only scenes for the golden gate: an open menu, the icons, the
     // draw-list sheet.
-    if let Some(s @ ("menu" | "icons" | "drawlist")) = scene.as_deref() {
+    if let Some(s @ ("menu" | "icons" | "drawlist" | "frame" | "cursors")) = scene.as_deref() {
         let Some(out) = env("AQUA_RENDER_PNG") else {
             eprintln!("AquaDemo: the {s} scene is render-only (AQUA_RENDER_PNG)");
             exit(2)
@@ -31,6 +31,8 @@ fn main() {
         let (mut runner, theme) = (tk.runner.borrow_mut(), tk.theme.borrow());
         let ok = match s {
             "menu" => aqua::scene::render_menu_png(&out, scale, env("AQUA_MENU_MARKS").is_some(), &mut runner, &theme),
+            "frame" => aquadraw::scene::render_frame_png(&out, scale, &mut runner, &theme),
+            "cursors" => aquadraw::scene::render_cursor_sheet_png(&out, scale, &mut runner, &theme),
             "icons" => aqua::scene::render_icon_sheet_png(&out, env("AQUA_DRAWLIST").as_deref(), scale, &mut runner, &theme),
             _ => aqua::scene::render_drawlist_png(&out, &env("AQUA_DRAWLIST").unwrap_or_else(|| "abyss/tests/drawlist-sample.dl".into()), scale, &mut runner),
         };

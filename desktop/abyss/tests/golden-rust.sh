@@ -64,6 +64,7 @@ icons@2x|icons@2x|aquademo:icons|2|
 trench-icons|trench-icons|aquademo:icons|1|ABYSS_THEME=trench
 svg-beacon@2x|svg-beacon@2x|aquademo:icons|2|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl
 wallpaper|wallpaper|aquademo:wallpaper|1|
+trench-wallpaper|trench-wallpaper|aquademo:wallpaper|1|ABYSS_THEME=trench
 finder|finder|aquademo:finder|1|
 finder-list|finder-list|aquademo:finder|1|AQUA_FINDER_VIEW=list
 finder@2x|finder@2x|aquademo:finder|2|

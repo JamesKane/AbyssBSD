@@ -1065,6 +1065,17 @@ FreeBSD's (jails); on Linux a stub abyss-model and an unjailed
 abyss-agent answered the window's question with a tool call, and Quit
 said bye and ended the agent. With it every AquaDemo scene is Rust.
 
+*R6w, AquaDemo from Cargo, 2026-10-31.* `abyss/rust-bins` names
+AquaDemo. It gained the render-only `frame` and `cursors` scenes (drawn
+by `aquadraw::scene`, which the examples now call too), and the Rust gate
+gained `trench-wallpaper`. Swift's own gate, golden.sh, is all green on
+it (105 scenes), and golden-rust.sh is at 107. Of the 63 Linux-runnable
+live scripts that start AquaDemo (live-install not run), 62 are green;
+live-sway fails as it does on the all-Swift tree (System Preferences
+never maps under sway). Left in Swift before R7: `abyssclip`,
+`abyssgrab`, `abyss-theme` (its `cursors` needs XCursorTheme) and
+`svg2dl` with SVGImport; `ipcprobe` is built by Cargo but not yet listed.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

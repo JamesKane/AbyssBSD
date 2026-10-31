@@ -6,8 +6,6 @@
 //! The theme is chosen as every process chooses it: appearance.ini, or
 //! `$ABYSS_THEME` / `$ABYSS_THEME_SCHEME`, found on the theme search path.
 
-use abyss_sys::{self as ffi, Context, Surface};
-use aquadraw::draw;
 use aquadraw::scene;
 use aquadraw::theme::{announcement, Theme};
 use std::process::ExitCode;
@@ -24,13 +22,6 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let mut theme = Theme::default();
-    let outcome = theme.load_current(None, Some(&mut runner));
-    eprintln!("{}", announcement(&outcome));
-    let (w, h) = (480, 300);
-    let cs = Surface::image(ffi::FORMAT_ARGB32, w * scale, h * scale);
-    let cr = Context::new(&cs);
-    cr.scale(scale as f64, scale as f64);
-    draw::paint_window_chrome(&mut runner, &theme, &cr, w as f64, h as f64, "Untitled — gedit", true, true);
-    cs.flush();
-    if cs.write_png(out) { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    eprintln!("{}", announcement(&theme.load_current(None, Some(&mut runner))));
+    if scene::render_frame_png(out, scale, &mut runner, &theme) { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
