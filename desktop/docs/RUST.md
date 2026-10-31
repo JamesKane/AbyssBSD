@@ -427,6 +427,34 @@ throwaway accounts each asking as itself, and sessions started as their
 own uids. The two failed there for Swift as well, at different steps:
 the menu-bar trouble again.
 
+*settings, 2026-10-30.* `de/settingsrun` (crate `settings-run`) is
+Service.swift: the authority (the uid it was started for, and only while
+it is in the admin group, asked at each connection), the service's five
+methods and the machine's own refusals, and the runner that stages every
+file and replaces them all only when every write succeeded.
+`de/settingsbin` is `abyss-settings` and `de/settingsctl`
+`abyss-settingsctl`. Volumes.swift's `zfs list` parsing moves into
+`settings::zfs`, since the helper's volume refusals read it (Disk Utility
+reads it from there at R6). `abyss-sys` gains `crypt_sha512`,
+`interface_index` and `local_timestamp`. Swift's pw root was a global;
+here the runner is told it (`How`). **A staged copy's mode is set, not
+only asked for**: Swift's `open(O_CREAT)` kept whatever mode a copy left
+by a crash had, so a wpa_supplicant.conf could be put in place 0644. The
+Swift runner tests ported (the dry run, whole-or-nothing, the half-way
+failure, two files together, sysctl.conf's mode, wpa_supplicant.conf's),
+with two over a socket: the wrong uid and a non-administrator refused in
+words, and an unknown method named. `live-settings`, `-energy-pane`,
+`-network-pane`, `-sound-pane`, `-wifi-pane`, `-activity`,
+`-accounts-pane`, `-diskutility` and `-accounts` are green against it on
+Linux, and all but `-sound-pane` in the FreeBSD guest, as root: accounts
+made, logged in automatically and deleted with `pw`, a ZFS snapshot rolled
+back, rc.conf and resolvconf.conf written whole. `-sound-pane` fails there
+for Swift too, opening the pane by its verb (the menu bar's `recvmsg`).
+`-wifi-pane` and `-wifi` were not run to the end: the guest's kernel
+deadlocked under the wtap lab (a `wtap1_com_lock` → `ifnet_sx` lock-order
+reversal, then every `ifconfig wlanN destroy` stuck in D state), and they
+wait for a restarted guest. `-network-reboot` is `--full`'s.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

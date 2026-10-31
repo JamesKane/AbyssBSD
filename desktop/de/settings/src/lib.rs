@@ -18,6 +18,7 @@ pub mod key;
 mod plan;
 mod steps;
 mod wifi;
+pub mod zfs;
 
 pub use plan::{
     AccountAction, EnergyPlan, IPv4, IPv4Config, NetworkPlan, PowerProfile, PowerdMode, SettingsPlan, SignalPlan, SoundPlan,

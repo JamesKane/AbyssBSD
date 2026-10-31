@@ -111,3 +111,44 @@ pub fn is_nonblocking(fd: BorrowedFd<'_>) -> io::Result<bool> {
     }
     Ok(flags & libc::O_NONBLOCK != 0)
 }
+
+unsafe extern "C" {
+    fn ap_crypt_sha512(password: *const libc::c_char, out: *mut libc::c_char, len: usize) -> c_int;
+}
+
+/// A crypt(3) SHA-512 hash of `password` with a fresh random salt, as
+/// `pw -H 0` takes it; None if crypt refused.
+pub fn crypt_sha512(password: &str) -> Option<String> {
+    let pw = std::ffi::CString::new(password).ok()?;
+    let mut out = [0 as libc::c_char; 256];
+    if unsafe { ap_crypt_sha512(pw.as_ptr(), out.as_mut_ptr(), out.len()) } != 0 {
+        return None;
+    }
+    let s = unsafe { std::ffi::CStr::from_ptr(out.as_ptr()) };
+    Some(s.to_string_lossy().into_owned())
+}
+
+/// The interface's index, or None when there is no interface by that name.
+pub fn interface_index(name: &str) -> Option<u32> {
+    let n = std::ffi::CString::new(name).ok()?;
+    let i = unsafe { libc::if_nametoindex(n.as_ptr()) };
+    (i != 0).then_some(i)
+}
+
+/// Now in local time, `YYYY-MM-DD HH:MM:SS`: a journal's stamp.
+pub fn local_timestamp() -> String {
+    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return String::new();
+    }
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec
+    )
+}

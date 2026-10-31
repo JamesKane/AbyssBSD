@@ -12,3 +12,5 @@ dbusprobe
 abyss-loginwindow
 abyss-loginctl
 abyss-loginstub
+abyss-settings
+abyss-settingsctl

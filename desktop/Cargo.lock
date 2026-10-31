@@ -245,11 +245,42 @@ name = "settings"
 version = "0.1.0"
 
 [[package]]
+name = "settings-run"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "settings",
+ "settings-wire",
+ "spawn",
+ "vents",
+]
+
+[[package]]
 name = "settings-wire"
 version = "0.1.0"
 dependencies = [
  "current-ipc",
  "settings",
+]
+
+[[package]]
+name = "settingsbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "settings-run",
+]
+
+[[package]]
+name = "settingsctl"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "settings",
+ "settings-wire",
 ]
 
 [[package]]

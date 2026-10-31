@@ -198,6 +198,12 @@ From HANDOFF §5.3, still true:
   serves passes one through the bridge today; a GTK app that does
   (`OpenURI` with a descriptor, say) would lose its connection. Rust's
   `dbusbridge` counts the bytes and sends the rest plain.
+- **Swift's settings runner keeps a stale staged copy's mode** (found
+  2026-10-30, porting the runner). `Runner.copyFile` opens
+  `<file>.abyss-staged` with `O_CREAT`, which sets the mode only when it
+  makes the file; one a crash left behind keeps its own, and is renamed
+  into place. A 0644 leftover would put the Wi-Fi keys in a world-readable
+  wpa_supplicant.conf. Rust's `settings-run` sets the mode after opening.
 - **TextEdit's Find Previous misses from the end of the text** (found
   2026-10-30, porting TextModel). `TextModel.find(backward:)` starts at
   the selection's start minus one, which can be past the last place a match
