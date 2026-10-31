@@ -9,6 +9,7 @@
 //! it publishes for a test to click by (`ABYSS_PREFS_DUMP`).
 
 pub mod app;
+pub mod accounts;
 pub mod appearance_catalogue;
 pub mod displays;
 pub mod energy;

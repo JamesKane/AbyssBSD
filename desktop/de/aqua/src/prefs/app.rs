@@ -14,12 +14,12 @@ use surface::{KeySym, RenderTarget, ResizeEdge, Window, WindowDelegate};
 
 /// The panes as the golden scene pictures them: fixed samples.
 pub fn sample_panes() -> Vec<Rc<dyn Pane>> {
-    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::sample()), sound::SoundPane::new(sound::SoundPaneState::sample()), displays::DisplaysPane::new(displays::DisplaysPaneState::sample()), network::NetworkPane::new(network::NetworkPaneState::sample())]
+    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::sample()), sound::SoundPane::new(sound::SoundPaneState::sample()), displays::DisplaysPane::new(displays::DisplaysPaneState::sample()), network::NetworkPane::new(network::NetworkPaneState::sample()), accounts::AccountsPane::new(accounts::AccountsPaneState::sample())]
 }
 
 /// Every pane with something behind it, live.
 pub fn live_panes() -> Vec<Rc<dyn Pane>> {
-    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::default()), sound::SoundPane::new(sound::SoundPaneState::default()), displays::DisplaysPane::new(displays::DisplaysPaneState::default()), network::NetworkPane::new(network::NetworkPaneState::default())]
+    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::default()), sound::SoundPane::new(sound::SoundPaneState::default()), displays::DisplaysPane::new(displays::DisplaysPaneState::default()), network::NetworkPane::new(network::NetworkPaneState::default()), accounts::AccountsPane::new(accounts::AccountsPaneState::default())]
 }
 
 pub struct SystemPreferences {

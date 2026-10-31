@@ -134,6 +134,12 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
                         panes.retain(|x| x.id() != "network");
                         panes.push(NetworkPane::new(NetworkPaneState::sample_wifi()));
                         m.view = crate::prefs::PrefsView::Pane("network".into())
+                    } else if p == "accounts-new" {
+                        // "accounts-new": the Accounts pane with New User… open (P16.6a).
+                        use crate::prefs::accounts::{AccountsPane, AccountsPaneState};
+                        panes.retain(|x| x.id() != "accounts");
+                        panes.push(AccountsPane::new(AccountsPaneState::sample_new()));
+                        m.view = crate::prefs::PrefsView::Pane("accounts".into())
                     } else {
                         m.view = crate::prefs::PrefsView::Pane(p)
                     }
