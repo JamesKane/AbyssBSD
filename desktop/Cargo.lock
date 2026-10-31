@@ -118,6 +118,7 @@ dependencies = [
  "abyss-sys",
  "aqua",
  "aquadraw",
+ "login",
  "surface",
 ]
 

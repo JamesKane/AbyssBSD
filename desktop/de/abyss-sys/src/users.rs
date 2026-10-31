@@ -28,6 +28,11 @@ fn copy(pw: *const passwd) -> Option<Account> {
     Some(Account { name: text(p.pw_name), uid: p.pw_uid, gid: p.pw_gid, gecos: text(p.pw_gecos), home: text(p.pw_dir), shell: text(p.pw_shell) })
 }
 
+/// This process's real user.
+pub fn uid() -> u32 {
+    unsafe { libc::getuid() }
+}
+
 pub fn by_uid(uid: u32) -> Option<Account> {
     copy(unsafe { libc::getpwuid(uid) })
 }

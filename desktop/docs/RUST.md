@@ -941,6 +941,14 @@ aqua. Live, mixed: live-clipboard, -dnd, -gtk, -firefox, -portal,
 -context, -menu-focus, -submenus, -window and -session green; live-menus
 and live-session-gtk, which waited for this, are green.
 
+*R6e, the lock screen, the login window and the Setup Assistant.* The
+lock screen on the session lock, the login window on a TOP layer surface,
+sharing the lock model and the panel's sheet (Swift drew it twice), and
+the Setup Assistant with the theme catalogue the General pane will use.
+Their 10 Swift tests come along (80 in aqua). None has a golden. Live,
+mixed: live-lockscreen, -locksession, -loginwindow, -greeter,
+-switchuser, -setup, -idlepolicy and -session green.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

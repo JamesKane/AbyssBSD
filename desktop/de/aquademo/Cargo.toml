@@ -10,6 +10,7 @@ name = "AquaDemo"
 path = "src/main.rs"
 
 [dependencies]
+login = { path = "../login" }
 abyss-sys.workspace = true
 aqua = { path = "../aqua" }
 aquadraw = { path = "../aquadraw" }

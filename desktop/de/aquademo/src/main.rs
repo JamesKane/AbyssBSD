@@ -37,6 +37,15 @@ fn main() {
         println!("{}", if ok { format!("AquaDemo: wrote {out}") } else { "AquaDemo: PNG render failed".into() });
         exit(if ok { 0 } else { 1 })
     }
+    // The session's own scenes: each a surface of its own, not a window.
+    if let Some(s @ ("lock" | "loginwindow" | "setupassistant")) = scene.as_deref() {
+        let Some(display) = surface::Display::connect() else {
+            println!("AquaDemo: cannot connect to a Wayland compositor (is WAYLAND_DISPLAY set, and does it offer xdg-shell?).");
+            exit(1)
+        };
+        tk.follow_appearance(&display);
+        session_scene(s, &display, &tk)
+    }
     let Some((kind, title, w, h)) = SceneKind::named(scene.as_deref()) else {
         eprintln!("AquaDemo: the scene {} is not ported to Rust yet", scene.unwrap_or_default());
         exit(2)
@@ -99,5 +108,81 @@ fn main() {
     } else {
         println!("AquaDemo: PNG render failed");
         exit(1)
+    }
+}
+
+/// The lock screen, the login window and the Setup Assistant.
+fn session_scene(scene: &str, display: &std::rc::Rc<surface::Display>, tk: &std::rc::Rc<Toolkit>) -> ! {
+    use std::cell::Cell;
+    use std::io::Write;
+    use std::rc::Rc;
+    match scene {
+        // An ext-session-lock client: exits 0 once the authenticator said
+        // yes and the session is given back, 1 if the compositor would not
+        // lock. The outcome also goes to stdout, one word, unbuffered:
+        // anchor reads it from a pipe to tell an unlock from a crash
+        // (P16.2c), with no exit status to tell it on FreeBSD.
+        "lock" => {
+            let outcome = |w: &str| {
+                let mut o = std::io::stdout();
+                let _ = writeln!(o, "abyss-lock-outcome: {w}");
+                let _ = o.flush();
+            };
+            let Some(ls) = aqua::lock_screen::LockScreen::new(display, tk) else {
+                eprintln!("AquaDemo: cannot lock (does the compositor offer ext-session-lock?).");
+                outcome("refused");
+                exit(1)
+            };
+            let unlocked = Rc::new(Cell::new(false));
+            let (u, d) = (unlocked.clone(), Rc::downgrade(display));
+            ls.on_done(move |ok| {
+                u.set(ok);
+                if let Some(d) = d.upgrade() {
+                    d.stop()
+                }
+            });
+            ls.on_locked(move || outcome("locked"));
+            display.run();
+            outcome(if unlocked.get() { "unlocked" } else { "refused" });
+            exit(if unlocked.get() { 0 } else { 1 })
+        }
+        // The greeter session's one surface (P16.5a).
+        // ABYSS_LOGINWINDOW_ACCOUNTS="name:Full Name:uid,…" stands in for the
+        // password database in a test; the daemon still checks the named
+        // account's real password, so a made-up list opens nothing.
+        "loginwindow" => {
+            let accounts = match env("ABYSS_LOGINWINDOW_ACCOUNTS") {
+                Some(list) => list
+                    .split(',')
+                    .filter_map(|e| {
+                        let f: Vec<&str> = e.split(':').collect();
+                        let [name, full, uid] = f[..] else { return None };
+                        Some(login::LoginAccount { name: name.into(), full_name: if full.is_empty() { name } else { full }.into(), uid: uid.parse().ok()? })
+                    })
+                    .collect(),
+                None => login::accounts::system(),
+            };
+            let Some(_lw) = aqua::login_window::LoginWindow::new(display, tk, accounts) else {
+                println!("AquaDemo: could not open the login window (does the compositor offer wlr-layer-shell?).");
+                exit(1)
+            };
+            display.run();
+            exit(0)
+        }
+        // An account's first login (P16.7).
+        _ => {
+            let Some(app) = aqua::setup_assistant::SetupAssistant::new(display, tk) else {
+                println!("AquaDemo: could not open the Setup Assistant.");
+                exit(1)
+            };
+            let d = Rc::downgrade(display);
+            app.on_quit(move || {
+                if let Some(d) = d.upgrade() {
+                    d.stop()
+                }
+            });
+            display.run();
+            exit(0)
+        }
     }
 }
