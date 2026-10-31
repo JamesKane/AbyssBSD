@@ -1,0 +1,15 @@
+[package]
+name = "installbin"
+description = "abyss-install: the installer's privileged half (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-install"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+install-run = { path = "../installrun" }

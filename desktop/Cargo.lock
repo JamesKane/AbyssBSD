@@ -137,11 +137,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "install-run"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "install",
+ "install-wire",
+ "spawn",
+ "vents",
+]
+
+[[package]]
 name = "install-wire"
 version = "0.1.0"
 dependencies = [
  "current-ipc",
  "install",
+]
+
+[[package]]
+name = "installbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "install-run",
+]
+
+[[package]]
+name = "installctl"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+ "install",
+ "install-wire",
 ]
 
 [[package]]

@@ -1,0 +1,14 @@
+[package]
+name = "install-run"
+description = "InstallRun: the installer's privileged half, its probe, its authority and its runner (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+install = { path = "../install" }
+install-wire = { path = "../installwire" }
+spawn = { path = "../spawn" }
+vents = { path = "../vents" }

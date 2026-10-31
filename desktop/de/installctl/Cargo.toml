@@ -1,0 +1,15 @@
+[package]
+name = "installctl"
+description = "abyss-installctl: the installer's command-line face (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-installctl"
+path = "src/main.rs"
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+install = { path = "../install" }
+install-wire = { path = "../installwire" }

@@ -455,6 +455,23 @@ deadlocked under the wtap lab (a `wtap1_com_lock` → `ifnet_sx` lock-order
 reversal, then every `ifconfig wlanN destroy` stuck in D state), and they
 wait for a restarted guest. `-network-reboot` is `--full`'s.
 
+*install, 2026-10-30.* `de/installrun` (crate `install-run`) is
+Service.swift, Peer.swift, Runner.swift and Probe.swift: the authority
+(one uid, asked of the kernel), the three methods, the runner that stops
+at the first real failure, and the probe with its parsers over `geom`,
+`mount -p`, `glabel`, `gpart show` and `zpool`. `de/installbin` is
+`abyss-install` and `de/installctl` `abyss-installctl`; both swap. The
+service takes the machine as a closure, as Swift did, so every refusal
+is tested on a machine with no disks. A probe that cannot run is said to
+the caller for `disks` and `check` alike, and a sizes-from-the-wire
+overflow (BACKLOG §5) cannot trap the client either: `--swap` saturates
+and a size prints through u128. Swift's 40 tests: 32 ported, 7 are wire
+round trips `installwire` already has, and one (a closed descriptor
+says no) cannot be written, since the service takes a `UnixStream`;
+one more is new (a probe's refusal reaches the caller). `live-installer`
+and `-installer-keyboard` are green against it on Linux; the guest and
+`--full`'s `live-install` and `-desktop` are not run yet.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

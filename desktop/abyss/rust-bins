@@ -14,3 +14,5 @@ abyss-loginctl
 abyss-loginstub
 abyss-settings
 abyss-settingsctl
+abyss-install
+abyss-installctl
