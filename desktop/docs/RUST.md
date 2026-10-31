@@ -801,6 +801,19 @@ of R4d were found by them and ported: the keyboard's return 100 ms after
 the last menu closes (live-menus), and a layer's exclusive keyboard,
 claimed as it maps and released as it goes.
 
+*The rest of the live scripts* (2026-10-30). Of the 89 that start
+undertow, **76 run green on Rust undertow and the 13 that need FreeBSD
+(jails, the agents, the medium's chroot) skip** here. Three failed at
+first (live-terminal, live-dock-apps, live-power), and all three were the
+same thing: a second window with an earlier one's place key, **reopened
+where it was** (BACKLOG §5's fix: Rust remembers a closed window's place),
+was never reported, because `run` said a window's geometry only when its
+key's line changed. It is now said per window. And one script that passed
+earlier then failed on both compositors, live-undertow-input, because six
+scripts read and wrote the person's own `~/.config/abyss`: the window it
+clicks reopened where an earlier run had left it. Those six now keep
+their own config directory in their work directory.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

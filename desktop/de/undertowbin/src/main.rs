@@ -666,7 +666,10 @@ fn unbounded_of(o: &Opts) -> bool {
 struct Reported {
     ops: String,
     theme_reloads: u64,
-    geometry: BTreeMap<String, String>,
+    /// By window, not by place key: two windows can share a key, and a new
+    /// one reopened where the last of that key was must still be said
+    /// (Swift's per-key map hid it, once places were really remembered).
+    geometry: BTreeMap<u32, String>,
     stack: String,
     text_input: String,
     constraints: String,
@@ -704,13 +707,15 @@ impl Reported {
             out(&format!("theme-reloads={} generation={}", self.theme_reloads, c.theme.borrow().generation));
         }
         let ts = c.toplevels.borrow().clone();
+        // A window that unmapped is forgotten: mapped again, it is said again.
+        self.geometry.retain(|id, _| ts.iter().any(|t| t.id == *id && t.mapped.get()));
         for t in ts.iter().filter(|t| t.mapped.get()) {
             let key = t.place_key().unwrap_or_else(|| "?".into());
             let flags = if t.minimized.get() { " min" } else if t.maximized.get() { " max" } else { "" };
             let line = format!("{},{} {}x{}{flags}", t.x.get(), t.y.get(), t.width(), t.height());
-            if self.geometry.get(&key) != Some(&line) {
+            if self.geometry.get(&t.id) != Some(&line) {
                 out(&format!("window {key} {line}"));
-                self.geometry.insert(key, line);
+                self.geometry.insert(t.id, line);
             }
         }
         let stack: Vec<String> = ts.iter().filter(|t| t.mapped.get()).map(|t| t.place_key().unwrap_or_else(|| "?".into())).collect();

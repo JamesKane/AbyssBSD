@@ -27,6 +27,9 @@ command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, 
 command -v zenity >/dev/null 2>&1 || { echo "FAIL: no zenity — the test's text-input client (dnf/pkg install zenity)"; exit 1; }
 
 work=$(mktemp -d /tmp/abyss-ime.XXXXXX)
+# Its own settings: a remembered window place (or anything else the run
+# writes) must not come from the person's own, nor go into them.
+mkdir -p "$work/cfg"; export ABYSS_CONFIG_DIR="$work/cfg"
 cleanup() {
   exec 7>&- 8>&- 2>/dev/null || true
   for p in ${zp:-} ${ip:-} ${vp:-} ${ut_pid:-}; do kill "$p" 2>/dev/null || true; done

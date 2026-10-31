@@ -32,6 +32,9 @@ H=600
 BAR=22          # the menu bar's height, and its exclusive zone
 
 work=$(mktemp -d /tmp/abyss-utshell.XXXXXX)
+# Its own settings: a remembered window place (or anything else the run
+# writes) must not come from the person's own, nor go into them.
+mkdir -p "$work/cfg"; export ABYSS_CONFIG_DIR="$work/cfg"
 deskdir="$work/desktop"
 mkdir -p "$deskdir"
 ppm="$work/shell.ppm"

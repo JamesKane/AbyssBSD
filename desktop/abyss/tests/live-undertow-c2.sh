@@ -50,6 +50,9 @@ HARD=8
 MISS_BUDGET=3
 
 work=$(mktemp -d /tmp/abyss-c2.XXXXXX)
+# Its own settings: a remembered window place (or anything else the run
+# writes) must not come from the person's own, nor go into them.
+mkdir -p "$work/cfg"; export ABYSS_CONFIG_DIR="$work/cfg"
 # Adversaries are started from a SUBSHELL that exits immediately, so they are
 # orphans rather than jobs of this shell. Otherwise killing eleven processes
 # makes the shell print eleven "Killed" lines to stderr, which in a test harness

@@ -32,6 +32,9 @@ CLICK_X=540
 CLICK_Y=415
 
 work=$(mktemp -d /tmp/abyss-utinput.XXXXXX)
+# Its own settings: a remembered window place (or anything else the run
+# writes) must not come from the person's own, nor go into them.
+mkdir -p "$work/cfg"; export ABYSS_CONFIG_DIR="$work/cfg"
 before="$work/before.ppm"
 after="$work/after.ppm"
 fifo="$work/vp.fifo"

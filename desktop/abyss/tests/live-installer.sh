@@ -44,6 +44,9 @@ H=768
 FRAMES=900
 
 work=$(mktemp -d /tmp/abyss-inst4.XXXXXX)
+# Its own settings: a remembered window place (or anything else the run
+# writes) must not come from the person's own, nor go into them.
+mkdir -p "$work/cfg"; export ABYSS_CONFIG_DIR="$work/cfg"
 rundir=$(mktemp -d /tmp/abyss-inst4r.XXXXXX)
 vp_dir="$work/vp"
 mkdir -p "$vp_dir"

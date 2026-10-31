@@ -33,6 +33,9 @@ WIN_W=460
 WIN_H=360
 
 work=$(mktemp -d /tmp/abyss-undertow.XXXXXX)
+# Its own settings: a remembered window place (or anything else the run
+# writes) must not come from the person's own, nor go into them.
+mkdir -p "$work/cfg"; export ABYSS_CONFIG_DIR="$work/cfg"
 ppm="$work/frame.ppm"
 cleanup() {
   [ -n "${client_pid:-}" ] && kill "$client_pid" 2>/dev/null || true
