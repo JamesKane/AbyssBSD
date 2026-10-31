@@ -126,10 +126,19 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             // AQUA_PREFS_PANE=<id> pictures a pane's page (P14.1).
             SceneKind::Prefs => {
                 let mut m = crate::prefs::PrefsModel::default();
+                let mut panes = crate::prefs::app::sample_panes();
                 if let Ok(p) = std::env::var("AQUA_PREFS_PANE") {
-                    m.view = crate::prefs::PrefsView::Pane(p)
+                    // "network-wifi": the Network pane with its radio chosen (P14.5c).
+                    if p == "network-wifi" {
+                        use crate::prefs::network::{NetworkPane, NetworkPaneState};
+                        panes.retain(|x| x.id() != "network");
+                        panes.push(NetworkPane::new(NetworkPaneState::sample_wifi()));
+                        m.view = crate::prefs::PrefsView::Pane("network".into())
+                    } else {
+                        m.view = crate::prefs::PrefsView::Pane(p)
+                    }
                 }
-                crate::prefs::paint_system_preferences(&mut c, cw, ch, &m, &crate::prefs::app::sample_panes());
+                crate::prefs::paint_system_preferences(&mut c, cw, ch, &m, &panes);
             }
             SceneKind::Finder => {
                 crate::finder::paint_finder(&mut c, cw, ch, &finder_scene_state());

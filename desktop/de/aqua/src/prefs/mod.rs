@@ -12,6 +12,7 @@ pub mod app;
 pub mod appearance_catalogue;
 pub mod displays;
 pub mod energy;
+pub mod network;
 pub mod general;
 pub mod islands;
 pub mod settings_client;
