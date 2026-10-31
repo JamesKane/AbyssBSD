@@ -2,6 +2,7 @@
 //! ported from the Swift beside it, drawn on aquadraw's `Canvas`. So far
 //! the window scene; the widgets, menus and the Wayland half follow.
 
+pub mod activity;
 pub mod agent_presence;
 pub mod app_icon;
 pub mod app_library;

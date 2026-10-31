@@ -85,6 +85,15 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Activity {
+            let Some(_am) = aqua::activity::ActivityMonitor::new(&display, &tk) else {
+                println!("AquaDemo: failed to open Activity Monitor.");
+                exit(1)
+            };
+            eprintln!("AquaDemo: Activity Monitor is up.");
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::Grab {
             let Some(_grab) = aqua::grab::GrabApp::new(&display, &tk) else {
                 println!("AquaDemo: failed to open Grab.");

@@ -122,6 +122,8 @@ textedit|textedit|aquademo:textedit|1|
 textedit@2x|textedit@2x|aquademo:textedit|2|
 grab|grab|aquademo:grab|1|
 grab@2x|grab@2x|aquademo:grab|2|
+activity|activity|aquademo:activity|1|
+activity@2x|activity@2x|aquademo:activity|2|
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

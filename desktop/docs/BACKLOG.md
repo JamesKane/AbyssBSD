@@ -138,6 +138,14 @@ recommended; the 12700KF has no Wi-Fi card (§3, item 5).
 
 From HANDOFF §5.3, still true:
 
+- **Activity Monitor's right-aligned column titles overhang their
+  columns** (found 2026-10-31, porting it). `paintActivity` measures each
+  header title at regular weight and draws it bold, so "PID", "% CPU",
+  "Threads" and "Real Memory" end a few points right of where the
+  numbers under them end. Rust matches it for now, since the `activity`
+  goldens are shared; fix both (measure with `.bold`) and regenerate
+  `activity` and `activity@2x` together.
+
 - **Swift's installer says "Choose an user account"** (found 2026-10-31,
   porting it). `article()` picks "an" by the first letter, so the hub's
   readiness line reads "an user account" when only the account is left.

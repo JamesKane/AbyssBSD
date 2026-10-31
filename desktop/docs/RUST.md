@@ -1003,6 +1003,16 @@ window of its own, saved as a PNG through the portal or copied as
 from pixels and PNG encoding to bytes. Both Grab goldens are identical
 (94 in the gate); live-grab's six checks are green.
 
+*R6p, Activity Monitor.* The process table every two seconds over
+`vents::processes`, sorted, filtered and narrowed by typing; Quit
+Process asks, then signals one's own process after checking it is
+still the one chosen, or sends another user's to the helper as a
+`signal` plan. One Swift quirk is kept on purpose: the right-aligned
+column titles are measured regular and drawn bold, because the
+`activity` goldens are shared (BACKLOG §5 fixes both). Both goldens are
+identical (96 in the gate); live-activity is green (its other-user half
+runs on FreeBSD).
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity
