@@ -6,6 +6,7 @@
 pub mod backend;
 pub mod compositor;
 pub mod cursor_images;
+pub mod decorations;
 pub mod displays;
 pub mod ebb;
 pub mod frame;

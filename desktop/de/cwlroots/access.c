@@ -37,6 +37,8 @@ TW_SIGNAL(foreign_toplevel_handle_v1, request_close)
 TW_SIGNAL(foreign_toplevel_handle_v1, request_minimize)
 TW_SIGNAL(foreign_toplevel_handle_v1, request_maximize)
 TW_SIGNAL(xdg_activation_v1, request_activate)
+TW_SIGNAL(xdg_decoration_manager_v1, new_toplevel_decoration)
+TW_SIGNAL(xdg_toplevel_decoration_v1, destroy)
 #undef TW_SIGNAL
 
 const char *tw_output_name(const struct wlr_output *o) { return o->name; }
@@ -210,4 +212,10 @@ bool tw_foreign_event_flag(const void *event, int maximize) {
 
 struct wlr_surface *tw_activation_surface(const void *event) {
     return ((const struct wlr_xdg_activation_v1_request_activate_event *)event)->surface;
+}
+
+struct wlr_xdg_toplevel *tw_decoration_toplevel(const struct wlr_xdg_toplevel_decoration_v1 *d) { return d->toplevel; }
+
+void tw_decoration_server_side(struct wlr_xdg_toplevel_decoration_v1 *d) {
+    wlr_xdg_toplevel_decoration_v1_set_mode(d, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 }

@@ -18,13 +18,16 @@
 //! (keyboard focus, move and resize) join it in the passes after.
 
 use crate::backend::{log, BackendError, WlrootsSession};
+use crate::decorations::Frames;
+use aquadraw::runner::Runner;
+use aquadraw::theme::Theme;
 use crate::displays::DisplayLayout;
 use crate::frame::FrameMetrics;
 use crate::geometry::{place_layer, LayerAnchor, LayerRequest, Rect};
 use crate::places::{WindowPlace, WindowPlaces};
 use crate::scene::{Label, SceneLayer, SceneWindow, World};
 use abyss_sys::mono;
-use abyss_sys::wlr::{self, globals, ForeignHandle, ForeignManager, LayerSurface, Listener, OutputLayout, Surface, Texture, Timeline, XdgPopup, XdgToplevel};
+use abyss_sys::wlr::{self, globals, Decoration, ForeignHandle, ForeignManager, LayerSurface, Listener, OutputLayout, Surface, Texture, Timeline, XdgPopup, XdgToplevel};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
@@ -55,6 +58,9 @@ pub struct Toplevel {
     pub fullscreen: Cell<bool>,
     /// Whether the compositor draws its frame (P9.6).
     pub decorated: Cell<bool>,
+    /// A decoration request waiting for the window's first commit: answering
+    /// before it is an assertion inside wlroots.
+    decoration: Cell<Option<Decoration>>,
     /// The island it is on (PHASE13 P13.1), of the display it lives on.
     pub island: Cell<i32>,
     pub island_display: RefCell<String>,
@@ -227,6 +233,12 @@ pub struct Compositor {
     pub dmabuf_offered: bool,
     /// The frame's size around a window: the theme's.
     pub metrics: Cell<FrameMetrics>,
+    /// What draws: the theme (Swift's global) and the runner its lists run
+    /// on, None when no font could be opened (no frames are drawn then).
+    pub theme: RefCell<Theme>,
+    pub runner: RefCell<Option<Runner>>,
+    /// The frames undertow draws (P9.6).
+    pub frames: RefCell<Frames>,
     /// The window with the keyboard. The seat says so to the client (R4e).
     pub focused: RefCell<Option<Weak<Toplevel>>>,
     focus_hook: RefCell<Option<FocusHook>>,
@@ -249,7 +261,8 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    pub fn new(session: Rc<WlrootsSession>, layout: DisplayLayout, config_dir: Option<&str>, socket_name: Option<&str>, metrics: FrameMetrics) -> Result<Rc<Compositor>, BackendError> {
+    pub fn new(session: Rc<WlrootsSession>, layout: DisplayLayout, config_dir: Option<&str>, socket_name: Option<&str>, theme: Theme, runner: Option<Runner>) -> Result<Rc<Compositor>, BackendError> {
+        let metrics = frame_metrics(&theme);
         let d = session.display();
         let renderer = session.renderer();
         // The same arrangement, told to wlroots, and through it to clients.
@@ -292,6 +305,8 @@ impl Compositor {
         // wlr-screencopy, server side: abyssgrab and the screenshot portal.
         globals::screencopy(d);
         let activation = globals::xdg_activation(d);
+        // Who draws the frames (P9.6): always us.
+        let decoration_manager = globals::xdg_decoration_manager(d);
 
         // The socket last of the globals, as Swift adds it; nothing is
         // dispatched before `new` returns, so no client arrives early.
@@ -319,6 +334,9 @@ impl Compositor {
             foreign_manager,
             dmabuf_offered,
             metrics: Cell::new(metrics),
+            theme: RefCell::new(theme),
+            runner: RefCell::new(runner),
+            frames: RefCell::default(),
             focused: RefCell::default(),
             focus_hook: RefCell::default(),
             active_islands: RefCell::default(),
@@ -374,6 +392,14 @@ impl Compositor {
             let l = c.adopt_layer(l);
             c.layers.borrow_mut().push(l);
         }));
+        if let Some(m) = decoration_manager {
+            let w = Rc::downgrade(&c);
+            ls.extend(m.on_new_toplevel_decoration(move |dec| {
+                if let Some(c) = w.upgrade() {
+                    c.take_decoration(dec)
+                }
+            }));
+        }
         if let Some(a) = activation {
             // The sanctioned "raise my own window": the spatial Finder brings
             // an open folder's window forward rather than opening a second.
@@ -419,6 +445,7 @@ impl Compositor {
             maximized: Cell::new(false),
             fullscreen: Cell::new(false),
             decorated: Cell::new(false),
+            decoration: Cell::new(None),
             island: Cell::new(1),
             island_display: RefCell::default(),
             suspended_said: Cell::new(false),
@@ -518,6 +545,9 @@ impl Compositor {
             // menu, which it does not draw. Here, not at creation: before the
             // first commit it is an assertion inside wlroots (P9.6).
             t.xdg.offer_capabilities();
+            // And the decoration mode, which could not be answered before
+            // this commit (P9.6).
+            self.answer_decoration(t);
             // The most room a window can have (T.3).
             let u = self.usable_area();
             t.xdg.set_bounds(u.width, u.height);
@@ -578,6 +608,7 @@ impl Compositor {
     }
 
     fn forget(&self, t: &Rc<Toplevel>) {
+        self.frames.borrow_mut().forget(t.id);
         t.teardown();
         self.toplevels.borrow_mut().retain(|o| !Rc::ptr_eq(o, t));
         // **Closing the focused window used to leave focus on nothing**:
@@ -754,6 +785,53 @@ impl Compositor {
         for w in all {
             w.xdg.send_close()
         }
+    }
+
+    // MARK: decorations (P9.6)
+
+    /// A client asked who decorates: we do, always, but **not yet** if its
+    /// first commit has not happened: the request is kept and answered
+    /// with the initial configure it belongs in.
+    fn take_decoration(&self, dec: Decoration) {
+        let Some(xdg) = dec.toplevel() else { return };
+        let found: Vec<Rc<Toplevel>> = self.toplevels.borrow().iter().filter(|t| t.xdg == xdg).cloned().collect();
+        for t in found {
+            t.decoration.set(Some(dec));
+            t.decorated.set(true);
+            // A client may drop the object before its first commit: then
+            // there is nothing to answer. (Swift kept the pointer.)
+            let wt = Rc::downgrade(&t);
+            t.listeners.borrow_mut().extend(dec.on_destroy(move || {
+                if let Some(t) = wt.upgrade() {
+                    t.decoration.set(None)
+                }
+            }));
+            if t.xdg.initialized() {
+                self.answer_decoration(&t)
+            }
+        }
+    }
+
+    /// Tell a window we draw its frame, and make room for it: the surface
+    /// moves down and right by the frame's own metrics. Safe to repeat.
+    fn answer_decoration(&self, t: &Toplevel) {
+        let Some(dec) = t.decoration.take() else { return };
+        dec.set_server_side();
+        let (x, y) = self.metrics.get().surface(t.x.get(), t.y.get());
+        t.x.set(x);
+        t.y.set(y);
+    }
+
+    /// The frame texture for a decorated window as it is now.
+    pub fn frame_texture(&self, t: &Toplevel) -> Option<Texture> {
+        if !t.decorated.get() {
+            return None;
+        }
+        let (_, _, w, h) = self.metrics.get().frame(t.x.get(), t.y.get(), t.width(), t.height());
+        let active = self.focused().is_some_and(|f| f.id == t.id);
+        let mut runner = self.runner.borrow_mut();
+        let runner = runner.as_mut()?;
+        self.frames.borrow_mut().texture(t.id, w, h, active, &t.title().unwrap_or_default(), self.session.renderer(), runner, &self.theme.borrow())
     }
 
     // MARK: maximize, minimize, fullscreen
@@ -1188,6 +1266,7 @@ impl Compositor {
 
 impl Drop for Compositor {
     fn drop(&mut self) {
+        self.frames.borrow_mut().release();
         self.listeners.borrow_mut().clear();
         for p in self.popups.borrow().iter() {
             p.listeners.borrow_mut().clear();
@@ -1253,8 +1332,9 @@ impl World for CompositorWorld {
     fn shoal(&self, _: usize) -> (String, Vec<String>) {
         (String::new(), vec![])
     }
-    fn frame_texture(&mut self, _: &SceneWindow) -> Option<Texture> {
-        None
+    fn frame_texture(&mut self, w: &SceneWindow) -> Option<Texture> {
+        let t = self.0.toplevels.borrow().iter().find(|t| t.id == w.id).cloned()?;
+        self.0.frame_texture(&t)
     }
     fn ebb_label(&mut self, _: &SceneWindow) -> Option<Label> {
         None
@@ -1275,8 +1355,15 @@ impl World for CompositorWorld {
         0
     }
     fn theme_generation(&self) -> u64 {
-        0
+        self.0.theme.borrow().generation
     }
+}
+
+/// The frame's size around a window, from the theme: the title bar and the
+/// border (`chrome.border`), so undertow's frames and an Aqua window's own
+/// are one height.
+pub fn frame_metrics(theme: &Theme) -> FrameMetrics {
+    FrameMetrics { title_height: theme.tokens.title_bar_height, border: theme.tokens.chrome_border }
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ macro_rules! opaque {
     ($($c:ident),*) => { $( #[allow(non_camel_case_types)] #[repr(C)] pub struct $c { _p: [u8; 0] } )* };
 }
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
+opaque!(wlr_xdg_decoration_manager_v1, wlr_xdg_toplevel_decoration_v1);
 opaque!(wlr_compositor, wlr_xdg_shell, wlr_xdg_toplevel, wlr_xdg_popup, wlr_layer_shell_v1, wlr_layer_surface_v1, wlr_foreign_toplevel_manager_v1, wlr_foreign_toplevel_handle_v1, wlr_xdg_activation_v1, wlr_output_layout);
 
 /// tw-access.h's `struct tw_layer_request`: what a layer surface asks for.
@@ -213,6 +214,11 @@ unsafe extern "C" {
     fn tw_foreign_toplevel_handle_v1_on_request_close(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_foreign_toplevel_handle_v1_on_request_minimize(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_foreign_toplevel_handle_v1_on_request_maximize(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_decoration_manager_v1_on_new_toplevel_decoration(o: *mut wlr_xdg_decoration_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_decoration_v1_on_destroy(o: *mut wlr_xdg_toplevel_decoration_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_decoration_toplevel(d: *const wlr_xdg_toplevel_decoration_v1) -> *mut wlr_xdg_toplevel;
+    fn tw_decoration_server_side(d: *mut wlr_xdg_toplevel_decoration_v1);
+    fn wlr_xdg_decoration_manager_v1_create(d: *mut wl_display) -> *mut wlr_xdg_decoration_manager_v1;
     fn tw_xdg_activation_v1_on_request_activate(o: *mut wlr_xdg_activation_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
 
     fn tw_surface_committed_buffer(s: *const wlr_surface) -> bool;
@@ -359,6 +365,8 @@ handle!(ForeignManager, wlr_foreign_toplevel_manager_v1);
 handle!(ForeignHandle, wlr_foreign_toplevel_handle_v1);
 handle!(Activation, wlr_xdg_activation_v1);
 handle!(OutputLayout, wlr_output_layout);
+handle!(DecorationManager, wlr_xdg_decoration_manager_v1);
+handle!(Decoration, wlr_xdg_toplevel_decoration_v1);
 
 // MARK: listeners
 
@@ -870,6 +878,9 @@ pub mod globals {
     pub fn output_layout(d: &Display) -> Option<OutputLayout> {
         OutputLayout::from_raw(unsafe { wlr_output_layout_create(d.0.as_ptr()) })
     }
+    pub fn xdg_decoration_manager(d: &Display) -> Option<DecorationManager> {
+        DecorationManager::from_raw(unsafe { wlr_xdg_decoration_manager_v1_create(d.0.as_ptr()) })
+    }
     pub fn xdg_output_manager(d: &Display, l: OutputLayout) -> bool {
         !unsafe { wlr_xdg_output_manager_v1_create(d.0.as_ptr(), l.0.as_ptr()) }.is_null()
     }
@@ -1055,6 +1066,21 @@ impl ForeignHandle {
     }
     pub fn set_activated(self, on: bool) {
         unsafe { wlr_foreign_toplevel_handle_v1_set_activated(self.0.as_ptr(), on) }
+    }
+}
+
+impl DecorationManager {
+    signal!(on_new_toplevel_decoration, tw_xdg_decoration_manager_v1_on_new_toplevel_decoration, wlr_xdg_decoration_manager_v1, |d| -> Decoration { Decoration(NonNull::new(d as *mut wlr_xdg_toplevel_decoration_v1).unwrap()) });
+}
+
+impl Decoration {
+    signal!(on_destroy, tw_xdg_toplevel_decoration_v1_on_destroy, wlr_xdg_toplevel_decoration_v1, ||);
+    pub fn toplevel(self) -> Option<XdgToplevel> {
+        XdgToplevel::from_raw(unsafe { tw_decoration_toplevel(self.0.as_ptr()) })
+    }
+    /// We draw the frame: always (P9.6).
+    pub fn set_server_side(self) {
+        unsafe { tw_decoration_server_side(self.0.as_ptr()) }
     }
 }
 

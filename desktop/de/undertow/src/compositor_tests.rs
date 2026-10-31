@@ -12,9 +12,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn metrics() -> FrameMetrics {
-    FrameMetrics { title_height: 22.0, border: 1.0 }
-}
+use aquadraw::theme::Theme;
 
 struct Rig {
     c: Rc<Compositor>,
@@ -29,7 +27,7 @@ fn rig(tag: &str) -> Rig {
     std::fs::create_dir_all(&dir).unwrap();
     let layout = DisplayLayout { displays: vec![DisplayBox::new(&name, 0, 0, 640, 480)], ..DisplayLayout::default() };
     let socket = format!("undertow-test-{tag}-{}", std::process::id());
-    let c = Compositor::new(session, layout, Some(&dir), Some(&socket), metrics()).unwrap();
+    let c = Compositor::new(session, layout, Some(&dir), Some(&socket), Theme::default(), aquadraw::scene::runner(1)).unwrap();
     assert_eq!(c.socket_name, socket);
     Rig { c, _dir: dir }
 }
@@ -159,7 +157,7 @@ fn the_scene_draws_a_clients_window_where_it_was_placed() {
     let _j = client(&c.socket_name, "Red", "org.test.red", (100, 50), (1.0, 0.0, 0.0), 5.0, tx);
     assert!(pump(c, || rx.try_recv().is_ok() && c.mapped_toplevels().len() == 1 && c.mapped_toplevels()[0].surface.texture().is_some()));
     let display = c.layout.borrow().displays[0].clone();
-    let scene = Rc::new(RefCell::new(SurfaceScene::new(c.world(), &display, metrics(), 64)));
+    let scene = Rc::new(RefCell::new(SurfaceScene::new(c.world(), &display, c.metrics.get(), 64)));
     let stats = scene.borrow_mut().latch_and_composite(0, 0);
     assert_eq!(stats.surfaces, 1);
     let mut out = WlrootsOutput::new(c.session.outputs()[0], &c.session);
@@ -180,4 +178,56 @@ fn the_scene_draws_a_clients_window_where_it_was_placed() {
     let _ = out.period_hint_ns();
     c.close_focused_window();
     pump(c, || c.toplevels.borrow().is_empty());
+}
+
+/// A decorated window: its frame drawn around it at the theme's metrics,
+/// rasterised once while nothing changes and again when focus moves.
+#[test]
+fn a_decorated_window_is_framed_and_its_frame_is_cached() {
+    let r = rig("frames");
+    let c = &r.c;
+    if c.runner.borrow().is_none() {
+        return; // no fonts: no frames
+    }
+    let (tx, rx) = mpsc::channel();
+    let _a = client(&c.socket_name, "Framed", "org.test.framed", (160, 80), (1.0, 0.0, 0.0), 5.0, tx.clone());
+    assert!(pump(c, || rx.try_recv().is_ok() && c.mapped_toplevels().len() == 1 && c.mapped_toplevels()[0].surface.texture().is_some()));
+    let t = c.mapped_toplevels()[0].clone();
+    t.decorated.set(true);
+    let m = c.metrics.get();
+    assert_eq!((m.title_height, m.border), (22.0, 1.0), "Jaguar's, from the theme");
+
+    let display = c.layout.borrow().displays[0].clone();
+    let scene = Rc::new(RefCell::new(SurfaceScene::new(c.world(), &display, m, 64)));
+    scene.borrow_mut().latch_and_composite(0, 0);
+    scene.borrow_mut().latch_and_composite(1, 1);
+    assert_eq!(c.frames.borrow().rasterisations, 1, "a still window rasterises its frame once");
+    let (frame, _, r) = scene.borrow().entry(0);
+    assert!(frame.is_some());
+    assert_eq!(r, Rect::new(t.x.get() - 1, t.y.get() - 22, 162, 103), "the frame under the window it frames");
+
+    let mut out = WlrootsOutput::new(c.session.outputs()[0], &c.session);
+    out.set_painter(scene.clone());
+    let path = std::env::temp_dir().join(format!("undertow-frame-{}.ppm", std::process::id()));
+    assert!(out.capture_ppm(&path.to_string_lossy()));
+    let ppm = std::fs::read(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let px = |x: i32, y: i32| {
+        let o = ppm.len() - 640 * 480 * 3 + (y as usize * 640 + x as usize) * 3;
+        [ppm[o], ppm[o + 1], ppm[o + 2]]
+    };
+    let title_bar = px(t.x.get() + 120, t.y.get() - 4);
+    assert!(title_bar != [61, 102, 161] && title_bar[0] > 150 && title_bar[0].abs_diff(title_bar[2]) < 40, "a pale title bar: {title_bar:?}");
+    assert_eq!(px(t.x.get() + 80, t.y.get() + 40), [255, 0, 0], "the client's own pixels inside it");
+
+    // Another window takes focus: the first's frame is drawn inactive.
+    let _b = client(&c.socket_name, "Other", "org.test.other", (60, 40), (0.0, 1.0, 0.0), 5.0, tx);
+    assert!(pump(c, || c.mapped_toplevels().len() == 2));
+    scene.borrow_mut().latch_and_composite(2, 2);
+    assert_eq!(c.frames.borrow().rasterisations, 2, "redrawn once, inactive");
+    while !c.toplevels.borrow().is_empty() {
+        c.close_focused_window();
+        let n = c.toplevels.borrow().len();
+        pump(c, || c.toplevels.borrow().len() < n);
+    }
 }

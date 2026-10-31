@@ -54,6 +54,8 @@ TW_SIGNAL(foreign_toplevel_handle_v1, request_close)
 TW_SIGNAL(foreign_toplevel_handle_v1, request_minimize)
 TW_SIGNAL(foreign_toplevel_handle_v1, request_maximize)
 TW_SIGNAL(xdg_activation_v1, request_activate)
+TW_SIGNAL(xdg_decoration_manager_v1, new_toplevel_decoration)
+TW_SIGNAL(xdg_toplevel_decoration_v1, destroy)
 #undef TW_SIGNAL
 
 /* MARK: outputs */
@@ -170,6 +172,12 @@ struct tw_layer_request {
 void tw_layer_request_read(const struct wlr_layer_surface_v1 *l, struct tw_layer_request *out);
 struct wlr_output *tw_layer_output(const struct wlr_layer_surface_v1 *l);  /* may be NULL */
 void tw_layer_set_output(struct wlr_layer_surface_v1 *l, struct wlr_output *o);
+
+/* MARK: decorations */
+
+struct wlr_xdg_toplevel *tw_decoration_toplevel(const struct wlr_xdg_toplevel_decoration_v1 *d);
+/* We draw the frame (WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE). */
+void tw_decoration_server_side(struct wlr_xdg_toplevel_decoration_v1 *d);
 
 /* MARK: foreign toplevels, activation */
 
