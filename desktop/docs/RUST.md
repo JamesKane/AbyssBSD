@@ -869,10 +869,27 @@ theme, following appearance.ini) and the live `AquaWindow` for the five
 toolkit scenes. With the Rust AquaDemo swapped in by hand, **live-suspend,
 -depth, -islands, -keys, -undertow, -undertow-input, -undertow-c2,
 -surface-enter and -displays-config are green**; live-window and
--screenshot need the menu bar and the desktop (R6). Not yet: popups (the
-widgets' pop-up button opens nothing), layer surfaces, the clipboard,
-activation, screencopy, the session lock, idle notification, foreign
-toplevels, the menu bar's focus protocol.
+-screenshot need the menu bar and the desktop (R6).
+
+*R5d, popups and layer surfaces.* What Swift copied into each surface
+class (two buffers, the scale from the outputs entered, frame pacing, the
+frame callback destroyed first on teardown) is one `Backing`; Window,
+Popup and LayerSurface each own one and are a `Role` to it. The Display
+keeps one registry of them by wl_surface, and input goes to the surface
+the last `enter` named, else the first window, else the first layer
+surface, where Swift kept a slot per kind and an order among them. A popup
+hears only the left button and no wheel, as before. The Popup is the
+xdg-popup below a rect of a window or a layer surface, or a submenu beside
+a row of another popup, grabbing with the last pointer serial; aqua's
+`LiveMenu` is the live AquaMenu on it: hover, keys, the submenu chain
+closed deepest first, Escape a dismissal, and the widgets scene's
+Appearance pop-up opens one, by click or by Space. Checked live on
+undertow by hand: opened by key and by click, closed by a choice, by
+Escape and by a click outside, each time opening again; the nine scripts
+above still green; `examples/layer_probe` maps a top bar and shows a
+frame. Not yet: the clipboard, activation, screencopy, the session lock,
+idle notification, foreign toplevels, the menu bar's focus protocol, the
+display configurator.
 
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System

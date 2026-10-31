@@ -1,12 +1,14 @@
 //! What every Aqua surface in a process shares: the fonts and draw-list
 //! runner, and the theme, followed as the person changes it (P14.2).
 
+use abyss_sys::Context;
+use aquadraw::canvas::Canvas;
 use aquadraw::runner::Runner;
 use aquadraw::theme::{announcement, role_announcements, Outcome, Theme};
 use std::cell::RefCell;
 use std::os::fd::AsRawFd;
 use std::rc::Rc;
-use surface::Display;
+use surface::{Display, RenderTarget};
 
 pub struct Toolkit {
     pub runner: RefCell<Runner>,
@@ -33,6 +35,24 @@ impl Toolkit {
         let mut theme = Theme::default();
         announce(&theme.load_current(config_dir.as_deref(), Some(&mut runner)));
         Some(Rc::new(Toolkit { runner: RefCell::new(runner), theme: RefCell::new(theme), config_dir, watch: RefCell::new(None) }))
+    }
+
+    /// Paint a frame: `f` gets a Canvas in points on a cleared target, and
+    /// its width and height in points. Text is shaped on this frame's
+    /// device grid.
+    pub fn draw<R>(&self, target: &RenderTarget, f: impl FnOnce(&mut Canvas, f64, f64) -> R) -> R {
+        let mut runner = self.runner.borrow_mut();
+        let theme = self.theme.borrow();
+        runner.text.render_scale = target.scale;
+        let (w, h) = ((target.width / target.scale) as f64, (target.height / target.scale) as f64);
+        let cr = Context::new(target.surface);
+        cr.scale(target.scale as f64, target.scale as f64);
+        // A transparent ground, so rounded corners read.
+        cr.set_operator(0); // CLEAR
+        cr.paint();
+        cr.set_operator(abyss_sys::OPERATOR_OVER);
+        let mut c = Canvas::new(&cr, &mut runner, &theme);
+        f(&mut c, w, h)
     }
 
     /// **Follow the theme a person chooses while this runs** (P14.2): one

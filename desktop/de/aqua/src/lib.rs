@@ -4,6 +4,7 @@
 
 pub mod commands;
 pub mod finder_commands;
+pub mod live_menu;
 pub mod menu;
 pub mod scene;
 pub mod scroll;

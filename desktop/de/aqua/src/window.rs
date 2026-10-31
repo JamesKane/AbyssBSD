@@ -3,15 +3,16 @@
 //! chrome is the compositor's to act on: a press on it is one request.
 
 use crate::scene::{paint_aqua_window, SceneKind};
+use crate::live_menu::LiveMenu;
+use crate::menu::AquaMenu;
 use crate::toolkit::Toolkit;
 use crate::{scroll, sheet, tabs, widgets};
-use aquadraw::canvas::{Canvas, SLIDER_THUMB_RADIUS};
+use aquadraw::canvas::SLIDER_THUMB_RADIUS;
 use aquadraw::chrome::{chrome_hit, window_chrome, ChromeEdge, ChromeHit, Gadget};
 use aquadraw::runner::Rect;
-use abyss_sys::Context;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use surface::{Display, KeyEvent, KeySym, RenderTarget, ResizeEdge, Window, WindowDelegate};
+use surface::{Display, KeyEvent, KeySym, PopupDelegate, RenderTarget, ResizeEdge, Window, WindowDelegate};
 use widgets::{WidgetFocus, WidgetLayout, WidgetState, FOCUS_ORDER};
 
 const BTN_LEFT: u32 = 0x110;
@@ -30,6 +31,10 @@ struct State {
     dragging_slider: bool,
     /// Keyboard focus starts on the default button, as Aqua's does.
     focus: Option<WidgetFocus>,
+    /// The Appearance pop-up's menu, while it is open; and a press that
+    /// asked for it, opened once the state is let go.
+    menu: Option<Rc<LiveMenu>>,
+    open_menu: bool,
     // Scroll.
     offset: f64,
     scroll_layout: scroll::ScrollLayout,
@@ -47,6 +52,7 @@ struct State {
 }
 
 pub struct AquaWindow {
+    me: Weak<AquaWindow>,
     window: RefCell<Option<Rc<Window>>>,
     toolkit: Rc<Toolkit>,
     title: String,
@@ -59,7 +65,8 @@ impl AquaWindow {
     /// otherwise the window follows its outputs.
     pub fn new(display: &Rc<Display>, toolkit: &Rc<Toolkit>, title: &str, kind: SceneKind, width: i32, height: i32) -> Option<Rc<AquaWindow>> {
         let pinned = std::env::var("AQUA_SCALE").ok().and_then(|s| s.parse::<i32>().ok()).filter(|v| *v > 0);
-        let me = Rc::new(AquaWindow {
+        let me = Rc::new_cyclic(|me| AquaWindow {
+            me: me.clone(),
             window: RefCell::new(None),
             toolkit: toolkit.clone(),
             title: title.into(),
@@ -138,6 +145,43 @@ impl AquaWindow {
         }
     }
 
+    /// Open the Appearance pop-up's menu below the button, if a press or a
+    /// key asked; a choice sets the value.
+    fn open_menu_if_asked(&self, w: &Window) {
+        let (r, selected) = {
+            let mut s = self.state.borrow_mut();
+            if !std::mem::take(&mut s.open_menu) || s.menu.as_ref().is_some_and(|m| m.is_open()) {
+                return;
+            }
+            (s.widget_layout.popup, s.widgets.popup)
+        };
+        let m = LiveMenu::new(&self.toolkit, AquaMenu::of_titles(&widgets::POPUP_OPTIONS, selected));
+        let (_, h) = m.preferred_size(r.w);
+        let anchor = (r.x.round() as i32, r.y.round() as i32, r.w.round() as i32, r.h.round() as i32);
+        let Some(p) = w.open_popup(anchor, r.w.round() as i32, h, Rc::downgrade(&m) as Weak<dyn PopupDelegate>) else { return };
+        m.set_popup(p);
+        let me = self.me.clone();
+        m.on_choose(move |i| {
+            let Some(aw) = me.upgrade() else { return };
+            let m = {
+                let mut s = aw.state.borrow_mut();
+                s.widgets.popup = i;
+                s.menu.take()
+            };
+            if let Some(m) = m {
+                m.close_all()
+            }
+            aw.refresh()
+        });
+        let me = self.me.clone();
+        m.on_dismiss(move || {
+            if let Some(aw) = me.upgrade() {
+                aw.state.borrow_mut().menu = None
+            }
+        });
+        self.state.borrow_mut().menu = Some(m);
+    }
+
     /// A press or release in the scene, past the chrome: whether to redraw.
     fn scene_button(&self, pressed: bool) -> bool {
         let mut s = self.state.borrow_mut();
@@ -177,8 +221,8 @@ impl AquaWindow {
                     s.dragging_slider = true;
                     s.widgets.slider = AquaWindow::slider_value(&s, x);
                 } else if l.popup.contains(x, y) {
-                    // The menu itself comes with surface's popups.
                     s.focus = Some(WidgetFocus::Popup);
+                    s.open_menu = true;
                 } else if l.cancel_button.contains(x, y) {
                     s.focus = Some(WidgetFocus::Cancel);
                     s.widgets.cancel_pressed = true;
@@ -300,6 +344,7 @@ impl AquaWindow {
                     KeySym::ESCAPE => s.widgets.cancel_pressed = true,
                     KeySym::SPACE => match s.focus {
                         Some(WidgetFocus::Check(i)) => s.widgets.checks[i] = !s.widgets.checks[i],
+                        Some(WidgetFocus::Popup) => s.open_menu = true,
                         Some(WidgetFocus::Ok) => s.widgets.ok_pressed = true,
                         Some(WidgetFocus::Cancel) => s.widgets.cancel_pressed = true,
                         _ => {}
@@ -381,32 +426,22 @@ impl AquaWindow {
 
 impl WindowDelegate for AquaWindow {
     fn render(&self, _w: &Window, target: &RenderTarget) {
-        let mut runner = self.toolkit.runner.borrow_mut();
-        let theme = self.toolkit.theme.borrow();
-        // Shape and hint on this frame's device grid.
-        runner.text.render_scale = target.scale;
-        let (w, h) = ((target.width / target.scale) as f64, (target.height / target.scale) as f64);
-        let cr = Context::new(target.surface);
-        cr.scale(target.scale as f64, target.scale as f64);
-        // A transparent ground, so the rounded corners read.
-        cr.set_operator(0); // CLEAR
-        cr.paint();
-        cr.set_operator(abyss_sys::OPERATOR_OVER);
-        let mut c = Canvas::new(&cr, &mut runner, &theme);
-        let mut s = self.state.borrow_mut();
-        match self.kind {
-            SceneKind::Window => s.button = paint_aqua_window(&mut c, w, h, &self.title, s.clicks, s.button_pressed, &s.typed.clone(), true),
-            SceneKind::Widgets => {
-                let (state, focus) = (s.widgets.clone(), s.focus);
-                s.widget_layout = widgets::paint_widgets(&mut c, w, h, &state, focus)
+        self.toolkit.draw(target, |c, w, h| {
+            let mut s = self.state.borrow_mut();
+            match self.kind {
+                SceneKind::Window => s.button = paint_aqua_window(c, w, h, &self.title, s.clicks, s.button_pressed, &s.typed.clone(), true),
+                SceneKind::Widgets => {
+                    let (state, focus) = (s.widgets.clone(), s.focus);
+                    s.widget_layout = widgets::paint_widgets(c, w, h, &state, focus)
+                }
+                SceneKind::Scroll => s.scroll_layout = scroll::paint_scroll(c, w, h, s.offset),
+                SceneKind::Tabs => s.tabs_layout = tabs::paint_tabs(c, w, h, s.tabs),
+                SceneKind::Sheet => {
+                    let action = s.sheet_action.clone();
+                    s.sheet = sheet::paint_sheet_scene(c, w, h, s.sheet_progress, s.sheet_visible, &action)
+                }
             }
-            SceneKind::Scroll => s.scroll_layout = scroll::paint_scroll(&mut c, w, h, s.offset),
-            SceneKind::Tabs => s.tabs_layout = tabs::paint_tabs(&mut c, w, h, s.tabs),
-            SceneKind::Sheet => {
-                let action = s.sheet_action.clone();
-                s.sheet = sheet::paint_sheet_scene(&mut c, w, h, s.sheet_progress, s.sheet_visible, &action)
-            }
-        }
+        })
     }
 
     /// The sheet's slide, a step a frame.
@@ -473,6 +508,7 @@ impl WindowDelegate for AquaWindow {
         if self.scene_button(pressed) {
             w.set_needs_display()
         }
+        self.open_menu_if_asked(w)
     }
 
     /// What the compositor says the window now is (P9.4), said aloud:
@@ -488,8 +524,18 @@ impl WindowDelegate for AquaWindow {
         if e.pressed {
             eprintln!("AquaWindow: key {}{}", e.keysym, if e.text.is_empty() { String::new() } else { format!(" '{}'", e.text) });
         }
+        // An open menu has the keys: a grabbing popup does not take the
+        // keyboard from the window under it.
+        let menu = self.state.borrow().menu.clone();
+        if let Some(m) = menu.filter(|m| m.is_open()) {
+            if e.pressed {
+                m.key_down(e.keysym);
+            }
+            return;
+        }
         if self.scene_key(e) {
             w.set_needs_display()
         }
+        self.open_menu_if_asked(w)
     }
 }

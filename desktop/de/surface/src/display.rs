@@ -1,12 +1,13 @@
 //! The connection (Display.swift): the registry and the globals the toolkit
 //! binds, the outputs' scales, the seat's pointer and keyboard routed to the
-//! window each event names, key repeat, and the run loop.
+//! surface each event names (a window, a popup, a layer surface), key
+//! repeat, and the run loop.
 //!
 //! Single-threaded, as the protocol's dispatch is: state is in Cells, and
 //! no borrow is held across a call that may dispatch or reach a delegate.
 
+use crate::backing::{Kind, Role};
 use crate::keyboard::{KeyEvent, KeyboardState};
-use crate::window::Window;
 use abyss_sys::proc::{poll, poll_fd};
 use abyss_sys::wlc::{self, wl_keyboard, wl_output, wl_pointer, wl_registry, wl_registry_bind::bind, wl_seat, xdg_wm_base, Connection, Obj};
 use std::cell::{Cell, RefCell};
@@ -73,11 +74,13 @@ pub struct Display {
     pointer: Cell<Option<Obj>>,
     keyboard: Cell<Option<Obj>>,
     keyboard_state: RefCell<KeyboardState>,
-    windows: RefCell<Vec<Weak<Window>>>,
-    /// The first window registered: input goes to it before any `enter`.
-    primary: RefCell<Weak<Window>>,
-    pointer_window: RefCell<Weak<Window>>,
-    keyboard_window: RefCell<Weak<Window>>,
+    /// Every surface painted here, by its wl_surface, oldest first.
+    surfaces: RefCell<Vec<(Obj, Weak<dyn Role>)>>,
+    /// The surfaces the pointer and the keyboard last entered: **only the
+    /// surface says where an event belongs**, since one process may own
+    /// windows, popups and a layer surface at once.
+    pointer_on: Cell<Option<Obj>>,
+    keyboard_on: Cell<Option<Obj>>,
     /// The most recent pointer serial: a move, a resize, a popup grab and a
     /// drag each want specifically one of these, so a keystroke cannot
     /// start them.
@@ -105,10 +108,9 @@ impl Display {
             pointer: Cell::new(None),
             keyboard: Cell::new(None),
             keyboard_state: RefCell::default(),
-            windows: RefCell::default(),
-            primary: RefCell::new(Weak::new()),
-            pointer_window: RefCell::new(Weak::new()),
-            keyboard_window: RefCell::new(Weak::new()),
+            surfaces: RefCell::default(),
+            pointer_on: Cell::new(None),
+            keyboard_on: Cell::new(None),
             last_pointer_serial: Cell::new(0),
             last_input_serial: Cell::new(0),
             repeat: RefCell::new(None),
@@ -232,8 +234,8 @@ impl Display {
     }
 
     fn rescale_windows(&self) {
-        for w in self.live_windows() {
-            w.recompute_scale()
+        for r in self.live_surfaces() {
+            r.backing().recompute_scale()
         }
     }
 
@@ -258,46 +260,44 @@ impl Display {
         self.last_input_serial.get()
     }
 
-    // MARK: windows
+    // MARK: surfaces
 
-    pub(crate) fn register(&self, w: &Rc<Window>) {
-        self.windows.borrow_mut().retain(|x| x.strong_count() > 0);
-        self.windows.borrow_mut().push(Rc::downgrade(w));
-        if self.primary.borrow().strong_count() == 0 {
-            *self.primary.borrow_mut() = Rc::downgrade(w)
-        }
+    pub(crate) fn register(&self, role: Weak<dyn Role>) {
+        let Some(r) = role.upgrade() else { return };
+        let surface = r.backing().surface;
+        let mut v = self.surfaces.borrow_mut();
+        v.retain(|(_, w)| w.strong_count() > 0);
+        v.push((surface, role));
     }
 
-    pub(crate) fn unregister(&self, w: &Window) {
-        let is = |x: &Weak<Window>| std::ptr::eq(x.as_ptr(), w);
-        self.windows.borrow_mut().retain(|x| x.strong_count() > 0 && !is(x));
-        for slot in [&self.pointer_window, &self.keyboard_window] {
-            if is(&slot.borrow()) {
-                *slot.borrow_mut() = Weak::new()
+    pub(crate) fn unregister(&self, surface: Obj) {
+        self.surfaces.borrow_mut().retain(|(s, w)| *s != surface && w.strong_count() > 0);
+        for slot in [&self.pointer_on, &self.keyboard_on] {
+            if slot.get() == Some(surface) {
+                slot.set(None)
             }
         }
-        if is(&self.primary.borrow()) {
-            let next = self.windows.borrow().first().cloned().unwrap_or_default();
-            *self.primary.borrow_mut() = next;
-        }
     }
 
-    pub(crate) fn window_by_surface(&self, surface: Obj) -> Option<Rc<Window>> {
-        self.window_for(Some(surface))
+    fn live_surfaces(&self) -> Vec<Rc<dyn Role>> {
+        self.surfaces.borrow().iter().filter_map(|(_, w)| w.upgrade()).collect()
     }
 
-    fn live_windows(&self) -> Vec<Rc<Window>> {
-        self.windows.borrow().iter().filter_map(Weak::upgrade).collect()
-    }
-
-    fn window_for(&self, surface: Option<Obj>) -> Option<Rc<Window>> {
+    fn surface(&self, surface: Option<Obj>) -> Option<Rc<dyn Role>> {
         let s = surface?;
-        self.live_windows().into_iter().find(|w| w.surface == s)
+        self.surfaces.borrow().iter().find(|(o, _)| *o == s).and_then(|(_, w)| w.upgrade())
     }
 
-    /// The window the primary input goes to: `slot`'s, else the first.
-    fn target(&self, slot: &RefCell<Weak<Window>>) -> Option<Rc<Window>> {
-        slot.borrow().upgrade().or_else(|| self.primary.borrow().upgrade())
+    /// Where input goes before any `enter` names a surface: the first
+    /// window, else the first layer surface.
+    fn primary(&self) -> Option<Rc<dyn Role>> {
+        let all = self.live_surfaces();
+        let first = |k| all.iter().find(|r| r.kind() == k).cloned();
+        first(Kind::Window).or_else(|| first(Kind::Layer))
+    }
+
+    fn target(&self, slot: &Cell<Option<Obj>>) -> Option<Rc<dyn Role>> {
+        self.surface(slot.get()).or_else(|| self.primary())
     }
 
     // MARK: the seat
@@ -323,22 +323,30 @@ impl Display {
             Enter { serial, surface, surface_x, surface_y } => {
                 self.last_pointer_serial.set(serial);
                 self.last_input_serial.set(serial);
-                if let Some(w) = self.window_for(surface) {
-                    *self.pointer_window.borrow_mut() = Rc::downgrade(&w)
+                if self.surface(surface).is_some() {
+                    self.pointer_on.set(surface)
                 }
                 self.route_motion(surface_x, surface_y)
+            }
+            Leave { surface, .. } => {
+                if self.pointer_on.get() == surface {
+                    self.pointer_on.set(None)
+                }
+                if let Some(r) = self.surface(surface) {
+                    r.pointer_left()
+                }
             }
             Motion { surface_x, surface_y, .. } => self.route_motion(surface_x, surface_y),
             Button { serial, button, state, .. } => {
                 self.last_pointer_serial.set(serial);
                 self.last_input_serial.set(serial);
-                if let Some(w) = self.target(&self.pointer_window) {
-                    w.pointer_button(button, state == 1)
+                if let Some(r) = self.target(&self.pointer_on) {
+                    r.pointer_button(button, state == 1)
                 }
             }
             Axis { axis, value, .. } => {
-                if let Some(w) = self.target(&self.pointer_window) {
-                    w.pointer_axis(axis, value)
+                if let Some(r) = self.target(&self.pointer_on) {
+                    r.pointer_axis(axis, value)
                 }
             }
             _ => {}
@@ -346,8 +354,8 @@ impl Display {
     }
 
     fn route_motion(&self, x: f64, y: f64) {
-        if let Some(w) = self.target(&self.pointer_window) {
-            w.pointer_moved(x, y)
+        if let Some(r) = self.target(&self.pointer_on) {
+            r.pointer_moved(x, y)
         }
     }
 
@@ -365,18 +373,18 @@ impl Display {
         use wl_keyboard::Event::*;
         match e {
             Keymap { format, fd, size } => self.keyboard_state.borrow_mut().load_keymap(fd, size, format),
-            // Where typing goes, in a multi-window application.
+            // Where typing goes, in a multi-window application. A grabbing
+            // popup does not take the keyboard from its own client (HANDOFF
+            // §2.12): the window under it forwards keys to its open menu.
             Enter { surface, .. } => {
-                if let Some(w) = self.window_for(surface) {
-                    *self.keyboard_window.borrow_mut() = Rc::downgrade(&w)
+                if self.surface(surface).is_some() {
+                    self.keyboard_on.set(surface)
                 }
             }
             Leave { surface, .. } => {
-                if let Some(w) = self.window_for(surface)
-                    && std::ptr::eq(self.keyboard_window.borrow().as_ptr(), Rc::as_ptr(&w))
-                {
-                    *self.keyboard_window.borrow_mut() = Weak::new();
-                    // Never repeat into a window that lost focus.
+                if surface.is_some() && self.keyboard_on.get() == surface {
+                    self.keyboard_on.set(None);
+                    // Never repeat into a surface that lost focus.
                     *self.repeat.borrow_mut() = None;
                 }
             }
@@ -398,8 +406,8 @@ impl Display {
     }
 
     fn route_key(&self, ev: &KeyEvent) {
-        if let Some(w) = self.target(&self.keyboard_window) {
-            w.key_event(ev)
+        if let Some(r) = self.target(&self.keyboard_on) {
+            r.key_event(ev)
         }
     }
 
@@ -534,8 +542,8 @@ impl Display {
     /// Every surface draws again: for a change to how everything looks (the
     /// theme, P14.2).
     pub fn set_everything_needs_display(&self) {
-        for w in self.live_windows() {
-            w.set_needs_display()
+        for r in self.live_surfaces() {
+            r.backing().set_needs_display()
         }
     }
 }
