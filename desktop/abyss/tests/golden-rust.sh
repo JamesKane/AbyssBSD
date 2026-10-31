@@ -63,6 +63,7 @@ icons|icons|aquademo:icons|1|
 icons@2x|icons@2x|aquademo:icons|2|
 trench-icons|trench-icons|aquademo:icons|1|ABYSS_THEME=trench
 svg-beacon@2x|svg-beacon@2x|aquademo:icons|2|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl
+wallpaper|wallpaper|aquademo:wallpaper|1|
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

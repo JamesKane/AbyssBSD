@@ -7,7 +7,9 @@ publish.workspace = true
 
 [dependencies]
 abyss-sys.workspace = true
+app-bundles = { path = "../appbundles" }
 aquadraw = { path = "../aquadraw" }
 menu-model = { path = "../menumodel" }
 pool-config = { path = "../poolconfig" }
+spawn = { path = "../spawn" }
 surface = { path = "../surface" }

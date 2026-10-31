@@ -85,6 +85,10 @@ pub const OPERATOR_OVER: c_int = 2;
 pub const FORMAT_ARGB32: c_int = 0;
 pub const FORMAT_A8: c_int = 2;
 const EXTEND_REPEAT: c_int = 1;
+const EXTEND_PAD: c_int = 3;
+const FILTER_GOOD: c_int = 1;
+const STATUS_SUCCESS: c_int = 0;
+const STATUS_READ_ERROR: c_int = 10;
 pub const LINE_CAP_BUTT: c_int = 0;
 pub const LINE_CAP_ROUND: c_int = 1;
 pub const LINE_JOIN_MITER: c_int = 0;
@@ -98,6 +102,14 @@ unsafe extern "C" {
     fn cairo_surface_mark_dirty(s: *mut cairo_surface_t);
     fn cairo_surface_destroy(s: *mut cairo_surface_t);
     fn cairo_surface_write_to_png(s: *mut cairo_surface_t, path: *const c_char) -> c_int;
+    fn cairo_image_surface_create_from_png(path: *const c_char) -> *mut cairo_surface_t;
+    fn cairo_image_surface_create_from_png_stream(read: unsafe extern "C" fn(*mut c_void, *mut u8, c_uint) -> c_int, closure: *mut c_void) -> *mut cairo_surface_t;
+    fn cairo_surface_status(s: *mut cairo_surface_t) -> c_int;
+    fn cairo_image_surface_get_width(s: *mut cairo_surface_t) -> c_int;
+    fn cairo_image_surface_get_height(s: *mut cairo_surface_t) -> c_int;
+    fn cairo_set_source_surface(cr: *mut cairo_t, s: *mut cairo_surface_t, x: c_double, y: c_double);
+    fn cairo_get_source(cr: *mut cairo_t) -> *mut cairo_pattern_t;
+    fn cairo_pattern_set_filter(p: *mut cairo_pattern_t, f: c_int);
 
     fn cairo_create(s: *mut cairo_surface_t) -> *mut cairo_t;
     fn cairo_destroy(cr: *mut cairo_t);
@@ -175,7 +187,46 @@ unsafe extern "C" {
 /// An owned reference to a cairo surface.
 pub struct Surface(*mut cairo_surface_t);
 
+/// cairo's PNG stream reader over a byte cursor.
+unsafe extern "C" fn read_png_bytes(closure: *mut c_void, out: *mut u8, len: c_uint) -> c_int {
+    let c = unsafe { &mut *(closure as *mut (&[u8], usize)) };
+    let n = len as usize;
+    if c.1 + n > c.0.len() {
+        return STATUS_READ_ERROR;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(c.0.as_ptr().add(c.1), out, n) };
+    c.1 += n;
+    STATUS_SUCCESS
+}
+
 impl Surface {
+    /// A PNG file, decoded; None when it cannot be read.
+    pub fn from_png(path: &str) -> Option<Surface> {
+        let p = CString::new(path).ok()?;
+        Surface::checked(unsafe { cairo_image_surface_create_from_png(p.as_ptr()) })
+    }
+
+    /// PNG bytes already in memory (an .icns payload), decoded.
+    pub fn from_png_bytes(bytes: &[u8]) -> Option<Surface> {
+        let mut cursor: (&[u8], usize) = (bytes, 0);
+        Surface::checked(unsafe { cairo_image_surface_create_from_png_stream(read_png_bytes, &mut cursor as *mut _ as *mut c_void) })
+    }
+
+    fn checked(s: *mut cairo_surface_t) -> Option<Surface> {
+        if s.is_null() {
+            return None;
+        }
+        let s = Surface(s);
+        (unsafe { cairo_surface_status(s.0) } == STATUS_SUCCESS).then_some(s)
+    }
+
+    pub fn width(&self) -> i32 {
+        unsafe { cairo_image_surface_get_width(self.0) }
+    }
+    pub fn height(&self) -> i32 {
+        unsafe { cairo_image_surface_get_height(self.0) }
+    }
+
     pub fn image(format: c_int, w: i32, h: i32) -> Surface {
         Surface(unsafe { cairo_image_surface_create(format, w, h) })
     }
@@ -348,6 +399,20 @@ impl Context {
     }
     pub fn set_source_rgba(&self, r: f64, g: f64, b: f64, a: f64) {
         unsafe { cairo_set_source_rgba(self.0, r, g, b, a) }
+    }
+    /// `s` as the source at (x, y); `pad` extends its edges past it, and
+    /// `good` filters it when scaled.
+    pub fn set_source_surface(&self, s: &Surface, x: f64, y: f64, pad: bool, good: bool) {
+        unsafe {
+            cairo_set_source_surface(self.0, s.0, x, y);
+            let p = cairo_get_source(self.0);
+            if pad {
+                cairo_pattern_set_extend(p, EXTEND_PAD)
+            }
+            if good {
+                cairo_pattern_set_filter(p, FILTER_GOOD)
+            }
+        }
     }
     pub fn set_source(&self, p: &Pattern) {
         unsafe { cairo_set_source(self.0, p.0) }

@@ -47,6 +47,15 @@ fn main() {
             exit(1)
         };
         tk.follow_appearance(&display);
+        if kind == SceneKind::Wallpaper {
+            let Some(_wallpaper) = aqua::wallpaper::Wallpaper::new(&display, &tk) else {
+                println!("AquaDemo: failed to create the wallpaper (does the compositor offer wlr-layer-shell?).");
+                exit(1)
+            };
+            println!("AquaDemo: wallpaper (layer-shell BACKGROUND) is up.");
+            display.run();
+            exit(0)
+        }
         let Some(_window) = AquaWindow::new(&display, &tk, title, kind, w, h) else {
             println!("AquaDemo: failed to create the window.");
             exit(1)

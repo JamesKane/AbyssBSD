@@ -17,6 +17,9 @@ pub enum SceneKind {
     Scroll,
     Tabs,
     Sheet,
+    /// The desktop: a layer-shell BACKGROUND surface live, full-bleed in a
+    /// PNG.
+    Wallpaper,
 }
 
 impl SceneKind {
@@ -28,6 +31,7 @@ impl SceneKind {
             Some("scroll") => Some((SceneKind::Scroll, "Scroll", 360, 420)),
             Some("tabs") => Some((SceneKind::Tabs, "Tab View", 480, 380)),
             Some("sheet") => Some((SceneKind::Sheet, "Sheets", 440, 320)),
+            Some("wallpaper") => Some((SceneKind::Wallpaper, "Desktop", 800, 600)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -61,6 +65,19 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
         cr.scale(scale as f64, scale as f64);
         let was = runner.text.render_scale;
         runner.text.render_scale = scale; // shape and hint on the device grid
+        // The shell's surfaces are full-bleed: no grey desktop, no inset.
+        if kind == SceneKind::Wallpaper {
+            let mut c = Canvas::new(&cr, runner, theme);
+            crate::wallpaper::paint_wallpaper(&mut c, width as f64, height as f64);
+            let top = theme.tokens.desktop_top_inset;
+            let bounds = Rect::new(0.0, top, width as f64, height as f64 - top);
+            // The desktop's own icons, over a fixed listing.
+            crate::desktop_icons::paint_desktop_icons(&mut c, bounds, &crate::desktop_icons::desktop_sample_entries(), Some(1));
+            runner.text.render_scale = was;
+            drop(cr);
+            cs.flush();
+            return cs.write_png(path);
+        }
         let g = Pattern::linear(0.0, 0.0, 0.0, height as f64);
         g.add_color_stop_rgba(0.0, 0.62, 0.66, 0.72, 1.0);
         g.add_color_stop_rgba(1.0, 0.50, 0.54, 0.60, 1.0);
@@ -88,6 +105,7 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             SceneKind::Widgets => {
                 crate::widgets::paint_widgets(&mut c, cw, ch, &crate::widgets::WidgetState::default(), Some(crate::widgets::WidgetFocus::Ok));
             }
+            SceneKind::Wallpaper => {}
         }
         cr.restore();
         runner.text.render_scale = was;

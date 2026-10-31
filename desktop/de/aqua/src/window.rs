@@ -187,6 +187,7 @@ impl AquaWindow {
         let mut s = self.state.borrow_mut();
         let (x, y) = s.pointer;
         match self.kind {
+            SceneKind::Wallpaper => false,
             SceneKind::Window => {
                 if pressed {
                     s.button_pressed = s.button.contains(x, y);
@@ -320,6 +321,7 @@ impl AquaWindow {
     fn scene_key(&self, e: &KeyEvent) -> bool {
         let mut s = self.state.borrow_mut();
         match self.kind {
+            SceneKind::Wallpaper => false,
             SceneKind::Widgets => {
                 if !e.pressed {
                     // Let go of the button the keyboard held.
@@ -440,6 +442,7 @@ impl WindowDelegate for AquaWindow {
                     let action = s.sheet_action.clone();
                     s.sheet = sheet::paint_sheet_scene(c, w, h, s.sheet_progress, s.sheet_visible, &action)
                 }
+                SceneKind::Wallpaper => {}
             }
         })
     }

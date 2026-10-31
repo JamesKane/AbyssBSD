@@ -22,6 +22,17 @@ impl Color {
             a,
         )
     }
+    /// Color(cssHex:): `#rrggbb` opaque or `#aarrggbb` alpha first, the `#`
+    /// optional.
+    pub fn css_hex(s: &str) -> Option<Color> {
+        let s = s.strip_prefix('#').unwrap_or(s);
+        let v = u32::from_str_radix(s, 16).ok()?;
+        match s.len() {
+            6 => Some(Color::hex(v, 1.0)),
+            8 => Some(Color::hex(v & 0x00ff_ffff, ((v >> 24) & 0xff) as f64 / 255.0)),
+            _ => None,
+        }
+    }
     pub fn with_a(self, a: f64) -> Color {
         Color::new(self.r, self.g, self.b, a)
     }
