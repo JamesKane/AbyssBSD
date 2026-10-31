@@ -327,3 +327,16 @@ pub fn hit(x: f64, y: f64, rects: &[Rect]) -> Option<(usize, f64, f64)> {
         (lx >= 0.0 && ly >= 0.0 && lx < f64::from(r.width) && ly < f64::from(r.height)).then_some((i, lx, ly))
     })
 }
+
+/// A layout rectangle in an output's buffer pixels (Scene.swift, P14.7a).
+/// Edges are rounded, not the size, so two rectangles that touch in the
+/// layout still touch on a scaled output.
+pub fn project(r: Rect, origin_x: i32, origin_y: i32, scale: f64) -> Rect {
+    if scale == 1.0 {
+        return Rect::new(r.x - origin_x, r.y - origin_y, r.width, r.height);
+    }
+    let edge = |v: i32| (f64::from(v) * scale).round();
+    let (x0, y0) = (edge(r.x - origin_x), edge(r.y - origin_y));
+    let (x1, y1) = (edge(r.x - origin_x + r.width), edge(r.y - origin_y + r.height));
+    Rect::new(x0 as i32, y0 as i32, (x1 - x0) as i32, (y1 - y0) as i32)
+}

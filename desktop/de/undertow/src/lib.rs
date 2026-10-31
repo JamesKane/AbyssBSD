@@ -3,11 +3,16 @@
 //! recorder, and the rules that decide where windows go. The wlroots half
 //! comes over a grown `cwlroots` (RUST.md §6.4).
 
+pub mod displays;
+pub mod frame;
 pub mod geometry;
+pub mod idle;
+pub mod keys;
 pub mod metronome;
 pub mod output;
 pub mod places;
 pub mod recorder;
+pub mod shoals;
 pub mod switch_latency;
 pub mod synthetic;
 
@@ -15,6 +20,8 @@ pub mod synthetic;
 mod tests;
 #[cfg(test)]
 mod geometry_tests;
+#[cfg(test)]
+mod displays_tests;
 
 pub use geometry::{clamp_cursor, ebb_arrange, hit, place_layer, snap_rect, snap_zone, EbbItem, EbbScope, IslandSlide, LayerAnchor, LayerRequest, Rect, SnapZone};
 pub use metronome::{Conductor, Config, LatchMargin, Metronome, Plan, VblankPredictor};

@@ -591,6 +591,19 @@ snapping, Ebb's grid, the island slide, hit-testing, remembered places).
 clock wlroots stamps presents with). The recorder is the present
 thread's by `&mut` rather than shared through an atomic, there being no
 second reader yet.
+Then the key table (and the VT chord), shoals, the display layout and
+displays.ini, the idle clock, frame arithmetic and cursor names, and
+popup placement: 80 tests in all, the Conductor's real-time ones among
+them (60 and 144 Hz synthetic displays each served at their own rate).
+
+*R4's second finding: undertow is not toolkit-free.* It imports
+`AquaDraw`: the theme (the title bar's height, the border, colours), the
+window-chrome layout and hit-test its server-side frames share with Aqua
+windows (`windowChrome`, `chromeHit`), the frames' and Ebb labels'
+drawing, and the cursors' draw lists. So the gate as written ("a Rust
+undertow and a Swift toolkit") cannot be met without part of R5 first:
+the theme and the chrome layout, in Rust, before R4c draws a frame.
+`FrameMetrics` takes its two sizes as arguments until then.
 
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,

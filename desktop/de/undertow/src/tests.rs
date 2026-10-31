@@ -324,3 +324,17 @@ fn c6_follows_a_switch_to_its_flip_and_past_a_refusal() {
     assert_eq!(refused.count, 1);
     assert!(refused.sample(0).0 >= 2, "a refused frame showed nothing");
 }
+
+/// The display's vblanks are its own, not an echo of the compositor's
+/// target: a model that agrees with you cannot test a predictor.
+#[test]
+fn the_synthetic_display_keeps_its_own_vblank_grid() {
+    let period = 10_000_000;
+    let mut o = SyntheticOutput::new(period, 1_000);
+    let t0 = abyss_sys::mono::now();
+    o.submit(t0 + period, t0); // establishes the epoch
+    o.drain_regardless_of_time();
+    o.submit(t0 + period * 100 + 12_345, t0 + period);
+    let f = o.drain_regardless_of_time().expect("a flip came back");
+    assert_eq!((f.vblank - t0) % period, 0, "the display landed a frame off its own grid: it is echoing the target");
+}
