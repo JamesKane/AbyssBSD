@@ -10,10 +10,12 @@
 
 pub mod app;
 pub mod appearance_catalogue;
+pub mod displays;
 pub mod energy;
 pub mod general;
 pub mod islands;
 pub mod settings_client;
+pub mod sound;
 
 use crate::toolkit::Toolkit;
 use aquadraw::canvas::Canvas;
@@ -276,6 +278,8 @@ pub trait Pane {
     }
     /// Shown: read what it shows.
     fn shown(&self, _h: &Rc<PrefsHost>) {}
+    /// Another view replaced it.
+    fn hidden(&self, _h: &Rc<PrefsHost>) {}
     fn paint(&self, c: &mut Canvas, body: Rect);
     /// Its controls as a layout line, when they moved since last said.
     fn dump(&self) -> Vec<String> {

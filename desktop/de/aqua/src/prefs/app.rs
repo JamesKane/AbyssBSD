@@ -14,12 +14,12 @@ use surface::{KeySym, RenderTarget, ResizeEdge, Window, WindowDelegate};
 
 /// The panes as the golden scene pictures them: fixed samples.
 pub fn sample_panes() -> Vec<Rc<dyn Pane>> {
-    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::sample())]
+    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::sample()), sound::SoundPane::new(sound::SoundPaneState::sample()), displays::DisplaysPane::new(displays::DisplaysPaneState::sample())]
 }
 
 /// Every pane with something behind it, live.
 pub fn live_panes() -> Vec<Rc<dyn Pane>> {
-    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::default())]
+    vec![Rc::new(general::GeneralPane::default()), Rc::new(islands::IslandsPane::default()), energy::EnergyPane::new(energy::EnergyPaneState::default()), sound::SoundPane::new(sound::SoundPaneState::default()), displays::DisplaysPane::new(displays::DisplaysPaneState::default())]
 }
 
 pub struct SystemPreferences {
@@ -141,6 +141,9 @@ impl SystemPreferences {
     pub fn show(&self, v: PrefsView) {
         if self.model.borrow().view == v {
             return;
+        }
+        if let Some(p) = self.current() {
+            p.hidden(&self.host)
         }
         self.model.borrow_mut().view = v.clone();
         if let PrefsView::Pane(id) = &v
