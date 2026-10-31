@@ -1,0 +1,13 @@
+[package]
+name = "jaild"
+description = "JailD: abyss-jaild's steps, performer, service and client (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+jails = { path = "../jails" }
+libc.workspace = true
+spawn = { path = "../spawn" }

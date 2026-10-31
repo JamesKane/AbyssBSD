@@ -290,3 +290,58 @@ impl Drop for ShmWindow {
         }
     }
 }
+
+unsafe extern "C" {
+    fn aw_jail_listen(d: *mut wl_display, path: *const c_char, engine: *const c_char, app_id: *const c_char, instance: *const c_char, close_out: *mut c_int) -> c_int;
+}
+
+/// A connection to the compositor and nothing on it: what the jail keeper
+/// registers jails' sockets on (P18.5), and watches to know the session is
+/// over.
+pub struct Display(*mut wl_display);
+
+impl Display {
+    /// `$WAYLAND_DISPLAY`'s compositor, or None when there is none.
+    pub fn connect() -> Option<Display> {
+        let d = unsafe { wl_display_connect(ptr::null()) };
+        // `then`, not `then_some`: a Display(null) built eagerly would be
+        // dropped, and disconnect a null display.
+        (!d.is_null()).then(|| Display(d))
+    }
+
+    pub fn fd(&self) -> c_int {
+        unsafe { wl_display_get_fd(self.0) }
+    }
+
+    pub fn flush(&self) {
+        unsafe { wl_display_flush(self.0) };
+    }
+
+    /// Read and dispatch what is waiting; false when the compositor is gone.
+    pub fn dispatch(&self) -> bool {
+        unsafe { wl_display_dispatch(self.0) >= 0 }
+    }
+
+    /// Bind a listening socket at `path` (inside a jail's root, from
+    /// outside) and hand it to the compositor as a wp_security_context_v1
+    /// with this engine, app id and instance: every client that connects
+    /// there is that context's. The answer is the descriptor that, closed,
+    /// stops the compositor listening; or the negative errno cwayland gave.
+    pub fn jail_listen(&self, path: &str, engine: &str, app_id: &str, instance: &str) -> Result<std::os::fd::OwnedFd, i32> {
+        use std::os::fd::FromRawFd;
+        let c = |s: &str| CString::new(s).map_err(|_| -libc::EINVAL);
+        let (p, e, a, i) = (c(path)?, c(engine)?, c(app_id)?, c(instance)?);
+        let mut closer: c_int = -1;
+        let rc = unsafe { aw_jail_listen(self.0, p.as_ptr(), e.as_ptr(), a.as_ptr(), i.as_ptr(), &mut closer) };
+        if rc != 0 {
+            return Err(rc);
+        }
+        Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(closer) })
+    }
+}
+
+impl Drop for Display {
+    fn drop(&mut self) {
+        unsafe { wl_display_disconnect(self.0) };
+    }
+}

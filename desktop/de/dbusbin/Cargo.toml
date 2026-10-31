@@ -11,9 +11,9 @@ path = "src/main.rs"
 
 [dependencies]
 abyss-sys.workspace = true
-current-ipc = { path = "../currentipc" }
 dbus = { path = "../dbus" }
 dbusbridge = { path = "../dbusbridge" }
 dbusmenus = { path = "../dbusmenus" }
 dbusportal = { path = "../dbusportal" }
+jaild = { path = "../jaild" }
 pool-config = { path = "../poolconfig" }

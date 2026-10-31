@@ -73,11 +73,11 @@ name = "dbusbin"
 version = "0.1.0"
 dependencies = [
  "abyss-sys",
- "current-ipc",
  "dbus",
  "dbusbridge",
  "dbusmenus",
  "dbusportal",
+ "jaild",
  "pool-config",
 ]
 
@@ -179,6 +179,53 @@ name = "ipcprobe"
 version = "0.1.0"
 dependencies = [
  "current-ipc",
+]
+
+[[package]]
+name = "jailctl"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "jaild",
+ "jailkeeper",
+ "jails",
+]
+
+[[package]]
+name = "jaild"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "jails",
+ "libc",
+ "spawn",
+]
+
+[[package]]
+name = "jaildbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "jaild",
+ "jails",
+ "pool-config",
+]
+
+[[package]]
+name = "jailkeeper"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "jaild",
+ "jails",
+ "libc",
+ "menu-wire",
+ "pool-config",
+ "spawn",
 ]
 
 [[package]]

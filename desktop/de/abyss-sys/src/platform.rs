@@ -152,3 +152,12 @@ pub fn local_timestamp() -> String {
         tm.tm_sec
     )
 }
+
+/// Whether `fd` was opened for writing (O_WRONLY or O_RDWR).
+pub fn is_writable(fd: BorrowedFd<'_>) -> io::Result<bool> {
+    let flags = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFL) };
+    if flags < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(flags & libc::O_ACCMODE != libc::O_RDONLY)
+}

@@ -133,3 +133,11 @@ pub fn self_executable() -> Option<String> {
     let n = unsafe { ap_self_executable(buf.as_mut_ptr().cast(), buf.len()) };
     (n > 0).then(|| String::from_utf8_lossy(&buf[..n as usize]).into_owned())
 }
+
+/// Wait for every child that has exited, without blocking. A daemon whose
+/// children are process descriptors still has to: on FreeBSD closing a
+/// process descriptor does not reap it (HANDOFF §2.108).
+pub fn reap_exited() {
+    let mut status = 0;
+    while unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) } > 0 {}
+}

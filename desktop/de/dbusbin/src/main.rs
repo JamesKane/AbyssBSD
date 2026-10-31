@@ -21,17 +21,12 @@
 //! it exists, and if it dies the desktop carries on without a file dialog
 //! for foreign apps (PHASE8 §6.3).
 
-use current_ipc::Msg;
 use dbus::Connection;
 use dbusbridge::{Endpoint, PeerKind};
 use dbusmenus::GtkMenuBridge;
 use dbusportal::{PortalService, PortalSettings};
-use std::os::fd::{AsRawFd, BorrowedFd};
 use std::process::{exit, Command, Stdio};
 use std::time::{Duration, Instant};
-
-/// abyss-jaild's socket (JailWire.defaultSocket).
-const JAILD_SOCKET: &str = "/var/run/abyss-jaild.sock";
 
 fn die(s: &str) -> ! {
     eprintln!("abyss-dbus: {s}");
@@ -55,23 +50,6 @@ fn run_palette() -> Option<String> {
 
 fn palette_name(text: &str) -> &str {
     text.lines().find_map(|l| l.strip_prefix("name = ")).unwrap_or("?")
-}
-
-/// JailClient.grant: mount `path` into the jail `name`, proven by `file`,
-/// and answer where it is inside.
-fn grant(socket: &str, jail: &str, path: &str, file: BorrowedFd<'_>) -> Result<String, String> {
-    let mut m = Msg::new();
-    m.set_string("method", "grant");
-    m.set_string("jail", jail);
-    m.set_string("path", path);
-    m.set_fd("file", file.as_raw_fd());
-    let s = current_ipc::connect_path(socket).map_err(|e| e.to_string())?;
-    current_ipc::send(&m, &s).map_err(|e| e.to_string())?;
-    let r = current_ipc::receive(&s).map_err(|e| e.to_string())?;
-    if r.bool("ok") != Some(true) {
-        return Err(r.string("error").unwrap_or("refused").to_owned());
-    }
-    Ok(r.string("path").unwrap_or("").to_owned())
 }
 
 #[derive(Default)]
@@ -151,10 +129,10 @@ fn main() {
 
     let mut service = PortalService::new(conn, a.portal.as_deref());
     if let Some(jail) = a.jail {
-        let socket = a.jaild.unwrap_or_else(|| JAILD_SOCKET.into());
+        let socket = a.jaild.unwrap_or_else(|| jaild::wire::DEFAULT_SOCKET.into());
         eprintln!("abyss-dbus: the portal of {jail}: chosen files are granted into it");
-        service.grant = Some(Box::new(move |path, fd| match grant(&socket, &jail, path, fd) {
-            Ok(inside) => Some(inside),
+        service.grant = Some(Box::new(move |path, fd| match jaild::client::grant(&jail, path, fd, &socket) {
+            Ok((inside, _)) => Some(inside),
             Err(e) => {
                 eprintln!("abyss-dbus: {jail}: {e}");
                 None

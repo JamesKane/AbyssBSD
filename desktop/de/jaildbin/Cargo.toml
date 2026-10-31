@@ -1,0 +1,17 @@
+[package]
+name = "jaildbin"
+description = "abyss-jaild: the root half of confinement (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-jaild"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+jaild = { path = "../jaild" }
+jails = { path = "../jails" }
+pool-config = { path = "../poolconfig" }

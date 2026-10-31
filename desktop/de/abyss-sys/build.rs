@@ -144,19 +144,42 @@ fn main() {
         println!("cargo:rustc-link-lib=pam");
     }
 
+    // CJail (src/jail.rs): jail(2), jail and process descriptors, and the
+    // login class's limits for abyss-jaild (PHASE18 P18.2); ENOSYS stubs
+    // off FreeBSD, so everything above compiles and is tested on Linux.
+    let cjail = de.join("cjail");
+    println!("cargo:rerun-if-changed={}", cjail.join("cjail.c").display());
+    cc::Build::new()
+        .file(cjail.join("cjail.c"))
+        .include(cjail.join("include"))
+        .compile("cjail");
+    if target.contains("freebsd") {
+        println!("cargo:rustc-link-lib=jail");
+    }
+
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
     // them for CWayland and CAbyssProtocols.
     let cwayland = de.join("cwayland");
     let protocols = de.join("cabyssprotocols");
     let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    for f in [here.join("wl.c"), protocols.join("xdg-shell-protocol.c"), cwayland.join("cwayland_shm.c")] {
+    // With the keeper's half of wp_security_context_v1 (cwayland_jail.c,
+    // P18.5) and that protocol's code.
+    for f in [
+        here.join("wl.c"),
+        protocols.join("xdg-shell-protocol.c"),
+        cwayland.join("cwayland_shm.c"),
+        cwayland.join("cwayland_jail.c"),
+        cwayland.join("security-context-v1-protocol.c"),
+    ] {
         println!("cargo:rerun-if-changed={}", f.display());
     }
     let mut wl = cc::Build::new();
     wl.file(here.join("wl.c"))
         .file(protocols.join("xdg-shell-protocol.c"))
         .file(cwayland.join("cwayland_shm.c"))
+        .file(cwayland.join("cwayland_jail.c"))
+        .file(cwayland.join("security-context-v1-protocol.c"))
         .include(cwayland.join("include"));
     for flag in pkg_config_of(&["--cflags"], &["wayland-client"]) {
         if let Some(dir) = flag.strip_prefix("-I") {

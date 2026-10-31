@@ -1,0 +1,16 @@
+[package]
+name = "jailkeeper"
+description = "JailKeeper: the session's half of confinement: a jail per class, its socket, bridge and portal, and launches into it (Swift: Keeper.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+jaild = { path = "../jaild" }
+jails = { path = "../jails" }
+libc.workspace = true
+menu-wire = { path = "../menuwire" }
+pool-config = { path = "../poolconfig" }
+spawn = { path = "../spawn" }

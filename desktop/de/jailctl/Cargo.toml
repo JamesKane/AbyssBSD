@@ -1,0 +1,17 @@
+[package]
+name = "jailctl"
+description = "abyss-jail: ask abyss-jaild for a jail by hand, and the session's keeper (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-jail"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+jaild = { path = "../jaild" }
+jailkeeper = { path = "../jailkeeper" }
+jails = { path = "../jails" }

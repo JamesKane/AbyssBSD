@@ -472,6 +472,35 @@ one more is new (a probe's refusal reaches the caller). `live-installer`
 and `-installer-keyboard` are green against it on Linux; the guest and
 `--full`'s `live-install` and `-desktop` are not run yet.
 
+*jails, 2026-10-30.* `de/jaild` (crate `jaild`) is Steps.swift,
+Performer.swift and Service.swift: the order a root is built and torn
+down in, the performer that carries it out as root, the daemon's loop
+(open, spawn, grant, revoke, grants; the kqueue that says a jail is gone;
+SIGCHLD reaped), and `jaild::client`, which `abyss-dbus --jail` now uses
+in place of its own copy of the grant call. `de/jailkeeper` (crate
+`jailkeeper`) is Keeper.swift: a jail per class held for the session,
+its Wayland security context, bridge, portal and menu bridge, launches
+with the person's files granted in, agent sessions, crashes and the
+`[apps]` watch. `de/jaildbin` is `abyss-jaild` and `de/jailctl`
+`abyss-jail`; both swap. `abyss-sys` gains `jail` (cjail.c: jail(2),
+jail and process descriptors, the removal kqueue, the login class's
+limits, getmntinfo) and `wl::Display` with `jail_listen`
+(cwayland_jail.c and the security-context protocol, in the Wayland build
+it already had). **A grant refused by jaild refuses the launch**, as in
+Swift; a file that cannot be opened is passed as it is. Swift's 16 jaild
+tests and 7 keeper tests are ported, with three more: a point mounted
+twice is unmounted twice, a regular file resolves and a directory does
+not, and off FreeBSD the jail calls say ENOSYS. **Found by running it:**
+the first `Display::connect` used `bool::then_some`, which builds its
+value eagerly, so with no compositor a `Display(null)` was dropped and
+`wl_display_disconnect(NULL)` crashed the keeper; `then` builds it only
+when there is one. On Linux every jail and agent script skips, since
+there are no jails there, and the keeper was run by hand without a
+compositor: it binds, and refuses each method in words. **Nothing of this
+group has run against a real jail yet**; that is the guest's, with
+`live-jaild`, `-jail-gate`, `-jail-files`, `-jail-launch`, `-crash*` and
+the `-agent*` scripts.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts
