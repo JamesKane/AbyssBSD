@@ -18,7 +18,27 @@ macro_rules! opaque {
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
 opaque!(wlr_xdg_decoration_manager_v1, wlr_xdg_toplevel_decoration_v1);
 opaque!(wlr_session_lock_manager_v1, wlr_session_lock_v1, wlr_session_lock_surface_v1);
+opaque!(wlr_pointer, wlr_keyboard, wlr_drag_icon, wlr_cursor_shape_manager_v1, wlr_virtual_pointer_manager_v1, wlr_virtual_keyboard_manager_v1);
 opaque!(wlr_output_manager_v1, wlr_output_configuration_v1, wlr_output_configuration_head_v1, wlr_idle_inhibit_manager_v1, wlr_idle_inhibitor_v1, wlr_idle_notifier_v1, wlr_seat);
+
+/// tw-access.h's `struct tw_motion`: a relative motion.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Motion {
+    pub time_msec: u32,
+    pub dx: f64,
+    pub dy: f64,
+    pub unaccel_dx: f64,
+    pub unaccel_dy: f64,
+}
+
+/// A button or key: when, which, and whether pressed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Press {
+    pub time_msec: u32,
+    pub code: u32,
+    pub pressed: bool,
+}
 
 /// tw-access.h's `struct tw_head_ask`.
 #[repr(C)]
@@ -249,6 +269,74 @@ unsafe extern "C" {
     fn tw_session_lock_manager_global(m: *const wlr_session_lock_manager_v1) -> *const c_void;
     fn tw_lock_surface_surface(s: *const wlr_session_lock_surface_v1) -> *mut wlr_surface;
     fn tw_lock_surface_output(s: *const wlr_session_lock_surface_v1) -> *mut wlr_output;
+    fn tw_seat_on_request_set_selection(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_on_request_set_primary_selection(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_on_request_start_drag(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_on_start_drag(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_on_request_set_cursor(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_on_pointer_focus_change(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_cursor_shape_manager_v1_on_request_set_shape(o: *mut wlr_cursor_shape_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_virtual_pointer_manager_v1_on_new_virtual_pointer(o: *mut wlr_virtual_pointer_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_virtual_keyboard_manager_v1_on_new_virtual_keyboard(o: *mut wlr_virtual_keyboard_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_on_motion(o: *mut wlr_pointer, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_on_motion_absolute(o: *mut wlr_pointer, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_on_button(o: *mut wlr_pointer, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_on_axis(o: *mut wlr_pointer, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_keyboard_on_key(o: *mut wlr_keyboard, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_keyboard_on_modifiers(o: *mut wlr_keyboard, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_device_on_destroy(o: *mut wlr_input_device, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_drag_icon_on_destroy(o: *mut wlr_drag_icon, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_motion_read(e: *const c_void, out: *mut Motion);
+    fn tw_pointer_motion_absolute_read(e: *const c_void, t: *mut u32, x: *mut f64, y: *mut f64);
+    fn tw_pointer_button_read(e: *const c_void, t: *mut u32, b: *mut u32, p: *mut u32);
+    fn tw_seat_pointer_axis(s: *mut wlr_seat, e: *const c_void);
+    fn tw_keyboard_key_read(e: *const c_void, t: *mut u32, k: *mut u32, p: *mut u32);
+    fn tw_input_device_kind(d: *const wlr_input_device) -> c_int;
+    fn tw_input_device_pointer(d: *mut wlr_input_device) -> *mut wlr_pointer;
+    fn tw_input_device_keyboard(d: *mut wlr_input_device) -> *mut wlr_keyboard;
+    fn tw_pointer_device(p: *mut wlr_pointer) -> *mut wlr_input_device;
+    fn tw_keyboard_device(k: *mut wlr_keyboard) -> *mut wlr_input_device;
+    fn tw_input_device_name(d: *const wlr_input_device) -> *const c_char;
+    fn tw_virtual_pointer_from_event(e: *const c_void) -> *mut wlr_pointer;
+    fn tw_virtual_keyboard_keyboard(v: *mut c_void) -> *mut wlr_keyboard;
+    fn tw_seat_keyboard_enter(s: *mut wlr_seat, sf: *mut wlr_surface) -> bool;
+    fn tw_seat_keyboard_modifiers(s: *mut wlr_seat, k: *mut wlr_keyboard);
+    fn tw_seat_keyboard_focused(s: *const wlr_seat) -> *mut wlr_surface;
+    fn tw_seat_pointer_focused_client(s: *const wlr_seat) -> *const c_void;
+    fn tw_seat_break_grabs(s: *mut wlr_seat, lock: *mut wlr_surface) -> c_int;
+    fn tw_seat_accept_selection(s: *mut wlr_seat, e: *const c_void, primary: bool);
+    fn tw_seat_accept_drag(s: *mut wlr_seat, e: *const c_void) -> bool;
+    fn tw_drag_icon(d: *const c_void) -> *mut wlr_drag_icon;
+    fn tw_drag_icon_surface(i: *const wlr_drag_icon) -> *mut wlr_surface;
+    fn tw_set_cursor_read(e: *const c_void, s: *mut *mut wlr_surface, hx: *mut i32, hy: *mut i32) -> *const c_void;
+    fn tw_set_shape_read(e: *const c_void, client: *mut *const c_void) -> *const c_char;
+    fn tw_pointer_focus_changed(e: *const c_void) -> bool;
+    fn tw_surface_offset(s: *const wlr_surface, dx: *mut i32, dy: *mut i32);
+    fn tw_keyboard_give_keymap(k: *mut wlr_keyboard, layout: *const c_char, variant: *const c_char) -> c_int;
+    fn tw_keyboard_set_layout(k: *mut wlr_keyboard, layout: *const c_char, variant: *const c_char) -> bool;
+    fn tw_keymap_compiles(layout: *const c_char, variant: *const c_char) -> bool;
+    fn tw_keyboard_layout_name(k: *const wlr_keyboard) -> *const c_char;
+    fn tw_keyboard_modifiers(k: *mut wlr_keyboard) -> u32;
+    fn tw_keyboard_syms(k: *mut wlr_keyboard, code: u32, out: *mut u32, max: usize) -> usize;
+    fn tw_keysym_from_name(name: *const c_char) -> u32;
+    fn tw_stand_in_keyboard_create() -> *mut wlr_keyboard;
+    fn tw_stand_in_keyboard_key(k: *mut wlr_keyboard, code: u32, pressed: bool, time: u32);
+    fn wlr_seat_create(d: *mut wl_display, name: *const c_char) -> *mut wlr_seat;
+    fn wlr_seat_set_capabilities(s: *mut wlr_seat, caps: u32);
+    fn wlr_seat_set_keyboard(s: *mut wlr_seat, k: *mut wlr_keyboard);
+    fn wlr_seat_keyboard_notify_clear_focus(s: *mut wlr_seat);
+    fn wlr_seat_keyboard_notify_key(s: *mut wlr_seat, time: u32, key: u32, state: u32);
+    fn wlr_seat_pointer_notify_enter(s: *mut wlr_seat, sf: *mut wlr_surface, sx: f64, sy: f64);
+    fn wlr_seat_pointer_notify_motion(s: *mut wlr_seat, time: u32, sx: f64, sy: f64);
+    fn wlr_seat_pointer_notify_button(s: *mut wlr_seat, time: u32, button: u32, state: u32) -> u32;
+    fn wlr_seat_pointer_notify_frame(s: *mut wlr_seat);
+    fn wlr_seat_pointer_clear_focus(s: *mut wlr_seat);
+    fn wlr_seat_pointer_warp(s: *mut wlr_seat, sx: f64, sy: f64);
+    fn wlr_surface_surface_at(s: *mut wlr_surface, sx: f64, sy: f64, sub_x: *mut f64, sub_y: *mut f64) -> *mut wlr_surface;
+    fn wlr_virtual_pointer_manager_v1_create(d: *mut wl_display) -> *mut wlr_virtual_pointer_manager_v1;
+    fn wlr_virtual_keyboard_manager_v1_create(d: *mut wl_display) -> *mut wlr_virtual_keyboard_manager_v1;
+    fn wlr_cursor_shape_manager_v1_create(d: *mut wl_display, version: u32) -> *mut wlr_cursor_shape_manager_v1;
+    fn wlr_primary_selection_v1_device_manager_create(d: *mut wl_display) -> *mut c_void;
     fn tw_output_manager_v1_on_apply(o: *mut wlr_output_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_output_manager_v1_on_test(o: *mut wlr_output_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_idle_inhibit_manager_v1_on_new_inhibitor(o: *mut wlr_idle_inhibit_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
@@ -429,6 +517,12 @@ handle!(LockManager, wlr_session_lock_manager_v1);
 handle!(Lock, wlr_session_lock_v1);
 handle!(LockSurface, wlr_session_lock_surface_v1);
 handle!(OutputManager, wlr_output_manager_v1);
+handle!(Pointer, wlr_pointer);
+handle!(Keyboard, wlr_keyboard);
+handle!(DragIcon, wlr_drag_icon);
+handle!(CursorShapeManager, wlr_cursor_shape_manager_v1);
+handle!(VirtualPointerManager, wlr_virtual_pointer_manager_v1);
+handle!(VirtualKeyboardManager, wlr_virtual_keyboard_manager_v1);
 handle!(
     /// A configuration a client asked to test or apply. Answer it, then
     /// `destroy` it.
@@ -893,6 +987,18 @@ impl Surface {
     signal!(on_unmap, tw_surface_on_unmap, wlr_surface, ||);
     signal!(on_commit, tw_surface_on_commit, wlr_surface, ||);
     signal!(on_destroy, tw_surface_on_destroy, wlr_surface, ||);
+    /// The surface of its tree under a point in its coordinates (honouring
+    /// each surface's input region), and the point in that surface's.
+    pub fn surface_at(self, x: f64, y: f64) -> Option<(Surface, f64, f64)> {
+        let (mut sx, mut sy) = (0.0, 0.0);
+        Surface::from_raw(unsafe { wlr_surface_surface_at(self.0.as_ptr(), x, y, &mut sx, &mut sy) }).map(|s| (s, sx, sy))
+    }
+    /// This commit's attach offset.
+    pub fn offset(self) -> (i32, i32) {
+        let (mut dx, mut dy) = (0, 0);
+        unsafe { tw_surface_offset(self.0.as_ptr(), &mut dx, &mut dy) };
+        (dx, dy)
+    }
     /// The root of the tree it is in (itself, unless a subsurface).
     pub fn root(self) -> Surface {
         Surface::from_raw(unsafe { wlr_surface_get_root_surface(self.0.as_ptr()) }).unwrap_or(self)
@@ -991,6 +1097,21 @@ pub mod globals {
             _ => {}
         }
         if unsafe { tw_syncobj_create(d.0.as_ptr(), r.0.as_ptr()) } { Ok(()) } else { Err("the render node refused a syncobj manager") }
+    }
+    pub fn seat(d: &Display, name: &str) -> Option<Seat> {
+        Seat::from_raw(unsafe { wlr_seat_create(d.0.as_ptr(), cstr(name).as_ptr()) })
+    }
+    pub fn virtual_pointer_manager(d: &Display) -> Option<VirtualPointerManager> {
+        VirtualPointerManager::from_raw(unsafe { wlr_virtual_pointer_manager_v1_create(d.0.as_ptr()) })
+    }
+    pub fn virtual_keyboard_manager(d: &Display) -> Option<VirtualKeyboardManager> {
+        VirtualKeyboardManager::from_raw(unsafe { wlr_virtual_keyboard_manager_v1_create(d.0.as_ptr()) })
+    }
+    pub fn cursor_shape_manager(d: &Display, version: u32) -> Option<CursorShapeManager> {
+        CursorShapeManager::from_raw(unsafe { wlr_cursor_shape_manager_v1_create(d.0.as_ptr(), version) })
+    }
+    pub fn primary_selection(d: &Display) -> bool {
+        !unsafe { wlr_primary_selection_v1_device_manager_create(d.0.as_ptr()) }.is_null()
     }
     pub fn output_manager(d: &Display) -> Option<OutputManager> {
         OutputManager::from_raw(unsafe { wlr_output_manager_v1_create(d.0.as_ptr()) })
@@ -1239,6 +1360,246 @@ impl LockSurface {
     pub fn configure(self, w: u32, h: u32) {
         unsafe { wlr_session_lock_surface_v1_configure(self.0.as_ptr(), w, h) };
     }
+}
+
+/// A client, as an identity only (`wlr_seat_client`): who asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SeatClient(*const c_void);
+
+/// The cursor a client asked for (wl_pointer.set_cursor).
+#[derive(Clone, Copy, Debug)]
+pub struct CursorRequest {
+    pub client: SeatClient,
+    pub surface: Option<Surface>,
+    pub hot_x: i32,
+    pub hot_y: i32,
+}
+
+/// The seat's capabilities (wl_seat.capability).
+pub const CAP_POINTER: u32 = 1;
+pub const CAP_KEYBOARD: u32 = 2;
+
+impl Seat {
+    signal!(
+        /// A client set the clipboard: accepted (wlroots checks the serial).
+        on_request_set_selection, tw_seat_on_request_set_selection, wlr_seat, |d| -> SelectionRequest { SelectionRequest(d) });
+    signal!(on_request_set_primary_selection, tw_seat_on_request_set_primary_selection, wlr_seat, |d| -> SelectionRequest { SelectionRequest(d) });
+    signal!(on_request_start_drag, tw_seat_on_request_start_drag, wlr_seat, |d| -> DragRequest { DragRequest(d) });
+    signal!(
+        /// A drag began: its icon, if it has one.
+        on_start_drag, tw_seat_on_start_drag, wlr_seat, |d| -> Option<DragIcon> { DragIcon::from_raw(unsafe { tw_drag_icon(d) }) });
+    signal!(on_request_set_cursor, tw_seat_on_request_set_cursor, wlr_seat, |d| -> CursorRequest {
+        let (mut s, mut hx, mut hy) = (std::ptr::null_mut(), 0, 0);
+        let client = SeatClient(unsafe { tw_set_cursor_read(d, &mut s, &mut hx, &mut hy) });
+        CursorRequest { client, surface: Surface::from_raw(s), hot_x: hx, hot_y: hy }
+    });
+    signal!(
+        /// The pointer went to another surface (true), or stayed (false).
+        on_pointer_focus_change, tw_seat_on_pointer_focus_change, wlr_seat, |d| -> bool { unsafe { tw_pointer_focus_changed(d) } });
+
+    pub fn set_capabilities(self, caps: u32) {
+        unsafe { wlr_seat_set_capabilities(self.0.as_ptr(), caps) }
+    }
+    /// The one active keyboard: its keymap is what clients are told.
+    pub fn set_keyboard(self, k: Keyboard) {
+        unsafe { wlr_seat_set_keyboard(self.0.as_ptr(), k.0.as_ptr()) }
+    }
+    /// Keyboard focus to `s`; false if there is no keyboard yet.
+    pub fn keyboard_enter(self, s: Surface) -> bool {
+        unsafe { tw_seat_keyboard_enter(self.0.as_ptr(), s.0.as_ptr()) }
+    }
+    pub fn keyboard_clear_focus(self) {
+        unsafe { wlr_seat_keyboard_notify_clear_focus(self.0.as_ptr()) }
+    }
+    pub fn keyboard_key(self, time_msec: u32, keycode: u32, pressed: bool) {
+        unsafe { wlr_seat_keyboard_notify_key(self.0.as_ptr(), time_msec, keycode, pressed as u32) }
+    }
+    pub fn keyboard_modifiers(self, k: Keyboard) {
+        unsafe { tw_seat_keyboard_modifiers(self.0.as_ptr(), k.0.as_ptr()) }
+    }
+    pub fn keyboard_focused(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_seat_keyboard_focused(self.0.as_ptr()) })
+    }
+    pub fn pointer_focused_client(self) -> SeatClient {
+        SeatClient(unsafe { tw_seat_pointer_focused_client(self.0.as_ptr()) })
+    }
+    pub fn pointer_enter(self, s: Surface, sx: f64, sy: f64) {
+        unsafe { wlr_seat_pointer_notify_enter(self.0.as_ptr(), s.0.as_ptr(), sx, sy) }
+    }
+    pub fn pointer_motion(self, time_msec: u32, sx: f64, sy: f64) {
+        unsafe { wlr_seat_pointer_notify_motion(self.0.as_ptr(), time_msec, sx, sy) }
+    }
+    pub fn pointer_button(self, time_msec: u32, button: u32, pressed: bool) -> u32 {
+        unsafe { wlr_seat_pointer_notify_button(self.0.as_ptr(), time_msec, button, pressed as u32) }
+    }
+    pub fn pointer_frame(self) {
+        unsafe { wlr_seat_pointer_notify_frame(self.0.as_ptr()) }
+    }
+    pub fn pointer_clear_focus(self) {
+        unsafe { wlr_seat_pointer_clear_focus(self.0.as_ptr()) }
+    }
+    pub fn pointer_warp(self, sx: f64, sy: f64) {
+        unsafe { wlr_seat_pointer_warp(self.0.as_ptr(), sx, sy) }
+    }
+    /// An axis event from a pointer, passed on whole, and its frame.
+    pub fn pointer_axis(self, e: AxisEvent) {
+        unsafe { tw_seat_pointer_axis(self.0.as_ptr(), e.0) }
+    }
+    /// **No grab survives a lock**: end any keyboard grab (the keys then go
+    /// to `lock_surface`) and pointer grab. How many were ended.
+    pub fn break_grabs(self, lock_surface: Option<Surface>) -> u32 {
+        unsafe { tw_seat_break_grabs(self.0.as_ptr(), lock_surface.map_or(std::ptr::null_mut(), |s| s.0.as_ptr())) as u32 }
+    }
+    pub fn accept_selection(self, r: SelectionRequest, primary: bool) {
+        unsafe { tw_seat_accept_selection(self.0.as_ptr(), r.0, primary) }
+    }
+    /// Start it if its serial is a real press; else destroy its source.
+    pub fn accept_drag(self, r: DragRequest) -> bool {
+        unsafe { tw_seat_accept_drag(self.0.as_ptr(), r.0) }
+    }
+}
+
+/// An event only valid inside the signal that carried it.
+#[derive(Clone, Copy, Debug)]
+pub struct SelectionRequest(*mut c_void);
+#[derive(Clone, Copy, Debug)]
+pub struct DragRequest(*mut c_void);
+#[derive(Clone, Copy, Debug)]
+pub struct AxisEvent(*mut c_void);
+
+impl DragIcon {
+    signal!(on_destroy, tw_drag_icon_on_destroy, wlr_drag_icon, ||);
+    pub fn surface(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_drag_icon_surface(self.0.as_ptr()) })
+    }
+}
+
+impl CursorShapeManager {
+    signal!(
+        /// A shape by name, if for the pointer, and who asked.
+        on_request_set_shape, tw_cursor_shape_manager_v1_on_request_set_shape, wlr_cursor_shape_manager_v1, |d| -> (Option<String>, SeatClient) {
+            let mut c = std::ptr::null();
+            let name = text(unsafe { tw_set_shape_read(d, &mut c) });
+            (name, SeatClient(c))
+        });
+}
+
+impl VirtualPointerManager {
+    signal!(on_new_virtual_pointer, tw_virtual_pointer_manager_v1_on_new_virtual_pointer, wlr_virtual_pointer_manager_v1, |d| -> Option<Pointer> { Pointer::from_raw(unsafe { tw_virtual_pointer_from_event(d) }) });
+}
+
+impl VirtualKeyboardManager {
+    signal!(on_new_virtual_keyboard, tw_virtual_keyboard_manager_v1_on_new_virtual_keyboard, wlr_virtual_keyboard_manager_v1, |d| -> Option<Keyboard> { Keyboard::from_raw(unsafe { tw_virtual_keyboard_keyboard(d) }) });
+}
+
+/// What a device is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeviceKind {
+    Pointer(Pointer),
+    Keyboard(Keyboard),
+    Other,
+}
+
+impl InputDevice {
+    signal!(on_destroy, tw_input_device_on_destroy, wlr_input_device, ||);
+    pub fn kind(self) -> DeviceKind {
+        let p = self.0.as_ptr();
+        match unsafe { tw_input_device_kind(p) } {
+            1 => Pointer::from_raw(unsafe { tw_input_device_pointer(p) }).map_or(DeviceKind::Other, DeviceKind::Pointer),
+            2 => Keyboard::from_raw(unsafe { tw_input_device_keyboard(p) }).map_or(DeviceKind::Other, DeviceKind::Keyboard),
+            _ => DeviceKind::Other,
+        }
+    }
+    pub fn name(self) -> String {
+        text(unsafe { tw_input_device_name(self.0.as_ptr()) }).unwrap_or_default()
+    }
+}
+
+impl Pointer {
+    signal!(on_motion, tw_pointer_on_motion, wlr_pointer, |d| -> Motion { let mut m = Motion::default(); unsafe { tw_pointer_motion_read(d, &mut m) }; m });
+    signal!(
+        /// x and y in 0…1 across the layout, and the time.
+        on_motion_absolute, tw_pointer_on_motion_absolute, wlr_pointer, |d| -> (f64, f64, u32) {
+            let (mut t, mut x, mut y) = (0, 0.0, 0.0);
+            unsafe { tw_pointer_motion_absolute_read(d, &mut t, &mut x, &mut y) };
+            (x, y, t)
+        });
+    signal!(on_button, tw_pointer_on_button, wlr_pointer, |d| -> Press {
+        let (mut t, mut b, mut p) = (0, 0, 0);
+        unsafe { tw_pointer_button_read(d, &mut t, &mut b, &mut p) };
+        Press { time_msec: t, code: b, pressed: p != 0 }
+    });
+    signal!(on_axis, tw_pointer_on_axis, wlr_pointer, |d| -> AxisEvent { AxisEvent(d) });
+    pub fn device(self) -> InputDevice {
+        InputDevice::from_raw(unsafe { tw_pointer_device(self.0.as_ptr()) }).expect("a pointer is a device")
+    }
+}
+
+/// What giving a keyboard a keymap did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeymapGiven {
+    Given,
+    /// It came with one: a backend that chose one knows better.
+    HadOne,
+    /// Nothing compiled (are the xkeyboard-config layouts installed?).
+    NoneCompiled,
+    Refused,
+}
+
+impl Keyboard {
+    signal!(on_key, tw_keyboard_on_key, wlr_keyboard, |d| -> Press {
+        let (mut t, mut k, mut p) = (0, 0, 0);
+        unsafe { tw_keyboard_key_read(d, &mut t, &mut k, &mut p) };
+        Press { time_msec: t, code: k, pressed: p != 0 }
+    });
+    signal!(on_modifiers, tw_keyboard_on_modifiers, wlr_keyboard, ||);
+    pub fn device(self) -> InputDevice {
+        InputDevice::from_raw(unsafe { tw_keyboard_device(self.0.as_ptr()) }).expect("a keyboard is a device")
+    }
+    /// A keyboard with no keymap of its own, fed by a test (T.2).
+    pub fn stand_in() -> Option<Keyboard> {
+        Keyboard::from_raw(unsafe { tw_stand_in_keyboard_create() })
+    }
+    pub fn stand_in_key(self, keycode: u32, pressed: bool, time_msec: u32) {
+        unsafe { tw_stand_in_keyboard_key(self.0.as_ptr(), keycode, pressed, time_msec) }
+    }
+    /// Compile `layout` (None: xkbcommon's default, which honours
+    /// XKB_DEFAULT_*) for a keyboard that has no keymap.
+    pub fn give_keymap(self, layout: Option<(&str, &str)>) -> KeymapGiven {
+        let (l, v) = layout.map_or((CString::default(), CString::default()), |(l, v)| (cstr(l), cstr(v)));
+        match unsafe { tw_keyboard_give_keymap(self.0.as_ptr(), l.as_ptr(), v.as_ptr()) } {
+            1 => KeymapGiven::Given,
+            0 => KeymapGiven::HadOne,
+            -1 => KeymapGiven::NoneCompiled,
+            _ => KeymapGiven::Refused,
+        }
+    }
+    pub fn set_layout(self, layout: &str, variant: &str) -> bool {
+        unsafe { tw_keyboard_set_layout(self.0.as_ptr(), cstr(layout).as_ptr(), cstr(variant).as_ptr()) }
+    }
+    pub fn layout_name(self) -> Option<String> {
+        text(unsafe { tw_keyboard_layout_name(self.0.as_ptr()) })
+    }
+    /// wlr_keyboard_get_modifiers: WLR_MODIFIER_* bits.
+    pub fn modifiers(self) -> u32 {
+        unsafe { tw_keyboard_modifiers(self.0.as_ptr()) }
+    }
+    /// The key's symbols: translated with the modifiers, then the raw ones.
+    pub fn syms(self, keycode: u32) -> Vec<u32> {
+        let mut out = [0u32; 16];
+        let n = unsafe { tw_keyboard_syms(self.0.as_ptr(), keycode, out.as_mut_ptr(), out.len()) };
+        out[..n].to_vec()
+    }
+}
+
+/// Whether an XKB layout compiles.
+pub fn keymap_compiles(layout: &str, variant: &str) -> bool {
+    unsafe { tw_keymap_compiles(cstr(layout).as_ptr(), cstr(variant).as_ptr()) }
+}
+
+pub fn keysym_from_name(name: &str) -> Option<u32> {
+    let k = unsafe { tw_keysym_from_name(cstr(name).as_ptr()) };
+    (k != 0).then_some(k)
 }
 
 impl OutputManager {

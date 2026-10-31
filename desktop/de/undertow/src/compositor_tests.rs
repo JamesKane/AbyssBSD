@@ -13,6 +13,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::geometry::EbbScope;
+use crate::seat::Seat;
+use std::collections::BTreeMap;
 use abyss_sys::mono;
 use aquadraw::theme::Theme;
 
@@ -444,39 +446,60 @@ fn the_menu_bar_is_told_the_focused_windows_menus() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// abyss/tests/lockclient.c, built as live-sessionlock.sh builds it, once:
-/// None (and the test skips) without wayland-scanner or wayland-protocols.
-fn lockclient() -> Option<std::path::PathBuf> {
+/// One of abyss/tests' probe clients (lockclient, vpointer, vkeyboard),
+/// built as the live scripts build them, once each: None (and the test
+/// skips) without wayland-scanner, wayland-protocols or xkbcommon.
+fn tool(name: &str) -> Option<std::path::PathBuf> {
     use std::process::Command;
-    static BUILT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
-    BUILT
-        .get_or_init(|| {
-            let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-            let out = std::env::temp_dir().join(format!("undertow-lockclient-{}", std::process::id()));
-            std::fs::create_dir_all(&out).ok()?;
-            let protos = String::from_utf8(Command::new("pkg-config").args(["--variable=pkgdatadir", "wayland-protocols"]).output().ok()?.stdout).ok()?;
-            let xml = format!("{}/staging/ext-session-lock/ext-session-lock-v1.xml", protos.trim());
-            let ok = |c: &mut Command| c.status().is_ok_and(|s| s.success());
-            if !ok(Command::new("wayland-scanner").args(["client-header", &xml]).arg(out.join("ext-session-lock-proto.h"))) || !ok(Command::new("wayland-scanner").args(["private-code", &xml]).arg(out.join("ext-session-lock-proto.c"))) {
-                return None;
+    static BUILT: std::sync::Mutex<BTreeMap<String, Option<std::path::PathBuf>>> = std::sync::Mutex::new(BTreeMap::new());
+    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(b) = built.get(name) {
+        return b.clone();
+    }
+    let build = || -> Option<std::path::PathBuf> {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let out = std::env::temp_dir().join(format!("undertow-tools-{}", std::process::id()));
+        std::fs::create_dir_all(&out).ok()?;
+        let ok = |c: &mut Command| c.status().is_ok_and(|s| s.success());
+        let scan = |xml: &str, stem: &str| ok(Command::new("wayland-scanner").args(["client-header", xml]).arg(out.join(format!("{stem}-proto.h")))) && ok(Command::new("wayland-scanner").args(["private-code", xml]).arg(out.join(format!("{stem}-proto.c"))));
+        let pc = |pkgs: &[&str]| String::from_utf8(Command::new("pkg-config").arg("--cflags").arg("--libs").args(pkgs).output().ok()?.stdout).ok();
+        let bin = out.join(name);
+        let mut cc = Command::new("cc");
+        cc.arg(format!("-I{}", out.display()));
+        match name {
+            "lockclient" => {
+                let protos = String::from_utf8(Command::new("pkg-config").args(["--variable=pkgdatadir", "wayland-protocols"]).output().ok()?.stdout).ok()?;
+                if !scan(&format!("{}/staging/ext-session-lock/ext-session-lock-v1.xml", protos.trim()), "ext-session-lock") {
+                    return None;
+                }
+                cc.arg(format!("-I{root}/de/cwayland/include"))
+                    .arg(format!("{root}/abyss/tests/lockclient.c"))
+                    .arg(format!("{root}/de/cabyssprotocols/xdg-shell-protocol.c"))
+                    .arg(out.join("ext-session-lock-proto.c"))
+                    .args(pc(&["wayland-client"])?.split_whitespace());
             }
-            let libs = String::from_utf8(Command::new("pkg-config").args(["--cflags", "--libs", "wayland-client"]).output().ok()?.stdout).ok()?;
-            let bin = out.join("lockclient");
-            let mut cc = Command::new("cc");
-            cc.arg(format!("-I{}", out.display()))
-                .arg(format!("-I{root}/de/cwayland/include"))
-                .arg(format!("{root}/abyss/tests/lockclient.c"))
-                .arg(format!("{root}/de/cabyssprotocols/xdg-shell-protocol.c"))
-                .arg(out.join("ext-session-lock-proto.c"))
-                .args(libs.split_whitespace())
-                .arg("-o")
-                .arg(&bin);
-            ok(&mut cc).then_some(bin)
-        })
-        .clone()
+            "vpointer" | "vkeyboard" => {
+                let xml = if name == "vpointer" { "wlr-virtual-pointer-unstable-v1" } else { "virtual-keyboard-unstable-v1" };
+                if !scan(&format!("{root}/abyss/tests/{xml}.xml"), name) {
+                    return None;
+                }
+                cc.arg(format!("{root}/abyss/tests/{name}.c")).arg(out.join(format!("{name}-proto.c"))).args(pc(&["wayland-client", "xkbcommon"])?.split_whitespace());
+            }
+            _ => return None,
+        }
+        cc.arg("-o").arg(&bin);
+        ok(&mut cc).then_some(bin)
+    };
+    let b = build();
+    built.insert(name.to_owned(), b.clone());
+    b
 }
 
-/// A lockclient process: commands on its stdin, its lines from stdout.
+fn lockclient() -> Option<std::path::PathBuf> {
+    tool("lockclient")
+}
+
+/// A probe process: commands on its stdin, its lines from stdout.
 struct LockClient {
     child: std::process::Child,
     lines: mpsc::Receiver<String>,
@@ -526,10 +549,10 @@ impl Drop for LockClient {
 /// locked and can be taken over, and windows behind the lock neither drawn
 /// nor focused.
 #[test]
-#[ignore = "lockclient binds wl_seat: on with the seat (R4e)"]
 fn the_session_lock_holds() {
     let Some(bin) = lockclient() else { return };
     let r = rig("lock");
+    let _seat = Seat::new(&r.c).unwrap();
     let c = &r.c;
     let (tx, _rx) = mpsc::channel();
     let _w = client(&c.socket_name, "Desk", "org.test.desk", (100, 60), (1.0, 0.0, 0.0), 8.0, tx.clone());
@@ -623,4 +646,81 @@ fn a_saved_display_setting_is_committed() {
     assert_eq!((o.width(), o.height(), o.scale()), (800, 600, 2.0));
     assert!(r.c.output_management.borrow().is_some(), "wlr-output-management is offered");
     r.c.publish_outputs();
+}
+
+impl LockClient {
+    /// Serve the compositor until a line starting `prefix` comes; the line.
+    fn wait_prefix(&self, c: &Compositor, prefix: &str) -> Option<String> {
+        let mut found = None;
+        pump(c, || {
+            if found.is_none() {
+                found = self.lines.try_iter().find(|l| l.starts_with(prefix));
+            }
+            found.is_some()
+        });
+        found
+    }
+}
+
+/// The seat with real devices: the pointer enters the window it is over and
+/// its clicks reach it; a click focuses and raises; keys reach the focused
+/// window; a bound chord is the desktop's and is never delivered; a press on
+/// a frame's title bar moves the window and is forwarded to nobody.
+#[test]
+fn the_seat_routes_pointer_and_keys() {
+    let (Some(lc), Some(vp), Some(vk)) = (lockclient(), tool("vpointer"), tool("vkeyboard")) else { return };
+    let r = rig("seat");
+    let c = &r.c;
+    let seat = Seat::new(c).unwrap();
+    let a = LockClient::start(&lc, &c.socket_name, &["window", "ff336699", "org.test.a"]);
+    assert!(pump(c, || c.mapped_toplevels().len() == 1));
+    let b = LockClient::start(&lc, &c.socket_name, &["window", "ffcc2222", "org.test.b"]);
+    assert!(pump(c, || c.mapped_toplevels().len() == 2));
+    let ta = c.toplevels.borrow().iter().find(|t| t.app_id().as_deref() == Some("org.test.a")).cloned().unwrap();
+    let tb = c.toplevels.borrow().iter().find(|t| t.app_id().as_deref() == Some("org.test.b")).cloned().unwrap();
+    // Apart, so a point is in one of them only.
+    ta.x.set(20);
+    ta.y.set(40);
+    tb.x.set(340);
+    tb.y.set(40);
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &tb)), "the last mapped");
+
+    let mut p = LockClient::start(&vp, &c.socket_name, &["640", "480"]);
+    let mut k = LockClient::start(&vk, &c.socket_name, &[]);
+    assert!(pump(c, || seat.capabilities.get() == 3), "a pointer and a keyboard");
+    let (ax, ay) = (ta.x.get() + ta.width() / 2, ta.y.get() + ta.height() / 2);
+    p.say(&format!("m {ax} {ay}"));
+    assert!(a.wait_prefix(c, "enter").is_some(), "the pointer entered A");
+    assert_eq!(seat.cursor.get(), (ax as f64, ay as f64));
+    p.say("p");
+    p.say("r");
+    assert!(a.wait_prefix(c, "button").is_some(), "the click reached A");
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &ta)), "and focused it");
+    assert!(Rc::ptr_eq(c.toplevels.borrow().last().unwrap(), &ta), "and raised it");
+
+    k.say("k 30"); // a
+    assert!(a.wait_prefix(c, "key").is_some(), "keys go to the focused window");
+    let before = seat.keybinds_fired.get();
+    k.say("c 64 15"); // Cmd-Tab
+    assert!(pump(c, || seat.keybinds_fired.get() > before), "the chord is the desktop's");
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &tb)), "Cmd-Tab: the window under the top");
+    assert!(!b.lines.try_iter().any(|l| l == "key 15"), "and never delivered");
+
+    // A press on B's frame title bar: a move, owned by the pointer.
+    tb.decorated.set(true);
+    // The middle of the title bar: the lights are at its left.
+    let (fx, fy) = (tb.x.get() + tb.width() / 2, tb.y.get() - 10);
+    p.say(&format!("m {fx} {fy}"));
+    assert!(pump(c, || seat.cursor.get() == (fx as f64, fy as f64)));
+    p.say("p");
+    assert!(pump(c, || c.moving().is_some()), "the title bar moves the window");
+    p.say(&format!("m {} {}", fx + 30, fy + 20));
+    assert!(pump(c, || tb.x.get() == 370));
+    p.say("r");
+    assert!(pump(c, || c.moving().is_none()));
+    assert_eq!((tb.x.get(), tb.y.get()), (370, 60), "it went with the pointer");
+    assert!(!tb.maximized.get());
+    assert_eq!(seat.frame_clicks.get(), 1);
+    drop((a, b, p, k));
+    pump(c, || c.toplevels.borrow().is_empty());
 }

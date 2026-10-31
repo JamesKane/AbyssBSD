@@ -65,7 +65,25 @@ TW_SIGNAL(output_manager_v1, apply)
 TW_SIGNAL(output_manager_v1, test)
 TW_SIGNAL(idle_inhibit_manager_v1, new_inhibitor)
 TW_SIGNAL(idle_inhibitor_v1, destroy)
+TW_SIGNAL(seat, request_set_selection)
+TW_SIGNAL(seat, request_set_primary_selection)
+TW_SIGNAL(seat, request_start_drag)
+TW_SIGNAL(seat, start_drag)
+TW_SIGNAL(seat, request_set_cursor)
+TW_SIGNAL(cursor_shape_manager_v1, request_set_shape)
+TW_SIGNAL(virtual_pointer_manager_v1, new_virtual_pointer)
+TW_SIGNAL(virtual_keyboard_manager_v1, new_virtual_keyboard)
+TW_SIGNAL(pointer, motion)
+TW_SIGNAL(pointer, motion_absolute)
+TW_SIGNAL(pointer, button)
+TW_SIGNAL(pointer, axis)
+TW_SIGNAL(keyboard, key)
+TW_SIGNAL(keyboard, modifiers)
+TW_SIGNAL(input_device, destroy)
+TW_SIGNAL(drag_icon, destroy)
 #undef TW_SIGNAL
+/* The seat's pointer focus moved (pointer_state.events, not events). */
+struct tw_listener *tw_seat_on_pointer_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx);
 
 /* MARK: outputs */
 
@@ -233,6 +251,76 @@ void tw_output_state_set_scale(struct wlr_output_state *s, double scale);
 /* MARK: display sleep (idle-inhibit-v1, ext-idle-notify-v1, U.9) */
 
 struct wlr_surface *tw_idle_inhibitor_surface(const struct wlr_idle_inhibitor_v1 *i);
+
+/* MARK: the seat (P6.4) */
+
+/* Its pointer devices' events, as ours. */
+struct tw_motion {
+    uint32_t time_msec;
+    double dx, dy, unaccel_dx, unaccel_dy;
+};
+void tw_pointer_motion_read(const void *event, struct tw_motion *out);
+/* motion_absolute: x and y in 0…1 across the layout. */
+void tw_pointer_motion_absolute_read(const void *event, uint32_t *time_msec, double *x, double *y);
+/* button: 1 pressed, 0 released. */
+void tw_pointer_button_read(const void *event, uint32_t *time_msec, uint32_t *button, uint32_t *pressed);
+void tw_seat_pointer_axis(struct wlr_seat *seat, const void *axis_event);
+/* key: 1 pressed, 0 released. */
+void tw_keyboard_key_read(const void *event, uint32_t *time_msec, uint32_t *keycode, uint32_t *pressed);
+
+/* 1 pointer, 2 keyboard, 0 another kind. */
+int tw_input_device_kind(const struct wlr_input_device *d);
+struct wlr_pointer *tw_input_device_pointer(struct wlr_input_device *d);
+struct wlr_keyboard *tw_input_device_keyboard(struct wlr_input_device *d);
+struct wlr_input_device *tw_pointer_device(struct wlr_pointer *p);
+struct wlr_input_device *tw_keyboard_device(struct wlr_keyboard *k);
+const char *tw_input_device_name(const struct wlr_input_device *d);
+struct wlr_pointer *tw_virtual_pointer_from_event(const void *new_pointer_event);
+struct wlr_keyboard *tw_virtual_keyboard_keyboard(void *virtual_keyboard);
+
+/* The keyboard notifies, with the seat's current keyboard's keycodes and
+ * modifiers; false if the seat has no keyboard yet. */
+bool tw_seat_keyboard_enter(struct wlr_seat *seat, struct wlr_surface *s);
+void tw_seat_keyboard_modifiers(struct wlr_seat *seat, struct wlr_keyboard *k);
+struct wlr_surface *tw_seat_keyboard_focused(const struct wlr_seat *seat);
+/* The client with the pointer, as an opaque identity. */
+const void *tw_seat_pointer_focused_client(const struct wlr_seat *seat);
+/* **No grab survives a lock**: end a keyboard grab (then re-enter
+ * `lock_surface` if given) and a pointer grab. How many were ended. */
+int tw_seat_break_grabs(struct wlr_seat *seat, struct wlr_surface *lock_surface);
+/* request_set_selection / _primary_selection: accept (wlroots checks the
+ * serial). */
+void tw_seat_accept_selection(struct wlr_seat *seat, const void *event, bool primary);
+/* request_start_drag: start it if the serial is a real press, else destroy
+ * its source (a client waits on its own cancel). True if started. */
+bool tw_seat_accept_drag(struct wlr_seat *seat, const void *event);
+/* start_drag's icon (a wlr_drag_icon), or NULL; and its surface. */
+struct wlr_drag_icon *tw_drag_icon(const void *drag);
+struct wlr_surface *tw_drag_icon_surface(const struct wlr_drag_icon *icon);
+/* request_set_cursor: the requesting client, surface (or NULL) and hotspot. */
+const void *tw_set_cursor_read(const void *event, struct wlr_surface **surface, int32_t *hot_x, int32_t *hot_y);
+/* request_set_shape: the shape's name if it is the pointer's, else NULL;
+ * the requesting client in *client. */
+const char *tw_set_shape_read(const void *event, const void **client);
+/* pointer focus_change: whether the surface changed. */
+bool tw_pointer_focus_changed(const void *event);
+/* The surface's attach offset this commit (a cursor's hotspot moves by it). */
+void tw_surface_offset(const struct wlr_surface *s, int32_t *dx, int32_t *dy);
+
+/* Keymaps (xkbcommon): compile the layout (NULL or "" for xkbcommon's
+ * default, which honours XKB_DEFAULT_*), give a keyboard with none one, at
+ * wlroots' repeat. 1 given, 0 it had one, -1 nothing compiled, -2 refused. */
+int tw_keyboard_give_keymap(struct wlr_keyboard *k, const char *layout, const char *variant);
+/* Set a keymap compiled from layout/variant; false if it did not compile. */
+bool tw_keyboard_set_layout(struct wlr_keyboard *k, const char *layout, const char *variant);
+bool tw_keymap_compiles(const char *layout, const char *variant);
+/* The name of the keyboard's keymap's first layout, or NULL. */
+const char *tw_keyboard_layout_name(const struct wlr_keyboard *k);
+uint32_t tw_keyboard_modifiers(struct wlr_keyboard *k);
+/* The key's symbols: translated with the modifiers, then the raw level-0
+ * ones not already there. How many, at most `max`, into out. */
+size_t tw_keyboard_syms(struct wlr_keyboard *k, uint32_t keycode, uint32_t *out, size_t max);
+uint32_t tw_keysym_from_name(const char *name);
 
 /* MARK: foreign toplevels, activation */
 

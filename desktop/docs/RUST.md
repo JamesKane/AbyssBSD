@@ -746,6 +746,26 @@ slow clock while asleep. And wl_surface.enter/leave with the preferred
 scale, every loop iteration. The compositor's half of R4d is done; the
 seat is next.
 
+*R4e, the seat* (`seat.rs`, `grab.rs`; Seat.swift, and the compositor's
+move and resize). wlr_seat with its devices (the backend's, the startup
+ones, virtual pointers and keyboards) and their per-device listeners;
+keymaps (XKB_DEFAULT_LAYOUT, keyboard.ini, rc.conf translated, the
+default), followed while running; the stand-in keyboard; routing in paint
+order (lock, popups, top layers, each window with its frame, bottom
+layers) down to the leaf surface; the cursor (theme shape, client
+surface, hidden) and its drawing with a drag's icon, through a `Desktop`
+painter (scene, then cursor); clicks (focus and raise, on-demand layer
+keyboards, frame gadgets, move and resize, Ebb, the strip); selection,
+primary selection and drag; keybinds (VT switches first, Ebb's keys,
+both symbols, consumed releases, keys.ini reloaded); and the lock's half
+(grabs broken, focus to the lock surface, back on unlock). Tested with
+the live scripts' own probes (vpointer, vkeyboard, lockclient's window
+mode, built as the scripts build them): pointer enter and clicks, click
+to focus and raise, keys to the focused window, Cmd-Tab taken by the
+desktop and never delivered, a window moved by its frame's title bar; and
+the session lock's test, on now. Text input and pointer constraints are
+next.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

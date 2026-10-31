@@ -263,8 +263,14 @@ pub struct Compositor {
     /// The seat's pointer, once a seat exists: the display a keystroke
     /// means when nothing is focused.
     pub cursor: Cell<Option<(f64, f64)>>,
-    /// The window being dragged, by the seat (R4e).
+    /// The window being dragged, and where the pointer took it.
     pub moving: RefCell<Option<Weak<Toplevel>>>,
+    pub(crate) move_offset: Cell<(f64, f64)>,
+    pub(crate) resizing: RefCell<Option<(Weak<Toplevel>, crate::grab::Resize)>>,
+    pub resizes_started: Cell<u64>,
+    pub snap_count: Cell<u64>,
+    /// The seat, once one exists.
+    pub seat: RefCell<Weak<crate::seat::Seat>>,
     pub islands: RefCell<IslandsConfig>,
     pub active_islands: RefCell<HashMap<String, i32>>,
     pub island_inputs: RefCell<HashMap<String, u64>>,
@@ -392,6 +398,11 @@ impl Compositor {
             config_dir: config_dir.map(str::to_owned),
             cursor: Cell::new(None),
             moving: RefCell::default(),
+            move_offset: Cell::new((0.0, 0.0)),
+            resizing: RefCell::default(),
+            resizes_started: Cell::new(0),
+            snap_count: Cell::new(0),
+            seat: RefCell::default(),
             islands: RefCell::new(IslandsConfig::load(config_dir)),
             active_islands: RefCell::default(),
             island_inputs: RefCell::default(),
@@ -629,6 +640,19 @@ impl Compositor {
                 c.set_minimized(&t, t.xdg.requested().minimized)
             }
         }));
+        // Interactive move and resize: the client asks, the compositor does.
+        let (wc, wt) = both();
+        ls.extend(xdg.on_request_move(move || {
+            if let (Some(c), Some(t)) = (wc.upgrade(), wt.upgrade()) {
+                c.begin_move(&t)
+            }
+        }));
+        let (wc, wt) = both();
+        ls.extend(xdg.on_request_resize(move |edges| {
+            if let (Some(c), Some(t)) = (wc.upgrade(), wt.upgrade()) {
+                c.begin_resize(&t, edges)
+            }
+        }));
         // Firefox's --kiosk asks before its first commit (PHASE15 §4.2).
         let (wc, wt) = both();
         ls.extend(xdg.on_request_fullscreen(move || {
@@ -689,6 +713,9 @@ impl Compositor {
         if (t.minimized.get() || !self.is_on_active_island(t)) && t.surface.committed_buffer() {
             self.hidden_commits.set(self.hidden_commits.get() + 1);
         }
+        // A resize in progress: the only moment the anchored edge can be put
+        // back exactly where it was (P9.4).
+        self.resize_committed(t);
     }
 
     /// Announce a window to the shell, and listen for what the shell asks.
@@ -1562,7 +1589,7 @@ impl World for CompositorWorld {
         if self.0.explicit_sync.borrow().offered { s.acquire_point() } else { None }
     }
     fn cursor_signature(&self) -> u64 {
-        0
+        self.0.seat.borrow().upgrade().map_or(0, |s| s.cursor_signature())
     }
     fn theme_generation(&self) -> u64 {
         self.0.theme.borrow().generation

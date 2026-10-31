@@ -11,3 +11,5 @@ libc.workspace = true
 pool-config = { path = "../poolconfig" }
 aquadraw = { path = "../aquadraw" }
 menu-model = { path = "../menumodel" }
+install = { path = "../install" }
+spawn = { path = "../spawn" }
