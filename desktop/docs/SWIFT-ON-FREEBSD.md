@@ -1,5 +1,8 @@
 # Swift 6 on FreeBSD 15 — the Phase-0 spike
 
+> **Retired 2026-10-31.** The desktop is Rust ([RUST.md](RUST.md), R7) and
+> builds with no Swift toolchain. Kept as the record of how Swift ran here.
+
 **Status: CLOSED, 2026-07-28. Acceptance met in full.** `swift build` and
 `swift test` both succeed on this repo in the FreeBSD 15.0 VM: **62/62 tests
 pass**, with no source changes — one `Package.swift` fix was the whole cost

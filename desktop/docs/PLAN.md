@@ -1,9 +1,10 @@
-# AbyssBSD (Swift DE) — Phased Roadmap
+# AbyssBSD desktop (ADE) — Phased Roadmap
 
 ## Context
 
 **AbyssBSD** is a fork of FreeBSD `main` whose headline feature is a
-**new desktop environment written in Swift 6**, styled as a faithful clone of
+**new desktop environment written in Rust** (in Swift 6 until 2026-10; see
+below), styled as a faithful clone of
 **Mac OS X 10.2 "Jaguar" Aqua**, running on **Wayland**, with a Fedora/Anaconda-style
 graphical installer. The bring-up target was the **Mac Pro 2013 (MacPro6,1)**;
 since 2026-09-05 it is an **Intel i7-12700KF with an AMD Radeon RX 6750 XT**
@@ -22,17 +23,21 @@ compositor (`tide`), a shell (`reef`), brokerless IPC (`current`), daemon-free c
 (`anchor`), and an image codec (`abyss-image`). Its architecture is documented in
 `AbyssBSD-old/abyss/docs/{DESKTOP,SEAMS,STATUS,KERNEL-READINESS}.md`.
 
-**The product is Swift.** The whole desktop — toolkit, shell, apps, *and* the engine
-underneath — gets written in Swift 6; we drop to C (or C++) only where Swift genuinely
-can't go. The sibling is therefore a **design source and reference implementation to
-rewrite from**, not a runtime dependency to link against: read its algorithms, its
-architecture docs and its protocol maps, then write the Swift. (Corrected 2026-07-27,
-superseding the earlier "reuse the Rust engine for now" framing. `PoolConfig` — a Swift
-rewrite of the Rust `pool`, sharing only the on-disk format — is the pattern.)
+**The product is Rust** (decided 2026-10-30, [RUST.md](RUST.md); done
+2026-10-31 at R7). The whole desktop — toolkit, shell, apps, *and* the engine
+underneath — is one Cargo workspace; `unsafe` lives only in `de/abyss-sys`, and
+nothing is linked beyond libc, `cc` and the C system libraries. Through Phase 18
+the desktop was Swift 6, and the phase history below is written in its terms
+(module names such as `Surface` or `CurrentIPC` are now crates of the same
+role). The reason for the move was one fact: Swift has no RV64 port, and ADE
+has to run on RV64 boards (RUST.md).
 
-"Where Swift can't go" means an established C system library (libwayland, wlroots,
+The sibling Rust DE (`AbyssBSD-old`) remains a **design source**, not a
+dependency: its crates were never linked, and still are not.
+
+"Where Rust can't go" means an established C system library (libwayland, wlroots,
 xkbcommon, cairo, FreeType/HarfBuzz, libnv) or a shim over one, exactly as `de/cwayland`
-and `de/ctext` already do. It does not mean linking Rust crates.
+and `de/ctext` do, called only from `abyss-sys`.
 
 **One foreign toolkit: GTK** (decided 2026-09-30). Beside our own `Aqua`,
 AbyssBSD depends on GTK or on Qt — not both — and it is GTK: Firefox, the
@@ -127,7 +132,8 @@ C2–C5 in [PHASE6.md](PHASE6.md) are still provisional until P4.5 re-measures t
 
 ### Decisions locked in (from planning Q&A)
 
-1. **Compositor: rewrite in Swift** (corrected 2026-07-27 — this used to read
+1. **Compositor: our own** (written in Swift from Phase 6, in Rust since R4;
+   corrected 2026-07-27 — this used to read
    "reuse now, rewrite later"). The Aqua shell/toolkit/apps are built first, as
    Wayland *clients*, because that's the fastest path to a visible desktop and it
    works against any wlroots compositor; the compositor itself is then written in
@@ -166,9 +172,9 @@ C2–C5 in [PHASE6.md](PHASE6.md) are still provisional until P4.5 re-measures t
    someone looking at Aqua will of course fit Aqua. See Phase 11.1. **Two themes
    is a proof; a curated pack of looks and the churn of keeping it current is a
    catalogue, and that we still refuse.**
-3. **Dev platform: Linux-first, then port.** Swift 6 is first-class on Linux; build the
-   toolkit + shell on this workstation against a stock wlroots compositor (sway/labwc)
-   for fast iteration, then bring Swift up on FreeBSD and run the same way there.
+3. **Dev platform: Linux-first, then port.** Build on this workstation against a
+   stock wlroots compositor (sway/labwc) or undertow for fast iteration, and run the
+   same tests in the FreeBSD guest. riscv64 is cross-built from Linux (RUST.md §3.4).
 4. **This document: full phased roadmap.** Phase 0–1 are executable detail; later phases
    are milestone sketches to be expanded when reached.
 5. **A fork of FreeBSD, and likely always one** (2026-09-30). Upstreaming is worth
@@ -178,21 +184,21 @@ C2–C5 in [PHASE6.md](PHASE6.md) are still provisional until P4.5 re-measures t
 6. **The desktop's metal target is the i7-12700KF / RX 6750 XT** (reaffirmed
    2026-09-30). The monorepo's Radxa Dragon Q8B (aarch64) is a second
    architecture, not far enough along to host the desktop; it becomes a row when
-   it can run Swift and drive a display ([PRODUCT.md §4.5](PRODUCT.md)).
+   it can run the desktop and drive a display ([PRODUCT.md §4.5](PRODUCT.md)).
 7. **Agents default to a local model** (2026-09-30); a person may choose any
    provider. Phase 18 has the reasoning.
 
-### Inheriting the sibling's standing policies (adapted to Swift)
+### Inheriting the sibling's standing policies
 
 - **Minimal third-party dependencies.** Capability = **hand FFI to a mature C system
   library** (wayland, xkbcommon, libnv, freetype, harfbuzz, cairo, libpng/jpeg, crypto)
-  or vendored C. Avoid SwiftPM registry deps the way the sibling avoids crates.io.
+  or vendored C. No crates.io dependencies beyond `libc` and `cc` (RUST.md §6.5).
 - **Wrap a C *library*; rewrite a Rust *component*.** Don't hand-fake a capability a
-  mature C lib provides — wrap it behind a clean Swift interface (the `wlsys`/`sysffi`
+  mature C lib provides — wrap it behind a clean interface in `abyss-sys` (the `wlsys`/`sysffi`
   discipline). The sibling's own crates are the opposite case: read them, then write
-  the Swift.
+  our own.
 - **The performance contract is the feature.** Keep `tide`'s C1–C5 benches as a
-  CI gate; never let the Swift client layer regress input-to-photon.
+  CI gate; never let the client layer regress input-to-photon.
 
 ---
 

@@ -50,7 +50,6 @@ what remains needs hardware we don't have, or is not started.
 | Warm-boot hangs | None: 30 of 30 warm reboots good (2026-10-10, src `d513e50da5`; each boot checked modules, devices, both DSPs, network, audio, a bit-exact H.264 decode and the boot log). Cold boots are not covered |
 | One power-off on pulling the headset (2026-10-01) | Never seen again; unexplained |
 | NPU details | QNN's harmless `GraphHtpSettings option 66` log; the DSP's own log (adspmsgd) is silent; quantization costs MobileNetV2 5 points |
-| `lang/swift6` for aarch64 | Port changes in the ports fork, not yet committed; the bootstrap is a local distfile |
 | Upstreaming | FreeBSD series ([../../UPSTREAMING.md](../../UPSTREAMING.md)); the fastrpc fork to quic/fastrpc; drm/msm and libdrm fixes |
 
 ## Decisions
@@ -220,6 +219,9 @@ what remains needs hardware we don't have, or is not started.
   every FreeBSD running drm-kmod. Cosmetic; not ours.
 
 ## Swift 6.3.3 on aarch64 (for the desktop)
+
+*History: since 2026-10-31 the desktop is Rust (desktop/docs/RUST.md R7), and
+nothing here is needed to build it. Kept as the record of the port work.*
 
 `lang/swift6` was amd64-only because its bootstrap (a prebuilt 6.3.2
 toolchain from the port maintainer) exists only for amd64. Since 6.3, the

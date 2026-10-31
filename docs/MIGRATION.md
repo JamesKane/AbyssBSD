@@ -138,8 +138,9 @@ macOS deletes old files in /tmp):**
         checksummed, the base held there; `--vm --live --full` green on it.
         An image built from `src/` is Phase 17's pipeline.*
   - [x] `desktop/docs/PLAN.md` still says "a FreeBSD `releng/15.0` fork".
-  - [ ] Check that `lang/swift6` builds and runs on 16-CURRENT, on both
-        amd64 and aarch64. *amd64 done: ports' `swift6` 6.3.3 builds and tests
+  - [x] Check that `lang/swift6` builds and runs on 16-CURRENT, on both
+        amd64 and aarch64. *Moot since 2026-10-31: the desktop is Rust
+        (desktop/docs/RUST.md R7) and needs no Swift.* *amd64 done: ports' `swift6` 6.3.3 builds and tests
         the desktop on the 16 guest. aarch64 built and tested on the Q8B
         2026-10-01 with the port extended in our ports fork (board README,
         "Swift 6.3.3 on aarch64"). Left: commit the port change, and host

@@ -1098,6 +1098,21 @@ data (Swift loops forever), a coordinate the format cannot write such as
 a signed hex colour (Swift accepts it), and CRLF as whitespace. With it
 nothing in `rust-bins`' list of Swift executables is left.
 
+*R7, Swift leaves, 2026-10-31.* The last mixed build (06bf1ba) passed
+`--vm --live --full` (2370 s, 35 of 35 live modes) after R7a–R7f fixed what
+the run found: a pty race, unlocked getpw*, two harness scripts, a silent
+image-build exit, GPU modules from our forks (abyss/mk/gpu-kmods.sh, since
+the package repository had outrun the pinned sets' kernel) and AquaDemo's
+text announcement. The Swift unit tests were accounted for first: 169
+ported, 17 obsolete (parity with frozen Swift painters), three keyboard
+tests an accepted gap. R7g moved the harness to Cargo's `target/debug`
+alone (`abyss_build` in common.sh; bin-dir.sh and rust-bins gone; metal.sh
+had still been pushing SwiftPM's binaries). R7h deleted Package.swift, the
+311 Swift files, Tests/, the module maps and the flag-carrier C
+directories; aquadraw finds `themes/` beside Cargo.toml. R7i took swift6
+out of the VM seed and check.sh, and retired SWIFT-ON-FREEBSD.md and
+SWIFT-6.4.md. Left: the `--full` gate on the first pure-Rust build.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

@@ -1,5 +1,8 @@
 # Swift 6.4 — what bumping the toolchain buys, and what it costs (scope)
 
+> **Retired 2026-10-31.** The desktop is Rust ([RUST.md](RUST.md), R7) and
+> builds with no Swift toolchain. Kept as the record of how Swift ran here.
+
 _2026-09-28. Swift 6.4 was released on 2026-09-15. This scopes moving to it: where
 each platform's toolchain actually is, which of its features would simplify or
 speed up this tree, which of those do not need 6.4 at all, and what was spiked

@@ -5,9 +5,8 @@
 # missing port can't wedge provisioning; the cost is that a silent miss looks
 # exactly like success. This script is the check that closes that gap: it waits
 # for provisioning to finish, then asserts SSH, the package set, the C libraries
-# the Swift targets FFI into (via pkg-config, the way SwiftPM will find them),
-# and reports the Swift toolchain's status without failing on it — Swift on
-# FreeBSD is the P3.2 spike, not a P3.1 precondition.
+# the desktop links (via pkg-config, the way abyss-sys/build.rs finds them),
+# and cargo.
 #
 # Exit 0 = the VM is ready to build in. Anything else prints what's wrong.
 set -eu
@@ -82,19 +81,17 @@ if [ "$ABYSS_VM_ROLE" = builder ]; then
   exit "$fail"
 fi
 
-# --- the C substrate SwiftPM will look for ------------------------------
-# These are the pkg-config names in Package.swift's systemLibrary targets
-# (plus wayland-client, which CWayland links directly).
-# Phase 6 adds wayland-server + wlroots for `undertow` (PHASE6.md §4.3).
-# The version is PINNED, to 0.20 since 2026-09-30: a compositor that builds
-# against different wlroots on each platform is a failure mode this project
-# has not had (PHASE6.md §7.3), so it must match Package.swift's.
-for pc in wayland-client wayland-scanner xkbcommon cairo freetype2 harfbuzz libpng \
-          wayland-server wlroots-0.20; do
+# --- the C libraries abyss-sys/build.rs links ------------------------------
+# Its pkg-config names, plus the scanner. The wlroots version is PINNED, to
+# 0.20 since 2026-09-30: a compositor that builds against different wlroots
+# on each platform is a failure mode this project has not had (PHASE6.md
+# §7.3), so it must match build.rs's.
+for pc in wayland-client wayland-scanner xkbcommon cairo freetype2 harfbuzz fontconfig \
+          pixman-1 wayland-server wlroots-0.20; do
   if ssh_run "pkg-config --exists $pc" 2>/dev/null; then
     note "pkg-config $pc: $(ssh_run "pkg-config --modversion $pc" 2>/dev/null)"
   else
-    bad "pkg-config cannot find '$pc' (Package.swift needs it)"
+    bad "pkg-config cannot find '$pc' (abyss-sys/build.rs needs it)"
   fi
 done
 
@@ -107,19 +104,11 @@ for tool in sway swaymsg grim cc; do
   fi
 done
 
-# --- Swift: report, do not gate -----------------------------------------
-# Ports installs the toolchain off PATH (see config.sh), so look where it lives.
-# This is a report, not a gate: proving Swift builds *this repo* is P3.2, and a
-# VM is still useful for C-substrate work without it.
-if ssh_run "test -x $ABYSS_GUEST_SWIFT_BIN/swift" 2>/dev/null; then
-  note "SWIFT PRESENT: $(ssh_run "$ABYSS_GUEST_SWIFT_BIN/swift --version 2>&1 | head -1")"
-  note "  target: $(ssh_run "$ABYSS_GUEST_SWIFT_BIN/swift --version 2>&1 | sed -n 2p")"
-  for t in swift-build swift-test swiftc; do
-    ssh_run "test -x $ABYSS_GUEST_SWIFT_BIN/$t" 2>/dev/null \
-      && note "  $t: ok" || bad "toolchain incomplete: no $t"
-  done
+# --- Rust -------------------------------------------------------------------
+if ssh_run "command -v cargo >/dev/null" 2>/dev/null; then
+  note "cargo: $(ssh_run "cargo --version" 2>/dev/null)"
 else
-  note "swift absent at $ABYSS_GUEST_SWIFT_BIN — see docs/SWIFT-ON-FREEBSD.md (P3.2)"
+  bad "missing tool: cargo (pkg install rust)"
 fi
 
 if [ "$fail" -eq 0 ]; then

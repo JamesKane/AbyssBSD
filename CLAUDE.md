@@ -2,7 +2,7 @@
 
 AbyssBSD is a FreeBSD distribution: a fork of FreeBSD `main` (16.0-CURRENT)
 with new hardware support (starting with the Radxa Dragon Q8B), and a Mac OS X 10.2-style
-desktop written in Swift 6 on Wayland. See [README.md](README.md).
+desktop written in Rust on Wayland. See [README.md](README.md).
 
 ## Where things are
 
@@ -36,7 +36,7 @@ and firmware the fork remote is named `fork`.
   records its licences in `LICENSES/`. Never copy Linux reference sources
   into the tree.
 - **No message bus.** ADE's IPC is `CurrentIPC`. Foreign applications that
-  speak D-Bus get a **bridge** in Swift that answers only for ADE's own
+  speak D-Bus get a **bridge** (`abyss-dbus`) that answers only for ADE's own
   services, never a bus, and never `dbus-daemon`
   ([PRODUCT §5.6](desktop/docs/PRODUCT.md)).
 - **"Nothing special"** on the board: stock GENERIC and an empty

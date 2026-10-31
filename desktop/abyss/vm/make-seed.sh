@@ -58,17 +58,11 @@ EOF
 # What the role installs, appended to the same runcmd.
 if [ "$ABYSS_VM_ROLE" = builder ]; then
   # The release pipeline's (PHASE17 P17.0): poudriere builds the overlay;
-  # swift6 builds the desktop outside it, for comparison with the port's build;
   # git for the ports tree poudriere is given. World and kernel need nothing
   # beyond base. Every install best-effort, then recorded, as the guest's.
   cat >> "$work/user-data" <<EOF
   - pkg install -y sudo rsync git gmake pkgconf poudriere || true
-  # On a line of its own: on 2026-10-02 FreeBSD's latest set had no swift6 at
-  # all (the port had moved to 6.4.0 and its package had not appeared), and a
-  # pkg install fails as a whole. Absent, the pipeline installs the pinned
-  # toolchain itself (PHASE17 P17.0).
-  - pkg install -y swift6 || true
-  - sh -c 'for p in sudo rsync git gmake pkgconf poudriere swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
+  - sh -c 'for p in sudo rsync git gmake pkgconf poudriere; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
   - touch /home/$ABYSS_SSH_USER/.cloud-init-done
   - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
 EOF
@@ -76,21 +70,16 @@ else
   cat >> "$work/user-data" <<EOF
   # Base tooling. sudo/rsync are not in FreeBSD base.
   - pkg install -y sudo rsync git gmake pkgconf || true
-  # Swift's own runtime/build dependencies (the same set Linux needs):
-  # ICU, libxml2, curl, libedit. No Rust: the engine is a Swift *rewrite*,
-  # not a reuse of the sibling's crates (PLAN.md, corrected 2026-07-27).
-  - pkg install -y icu libxml2 curl libedit || true
-  # DE C-lib substrate the Swift Surface/Aqua targets FFI into:
+  # The C libraries the desktop links (abyss-sys/build.rs):
   #   wayland (client+server), xkbcommon, cairo, freetype/harfbuzz + a font,
   #   png/jpeg. wayland-protocols supplies xdg-shell.xml for the scanner.
   - pkg install -y wayland wayland-protocols libxkbcommon cairo || true
   - pkg install -y freetype2 harfbuzz dejavu png jpeg-turbo || true
-  # wlroots + seatd + a stock compositor: the Swift shell runs as a *client*
-  # against sway here exactly as it does on Linux (a Swift compositor is
-  # Phase 6). grim captures the headless output for the live tests.
+  # wlroots + seatd + a stock compositor: the shell runs as a *client*
+  # against sway here exactly as it does on Linux, beside undertow. grim
+  # captures the headless output for the live tests.
   - pkg install -y wlroots019 seatd sway grim || true
-  # wlroots 0.20 beside 0.19: undertow moves to it on both platforms at once
-  # (Package.swift's pin), and the guest should already have it when it does.
+  # wlroots 0.20 beside 0.19 (sway's): undertow's pin, on both platforms.
   - pkg install -y wlroots020 || true
   # What the harness grew into after the seed was written, installed by hand
   # on the 15.0 box and recorded here so a rebuilt guest is the same guest:
@@ -101,24 +90,12 @@ else
   # an independent
   # wlr-output-management client (P14.7).
   - pkg install -y edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr || true
-  # Rust (docs/RUST.md R1): the desktop's Rust half builds and is tested here
-  # beside the Swift, on every pass.
+  # Rust (docs/RUST.md): the desktop builds and is tested here on every pass.
   - pkg install -y rust || true
-  # Swift toolchain. FreeBSD is not an *official* swift.org target, but ports
-  # carries one: the package is \`swift6\` (\`swift\` alone matches nothing, which
-  # is why this line used to report a false negative). Confirmed 2026-07-28:
-  # swift6-6.3.2, newer than the 6.3.1 we develop against on Linux. Option (a)
-  # of docs/SWIFT-ON-FREEBSD.md; proving it builds *this repo* is P3.2.
-  - pkg install -y swift6 || echo "swift6 pkg install failed — see docs/SWIFT-ON-FREEBSD.md" >> /home/$ABYSS_SSH_USER/.swift-todo
-  # The port installs to /usr/local/swift6/bin (deliberately off PATH, so 5.10
-  # and 6.x can coexist). Put it on PATH for interactive logins; scripts use
-  # \$ABYSS_GUEST_SWIFT_BIN from config.sh instead, since a non-interactive
-  # \`ssh host 'cmd'\` reads neither .profile nor /etc/profile.
-  - sh -c 'echo "PATH=/usr/local/swift6/bin:\\\$PATH; export PATH" >> /home/$ABYSS_SSH_USER/.profile'
   # Every install above is best-effort (|| true) so one missing port can't wedge
   # first boot — which means a silent miss would otherwise look like success.
   # Record what actually landed; abyss/vm/check.sh asserts on this file.
-  - sh -c 'for p in sudo rsync git gmake pkgconf icu libxml2 curl libedit wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr rust swift6; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
+  - sh -c 'for p in sudo rsync git gmake pkgconf wayland wayland-protocols libxkbcommon cairo freetype2 harfbuzz dejavu png jpeg-turbo wlroots019 wlroots020 seatd sway grim edk2-bhyve gdb zenity galculator firefox-esr ffmpeg wlr-randr rust; do pkg info -e "\$p" || echo "\$p" >> /home/$ABYSS_SSH_USER/.pkg-missing; done'
   - touch /home/$ABYSS_SSH_USER/.cloud-init-done
   - chown $ABYSS_SSH_USER /home/$ABYSS_SSH_USER/.cloud-init-done
 EOF

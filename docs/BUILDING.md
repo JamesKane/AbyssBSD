@@ -13,7 +13,7 @@ What is built where:
 | drm-kmod (`kmod/drm/`), msm (`kmod/drm-msm/`), firmware kmods (`firmware/`) | Linux, cross, inside `make.py buildenv` | `drm.ko`, `sysfbdrm.ko`, `msm.ko`, `qcom_*.ko` |
 | Q8B boot image | Linux (no root), from a snapshot `base.txz` + our kernel | `q8b-usb.img` |
 | Ports overlay (`ports/`): Mesa, libdrm, packaged kmods | **FreeBSD only** (poudriere or `make package`) | `.pkg` files |
-| Desktop (`desktop/`) | Linux for the dev loop; FreeBSD VM for the truth | `swift build` products |
+| Desktop (`desktop/`) | Linux for the dev loop; FreeBSD VM for the truth | `cargo build` products |
 
 Anything marked *unverified on Linux* below is our best translation of a
 recipe that was only run on the Mac. Once it has been run, fix the doc and
@@ -32,7 +32,7 @@ Packages (Debian/Ubuntu names; adjust for your distribution):
 ```sh
 # FreeBSD cross-build
 sudo apt install git python3 clang lld llvm libarchive-dev libbz2-dev zlib1g-dev
-# desktop (pkg-config names from desktop/Package.swift)
+# desktop (pkg-config names from desktop/de/abyss-sys/build.rs)
 sudo apt install pkg-config libwayland-dev wayland-protocols libxkbcommon-dev \
     libcairo2-dev libpixman-1-dev libfreetype-dev libharfbuzz-dev \
     libfontconfig-dev libwlroots-0.19-dev sway   # 0.20 after the upgrade (MIGRATION.md §5)
@@ -40,8 +40,9 @@ sudo apt install pkg-config libwayland-dev wayland-protocols libxkbcommon-dev \
 sudo apt install qemu-system-x86 qemu-utils rsync python3-pycdlib
 ```
 
-The desktop needs Swift 6.3.x (installed with swiftly). The FreeBSD guest has
-`swift6` 6.3.2.
+The desktop needs Rust (stable, edition 2024, installed with rustup); the
+riscv64 cross-build also wants the nightly pinned in `desktop/abyss/vm/config.sh`.
+The FreeBSD guest has ports' `rust`.
 
 `make.py` finds `clang`, `clang++`, `clang-cpp` and `ld.lld` on `PATH`. On
 Debian, the versioned tools live in `/usr/lib/llvm-NN/bin`: pass that
@@ -267,7 +268,7 @@ The desktop has always been developed on Linux; see
 
 ```sh
 cd $ABYSS/desktop
-swift build && swift test
+cargo build --workspace --bins --examples && cargo test --workspace
 sh abyss/tests/run.sh            # the Linux lane
 # FreeBSD truth: the qemu/KVM VM (FreeBSD 15.0-RELEASE amd64)
 cd abyss/vm && ./fetch-image.sh && ./make-seed.sh && ABYSS_DAEMON=1 ./run.sh && ./check.sh && ./build.sh

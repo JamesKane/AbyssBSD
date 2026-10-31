@@ -406,10 +406,9 @@ say "== the runtime closure"
 #
 # `ldd` over what we built answers the question exactly: **84 shared objects,
 # 22 MB**, transitively closed, and it cannot drift from the binaries because it
-# IS the binaries. That includes the Swift runtime, where the arithmetic is
-# starkest — the swift6 package is 2.70 GiB of toolchain and we load 19 libraries
-# from it (PHASE5 §6.3). Paths are preserved, because that is where each
-# binary's rpath says to look.
+# IS the binaries. (Under Swift it also carried the runtime: 19 libraries out of
+# a 2.70 GiB toolchain package, PHASE5 §6.3.) Paths are preserved, because that
+# is where each binary's rpath says to look.
 #
 # The cost, stated rather than discovered: **the medium has no package
 # database**, so nothing on it can `pkg install` anything. For a live installer

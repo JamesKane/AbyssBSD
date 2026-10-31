@@ -1,10 +1,18 @@
-# AbyssBSD (Swift DE) — Status & Handoff
+# AbyssBSD desktop (ADE) — Status & Handoff
 
 The resume-from-here doc. For the *why* and the full roadmap see [PLAN.md](PLAN.md);
 for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 
-Last updated: 2026-10-02. **Every phase but 4 and 17 is complete**: the
-Jaguar desktop on our own Swift compositor, its applications (Finder,
+**2026-10-31: the desktop is Rust.** The Swift-to-Rust port
+([RUST.md](RUST.md)) reached R7: the last mixed build passed
+`--vm --live --full`, and Package.swift, the Swift sources and Tests/ are
+gone; `cargo build` and `cargo test` are the whole build. Next: the `--full`
+gate on the pure-Rust build, then R8 (riscv64). The rest of this page was
+written while the desktop was Swift; its module names are now crates of the
+same role.
+
+Last updated (below): 2026-10-02. **Every phase but 4 and 17 is complete**: the
+Jaguar desktop on our own compositor, its applications (Finder,
 Terminal, TextEdit, Grab, Activity Monitor, Disk Utility, System Profiler,
 Firefox ESR), the menu protocol, the theme system with two themes, System
 Preferences that write, the installer, islands, the session (login, lock,
@@ -28,14 +36,13 @@ Software, scoped in [PHASE17.md](PHASE17.md) (P17.0–P17.10). The working list 
 
 ## What this is
 
-A FreeBSD fork whose desktop environment is written in **Swift 6**, styled as a
+A FreeBSD fork whose desktop environment is written in **Rust** (Swift 6
+until 2026-10, RUST.md), styled as a
 faithful **Mac OS X 10.2 "Jaguar" Aqua** clone, on **Wayland**. The earlier Rust DE,
 checked out beside the monorepo as `AbyssBSD-old`, is the **design source we rewrite from** — its compositor
 (`tide`), IPC (`current`), config (`pool`) and helpers are reference
-implementations to read, not code to link. **The product is Swift**, dropping to
-C only where Swift can't reach (system-library shims like `de/cwayland`).
-`PoolConfig` is the pattern: a Swift rewrite of the Rust `pool` that shares the
-on-disk format and none of the code. See PLAN.md for the locked-in decisions
+implementations to read, not code to link. C appears only as shims over system
+libraries (`de/cwayland` and the rest), called from `abyss-sys`. See PLAN.md for the locked-in decisions
 (faithful clone; Linux-first dev; full phased roadmap).
 
 **Phase 2 built the shell** (all of it now shipped; the tour below is the
