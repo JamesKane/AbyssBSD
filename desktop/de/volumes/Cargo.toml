@@ -1,0 +1,9 @@
+[package]
+name = "volumes"
+description = "Volumes: ZFS datasets and snapshots as Disk Utility reads them (Swift: Volumes.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+spawn = { path = "../spawn" }

@@ -11,6 +11,7 @@ app-bundles = { path = "../appbundles" }
 aquadraw = { path = "../aquadraw" }
 current-ipc = { path = "../currentipc" }
 install = { path = "../install" }
+install-run = { path = "../installrun" }
 install-wire = { path = "../installwire" }
 libc.workspace = true
 login = { path = "../login" }
@@ -26,3 +27,4 @@ surface = { path = "../surface" }
 terminal = { path = "../terminal" }
 text-model = { path = "../textmodel" }
 vents = { path = "../vents" }
+volumes = { path = "../volumes" }

@@ -10,6 +10,7 @@ pub mod app_library;
 pub mod commands;
 pub mod context_menu;
 pub mod desktop_icons;
+pub mod diskutility;
 pub mod dock;
 pub mod finder_commands;
 pub mod finder;

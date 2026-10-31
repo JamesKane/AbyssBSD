@@ -1013,6 +1013,15 @@ column titles are measured regular and drawn bold, because the
 identical (96 in the gate); live-activity is green (its other-user half
 runs on FreeBSD).
 
+*R6q, Disk Utility.* `volumes` first (`zfs list` parsed, with its three
+Swift tests); then the window: disks from the installer's probe,
+datasets and their snapshots, and Take Snapshot, Roll Back (latest
+only, asked first), Mount and Unmount as `volume` plans for the helper.
+abyss-sys gains `civil_time` (local or UTC). Both goldens are identical
+(98 in the gate). live-diskutility is green on Linux, where it checks
+only that the window says ZFS is missing; its claims run in the FreeBSD
+guest and wait for it.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

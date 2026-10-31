@@ -165,6 +165,15 @@ pub fn free_space(path: &str) -> Option<u64> {
 
 /// Now in local time: (hour 0…23, minute, weekday 0 = Sunday). A menu
 /// bar's clock.
+/// The time `t` (seconds since the epoch, or now when None) broken down,
+/// in the local zone or UTC: year, month 1–12, day, hour, minute, second.
+pub fn civil_time(t: Option<i64>, utc: bool) -> Option<[i32; 6]> {
+    let t: libc::time_t = t.map_or_else(|| unsafe { libc::time(std::ptr::null_mut()) }, |t| t as libc::time_t);
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let r = if utc { unsafe { libc::gmtime_r(&t, &mut tm) } } else { unsafe { libc::localtime_r(&t, &mut tm) } };
+    (!r.is_null()).then_some([tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec])
+}
+
 pub fn local_clock() -> Option<(i32, i32, i32)> {
     let t = unsafe { libc::time(std::ptr::null_mut()) };
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };

@@ -38,6 +38,8 @@ pub enum SceneKind {
     Grab,
     /// Activity Monitor: the process table.
     Activity,
+    /// Disk Utility: disks, datasets, snapshots.
+    DiskUtility,
 }
 
 impl SceneKind {
@@ -62,6 +64,7 @@ impl SceneKind {
             Some("textedit") => Some((SceneKind::TextEdit, "TextEdit", 520, 380)),
             Some("grab") => Some((SceneKind::Grab, "Grab", 420, 150)),
             Some("activity") => Some((SceneKind::Activity, "Activity Monitor", 620, 360)),
+            Some("diskutility") => Some((SceneKind::DiskUtility, "Disk Utility", 700, 440)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -174,6 +177,10 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
                 let mut view = crate::text_view::TextView::new(crate::textedit::sample_text(), &mut c.runner.text);
                 view.edit(|m| m.select(TextRange::new(TextPosition::new(2, 6), TextPosition::new(3, 9))));
                 crate::textedit::paint_textedit(&mut c, cw, ch, "Notes.txt — Edited", &mut view, Some("wraps"), false, true);
+            }
+            // A fixed machine: one disk, a pool, a dataset with two snapshots.
+            SceneKind::DiskUtility => {
+                crate::diskutility::paint_disk_utility(&mut c, cw, ch, &crate::diskutility::sample_view());
             }
             // A fixed table: names, users and numbers that do not change.
             SceneKind::Activity => {

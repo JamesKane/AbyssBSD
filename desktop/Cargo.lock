@@ -102,6 +102,7 @@ dependencies = [
  "aquadraw",
  "current-ipc",
  "install",
+ "install-run",
  "install-wire",
  "libc",
  "login",
@@ -117,6 +118,7 @@ dependencies = [
  "terminal",
  "text-model",
  "vents",
+ "volumes",
 ]
 
 [[package]]
@@ -613,6 +615,13 @@ dependencies = [
  "menu-model",
  "menu-wire",
  "model",
+]
+
+[[package]]
+name = "volumes"
+version = "0.1.0"
+dependencies = [
+ "spawn",
 ]
 
 [[package]]
