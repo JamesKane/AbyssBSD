@@ -505,6 +505,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "undertowbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "aquadraw",
+ "libc",
+ "undertow",
+]
+
+[[package]]
 name = "vents"
 version = "0.1.0"
 dependencies = [

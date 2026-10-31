@@ -1,0 +1,16 @@
+[package]
+name = "undertowbin"
+description = "undertow: the compositor, its benches and its run loop (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "undertow"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys = { workspace = true, features = ["wlroots"] }
+aquadraw = { path = "../aquadraw" }
+libc.workspace = true
+undertow = { path = "../undertow" }

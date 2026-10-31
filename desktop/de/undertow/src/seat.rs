@@ -1172,6 +1172,16 @@ impl Drop for Seat {
     }
 }
 
+/// A `Desktop` shared between the conductor (which latches it) and its
+/// output (which draws it).
+pub struct SharedDesktop<W: World>(pub Rc<RefCell<Desktop<W>>>);
+
+impl<W: World> crate::output::FrameSink for SharedDesktop<W> {
+    fn latch_and_composite(&mut self, now: u64, target: u64) -> crate::output::FrameStats {
+        self.0.borrow_mut().scene.latch_and_composite(now, target)
+    }
+}
+
 /// What draws an output: the scene, then the seat's cursor over it.
 pub struct Desktop<W: World> {
     pub scene: SurfaceScene<W>,

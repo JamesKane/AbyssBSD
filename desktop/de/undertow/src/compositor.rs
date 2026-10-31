@@ -256,6 +256,10 @@ pub struct Compositor {
     pub runner: RefCell<Option<Runner>>,
     /// The frames undertow draws (P9.6).
     pub frames: RefCell<Frames>,
+    pub theme_reloads: Cell<u64>,
+    restore_timer: RefCell<Option<abyss_sys::wlr::Source>>,
+    pub(crate) appearance_watch: RefCell<Option<(pool_config::Watcher, abyss_sys::wlr::Source)>>,
+    pub(crate) islands_watch: RefCell<Option<(pool_config::Watcher, abyss_sys::wlr::Source)>>,
     /// The window with the keyboard. The seat says so to the client (R4e).
     pub focused: RefCell<Option<Weak<Toplevel>>>,
     focus_hook: RefCell<Option<FocusHook>>,
@@ -393,6 +397,10 @@ impl Compositor {
             theme: RefCell::new(theme),
             runner: RefCell::new(runner),
             frames: RefCell::default(),
+            theme_reloads: Cell::new(0),
+            restore_timer: RefCell::default(),
+            appearance_watch: RefCell::default(),
+            islands_watch: RefCell::default(),
             focused: RefCell::default(),
             focus_hook: RefCell::default(),
             config_dir: config_dir.map(str::to_owned),
@@ -1142,32 +1150,58 @@ impl Compositor {
             let (Some(c), Some(l)) = (wc.upgrade(), wl.upgrade()) else { return };
             l.mapped.set(true);
             c.arrange_layers();
+            c.claim_keyboard_if_exclusive(&l);
         }));
         let (wc, wl) = both();
         ls.extend(l.surface.on_unmap(move || {
             let (Some(c), Some(l)) = (wc.upgrade(), wl.upgrade()) else { return };
             l.mapped.set(false);
             c.arrange_layers();
+            c.release_layer_keyboard(&l);
         }));
         // Same rule as xdg-shell: the first commit is answered with a
         // configure. And again on every commit: a client may change its
         // anchors or zone at any time (the menu bar does, opening a menu).
-        let wc = self.me.clone();
+        let (wc, wl) = both();
         ls.extend(l.surface.on_commit(move || {
-            if let Some(c) = wc.upgrade() {
-                c.arrange_layers()
-            }
+            let (Some(c), Some(l)) = (wc.upgrade(), wl.upgrade()) else { return };
+            c.arrange_layers();
+            // Exclusive may be asked for after mapping.
+            c.claim_keyboard_if_exclusive(&l);
         }));
         let (wc, wl) = both();
         ls.extend(handle.on_destroy(move || {
             let (Some(c), Some(l)) = (wc.upgrade(), wl.upgrade()) else { return };
             l.mapped.set(false);
+            c.release_layer_keyboard(&l);
             l.listeners.borrow_mut().clear();
             c.layers.borrow_mut().retain(|o| !Rc::ptr_eq(o, &l));
             c.arrange_layers();
         }));
         *l.listeners.borrow_mut() = ls;
         l
+    }
+
+    /// `exclusive` on the top or overlay layer: the keyboard as it maps, no
+    /// click (a lock screen, Grab's overlay; P15.6).
+    fn claim_keyboard_if_exclusive(&self, l: &Rc<Layer>) {
+        if !l.mapped.get() || !l.wants_exclusive_keyboard() {
+            return;
+        }
+        if let Some(s) = self.seat.borrow().upgrade()
+            && !s.keyboard_layer().is_some_and(|k| Rc::ptr_eq(&k, l))
+        {
+            s.give_keyboard(l)
+        }
+    }
+
+    /// A layer that had the keyboard went: back to the active window.
+    fn release_layer_keyboard(&self, l: &Rc<Layer>) {
+        if let Some(s) = self.seat.borrow().upgrade()
+            && s.keyboard_layer().is_some_and(|k| Rc::ptr_eq(&k, l))
+        {
+            s.restore_keyboard()
+        }
     }
 
     /// Place every layer surface and recompute the usable areas. **By
@@ -1338,9 +1372,37 @@ impl Compositor {
             p.mapped.set(false);
             p.listeners.borrow_mut().clear();
             c.popups.borrow_mut().retain(|o| !Rc::ptr_eq(o, &p));
+            c.popup_gone();
         }));
         *p.listeners.borrow_mut() = ls;
         p
+    }
+
+    /// The last menu closed: the keys go back to the window you were in,
+    /// **after a moment, not now**. Walking the bar with ←/→ closes one menu
+    /// and opens the next, and the bar may flush between the two, so "no
+    /// popups" is briefly true; restoring then takes the keyboard from the
+    /// bar mid-walk. 100 ms is long enough for a client to open its next menu
+    /// and short enough that nobody types into the gap after an Escape.
+    fn popup_gone(&self) {
+        if !self.popups.borrow().is_empty() {
+            return;
+        }
+        if self.restore_timer.borrow().is_none() {
+            let w = self.me.clone();
+            let t = self.session.event_loop().add_timer(move || {
+                let Some(c) = w.upgrade() else { return };
+                if c.popups.borrow().is_empty()
+                    && let Some(s) = c.seat.borrow().upgrade()
+                {
+                    s.restore_keyboard()
+                }
+            });
+            *self.restore_timer.borrow_mut() = t;
+        }
+        if let Some(t) = &*self.restore_timer.borrow() {
+            t.arm(100)
+        }
     }
 
     /// The parent's surface origin and window-geometry offset, in layout
@@ -1498,6 +1560,9 @@ impl Drop for Compositor {
         self.menu_state.borrow_mut().addresses_clear();
         self.lock.borrow_mut().clear();
         self.display_sleep.borrow_mut().take();
+        self.appearance_watch.borrow_mut().take();
+        self.restore_timer.borrow_mut().take();
+        self.islands_watch.borrow_mut().take();
         self.output_management.borrow_mut().take();
         self.menus.borrow_mut().take();
         self.frames.borrow_mut().release();

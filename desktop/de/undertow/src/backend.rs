@@ -150,7 +150,7 @@ pub struct WlrootsSession {
     session: Option<Session>,
     new_output: Option<Listener>,
     startup_input: RefCell<Option<Listener>>,
-    stand_in_vt: Option<Source>,
+    stand_in_vt: RefCell<Option<Source>>,
 }
 
 impl WlrootsSession {
@@ -216,7 +216,7 @@ impl WlrootsSession {
                 s.borrow_mut().startup_inputs.push(d)
             }
         });
-        let me = WlrootsSession { state, hooks, display, event_loop, session, new_output, startup_input: RefCell::new(startup_input), stand_in_vt: None };
+        let me = WlrootsSession { state, hooks, display, event_loop, session, new_output, startup_input: RefCell::new(startup_input), stand_in_vt: RefCell::new(None) };
 
         // From here a failure drops `me`, which unhooks the listeners before
         // the display goes: destroying it with them hooked aborted in
@@ -301,8 +301,8 @@ impl WlrootsSession {
     /// what wlroots does to DRM ones when the VT is switched away (destroys
     /// them all), and `back` announces them again by the same names.
     /// Headless only: a real session has a real VT.
-    pub fn add_stand_in_vt(&mut self, fifo: &str) -> bool {
-        if !matches!(self.state.borrow().kind, Kind::Headless { .. }) || self.stand_in_vt.is_some() {
+    pub fn add_stand_in_vt(&self, fifo: &str) -> bool {
+        if !matches!(self.state.borrow().kind, Kind::Headless { .. }) || self.stand_in_vt.borrow().is_some() {
             return false;
         }
         use std::os::unix::fs::OpenOptionsExt;
@@ -319,7 +319,7 @@ impl WlrootsSession {
         }) else {
             return false;
         };
-        self.stand_in_vt = Some(src);
+        *self.stand_in_vt.borrow_mut() = Some(src);
         true
     }
 
@@ -349,7 +349,7 @@ impl Drop for WlrootsSession {
         // Before the display goes: a destroy listener firing into a session
         // mid-teardown is §2.35 again.
         self.state.borrow_mut().destroy_listeners.clear();
-        self.stand_in_vt.take();
+        self.stand_in_vt.borrow_mut().take();
         // The display itself goes when the last Rc does, which is here
         // unless someone kept one.
     }
@@ -871,36 +871,65 @@ impl Output for WlrootsOutput {
     /// would leave the loop unserviced, no present would arrive, and the
     /// compositor would look hung while dutifully committing frames.
     fn wait_until(&mut self, deadline_ns: u64) {
-        // Stop servicing clients this long before the deadline and just
-        // sleep: a dispatch pass is bounded by the clients' buffers, not the
-        // time left, so the last one could overrun onto the frame.
-        const RESERVE_NS: u64 = 500_000;
-        loop {
-            let now = mono::now();
-            if now >= deadline_ns {
-                return;
-            }
-            let remaining = deadline_ns - now;
-            if remaining <= RESERVE_NS {
-                mono::sleep_until(deadline_ns);
-                return;
-            }
-            // Bounded, non-blocking passes with a clock check between each.
-            self.event_loop.dispatch(0);
-            if mono::now() >= deadline_ns - RESERVE_NS {
-                continue;
-            }
-            // Nothing pending: block for the remainder, **and wake before
-            // the reserve, never after it** (PHASE4 §5.13): round down, and
-            // leave a sixteenth for the timer's slop.
-            let slop = remaining / 16;
-            let ms = (remaining - RESERVE_NS - slop.min(remaining - RESERVE_NS)) / 1_000_000;
-            if ms == 0 {
-                mono::sleep_until(deadline_ns - RESERVE_NS);
-                continue;
-            }
-            self.event_loop.dispatch(ms.min(1000) as i32);
+        serve_until(self.event_loop, deadline_ns)
+    }
+}
+
+/// `wait_until`'s work, for an event loop: dispatch in the slack before the
+/// deadline, then sleep the rest.
+pub fn serve_until(event_loop: EventLoop, deadline_ns: u64) {
+    // Stop servicing clients this long before the deadline and just sleep:
+    // a dispatch pass is bounded by the clients' buffers, not the time left,
+    // so the last one could overrun onto the frame.
+    const RESERVE_NS: u64 = 500_000;
+    loop {
+        let now = mono::now();
+        if now >= deadline_ns {
+            return;
         }
+        let remaining = deadline_ns - now;
+        if remaining <= RESERVE_NS {
+            mono::sleep_until(deadline_ns);
+            return;
+        }
+        // Bounded, non-blocking passes with a clock check between each.
+        event_loop.dispatch(0);
+        if mono::now() >= deadline_ns - RESERVE_NS {
+            continue;
+        }
+        // Nothing pending: block for the remainder, **and wake before the
+        // reserve, never after it** (PHASE4 §5.13): round down, and leave a
+        // sixteenth for the timer's slop.
+        let slop = remaining / 16;
+        let ms = (remaining - RESERVE_NS - slop.min(remaining - RESERVE_NS)) / 1_000_000;
+        if ms == 0 {
+            mono::sleep_until(deadline_ns - RESERVE_NS);
+            continue;
+        }
+        event_loop.dispatch(ms.min(1000) as i32);
+    }
+}
+
+/// A `WlrootsOutput` shared between the conductor that drives it and the
+/// hooks that detach, re-aim and sleep it, as Swift's class was. **The wait
+/// dispatches without holding it**: the VT's hooks borrow it from inside
+/// that dispatch (Swift's exclusivity check caught the same overlap).
+#[derive(Clone)]
+pub struct SharedOutput(pub Rc<RefCell<WlrootsOutput>>);
+
+impl Output for SharedOutput {
+    fn period_hint_ns(&self) -> u64 {
+        self.0.borrow().period_hint_ns()
+    }
+    fn submit(&mut self, target: u64, now: u64) {
+        self.0.borrow_mut().submit(target, now)
+    }
+    fn poll_flip(&mut self) -> Option<Flip> {
+        self.0.borrow_mut().poll_flip()
+    }
+    fn wait_until(&mut self, deadline_ns: u64) {
+        let l = self.0.borrow().event_loop;
+        serve_until(l, deadline_ns)
     }
 }
 

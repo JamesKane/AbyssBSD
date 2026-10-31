@@ -65,7 +65,7 @@ fn a_capture_is_the_frame_drawn() {
 /// the same sizes; the hooks hear both, and a detached output waits.
 #[test]
 fn the_stand_in_vt_takes_the_outputs_away_and_brings_them_back() {
-    let mut s = WlrootsSession::new(Kind::Headless { sizes: vec![HeadlessSize::new(64, 48), HeadlessSize::new(80, 60)], refresh_mhz: 60_000 }, false).unwrap();
+    let s = WlrootsSession::new(Kind::Headless { sizes: vec![HeadlessSize::new(64, 48), HeadlessSize::new(80, 60)], refresh_mhz: 60_000 }, false).unwrap();
     let names: Vec<String> = s.outputs().iter().map(|o| o.name()).collect();
     let out = Rc::new(RefCell::new(WlrootsOutput::new(s.outputs()[1], &s)));
     let (removed, added) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));

@@ -782,6 +782,25 @@ confinement pulling the pointer back, the hint), and imetest with
 prints `b日本語`). The seat is complete: R4e is done, and undertow's
 library with it. `undertowbin` and the gate are next.
 
+*R4, the binary and the swap* (`de/undertowbin`, main.swift): the four
+modes (bench-metronome, bench-alloc, headless, run) with every option and
+every output line the live scripts read, word for word. bench-alloc's
+probe is a counting global allocator, with Swift's positive control
+first and fatal: **the Rust present loop allocates nothing** (0 in 2000
+frames). The run loop's outputs and scenes are shared (`SharedOutput`,
+`SharedDesktop`), and **the wait dispatches without holding the
+output**, since the VT's hooks borrow it from inside that dispatch (the
+overlap Swift's exclusivity check caught). `undertow` is in
+`abyss/rust-bins`. **31 of the 89 live scripts that start undertow run
+green on it with the Swift toolkit**: undertow, -input, -shell, -c2,
+-places, decorations, sessionlock, lock, ime, menus, menu-focus,
+submenus, menus-gtk, clipboard, dnd, islands, ebb, shoals, cursor,
+damage, idle, keys, depth, subsurface, viewport, vtswitch,
+displays-config, grab, present, hidden, surface-enter. Two steps left out
+of R4d were found by them and ported: the keyboard's return 100 ms after
+the last menu closes (live-menus), and a layer's exclusive keyboard,
+claimed as it maps and released as it goes.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

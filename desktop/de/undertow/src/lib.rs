@@ -31,6 +31,7 @@ pub mod switch_latency;
 pub mod synthetic;
 pub mod text_input;
 pub mod tide;
+pub mod watches;
 
 #[cfg(test)]
 mod tests;
