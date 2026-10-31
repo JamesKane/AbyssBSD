@@ -7,7 +7,8 @@ for lessons learned + interop traps see [HANDOFF.md](HANDOFF.md).
 ([RUST.md](RUST.md)) finished R7: Package.swift, the Swift sources and
 Tests/ are gone, `cargo build` and `cargo test` are the whole build, and the
 first pure-Rust build passed `--vm --live --full` (2165 s). Next: R8
-(riscv64). The rest of this page was
+(riscv64). Phase 19 (Wine, games, streaming, no XWayland) is scoped in
+[PHASE19.md](PHASE19.md). The rest of this page was
 written while the desktop was Swift; its module names are now crates of the
 same role.
 

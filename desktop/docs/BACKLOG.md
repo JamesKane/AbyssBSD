@@ -7,7 +7,8 @@ This is the list to work from; the phase docs keep the detail._
 **Where it stands (2026-10-02):** §1 and §2 are done, Phases 13, 15, 16
 and 18 have closed, and the next phase is 17 (PLAN). What is left here is §3's
 metal items, §5's standing items, §6's kernel items and §7's tech debt
-(toolkit assumptions outside the compatibility layer, 2026-10-31).
+(toolkit assumptions outside the compatibility layer, 2026-10-31). Phase 19
+(Wine, games, streaming; PHASE19.md) is scoped, after 17.
 
 **The constraint that shapes it:** the bring-up machine's USB is in use elsewhere
 again (2026-10-02, to be rebuilt), so **nothing here may need metal to be
@@ -248,6 +249,10 @@ scheduled; each is small and self-contained:
   (PHASE16 P16.4b, HANDOFF §2.113). **Raised by the 12700KF** (§2.115): its
   board has both kinds and the case button is the fixed one, so on a typical
   desktop board the dialog is never offered;
+- **Game controllers** (PHASE19 §4, 2026-10-31). `sys/dev/hid` has no
+  driver for PS5 (DualSense) or Xbox One/Series pads, and evdev has no
+  force feedback (`EV_FF`, `sys/dev/evdev/cdev.c`), so no rumble anywhere.
+  Phase 19 uses the pads FreeBSD already drives; these are the fork's.
 - **C2 on metal — parked 2026-10-02** (HANDOFF §2.120: what it is not, and
   the thread to pull). Formerly "amdgpu's page-flip news is late under load"
   (HANDOFF §2.119) — **that explanation did not survive the measurements.** With twelve plain busy loops and no Wayland traffic, a

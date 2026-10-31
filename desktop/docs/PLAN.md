@@ -304,6 +304,7 @@ taken in, across phases, is [BACKLOG.md](BACKLOG.md).
 | 16 | The session — login, lock, idle, power | 6, 12, 14 | a machine somebody else can use | ✅ 2026-10-01; resume blocked by the 12700KF's kernel |
 | 17 | Delivery — the overlay, a release pipeline, and `abyss update` | 5, 14, 15 | shipping to anyone who is not us | **next** — scoped in [PHASE17.md](PHASE17.md) (2026-10-02); the overlay exists, for the board |
 | 18 | Confinement, then agents | 7, **10**, 14 | thesis 4 | ✅ 2026-10-02 but the gate on metal (the medium), P18.7c and requester 2 |
+| 19 | Play and broadcast: Wine, games, streaming — no XWayland | 9, 11, 14, 15; 17 for P19.1 and P19.6 | the demo audience (developers, hackers, streamers, gamers within limits) | scoped 2026-10-31 in [PHASE19.md](PHASE19.md) |
 
 **Phases 9–12 are mutually independent** — 9, 10 and 11 need nothing from each
 other, and 12 needs only what Phase 4 has already done. Among independent work
@@ -1324,6 +1325,19 @@ check above in the build VM with no model on disk and no network (§2.43). The
 sandbox check needs §2.37's companion: **one control, a jail deliberately built
 without the restriction, so the check is watched failing.** A confinement test
 that has never failed is a comment.
+
+---
+
+## Phase 19 — play and broadcast
+
+Scoped in [PHASE19.md](PHASE19.md) (2026-10-31). Windows programs and games
+through Wine's Wayland driver, the compositor's game path (tearing control,
+variable refresh, direct scanout, shortcut inhibit), and OBS capturing the
+desktop through `wlr-screencopy`. **No XWayland**, reaffirmed: anything
+X11-only is the person's own to run, in a rootful `Xwayland` window they
+install. Two checks came first: Wine 11's Wayland driver already runs GDI,
+WGL and D3D11 programs under `undertow`, and only 64-bit ones, since
+FreeBSD 16 has no 32-bit packages (PHASE19 §1.1).
 
 ---
 
