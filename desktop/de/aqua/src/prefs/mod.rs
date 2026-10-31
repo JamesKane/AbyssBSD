@@ -10,6 +10,7 @@
 
 pub mod app;
 pub mod accounts;
+pub mod agents;
 pub mod appearance_catalogue;
 pub mod displays;
 pub mod energy;

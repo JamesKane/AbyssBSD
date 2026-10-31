@@ -95,6 +95,18 @@ dock-agent-waiting@2x|dock-agent-waiting@2x|aquademo:dock|2|AQUA_DOCK_RUNNING=1 
 dock-agent-working|dock-agent-working|aquademo:dock|1|AQUA_DOCK_RUNNING=1 AQUA_AGENTS=working:1
 trench-dock|trench-dock|aquademo:dock|1|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1
 trench-dock-agent|trench-dock-agent|aquademo:dock|1|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1 AQUA_AGENTS=waiting:1
+sysprefs|sysprefs|aquademo:sysprefs|1|
+sysprefs-pane|sysprefs-pane|aquademo:sysprefs|1|AQUA_PREFS_PANE=network
+sysprefs-wifi|sysprefs-wifi|aquademo:sysprefs|1|AQUA_PREFS_PANE=network-wifi
+sysprefs-sound|sysprefs-sound|aquademo:sysprefs|1|AQUA_PREFS_PANE=sound
+sysprefs-displays|sysprefs-displays|aquademo:sysprefs|1|AQUA_PREFS_PANE=displays
+sysprefs-energy|sysprefs-energy|aquademo:sysprefs|1|AQUA_PREFS_PANE=energySaver
+sysprefs-accounts|sysprefs-accounts|aquademo:sysprefs|1|AQUA_PREFS_PANE=accounts
+sysprefs-accounts-new|sysprefs-accounts-new|aquademo:sysprefs|1|AQUA_PREFS_PANE=accounts-new
+sysprefs-agents|sysprefs-agents|aquademo:sysprefs|1|AQUA_PREFS_PANE=agents
+sysprefs-general|sysprefs-general|aquademo:sysprefs|1|AQUA_PREFS_PANE=general
+trench-sysprefs|trench-sysprefs|aquademo:sysprefs|1|ABYSS_THEME=trench
+trench-sysprefs-general|trench-sysprefs-general|aquademo:sysprefs|1|ABYSS_THEME=trench AQUA_PREFS_PANE=general
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

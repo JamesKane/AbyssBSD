@@ -105,6 +105,7 @@ dependencies = [
  "login",
  "menu-model",
  "menu-wire",
+ "model",
  "pool-config",
  "settings",
  "settings-wire",

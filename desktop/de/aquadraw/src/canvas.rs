@@ -255,6 +255,24 @@ impl<'a> Canvas<'a> {
         self.runner.text.text_width(s, size, style, role)
     }
 
+    /// `text` broken at spaces into lines no wider than `width`; a word
+    /// wider than that is a line of its own.
+    pub fn wrap_words(&mut self, text: &str, width: f64, size: f64, style: Style) -> Vec<String> {
+        let (mut lines, mut line) = (vec![], String::new());
+        for word in text.split(' ').filter(|w| !w.is_empty()) {
+            let next = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
+            if !line.is_empty() && self.text_width(&next, size, style, Role::Interface) > width {
+                lines.push(std::mem::replace(&mut line, word.to_string()))
+            } else {
+                line = next
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line)
+        }
+        lines
+    }
+
     /// The theme's tokens.
     pub fn t(&self) -> &crate::tokens::ThemeTokens {
         &self.theme.tokens

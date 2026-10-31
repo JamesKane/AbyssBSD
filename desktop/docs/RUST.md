@@ -949,6 +949,22 @@ Their 10 Swift tests come along (80 in aqua). None has a golden. Live,
 mixed: live-lockscreen, -locksession, -loginwindow, -greeter,
 -switchuser, -setup, -idlepolicy and -session green.
 
+*R6f–i, System Preferences.* The shell (the grid, the toolbar, Show All,
+its menu service) and every pane: General, Islands, Energy Saver, Sound,
+Displays, Network with Wi-Fi beside it, Accounts and Agents. Swift's one
+3,000-line class with a field per pane becomes a `Pane` trait, each pane
+keeping its own state, layout, dump line and helper traffic; panes hear
+`shown` and `hidden`, so Sound's once-a-second read and Network's
+routing-socket watch run only while their page shows. One `Apply`
+follows a settings-helper apply in the run loop for every pane that
+changes the machine. Canvas gains `wrap_words` (the power dialog's too);
+aqua now links `model` for the transcripts. All 12 System Preferences
+goldens are identical (79 in the gate); 26 prefs tests. Live, mixed:
+live-prefs, -islands-pane, -energy-pane, -sound-pane, -displays-pane,
+-displays-config, -displays, -network-pane, -wifi-pane, -accounts-pane,
+-appearance and -setup green; live-agents-pane and -agents-off are
+FreeBSD-only and wait for the build guest.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

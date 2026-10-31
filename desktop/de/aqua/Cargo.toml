@@ -13,6 +13,7 @@ current-ipc = { path = "../currentipc" }
 libc.workspace = true
 login = { path = "../login" }
 menu-model = { path = "../menumodel" }
+model = { path = "../model" }
 menu-wire = { path = "../menuwire" }
 pool-config = { path = "../poolconfig" }
 settings = { path = "../settings" }
