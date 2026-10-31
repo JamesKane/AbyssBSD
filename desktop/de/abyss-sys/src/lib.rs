@@ -85,6 +85,7 @@ pub const OPERATOR_SOURCE: c_int = 1;
 pub const OPERATOR_OVER: c_int = 2;
 pub const FORMAT_ARGB32: c_int = 0;
 pub const FORMAT_A8: c_int = 2;
+pub const FORMAT_RGB24: c_int = 1;
 const EXTEND_REPEAT: c_int = 1;
 const EXTEND_PAD: c_int = 3;
 const FILTER_GOOD: c_int = 1;
@@ -104,6 +105,7 @@ unsafe extern "C" {
     fn cairo_surface_mark_dirty(s: *mut cairo_surface_t);
     fn cairo_surface_destroy(s: *mut cairo_surface_t);
     fn cairo_surface_write_to_png(s: *mut cairo_surface_t, path: *const c_char) -> c_int;
+    fn cairo_surface_write_to_png_stream(s: *mut cairo_surface_t, write: unsafe extern "C" fn(*mut c_void, *const u8, c_uint) -> c_int, closure: *mut c_void) -> c_int;
     fn cairo_image_surface_create_from_png(path: *const c_char) -> *mut cairo_surface_t;
     fn cairo_image_surface_create_from_png_stream(read: unsafe extern "C" fn(*mut c_void, *mut u8, c_uint) -> c_int, closure: *mut c_void) -> *mut cairo_surface_t;
     fn cairo_surface_status(s: *mut cairo_surface_t) -> c_int;
@@ -201,7 +203,41 @@ unsafe extern "C" fn read_png_bytes(closure: *mut c_void, out: *mut u8, len: c_u
     STATUS_SUCCESS
 }
 
+/// cairo's PNG stream writer into a byte vector.
+unsafe extern "C" fn write_png_bytes(closure: *mut c_void, data: *const u8, len: c_uint) -> c_int {
+    let out = unsafe { &mut *(closure as *mut Vec<u8>) };
+    out.extend_from_slice(unsafe { std::slice::from_raw_parts(data, len as usize) });
+    STATUS_SUCCESS
+}
+
 impl Surface {
+    /// An RGB24 surface holding `pixels` (B, G, R, X, four bytes each,
+    /// `width * 4` to a row), copied in; None when they do not fill it.
+    pub fn rgb24(width: i32, height: i32, pixels: &[u8]) -> Option<Surface> {
+        let (w, h) = (width.max(0) as usize, height.max(0) as usize);
+        if w == 0 || h == 0 || pixels.len() < w * h * 4 {
+            return None;
+        }
+        let s = Surface::checked(unsafe { cairo_image_surface_create(FORMAT_RGB24, width, height) })?;
+        s.flush();
+        let (data, stride) = (unsafe { cairo_image_surface_get_data(s.0) }, s.stride() as usize);
+        if data.is_null() {
+            return None;
+        }
+        for y in 0..h {
+            unsafe { std::ptr::copy_nonoverlapping(pixels.as_ptr().add(y * w * 4), data.add(y * stride), w * 4) }
+        }
+        s.mark_dirty();
+        Some(s)
+    }
+
+    /// The surface as PNG bytes.
+    pub fn png_bytes(&self) -> Option<Vec<u8>> {
+        let mut out: Vec<u8> = vec![];
+        let st = unsafe { cairo_surface_write_to_png_stream(self.0, write_png_bytes, &mut out as *mut _ as *mut c_void) };
+        (st == STATUS_SUCCESS).then_some(out)
+    }
+
     /// A PNG file, decoded; None when it cannot be read.
     pub fn from_png(path: &str) -> Option<Surface> {
         let p = CString::new(path).ok()?;

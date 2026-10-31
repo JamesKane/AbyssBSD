@@ -85,6 +85,15 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Grab {
+            let Some(_grab) = aqua::grab::GrabApp::new(&display, &tk) else {
+                println!("AquaDemo: failed to open Grab.");
+                exit(1)
+            };
+            eprintln!("AquaDemo: Grab is up.");
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::TextEdit {
             // The arguments are files to open; none, an empty document.
             let textedit = aqua::textedit::TextEditApp::new(&display, &tk);

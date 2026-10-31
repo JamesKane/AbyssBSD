@@ -22,7 +22,7 @@ pub mod window;
 
 pub use backing::RenderTarget;
 pub use clipboard::Clipboard;
-pub use display::Display;
+pub use display::{Display, WindowAt};
 pub use idle::IdleNotification;
 pub use keyboard::{KeyEvent, KeyModifiers, KeySym};
 pub use menubar_focus::MenuBarFocus;

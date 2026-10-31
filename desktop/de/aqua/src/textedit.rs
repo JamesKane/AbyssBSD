@@ -152,7 +152,7 @@ pub fn save_fd(bytes: &[u8], fd: OwnedFd) -> Result<(), String> {
 }
 
 /// One question to the portal, answered in the run loop.
-fn ask_portal(display: &Rc<Display>, msg: &Msg, done: impl FnOnce(Option<Msg>) + 'static) {
+pub(crate) fn ask_portal(display: &Rc<Display>, msg: &Msg, done: impl FnOnce(Option<Msg>) + 'static) {
     let service = std::env::var("ABYSS_PORTAL_SERVICE").unwrap_or_else(|_| "portal".into());
     let Ok(sock) = current_ipc::connect(&service) else { return done(None) };
     if current_ipc::send(msg, &sock).is_err() {

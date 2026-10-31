@@ -995,6 +995,14 @@ through the portal, find, Undo named in the Edit menu, and the save
 sheet on Close and Quit. Both TextEdit goldens are identical (92 in the
 gate); live-textedit's eight checks are green.
 
+*R6o, Grab.* Selection and Window on an OVERLAY layer surface (closed
+before the copy is taken), Screen and Timed Screen, each picture in a
+window of its own, saved as a PNG through the portal or copied as
+`image/png`. surface gains `Display::window_at` over
+`abyss_window_manager_v1.window_at`; abyss-sys an RGB24 surface made
+from pixels and PNG encoding to bytes. Both Grab goldens are identical
+(94 in the gate); live-grab's six checks are green.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

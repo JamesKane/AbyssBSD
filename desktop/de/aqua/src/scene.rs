@@ -34,6 +34,8 @@ pub enum SceneKind {
     Terminal,
     /// TextEdit: a window per document live.
     TextEdit,
+    /// Grab's panel: with the pictures it takes, live.
+    Grab,
 }
 
 impl SceneKind {
@@ -56,6 +58,7 @@ impl SceneKind {
             Some("terminal") => Some((SceneKind::Terminal, "Terminal", 500, 340)),
             // Live, the arguments are files to open.
             Some("textedit") => Some((SceneKind::TextEdit, "TextEdit", 520, 380)),
+            Some("grab") => Some((SceneKind::Grab, "Grab", 420, 150)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -168,6 +171,9 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
                 let mut view = crate::text_view::TextView::new(crate::textedit::sample_text(), &mut c.runner.text);
                 view.edit(|m| m.select(TextRange::new(TextPosition::new(2, 6), TextPosition::new(3, 9))));
                 crate::textedit::paint_textedit(&mut c, cw, ch, "Notes.txt — Edited", &mut view, Some("wraps"), false, true);
+            }
+            SceneKind::Grab => {
+                crate::grab::paint_grab_panel(&mut c, cw, ch, "Choose what to capture.");
             }
             // A fixed transcript through the real screen model.
             SceneKind::Terminal => {

@@ -80,6 +80,18 @@ struct Repeat {
     next: u64,
 }
 
+/// A window as `window_at` answers: its box in the layout, frame
+/// included, and what it calls itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowAt {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub app_id: String,
+    pub title: String,
+}
+
 pub struct Display {
     pub(crate) conn: Connection,
     pub(crate) registry: Obj,
@@ -301,6 +313,37 @@ impl Display {
     pub fn last_pointer_serial(&self) -> u32 {
         self.last_pointer_serial.get()
     }
+    /// Which window is topmost at (x, y) in the layout, and its box with
+    /// the compositor's frame included (`abyss_window_manager_v1.window_at`,
+    /// P15.6): what Grab's Window mode clicks. None when nothing is there,
+    /// or the compositor is older than version 2. The answer comes at once;
+    /// a round trip or three is enough.
+    pub fn window_at(&self, x: i32, y: i32) -> Option<WindowAt> {
+        use wlc::{abyss_window_manager_v1 as wm, abyss_window_query_v1 as query};
+        let (m, v) = self.globals.borrow().window_manager?;
+        if v < 2 {
+            return None;
+        }
+        let q = wm::window_at(m, x, y)?;
+        let answer: Rc<RefCell<(bool, Option<WindowAt>)>> = Rc::default();
+        let a = answer.clone();
+        query::listen(q, move |e| {
+            let mut a = a.borrow_mut();
+            a.0 = true;
+            if let query::Event::Window { x, y, width, height, app_id, title } = e {
+                a.1 = Some(WindowAt { x, y, width, height, app_id, title })
+            }
+        });
+        for _ in 0..3 {
+            if answer.borrow().0 {
+                break;
+            }
+            self.conn.roundtrip();
+        }
+        query::destroy(q);
+        answer.borrow_mut().1.take()
+    }
+
     pub fn last_input_serial(&self) -> u32 {
         self.last_input_serial.get()
     }
