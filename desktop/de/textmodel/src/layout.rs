@@ -30,6 +30,12 @@ impl<'a, F: Fn(&str) -> f64> TextLayout<'a, F> {
         TextLayout { width, rows, lines, advance }
     }
 
+    /// A layout already wrapped: `rows` from an earlier `new` on the same
+    /// lines, width and advance, so a view need not wrap again to ask.
+    pub fn with_rows(lines: &'a [Line], width: f64, rows: Vec<VisualRow>, advance: F) -> TextLayout<'a, F> {
+        TextLayout { width: width.max(1.0), rows, lines, advance }
+    }
+
     /// The row the caret at `p` is drawn in. A position exactly at a wrap is
     /// the start of the next row; the end of a line is the end of its last.
     pub fn row_of(&self, p: TextPosition) -> usize {

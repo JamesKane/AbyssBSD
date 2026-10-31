@@ -115,6 +115,7 @@ dependencies = [
  "spawn",
  "surface",
  "terminal",
+ "text-model",
  "vents",
 ]
 

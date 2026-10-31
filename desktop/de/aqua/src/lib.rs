@@ -31,6 +31,8 @@ pub mod setup_assistant;
 pub mod sheet;
 pub mod tabs;
 pub mod terminal_app;
+pub mod text_view;
+pub mod textedit;
 pub mod toolkit;
 pub mod undo;
 pub mod wallpaper;

@@ -85,6 +85,19 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::TextEdit {
+            // The arguments are files to open; none, an empty document.
+            let textedit = aqua::textedit::TextEditApp::new(&display, &tk);
+            let files: Vec<String> = std::env::args().skip(1).collect();
+            let any = files.iter().filter(|f| textedit.open(Some(f))).count() > 0;
+            if !any && !textedit.open(None) {
+                println!("AquaDemo: failed to open a TextEdit window.");
+                exit(1)
+            }
+            eprintln!("AquaDemo: TextEdit is up.");
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::Terminal {
             // `-e PROGRAM ARGS…` runs that instead of the shell, as xterm's
             // does: how a bundle whose entry says Terminal=true opens.

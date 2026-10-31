@@ -987,6 +987,14 @@ text `Style` gains Italic and BoldItalic, which CText always had. Both
 Terminal goldens are identical (90 in the gate); live-terminal's ten
 checks are green.
 
+*R6n, TextEdit.* The toolkit's `TextView` first (wrapping, scrolling,
+selection by drag, word and line, Up and Down keeping their column),
+caching its rows through `TextLayout::with_rows`; then a document per
+window, saved through a temporary file and a rename, Open… and Save As…
+through the portal, find, Undo named in the Edit menu, and the save
+sheet on Close and Quit. Both TextEdit goldens are identical (92 in the
+gate); live-textedit's eight checks are green.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

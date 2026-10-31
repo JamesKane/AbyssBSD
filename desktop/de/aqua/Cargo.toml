@@ -24,4 +24,5 @@ settings-wire = { path = "../settingswire" }
 spawn = { path = "../spawn" }
 surface = { path = "../surface" }
 terminal = { path = "../terminal" }
+text-model = { path = "../textmodel" }
 vents = { path = "../vents" }
