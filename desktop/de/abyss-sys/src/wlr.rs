@@ -18,6 +18,7 @@ macro_rules! opaque {
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
 opaque!(wlr_xdg_decoration_manager_v1, wlr_xdg_toplevel_decoration_v1);
 opaque!(wlr_session_lock_manager_v1, wlr_session_lock_v1, wlr_session_lock_surface_v1);
+opaque!(wlr_text_input_manager_v3, wlr_input_method_manager_v2, wlr_text_input_v3, wlr_input_method_v2, wlr_input_method_keyboard_grab_v2, wlr_input_popup_surface_v2);
 opaque!(wlr_relative_pointer_manager_v1, wlr_pointer_constraints_v1, wlr_pointer_constraint_v1);
 opaque!(wlr_pointer, wlr_keyboard, wlr_drag_icon, wlr_cursor_shape_manager_v1, wlr_virtual_pointer_manager_v1, wlr_virtual_keyboard_manager_v1);
 opaque!(wlr_output_manager_v1, wlr_output_configuration_v1, wlr_output_configuration_head_v1, wlr_idle_inhibit_manager_v1, wlr_idle_inhibitor_v1, wlr_idle_notifier_v1, wlr_seat);
@@ -270,6 +271,41 @@ unsafe extern "C" {
     fn tw_session_lock_manager_global(m: *const wlr_session_lock_manager_v1) -> *const c_void;
     fn tw_lock_surface_surface(s: *const wlr_session_lock_surface_v1) -> *mut wlr_surface;
     fn tw_lock_surface_output(s: *const wlr_session_lock_surface_v1) -> *mut wlr_output;
+    fn tw_text_input_manager_v3_on_new_text_input(o: *mut wlr_text_input_manager_v3, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_method_manager_v2_on_new_input_method(o: *mut wlr_input_method_manager_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_text_input_v3_on_enable(o: *mut wlr_text_input_v3, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_text_input_v3_on_commit(o: *mut wlr_text_input_v3, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_text_input_v3_on_disable(o: *mut wlr_text_input_v3, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_text_input_v3_on_destroy(o: *mut wlr_text_input_v3, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_method_v2_on_commit(o: *mut wlr_input_method_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_method_v2_on_grab_keyboard(o: *mut wlr_input_method_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_method_v2_on_new_popup_surface(o: *mut wlr_input_method_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_method_v2_on_destroy(o: *mut wlr_input_method_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_method_keyboard_grab_v2_on_destroy(o: *mut wlr_input_method_keyboard_grab_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_input_popup_surface_v2_on_destroy(o: *mut wlr_input_popup_surface_v2, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_on_keyboard_focus_change(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_keyboard_focus_new_surface(e: *const c_void) -> *mut wlr_surface;
+    fn tw_text_input_focused(t: *const wlr_text_input_v3) -> *mut wlr_surface;
+    fn tw_text_input_enabled(t: *const wlr_text_input_v3) -> bool;
+    fn tw_text_input_same_client(t: *const wlr_text_input_v3, s: *mut wlr_surface) -> bool;
+    fn tw_text_input_cursor(t: *const wlr_text_input_v3, out: *mut i32);
+    fn tw_text_input_send_state(t: *mut wlr_text_input_v3, im: *mut wlr_input_method_v2);
+    fn tw_input_method_relay(im: *mut wlr_input_method_v2, t: *mut wlr_text_input_v3, pre: *mut usize, com: *mut usize);
+    fn tw_text_input_clear_preedit(t: *mut wlr_text_input_v3);
+    fn tw_keyboard_from_method(k: *mut wlr_keyboard, im: *const wlr_input_method_v2) -> bool;
+    fn tw_grab_send_modifiers(g: *mut wlr_input_method_keyboard_grab_v2, k: *mut wlr_keyboard);
+    fn tw_input_popup_surface(p: *const wlr_input_popup_surface_v2) -> *mut wlr_surface;
+    fn tw_input_popup_send_rectangle(p: *mut wlr_input_popup_surface_v2, r: *const i32);
+    fn wlr_text_input_manager_v3_create(d: *mut wl_display) -> *mut wlr_text_input_manager_v3;
+    fn wlr_input_method_manager_v2_create(d: *mut wl_display) -> *mut wlr_input_method_manager_v2;
+    fn wlr_text_input_v3_send_enter(t: *mut wlr_text_input_v3, s: *mut wlr_surface);
+    fn wlr_text_input_v3_send_leave(t: *mut wlr_text_input_v3);
+    fn wlr_input_method_v2_send_activate(im: *mut wlr_input_method_v2);
+    fn wlr_input_method_v2_send_deactivate(im: *mut wlr_input_method_v2);
+    fn wlr_input_method_v2_send_done(im: *mut wlr_input_method_v2);
+    fn wlr_input_method_v2_send_unavailable(im: *mut wlr_input_method_v2);
+    fn wlr_input_method_keyboard_grab_v2_set_keyboard(g: *mut wlr_input_method_keyboard_grab_v2, k: *mut wlr_keyboard);
+    fn wlr_input_method_keyboard_grab_v2_send_key(g: *mut wlr_input_method_keyboard_grab_v2, time: u32, key: u32, state: u32);
     fn tw_pointer_constraints_v1_on_new_constraint(o: *mut wlr_pointer_constraints_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_pointer_constraint_v1_on_set_region(o: *mut wlr_pointer_constraint_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_pointer_constraint_v1_on_destroy(o: *mut wlr_pointer_constraint_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
@@ -535,6 +571,12 @@ handle!(LockSurface, wlr_session_lock_surface_v1);
 handle!(OutputManager, wlr_output_manager_v1);
 handle!(Pointer, wlr_pointer);
 handle!(RelativePointerManager, wlr_relative_pointer_manager_v1);
+handle!(TextInputManager, wlr_text_input_manager_v3);
+handle!(InputMethodManager, wlr_input_method_manager_v2);
+handle!(TextInput, wlr_text_input_v3);
+handle!(InputMethod, wlr_input_method_v2);
+handle!(KeyboardGrab, wlr_input_method_keyboard_grab_v2);
+handle!(InputPopup, wlr_input_popup_surface_v2);
 handle!(ConstraintManager, wlr_pointer_constraints_v1);
 handle!(Constraint, wlr_pointer_constraint_v1);
 handle!(Keyboard, wlr_keyboard);
@@ -1117,6 +1159,12 @@ pub mod globals {
         }
         if unsafe { tw_syncobj_create(d.0.as_ptr(), r.0.as_ptr()) } { Ok(()) } else { Err("the render node refused a syncobj manager") }
     }
+    pub fn text_input_manager(d: &Display) -> Option<TextInputManager> {
+        TextInputManager::from_raw(unsafe { wlr_text_input_manager_v3_create(d.0.as_ptr()) })
+    }
+    pub fn input_method_manager(d: &Display) -> Option<InputMethodManager> {
+        InputMethodManager::from_raw(unsafe { wlr_input_method_manager_v2_create(d.0.as_ptr()) })
+    }
     pub fn relative_pointer_manager(d: &Display) -> Option<RelativePointerManager> {
         RelativePointerManager::from_raw(unsafe { wlr_relative_pointer_manager_v1_create(d.0.as_ptr()) })
     }
@@ -1489,6 +1537,113 @@ impl Seat {
     pub fn pointer_focused(self) -> Option<(Surface, f64, f64)> {
         let (mut x, mut y) = (0.0, 0.0);
         Surface::from_raw(unsafe { tw_seat_pointer_focused(self.0.as_ptr(), &mut x, &mut y) }).map(|s| (s, x, y))
+    }
+}
+
+impl Seat {
+    signal!(
+        /// The keyboard went to another surface (or none).
+        on_keyboard_focus_change, tw_seat_on_keyboard_focus_change, wlr_seat, |d| -> Option<Surface> { Surface::from_raw(unsafe { tw_keyboard_focus_new_surface(d) }) });
+}
+
+impl TextInputManager {
+    signal!(on_new_text_input, tw_text_input_manager_v3_on_new_text_input, wlr_text_input_manager_v3, |d| -> TextInput { TextInput(NonNull::new(d as *mut wlr_text_input_v3).unwrap()) });
+}
+
+impl InputMethodManager {
+    signal!(on_new_input_method, tw_input_method_manager_v2_on_new_input_method, wlr_input_method_manager_v2, |d| -> InputMethod { InputMethod(NonNull::new(d as *mut wlr_input_method_v2).unwrap()) });
+}
+
+impl TextInput {
+    // wlroots 0.20 emits these with NULL data: the closure knows which.
+    signal!(on_enable, tw_text_input_v3_on_enable, wlr_text_input_v3, ||);
+    signal!(on_commit, tw_text_input_v3_on_commit, wlr_text_input_v3, ||);
+    signal!(on_disable, tw_text_input_v3_on_disable, wlr_text_input_v3, ||);
+    signal!(on_destroy, tw_text_input_v3_on_destroy, wlr_text_input_v3, ||);
+    pub fn focused_surface(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_text_input_focused(self.0.as_ptr()) })
+    }
+    pub fn enabled(self) -> bool {
+        unsafe { tw_text_input_enabled(self.0.as_ptr()) }
+    }
+    pub fn same_client(self, s: Surface) -> bool {
+        unsafe { tw_text_input_same_client(self.0.as_ptr(), s.0.as_ptr()) }
+    }
+    /// The text cursor's rectangle, in its surface: x, y, width, height.
+    pub fn cursor(self) -> [i32; 4] {
+        let mut r = [0; 4];
+        unsafe { tw_text_input_cursor(self.0.as_ptr(), r.as_mut_ptr()) };
+        r
+    }
+    pub fn send_enter(self, s: Surface) {
+        unsafe { wlr_text_input_v3_send_enter(self.0.as_ptr(), s.0.as_ptr()) }
+    }
+    pub fn send_leave(self) {
+        unsafe { wlr_text_input_v3_send_leave(self.0.as_ptr()) }
+    }
+    /// Its state to the method, then done.
+    pub fn send_state_to(self, im: InputMethod) {
+        unsafe { tw_text_input_send_state(self.0.as_ptr(), im.0.as_ptr()) }
+    }
+    pub fn clear_preedit(self) {
+        unsafe { tw_text_input_clear_preedit(self.0.as_ptr()) }
+    }
+}
+
+impl InputMethod {
+    signal!(on_commit, tw_input_method_v2_on_commit, wlr_input_method_v2, ||);
+    signal!(on_grab_keyboard, tw_input_method_v2_on_grab_keyboard, wlr_input_method_v2, |d| -> KeyboardGrab { KeyboardGrab(NonNull::new(d as *mut wlr_input_method_keyboard_grab_v2).unwrap()) });
+    signal!(on_new_popup_surface, tw_input_method_v2_on_new_popup_surface, wlr_input_method_v2, |d| -> InputPopup { InputPopup(NonNull::new(d as *mut wlr_input_popup_surface_v2).unwrap()) });
+    signal!(on_destroy, tw_input_method_v2_on_destroy, wlr_input_method_v2, ||);
+    pub fn send_activate(self) {
+        unsafe { wlr_input_method_v2_send_activate(self.0.as_ptr()) }
+    }
+    pub fn send_deactivate(self) {
+        unsafe { wlr_input_method_v2_send_deactivate(self.0.as_ptr()) }
+    }
+    pub fn send_done(self) {
+        unsafe { wlr_input_method_v2_send_done(self.0.as_ptr()) }
+    }
+    /// One per seat: a second is told it is unavailable.
+    pub fn send_unavailable(self) {
+        unsafe { wlr_input_method_v2_send_unavailable(self.0.as_ptr()) }
+    }
+    /// Its commit to the field: preedit and commit sizes, never the text.
+    pub fn relay_to(self, ti: TextInput) -> (usize, usize) {
+        let (mut p, mut c) = (0, 0);
+        unsafe { tw_input_method_relay(self.0.as_ptr(), ti.0.as_ptr(), &mut p, &mut c) };
+        (p, c)
+    }
+    /// Whether `k` is its own virtual keyboard.
+    pub fn owns_keyboard(self, k: Keyboard) -> bool {
+        unsafe { tw_keyboard_from_method(k.0.as_ptr(), self.0.as_ptr()) }
+    }
+}
+
+impl KeyboardGrab {
+    signal!(on_destroy, tw_input_method_keyboard_grab_v2_on_destroy, wlr_input_method_keyboard_grab_v2, ||);
+    pub fn set_keyboard(self, k: Keyboard) {
+        unsafe { wlr_input_method_keyboard_grab_v2_set_keyboard(self.0.as_ptr(), k.0.as_ptr()) }
+    }
+    pub fn send_key(self, k: Keyboard, e: Press) {
+        unsafe {
+            wlr_input_method_keyboard_grab_v2_set_keyboard(self.0.as_ptr(), k.0.as_ptr());
+            wlr_input_method_keyboard_grab_v2_send_key(self.0.as_ptr(), e.time_msec, e.code, e.pressed as u32);
+        }
+    }
+    pub fn send_modifiers(self, k: Keyboard) {
+        unsafe { tw_grab_send_modifiers(self.0.as_ptr(), k.0.as_ptr()) }
+    }
+}
+
+impl InputPopup {
+    signal!(on_destroy, tw_input_popup_surface_v2_on_destroy, wlr_input_popup_surface_v2, ||);
+    pub fn surface(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_input_popup_surface(self.0.as_ptr()) })
+    }
+    /// Where the field's text cursor is, in its surface.
+    pub fn send_rectangle(self, r: [i32; 4]) {
+        unsafe { tw_input_popup_send_rectangle(self.0.as_ptr(), r.as_ptr()) }
     }
 }
 

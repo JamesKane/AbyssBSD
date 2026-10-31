@@ -46,8 +46,12 @@ fn rig_with(tag: &str, files: &[(&str, &str)]) -> Rig {
 }
 
 /// Serve clients until `done`, or five seconds.
-fn pump(c: &Compositor, mut done: impl FnMut() -> bool) -> bool {
-    let until = Instant::now() + Duration::from_secs(5);
+fn pump(c: &Compositor, done: impl FnMut() -> bool) -> bool {
+    pump_for(c, 5, done)
+}
+
+fn pump_for(c: &Compositor, secs: u64, mut done: impl FnMut() -> bool) -> bool {
+    let until = Instant::now() + Duration::from_secs(secs);
     while Instant::now() < until {
         if done() {
             return true;
@@ -478,8 +482,12 @@ fn tool(name: &str) -> Option<std::path::PathBuf> {
                     .arg(out.join("ext-session-lock-proto.c"))
                     .args(pc(&["wayland-client"])?.split_whitespace());
             }
-            "vpointer" | "vkeyboard" => {
-                let xml = if name == "vpointer" { "wlr-virtual-pointer-unstable-v1" } else { "virtual-keyboard-unstable-v1" };
+            "vpointer" | "vkeyboard" | "imetest" => {
+                let xml = match name {
+                    "vpointer" => "wlr-virtual-pointer-unstable-v1",
+                    "vkeyboard" => "virtual-keyboard-unstable-v1",
+                    _ => "input-method-unstable-v2",
+                };
                 if !scan(&format!("{root}/abyss/tests/{xml}.xml"), name) {
                     return None;
                 }
@@ -814,4 +822,82 @@ fn pointer_locks_and_confinements_hold() {
     assert!(pc.warps.get() >= 1);
     drop((game, other, p, k));
     pump(c, || c.toplevels.borrow().is_empty());
+}
+
+/// An input method composes into another toolkit's field, through us
+/// (live-ime.sh's claims, with its own imetest and zenity's GTK entry):
+/// focus activates the method, told the surrounding text; a grab takes
+/// the keys and its release gives them back; a commit of 日本語 reaches the
+/// field; and when the field goes the method is deactivated.
+#[test]
+fn an_input_method_composes_into_a_gtk_field() {
+    use std::process::{Command, Stdio};
+    let (Some(ime), Some(vk)) = (tool("imetest"), tool("vkeyboard")) else { return };
+    if !Command::new("zenity").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success()) {
+        return;
+    }
+    let r = rig("ime");
+    let c = &r.c;
+    let seat = Seat::new(c).unwrap();
+    // A keyboard first: GTK makes its text input only for a seat with one.
+    let mut k = LockClient::start(&vk, &c.socket_name, &[]);
+    let mut m = LockClient::start(&ime, &c.socket_name, &[]);
+    assert!(m.wait(c, "ready"), "the input method bound");
+    let mut zen = Command::new("zenity")
+        .args(["--entry", "--text=Name"])
+        .env("WAYLAND_DISPLAY", &c.socket_name)
+        .env("GDK_BACKEND", "wayland")
+        .env("GTK_IM_MODULE", "wayland")
+        .env("GSK_RENDERER", "cairo")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    // 1. activated, told the surrounding text.
+    let mut said = vec![];
+    assert!(
+        pump_for(c, 20, || {
+            said.extend(m.lines.try_iter());
+            said.iter().any(|l| l == "done active=1")
+        }),
+        "focusing the entry did not activate the input method: {said:?}"
+    );
+    assert!(said.iter().any(|l| l == "activate") && said.iter().any(|l| l.starts_with("surrounding ")), "{said:?}");
+
+    // 3. the grab: 'a' to the method; released, 'b' to the application.
+    m.say("g");
+    pump_for(c, 1, || false);
+    k.say("t a");
+    assert!(m.wait(c, "key 30 1"), "a key typed while the method held the keyboard did not reach it");
+    m.say("u");
+    pump_for(c, 1, || false);
+    k.say("t b");
+    pump_for(c, 1, || false);
+    assert!(!m.lines.try_iter().any(|l| l.starts_with("key 48 ")), "after the release 'b' still went to the method");
+
+    // 2. preedit, then the commit, into the field; Return prints it.
+    m.say("p にほんご");
+    pump_for(c, 1, || false);
+    m.say("c 日本語");
+    assert!(m.wait_prefix(c, "surrounding ").is_some(), "the field's text did not change after the commit");
+    k.say("k 28");
+    // Waited on while serving it: this thread is its compositor.
+    let mut exited = false;
+    pump_for(c, 10, || {
+        exited = exited || zen.try_wait().is_ok_and(|s| s.is_some());
+        exited
+    });
+    if !exited {
+        let _ = zen.kill();
+    }
+    let mut got = String::new();
+    std::io::Read::read_to_string(&mut zen.stdout.take().unwrap(), &mut got).unwrap();
+    assert_eq!(got.trim_end(), "b日本語", "the b typed after the release, then the commit");
+
+    // 4. the field gone, the method deactivated.
+    assert!(m.wait(c, "done active=0"), "the input method was not deactivated when the field went");
+    let tr = seat.text_input.as_ref().unwrap();
+    assert!(tr.enters.get() >= 1 && tr.activations.get() >= 1 && tr.commits_relayed.get() >= 1 && tr.keys_grabbed.get() >= 1);
+    drop((k, m));
 }

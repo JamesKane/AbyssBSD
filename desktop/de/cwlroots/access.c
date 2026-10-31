@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <string.h>
 #include <xkbcommon/xkbcommon.h>
 
 #define TW_SIGNAL(type, sig) \
@@ -69,7 +70,26 @@ TW_SIGNAL(drag_icon, destroy)
 TW_SIGNAL(pointer_constraints_v1, new_constraint)
 TW_SIGNAL(pointer_constraint_v1, set_region)
 TW_SIGNAL(pointer_constraint_v1, destroy)
+TW_SIGNAL(text_input_manager_v3, new_text_input)
+TW_SIGNAL(input_method_manager_v2, new_input_method)
+TW_SIGNAL(text_input_v3, enable)
+TW_SIGNAL(text_input_v3, commit)
+TW_SIGNAL(text_input_v3, disable)
+TW_SIGNAL(text_input_v3, destroy)
+TW_SIGNAL(input_method_v2, commit)
+TW_SIGNAL(input_method_v2, grab_keyboard)
+TW_SIGNAL(input_method_v2, new_popup_surface)
+TW_SIGNAL(input_method_v2, destroy)
+TW_SIGNAL(input_method_keyboard_grab_v2, destroy)
+TW_SIGNAL(input_popup_surface_v2, destroy)
 #undef TW_SIGNAL
+
+struct tw_listener *tw_seat_on_keyboard_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx) {
+    return tw_listen(&s->keyboard_state.events.focus_change, fn, ctx);
+}
+struct wlr_surface *tw_keyboard_focus_new_surface(const void *event) {
+    return ((const struct wlr_seat_keyboard_focus_change_event *)event)->new_surface;
+}
 
 struct tw_listener *tw_seat_on_pointer_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx) {
     return tw_listen(&s->pointer_state.events.focus_change, fn, ctx);
@@ -557,4 +577,65 @@ bool tw_constraint_hint(const struct wlr_pointer_constraint_v1 *c, double *x, do
     if (!c->current.cursor_hint.enabled) return false;
     *x = c->current.cursor_hint.x; *y = c->current.cursor_hint.y;
     return true;
+}
+
+struct wlr_surface *tw_text_input_focused(const struct wlr_text_input_v3 *ti) { return ti->focused_surface; }
+bool tw_text_input_enabled(const struct wlr_text_input_v3 *ti) { return ti->current_enabled; }
+
+bool tw_text_input_same_client(const struct wlr_text_input_v3 *ti, struct wlr_surface *s) {
+    return s && s->resource && ti->resource && wl_resource_get_client(s->resource) == wl_resource_get_client(ti->resource);
+}
+
+void tw_text_input_cursor(const struct wlr_text_input_v3 *ti, int32_t out[4]) {
+    const struct wlr_box *c = &ti->current.cursor_rectangle;
+    out[0] = c->x; out[1] = c->y; out[2] = c->width; out[3] = c->height;
+}
+
+void tw_text_input_send_state(struct wlr_text_input_v3 *ti, struct wlr_input_method_v2 *im) {
+    const struct wlr_text_input_v3_state *st = &ti->current;
+    if (ti->active_features & WLR_TEXT_INPUT_V3_FEATURE_SURROUNDING_TEXT)
+        wlr_input_method_v2_send_surrounding_text(im, st->surrounding.text ? st->surrounding.text : "",
+                                                  st->surrounding.cursor, st->surrounding.anchor);
+    wlr_input_method_v2_send_text_change_cause(im, st->text_change_cause);
+    if (ti->active_features & WLR_TEXT_INPUT_V3_FEATURE_CONTENT_TYPE)
+        wlr_input_method_v2_send_content_type(im, st->content_type.hint, st->content_type.purpose);
+    wlr_input_method_v2_send_done(im);
+}
+
+void tw_input_method_relay(struct wlr_input_method_v2 *im, struct wlr_text_input_v3 *ti,
+                           size_t *preedit_bytes, size_t *commit_bytes) {
+    const struct wlr_input_method_v2_state *st = &im->current;
+    if (st->preedit.text)
+        wlr_text_input_v3_send_preedit_string(ti, st->preedit.text, st->preedit.cursor_begin, st->preedit.cursor_end);
+    else
+        wlr_text_input_v3_send_preedit_string(ti, NULL, 0, 0);
+    if (st->commit_text) wlr_text_input_v3_send_commit_string(ti, st->commit_text);
+    if (st->delete.before_length > 0 || st->delete.after_length > 0)
+        wlr_text_input_v3_send_delete_surrounding_text(ti, st->delete.before_length, st->delete.after_length);
+    wlr_text_input_v3_send_done(ti);
+    *preedit_bytes = st->preedit.text ? strlen(st->preedit.text) : 0;
+    *commit_bytes = st->commit_text ? strlen(st->commit_text) : 0;
+}
+
+void tw_text_input_clear_preedit(struct wlr_text_input_v3 *ti) {
+    wlr_text_input_v3_send_preedit_string(ti, NULL, 0, 0);
+    wlr_text_input_v3_send_done(ti);
+}
+
+bool tw_keyboard_from_method(struct wlr_keyboard *k, const struct wlr_input_method_v2 *im) {
+    struct wlr_virtual_keyboard_v1 *vk = wlr_input_device_get_virtual_keyboard(&k->base);
+    if (!vk || !vk->resource || !im->resource) return false;
+    return wl_resource_get_client(vk->resource) == wl_resource_get_client(im->resource);
+}
+
+void tw_grab_send_modifiers(struct wlr_input_method_keyboard_grab_v2 *g, struct wlr_keyboard *k) {
+    wlr_input_method_keyboard_grab_v2_set_keyboard(g, k);
+    wlr_input_method_keyboard_grab_v2_send_modifiers(g, &k->modifiers);
+}
+
+struct wlr_surface *tw_input_popup_surface(const struct wlr_input_popup_surface_v2 *p) { return p->surface; }
+
+void tw_input_popup_send_rectangle(struct wlr_input_popup_surface_v2 *p, const int32_t r[4]) {
+    struct wlr_box box = { .x = r[0], .y = r[1], .width = r[2], .height = r[3] };
+    wlr_input_popup_surface_v2_send_text_input_rectangle(p, &box);
 }

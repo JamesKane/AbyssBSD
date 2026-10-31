@@ -78,6 +78,9 @@ pub struct Seat {
     pub(crate) me: Weak<Seat>,
     /// relative-pointer and pointer-constraints (U.6).
     pub pointer_constraints: Option<crate::pointer_constraints::PointerConstraints>,
+    /// text-input-v3 and input-method-v2 (U.5), made just after the seat.
+    pub text_input: Option<crate::text_input::TextInputRelay>,
+    keyboard: Cell<Option<Keyboard>>,
     listeners: RefCell<Vec<Listener>>,
     /// Listeners belonging to **one device**, by its address: a virtual
     /// pointer is a client resource, and wlroots asserts nothing still
@@ -134,6 +137,8 @@ impl Seat {
             c: Rc::downgrade(c),
             me: me.clone(),
             pointer_constraints: crate::pointer_constraints::PointerConstraints::new(d, me.clone()),
+            text_input: crate::text_input::TextInputRelay::new(d, seat, me.clone()),
+            keyboard: Cell::new(None),
             listeners: RefCell::default(),
             device_listeners: RefCell::default(),
             cursor: Cell::new(start),
@@ -355,7 +360,15 @@ impl Seat {
         }
     }
 
+    /// The seat's keyboard, the last attached that still exists.
+    pub(crate) fn keyboard(&self) -> Option<Keyboard> {
+        self.keyboard.get()
+    }
+
     fn forget_device(&self, d: InputDevice, key: usize) {
+        if self.keyboard.get().is_some_and(|k| k.device() == d) {
+            self.keyboard.set(None)
+        }
         self.keymapped.borrow_mut().retain(|k| k.device() != d);
         // This device's listeners, dropped from inside one of them.
         let gone = self.device_listeners.borrow_mut().remove(&key);
@@ -417,9 +430,11 @@ impl Seat {
         }));
         let w = me();
         g.extend(k.on_modifiers(move || {
-            if let Some(s) = w.upgrade() {
-                s.seat.keyboard_modifiers(k)
+            let Some(s) = w.upgrade() else { return };
+            if !s.c().is_locked() && s.route_modifiers_to_method(k) {
+                return;
             }
+            s.seat.keyboard_modifiers(k)
         }));
         let (w, dev, key) = (me(), k.device(), k.addr());
         g.extend(dev.on_destroy(move || {
@@ -431,6 +446,7 @@ impl Seat {
         // The seat carries one active keyboard; its keymap is what clients
         // are told. wlroots drops it from the seat when it is destroyed.
         self.seat.set_keyboard(k);
+        self.keyboard.set(Some(k));
         self.add_capability(CAP_KEYBOARD);
         // **Deliver the focus recorded before there was a keyboard**: a
         // window focused first was deaf for the rest of its life (P9.2).
@@ -965,6 +981,10 @@ impl Seat {
         if !locked && self.intercept(k, e) {
             return;
         }
+        // An input method holding the keyboard composes with it (U.5).
+        if !locked && self.route_key_to_method(k, e) {
+            return;
+        }
         self.seat.keyboard_key(e.time_msec, e.code, e.pressed);
     }
 
@@ -1135,6 +1155,9 @@ fn hit_layer<'a>(layers: impl DoubleEndedIterator<Item = &'a Rc<Layer>>, x: f64,
 
 impl Drop for Seat {
     fn drop(&mut self) {
+        if let Some(r) = &self.text_input {
+            r.clear()
+        }
         if let Some(pc) = &self.pointer_constraints {
             pc.listener.borrow_mut().take();
             pc.entries.borrow_mut().clear();

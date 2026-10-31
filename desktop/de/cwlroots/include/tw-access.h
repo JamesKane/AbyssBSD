@@ -84,7 +84,22 @@ TW_SIGNAL(drag_icon, destroy)
 TW_SIGNAL(pointer_constraints_v1, new_constraint)
 TW_SIGNAL(pointer_constraint_v1, set_region)
 TW_SIGNAL(pointer_constraint_v1, destroy)
+TW_SIGNAL(text_input_manager_v3, new_text_input)
+TW_SIGNAL(input_method_manager_v2, new_input_method)
+TW_SIGNAL(text_input_v3, enable)
+TW_SIGNAL(text_input_v3, commit)
+TW_SIGNAL(text_input_v3, disable)
+TW_SIGNAL(text_input_v3, destroy)
+TW_SIGNAL(input_method_v2, commit)
+TW_SIGNAL(input_method_v2, grab_keyboard)
+TW_SIGNAL(input_method_v2, new_popup_surface)
+TW_SIGNAL(input_method_v2, destroy)
+TW_SIGNAL(input_method_keyboard_grab_v2, destroy)
+TW_SIGNAL(input_popup_surface_v2, destroy)
 #undef TW_SIGNAL
+/* The seat's keyboard focus moved: the new surface (keyboard_state.events). */
+struct tw_listener *tw_seat_on_keyboard_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx);
+struct wlr_surface *tw_keyboard_focus_new_surface(const void *event);
 /* The seat's pointer focus moved (pointer_state.events, not events). */
 struct tw_listener *tw_seat_on_pointer_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx);
 
@@ -338,6 +353,29 @@ bool tw_constraint_contains(struct wlr_pointer_constraint_v1 *c, double x, doubl
 bool tw_constraint_nearest(struct wlr_pointer_constraint_v1 *c, double x, double y, double *nx, double *ny);
 /* A lock's cursor-position hint, if the client gave one. */
 bool tw_constraint_hint(const struct wlr_pointer_constraint_v1 *c, double *x, double *y);
+
+/* MARK: text input and input methods (text-input-v3, input-method-v2, U.5) */
+
+struct wlr_surface *tw_text_input_focused(const struct wlr_text_input_v3 *ti);
+bool tw_text_input_enabled(const struct wlr_text_input_v3 *ti);
+/* Whether the text input's client is the surface's. */
+bool tw_text_input_same_client(const struct wlr_text_input_v3 *ti, struct wlr_surface *s);
+void tw_text_input_cursor(const struct wlr_text_input_v3 *ti, int32_t out[4]);
+/* The field's state to the method: surrounding text and content type when
+ * the field offers them, the cause, then done. */
+void tw_text_input_send_state(struct wlr_text_input_v3 *ti, struct wlr_input_method_v2 *im);
+/* The method's commit to the field: preedit, commit string, deletion, done.
+ * The sizes, never the text (it can be a password). */
+void tw_input_method_relay(struct wlr_input_method_v2 *im, struct wlr_text_input_v3 *ti,
+                           size_t *preedit_bytes, size_t *commit_bytes);
+/* The method went: whatever preedit the field showed is withdrawn. */
+void tw_text_input_clear_preedit(struct wlr_text_input_v3 *ti);
+/* Whether `k` is the method's own virtual keyboard (its typing, which would
+ * loop back to it). */
+bool tw_keyboard_from_method(struct wlr_keyboard *k, const struct wlr_input_method_v2 *im);
+void tw_grab_send_modifiers(struct wlr_input_method_keyboard_grab_v2 *g, struct wlr_keyboard *k);
+struct wlr_surface *tw_input_popup_surface(const struct wlr_input_popup_surface_v2 *p);
+void tw_input_popup_send_rectangle(struct wlr_input_popup_surface_v2 *p, const int32_t r[4]);
 
 /* MARK: foreign toplevels, activation */
 

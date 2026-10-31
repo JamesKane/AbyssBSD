@@ -29,6 +29,7 @@ pub mod session_lock;
 pub mod shoals;
 pub mod switch_latency;
 pub mod synthetic;
+pub mod text_input;
 pub mod tide;
 
 #[cfg(test)]

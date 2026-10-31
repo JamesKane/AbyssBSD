@@ -766,6 +766,22 @@ desktop and never delivered, a window moved by its frame's title bar; and
 the session lock's test, on now. Text input and pointer constraints are
 next.
 
+*R4e, then: pointer constraints and text input* (`pointer_constraints.rs`,
+`text_input.rs`). Relative motion to the client with the pointer; a lock
+or confinement active while its surface has the pointer, is the focused
+window's, and the pointer is inside its region (the nearest-point search
+in C beside the pixman region); a lock's hint where the pointer lands.
+The text-input-v3 / input-method-v2 relay: enter and leave on keyboard
+focus, the active field's state to the method and its commits back (in
+C, which hands back byte counts only: nothing logs the text), the
+keyboard grab and its release, the candidate popup under the text
+cursor. Tested with the live scripts' own probes: locktest (deltas while
+held, ⌘-Tab ending a lock, a persistent lock back with the focus, a
+confinement pulling the pointer back, the hint), and imetest with
+**zenity's GTK entry**, live-ime.sh's four claims in a unit test (zenity
+prints `b日本語`). The seat is complete: R4e is done, and undertow's
+library with it. `undertowbin` and the gate are next.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

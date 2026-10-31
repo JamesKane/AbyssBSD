@@ -1583,7 +1583,7 @@ impl World for CompositorWorld {
         self.0.mapped_popups().into_iter().map(|(p, (x, y))| (p.surface, x, y)).collect()
     }
     fn input_method_popups(&self) -> Vec<(Surface, i32, i32)> {
-        vec![]
+        self.0.seat.borrow().upgrade().map(|s| s.input_method_popups()).unwrap_or_default()
     }
     fn acquire(&self, s: Surface) -> Option<(Timeline, u64)> {
         if self.0.explicit_sync.borrow().offered { s.acquire_point() } else { None }
