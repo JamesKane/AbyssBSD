@@ -16,3 +16,6 @@ cc.workspace = true
 # CTLS (src/tls.rs): OpenSSL, for the binaries that reach a server over
 # TLS (the model's fetch, P18.12a). A feature, so only they link libssl.
 tls = []
+# CWlroots (src/wlr.rs): wlroots 0.20 and libwayland-server, for undertow
+# alone (RUST.md R4b).
+wlroots = []

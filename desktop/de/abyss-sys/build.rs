@@ -171,6 +171,39 @@ fn main() {
         println!("cargo:rustc-link-lib=crypto");
     }
 
+    // CWlroots (src/wlr.rs), with the `wlroots` feature: the listener
+    // trampoline SwiftPM compiles for undertow, and the accessors Rust needs
+    // because it cannot read wlroots' headers (tw-access.h, RUST.md R4b).
+    if env::var_os("CARGO_FEATURE_WLROOTS").is_some() {
+        let cwlroots = de.join("cwlroots");
+        let mut w = cc::Build::new();
+        for f in ["cwlroots.c", "access.c", "include/cwlroots.h", "include/tw-access.h"] {
+            println!("cargo:rerun-if-changed={}", cwlroots.join(f).display());
+        }
+        w.file(cwlroots.join("cwlroots.c")).file(cwlroots.join("access.c")).include(cwlroots.join("include"));
+        let wlroots = ["wlroots-0.20", "wayland-server", "pixman-1", "xkbcommon"];
+        for flag in pkg_config_of(&["--cflags"], &wlroots) {
+            if let Some(dir) = flag.strip_prefix("-I") {
+                w.include(dir);
+            } else if let Some(def) = flag.strip_prefix("-D") {
+                match def.split_once('=') {
+                    Some((k, v)) => w.define(k, v),
+                    None => w.define(def, None),
+                };
+            } else {
+                w.flag(&flag);
+            }
+        }
+        w.compile("cwlroots");
+        for flag in pkg_config_of(&["--libs"], &wlroots) {
+            if let Some(dir) = flag.strip_prefix("-L") {
+                println!("cargo:rustc-link-search=native={dir}");
+            } else if let Some(lib) = flag.strip_prefix("-l") {
+                println!("cargo:rustc-link-lib={lib}");
+            }
+        }
+    }
+
     // CCapsicum (src/sandbox.rs): capability mode, FreeBSD's; elsewhere it
     // says it is not there (P7.3).
     let ccap = de.join("ccap");

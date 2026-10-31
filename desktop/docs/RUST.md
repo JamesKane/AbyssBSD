@@ -624,6 +624,26 @@ pixel for pixel: `frame`, `frame-depth`, `trench-frame`, `cursors`,
 `cursors@2x`, now in `golden-rust.sh`; ThemeTests, ChromeTests and
 LegibilityTests ported. The XCursor writer stays for `abyss-theme` (R5).
 
+*R4b, the grown shim.* `de/cwlroots/tw-access.h` and `access.c` (not in
+SwiftPM's sources; Swift needs none of it): an accessor per field undertow
+reads, `tw_<type>_on_<signal>` so Rust never takes a member's address, and
+structs of our own (`tw_rect`, `tw_texture_draw`, `tw_present`) where
+wlroots wants one filled or read. Plain wlroots functions over opaque
+pointers Rust declares itself. `abyss-sys` gains `wlr` behind a `wlroots`
+feature: Copy handles (valid until wlroots destroys the object, which a
+handle cannot enforce: holders let go in its destroy signal, as in Swift),
+and owners for what Rust holds (`Display`, `OutputState`, `Listener`,
+`Source`). **A listener may drop itself from inside its own callback**, as
+Swift's output-destroy handler frees its own listener; the closure is
+freed once it returns. The shim grows with its callers, a pass at a
+time: this one carries the backend, outputs, the render pass, textures
+and surfaces' drawing half, proved by a headless test (an output
+announced, given a mode, drawn into with rects and a texture, read back,
+committed and presented). *Finding: FreeBSD/riscv64's wlroots has no X11
+backend and no Xwayland* (`wlr/config.h`). `cwlroots.h` now includes
+x11.h only `#if WLR_HAS_X11_BACKEND`, and the backend's name comes from
+C, which can ask.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

@@ -36,9 +36,14 @@
  * clocks wearing one name. A nested output reports *real* present timestamps
  * from somebody else's vblank, so "did we see a hardware clock" cannot tell it
  * apart from DRM. The backend can. */
+#include <wlr/config.h>
 #include <wlr/backend/drm.h>
 #include <wlr/backend/wayland.h>
+/* A wlroots built without X11 (FreeBSD/riscv64's, RUST.md R4b) has no
+ * x11.h: it says so in config.h. */
+#if WLR_HAS_X11_BACKEND
 #include <wlr/backend/x11.h>
+#endif
 /* Phase 4: the backend that drives a real display, and the session that owns the
  * VT and the device descriptors it needs. `wlr_backend_autocreate` returns the
  * session as an out-parameter, so the type has to be visible even though we

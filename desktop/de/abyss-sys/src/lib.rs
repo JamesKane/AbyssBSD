@@ -21,6 +21,8 @@ pub mod tls;
 pub mod users;
 pub mod vents;
 pub mod wl;
+#[cfg(feature = "wlroots")]
+pub mod wlr;
 
 // MARK: raw declarations
 
