@@ -3,7 +3,7 @@
 # dependencies beyond libc and cc (§6.5).
 [workspace]
 resolver = "3"
-members = ["de/abyss-sys", "de/abyssctl", "de/anchor", "de/anchorbin", "de/aquadraw", "de/currentipc", "de/dbus", "de/dbusbin", "de/dbusbridge", "de/dbusmenus", "de/dbusportal", "de/dbusprobe", "de/fathom", "de/fathombin", "de/idlebin", "de/install", "de/installbin", "de/installctl", "de/installrun", "de/installwire", "de/ipcprobe", "de/jaild", "de/jaildbin", "de/jailctl", "de/jailkeeper", "de/jails", "de/login", "de/loginctl", "de/loginstub", "de/loginwindowbin", "de/menumodel", "de/menuwire", "de/model", "de/poolconfig", "de/portal", "de/portalbin", "de/settings", "de/settingsbin", "de/settingsctl", "de/settingsrun", "de/settingswire", "de/spawn", "de/systemfacts", "de/textmodel", "de/vents", "de/ventsctl", "de/vocab"]
+members = ["de/abyss-sys", "de/abyssctl", "de/agent", "de/agentbin", "de/anchor", "de/anchorbin", "de/aquadraw", "de/currentipc", "de/dbus", "de/dbusbin", "de/dbusbridge", "de/dbusmenus", "de/dbusportal", "de/dbusprobe", "de/fathom", "de/fathombin", "de/fetch", "de/fetchbin", "de/idlebin", "de/install", "de/installbin", "de/installctl", "de/installrun", "de/installwire", "de/ipcprobe", "de/jaild", "de/jaildbin", "de/jailctl", "de/jailkeeper", "de/jails", "de/login", "de/loginctl", "de/loginstub", "de/loginwindowbin", "de/menumodel", "de/menuwire", "de/model", "de/modelbin", "de/poolconfig", "de/portal", "de/portalbin", "de/settings", "de/settingsbin", "de/settingsctl", "de/settingsrun", "de/settingswire", "de/spawn", "de/systemfacts", "de/textmodel", "de/vents", "de/ventsctl", "de/vocab", "de/vocabbin"]
 
 [workspace.package]
 version = "0.1.0"

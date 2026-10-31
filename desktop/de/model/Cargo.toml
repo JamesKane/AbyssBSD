@@ -1,6 +1,10 @@
 [package]
 name = "model"
-description = "Model: the one wire to a model; so far its JSON, which the vocabulary bridge's transcript needs (Swift: JSON.swift beside it; HTTP, the session and the backends are R3's)"
+description = "Model: the one wire to a model: its JSON and HTTP, the session's budget and transcript, the backends (Swift: *.swift beside it)"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+
+[dependencies]
+abyss-sys = { workspace = true, features = ["tls"] }
+libc.workspace = true

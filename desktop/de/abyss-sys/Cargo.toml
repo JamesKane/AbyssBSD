@@ -11,3 +11,8 @@ libc.workspace = true
 
 [build-dependencies]
 cc.workspace = true
+
+[features]
+# CTLS (src/tls.rs): OpenSSL, for the binaries that reach a server over
+# TLS (the model's fetch, P18.12a). A feature, so only they link libssl.
+tls = []

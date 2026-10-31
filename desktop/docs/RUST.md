@@ -517,6 +517,34 @@ carries it in Swift is R5's. `live-idlepolicy`, `-idle`, `-power`,
 with undertow's real idle notifications. `live-medium`, fathom's, builds
 a medium and is not run.
 
+*agent, model, fetch and vocab, 2026-10-30.* The rest of the agent
+runtime. `model` gains HTTP (the parser, and a client over a unix
+socket, TCP or TLS), the session (the budget, refused before anything
+leaves; the append-only transcript), the backends (canned replies, a
+server, llama-server run as a supervised child) and the transcript read
+back as sentences. `de/agent` (crate `agent`) is the loop and its tools,
+`de/fetch` (crate `fetch`) the fetch bridge. `de/modelbin` is
+`abyss-model`, `de/agentbin` `abyss-agent`, `de/fetchbin` `abyss-fetch`
+and `de/vocabbin` `abyss-vocab`, over R2's `vocabulary`; all four swap.
+`abyss-sys` gains `tls` (ctls.c, OpenSSL, behind a `tls` feature so only
+what fetches links libssl) and a signal guard (guard.c) that stops
+llama-server from a handler, as Swift's did, so a SIGTERM during a long
+completion is not held up behind it. Two differences, both stricter: a
+URL's host is ASCII only (an international name travels as punycode; a
+lookalike letter is a homograph), and an IPv4-mapped IPv6 address is
+judged as the IPv4 address it carries, so every private range is
+refused through it, where Swift's prefixes caught three. Swift's model,
+agent, fetch, transcript and URL tests are ported (JSON's were R2's),
+with a unix-socket round trip and two more refusals. The agent scripts
+skip on Linux (no jails), so the runtime was run by hand there: a stub
+model and the agent answer, call a tool and stop at the budget the same
+in every pairing of Rust and Swift `abyss-model` and `abyss-agent`, and
+the two models' transcripts are the same bytes but for the time; the
+fetch bridge asks, fetches once permitted, gives words without markup,
+and refuses a private address; and TLS, against a local `s_server`,
+takes a trusted certificate and refuses a self-signed one and a name
+that does not match, in OpenSSL's words, as Swift does.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

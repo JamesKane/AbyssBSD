@@ -1,0 +1,9 @@
+[package]
+name = "fetch"
+description = "Fetch: the fetch bridge, an agent's only way to the network (Swift: Fetch.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+model = { path = "../model" }

@@ -161,3 +161,13 @@ pub fn is_writable(fd: BorrowedFd<'_>) -> io::Result<bool> {
     }
     Ok(flags & libc::O_ACCMODE != libc::O_RDONLY)
 }
+
+/// `secs` since the epoch as local HH:MM:SS: a transcript's clock.
+pub fn local_time_of_day(secs: i64) -> String {
+    let t = secs as libc::time_t;
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return String::new();
+    }
+    format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+}

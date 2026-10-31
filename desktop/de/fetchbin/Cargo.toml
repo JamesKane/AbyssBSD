@@ -1,0 +1,16 @@
+[package]
+name = "fetchbin"
+description = "abyss-fetch: an agent session's fetch bridge (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-fetch"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+fetch = { path = "../fetch" }
+model = { path = "../model" }

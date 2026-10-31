@@ -18,6 +18,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+ "model",
+ "spawn",
+]
+
+[[package]]
+name = "agentbin"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "current-ipc",
+ "jails",
+ "model",
+]
+
+[[package]]
 name = "anchor"
 version = "0.1.0"
 dependencies = [
@@ -131,6 +150,23 @@ dependencies = [
  "fathom",
  "spawn",
  "vents",
+]
+
+[[package]]
+name = "fetch"
+version = "0.1.0"
+dependencies = [
+ "model",
+]
+
+[[package]]
+name = "fetchbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "fetch",
+ "model",
 ]
 
 [[package]]
@@ -314,6 +350,20 @@ dependencies = [
 [[package]]
 name = "model"
 version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "libc",
+]
+
+[[package]]
+name = "modelbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "model",
+ "spawn",
+]
 
 [[package]]
 name = "pool-config"
@@ -416,6 +466,16 @@ version = "0.1.0"
 dependencies = [
  "abyss-sys",
  "vents",
+]
+
+[[package]]
+name = "vocabbin"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+ "model",
+ "vocabulary",
 ]
 
 [[package]]

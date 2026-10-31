@@ -14,6 +14,8 @@ pub mod platform;
 pub mod poolwatch;
 pub mod proc;
 pub mod spawn;
+#[cfg(feature = "tls")]
+pub mod tls;
 pub mod users;
 pub mod vents;
 pub mod wl;

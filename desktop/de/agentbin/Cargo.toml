@@ -1,0 +1,16 @@
+[package]
+name = "agentbin"
+description = "abyss-agent: an agent session, inside its jail (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-agent"
+path = "src/main.rs"
+
+[dependencies]
+agent = { path = "../agent" }
+current-ipc = { path = "../currentipc" }
+jails = { path = "../jails" }
+model = { path = "../model" }

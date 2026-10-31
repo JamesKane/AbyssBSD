@@ -1,0 +1,16 @@
+[package]
+name = "vocabbin"
+description = "abyss-vocab: an agent session's vocabulary bridge (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-vocab"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+current-ipc = { path = "../currentipc" }
+vocabulary = { path = "../vocab" }
+model = { path = "../model" }

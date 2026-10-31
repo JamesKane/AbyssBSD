@@ -141,3 +141,14 @@ pub fn reap_exited() {
     let mut status = 0;
     while unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) } > 0 {}
 }
+
+unsafe extern "C" {
+    fn abg_stop_child_on_signals(pid: c_int);
+}
+
+/// On SIGTERM, SIGINT or SIGHUP: SIGTERM `pid`, wait up to 5 s for it, and
+/// exit 128 + the signal. From a handler, so it works while this process is
+/// blocked in a long call (guard.c).
+pub fn stop_child_on_signals(pid: i32) {
+    unsafe { abg_stop_child_on_signals(pid) }
+}

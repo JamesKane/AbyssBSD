@@ -45,6 +45,10 @@ fn pkg_config_of(args: &[&str], packages: &[&str]) -> Vec<String> {
         .collect()
 }
 
+fn here_dir() -> PathBuf {
+    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+}
+
 fn main() {
     let target = env::var("TARGET").unwrap_or_default();
     for v in [
@@ -156,6 +160,20 @@ fn main() {
     if target.contains("freebsd") {
         println!("cargo:rustc-link-lib=jail");
     }
+
+    // CTLS (src/tls.rs), with the `tls` feature: a verified TLS client
+    // over OpenSSL, base's on FreeBSD (P18.12a).
+    if env::var_os("CARGO_FEATURE_TLS").is_some() {
+        let ctls = de.join("ctls");
+        println!("cargo:rerun-if-changed={}", ctls.join("ctls.c").display());
+        cc::Build::new().file(ctls.join("ctls.c")).include(ctls.join("include")).compile("ctls");
+        println!("cargo:rustc-link-lib=ssl");
+        println!("cargo:rustc-link-lib=crypto");
+    }
+
+    // The guard (guard.c): a supervised child stopped from a signal handler.
+    println!("cargo:rerun-if-changed={}", here_dir().join("guard.c").display());
+    cc::Build::new().file(here_dir().join("guard.c")).compile("abguard");
 
     // The Wayland client (src/wl.rs): the requests wl.c exports, over the
     // scanner's xdg-shell code and cwayland's shm helper, as SwiftPM builds
