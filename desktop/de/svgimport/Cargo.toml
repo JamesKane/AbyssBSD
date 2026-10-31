@@ -1,0 +1,12 @@
+[package]
+name = "svgimport"
+description = "SVGImport: vector artwork into a draw list, at build time (Swift: SVGImport.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+abyss-sys.workspace = true
+aquadraw = { path = "../aquadraw" }

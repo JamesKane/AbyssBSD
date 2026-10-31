@@ -1,0 +1,13 @@
+[package]
+name = "svg2dl"
+description = "svg2dl: turn an SVG icon into a draw list, at build time (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "svg2dl"
+path = "src/main.rs"
+
+[dependencies]
+svgimport = { path = "../svgimport" }

@@ -138,6 +138,14 @@ recommended; the 12700KF has no Wi-Fi card (§3, item 5).
 
 From HANDOFF §5.3, still true:
 
+- **svg2dl ignores some attributes instead of refusing them** (found
+  2026-10-31, porting it). `gradientTransform`, `href`, `clip-path`,
+  `mask` and `filter` are dropped silently, against the importer's
+  refuse-by-name rule; `stroke-linejoin`/`linecap="round"` cannot be
+  turned off by a child; and the radial-gradient error says "no
+  linearGradient". Rust kept all three, as Swift does; no file in the
+  tree uses them. Refuse them by name and fix the message.
+
 - **Activity Monitor's right-aligned column titles overhang their
   columns** (found 2026-10-31, porting it). `paintActivity` measures each
   header title at regular weight and draws it bold, so "PID", "% CPU",

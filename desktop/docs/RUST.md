@@ -1087,6 +1087,17 @@ rather than by counting three newlines. Two notes for R7:
 `Package.swift`, and live-ipc-mixed names Swift's `ipcprobe` outright;
 both change when Swift goes.
 
+*R6y, svg2dl, 2026-10-31.* SVGImport is the `svgimport` crate and
+`svg2dl` its binary; `rust-bins` names it. On the 45 SVGs in the tree
+(beacon and Trench's art) its output, messages and exit codes are
+byte-identical to Swift's, as on hand-made files for each refusal. It
+fixes what Swift gets wrong outside those: numbers after `Z` in path
+data (Swift loops forever), a coordinate the format cannot write such as
+`1e300` and a transform with `)` before `(` (Swift crashes), the root
+`<svg>`'s own fill, stroke, opacity and transform (Swift ignores them),
+a signed hex colour (Swift accepts it), and CRLF as whitespace. With it
+nothing in `rust-bins`' list of Swift executables is left.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

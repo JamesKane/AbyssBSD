@@ -570,6 +570,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "svg2dl"
+version = "0.1.0"
+dependencies = [
+ "svgimport",
+]
+
+[[package]]
+name = "svgimport"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "aquadraw",
+]
+
+[[package]]
 name = "system-facts"
 version = "0.1.0"
 
