@@ -338,3 +338,14 @@ fn the_synthetic_display_keeps_its_own_vblank_grid() {
     let f = o.drain_regardless_of_time().expect("a flip came back");
     assert_eq!((f.vblank - t0) % period, 0, "the display landed a frame off its own grid: it is echoing the target");
 }
+
+// MARK: the synthetic scene
+
+#[test]
+fn the_scene_composites_the_surfaces_it_is_given() {
+    let mut scene = SyntheticScene::new(64, (1920, 1080));
+    let stats = scene.latch_and_composite(0, 0);
+    assert!(stats.surfaces > 0);
+    assert!(stats.damage_area > 0);
+    assert!(!stats.degraded);
+}

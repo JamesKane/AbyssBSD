@@ -46,3 +46,6 @@ pub mod undo;
 pub mod wallpaper;
 pub mod widgets;
 pub mod window;
+
+#[cfg(test)]
+mod toolkit_tests;

@@ -464,7 +464,13 @@ impl Seat {
     /// keyboard.ini kbdmap; (3) rc.conf's `keymap=`, translated, so the
     /// desktop types what the console types; (4) xkbcommon's default, US.
     pub fn keymap_choice(rc_conf: &[&str], session: &str) -> Option<(String, String)> {
-        if std::env::var_os("XKB_DEFAULT_LAYOUT").is_some() {
+        Seat::keymap_choice_given(std::env::var_os("XKB_DEFAULT_LAYOUT").is_some(), rc_conf, session)
+    }
+
+    /// `keymap_choice` with the environment's say passed in, so a test can
+    /// ask both ways without setting a variable (`unsafe` in Rust 2024).
+    pub fn keymap_choice_given(environment_sets_it: bool, rc_conf: &[&str], session: &str) -> Option<(String, String)> {
+        if environment_sets_it {
             return None;
         }
         if !session.is_empty() {

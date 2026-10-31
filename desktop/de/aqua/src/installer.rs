@@ -1151,4 +1151,410 @@ mod tests {
         let l = installer_layout(620.0, 460.0, &m, &mut |s| s.len() as f64 * 7.0);
         assert!(l.primary.w > BUTTON_W, "Erase and Install is as wide as its words");
     }
+
+    // InstallerTests.swift, the rest of it.
+
+    fn disk(name: &str, gib: u64, description: &str) -> Disk {
+        Disk { name: name.into(), bytes: gib << 30, description: description.into(), ..Disk::default() }
+    }
+
+    fn machine() -> DiskInventory {
+        let mut inv = DiskInventory::new(vec![
+            Disk { mounted_at: vec!["/".into(), "/home".into()], holds_running_root: true, ..disk("ada0", 500, "APPLE SSD") },
+            Disk { mounted_at: vec!["/media/photos".into()], ..disk("ada1", 256, "Scratch") },
+            disk("ada2", 128, "Crucial CT128"),
+            disk("da0", 2, "SanDisk Cruzer"),
+        ]);
+        inv.imported_pools = vec!["zroot".into()];
+        inv
+    }
+
+    fn with_account(mut m: InstallerModel, password: &str) -> InstallerModel {
+        m.account_name = "jkane".into();
+        m.account_full_name = "J Kane".into();
+        m.account_password = password.into();
+        m.account_confirm = password.into();
+        m
+    }
+
+    fn ready() -> InstallerModel {
+        let mut m = with_account(InstallerModel::new(machine()), "hunter2");
+        m.set_disk("ada2");
+        m
+    }
+
+    fn named<'a>(m: &'a InstallerModel, n: &str) -> &'a Disk {
+        m.inventory.disk(n).unwrap()
+    }
+
+    /// **The live-medium case, at the screen**: a disk holding an unimported
+    /// pool is choosable only after being asked about, and says what is on it.
+    #[test]
+    fn the_disk_picker_shows_a_disk_that_already_holds_a_system() {
+        let inv = DiskInventory::new(vec![
+            Disk { existing_pools: vec!["zroot".into()], partition_kinds: vec!["efi".into(), "freebsd-zfs".into()], free_bytes: 1 << 20, has_partition_table: true, ..disk("nvd0", 900, "Samsung SSD 980") },
+            disk("da0", 64, "SanDisk Cruzer"),
+        ]);
+        let mut m = with_account(InstallerModel::new(inv), "x");
+        let occupied = named(&m, "nvd0").clone();
+        assert!(m.needs_erasing(&occupied), "it needs erasing —");
+        assert!(!m.is_blocked(&occupied), "— but nothing makes it impossible");
+        assert!(m.objection(&occupied).contains("zroot"), "the row names what would be destroyed: {}", m.objection(&occupied));
+        m.enter(Spoke::Disk);
+        m.selection = 0;
+        assert!(!m.choose_selection(), "it must ask before taking it");
+        assert_eq!(m.page, Page::EraseConfirm("nvd0".into()));
+        let stick = named(&m, "da0").clone();
+        assert_eq!(m.objection(&stick), "");
+        assert!(!m.is_blocked(&stick) && !m.needs_erasing(&stick), "the empty stick beside it is still choosable");
+    }
+
+    fn crowded_machine() -> DiskInventory {
+        DiskInventory::new(vec![
+            Disk { partition_kinds: ["efi", "ms-reserved", "ms-basic-data", "ms-recovery"].map(String::from).into(), free_bytes: 1_776_128, has_partition_table: true, ..disk("nda0", 931, "WD_BLACK SN850X") },
+            Disk { existing_pools: vec!["zroot".into()], partition_kinds: ["efi", "freebsd-boot", "freebsd-swap", "freebsd-zfs"].map(String::from).into(), free_bytes: 728_576, has_partition_table: true, ..disk("nda1", 931, "Samsung SSD 990 PRO") },
+            Disk { mounted_at: vec!["/".into()], holds_running_root: true, partition_kinds: vec!["efi".into(), "freebsd-ufs".into()], free_bytes: 0, has_partition_table: true, ..disk("da0", 14, "Kingston DataTraveler") },
+        ])
+    }
+
+    fn at_disk_spoke() -> InstallerModel {
+        let mut m = with_account(InstallerModel::new(crowded_machine()), "x");
+        m.enter(Spoke::Disk);
+        m
+    }
+
+    fn asked_about(n: usize) -> InstallerModel {
+        let mut m = at_disk_spoke();
+        m.selection = n;
+        assert!(!m.choose_selection());
+        m
+    }
+
+    /// **The dead end this replaces**: a full disk opens a sheet.
+    #[test]
+    fn a_full_disk_asks_instead_of_doing_nothing() {
+        let m = asked_about(0);
+        assert_eq!(m.page, Page::EraseConfirm("nda0".into()));
+        assert_eq!(m.disk(), "", "nothing is chosen until the sheet is answered");
+    }
+
+    /// The sheet names the disk and what is on it; the words around them are
+    /// painted (installer.rs paint_erase_confirm), not a model string.
+    #[test]
+    fn the_sheet_names_the_disk_and_what_is_on_it() {
+        let m = asked_about(0);
+        let d = m.erase_subject().unwrap();
+        assert_eq!(d.name, "nda0");
+        assert!(d.contents().contains(&"ms-basic-data".to_string()), "{:?}", d.contents());
+        assert!(asked_about(1).erase_subject().unwrap().contents().contains(&"ZFS pool zroot".to_string()), "our own disk names its pool");
+    }
+
+    #[test]
+    fn confirming_takes_the_disk_and_grants_the_permission() {
+        let mut m = asked_about(1);
+        m.confirm_erase();
+        assert_eq!((m.disk(), m.erase_confirmed(), &m.page), ("nda1", true, &Page::Hub));
+        assert!(m.plan(None, "$6$x", None).erase_existing_data, "the permission reaches the plan");
+    }
+
+    #[test]
+    fn cancelling_grants_nothing_and_chooses_nothing() {
+        let mut m = asked_about(1);
+        m.cancel_erase();
+        assert_eq!((m.disk(), m.erase_confirmed()), ("", false));
+        assert_eq!(m.page, Page::Spoke(Spoke::Disk), "back to the list, not to the hub");
+    }
+
+    #[test]
+    fn consent_does_not_follow_the_person_to_another_disk() {
+        let mut m = asked_about(1);
+        m.confirm_erase();
+        m.enter(Spoke::Disk);
+        m.selection = 0;
+        assert!(!m.choose_selection(), "it must ask again");
+        assert_eq!(m.page, Page::EraseConfirm("nda0".into()));
+        assert!(m.erase_confirmed(), "nda1's own answer survives being asked about another disk");
+        assert!(!m.plan(Some("nda0"), "$6$x", None).erase_existing_data, "a plan for another disk inherits no permission");
+        assert!(m.plan(Some("nda1"), "$6$x", None).erase_existing_data, "the disk it was given for still has it");
+        m.cancel_erase();
+        assert_eq!(m.disk(), "nda1");
+        assert!(!m.erase_confirmed(), "cancelling withdraws the pending question's consent");
+    }
+
+    #[test]
+    fn confirming_a_second_disk_moves_the_consent_to_it() {
+        let mut m = asked_about(1);
+        m.confirm_erase();
+        m.enter(Spoke::Disk);
+        m.selection = 0;
+        assert!(!m.choose_selection());
+        m.confirm_erase();
+        assert_eq!((m.disk(), m.erase_confirmed()), ("nda0", true));
+        assert!(m.plan(None, "$6$x", None).erase_existing_data);
+    }
+
+    /// The guarantee lives in the setter: the screen is not the only caller.
+    #[test]
+    fn assigning_the_disk_directly_also_withdraws_consent() {
+        let mut m = asked_about(1);
+        m.confirm_erase();
+        m.set_disk("nda0");
+        assert!(!m.erase_confirmed());
+    }
+
+    #[test]
+    fn a_disk_nothing_can_make_installable_is_still_just_refused() {
+        let mut m = at_disk_spoke();
+        m.selection = 2;
+        assert!(m.is_blocked(&m.installable_disks()[2].clone()));
+        assert!(!m.choose_selection());
+        assert_eq!(m.page, Page::Spoke(Spoke::Disk), "no sheet: there is nothing to ask");
+    }
+
+    #[test]
+    fn the_sheets_default_button_is_cancel() {
+        let m = asked_about(0);
+        let l = installer_layout(520.0, 380.0, &m, &mut |s| s.len() as f64 * 7.0);
+        assert_eq!(l.secondary_label, "Cancel");
+        assert!(l.primary_label.contains("nda0"), "the destructive button names the disk: {}", l.primary_label);
+    }
+
+    #[test]
+    fn the_install_button_is_dead_until_the_required_spokes_are_answered() {
+        let mut m = InstallerModel::new(machine());
+        assert!(!m.can_install());
+        assert_eq!(m.outstanding(), [Spoke::Disk, Spoke::Account]);
+        m.set_disk("ada2");
+        assert!(!m.can_install(), "a disk alone is not enough");
+        assert_eq!(m.outstanding(), [Spoke::Account]);
+        let m = with_account(m, "hunter2");
+        assert!(m.can_install());
+        assert!(m.outstanding().is_empty());
+    }
+
+    #[test]
+    fn keyboard_and_time_zone_are_not_required_because_they_have_real_defaults() {
+        let m = ready();
+        assert!(m.can_install(), "an unvisited keyboard spoke blocked the install");
+        assert_eq!(m.status(Spoke::Keyboard), "U.S. (default)");
+        assert_eq!(m.status(Spoke::Timezone), "UTC (default)");
+        assert!(m.complete(Spoke::Keyboard) && m.complete(Spoke::Timezone));
+    }
+
+    #[test]
+    fn every_spoke_says_something_including_the_ones_that_are_not_done() {
+        let m = InstallerModel::new(machine());
+        for s in Spoke::ALL {
+            assert!(m.status(s).chars().count() > 8, "{s:?}: {}", m.status(s));
+        }
+        assert_eq!(m.status(Spoke::Disk), "Choose a disk to install onto");
+        assert_eq!(m.status(Spoke::Account), "No account will be created");
+    }
+
+    #[test]
+    fn the_readiness_line_names_what_is_missing_and_then_what_will_happen() {
+        let mut m = InstallerModel::new(machine());
+        assert!(m.readiness().contains("disk") && m.readiness().contains("account"), "{}", m.readiness());
+        m.set_disk("ada2");
+        assert!(m.readiness().contains("account") && !m.readiness().contains("disk"), "{}", m.readiness());
+        let m = with_account(InstallerModel::new(machine()), "x");
+        assert_eq!(m.readiness(), "Choose an installation disk before installing.");
+        let r = ready().readiness();
+        assert!(r.contains("ada2") && r.to_lowercase().contains("erase"), "{r}");
+    }
+
+    #[test]
+    fn every_disk_is_shown_even_the_ones_that_cannot_be_used() {
+        let m = InstallerModel::new(machine());
+        assert_eq!(m.installable_disks().iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), ["ada0", "ada1", "ada2", "da0"]);
+    }
+
+    #[test]
+    fn the_disk_you_booted_from_is_shown_with_the_reason_and_cannot_be_chosen() {
+        let mut m = InstallerModel::new(machine());
+        let root = named(&m, "ada0").clone();
+        assert!(m.is_blocked(&root));
+        assert!(m.objection(&root).contains("running from"), "{}", m.objection(&root));
+        m.enter(Spoke::Disk);
+        m.selection = 0;
+        assert!(!m.choose_selection());
+        assert_eq!(m.disk(), "", "the installer accepted the disk it is running from");
+        assert_eq!(m.page, Page::Spoke(Spoke::Disk), "a refused choice left the spoke as if it had worked");
+        m.selection = 2;
+        assert!(m.choose_selection());
+        assert_eq!((m.disk(), &m.page), ("ada2", &Page::Hub));
+    }
+
+    #[test]
+    fn a_disk_in_use_and_a_disk_too_small_each_say_why() {
+        let m = InstallerModel::new(machine());
+        assert!(m.objection(named(&m, "ada1")).contains("in use"), "{}", m.objection(named(&m, "ada1")));
+        assert!(m.objection(named(&m, "da0")).contains("needs at least"), "{}", m.objection(named(&m, "da0")));
+        assert_eq!(m.objection(named(&m, "ada2")), "");
+    }
+
+    /// The disk spoke shows only objections about the disk, or every row
+    /// grows a complaint about a password.
+    #[test]
+    fn a_missing_account_is_not_the_disks_fault() {
+        let m = InstallerModel::new(machine());
+        assert_eq!(m.objection(named(&m, "ada2")), "");
+    }
+
+    #[test]
+    fn the_chosen_disk_is_described_by_what_it_is_not_by_its_name() {
+        let mut m = ready();
+        let s = m.status(Spoke::Disk);
+        assert!(s.contains("ada2") && s.contains("128.0 GB") && s.contains("Crucial"), "{s}");
+        m.inventory = DiskInventory::new(vec![]);
+        assert!(m.status(Spoke::Disk).contains("no longer there"), "{}", m.status(Spoke::Disk));
+        assert!(!m.can_install(), "a vanished disk still counted as chosen");
+    }
+
+    #[test]
+    fn a_password_that_does_not_match_is_said_on_the_hub_not_swallowed() {
+        let mut m = ready();
+        m.account_confirm = "hunter3".into();
+        assert!(!m.can_install());
+        assert_eq!(m.password_problem(), "The passwords do not match");
+        assert_eq!(m.status(Spoke::Account), "The passwords do not match", "the hub hid the reason the install is blocked");
+    }
+
+    #[test]
+    fn an_account_with_no_password_is_refused() {
+        let m = with_account(ready(), "");
+        assert!(!m.can_install());
+        assert!(m.status(Spoke::Account).contains("no password"), "{}", m.status(Spoke::Account));
+    }
+
+    #[test]
+    fn the_account_says_whether_it_can_administer() {
+        let mut m = ready();
+        assert!(m.status(Spoke::Account).contains("administer"));
+        m.account_is_administrator = false;
+        assert!(!m.status(Spoke::Account).contains("administer"));
+    }
+
+    #[test]
+    fn spokes_can_be_visited_in_any_order_and_remember_where_you_left_off() {
+        let mut m = InstallerModel::new(machine());
+        let pick = |m: &mut InstallerModel, s: Spoke, i: usize| {
+            m.enter(s);
+            m.selection = i;
+            m.choose_selection()
+        };
+        pick(&mut m, Spoke::Timezone, 3);
+        assert_eq!((m.timezone.as_str(), &m.page), (TIMEZONES[3], &Page::Hub));
+        pick(&mut m, Spoke::Disk, 2);
+        assert_eq!(m.disk(), "ada2");
+        pick(&mut m, Spoke::Keyboard, 6);
+        assert_eq!(m.keymap, keymap_files()[6]);
+        for (s, expected) in [(Spoke::Timezone, 3), (Spoke::Disk, 2), (Spoke::Keyboard, 6)] {
+            m.enter(s);
+            assert_eq!(m.selection, expected, "{s:?} opened at {}, forgetting the choice already made", m.selection);
+        }
+    }
+
+    #[test]
+    fn leaving_a_spoke_without_choosing_changes_nothing() {
+        let mut m = ready();
+        m.enter(Spoke::Disk);
+        m.selection = 0;
+        m.back();
+        assert_eq!((m.disk(), &m.page), ("ada2", &Page::Hub));
+    }
+
+    /// What the person chose is what gets run, against a plan built by hand.
+    #[test]
+    fn the_plan_says_what_the_screens_said() {
+        let mut m = ready();
+        m.hostname = "jaguar".into();
+        m.enter(Spoke::Keyboard);
+        m.selection = 1;
+        m.choose_selection();
+        m.enter(Spoke::Timezone);
+        m.selection = 3;
+        m.choose_selection();
+        let mut expected = InstallPlan::new("ada2");
+        expected.sets = vec!["base.txz".into(), "kernel.txz".into(), "abyss.tzst".into()];
+        expected.dist_directory = "/usr/freebsd-dist".into();
+        expected.hostname = "jaguar".into();
+        expected.timezone = "America/Chicago".into();
+        expected.keymap = "uk.kbd".into();
+        expected.root_password_hash = "*".into();
+        expected.accounts = vec![Account { name: "jkane".into(), full_name: "J Kane".into(), password_hash: "$6$fake".into(), groups: vec!["wheel".into(), "operator".into(), "audio".into()], shell: "/bin/sh".into() }];
+        let mut built = m.plan(None, "$6$fake", None);
+        built.dist_directory = "/usr/freebsd-dist".into(); // $ABYSS_DIST_DIR may say otherwise here
+        assert_eq!(built, expected);
+    }
+
+    #[test]
+    fn the_aqua_installer_installs_this_desktop() {
+        let p = ready().plan(None, "$6$fake", None);
+        assert!(p.installs_desktop(), "the Aqua installer did not install the desktop");
+        assert_eq!(p.sets[0], "base.txz", "base still has to be first");
+        let rc = install::rc_conf(&p);
+        assert!(rc.contains("abyss_loginwindow_greeter=\"YES\""), "{rc}");
+        assert!(!rc.contains("abyss_desktop_user"));
+    }
+
+    #[test]
+    fn the_trial_plan_behind_an_objection_matches_the_real_one() {
+        let mut m = ready();
+        m.set_disk("");
+        assert_eq!(m.objection(named(&m, "ada2")), "");
+        m.set_disk("ada2");
+        assert_eq!(install::problems(&m.plan(None, "$6$x", None), &m.inventory), []);
+    }
+
+    #[test]
+    fn the_plan_the_gui_builds_is_one_the_installer_will_accept() {
+        let m = ready();
+        assert_eq!(install::problems(&m.plan(None, "$6$fake", None), &m.inventory), []);
+        assert!(install::compile(&m.plan(None, "$6$fake", None), &m.inventory).is_ok());
+    }
+
+    #[test]
+    fn an_incomplete_hub_cannot_produce_an_installable_plan() {
+        let mut m = InstallerModel::new(machine());
+        m.set_disk("ada2");
+        assert!(!m.can_install());
+        assert!(install::problems(&m.plan(None, "$6$fake", None), &m.inventory).contains(&PlanRefusal::NoAdministrator));
+    }
+
+    #[test]
+    fn root_gets_no_password_and_the_user_gets_wheel() {
+        let p = ready().plan(None, "$6$fake", None);
+        assert_eq!(p.root_password_hash, "*");
+        assert!(p.accounts[0].is_administrator());
+    }
+
+    #[test]
+    fn no_plaintext_password_ever_reaches_a_plan() {
+        let m = ready();
+        let p = m.plan(None, "$6$fake", None);
+        assert!(!p.accounts.iter().any(|a| a.password_hash.contains("hunter2")));
+        assert!(!install::render(&install::compile(&p, &m.inventory).unwrap()).contains("hunter2"));
+    }
+
+    #[test]
+    fn a_machine_with_no_disks_says_so_rather_than_offering_nothing() {
+        let mut m = InstallerModel::new(DiskInventory::new(vec![]));
+        assert!(m.status(Spoke::Disk).contains("No disk"), "{}", m.status(Spoke::Disk));
+        m.inventory_error = "disk discovery needs FreeBSD's geom(8)".into();
+        assert_eq!(m.status(Spoke::Disk), "disk discovery needs FreeBSD's geom(8)");
+    }
+
+    #[test]
+    fn the_keyboard_spoke_says_the_layouts_name_not_its_file() {
+        let mut m = ready();
+        assert_eq!(m.status(Spoke::Keyboard), "U.S. (default)");
+        m.enter(Spoke::Keyboard);
+        m.selection = 6;
+        m.choose_selection();
+        assert_eq!(m.keymap, "us.dvorak.kbd", "the plan keeps the file");
+        assert_eq!(m.status(Spoke::Keyboard), "Dvorak");
+        assert_eq!(keymap_names().len(), keymap_files().len());
+        assert_eq!(keymap_names()[1], "British");
+    }
 }

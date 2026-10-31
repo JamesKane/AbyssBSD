@@ -396,4 +396,46 @@ mod tests {
         assert_eq!(agents_hit(&l, r.x + 5.0, r.y + 5.0), Some(AgentsHit::Session(1)));
         assert_eq!(agents_hit(&l, l.revoke[0].x + 5.0, l.revoke[0].y + 5.0), Some(AgentsHit::Revoke(0)));
     }
+
+    #[test]
+    fn a_grant_from_the_keeper() {
+        assert_eq!(GrantRow::parse("abyss-1001-app\t3\trw\t/run/granted/3/notes.txt\t/home/ada/notes.txt"), Some(GrantRow { jail: "abyss-1001-app".into(), n: 3, writable: true, path: "/home/ada/notes.txt".into() }));
+        assert_eq!(GrantRow::parse("abyss-1001-app-net\t1\tro\t/run/granted/1/a b.pdf\t/home/ada/a b.pdf").unwrap().line(), "app-net — /home/ada/a b.pdf (read-only)", "a hyphenated class, and a path with a space");
+        assert_eq!(GrantRow::parse("abyss-1001-app\tnot-a-number\tro\tx\ty"), None);
+        assert_eq!(GrantRow::parse("too\tfew"), None);
+    }
+
+    #[test]
+    fn rows_and_revokes_are_where_they_are_drawn() {
+        let s = AgentsPaneState::sample();
+        let l = agents_layout(Rect::new(0.0, 100.0, 760.0, 500.0), &s);
+        assert_eq!((l.session_rows.len(), l.revoke.len()), (2, 1));
+        let mid = |r: Rect| (r.x + 5.0, r.y + 5.0);
+        let (x, y) = mid(l.session_rows[1]);
+        assert_eq!(agents_hit(&l, x, y), Some(AgentsHit::Session(1)));
+        let (x, y) = mid(l.revoke[0]);
+        assert_eq!(agents_hit(&l, x, y), Some(AgentsHit::Revoke(0)));
+        let (x, y) = mid(l.digest);
+        assert_eq!(agents_hit(&l, x, y), None, "the digest is read, not pressed");
+        let (x, y) = mid(l.on_off);
+        assert_eq!(agents_hit(&l, x, y), Some(AgentsHit::OnOff));
+        assert!(l.on_off.y + l.on_off.h < l.sessions.y - 20.0, "the switch sits above the sessions' heading");
+        assert!(l.sessions.x + l.sessions.w < l.digest.x, "the list and the digest do not overlap");
+        assert!(l.digest.y + l.digest.h < l.grants.y);
+    }
+
+    #[test]
+    fn an_answers_line_breaks_are_paragraphs() {
+        assert_eq!(digest_paragraphs(&["17:33:08  The agent answered: Let me check.\nThen save.".into(), "next".into()]), ["17:33:08  The agent answered: Let me check.", "Then save.", "next"]);
+        assert_eq!(digest_paragraphs(&["a\n\nb".into()]), ["a", "b"], "no empty paragraph");
+    }
+
+    #[test]
+    fn at_most_what_fits() {
+        let sessions = (0..20).map(|i| Summary { id: i.to_string(), class: "agent".into(), started: String::new(), questions: 0, tokens: 0, given: vec![] }).collect();
+        let grants = (0..9).map(|n| GrantRow { jail: "j".into(), n, writable: false, path: "/p".into() }).collect();
+        let s = AgentsPaneState { sessions, grants, ..AgentsPaneState::default() };
+        let l = agents_layout(Rect::new(0.0, 100.0, 760.0, 500.0), &s);
+        assert_eq!((l.session_rows.len(), l.revoke.len()), (MAX_SESSIONS, MAX_GRANTS));
+    }
 }

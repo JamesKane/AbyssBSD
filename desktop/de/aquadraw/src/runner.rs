@@ -942,3 +942,7 @@ fn conic_mesh(cx: f64, cy: f64, r: f64, stops: Vec<(f64, Color)>) -> Pattern {
     }
     pat
 }
+
+#[cfg(test)]
+#[path = "runner_tests.rs"]
+mod tests;

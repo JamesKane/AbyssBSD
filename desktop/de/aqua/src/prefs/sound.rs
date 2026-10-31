@@ -418,4 +418,50 @@ mod tests {
         assert_eq!(sound_hit(&l, tr.x + tr.w, tr.y + 2.0), Some(SoundHit::Level("vol".into(), 100)));
         assert_eq!(player(&Channel { name: "x".into(), pid: Some(7), command: "mpv".into(), left: 40, right: 50 }), "mpv (pid 7) — 50% (40:50)");
     }
+
+    // SoundPaneTests and VolumeExtraTests, the parts the test above leaves out.
+
+    #[test]
+    fn the_page_in_one_line_with_nothing_or_nobody_playing() {
+        assert_eq!(status_line(&SoundPaneState::default()), "no devices");
+        let mut quiet = SoundPaneState::sample();
+        quiet.devices.iter_mut().for_each(|d| d.channels.clear());
+        assert!(status_line(&quiet).ends_with("; playing none"), "{}", status_line(&quiet));
+    }
+
+    #[test]
+    fn a_player_and_a_control_are_said_as_a_person_reads_them() {
+        let c = |l, r| Channel { name: "x".into(), pid: Some(7), command: "mpv".into(), left: l, right: r };
+        assert_eq!(player(&c(45, 45)), "mpv (pid 7) — 45%");
+        assert_eq!(player(&c(80, 40)), "mpv (pid 7) — 80% (80:40)", "an unbalanced level says both sides");
+        assert_eq!(label("vol"), "Output volume");
+        assert_eq!(label("ogain"), "ogain", "an unknown control keeps its name");
+    }
+
+    #[test]
+    fn one_layout_for_paint_and_hit() {
+        let body = Rect::new(0.0, 80.0, 760.0, 540.0);
+        let l = sound_layout(body, &SoundPaneState::sample());
+        assert_eq!(l.outputs.iter().map(|r| r.value.as_str()).collect::<Vec<_>>(), ["0", "1"]);
+        assert_eq!(l.levels.iter().map(|r| r.value.as_str()).collect::<Vec<_>>(), ["vol", "pcm", "rec"]);
+        let tr = l.levels[0].control;
+        assert_eq!(sound_hit(&l, tr.x, tr.y + 5.0), Some(SoundHit::Level("vol".into(), 0)));
+        assert_eq!(sound_hit(&l, tr.x + tr.w / 4.0, tr.y + 5.0), Some(SoundHit::Level("vol".into(), 25)));
+        assert_eq!(sound_level(tr, tr.x - 50.0), 0, "past the end is the end");
+        assert!(l.note_baseline < body.y + body.h);
+        let rects: Vec<Rect> = l.outputs.iter().chain(&l.levels).chain(&l.mutes).map(|r| r.hit).collect();
+        for (i, a) in rects.iter().enumerate() {
+            for b in &rects[i + 1..] {
+                assert!(!(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h), "{a:?} overlaps {b:?}");
+            }
+        }
+        assert!(sound_layout(body, &SoundPaneState::default()).outputs.is_empty(), "no devices, no controls");
+    }
+
+    #[test]
+    fn choosing_an_output_asks_the_helper_for_exactly_that() {
+        let m = client::apply_request(&settings::SettingsPlan::Sound(settings::SoundPlan { default_unit: 1 }));
+        assert_eq!(m.string("method"), Some("apply"));
+        assert_eq!(settings_wire::decode_plan(&m), Ok(settings::SettingsPlan::Sound(settings::SoundPlan { default_unit: 1 })));
+    }
 }

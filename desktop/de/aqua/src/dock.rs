@@ -901,4 +901,31 @@ mod tests {
         let t = ThemeTokens::default();
         assert!(dock_surface_height(&t, 48.0) > 48.0 * t.dock_max_scale);
     }
+
+    /// AgentWindowTests' built-in checks the Rust test leaves out: no two
+    /// built-ins share a token or an app ID, a running one wears its own
+    /// icon, and every theme draws each one's icon.
+    #[test]
+    fn every_builtin_has_a_tile_and_an_icon_in_every_theme() {
+        let tokens: std::collections::BTreeSet<&str> = BUILTIN_APPS.iter().map(|b| b.token).collect();
+        let ids: std::collections::BTreeSet<&str> = BUILTIN_APPS.iter().map(|b| b.app_id).collect();
+        assert_eq!((tokens.len(), ids.len()), (BUILTIN_APPS.len(), BUILTIN_APPS.len()));
+        let jaguar = aquadraw::theme::Theme::default();
+        for b in BUILTIN_APPS {
+            assert_eq!(builtin_running(b.app_id).unwrap().icon, DockIcon::Theme(b.icon.into()), "{} wears its own icon", b.name);
+            assert!(jaguar.lists.get(&b.theme_icon()).is_some(), "{} has no icon in Jaguar", b.name);
+        }
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let themes = format!("{root}/themes");
+        let mut names: Vec<String> = std::fs::read_dir(&themes).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| std::path::Path::new(&format!("{themes}/{n}/theme.ini")).exists()).collect();
+        names.sort();
+        assert!(names.len() >= 2, "Aqua and a second theme: {names:?}");
+        for theme in &names {
+            let text = std::fs::read_to_string(format!("{root}/themes/{theme}/icons/dock.dl")).unwrap();
+            let lists: std::collections::BTreeSet<&str> = text.lines().filter_map(|l| l.strip_prefix("list ")).map(|l| l.split_whitespace().next().unwrap_or("")).collect();
+            for b in BUILTIN_APPS.iter().filter(|b| b.folder.is_some()) {
+                assert!(lists.contains(b.theme_icon().as_str()), "{theme} has no {} for {}", b.theme_icon(), b.name);
+            }
+        }
+    }
 }

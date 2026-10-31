@@ -249,3 +249,20 @@ impl Drop for LayerSurface {
         self.close()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use abyss_sys::wlc::zwlr_layer_shell_v1 as zlsh;
+
+    /// AquaTests' testLayerAnchorAndLayerValues: the anchor bits are the
+    /// protocol's, `ALL` is their union (the wallpaper's), and the layers
+    /// run bottom to top as zwlr_layer_shell_v1's do.
+    #[test]
+    fn layer_anchor_and_layer_values_are_the_protocols() {
+        assert_eq!([anchor::TOP, anchor::BOTTOM, anchor::LEFT, anchor::RIGHT], [zls::ANCHOR_TOP, zls::ANCHOR_BOTTOM, zls::ANCHOR_LEFT, zls::ANCHOR_RIGHT]);
+        assert_eq!([anchor::TOP, anchor::BOTTOM, anchor::LEFT, anchor::RIGHT], [1, 2, 4, 8]);
+        assert_eq!(anchor::ALL, anchor::TOP | anchor::BOTTOM | anchor::LEFT | anchor::RIGHT);
+        assert_eq!([Layer::Background as u32, Layer::Bottom as u32, Layer::Top as u32, Layer::Overlay as u32], [zlsh::LAYER_BACKGROUND, zlsh::LAYER_BOTTOM, zlsh::LAYER_TOP, zlsh::LAYER_OVERLAY]);
+    }
+}

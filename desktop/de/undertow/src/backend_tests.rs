@@ -126,3 +126,43 @@ fn the_metronome_drives_a_wlroots_output() {
     assert!(out.commits_made >= 28, "{}", out.commits_made);
     assert_eq!(rec.count(), 30);
 }
+
+/// A backend with nothing to show on is a refusal the caller can print, not
+/// an abort.
+#[test]
+fn no_output_is_an_error_not_an_abort() {
+    let e = WlrootsSession::headless(0, 320, 240, 60_000, false).err().expect("no output, no session");
+    assert!(matches!(e, BackendError::NoOutput), "{e}");
+    assert_eq!(e.to_string(), "the backend produced no output");
+}
+
+/// The metronome's flips are the backend's: a frame committed learns its
+/// fate, the predictor is fed, and a present arrives.
+#[test]
+fn frames_reach_the_backend_and_flip_feedback_returns() {
+    let s = WlrootsSession::headless(1, 320, 240, 60_000, false).unwrap();
+    assert!(s.outputs()[0].name().starts_with("HEADLESS"), "{}", s.outputs()[0].name());
+    let mut out = WlrootsOutput::new(s.outputs()[0], &s);
+    let mut scene = crate::synthetic::SyntheticScene::new(8, (320, 240));
+    let mut rec = FlightRecorder::new(64);
+    let mut m = Metronome::new(out.period_hint_ns(), Config::default());
+    m.run(12, &mut out, &mut scene, &mut rec);
+    assert_eq!(rec.count(), 12);
+    assert!(m.predictor.samples > 0, "no flip feedback reached the predictor: frames committed whose fate is never learnt");
+    assert!((0..rec.retained()).any(|i| rec.retained_record(i).actual_vblank > 0), "no present event ever arrived");
+}
+
+/// Headless has no hardware clock; the grid snap still holds it to the mode's
+/// rate. Without it the estimate drifts ~30% low.
+#[test]
+fn a_clockless_backend_still_paces_at_its_nominal_rate() {
+    let s = WlrootsSession::headless(1, 320, 240, 60_000, false).unwrap();
+    let mut out = WlrootsOutput::new(s.outputs()[0], &s);
+    let mut scene = crate::synthetic::SyntheticScene::new(4, (320, 240));
+    let mut rec = FlightRecorder::new(128);
+    let mut m = Metronome::new(out.period_hint_ns(), Config::default());
+    m.run(60, &mut out, &mut scene, &mut rec);
+    assert!(!out.saw_hardware_clock, "the headless backend claimed a hardware clock; this test's premise is stale");
+    let p = m.predictor.period_ns as f64;
+    assert!((p - 16_666_666.0).abs() <= 16_666_666.0 * 0.05, "period {p} is not within 5% of 60 Hz");
+}

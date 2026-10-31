@@ -450,4 +450,22 @@ mod tests {
         assert_eq!(finder_move(&t, Some(0), -1, 0, count, FinderView::Icon, vp), Some(0));
         assert_eq!(finder_move(&t, Some(count - 1), 0, 1, count, FinderView::Icon, vp), Some(count - 1));
     }
+
+    #[test]
+    fn read_directory_sorts_and_hides_dotfiles() {
+        let dir = std::env::temp_dir().join(format!("finder.{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Alpha")).unwrap();
+        std::fs::create_dir_all(dir.join("TextEdit.app")).unwrap();
+        std::fs::write(dir.join("beta.txt"), vec![b'A'; 1500]).unwrap();
+        std::fs::write(dir.join(".hidden"), "abc").unwrap();
+        let d = dir.to_str().unwrap();
+        let e = read_directory(d, false);
+        assert_eq!(e.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), ["Alpha", "beta.txt", "TextEdit.app"], "alphabetical, folders interleaved, dot-file hidden");
+        assert_eq!((e[0].kind, e[1].kind, e[2].kind), (FinderItemKind::Folder, FinderItemKind::Document, FinderItemKind::Application));
+        assert_eq!(e[1].size, 1500);
+        assert_eq!(read_directory(d, true).len(), 4, "shown when asked for");
+        assert!(read_directory(&format!("{d}/nope"), false).is_empty(), "an unreadable path lists as empty");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

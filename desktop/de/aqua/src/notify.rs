@@ -339,4 +339,66 @@ mod tests {
         let toasts = [Toast { id: 1, summary: "a".into(), body: None, expires_at: 1.0 }, Toast { id: 2, summary: "b".into(), body: None, expires_at: 3.0 }];
         assert_eq!(live_toasts(&toasts, 2.0).len(), 1);
     }
+
+    // AquaTests.swift's toasts, the rest of them.
+
+    #[test]
+    fn toasts_stack_downward_without_overlapping() {
+        let t = ThemeTokens::default();
+        let (rects, width, total) = toast_layout(&t, &[50.0, 66.0, 50.0]);
+        assert_eq!((rects.len(), width), (3, t.toast_width));
+        assert_eq!(rects.iter().map(|r| r.y).collect::<Vec<_>>(), [0.0, 50.0 + t.toast_gap, 50.0 + t.toast_gap + 66.0 + t.toast_gap]);
+        // No trailing gap: an overlay takes the pointer wherever it extends.
+        assert_eq!(total, 50.0 + t.toast_gap + 66.0 + t.toast_gap + 50.0);
+    }
+
+    #[test]
+    fn an_empty_stack_needs_no_surface() {
+        let (rects, _, total) = toast_layout(&ThemeTokens::default(), &[]);
+        assert!(rects.is_empty());
+        assert_eq!(total, 0.0);
+    }
+
+    #[test]
+    fn clicks_land_on_the_toast_they_look_like() {
+        let t = ThemeTokens::default();
+        let (rects, _, _) = toast_layout(&t, &[50.0, 50.0]);
+        assert_eq!(toast_index(0.0, &rects), Some(0));
+        assert_eq!(toast_index(49.0, &rects), Some(0));
+        assert_eq!(toast_index(50.0 + t.toast_gap / 2.0, &rects), None, "the gap belongs to neither");
+        assert_eq!(toast_index(50.0 + t.toast_gap, &rects), Some(1));
+        assert_eq!(toast_index(5000.0, &rects), None);
+    }
+
+    #[test]
+    fn expiry_is_by_monotonic_deadline() {
+        let toast = |id, s: &str, at| Toast { id, summary: s.into(), body: None, expires_at: at };
+        let toasts = [toast(1, "gone", 100.0), toast(2, "staying", 200.0)];
+        let ids = |now| live_toasts(&toasts, now).iter().map(|t| t.id).collect::<Vec<_>>();
+        assert_eq!(ids(50.0), [1, 2]);
+        assert_eq!(ids(150.0), [2]);
+        assert!(ids(250.0).is_empty());
+        assert_eq!(ids(100.0), [2], "exactly at the deadline it is gone, not lingering");
+    }
+
+    /// A wall of text from an application must not become a full-screen
+    /// panel; the cut is visible rather than silent.
+    #[test]
+    fn a_body_is_capped_rather_than_covering_the_screen() {
+        let t = ThemeTokens::default();
+        let short = Toast { id: 1, summary: "s".into(), body: Some("all tests green".into()), expires_at: 0.0 };
+        assert_eq!(body_lines(&t, &short, &mut |s| s.chars().count() as f64 * 6.0), ["all tests green"]);
+        let wall = Toast { body: Some("lorem ipsum dolor sit amet ".repeat(40)), ..short };
+        let wrapped = body_lines(&t, &wall, &mut |s| s.chars().count() as f64 * 6.0);
+        assert_eq!(wrapped.len(), t.toast_max_body_lines as usize);
+        assert!(wrapped.last().unwrap().ends_with('…'), "capped text is elided");
+        assert!(toast_wrap("", 250.0, 4, &mut by_chars).is_empty());
+    }
+
+    #[test]
+    fn height_grows_with_the_body() {
+        let t = ThemeTokens::default();
+        assert_eq!(toast_height(&t, 0), t.toast_base_height);
+        assert_eq!(toast_height(&t, 2), t.toast_base_height + 2.0 * t.toast_line_height);
+    }
 }

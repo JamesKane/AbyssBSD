@@ -527,4 +527,57 @@ mod tests {
         let r = resized(&heads, "DP-1", &s.heads[0]);
         assert_eq!(r[1].x, 2048 - (2048 - 1280));
     }
+
+    // DisplaysPaneTests, the parts the tests above leave out.
+
+    #[test]
+    fn the_layout_is_fitted_to_scale_and_centred() {
+        let b = |name: &str, x, w, h| LayoutBox { name: name.into(), x, y: 0, w, h };
+        let (r, k) = fit(&[b("A", 0, 640, 480), b("B", 640, 800, 600)], Rect::new(0.0, 0.0, 720.0, 300.0));
+        let at = |n: &str| r.iter().find(|(m, _)| m == n).unwrap().1;
+        let (a, bb) = (at("A"), at("B"));
+        assert!((k - 0.4).abs() < 1e-9, "the height binds: 300/600 x 0.8");
+        assert!((a.w - 256.0).abs() < 1e-9);
+        assert!((bb.x - (a.x + a.w)).abs() < 1e-9, "neighbours touch in the pane as they do in the layout");
+        assert!((a.x + (bb.x + bb.w - a.x) / 2.0 - 360.0).abs() < 1e-9, "centred");
+    }
+
+    #[test]
+    fn a_dropped_display_snaps_to_touch_the_nearest_edge() {
+        let main = (0, 0, 640, 480);
+        assert_eq!(snap(100, 520, 800, 600, &[main]), (100, 480), "a little below main's bottom edge: on it");
+        assert_eq!(snap(3, 500, 800, 600, &[main]), (0, 480), "a few units off lining up: lined up");
+        assert_eq!(snap(-150, 500, 800, 600, &[main]).0, -160, "right edges flush: 640 - 800");
+        assert_eq!(snap(500, 30, 800, 600, &[main]), (640, 30), "overlapping main's right half: to its right, touching");
+        let far = snap(3000, 2000, 800, 600, &[main]);
+        assert!([(640, 479), (639, 480), (640, 0), (0, 480), (-160, 480), (640, -120)].contains(&far), "brought back to touch: {far:?}");
+        let right = (640, 0, 800, 600);
+        let (x, y) = snap(600, 470, 320, 240, &[main, right]);
+        let over = |(ox, oy, ow, oh): (i32, i32, i32, i32)| (x + 320).min(ox + ow) > x.max(ox) && (y + 240).min(oy + oh) > y.max(oy);
+        assert!(!over(main) && !over(right), "never onto either neighbour: {x},{y}");
+    }
+
+    #[test]
+    fn the_page_in_words() {
+        let s = DisplaysPaneState::sample();
+        assert_eq!(scales(1.75), [1.0, 1.25, 1.5, 1.75, 2.0], "an unusual current scale is offered too");
+        assert_eq!(s.heads[0].layout_size().0, 2048, "2560 at 1.25");
+    }
+
+    #[test]
+    fn one_layout_for_paint_and_hit_and_no_rescale_mid_drag() {
+        let body = Rect::new(0.0, 80.0, 760.0, 540.0);
+        let l = displays_layout(body, &DisplaysPaneState::sample());
+        let at = |r: &Rect| displays_hit(&l, r.x + r.w / 2.0, r.y + r.h / 2.0);
+        let display = |l: &DisplaysLayout, n: &str| l.displays.iter().find(|(m, _)| m == n).unwrap().1;
+        assert_eq!(at(&display(&l, "HDMI-A-1")), Some(DisplaysHit::Display("HDMI-A-1".into())));
+        assert_eq!(l.modes.iter().map(|r| r.value.as_str()).collect::<Vec<_>>(), ["2560x1440@59951", "1920x1080@60000"]);
+        assert_eq!(at(&l.modes[1].hit), Some(DisplaysHit::Mode("1920x1080@60000".into())));
+        assert_eq!(at(&l.scales[3].hit), Some(DisplaysHit::Scale("2".into())));
+        assert!(l.note_baseline < 620.0);
+        let dragged = DisplaysPaneState { dragging: Some(Dragging { name: "HDMI-A-1".into(), x: 0, y: 1440 }), ..DisplaysPaneState::sample() };
+        let d = displays_layout(body, &dragged);
+        assert_eq!(d.factor, l.factor, "the pane does not rescale under the pointer mid-drag");
+        assert!((display(&d, "HDMI-A-1").y - (display(&l, "DP-1").y + 1440.0 * l.factor)).abs() < 1e-9);
+    }
 }

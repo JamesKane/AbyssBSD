@@ -259,4 +259,23 @@ mod tests {
         assert_eq!(slider_level(-50.0), 100);
         assert_eq!(slider_level(t.y + t.h / 2.0), 50);
     }
+
+    /// VolumeExtraTests: 70% of the way down is 30, and the track is inside
+    /// the popup.
+    #[test]
+    fn the_slider_is_loud_at_the_top_and_inside_its_popup() {
+        let t = slider_track();
+        assert_eq!(slider_level(t.y + t.h * 0.7), 30);
+        assert!(t.y + t.h <= SLIDER_HEIGHT, "the track is inside the popup");
+    }
+
+    #[test]
+    fn the_bar_says_muted_and_hides_what_it_cannot_feed() {
+        let mut s = st(Some(40), None);
+        assert_eq!(s.describe(), "volume 40%, no battery");
+        s.muted = true;
+        assert_eq!(s.describe(), "volume 40% muted, no battery");
+        assert_eq!(MenuBarStatus::default().describe(), "no mixer, no battery");
+        assert_eq!(menu_bar_status_layout(&ThemeTokens::default(), &MenuBarStatus::default(), 22.0, 700.0).0, None, "no mixer, no speaker");
+    }
 }

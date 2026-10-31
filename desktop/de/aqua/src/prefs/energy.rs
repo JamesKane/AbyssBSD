@@ -506,4 +506,28 @@ mod tests {
         assert_eq!(energy_hit(&l, x, y), Some(EnergyHit::Powerd));
         assert_eq!(energy_hit(&l, l.computer.x, l.computer.y + 5.0), Some(EnergyHit::Sleep { display: false, minutes: 1 }));
     }
+
+    #[test]
+    fn one_layout_for_paint_and_hit() {
+        let l = energy_layout(Rect::new(0.0, 80.0, 760.0, 540.0), false);
+        assert_eq!(energy_hit(&l, l.computer.x, l.computer.y + 10.0), Some(EnergyHit::Sleep { display: false, minutes: 1 }));
+        assert_eq!(energy_hit(&l, l.display.x + l.display.w, l.display.y + 10.0), Some(EnergyHit::Sleep { display: true, minutes: 0 }), "the far end is Never");
+        assert_eq!(energy_hit(&l, l.powerd.hit.x + 5.0, l.powerd.hit.y + 5.0), Some(EnergyHit::Powerd));
+        assert_eq!(energy_hit(&l, l.battery[2].hit.x + 5.0, l.battery[2].hit.y + 5.0), Some(EnergyHit::Battery(PowerdMode::Minimum)));
+        assert_eq!(energy_hit(&l, l.ac[3].hit.x + 5.0, l.ac[3].hit.y + 5.0), Some(EnergyHit::Ac(PowerdMode::Maximum)));
+        assert!(l.note_baseline < 620.0);
+        assert!(l.profile.is_empty());
+    }
+
+    #[test]
+    fn with_profiles_the_power_mode_replaces_the_per_source_modes() {
+        let l = energy_layout(Rect::new(0.0, 80.0, 760.0, 540.0), true);
+        assert!(l.ac.is_empty() && l.battery.is_empty());
+        assert_eq!(l.profile.iter().map(|r| r.value).collect::<Vec<_>>(), ["power-saver", "balanced", "performance"]);
+        assert_eq!(energy_hit(&l, l.profile[2].hit.x + 5.0, l.profile[2].hit.y + 5.0), Some(EnergyHit::Profile(PowerProfile::Performance)));
+        assert_eq!(energy_hit(&l, l.powerd.hit.x + 5.0, l.powerd.hit.y + 5.0), Some(EnergyHit::Powerd));
+        assert_eq!(profile_words(PowerProfile::PowerSaver), "Power Saver");
+        let s = EnergyPaneState { profile: Some(PowerProfile::Balanced), ..EnergyPaneState::sample() };
+        assert!(status_line(&s).contains(" profile balanced battery "), "{}", status_line(&s));
+    }
 }

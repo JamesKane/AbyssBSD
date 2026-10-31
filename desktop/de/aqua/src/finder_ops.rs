@@ -336,4 +336,50 @@ mod tests {
         assert_eq!(empty_trash_in(&trash), (0, 0));
         let _ = fs::remove_dir_all(&root);
     }
+
+    /// Looking at an absent Trash does not create it, and reads as empty;
+    /// emptying takes a folder whole, dot-files too, and leaves the Trash.
+    #[test]
+    fn empty_trash_removes_everything_permanently() {
+        let root = std::env::temp_dir().join(format!("emptytrash.{}", std::process::id()));
+        let root = root.to_str().unwrap().to_string();
+        let _ = fs::remove_dir_all(&root);
+        assert!(finder_create_directory(&root));
+        let trash = finder_join(&root, ".Trash");
+        assert!(trash_contents_in(&trash).is_empty());
+        assert_eq!(empty_trash_in(&trash), (0, 0));
+        assert!(!finder_exists(&trash), "looking must not create it");
+
+        assert!(finder_create_directory(&trash));
+        let work = finder_join(&root, "work");
+        assert!(finder_create_directory(&work));
+        fs::write(finder_join(&work, "Read Me.txt"), "hello").unwrap();
+        assert!(finder_create_directory(&finder_join(&work, "Reports")));
+        fs::write(finder_join(&work, "Reports/q1.txt"), "quarter one").unwrap();
+        fs::write(finder_join(&work, "Reports/.notes"), "private").unwrap();
+        assert!(move_to_trash_in(&trash, &finder_join(&work, "Read Me.txt")).is_some());
+        assert!(move_to_trash_in(&trash, &finder_join(&work, "Reports")).is_some());
+        assert_eq!(trash_contents_in(&trash).len(), 2);
+
+        assert_eq!(empty_trash_in(&trash), (2, 0));
+        assert!(trash_contents_in(&trash).is_empty());
+        assert!(finder_is_directory(&trash), "the folder stays, its contents do not");
+        assert!(!finder_exists(&finder_join(&trash, "Reports/q1.txt")));
+        assert!(finder_is_directory(&work), "nothing outside the Trash was touched");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn remove_path_deletes_trees_and_reports_failure() {
+        let root = std::env::temp_dir().join(format!("removepath.{}", std::process::id()));
+        let root = root.to_str().unwrap().to_string();
+        let _ = fs::remove_dir_all(&root);
+        let tree = finder_join(&root, "a");
+        assert!(finder_create_directory(&root) && finder_create_directory(&tree) && finder_create_directory(&finder_join(&tree, "b")));
+        fs::write(finder_join(&tree, "b/c.txt"), "").unwrap();
+        assert!(finder_remove_path(&tree));
+        assert!(!finder_exists(&tree));
+        assert!(!finder_remove_path(&finder_join(&root, "gone")), "removing what is not there fails rather than pretending");
+        let _ = fs::remove_dir_all(&root);
+    }
 }

@@ -1088,4 +1088,101 @@ mod tests {
         let f = l.forgets[1];
         assert_eq!(wifi_hit(&l, &s, f.x + 5.0, f.y + 5.0), Some(WifiHit::Forget("Café Wi-Fi".into())));
     }
+
+    // NetworkPaneTests and WifiPaneTests, the parts the tests above leave out.
+
+    #[test]
+    fn the_form_says_what_it_sends() {
+        let ip = |s| IPv4::parse(s).unwrap();
+        let plan = NetworkPlan { interface: "em0".into(), ipv4: IPv4Config::Manual { address: ip("192.168.1.20"), prefix: 24, router: Some(ip("192.168.1.1")) }, dns: vec![ip("9.9.9.9"), ip("1.1.1.1")] };
+        let r = NetworkForm::from_plan(&plan).request("apply");
+        assert_eq!((r.string("method"), r.string("interface")), (Some("apply"), Some("em0")));
+        let mut f = NetworkForm::new("vtnet0");
+        f.values[Field::Address.index()] = "10.0.0.5".into();
+        let m = f.request("check");
+        assert_eq!(m.string("network.mode"), Some("dhcp"));
+        assert!(matches!(settings_wire::decode_plan(&m), Ok(SettingsPlan::Network(NetworkPlan { ipv4: IPv4Config::Dhcp, .. }))));
+    }
+
+    #[test]
+    fn what_was_typed_is_sent_as_typed_for_the_helper_to_refuse() {
+        let mut f = NetworkForm::new("em0");
+        f.set_dhcp(false);
+        f.focus = Some(Field::Address);
+        f.type_text("10.0.0.300");
+        match settings_wire::decode_plan(&f.request("apply")) {
+            Err(why) => assert!(why.message.contains("10.0.0.300"), "{}", why.message),
+            Ok(p) => panic!("an impossible address was accepted: {p:?}"),
+        }
+    }
+
+    #[test]
+    fn typing_edits_the_focused_field_only() {
+        let mut f = NetworkForm::new("em0");
+        f.set_dhcp(false);
+        f.focus = Some(Field::Router);
+        f.type_text("10.0.0.1");
+        f.type_text("\t");
+        assert_eq!(f.get(Field::Router), "10.0.0.1", "control characters are not text");
+        f.backspace();
+        assert_eq!(f.get(Field::Router), "10.0.0.");
+    }
+
+    #[test]
+    fn the_status_is_said_in_words_wireless_and_missing_too() {
+        let s = NetworkPaneState::sample();
+        let names = |v: Vec<&Interface>| v.iter().map(|i| i.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(choosable(&s.status.interfaces)), ["em0", "igc0"], "no loopback");
+        let wifi = Interface { name: "wlan0".into(), up: true, loopback: false, link: net::Link::Up, ipv4: vec![], mac: Some("02:00:00:00:00:01".into()) };
+        let pseudo = Interface { name: "pflog0".into(), up: true, loopback: false, link: net::Link::Unknown, ipv4: vec![], mac: None };
+        let all: Vec<Interface> = [wifi, pseudo].into_iter().chain(s.status.interfaces.clone()).collect();
+        assert_eq!(names(choosable(&all)), ["em0", "igc0"], "wireless is its own pane, and an interface with no hardware is nobody's");
+        let em = status_rows(&s.status, "em0");
+        assert_eq!(em.iter().find(|r| r.0 == "Router:").unwrap().1, "192.168.1.1");
+        assert_eq!(status_rows(&s.status, "igc0")[0].1, "Cable unplugged");
+        assert_eq!(status_rows(&s.status, "em9")[0].1, "em9 is not on this machine now");
+    }
+
+    #[test]
+    fn one_layout_for_paint_and_hit() {
+        let body = Rect::new(0.0, 80.0, 760.0, 540.0);
+        let l = network_layout(body, &["em0".into(), "igc0".into()], &[], None);
+        let mut f = NetworkForm::new("em0");
+        let mid = |r: &Rect| (r.x + r.w / 2.0, r.y + r.h / 2.0);
+        let at = |f: &NetworkForm, r: &Rect| {
+            let (x, y) = mid(r);
+            network_hit(&l, f, x, y)
+        };
+        assert_eq!(at(&f, &l.interfaces[1].hit), Some(NetworkHit::Interface("igc0".into())));
+        assert_eq!(at(&f, &l.manual.0), Some(NetworkHit::Mode { dhcp: false }));
+        assert_eq!(at(&f, &l.dhcp.0), Some(NetworkHit::Mode { dhcp: true }));
+        assert_eq!(at(&f, &l.fields[Field::Address.index()]), None, "with DHCP the address is not a field");
+        assert_eq!(at(&f, &l.fields[Field::Dns.index()]), Some(NetworkHit::Field(Field::Dns)));
+        f.set_dhcp(false);
+        assert_eq!(at(&f, &l.fields[Field::Address.index()]), Some(NetworkHit::Field(Field::Address)));
+        assert_eq!(at(&f, &l.apply), Some(NetworkHit::Apply));
+        assert_eq!(at(&f, &l.revert), Some(NetworkHit::Revert));
+        assert!(l.apply.y + l.apply.h < body.y + body.h, "Apply Now is inside the window");
+        let rects: Vec<Rect> = l.interfaces.iter().map(|r| r.hit).chain([l.status, l.dhcp.0, l.manual.0, l.revert, l.apply]).chain(l.fields).collect();
+        for (i, a) in rects.iter().enumerate() {
+            for b in &rects[i + 1..] {
+                assert!(!(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h), "{a:?} overlaps {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn wifi_the_page_in_words_and_where_it_is_hit() {
+        assert_eq!(wifi_status_words(&wifi::Status { interface: "wlan0".into(), exists: false, ..wifi::Status::default() }), "Not set up: this radio has no wlan interface yet");
+        assert_eq!((bars(-41), bars(-65), bars(-85), bars(10)), (3, 2, 1, 2), "wtap's S of 10 reads as -60 dBm: fair, not full");
+        let s = WifiPaneState::sample();
+        let l = wifi_layout(Rect::new(0.0, 80.0, 760.0, 540.0), 140.0, &s);
+        let at = |r: &Rect| wifi_hit(&l, &s, r.x + r.w / 2.0, r.y + r.h / 2.0);
+        assert_eq!(at(&l.scan), Some(WifiHit::Scan));
+        assert_eq!(at(&l.networks[2]), Some(WifiHit::Network("Library".into())));
+        assert_eq!(at(&l.field), Some(WifiHit::Field));
+        assert_eq!(at(&l.join), Some(WifiHit::Join));
+        assert_eq!(at(&l.forgets[1]), Some(WifiHit::Forget("Café Wi-Fi".into())));
+        assert!(l.note_baseline < 620.0);
+    }
 }

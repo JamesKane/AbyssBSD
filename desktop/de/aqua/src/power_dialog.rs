@@ -326,4 +326,11 @@ mod tests {
         assert_eq!(l.buttons.len(), 1);
         assert_eq!(l.buttons[0].1.x + l.buttons[0].1.w, 440.0);
     }
+
+    #[test]
+    fn each_question_has_its_default_last() {
+        assert_eq!(PowerAsk::PowerKey.choices(), [Restart, Sleep, Cancel, ShutDown]);
+        assert_eq!(PowerAsk::PowerKey.question(), "Are you sure you want to shut down your computer now?");
+        assert_eq!(Sleep.action(), Some(PowerAction::Sleep));
+    }
 }

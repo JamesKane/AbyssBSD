@@ -328,3 +328,39 @@ fn the_palette_is_the_theme() {
     dark.body_text = Color::new(1.0, 1.0, 1.0, 1.0);
     assert!(legibility::palette_ini(&dark, "x", None).contains("color-scheme = 1\n"), "dark");
 }
+
+// MARK: AquaTests — window chrome (P9.4), on Jaguar's frame
+
+fn hit(x: f64, y: f64) -> ChromeHit {
+    let t = ThemeTokens::jaguar();
+    chrome_hit(&t, &window_chrome(&t, 400.0, 300.0, false), x, y)
+}
+
+/// The lights sit in the title bar, so the title is what is left over.
+#[test]
+fn chrome_lights_beat_the_title_bar() {
+    let l = window_chrome(&ThemeTokens::jaguar(), 400.0, 300.0, false);
+    for g in [Gadget::Close, Gadget::Minimize, Gadget::Zoom] {
+        assert_eq!(hit(l.rect(g).unwrap().x + 3.0, 11.0), ChromeHit::Gadget(g));
+    }
+    assert_eq!(hit(200.0, 11.0), ChromeHit::Title);
+    assert_eq!(hit(380.0, 11.0), ChromeHit::Gadget(Gadget::Pill));
+}
+
+/// **The sides are not resize bands**: the Finder's scrollbar is the
+/// rightmost 15 px of its window. Nor is the top: that is for dragging.
+#[test]
+fn only_the_bottom_and_its_corners_resize() {
+    assert_eq!(hit(200.0, 299.0), ChromeHit::Resize(ChromeEdge::Bottom));
+    assert_eq!(hit(398.0, 298.0), ChromeHit::Resize(ChromeEdge::BottomRight));
+    assert_eq!(hit(2.0, 298.0), ChromeHit::Resize(ChromeEdge::BottomLeft));
+    assert_eq!(hit(399.0, 150.0), ChromeHit::Content);
+    assert_eq!(hit(1.0, 150.0), ChromeHit::Content);
+    assert_eq!(hit(1.0, 2.0), ChromeHit::Title);
+    assert_eq!(hit(399.0, 2.0), ChromeHit::Title);
+}
+
+#[test]
+fn chrome_leaves_the_content_alone() {
+    assert_eq!(hit(200.0, 150.0), ChromeHit::Content);
+}

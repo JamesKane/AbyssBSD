@@ -36,7 +36,13 @@ pub const CANCELLED_EXIT: i32 = 1;
 /// The result file `$ABYSS_FINDER_PICK` names; None (empty too) when not
 /// picking.
 pub fn result_path() -> Option<String> {
-    std::env::var("ABYSS_FINDER_PICK").ok().filter(|v| !v.is_empty())
+    result_path_from(std::env::var("ABYSS_FINDER_PICK").ok())
+}
+
+/// `result_path` for a given value of the variable, so a test can ask
+/// without setting it (`unsafe` in Rust 2024).
+fn result_path_from(value: Option<String>) -> Option<String> {
+    value.filter(|v| !v.is_empty())
 }
 
 pub fn is_picking() -> bool {
@@ -85,6 +91,15 @@ pub fn read_result(path: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::finder_model::FinderItemKind;
+
+    /// Off unless the variable names a result file; empty means "not
+    /// picking", not "pick into ''".
+    #[test]
+    fn picker_mode_is_off_unless_the_environment_says_otherwise() {
+        assert_eq!(result_path_from(None), None);
+        assert_eq!(result_path_from(Some("/tmp/abyss-pick-result".into())).as_deref(), Some("/tmp/abyss-pick-result"));
+        assert_eq!(result_path_from(Some(String::new())), None);
+    }
 
     #[test]
     fn picker_mode_chooses_a_file_instead_of_launching_it() {

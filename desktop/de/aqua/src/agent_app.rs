@@ -1285,4 +1285,18 @@ mod tests {
         assert_eq!(presence_about(Some(&budget), "q"), "Allow more tokens?");
         assert_eq!(presence_about(None, "q"), "q");
     }
+
+    /// AgentPresenceTests' first test, whole: a host or a write is waiting
+    /// too, and the budget's requester comes up after the answer, in Ready.
+    #[test]
+    fn the_state_follows_the_phase_and_the_requester() {
+        let host = AgentAsk::Host { host: "a.org".into(), url: "https://a.org/".into() };
+        let budget = AgentAsk::Budget("spent".into());
+        let write = AgentAsk::Write { app: "TextEdit".into(), verb: "file.save".into(), title: "Save".into() };
+        assert_eq!(presence_state(Phase::Asking, Some(&host)), Some(AgentState::Waiting));
+        assert_eq!(presence_state(Phase::Ready, Some(&budget)), Some(AgentState::Waiting), "still waiting");
+        assert_eq!(presence_about(Some(&write), "q"), "Allow TextEdit to write?");
+        assert_eq!(presence_about(Some(&host), "q"), "Allow it to reach a.org?");
+        assert_eq!(presence_about(None, "what is due?"), "what is due?");
+    }
 }

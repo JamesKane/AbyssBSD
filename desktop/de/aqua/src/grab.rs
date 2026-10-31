@@ -771,4 +771,18 @@ mod tests {
         assert_eq!(l.selection.y, 82.0);
         assert!((l.timed.x + l.timed.w - 410.0).abs() < 1e-9);
     }
+
+    /// AquaTests' grab, with its own screen: every pixel says where it is
+    /// (B = x, G = y), and a crop off the top-right corner is clamped to it.
+    #[test]
+    fn a_grab_is_the_screens_pixels_cropped() {
+        let pixels = (0..3u8).flat_map(|y| (0..4u8).flat_map(move |x| [x, y, 0, 0xff])).collect();
+        let screen = ScreenCapture { width: 4, height: 3, pixels };
+        let c = GrabImage::crop(&screen, 1, 1, 2, 2).unwrap();
+        assert_eq!((c.width, c.height), (2, 2));
+        assert_eq!(c.pixels, [1, 1, 0, 0xff, 2, 1, 0, 0xff, 1, 2, 0, 0xff, 2, 2, 0, 0xff]);
+        let edge = GrabImage::crop(&screen, 3, -5, 10, 7).unwrap();
+        assert_eq!((edge.width, edge.height), (1, 2), "clamped to the screen's right edge and its top");
+        assert_eq!(GrabImage::crop(&screen, 9, 0, 2, 2), None, "nothing of it on the screen");
+    }
 }

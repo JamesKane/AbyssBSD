@@ -901,3 +901,184 @@ fn an_input_method_composes_into_a_gtk_field() {
     assert!(tr.enters.get() >= 1 && tr.activations.get() >= 1 && tr.commits_relayed.get() >= 1 && tr.keys_grabbed.get() >= 1);
     drop((k, m));
 }
+
+// MARK: the compositor's own sockets and globals, with no client
+
+fn bare(tag: &str, privileged: Option<&str>) -> Result<Rc<Compositor>, BackendError> {
+    let session = Rc::new(WlrootsSession::headless(1, 64, 48, 60_000, false).unwrap());
+    let name = session.outputs()[0].name();
+    let dir = std::env::temp_dir().join(format!("undertow-{tag}-{}", std::process::id())).to_string_lossy().into_owned();
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let layout = DisplayLayout { displays: vec![DisplayBox::new(&name, 0, 0, 64, 48)] };
+    let opts = Options { config_dir: Some(&dir), socket_name: None, privileged_socket: privileged };
+    Compositor::new(session, layout, opts, Theme::default(), None)
+}
+
+/// Asked for no particular name, it takes the next `wayland-N`, and starts
+/// with no windows.
+#[test]
+fn the_compositor_offers_a_socket_and_the_globals_a_client_needs() {
+    if std::env::var("XDG_RUNTIME_DIR").map_or(true, |d| d.is_empty()) {
+        return; // nowhere to put a socket
+    }
+    let c = bare("auto", None).unwrap();
+    assert!(c.socket_name.starts_with("wayland-"), "{}", c.socket_name);
+    assert!(c.toplevels.borrow().is_empty());
+    assert!(c.mapped_toplevels().is_empty());
+}
+
+/// Each compositor makes its own menu globals (nothing static outlives a
+/// display), starts with nothing focused, and has no privileged socket
+/// unless asked for one.
+#[test]
+fn every_compositor_has_its_own_menu_globals_and_starts_with_nothing_focused() {
+    if std::env::var("XDG_RUNTIME_DIR").map_or(true, |d| d.is_empty()) {
+        return;
+    }
+    let c1 = bare("menus1", None).unwrap();
+    let c2 = bare("menus2", None).unwrap();
+    assert!(c1.menus.borrow().is_some() && c2.menus.borrow().is_some());
+    assert_eq!(c2.menus_current(), crate::menus::Focus::nothing());
+    assert_eq!(c2.menus.borrow().as_ref().unwrap().menubar_count(), 0);
+    assert!(c1.privileged_socket_name.is_none(), "no privileged socket unless asked for");
+}
+
+/// The privileged socket is the user's alone, and goes with its compositor.
+#[test]
+fn the_privileged_socket_is_the_users_alone_and_is_removed_after() {
+    use std::os::unix::fs::PermissionsExt;
+    if std::env::var("XDG_RUNTIME_DIR").map_or(true, |d| d.is_empty()) {
+        return;
+    }
+    let path = std::env::temp_dir().join(format!("undertow-priv-perm-{}", std::process::id())).to_string_lossy().into_owned();
+    let _ = std::fs::remove_file(&path);
+    let c = bare("privperm", Some(&path)).unwrap();
+    assert_eq!(c.privileged_socket_name.as_deref(), Some(path.as_str()));
+    let meta = std::fs::metadata(&path).expect("no privileged socket");
+    assert_eq!(meta.permissions().mode() & 0o777, 0o600);
+    drop(c);
+    assert!(!std::path::Path::new(&path).exists(), "the privileged socket outlived its compositor");
+}
+
+#[test]
+fn an_impossible_privileged_socket_is_an_error() {
+    if std::env::var("XDG_RUNTIME_DIR").map_or(true, |d| d.is_empty()) {
+        return;
+    }
+    match bare("privbad", Some("/nonexistent-dir/priv")) {
+        Ok(_) => panic!("a socket in a directory that does not exist"),
+        Err(e) => assert!(e.to_string().contains("/nonexistent-dir/priv"), "{e}"),
+    }
+}
+
+/// With no windows the scene draws the desktop: no surfaces, no damage.
+#[test]
+fn an_empty_scene_composites_the_desktop_and_nothing_else() {
+    let r = rig("empty");
+    let c = &r.c;
+    let display = c.layout.borrow().displays[0].clone();
+    let mut scene = SurfaceScene::new(c.world(), &display, c.metrics.get(), 64);
+    let stats = scene.latch_and_composite(0, 0);
+    assert_eq!((stats.surfaces, stats.damage_area), (0, 0));
+    assert_eq!(scene.count, 0);
+}
+
+/// The seat starts with the cursor in the middle of the main display, so a
+/// capture with no input is still sane, and nothing focused.
+#[test]
+fn the_seat_offers_the_virtual_input_globals() {
+    let r = rig("seatbare");
+    let c = &r.c;
+    let seat = Seat::new(c).unwrap();
+    assert_eq!(seat.cursor.get(), (320.0, 240.0));
+    assert_eq!(c.cursor.get(), Some((320.0, 240.0)));
+    assert!(c.focused().is_none());
+    assert!(c.mapped_toplevels().is_empty(), "there are no windows yet");
+}
+
+// MARK: the keymap a keyboard with none of its own is given (T.2)
+//
+// Swift's versions gave a bare wlr_keyboard the keymap and read its layout
+// name back; here the choice is asserted, and that it compiles. Setting
+// XKB_DEFAULT_LAYOUT from a test is `unsafe` in Rust 2024, so the tests
+// pass the environment's say to `keymap_choice_given` instead: they run the
+// same whether or not the developer's session sets it.
+
+/// An rc.conf holding `keymap="<kbdmap>"`, for `keymap_choice`.
+fn rc_conf_with(kbdmap: &str) -> String {
+    let p = std::env::temp_dir().join(format!("undertow-rc-{}-{kbdmap}", std::process::id()));
+    std::fs::write(&p, format!("hostname=\"abyss\"\nkeymap=\"{kbdmap}\"\n")).unwrap();
+    p.to_string_lossy().into_owned()
+}
+
+/// False when xkeyboard-config is missing.
+fn keymaps_testable() -> bool {
+    abyss_sys::wlr::keymap_compiles("us", "")
+}
+
+fn choice(rc: Option<&str>, session: &str) -> Option<(String, String)> {
+    choice_given(false, rc, session)
+}
+
+fn choice_given(environment_sets_it: bool, rc: Option<&str>, session: &str) -> Option<(String, String)> {
+    let path = rc.map(rc_conf_with);
+    let paths: Vec<&str> = path.iter().map(String::as_str).collect();
+    let c = Seat::keymap_choice_given(environment_sets_it, &paths, session);
+    if let Some(p) = path {
+        let _ = std::fs::remove_file(p);
+    }
+    c
+}
+
+#[test]
+fn every_layout_the_installer_offers_reaches_the_seat() {
+    if !keymaps_testable() {
+        return;
+    }
+    let expected = ["us.kbd", "uk.kbd", "de.kbd", "fr.kbd", "es.kbd", "it.kbd", "us.dvorak.kbd", "colemak.acc.kbd"];
+    let mut offered: Vec<String> = install::keymaps::offered().into_iter().map(|k| k.kbdmap).collect();
+    offered.sort();
+    let mut e: Vec<String> = expected.iter().map(|s| (*s).to_owned()).collect();
+    e.sort();
+    assert_eq!(offered, e, "a layout was added to the installer without a test here");
+    for k in install::keymaps::offered() {
+        assert_eq!(choice(Some(&k.kbdmap), ""), Some((k.layout.clone(), k.variant.clone())), "{}", k.kbdmap);
+    }
+}
+
+#[test]
+fn a_guess_xkb_refuses_falls_back_to_the_default() {
+    if !keymaps_testable() {
+        return;
+    }
+    assert_eq!(choice(Some("de.acc.kbd"), "").map(|c| c.0).as_deref(), Some("de"), "a name the installer never offered, guessed from its prefix");
+    assert_eq!(choice(Some("zz.kbd"), ""), None, "no layout zz, so the default: not a keyboard with no keymap");
+    assert_eq!(choice(None, ""), None, "nothing configured: the default");
+}
+
+#[test]
+fn the_sessions_layout_beats_rc_conf() {
+    if !keymaps_testable() {
+        return;
+    }
+    assert_eq!(choice(Some("uk.kbd"), "de.kbd").map(|c| c.0).as_deref(), Some("de"));
+}
+
+#[test]
+fn a_session_layout_that_will_not_compile_falls_back_to_rc_confs() {
+    if !keymaps_testable() {
+        return;
+    }
+    assert_eq!(choice(Some("uk.kbd"), "zz.kbd").map(|c| c.0).as_deref(), Some("gb"));
+}
+
+/// Where the environment sets XKB_DEFAULT_LAYOUT (as a developer's session
+/// often does): it beats rc.conf and the session both, so the choice is
+/// left to xkbcommon, which reads it itself.
+#[test]
+fn the_environment_beats_rc_conf_and_the_session() {
+    assert_eq!(choice_given(true, Some("uk.kbd"), ""), None);
+    assert_eq!(choice_given(true, Some("uk.kbd"), "de.kbd"), None);
+    assert_eq!(choice_given(true, None, "de.kbd"), None);
+}

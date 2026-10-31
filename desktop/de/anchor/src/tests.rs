@@ -72,6 +72,18 @@ fn command_splitting_is_whitespace_only() {
     assert_eq!(split_command("/bin/echo \"a b\""), ["/bin/echo", "\"a", "b\""], "deliberately not a shell");
 }
 
+// MARK: component specs
+
+#[test]
+fn a_spec_carries_its_environment() {
+    let mut spec = ComponentSpec::new("dock", vec!["/x/AquaDemo".into()]);
+    spec.env.insert("AQUA_SCENE".into(), "dock".into());
+    assert_eq!(spec.name, "dock");
+    assert_eq!(spec.argv, ["/x/AquaDemo"]);
+    assert_eq!(spec.env.get("AQUA_SCENE").map(String::as_str), Some("dock"));
+    assert!(spec.requires.is_empty(), "a spec waits for nothing unless told");
+}
+
 #[test]
 fn the_monotonic_clock_moves_forward() {
     let a = monotonic_seconds();

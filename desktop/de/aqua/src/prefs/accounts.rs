@@ -585,4 +585,71 @@ mod tests {
         assert_eq!(accounts_hit(&l, &s, r.x + 5.0, r.y + 30.0), None, "the list is under a modal sheet");
         assert_eq!(accounts_hit(&l, &s, l.confirm.x + 5.0, l.confirm.y + 5.0), Some(AccountsHit::Confirm));
     }
+
+    /// The Swift test's own walk: typed in two pieces, a backspace, the
+    /// short name retyped by hand; and a name with an accent.
+    #[test]
+    fn the_short_name_stops_following_once_typed_by_hand() {
+        let mut f = NewUserForm::default();
+        f.type_text("Ada");
+        f.type_text(" Lovelace");
+        assert_eq!(f.short_name, "ada", "the first word, lower-cased");
+        f.backspace();
+        assert_eq!(f.short_name, "ada");
+        f.tab(1);
+        for _ in 0..3 {
+            f.backspace()
+        }
+        f.type_text("countess");
+        assert_eq!(f.short_name, "countess");
+        f.tab(-1);
+        f.type_text("x");
+        assert_eq!(f.short_name, "countess", "typed by hand: no longer follows");
+        assert_eq!(suggest("Émile Zola"), "mile", "letters and digits only");
+    }
+
+    #[test]
+    fn the_sheet_says_why_it_cannot_create_yet() {
+        let mut f = NewUserForm::default();
+        assert_eq!(f.why_not(), Some("Type a short name."));
+        f.type_text("Grace");
+        assert_eq!(f.why_not(), Some("Type a password."));
+        f.tab(2);
+        assert_eq!(f.focused(), UserField::Password);
+        f.type_text("cobol");
+        f.tab(1);
+        f.type_text("fortran");
+        assert_eq!(f.why_not(), Some("The passwords do not match."));
+        for _ in 0..7 {
+            f.backspace()
+        }
+        f.type_text("cobol");
+        assert_eq!(f.why_not(), None);
+        f.tab(1);
+        assert_eq!(f.focused(), UserField::FullName, "Tab goes round");
+    }
+
+    #[test]
+    fn the_pane_reads_people_administrators_and_automatic_login() {
+        let passwd = "root:*:0:0:Charlie &:/root:/bin/sh\nada:*:1001:1001:Ada Lovelace:/home/ada:/bin/sh\nbob:*:1002:1002::/home/bob:/bin/csh\n_loginwindow:*:1099:1099:Login Window:/nonexistent:/usr/sbin/nologin\n";
+        let group = "wheel:*:0:root,ada\naudio:*:43:ada,bob\n";
+        let s = AccountsPaneState::read(passwd, group, "hostname=\"x\"\nabyss_desktop_enable=\"YES\"\nabyss_desktop_user=\"bob\"\n");
+        assert_eq!(s.accounts.iter().map(|a| (a.name.as_str(), a.admin)).collect::<Vec<_>>(), [("ada", true), ("bob", false)]);
+        assert_eq!(s.auto_login.as_deref(), Some("bob"));
+        assert_eq!(AccountsPaneState::read(passwd, group, "abyss_desktop_user=\"bob\"\n").auto_login, None, "a user named, but the desktop not enabled: the login window");
+    }
+
+    #[test]
+    fn a_sheet_is_modal() {
+        let mut s = AccountsPaneState::sample();
+        let body = Rect::new(0.0, 100.0, 760.0, 500.0);
+        let l = accounts_layout(body, &s);
+        let r = l.rows[1];
+        assert_eq!(accounts_hit(&l, &s, r.x + 5.0, r.y + 5.0), Some(AccountsHit::Row(1)));
+        s.form = Some(NewUserForm::default());
+        let l = accounts_layout(body, &s);
+        assert_eq!(accounts_hit(&l, &s, l.new_user.x + 5.0, l.new_user.y + 5.0), None, "behind the sheet, nothing answers");
+        assert_eq!(accounts_hit(&l, &s, l.fields[2].x + 5.0, l.fields[2].y + 5.0), Some(AccountsHit::Field(2)));
+        assert_eq!(accounts_hit(&l, &s, l.confirm.x + 5.0, l.confirm.y + 5.0), Some(AccountsHit::Confirm));
+    }
 }

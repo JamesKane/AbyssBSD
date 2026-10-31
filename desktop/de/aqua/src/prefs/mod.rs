@@ -468,4 +468,77 @@ mod tests {
         assert_eq!(two_places(2.456), "2.46");
         assert_eq!(two_places(0.05), "0.05");
     }
+
+    // SystemPreferencesTests, the parts the tests above leave out.
+
+    #[test]
+    fn the_catalogue_is_what_the_theme_can_draw() {
+        let ids: Vec<&str> = all_panes().map(|p| p.id).collect();
+        assert_eq!(ids.len(), 23, "Jaguar's 25, less Classic, QuickTime, Speech and ColorSync, and Islands and Agents");
+        assert_eq!(ids.iter().collect::<std::collections::BTreeSet<_>>().len(), ids.len(), "pane ids are unique");
+        let jaguar = aquadraw::theme::Theme::default();
+        for id in &ids {
+            assert!(jaguar.lists.get(&format!("icon.{id}")).is_some(), "no icon.{id} in the icon set");
+        }
+        assert_eq!(TOOLBAR, ["displays", "sound", "network", "startupDisk"]);
+    }
+
+    #[test]
+    fn every_cell_is_hit_by_its_label_and_the_toolbar_works_on_a_page() {
+        let l = prefs_layout(22.0, 760.0, 620.0);
+        let mut m = PrefsModel::default();
+        for c in &l.cells {
+            assert_eq!(prefs_hit(&l, &m, c.label_cx, c.label_top + 4.0), Some(PrefsHit::Pane(c.pane)), "the label too");
+        }
+        for (i, a) in l.cells.iter().enumerate() {
+            for b in &l.cells[i + 1..] {
+                assert!(!(a.hit.x < b.hit.x + b.hit.w && b.hit.x < a.hit.x + a.hit.w && a.hit.y < b.hit.y + b.hit.h && b.hit.y < a.hit.y + a.hit.h), "{} overlaps {}", a.pane, b.pane);
+            }
+        }
+        assert_eq!(prefs_hit(&l, &m, l.show_all.x + 20.0, l.show_all.y + 10.0), Some(PrefsHit::ShowAll));
+        let net = l.toolbar_items.iter().find(|t| t.pane == "network").unwrap();
+        m.view = PrefsView::Pane("sound".into());
+        assert_eq!(prefs_hit(&l, &m, net.hit.x + 30.0, net.hit.y + 10.0), Some(PrefsHit::Pane("network")), "the toolbar works on a page");
+        let desktop = l.cells.iter().find(|c| c.pane == "desktop").unwrap();
+        assert_eq!(prefs_hit(&l, &m, desktop.icon.x + 5.0, desktop.icon.y + 5.0), None, "the grid is not there on a page");
+    }
+
+    /// A page says what its pane does, and the ones with nothing behind them
+    /// say so. (What failed is each pane's own `note`, not a model field.)
+    #[test]
+    fn a_page_is_titled_and_honest() {
+        let mut m = PrefsModel::default();
+        assert_eq!(m.title(), "System Preferences");
+        m.view = PrefsView::Pane("dateTime".into());
+        assert_eq!(m.title(), "Date & Time");
+        assert_eq!(default_note("dateTime"), "This pane cannot change anything yet.");
+        for built in ["network", "sound", "displays", "energySaver"] {
+            assert_ne!(default_note(built), "This pane cannot change anything yet.", "{built} changes things");
+        }
+    }
+
+    #[test]
+    fn the_keyboard_walks_the_panes_in_reading_order() {
+        let mut m = PrefsModel::default();
+        let mut go = |d: i64| {
+            m.move_focus(d);
+            m.focus.clone().unwrap()
+        };
+        assert_eq!(go(1), "desktop");
+        assert_eq!(go(1), "dock");
+        assert_eq!(go(-5), "desktop", "clamped at the first");
+        assert_eq!(go(7), "screenEffects", "down a row: Personal's second row");
+        assert_eq!(go(1), "cdsDvds", "then the next section's first");
+        assert_eq!(go(100), "universalAccess", "clamped at the last");
+    }
+
+    #[test]
+    fn the_vocabulary() {
+        let mb = system_preferences_menu_bar();
+        assert_eq!(mb.verb_for(&KeyEquivalent::cmd('l', Modifiers::NONE)), Some(VERB_SHOW_ALL));
+        assert_eq!(mb.verb_for(&KeyEquivalent::cmd('q', Modifiers::NONE)), Some(VERB_QUIT));
+        let view = mb.menus.iter().find(|m| m.title == "View").unwrap();
+        let panes: Vec<&str> = view.commands().iter().filter_map(|c| verb_pane(&c.verb)).collect();
+        assert_eq!(panes, all_panes().map(|p| p.id).collect::<Vec<_>>(), "the View menu lists every pane, in the grid's order");
+    }
 }

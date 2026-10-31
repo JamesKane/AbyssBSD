@@ -373,6 +373,29 @@ fn another_user_is_refused_and_told_why() {
     assert!(why.contains(&me().to_string()), "{why}");
 }
 
+/// A descriptor the kernel cannot name a peer for (here, a regular file
+/// where a socket should be) is refused. Failing *open* would be worse than
+/// having no check at all, because it would look like one.
+#[test]
+fn a_mechanism_that_cannot_identify_the_caller_says_no() {
+    let path = std::env::temp_dir().join(format!("installrun-not-a-socket-{}", std::process::id()));
+    let file = std::fs::File::create(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let not_a_socket = UnixStream::from(std::os::fd::OwnedFd::from(file));
+    assert!(abyss_sys::platform::peer_uid(not_a_socket.as_fd()).is_err());
+    let why = Authority::new(me()).admits(&not_a_socket).unwrap_err();
+    assert_eq!(why, "the kernel would not identify the caller");
+}
+
+/// The inventory of a real machine, not a hand-made one, crosses the wire.
+#[test]
+fn the_machine_survives_the_wire() {
+    let inv = real_machine();
+    let mut m = Msg::new();
+    install_wire::encode_inventory(&inv, &mut m);
+    assert_eq!(install_wire::decode_inventory(&Msg::unpack(&m.pack(), vec![]).unwrap()), inv);
+}
+
 /// There is no method on an installer that a caller who may not command it
 /// should get to attempt, so the check is at the connection, not per method.
 #[test]
