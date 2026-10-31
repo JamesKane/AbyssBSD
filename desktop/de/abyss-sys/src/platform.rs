@@ -153,6 +153,17 @@ pub fn local_timestamp() -> String {
     )
 }
 
+/// Now in local time: (hour 0…23, minute, weekday 0 = Sunday). A menu
+/// bar's clock.
+pub fn local_clock() -> Option<(i32, i32, i32)> {
+    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return None;
+    }
+    Some((tm.tm_hour, tm.tm_min, tm.tm_wday))
+}
+
 /// Whether `fd` was opened for writing (O_WRONLY or O_RDWR).
 pub fn is_writable(fd: BorrowedFd<'_>) -> io::Result<bool> {
     let flags = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFL) };

@@ -20,6 +20,8 @@ pub enum SceneKind {
     /// The desktop: a layer-shell BACKGROUND surface live, full-bleed in a
     /// PNG.
     Wallpaper,
+    /// The menu bar: a TOP layer surface live; over the wallpaper in a PNG.
+    MenuBar,
 }
 
 impl SceneKind {
@@ -32,6 +34,7 @@ impl SceneKind {
             Some("tabs") => Some((SceneKind::Tabs, "Tab View", 480, 380)),
             Some("sheet") => Some((SceneKind::Sheet, "Sheets", 440, 320)),
             Some("wallpaper") => Some((SceneKind::Wallpaper, "Desktop", 800, 600)),
+            Some("menubar") => Some((SceneKind::MenuBar, "Menu Bar", 800, 600)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -66,13 +69,17 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
         let was = runner.text.render_scale;
         runner.text.render_scale = scale; // shape and hint on the device grid
         // The shell's surfaces are full-bleed: no grey desktop, no inset.
-        if kind == SceneKind::Wallpaper {
+        if matches!(kind, SceneKind::Wallpaper | SceneKind::MenuBar) {
             let mut c = Canvas::new(&cr, runner, theme);
             crate::wallpaper::paint_wallpaper(&mut c, width as f64, height as f64);
-            let top = theme.tokens.desktop_top_inset;
-            let bounds = Rect::new(0.0, top, width as f64, height as f64 - top);
-            // The desktop's own icons, over a fixed listing.
-            crate::desktop_icons::paint_desktop_icons(&mut c, bounds, &crate::desktop_icons::desktop_sample_entries(), Some(1));
+            if kind == SceneKind::Wallpaper {
+                let top = theme.tokens.desktop_top_inset;
+                let bounds = Rect::new(0.0, top, width as f64, height as f64 - top);
+                // The desktop's own icons, over a fixed listing.
+                crate::desktop_icons::paint_desktop_icons(&mut c, bounds, &crate::desktop_icons::desktop_sample_entries(), Some(1));
+            } else {
+                paint_menu_bar_scene(&mut c, width as f64);
+            }
             runner.text.render_scale = was;
             drop(cr);
             cs.flush();
@@ -105,13 +112,43 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             SceneKind::Widgets => {
                 crate::widgets::paint_widgets(&mut c, cw, ch, &crate::widgets::WidgetState::default(), Some(crate::widgets::WidgetFocus::Ok));
             }
-            SceneKind::Wallpaper => {}
+            SceneKind::Wallpaper | SceneKind::MenuBar => {}
         }
         cr.restore();
         runner.text.render_scale = was;
     }
     cs.flush();
     cs.write_png(path)
+}
+
+/// AQUA_AGENTS=STATE:N pictures N agent sessions in STATE (P18.13b): the
+/// Dock tile's badge, and the menu bar's Agent item.
+pub fn pictured_agents() -> Vec<crate::agent_presence::AgentPresence> {
+    use crate::agent_presence::{AgentPresence, AgentState};
+    let Some((st, n)) = std::env::var("AQUA_AGENTS").ok().and_then(|e| e.split_once(':').and_then(|(s, n)| Some((AgentState::from_name(s)?, n.parse::<i32>().ok()?)))) else { return vec![] };
+    (0..n).map(|i| AgentPresence::new(1000 + i, st, "")).collect()
+}
+
+/// The menu bar as the headless render has it: the Finder's menus, Monday
+/// 9:41, the machine's status read as the live bar reads it (so an item
+/// that would show live shows here too), and AQUA_MENUBAR_OPEN=i picturing
+/// title i open (0 is the system menu's mark).
+fn paint_menu_bar_scene(c: &mut Canvas, w: f64) {
+    use crate::menubar::{format_menu_clock, menus_for, paint_menu_bar, BarState};
+    let pictured = pictured_agents();
+    let agent = crate::agent_presence::menu_bar_agent_label(&pictured);
+    let clock = format_menu_clock(9, 41, 1);
+    let s = BarState {
+        clock: &clock,
+        show_clock: true,
+        open_index: std::env::var("AQUA_MENUBAR_OPEN").ok().and_then(|v| v.parse().ok()),
+        status: crate::menubar_status::MenuBarStatus::read(),
+        agent: agent.as_deref(),
+        agent_waiting: pictured.iter().any(|a| a.state == crate::agent_presence::AgentState::Waiting),
+        ..BarState::default()
+    };
+    let h = c.theme.tokens.menu_bar_height;
+    paint_menu_bar(c, w, h, &menus_for(&crate::finder_commands::finder_menu_bar()), &s);
 }
 
 /// An open menu (Scene.swift's renderMenuPNG): the Finder's File menu with

@@ -56,6 +56,15 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::MenuBar {
+            let Some(_bar) = aqua::menubar::MenuBar::new(&display, &tk) else {
+                println!("AquaDemo: failed to create the menu bar (does the compositor offer wlr-layer-shell?).");
+                exit(1)
+            };
+            println!("AquaDemo: menu bar (layer-shell TOP) is up.");
+            display.run();
+            exit(0)
+        }
         let Some(_window) = AquaWindow::new(&display, &tk, title, kind, w, h) else {
             println!("AquaDemo: failed to create the window.");
             exit(1)

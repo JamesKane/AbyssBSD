@@ -64,6 +64,17 @@ icons@2x|icons@2x|aquademo:icons|2|
 trench-icons|trench-icons|aquademo:icons|1|ABYSS_THEME=trench
 svg-beacon@2x|svg-beacon@2x|aquademo:icons|2|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl
 wallpaper|wallpaper|aquademo:wallpaper|1|
+menubar|menubar|aquademo:menubar|1|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
+menubar@2x|menubar@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
+menubar-system|menubar-system|aquademo:menubar|1|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=0
+menubar-file@2x|menubar-file@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2
+menubar-mute@2x|menubar-mute@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=0 ABYSS_FAKE_BATTERY=0 ABYSS_FAKE_BATTERY_CHARGING=1
+menubar-low|menubar-low|aquademo:menubar|1|ABYSS_FAKE_VOLUME=20 ABYSS_FAKE_BATTERY=5
+menubar-full|menubar-full|aquademo:menubar|1|ABYSS_FAKE_VOLUME=100 ABYSS_FAKE_BATTERY=100 ABYSS_FAKE_BATTERY_CHARGING=1
+menubar-muted@2x|menubar-muted@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_MUTED=1 ABYSS_FAKE_BATTERY=80
+menubar-agent-waiting@2x|menubar-agent-waiting@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_AGENTS=waiting:2
+menubar-agent-idle|menubar-agent-idle|aquademo:menubar|1|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_AGENTS=idle:1
+trench-menubar|trench-menubar|aquademo:menubar|1|ABYSS_THEME=trench ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

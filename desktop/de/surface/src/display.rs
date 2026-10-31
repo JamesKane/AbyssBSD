@@ -67,6 +67,13 @@ pub(crate) struct OutputHooks {
     pub(crate) removed: Rc<dyn Fn(Obj)>,
 }
 
+struct Timer {
+    id: u64,
+    next: u64,
+    period: u64,
+    handler: FdHandler,
+}
+
 struct Repeat {
     evdev: u32,
     event: KeyEvent,
@@ -98,6 +105,9 @@ pub struct Display {
     repeat: RefCell<Option<Repeat>>,
     extra_fds: RefCell<Vec<(i32, FdHandler)>>,
     pub(crate) output_hooks: RefCell<Option<OutputHooks>>,
+    /// Repeating timers: when each is next due, its period, and what runs.
+    timers: RefCell<Vec<Timer>>,
+    next_timer: Cell<u64>,
     clipboard: RefCell<Option<Rc<Clipboard>>>,
     running: Cell<bool>,
     epoch: Instant,
@@ -126,6 +136,8 @@ impl Display {
             repeat: RefCell::new(None),
             extra_fds: RefCell::default(),
             output_hooks: RefCell::new(None),
+            timers: RefCell::default(),
+            next_timer: Cell::new(1),
             clipboard: RefCell::new(None),
             running: Cell::new(true),
             epoch: Instant::now(),
@@ -523,6 +535,45 @@ impl Display {
         self.extra_fds.borrow_mut().retain(|(f, _)| *f != fd)
     }
 
+    /// Run `f` every `period_ms`, from the loop (a clock's tick): the id,
+    /// for `remove_timer`. A loop held up does not run the missed ticks.
+    pub fn add_timer(&self, period_ms: u64, f: impl Fn() + 'static) -> u64 {
+        let id = self.next_timer.get();
+        self.next_timer.set(id + 1);
+        let period = period_ms.max(1);
+        self.timers.borrow_mut().push(Timer { id, next: self.now_ms() + period, period, handler: Rc::new(f) });
+        id
+    }
+
+    pub fn remove_timer(&self, id: u64) {
+        self.timers.borrow_mut().retain(|t| t.id != id)
+    }
+
+    fn timer_timeout_ms(&self) -> Option<i32> {
+        let now = self.now_ms();
+        self.timers.borrow().iter().map(|t| t.next.saturating_sub(now).min(i32::MAX as u64) as i32).min()
+    }
+
+    fn fire_due_timers(&self) {
+        let now = self.now_ms();
+        let due: Vec<(u64, FdHandler)> = self
+            .timers
+            .borrow_mut()
+            .iter_mut()
+            .filter(|t| t.next <= now)
+            .map(|t| {
+                t.next = now + t.period;
+                (t.id, t.handler.clone())
+            })
+            .collect();
+        for (id, h) in due {
+            // One removed by an earlier handler this round does not run.
+            if self.timers.borrow().iter().any(|t| t.id == id) {
+                h()
+            }
+        }
+    }
+
     pub fn stop(&self) {
         self.running.set(false)
     }
@@ -548,7 +599,8 @@ impl Display {
             let polled: Vec<(i32, FdHandler)> = self.extra_fds.borrow().clone();
             let mut pfds = vec![poll_fd(wlfd, libc::POLLIN)];
             pfds.extend(polled.iter().map(|(fd, _)| poll_fd(*fd, libc::POLLIN)));
-            let n = poll(&mut pfds, self.repeat_timeout_ms().unwrap_or(-1)).unwrap_or(0);
+            let timeout = [self.repeat_timeout_ms(), self.timer_timeout_ms()].into_iter().flatten().min().unwrap_or(-1);
+            let n = poll(&mut pfds, timeout).unwrap_or(0);
             // Resolve the armed read before any handler issues requests.
             if n > 0 && pfds[0].revents & libc::POLLIN != 0 {
                 if self.conn.read_events() < 0 || self.conn.dispatch_pending() < 0 {
@@ -575,6 +627,7 @@ impl Display {
                 }
             }
             self.fire_due_repeats();
+            self.fire_due_timers();
         }
     }
 

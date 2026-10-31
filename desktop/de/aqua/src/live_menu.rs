@@ -123,7 +123,9 @@ impl LiveMenu {
         }
     }
 
-    fn hovered_opens_submenu(&self) -> bool {
+    /// Whether the highlighted row opens a submenu: → goes into it, not to
+    /// the next title in the bar.
+    pub fn highlight_opens_submenu(&self) -> bool {
         let m = self.menu.borrow();
         m.hovered.is_some_and(|h| h < m.items.len() && m.items[h].has_submenu && m.items[h].enabled)
     }
@@ -196,7 +198,7 @@ impl LiveMenu {
         }
         let has_parent = self.parent.borrow().strong_count() > 0;
         let into = matches!(keysym, KeySym::RIGHT | KeySym::ENTER | KeySym::SPACE);
-        if into && self.hovered_opens_submenu() {
+        if into && self.highlight_opens_submenu() {
             let h = self.menu.borrow().hovered.unwrap_or(0);
             match self.child.borrow().as_ref() {
                 Some((row, c)) if *row == h => {
@@ -271,7 +273,7 @@ impl PopupDelegate for LiveMenu {
         let open_row = self.child.borrow().as_ref().map(|(r, _)| *r);
         let Some(me) = self.me.upgrade() else { return };
         match h {
-            Some(i) if self.hovered_opens_submenu() => {
+            Some(i) if self.highlight_opens_submenu() => {
                 if open_row != Some(i) {
                     me.open_child(i, false);
                 }

@@ -100,10 +100,15 @@ dependencies = [
  "abyss-sys",
  "app-bundles",
  "aquadraw",
+ "current-ipc",
+ "libc",
+ "login",
  "menu-model",
+ "menu-wire",
  "pool-config",
  "spawn",
  "surface",
+ "vents",
 ]
 
 [[package]]

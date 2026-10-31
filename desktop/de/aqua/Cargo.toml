@@ -9,7 +9,12 @@ publish.workspace = true
 abyss-sys.workspace = true
 app-bundles = { path = "../appbundles" }
 aquadraw = { path = "../aquadraw" }
+current-ipc = { path = "../currentipc" }
+libc.workspace = true
+login = { path = "../login" }
 menu-model = { path = "../menumodel" }
+menu-wire = { path = "../menuwire" }
 pool-config = { path = "../poolconfig" }
 spawn = { path = "../spawn" }
 surface = { path = "../surface" }
+vents = { path = "../vents" }
