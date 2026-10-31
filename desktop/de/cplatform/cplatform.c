@@ -281,9 +281,18 @@ int ap_pty_spawn(const char *path, char *const argv[], char *const envp[], const
     strcpy(slave, name);
     /* Its size before the program starts, so the first thing it asks is true. */
     if (ap_pty_resize(master, rows, cols) < 0) { int e = errno; close(master); errno = e; return -1; }
+    /* The slave is opened here, before the fork, and the child keeps this very
+     * descriptor: the terminal is open from before the caller can write to it
+     * until the program exits. FreeBSD discards what reaches the master while
+     * no one has the slave open, so a child opening its own after setsid()
+     * lost whatever was typed first, half the time (pty's unit test, in the
+     * build guest). O_NOCTTY: it becomes the child's controlling terminal by
+     * TIOCSCTTY, not this process's by accident. */
+    int s = open(slave, O_RDWR | O_NOCTTY);
+    if (s < 0) { int e = errno; close(master); errno = e; return -1; }
 
     pid_t pid = fork();
-    if (pid < 0) { int e = errno; close(master); errno = e; return -1; }
+    if (pid < 0) { int e = errno; close(s); close(master); errno = e; return -1; }
     if (pid == 0) {
         /* The child: async-signal-safe calls only.
          *
@@ -300,11 +309,8 @@ int ap_pty_spawn(const char *path, char *const argv[], char *const envp[], const
         sigemptyset(&none);
         (void)sigprocmask(SIG_SETMASK, &none, NULL);
         if (setsid() < 0) _exit(126);
-        int s = open(slave, O_RDWR);   /* the first tty a session leader opens */
-        if (s < 0) _exit(126);
-#ifdef TIOCSCTTY
-        (void)ioctl(s, TIOCSCTTY, 0);  /* FreeBSD needs it said; Linux took it on open */
-#endif
+        /* Opened with O_NOCTTY, so said outright, on both systems. */
+        if (ioctl(s, TIOCSCTTY, 0) < 0) _exit(126);
         if (dup2(s, 0) < 0 || dup2(s, 1) < 0 || dup2(s, 2) < 0) _exit(126);
         if (s > 2) close(s);
         close(master);
@@ -312,6 +318,7 @@ int ap_pty_spawn(const char *path, char *const argv[], char *const envp[], const
         execve(path, argv, envp);
         _exit(127);
     }
+    close(s);
     /* The parent keeps the master, private to it and never blocking. */
     int fl = fcntl(master, F_GETFD);
     if (fl >= 0) fcntl(master, F_SETFD, fl | FD_CLOEXEC);
