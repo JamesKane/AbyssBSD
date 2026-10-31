@@ -1,0 +1,13 @@
+[package]
+name = "abysstheme"
+description = "abyss-theme: the loaded theme, for things that do not draw (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-theme"
+path = "src/main.rs"
+
+[dependencies]
+aquadraw = { path = "../aquadraw" }

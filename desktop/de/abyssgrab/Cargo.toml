@@ -1,0 +1,10 @@
+[package]
+name = "abyssgrab"
+description = "abyssgrab: capture an output to a PNG or PPM (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+surface = { path = "../surface" }

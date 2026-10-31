@@ -15,3 +15,4 @@ pub mod scene;
 pub mod text;
 pub mod theme;
 pub mod tokens;
+pub mod xcursor;

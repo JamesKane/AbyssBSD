@@ -1076,6 +1076,17 @@ never maps under sway). Left in Swift before R7: `abyssclip`,
 `abyssgrab`, `abyss-theme` (its `cursors` needs XCursorTheme) and
 `svg2dl` with SVGImport; `ipcprobe` is built by Cargo but not yet listed.
 
+*R6x, the shell tools, 2026-10-31.* `abyssclip`, `abyssgrab` and
+`abyss-theme` are Rust, and `rust-bins` names them and `ipcprobe`.
+XCursorTheme is `aquadraw::xcursor`, over the one cursor rasteriser; the
+theme `abyss-theme cursors` writes is byte-identical to Swift's (34
+files, 44 links), and `palette` and `check` print what Swift's do for
+every theme. `--diff` reads a PPM header by whitespace-separated fields
+rather than by counting three newlines. Two notes for R7:
+`theme::search_path` finds the build tree's `themes/` by walking up to
+`Package.swift`, and live-ipc-mixed names Swift's `ipcprobe` outright;
+both change when Swift goes.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

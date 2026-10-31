@@ -11,10 +11,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "abyssclip"
+version = "0.1.0"
+dependencies = [
+ "surface",
+]
+
+[[package]]
 name = "abyssctl"
 version = "0.1.0"
 dependencies = [
  "current-ipc",
+]
+
+[[package]]
+name = "abyssgrab"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "surface",
 ]
 
 [[package]]
@@ -39,6 +54,13 @@ version = "0.1.0"
 dependencies = [
  "abyss-sys",
  "current-ipc",
+]
+
+[[package]]
+name = "abysstheme"
+version = "0.1.0"
+dependencies = [
+ "aquadraw",
 ]
 
 [[package]]

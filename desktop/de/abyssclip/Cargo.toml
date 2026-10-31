@@ -1,0 +1,9 @@
+[package]
+name = "abyssclip"
+description = "abyssclip: the clipboard, from a shell (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+surface = { path = "../surface" }
