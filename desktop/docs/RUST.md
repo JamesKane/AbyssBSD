@@ -644,6 +644,19 @@ backend and no Xwayland* (`wlr/config.h`). `cwlroots.h` now includes
 x11.h only `#if WLR_HAS_X11_BACKEND`, and the backend's name comes from
 C, which can ask.
 
+*R4c, first: the bridge* (`de/undertow/src/backend.rs`, Backend.swift).
+`WlrootsSession` (display, backend, renderer, allocator; outputs that come
+and go; the stand-in VT) and `WlrootsOutput`, which wears R4a's `Output`
+trait: submit, the present ring, the refused-commit ring, the snapped
+grid, `wait_until`'s reserve and slop, the PPM capture. Swift's classes
+become an `Rc<RefCell<…>>` the listeners hold weakly, with the hooks kept
+apart so one may call back into the session from inside wlroots' signal.
+What draws an output is a `Painter` (the scene and the cursor, R4c's
+next), and **`needs_frame` sets the painter's dirty flag** instead of
+calling it: wlroots raises it from inside commits and dispatches, where
+the painter may be borrowed. Five headless tests, the metronome driving a
+wlroots output among them.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

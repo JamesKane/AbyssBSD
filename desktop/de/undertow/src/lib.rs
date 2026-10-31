@@ -3,6 +3,7 @@
 //! recorder, and the rules that decide where windows go. The wlroots half
 //! comes over a grown `cwlroots` (RUST.md §6.4).
 
+pub mod backend;
 pub mod displays;
 pub mod frame;
 pub mod geometry;

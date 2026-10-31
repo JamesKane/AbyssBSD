@@ -183,6 +183,17 @@ pub fn log(verbose: bool) {
     }
 }
 
+/// Pin wlroots' renderer to pixman unless `WLR_RENDERER` says otherwise:
+/// headless runs need CPU-readable buffers. Call before the backend exists,
+/// and so before any thread could read the environment.
+pub fn prefer_pixman_renderer() {
+    if std::env::var_os("WLR_RENDERER").is_none() {
+        // SAFETY: called while the process is single-threaded (before
+        // wlroots, which is the only thing that would read it, starts).
+        unsafe { std::env::set_var("WLR_RENDERER", "pixman") };
+    }
+}
+
 /// wl_output_transform's inverse.
 pub fn transform_invert(t: i32) -> i32 {
     unsafe { wlr_output_transform_invert(t) }

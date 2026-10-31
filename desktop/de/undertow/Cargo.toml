@@ -6,5 +6,6 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-abyss-sys.workspace = true
+abyss-sys = { workspace = true, features = ["wlroots"] }
+libc.workspace = true
 pool-config = { path = "../poolconfig" }
