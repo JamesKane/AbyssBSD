@@ -113,6 +113,7 @@ unsafe extern "C" {
     fn cairo_mask(cr: *mut cairo_t, p: *mut cairo_pattern_t);
     fn cairo_mask_surface(cr: *mut cairo_t, s: *mut cairo_surface_t, x: c_double, y: c_double);
     fn cairo_new_path(cr: *mut cairo_t);
+    fn cairo_fill_preserve(cr: *mut cairo_t);
     fn cairo_set_operator(cr: *mut cairo_t, op: c_int);
     fn cairo_new_sub_path(cr: *mut cairo_t);
     fn cairo_close_path(cr: *mut cairo_t);
@@ -369,6 +370,9 @@ impl Context {
     /// cairo_operator_t: OPERATOR_SOURCE, OPERATOR_OVER.
     pub fn set_operator(&self, op: c_int) {
         unsafe { cairo_set_operator(self.0, op) }
+    }
+    pub fn fill_preserve(&self) {
+        unsafe { cairo_fill_preserve(self.0) }
     }
     pub fn new_path(&self) {
         unsafe { cairo_new_path(self.0) }

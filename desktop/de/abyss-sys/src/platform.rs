@@ -171,3 +171,14 @@ pub fn local_time_of_day(secs: i64) -> String {
     }
     format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
 }
+
+unsafe extern "C" {
+    fn ap_request_realtime(priority: libc::c_int) -> libc::c_int;
+}
+
+/// Real-time priority for this process (FreeBSD rtprio(2), 0 highest, 31
+/// lowest): root's, or group `realtime`'s with mac_priority(4) loaded.
+/// Elsewhere, and refused, the error says why.
+pub fn request_realtime(priority: i32) -> std::io::Result<()> {
+    if unsafe { ap_request_realtime(priority) } == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+}

@@ -94,6 +94,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aqua"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "aquadraw",
+]
+
+[[package]]
+name = "aquademo"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "aqua",
+ "aquadraw",
+]
+
+[[package]]
 name = "aquadraw"
 version = "0.1.0"
 dependencies = [

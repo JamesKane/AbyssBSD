@@ -10,7 +10,7 @@ use crate::tokens::{ThemeTokens, COLOR_KEYS, METRIC_KEYS};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,

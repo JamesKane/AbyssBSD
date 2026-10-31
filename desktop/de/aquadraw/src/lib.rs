@@ -3,6 +3,7 @@
 //! Drawing.swift and ThemeLoader.swift it reaches. Themes are not ported
 //! yet: a colour token or `@metric` is a parse error until they are.
 
+pub mod canvas;
 pub mod chrome;
 pub mod color;
 pub mod cursor;

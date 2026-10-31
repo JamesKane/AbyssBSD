@@ -819,6 +819,23 @@ their own config directory in their work directory.
 FreeType and HarfBuzz are the same C libraries making the same calls, so an
 exact match is the expected result. A mismatch is a bug, not a tolerance.
 
+*R5's boundary, 2026-10-30.* aqua holds the toolkit and the applications
+side by side (Finder, System Preferences, Terminal, the installer…). R5
+is the toolkit: its bar is the toolkit's own scenes' goldens (windows,
+controls, menus, cursors, icons, frames) in every theme that draws them;
+an application's goldens come with it in R6, as R6 says.
+
+*R5a, the drawing and the first scenes.* aquadraw's `Canvas`
+(Drawing.swift's `Draw`): the cairo context, the runner and the theme
+borrowed together, every widget call a method, where Swift reaches a
+global `Theme` and static `Draw`. The `aqua` crate begins with the scenes
+(Scene.swift's window, Widgets, Scroll, Tabs, Sheet), and a Rust
+`AquaDemo` (de/aquademo) renders them offscreen as Swift's does
+(AQUA_SCENE, AQUA_SCALE, AQUA_RENDER_PNG, its `Theme:` line).
+golden-rust.sh runs it as golden.sh runs Swift's: **25 goldens, pixel for
+pixel**, the five scenes in Aqua, Trench (neon, daylight, neon-hc) and
+the chrome-test theme, at 1x and 2x.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

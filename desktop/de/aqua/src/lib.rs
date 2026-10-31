@@ -1,0 +1,9 @@
+//! Aqua in Rust (RUST.md R5): the toolkit's widgets, windows and scenes,
+//! ported from the Swift beside it, drawn on aquadraw's `Canvas`. So far
+//! the window scene; the widgets, menus and the Wayland half follow.
+
+pub mod scene;
+pub mod scroll;
+pub mod sheet;
+pub mod tabs;
+pub mod widgets;

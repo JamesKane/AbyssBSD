@@ -1,0 +1,10 @@
+[package]
+name = "aqua"
+description = "Aqua: the toolkit's widgets, windows and scenes (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+aquadraw = { path = "../aquadraw" }

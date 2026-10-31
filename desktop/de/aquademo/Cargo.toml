@@ -1,0 +1,15 @@
+[package]
+name = "aquademo"
+description = "AquaDemo: the toolkit's scenes, offscreen or in a window (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "AquaDemo"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+aqua = { path = "../aqua" }
+aquadraw = { path = "../aquadraw" }

@@ -27,7 +27,8 @@ mkdir -p "$work/home" "$work/cfg"
 cc -O1 "$root/abyss/tests/pngdiff.c" $(pkg-config --cflags --libs cairo) \
    -o "$work/pngdiff" || { echo "FAIL: could not build pngdiff"; exit 1; }
 
-# name | golden | how (png, window, or an example drawn to a PNG) | scale | env
+# name | golden | how (png, window, an example drawn to a PNG, or aquademo:SCENE,
+# the Rust AquaDemo rendering AQUA_SCENE as golden.sh renders it) | scale | env
 scenes='drawlist|drawlist|png|1|
 drawlist@2x|drawlist@2x|png|2|
 drawlist-window|drawlist|window|1|
@@ -36,7 +37,23 @@ frame|frame|frame|1|
 frame-depth|frame-depth|frame|1|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes
 trench-frame|trench-frame|frame|1|ABYSS_THEME=trench
 cursors|cursors|cursors|1|
-cursors@2x|cursors@2x|cursors|2|'
+cursors@2x|cursors@2x|cursors|2|
+window|window|aquademo:window|1|
+window@2x|window@2x|aquademo:window|2|
+widgets|widgets|aquademo:widgets|1|
+scroll|scroll|aquademo:scroll|1|
+tabs|tabs|aquademo:tabs|1|
+sheet|sheet|aquademo:sheet|1|
+window-depth@2x|window-depth@2x|aquademo:window|2|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes
+trench-window|trench-window|aquademo:window|1|ABYSS_THEME=trench
+trench-window@2x|trench-window@2x|aquademo:window|2|ABYSS_THEME=trench
+trench-widgets|trench-widgets|aquademo:widgets|1|ABYSS_THEME=trench
+trench-sheet|trench-sheet|aquademo:sheet|1|ABYSS_THEME=trench
+trench-tabs|trench-tabs|aquademo:tabs|1|ABYSS_THEME=trench
+trench-scroll|trench-scroll|aquademo:scroll|1|ABYSS_THEME=trench
+trench-hc-widgets|trench-hc-widgets|aquademo:widgets|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc
+trench-day-widgets|trench-day-widgets|aquademo:widgets|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
+trench-day-window|trench-day-window|aquademo:window|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight'
 
 if [ "$rv64" = 1 ]; then
   vm="$root/abyss/vm"
@@ -53,6 +70,7 @@ if [ "$rv64" = 1 ]; then
   rssh 'cat > ~/golden-rust/window-shot.sh' < abyss/tests/window-shot.sh
 else
   cargo build -q --release --example drawlist --example window --example frame --example cursors
+  cargo build -q --release -p aquademo
   bin="$root/target/release/examples"
   dir="$root/abyss/tests/golden/$(uname -s | tr '[:upper:]' '[:lower:]')"
 fi
@@ -75,6 +93,11 @@ echo "$scenes" | while IFS='|' read -r name golden how scale env; do
   elif [ "$how" = png ]; then
     env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" LANG=C.UTF-8 TZ=UTC \
       "$bin/drawlist" abyss/tests/drawlist-sample.dl "$out" "$scale" >/dev/null
+  elif [ "${how#aquademo:}" != "$how" ]; then
+    # shellcheck disable=SC2086 # env is words
+    env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" LANG=C.UTF-8 TZ=UTC \
+      AQUA_SCENE="${how#aquademo:}" AQUA_SCALE="$scale" AQUA_RENDER_PNG="$out" $env \
+      "${bin%/examples}/AquaDemo" > "$work/$name.aqua.log" 2>&1
   elif [ "$how" != window ]; then
     # shellcheck disable=SC2086 # env is words
     env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" LANG=C.UTF-8 TZ=UTC $env \
