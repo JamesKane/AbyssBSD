@@ -442,3 +442,140 @@ fn the_menu_bar_is_told_the_focused_windows_menus() {
     drop(c);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// abyss/tests/lockclient.c, built as live-sessionlock.sh builds it, once:
+/// None (and the test skips) without wayland-scanner or wayland-protocols.
+fn lockclient() -> Option<std::path::PathBuf> {
+    use std::process::Command;
+    static BUILT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+            let out = std::env::temp_dir().join(format!("undertow-lockclient-{}", std::process::id()));
+            std::fs::create_dir_all(&out).ok()?;
+            let protos = String::from_utf8(Command::new("pkg-config").args(["--variable=pkgdatadir", "wayland-protocols"]).output().ok()?.stdout).ok()?;
+            let xml = format!("{}/staging/ext-session-lock/ext-session-lock-v1.xml", protos.trim());
+            let ok = |c: &mut Command| c.status().is_ok_and(|s| s.success());
+            if !ok(Command::new("wayland-scanner").args(["client-header", &xml]).arg(out.join("ext-session-lock-proto.h"))) || !ok(Command::new("wayland-scanner").args(["private-code", &xml]).arg(out.join("ext-session-lock-proto.c"))) {
+                return None;
+            }
+            let libs = String::from_utf8(Command::new("pkg-config").args(["--cflags", "--libs", "wayland-client"]).output().ok()?.stdout).ok()?;
+            let bin = out.join("lockclient");
+            let mut cc = Command::new("cc");
+            cc.arg(format!("-I{}", out.display()))
+                .arg(format!("-I{root}/de/cwayland/include"))
+                .arg(format!("{root}/abyss/tests/lockclient.c"))
+                .arg(format!("{root}/de/cabyssprotocols/xdg-shell-protocol.c"))
+                .arg(out.join("ext-session-lock-proto.c"))
+                .args(libs.split_whitespace())
+                .arg("-o")
+                .arg(&bin);
+            ok(&mut cc).then_some(bin)
+        })
+        .clone()
+}
+
+/// A lockclient process: commands on its stdin, its lines from stdout.
+struct LockClient {
+    child: std::process::Child,
+    lines: mpsc::Receiver<String>,
+}
+
+impl LockClient {
+    fn start(bin: &std::path::Path, socket: &str, args: &[&str]) -> LockClient {
+        use std::io::BufRead;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new(bin).args(args).env("WAYLAND_DISPLAY", socket).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+        let out = child.stdout.take().unwrap();
+        let (tx, lines) = mpsc::channel();
+        thread::spawn(move || {
+            for l in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                if tx.send(l).is_err() {
+                    break;
+                }
+            }
+        });
+        LockClient { child, lines }
+    }
+    fn say(&mut self, cmd: &str) {
+        use std::io::Write;
+        let stdin = self.child.stdin.as_mut().unwrap();
+        writeln!(stdin, "{cmd}").unwrap();
+        stdin.flush().unwrap();
+    }
+    /// Serve the compositor until the client prints `line`.
+    fn wait(&self, c: &Compositor, line: &str) -> bool {
+        let mut seen = false;
+        pump(c, || {
+            seen = seen || self.lines.try_iter().any(|l| l == line);
+            seen
+        })
+    }
+}
+
+impl Drop for LockClient {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// ext-session-lock (P16.2a), with Swift's own probe client: `locked`
+/// only after a frame, one lock at a time, an abandoned lock that stays
+/// locked and can be taken over, and windows behind the lock neither drawn
+/// nor focused.
+#[test]
+#[ignore = "lockclient binds wl_seat: on with the seat (R4e)"]
+fn the_session_lock_holds() {
+    let Some(bin) = lockclient() else { return };
+    let r = rig("lock");
+    let c = &r.c;
+    let (tx, _rx) = mpsc::channel();
+    let _w = client(&c.socket_name, "Desk", "org.test.desk", (100, 60), (1.0, 0.0, 0.0), 8.0, tx.clone());
+    assert!(pump(c, || c.mapped_toplevels().len() == 1));
+    let desk = by_title(c, "Desk");
+
+    let mut l1 = LockClient::start(&bin, &c.socket_name, &["lock", "ff2a5a2a"]);
+    assert!(l1.wait(c, "ready"));
+    l1.say("l");
+    assert!(l1.wait(c, "locked"), "locked, after a frame");
+    assert!(c.is_locked());
+    assert!(pump(c, || !c.lock_mapped().is_empty()), "the lock surface drew");
+
+    let display = c.layout.borrow().displays[0].clone();
+    let mut scene = SurfaceScene::new(c.world(), &display, c.metrics.get(), 64);
+    scene.latch_and_composite(0, 0);
+    assert_eq!(scene.count, 1, "the lock surface, and nothing of the desktop");
+    assert_eq!(scene.entry(0).1, None);
+
+    let _late = client(&c.socket_name, "Late", "org.test.late", (100, 60), (0.0, 1.0, 0.0), 8.0, tx);
+    assert!(pump(c, || c.toplevels.borrow().len() == 2 && c.toplevels.borrow()[1].mapped.get()));
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &desk)), "a window mapping behind the lock takes nothing");
+
+    let mut l2 = LockClient::start(&bin, &c.socket_name, &["lock", "ff802020"]);
+    assert!(l2.wait(c, "ready"));
+    l2.say("l");
+    assert!(l2.wait(c, "finished"), "one lock at a time");
+    assert_eq!(c.lock.borrow().refused, 1);
+
+    l1.say("q"); // quits holding the lock
+    assert!(pump(c, || c.lock.borrow().abandoned()));
+    assert!(c.is_locked(), "an abandoned lock stays locked");
+    let mut l3 = LockClient::start(&bin, &c.socket_name, &["lock", "ff2a5a2a"]);
+    assert!(l3.wait(c, "ready"));
+    l3.say("l");
+    assert!(l3.wait(c, "locked"), "and can be taken over");
+    l3.say("u");
+    assert!(pump(c, || !c.is_locked()), "unlocked");
+    let st = c.lock.borrow();
+    assert_eq!((st.locks, st.unlocks, st.abandonments), (2, 1, 1));
+    drop(st);
+    while !c.toplevels.borrow().is_empty() {
+        c.close_focused_window();
+        let n = c.toplevels.borrow().len();
+        if !pump(c, || c.toplevels.borrow().len() < n) {
+            let t = c.toplevels.borrow()[0].clone();
+            t.xdg.send_close();
+        }
+    }
+}

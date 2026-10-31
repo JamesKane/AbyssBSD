@@ -17,6 +17,7 @@ macro_rules! opaque {
 }
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
 opaque!(wlr_xdg_decoration_manager_v1, wlr_xdg_toplevel_decoration_v1);
+opaque!(wlr_session_lock_manager_v1, wlr_session_lock_v1, wlr_session_lock_surface_v1);
 opaque!(wlr_compositor, wlr_xdg_shell, wlr_xdg_toplevel, wlr_xdg_popup, wlr_layer_shell_v1, wlr_layer_surface_v1, wlr_foreign_toplevel_manager_v1, wlr_foreign_toplevel_handle_v1, wlr_xdg_activation_v1, wlr_output_layout);
 
 /// tw-access.h's `struct tw_layer_request`: what a layer surface asks for.
@@ -219,6 +220,18 @@ unsafe extern "C" {
     fn tw_decoration_toplevel(d: *const wlr_xdg_toplevel_decoration_v1) -> *mut wlr_xdg_toplevel;
     fn tw_decoration_server_side(d: *mut wlr_xdg_toplevel_decoration_v1);
     fn wlr_xdg_decoration_manager_v1_create(d: *mut wl_display) -> *mut wlr_xdg_decoration_manager_v1;
+    fn tw_session_lock_manager_v1_on_new_lock(o: *mut wlr_session_lock_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_session_lock_v1_on_new_surface(o: *mut wlr_session_lock_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_session_lock_v1_on_unlock(o: *mut wlr_session_lock_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_session_lock_v1_on_destroy(o: *mut wlr_session_lock_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_session_lock_surface_v1_on_destroy(o: *mut wlr_session_lock_surface_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_session_lock_manager_global(m: *const wlr_session_lock_manager_v1) -> *const c_void;
+    fn tw_lock_surface_surface(s: *const wlr_session_lock_surface_v1) -> *mut wlr_surface;
+    fn tw_lock_surface_output(s: *const wlr_session_lock_surface_v1) -> *mut wlr_output;
+    fn wlr_session_lock_manager_v1_create(d: *mut wl_display) -> *mut wlr_session_lock_manager_v1;
+    fn wlr_session_lock_v1_destroy(l: *mut wlr_session_lock_v1);
+    fn wlr_session_lock_v1_send_locked(l: *mut wlr_session_lock_v1);
+    fn wlr_session_lock_surface_v1_configure(s: *mut wlr_session_lock_surface_v1, w: u32, h: u32) -> u32;
     fn tw_xdg_activation_v1_on_request_activate(o: *mut wlr_xdg_activation_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
 
     fn tw_surface_committed_buffer(s: *const wlr_surface) -> bool;
@@ -367,6 +380,9 @@ handle!(Activation, wlr_xdg_activation_v1);
 handle!(OutputLayout, wlr_output_layout);
 handle!(DecorationManager, wlr_xdg_decoration_manager_v1);
 handle!(Decoration, wlr_xdg_toplevel_decoration_v1);
+handle!(LockManager, wlr_session_lock_manager_v1);
+handle!(Lock, wlr_session_lock_v1);
+handle!(LockSurface, wlr_session_lock_surface_v1);
 
 // MARK: listeners
 
@@ -881,6 +897,10 @@ pub mod globals {
     pub fn xdg_decoration_manager(d: &Display) -> Option<DecorationManager> {
         DecorationManager::from_raw(unsafe { wlr_xdg_decoration_manager_v1_create(d.0.as_ptr()) })
     }
+    /// ext-session-lock-v1 (P16.2).
+    pub fn session_lock_manager(d: &Display) -> Option<LockManager> {
+        LockManager::from_raw(unsafe { wlr_session_lock_manager_v1_create(d.0.as_ptr()) })
+    }
     pub fn xdg_output_manager(d: &Display, l: OutputLayout) -> bool {
         !unsafe { wlr_xdg_output_manager_v1_create(d.0.as_ptr(), l.0.as_ptr()) }.is_null()
     }
@@ -1081,6 +1101,40 @@ impl Decoration {
     /// We draw the frame: always (P9.6).
     pub fn set_server_side(self) {
         unsafe { tw_decoration_server_side(self.0.as_ptr()) }
+    }
+}
+
+impl LockManager {
+    signal!(on_new_lock, tw_session_lock_manager_v1_on_new_lock, wlr_session_lock_manager_v1, |d| -> Lock { Lock(NonNull::new(d as *mut wlr_session_lock_v1).unwrap()) });
+    /// Its wl_global, for `Menus::restrict_to_privileged`.
+    pub fn global(self) -> *const c_void {
+        unsafe { tw_session_lock_manager_global(self.0.as_ptr()) }
+    }
+}
+
+impl Lock {
+    signal!(on_new_surface, tw_session_lock_v1_on_new_surface, wlr_session_lock_v1, |d| -> LockSurface { LockSurface(NonNull::new(d as *mut wlr_session_lock_surface_v1).unwrap()) });
+    signal!(on_unlock, tw_session_lock_v1_on_unlock, wlr_session_lock_v1, ||);
+    signal!(on_destroy, tw_session_lock_v1_on_destroy, wlr_session_lock_v1, ||);
+    /// Refuse it: the client is told `finished`.
+    pub fn destroy(self) {
+        unsafe { wlr_session_lock_v1_destroy(self.0.as_ptr()) }
+    }
+    pub fn send_locked(self) {
+        unsafe { wlr_session_lock_v1_send_locked(self.0.as_ptr()) }
+    }
+}
+
+impl LockSurface {
+    signal!(on_destroy, tw_session_lock_surface_v1_on_destroy, wlr_session_lock_surface_v1, ||);
+    pub fn surface(self) -> Surface {
+        Surface::from_raw(unsafe { tw_lock_surface_surface(self.0.as_ptr()) }).expect("a lock surface has a surface")
+    }
+    pub fn output(self) -> Option<Output> {
+        Output::from_raw(unsafe { tw_lock_surface_output(self.0.as_ptr()) })
+    }
+    pub fn configure(self, w: u32, h: u32) {
+        unsafe { wlr_session_lock_surface_v1_configure(self.0.as_ptr(), w, h) };
     }
 }
 

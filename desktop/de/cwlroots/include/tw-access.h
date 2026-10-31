@@ -56,6 +56,11 @@ TW_SIGNAL(foreign_toplevel_handle_v1, request_maximize)
 TW_SIGNAL(xdg_activation_v1, request_activate)
 TW_SIGNAL(xdg_decoration_manager_v1, new_toplevel_decoration)
 TW_SIGNAL(xdg_toplevel_decoration_v1, destroy)
+TW_SIGNAL(session_lock_manager_v1, new_lock)
+TW_SIGNAL(session_lock_v1, new_surface)
+TW_SIGNAL(session_lock_v1, unlock)
+TW_SIGNAL(session_lock_v1, destroy)
+TW_SIGNAL(session_lock_surface_v1, destroy)
 #undef TW_SIGNAL
 
 /* MARK: outputs */
@@ -127,6 +132,8 @@ void tw_surface_source_box(struct wlr_surface *s, double out[4]);
 bool tw_surface_committed_buffer(const struct wlr_surface *s);
 /* Frame-done, now, to `s` and every subsurface under it. */
 void tw_surface_frame_done_tree(struct wlr_surface *s);
+/* The client owning the surface, or NULL. */
+struct wl_client *tw_surface_client(struct wlr_surface *s);
 /* The pid of the client owning the surface, or -1. */
 int tw_surface_client_pid(struct wlr_surface *s);
 
@@ -178,6 +185,13 @@ void tw_layer_set_output(struct wlr_layer_surface_v1 *l, struct wlr_output *o);
 struct wlr_xdg_toplevel *tw_decoration_toplevel(const struct wlr_xdg_toplevel_decoration_v1 *d);
 /* We draw the frame (WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE). */
 void tw_decoration_server_side(struct wlr_xdg_toplevel_decoration_v1 *d);
+
+/* MARK: the session lock */
+
+/* The manager's global, to keep it to the privileged socket (P16.2c). */
+const struct wl_global *tw_session_lock_manager_global(const struct wlr_session_lock_manager_v1 *m);
+struct wlr_surface *tw_lock_surface_surface(const struct wlr_session_lock_surface_v1 *s);
+struct wlr_output *tw_lock_surface_output(const struct wlr_session_lock_surface_v1 *s);
 
 /* MARK: foreign toplevels, activation */
 

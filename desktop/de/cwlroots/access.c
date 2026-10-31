@@ -39,6 +39,11 @@ TW_SIGNAL(foreign_toplevel_handle_v1, request_maximize)
 TW_SIGNAL(xdg_activation_v1, request_activate)
 TW_SIGNAL(xdg_decoration_manager_v1, new_toplevel_decoration)
 TW_SIGNAL(xdg_toplevel_decoration_v1, destroy)
+TW_SIGNAL(session_lock_manager_v1, new_lock)
+TW_SIGNAL(session_lock_v1, new_surface)
+TW_SIGNAL(session_lock_v1, unlock)
+TW_SIGNAL(session_lock_v1, destroy)
+TW_SIGNAL(session_lock_surface_v1, destroy)
 #undef TW_SIGNAL
 
 const char *tw_output_name(const struct wlr_output *o) { return o->name; }
@@ -135,6 +140,10 @@ void tw_surface_frame_done_tree(struct wlr_surface *s) {
     wlr_surface_for_each_surface(s, frame_done, &now);
 }
 
+struct wl_client *tw_surface_client(struct wlr_surface *s) {
+    return s->resource ? wl_resource_get_client(s->resource) : NULL;
+}
+
 int tw_surface_client_pid(struct wlr_surface *s) {
     if (!s->resource) return -1;
     pid_t pid = -1;
@@ -219,3 +228,7 @@ struct wlr_xdg_toplevel *tw_decoration_toplevel(const struct wlr_xdg_toplevel_de
 void tw_decoration_server_side(struct wlr_xdg_toplevel_decoration_v1 *d) {
     wlr_xdg_toplevel_decoration_v1_set_mode(d, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 }
+
+const struct wl_global *tw_session_lock_manager_global(const struct wlr_session_lock_manager_v1 *m) { return m->global; }
+struct wlr_surface *tw_lock_surface_surface(const struct wlr_session_lock_surface_v1 *s) { return s->surface; }
+struct wlr_output *tw_lock_surface_output(const struct wlr_session_lock_surface_v1 *s) { return s->output; }

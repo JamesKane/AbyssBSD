@@ -217,6 +217,7 @@ pub fn popup_surface_origin(parent: (i32, i32), parent_geometry: (i32, i32), pos
 }
 
 type FocusHook = Box<dyn Fn(Option<&Rc<Toplevel>>)>;
+pub(crate) type LockHook = Box<dyn Fn(crate::session_lock::LockEvent)>;
 
 /// How a compositor is set up: where its settings live, and its sockets.
 #[derive(Clone, Copy, Debug, Default)]
@@ -280,8 +281,12 @@ pub struct Compositor {
     pub menus: RefCell<Option<wlr::menus::Menus>>,
     pub menu_state: RefCell<crate::menus::MenuState>,
     pub privileged_socket_name: Option<String>,
+    /// The session lock (P16.2), and the seat's ear for it.
+    pub lock: RefCell<crate::session_lock::LockState>,
+    pub(crate) lock_hook: RefCell<Option<LockHook>>,
     last_id: Cell<u32>,
     cascade: Cell<i32>,
+    locked_frame_at: Cell<u64>,
     orphaned_layers: RefCell<Vec<(Weak<Layer>, String)>>,
     // Counters, for the tests and the logs.
     pub surfaces_created: Cell<u64>,
@@ -394,8 +399,11 @@ impl Compositor {
             menus: RefCell::default(),
             menu_state: RefCell::default(),
             privileged_socket_name: opts.privileged_socket.map(str::to_owned),
+            lock: RefCell::default(),
+            lock_hook: RefCell::default(),
             last_id: Cell::new(0),
             cascade: Cell::new(0),
+            locked_frame_at: Cell::new(0),
             orphaned_layers: RefCell::default(),
             surfaces_created: Cell::new(0),
             restored_count: Cell::new(0),
@@ -469,6 +477,10 @@ impl Compositor {
 
         // Menus (P10.3): the manager for everyone, the bar's global only for
         // clients that came in through the privileged socket (PHASE10 §6.1).
+        let lock_manager = globals::session_lock_manager(d);
+        if let Some(lm) = lock_manager {
+            c.listen_for_locks(lm);
+        }
         let m = wlr::menus::Menus::create(d, crate::menus::Hooks(Rc::downgrade(&c))).ok_or_else(|| BackendError::NoGlobals("abyss_menu_manager_v1".into()))?;
         // Jailed clients (P18.3): what comes in through a jail's socket sees
         // an allowlist.
@@ -485,6 +497,13 @@ impl Compositor {
                 format!("{dir}/{name}")
             };
             m.add_privileged_socket(&path).map_err(|e| BackendError::PrivilegedSocket(path.clone(), e))?;
+            // **The session lock is the privileged socket's** (P16.2c).
+            // Offered to everyone, any application could wait for the lock
+            // screen to crash, take the abandoned lock over, and unlock it.
+            // Without a privileged socket it is everyone's, as anywhere.
+            if let Some(lm) = lock_manager {
+                m.restrict_to_privileged(lm.global());
+            }
             // A session with a bar can show GTK's menus in it, so GTK may
             // stop drawing its own (PHASE10 §6.5). Without one it keeps them.
             m.advertise_global_menus_to_gtk(true);
@@ -802,6 +821,12 @@ impl Compositor {
     /// Give `t` the keyboard: raised, told it is active, its tile lit, and
     /// the seat told (R4e).
     pub fn focus(&self, t: &Rc<Toplevel>) {
+        // **Locked (P16.2): focus does not move at all.** A window mapping
+        // behind the lock is not raised, made frontmost or told it is
+        // active, so unlocking finds you where you left off.
+        if self.is_locked() {
+            return;
+        }
         self.raise(t);
         if self.focused().is_some_and(|f| Rc::ptr_eq(&f, t)) {
             return;
@@ -825,6 +850,18 @@ impl Compositor {
 
     /// The topmost showing window gets the keyboard, or nobody does.
     pub fn focus_topmost(&self) {
+        // **Locked: the keyboard is the lock screen's**, whatever closes
+        // behind it (clearing it left the lock screen deaf, P16.4b). Forget
+        // a window that went; unlocking picks the topmost then.
+        if self.is_locked() {
+            if let Some(f) = self.focused()
+                && !self.mapped_toplevels().iter().any(|t| Rc::ptr_eq(t, &f))
+            {
+                f.set_foreign_activated(false);
+                *self.focused.borrow_mut() = None;
+            }
+            return;
+        }
         match self.mapped_toplevels().pop() {
             Some(t) => self.focus(&t),
             None => {
@@ -1320,6 +1357,31 @@ impl Compositor {
     /// Without it a client renders one frame and waits for ever.
     pub fn send_frame_done(&self) {
         let now = mono::now();
+        // **Locked (P16.2): the lock screen at the display's rate, and
+        // everything behind it the slow clock**: nothing of it is shown, but
+        // a FIFO client must still be let go now and then (U.2). Without
+        // this a lock screen drew its first frame and never another.
+        if self.is_locked() {
+            let ls: Vec<Surface> = self.lock.borrow().surfaces.iter().map(|e| e.surface).collect();
+            for s in ls {
+                s.frame_done_tree();
+            }
+            if now.saturating_sub(self.locked_frame_at.get()) < HIDDEN_FRAME_PERIOD_NS {
+                return;
+            }
+            self.locked_frame_at.set(now);
+            let ts: Vec<Rc<Toplevel>> = self.toplevels.borrow().iter().filter(|t| t.mapped.get()).cloned().collect();
+            for t in ts {
+                t.surface.frame_done_tree();
+            }
+            for l in self.mapped_layers() {
+                l.surface.frame_done_tree();
+            }
+            for (p, _) in self.mapped_popups() {
+                p.surface.frame_done_tree();
+            }
+            return;
+        }
         for t in self.mapped_toplevels() {
             t.surface.frame_done_tree();
         }
@@ -1346,6 +1408,8 @@ impl Compositor {
     /// queued events down their sockets. One call, so a caller cannot do
     /// half of it: a frame-done never flushed is a hang with no fingerprints.
     pub fn end_frame(&self) {
+        // A frame was drawn under a new lock: now its client may be told.
+        self.lock_frame_drawn();
         self.send_frame_done();
         self.session.display().flush_clients();
     }
@@ -1360,6 +1424,7 @@ impl Drop for Compositor {
     fn drop(&mut self) {
         // While the display, which the menu globals live on, is alive.
         self.menu_state.borrow_mut().addresses_clear();
+        self.lock.borrow_mut().clear();
         self.menus.borrow_mut().take();
         self.frames.borrow_mut().release();
         self.ebb_labels.borrow_mut().clear();
@@ -1385,10 +1450,10 @@ impl World for CompositorWorld {
         self.0.island_inputs.borrow_mut().remove(display).unwrap_or(0)
     }
     fn is_locked(&self) -> bool {
-        false
+        self.0.is_locked()
     }
     fn lock_surfaces(&self) -> Vec<(Surface, i32, i32)> {
-        vec![]
+        self.0.lock_mapped().into_iter().map(|(s, d)| (s, d.x, d.y)).collect()
     }
     fn mapped_layers(&self) -> Vec<SceneLayer> {
         self.0.mapped_layers().iter().map(|l| SceneLayer { layer: l.layer(), surface: l.surface, rect: l.rect.get() }).collect()

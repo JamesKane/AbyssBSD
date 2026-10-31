@@ -724,6 +724,15 @@ takes an `Options` (config dir, socket, privileged socket). Tested through
 the hooks against real windows; a client of the protocols is Swift's
 until R5.
 
+*R4d, the session lock* (`session_lock.rs`). One lock at a time, the
+abandoned lock that stays locked and can be taken over, `locked` after a
+frame, the lock surfaces configured to their displays, focus frozen and
+the lock screen alone at full frame rate, the manager kept to the
+privileged socket. What the pointer and keyboard do is the seat's,
+through `LockEvent`s. Its test drives Swift's own probe
+(abyss/tests/lockclient.c, built as live-sessionlock.sh builds it), and is
+`#[ignore]`d until R4e: the probe binds wl_seat.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

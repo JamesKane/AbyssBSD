@@ -19,6 +19,7 @@ pub mod output;
 pub mod places;
 pub mod recorder;
 pub mod scene;
+pub mod session_lock;
 pub mod shoals;
 pub mod switch_latency;
 pub mod synthetic;
