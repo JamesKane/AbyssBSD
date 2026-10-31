@@ -1,9 +1,24 @@
 //! The password and group databases (getpwuid, getpwnam, getpwent,
-//! getgrouplist, getgrgid), copied out into owned values. Not reentrant:
-//! like Swift's callers, these are for one thread at a time.
+//! getgrouplist, getgrgid), copied out into owned values.
+//!
+//! libc answers these in buffers it shares between calls, and the walk
+//! (setpwent/getpwent) keeps its place there too, so every lookup here holds
+//! one lock from the call until its answer is copied out. They are safe to
+//! call from any thread, then, as long as nothing else in the process calls
+//! those functions itself: go through here. (Unlocked, cargo's parallel tests
+//! read each other's answers: settings-run's admin test lost its account two
+//! runs in fifteen.)
 
 use libc::{c_char, c_int, gid_t, passwd};
 use std::ffi::{CStr, CString};
+use std::sync::{Mutex, MutexGuard};
+
+static DATABASES: Mutex<()> = Mutex::new(());
+
+/// The lock; a panic while holding it left nothing half-done in libc.
+fn lock() -> MutexGuard<'static, ()> {
+    DATABASES.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 /// One account, as passwd(5) has it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,17 +49,20 @@ pub fn uid() -> u32 {
 }
 
 pub fn by_uid(uid: u32) -> Option<Account> {
+    let _held = lock();
     copy(unsafe { libc::getpwuid(uid) })
 }
 
 pub fn by_name(name: &str) -> Option<Account> {
     let c = CString::new(name).ok()?;
+    let _held = lock();
     copy(unsafe { libc::getpwnam(c.as_ptr()) })
 }
 
 /// Every account in the database.
 pub fn all() -> Vec<Account> {
     let mut out = vec![];
+    let _held = lock();
     unsafe { libc::setpwent() };
     loop {
         let p = unsafe { libc::getpwent() };
@@ -61,6 +79,7 @@ pub fn all() -> Vec<Account> {
 pub fn group_names(uid: u32) -> Vec<String> {
     let Some(a) = by_uid(uid) else { return vec![] };
     let Ok(name) = CString::new(a.name) else { return vec![] };
+    let _held = lock();
     let mut n: c_int = 64;
     let mut list = vec![0 as gid_t; 64];
     #[cfg(target_os = "macos")]

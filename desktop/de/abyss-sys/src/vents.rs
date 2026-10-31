@@ -256,11 +256,7 @@ pub fn memory() -> (u64, u64) {
 
 /// The name an account goes by, or None.
 pub fn user_name(uid: u32) -> Option<String> {
-    let pw = unsafe { libc::getpwuid(uid) };
-    if pw.is_null() || unsafe { (*pw).pw_name }.is_null() {
-        return None;
-    }
-    Some(unsafe { CStr::from_ptr((*pw).pw_name) }.to_string_lossy().into_owned())
+    crate::users::by_uid(uid).map(|a| a.name)
 }
 
 /// Wait up to `timeout_ms` for `fd` to be readable (or hung up).
