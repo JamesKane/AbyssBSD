@@ -469,6 +469,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pty"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "libc",
+ "spawn",
+]
+
+[[package]]
 name = "settings"
 version = "0.1.0"
 
@@ -537,6 +546,10 @@ name = "system-facts"
 version = "0.1.0"
 
 [[package]]
+name = "terminal"
+version = "0.1.0"
+
+[[package]]
 name = "text-model"
 version = "0.1.0"
 
@@ -597,4 +610,12 @@ dependencies = [
  "menu-model",
  "menu-wire",
  "model",
+]
+
+[[package]]
+name = "vtbin"
+version = "0.1.0"
+dependencies = [
+ "pty",
+ "terminal",
 ]

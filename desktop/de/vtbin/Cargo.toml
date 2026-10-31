@@ -1,0 +1,14 @@
+[package]
+name = "vtbin"
+description = "abyss-vt: a program on a pty through Terminal's screen model, with no display (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-vt"
+path = "src/main.rs"
+
+[dependencies]
+pty = { path = "../pty" }
+terminal = { path = "../terminal" }

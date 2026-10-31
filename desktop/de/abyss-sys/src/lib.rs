@@ -16,6 +16,7 @@ pub mod sandbox;
 pub mod shm;
 pub mod poolwatch;
 pub mod proc;
+pub mod pty;
 pub mod spawn;
 #[cfg(feature = "tls")]
 pub mod tls;

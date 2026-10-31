@@ -1,0 +1,11 @@
+[package]
+name = "pty"
+description = "Pty: a program on a pseudo-terminal, read and written through the master (Swift: Pty.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+libc.workspace = true
+spawn = { path = "../spawn" }
