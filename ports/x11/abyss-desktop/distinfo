@@ -1,3 +1,9 @@
-TIMESTAMP = 1790977733
-SHA256 (abyss-desktop-2026.10.02.tar.xz) = 71b3e09553b33f524b97b7a326ae1452dd05c20c4f5594af7cee42c8f2adf316
-SIZE (abyss-desktop-2026.10.02.tar.xz) = 19113408
+TIMESTAMP = 1793472678
+SHA256 (rust/crates/cc-1.10.0.crate) = 86e055fa6e3e40ad6187ba25b6855eeb635d5271f8e0f0e1e9a5826b8d75bea0
+SIZE (rust/crates/cc-1.10.0.crate) = 148443
+SHA256 (rust/crates/find-msvc-tools-0.1.15.crate) = 1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48
+SIZE (rust/crates/find-msvc-tools-0.1.15.crate) = 31634
+SHA256 (rust/crates/libc-0.2.191.crate) = 65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a
+SIZE (rust/crates/libc-0.2.191.crate) = 855401
+SHA256 (rust/crates/shlex-2.0.1.crate) = f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba
+SIZE (rust/crates/shlex-2.0.1.crate) = 19332

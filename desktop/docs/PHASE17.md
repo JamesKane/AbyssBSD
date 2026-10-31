@@ -129,8 +129,9 @@ Sizes: **S** a day or less, **M** a few days, **L** a week or more.
 
 - **P17.1 — the desktop as a port (M).** `ports/x11/abyss-desktop`: the
   distfile is `git archive` of `desktop/` at the release commit, made by the
-  pipeline into `DISTDIR`. It builds every product with `swift build -c
-  release` and installs:
+  pipeline into `DISTDIR`. It builds every product with `USES=cargo`
+  (`cargo build --release --workspace --bins`; the only fetched distfiles are
+  Cargo.lock's four crates) and installs:
   - the binaries in `/usr/local/bin` and `/usr/local/libexec/abyss`;
   - the themes, icons and data in `/usr/local/share/abyss`;
   - the rc.d scripts `live-image.sh` writes inline today, moved into files
