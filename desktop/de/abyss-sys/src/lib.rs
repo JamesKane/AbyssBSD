@@ -92,6 +92,7 @@ const STATUS_SUCCESS: c_int = 0;
 const STATUS_READ_ERROR: c_int = 10;
 pub const LINE_CAP_BUTT: c_int = 0;
 pub const LINE_CAP_ROUND: c_int = 1;
+pub const LINE_CAP_SQUARE: c_int = 2;
 pub const LINE_JOIN_MITER: c_int = 0;
 pub const LINE_JOIN_ROUND: c_int = 1;
 

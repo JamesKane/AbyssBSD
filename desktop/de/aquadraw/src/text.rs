@@ -16,6 +16,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 pub enum Style {
     Regular = 0,
     Bold = 1,
+    /// CText's italic faces, as Terminal's SGR 3 asks for.
+    Italic = 2,
+    BoldItalic = 3,
 }
 
 pub struct Metrics {

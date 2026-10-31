@@ -18,8 +18,10 @@ menu-model = { path = "../menumodel" }
 model = { path = "../model" }
 menu-wire = { path = "../menuwire" }
 pool-config = { path = "../poolconfig" }
+pty = { path = "../pty" }
 settings = { path = "../settings" }
 settings-wire = { path = "../settingswire" }
 spawn = { path = "../spawn" }
 surface = { path = "../surface" }
+terminal = { path = "../terminal" }
 vents = { path = "../vents" }

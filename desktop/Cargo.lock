@@ -109,10 +109,12 @@ dependencies = [
  "menu-wire",
  "model",
  "pool-config",
+ "pty",
  "settings",
  "settings-wire",
  "spawn",
  "surface",
+ "terminal",
  "vents",
 ]
 

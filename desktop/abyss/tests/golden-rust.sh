@@ -116,6 +116,8 @@ installer-confirm|installer-confirm|aquademo:installer|1|AQUA_INSTALLER_PAGE=con
 installer-installing|installer-installing|aquademo:installer|1|AQUA_INSTALLER_PAGE=installing
 installer-done|installer-done|aquademo:installer|1|AQUA_INSTALLER_PAGE=done
 trench-installer-disk|trench-installer-disk|aquademo:installer|1|ABYSS_THEME=trench AQUA_INSTALLER_PAGE=disk
+terminal|terminal|aquademo:terminal|1|
+terminal@2x|terminal@2x|aquademo:terminal|2|
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

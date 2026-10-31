@@ -85,6 +85,20 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Terminal {
+            // `-e PROGRAM ARGS…` runs that instead of the shell, as xterm's
+            // does: how a bundle whose entry says Terminal=true opens.
+            let args: Vec<String> = std::env::args().collect();
+            let command = args.iter().position(|a| a == "-e").map(|i| args[i + 1..].to_vec());
+            let terminal = aqua::terminal_app::TerminalApp::new(&display, &tk, command);
+            if !terminal.open_window() {
+                println!("AquaDemo: failed to open a Terminal window.");
+                exit(1)
+            }
+            eprintln!("AquaDemo: Terminal is up.");
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::Installer {
             // Ask the machine what it has, once, before the first frame: if
             // the service is not there the hub says so on the disk spoke.

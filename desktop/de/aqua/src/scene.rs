@@ -30,6 +30,8 @@ pub enum SceneKind {
     Prefs,
     /// The guided installer: its own window live.
     Installer,
+    /// Terminal: its own windows live, sized to 80×24.
+    Terminal,
 }
 
 impl SceneKind {
@@ -48,6 +50,8 @@ impl SceneKind {
             Some("sysprefs") => Some((SceneKind::Prefs, "System Preferences", 760, 620)),
             // Wide enough for a disk row to say why it cannot be used.
             Some("installer") => Some((SceneKind::Installer, "Install AbyssBSD", 620, 460)),
+            // Live, Terminal sizes its window to 80×24 itself.
+            Some("terminal") => Some((SceneKind::Terminal, "Terminal", 500, 340)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -152,6 +156,10 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             }
             SceneKind::Finder => {
                 crate::finder::paint_finder(&mut c, cw, ch, &finder_scene_state());
+            }
+            // A fixed transcript through the real screen model.
+            SceneKind::Terminal => {
+                crate::terminal_app::paint_terminal(&mut c, cw, ch, "sh — 70×20", &crate::terminal_app::sample_screen(), true, true, 0, None);
             }
             // A fixed synthetic machine; AQUA_INSTALLER_PAGE picks the screen.
             SceneKind::Installer => {

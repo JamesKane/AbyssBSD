@@ -975,6 +975,18 @@ goldens are identical (88 in the gate). Live, mixed: live-installer and
 -installer-keyboard green; live-install drives `abyss-installctl` in the
 build VM, not this window, and was not run.
 
+*R6l–m, Terminal.* First its libraries: `terminal` (the VT500 parser,
+the screen, selection across scrollback, bracketed paste, xterm's keys,
+with the 22 Swift tests) and `pty` over cplatform's `ap_pty_spawn`,
+bound in abyss-sys; `abyss-vt` swapped to Rust (live-vt green: a shell,
+vim, top). Then the window: cells in the `mono` role with box drawing
+done edge to edge, the caret, selection by drag, word and line, the
+wheel and Page keys through history, Copy and Paste across the Wayland
+clipboard, ⌘K, ⌘N, and the window closing with its shell. aquadraw's
+text `Style` gains Italic and BoldItalic, which CText always had. Both
+Terminal goldens are identical (90 in the gate); live-terminal's ten
+checks are green.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity
