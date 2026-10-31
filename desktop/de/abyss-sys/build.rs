@@ -171,6 +171,12 @@ fn main() {
         println!("cargo:rustc-link-lib=crypto");
     }
 
+    // CCapsicum (src/sandbox.rs): capability mode, FreeBSD's; elsewhere it
+    // says it is not there (P7.3).
+    let ccap = de.join("ccap");
+    println!("cargo:rerun-if-changed={}", ccap.join("ccap.c").display());
+    cc::Build::new().file(ccap.join("ccap.c")).include(ccap.join("include")).compile("ccap");
+
     // The guard (guard.c): a supervised child stopped from a signal handler.
     println!("cargo:rerun-if-changed={}", here_dir().join("guard.c").display());
     cc::Build::new().file(here_dir().join("guard.c")).compile("abguard");

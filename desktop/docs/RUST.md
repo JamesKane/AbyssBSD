@@ -545,6 +545,22 @@ and refuses a private address; and TLS, against a local `s_server`,
 takes a trusted certificate and refuses a self-signed one and a name
 that does not match, in OpenSSL's words, as Swift does.
 
+*the small tools, 2026-10-30.* `abyssmenu`, `abyssnotify`, `abyssopen`
+and `abyss-appgen` swap. `abyss-sys` gains `sandbox` (ccap.c, Capsicum)
+for `abyssopen`, and `de/appbundles` (crate `app-bundles`) is
+AppBundles.swift, its tests ported. One change in `abyss-appgen`:
+Terminal (`AquaDemo`) is looked for beside argv[0] as invoked, links not
+followed, where Swift took its realpath; through the harness's
+directory that names `.build/abyss-bin/AquaDemo`, which follows
+`abyss/rust-bins`, and `live-appgen` now takes either path. Over the
+desktop entries of this Linux box it makes the same 308 decisions and
+the same bundles as Swift, those launcher paths aside. `live-appgen`,
+`-vocabulary`, `-notify`, `-sandbox`, `-screenshot`, `-prefs`,
+`-dock-apps`, `-firefox` and `-undo` are green on Linux. Left for later:
+`abyss-theme` needs the theme loader and the cursors, R5's with the
+theme; `abyss-vt` needs Terminal and the pty; `abyssgrab`,
+`abyss-displays` and `abyssclip` are Wayland clients on `surface`, R5's.
+
 **R4. `undertow` (L).** It runs over the same `cwlroots` shim and wlroots
 0.20 (§6.3). The HANDOFF §2 lessons that undertow encodes become comments at
 the code that encodes them, as in Swift. Gate: every live script that starts

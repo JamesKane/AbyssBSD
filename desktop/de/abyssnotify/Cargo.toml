@@ -1,0 +1,10 @@
+[package]
+name = "abyssnotify"
+description = "abyssnotify: post a desktop notification, the brokerless notify-send (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+current-ipc = { path = "../currentipc" }
+libc.workspace = true

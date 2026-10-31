@@ -1,0 +1,10 @@
+[package]
+name = "abyssmenu"
+description = "abyssmenu: ask an application what it can do, and have it do it (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+menu-model = { path = "../menumodel" }
+menu-wire = { path = "../menuwire" }

@@ -1,0 +1,16 @@
+[package]
+name = "appgen"
+description = "abyss-appgen: an application bundle for every installed port with a desktop entry (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-appgen"
+path = "src/main.rs"
+
+[dependencies]
+abyss-sys.workspace = true
+app-bundles = { path = "../appbundles" }
+pool-config = { path = "../poolconfig" }
+spawn = { path = "../spawn" }

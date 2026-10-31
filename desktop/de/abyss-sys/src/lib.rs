@@ -11,6 +11,7 @@ use std::ffi::CString;
 pub mod jail;
 pub mod pam;
 pub mod platform;
+pub mod sandbox;
 pub mod poolwatch;
 pub mod proc;
 pub mod spawn;

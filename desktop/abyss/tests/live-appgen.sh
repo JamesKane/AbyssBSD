@@ -36,8 +36,11 @@ abyss_ensure_runtime_dir
 appgen="$ABYSS_BIN_DIR/abyss-appgen"
 undertow="$ABYSS_BIN_DIR/undertow"
 demo="$ABYSS_BIN_DIR/AquaDemo"
-# What a launcher names: the binary's real path, so it runs from anywhere.
+# What a launcher names: the binary's absolute path, so it runs from
+# anywhere: the path it was found at (Rust, which follows abyss/rust-bins
+# when AquaDemo changes language), or that path resolved (Swift).
 demo_real=$(realpath "$demo")
+demo_abs=$(cd "$(dirname "$demo")" && pwd -L)/AquaDemo
 for b in "$appgen" "$undertow" "$demo"; do [ -x "$b" ] || { swift build; break; }; done
 # The SVG half needs rsvg-convert (librsvg; the guest has it with GTK). Without
 # it the fixture's icon is a PNG from the tree, and only the rasterising is not
@@ -99,7 +102,7 @@ for w in "handler.desktop: NoDisplay" "hidden.desktop: Hidden" \
   grep -q "^skip $w" "$work/gen.out" || fail "not skipped with its reason: $w"
 done
 for n in Handler Gone Absent; do [ -e "$apps/$n.app" ] && fail "$n.app was made"; done
-grep -q "^exec env AQUA_SCENE=terminal $demo_real -e top\$" "$apps/Top.app/Contents/MacOS/Top" \
+grep -qFx -e "exec env AQUA_SCENE=terminal $demo_real -e top" -e "exec env AQUA_SCENE=terminal $demo_abs -e top" "$apps/Top.app/Contents/MacOS/Top" \
   || fail "Top.app does not open top in Terminal: $(cat "$apps/Top.app/Contents/MacOS/Top" 2>&1)"
 echo "ok: 1. an application became a bundle (launcher, icon $([ "$svg" = 1 ] && echo "rasterised from SVG to 256 px" || echo "copied from a PNG"), marker); a terminal program's opens it in Terminal; three others skipped, each with why"
 
@@ -159,7 +162,7 @@ for b in "System Preferences.app:sysprefs:org.abyssbsd.preferences:prefs" "TextE
   ic=$tok; case "$id" in *:*) ic=${id#*:}; id=${id%%:*} ;; esac   # the icon, when it is not the token
   d="$own/$rel"; stem=$(basename "$rel" .app)
   [ -x "$d/Contents/MacOS/$stem" ] || fail "no launcher for $rel"
-  grep -q "^AQUA_SCENE=$tok exec $demo_real \"\$@\"\$" "$d/Contents/MacOS/$stem" || fail "$rel's launcher: $(tail -1 "$d/Contents/MacOS/$stem")"
+  grep -qFx -e "AQUA_SCENE=$tok exec $demo_real \"\$@\"" -e "AQUA_SCENE=$tok exec $demo_abs \"\$@\"" "$d/Contents/MacOS/$stem" || fail "$rel's launcher: $(tail -1 "$d/Contents/MacOS/$stem")"
   [ "$(cat "$d/Contents/theme-icon")" = "dock.icon.$ic" ] || fail "$rel's icon is not the theme's dock.icon.$ic"
   [ "$(cat "$d/Contents/app-id")" = "$id" ] || fail "$rel's app_id: $(cat "$d/Contents/app-id")"
   [ "$(cat "$d/Contents/abyss-appgen")" = "builtin:$tok" ] || fail "$rel's marker"

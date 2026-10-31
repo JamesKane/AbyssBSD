@@ -1,0 +1,6 @@
+[package]
+name = "app-bundles"
+description = "AppBundles: a port's .desktop entry as a Mac-shaped application bundle, as values (Swift: AppBundles.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

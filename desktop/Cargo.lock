@@ -18,6 +18,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "abyssmenu"
+version = "0.1.0"
+dependencies = [
+ "menu-model",
+ "menu-wire",
+]
+
+[[package]]
+name = "abyssnotify"
+version = "0.1.0"
+dependencies = [
+ "current-ipc",
+ "libc",
+]
+
+[[package]]
+name = "abyssopen"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "current-ipc",
+]
+
+[[package]]
 name = "agent"
 version = "0.1.0"
 dependencies = [
@@ -51,6 +75,20 @@ dependencies = [
  "abyss-sys",
  "anchor",
  "current-ipc",
+ "pool-config",
+ "spawn",
+]
+
+[[package]]
+name = "app-bundles"
+version = "0.1.0"
+
+[[package]]
+name = "appgen"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "app-bundles",
  "pool-config",
  "spawn",
 ]
