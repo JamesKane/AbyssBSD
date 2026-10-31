@@ -7,6 +7,7 @@
 //! no borrow is held across a call that may dispatch or reach a delegate.
 
 use crate::backing::{Kind, Role};
+use crate::clipboard::Clipboard;
 use crate::keyboard::{KeyEvent, KeyboardState};
 use abyss_sys::proc::{poll, poll_fd};
 use abyss_sys::wlc::{self, wl_keyboard, wl_output, wl_pointer, wl_registry, wl_registry_bind::bind, wl_seat, xdg_wm_base, Connection, Obj};
@@ -59,6 +60,13 @@ pub struct Globals {
 /// An extra descriptor the run loop polls, and what runs when it's ready.
 type FdHandler = Rc<dyn Fn()>;
 
+/// Told of a display that appears (its index) and one that goes (its
+/// proxy): a lock must cover every display, one plugged in while locked too.
+pub(crate) struct OutputHooks {
+    pub(crate) added: Rc<dyn Fn(usize)>,
+    pub(crate) removed: Rc<dyn Fn(Obj)>,
+}
+
 struct Repeat {
     evdev: u32,
     event: KeyEvent,
@@ -67,7 +75,7 @@ struct Repeat {
 
 pub struct Display {
     pub(crate) conn: Connection,
-    registry: Obj,
+    pub(crate) registry: Obj,
     me: Weak<Display>,
     pub(crate) globals: RefCell<Globals>,
     outputs: RefCell<Vec<OutputInfo>>,
@@ -89,6 +97,8 @@ pub struct Display {
     last_input_serial: Cell<u32>,
     repeat: RefCell<Option<Repeat>>,
     extra_fds: RefCell<Vec<(i32, FdHandler)>>,
+    pub(crate) output_hooks: RefCell<Option<OutputHooks>>,
+    clipboard: RefCell<Option<Rc<Clipboard>>>,
     running: Cell<bool>,
     epoch: Instant,
 }
@@ -115,6 +125,8 @@ impl Display {
             last_input_serial: Cell::new(0),
             repeat: RefCell::new(None),
             extra_fds: RefCell::default(),
+            output_hooks: RefCell::new(None),
+            clipboard: RefCell::new(None),
             running: Cell::new(true),
             epoch: Instant::now(),
         });
@@ -133,8 +145,19 @@ impl Display {
         if g.compositor.is_none() || g.shm.is_none() || g.wm_base.is_none() {
             return None;
         }
+        // Without a data device there is no clipboard, and an application
+        // goes without rather than refuse to start.
+        let clip = g.data_device_manager.zip(g.seat);
         drop(g);
+        if let Some((m, s)) = clip {
+            *d.clipboard.borrow_mut() = Clipboard::new(&d, m, s)
+        }
         Some(d)
+    }
+
+    /// The clipboard, when the compositor has a data device and a seat.
+    pub fn clipboard(&self) -> Option<Rc<Clipboard>> {
+        self.clipboard.borrow().clone()
     }
 
     pub fn globals(&self) -> std::cell::Ref<'_, Globals> {
@@ -202,6 +225,10 @@ impl Display {
                         _ => {}
                     }
                 });
+                let added = self.output_hooks.borrow().as_ref().map(|h| h.added.clone());
+                if let Some(f) = added {
+                    f(self.outputs.borrow().len() - 1)
+                }
             }
             _ => {}
         }
@@ -213,6 +240,12 @@ impl Display {
             let i = outs.iter().position(|o| o.name == name);
             i.map(|i| outs.remove(i))
         };
+        if let Some(o) = &removed {
+            let hook = self.output_hooks.borrow().as_ref().map(|h| h.removed.clone());
+            if let Some(f) = hook {
+                f(o.proxy)
+            }
+        }
         if removed.is_some() {
             self.rescale_windows()
         }
@@ -294,6 +327,12 @@ impl Display {
         let all = self.live_surfaces();
         let first = |k| all.iter().find(|r| r.kind() == k).cloned();
         first(Kind::Window).or_else(|| first(Kind::Layer))
+    }
+
+    /// The surface an activation claims to come from: the one with the
+    /// keyboard, else the primary.
+    pub(crate) fn activation_source(&self) -> Option<Obj> {
+        self.target(&self.keyboard_on).map(|r| r.backing().surface)
     }
 
     fn target(&self, slot: &Cell<Option<Obj>>) -> Option<Rc<dyn Role>> {
@@ -545,6 +584,16 @@ impl Display {
         for r in self.live_surfaces() {
             r.backing().set_needs_display()
         }
+    }
+}
+
+impl Drop for Display {
+    /// What holds proxies goes before the connection: a proxy destroyed
+    /// after `wl_display_disconnect` is a use of freed memory (the struct's
+    /// fields drop in order, and `conn` is first).
+    fn drop(&mut self) {
+        self.clipboard.borrow_mut().take();
+        self.output_hooks.borrow_mut().take();
     }
 }
 

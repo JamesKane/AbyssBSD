@@ -1,0 +1,13 @@
+[package]
+name = "displaysctl"
+description = "abyss-displays: the displays over wlr-output-management-v1, listed and rearranged (Swift: main.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "abyss-displays"
+path = "src/main.rs"
+
+[dependencies]
+surface = { path = "../surface" }

@@ -199,6 +199,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "displaysctl"
+version = "0.1.0"
+dependencies = [
+ "surface",
+]
+
+[[package]]
 name = "fathom"
 version = "0.1.0"
 

@@ -887,9 +887,24 @@ Appearance pop-up opens one, by click or by Space. Checked live on
 undertow by hand: opened by key and by click, closed by a choice, by
 Escape and by a click outside, each time opening again; the nine scripts
 above still green; `examples/layer_probe` maps a top bar and shows a
-frame. Not yet: the clipboard, activation, screencopy, the session lock,
-idle notification, foreign toplevels, the menu bar's focus protocol, the
-display configurator.
+frame.
+
+*R5d, the rest of surface.* Idle notification, activation, foreign
+toplevels, the menu bar's focus protocol (islands and shoals with it),
+the session lock (a `LockSurface` per display on the same Backing, one
+plugged in while locked too, through output hooks on the Display),
+screencopy (its normalisation and its six tests), the display
+configurator on its own connection, and the clipboard with drag and drop
+over std's pipes. Swift's delegates are closures where one owner hears
+them. Where Swift was loose: the configurator releases heads and modes
+with v3's destructor and stops the manager, where Swift freed only the
+proxies; and the Display drops what holds proxies before its
+connection (a paste probe dumped core on exit until it did). The
+`probe` example checks each live on undertow: layer, lock, toplevels,
+idle, shot (pixel for pixel what grim captures), and copy and paste
+against wl-clipboard both ways. **`abyss-displays` (de/displaysctl) is
+ported and swapped**: live-displays-config, -displays and -displays-pane
+green on it. Drag and drop waits for the Finder (R6) to be tried live.
 
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System

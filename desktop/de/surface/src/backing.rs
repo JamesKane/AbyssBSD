@@ -29,6 +29,7 @@ pub(crate) enum Kind {
     Window,
     Popup,
     Layer,
+    Lock,
 }
 
 /// A painted surface, as its backing and the display see it.
@@ -173,6 +174,15 @@ impl Backing {
     }
     pub(crate) fn mark_dirty(&self) {
         self.needs_redraw.set(true)
+    }
+
+    /// A pinned scale, from what the owner knows of its output: fresh
+    /// buffers at the next `resize`.
+    pub(crate) fn set_scale(&self, s: i32) {
+        if s.max(1) != self.scale.get() {
+            self.scale.set(s.max(1));
+            self.buffers.borrow_mut().clear()
+        }
     }
 
     /// A new size in points: fresh buffers when it changed, or there are
