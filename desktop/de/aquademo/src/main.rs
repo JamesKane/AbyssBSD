@@ -118,6 +118,18 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::CrashReport {
+            // Started by the keeper for a confined program that died of a
+            // signal (ABYSS_CRASH_*).
+            let Some(dialog) = aqua::crash_report::CrashReport::new(&display, &tk, aqua::crash_report::CrashNotice::from_environment()) else {
+                println!("AquaDemo: could not open the crash report.");
+                exit(1)
+            };
+            let d = display.clone();
+            *dialog.on_done.borrow_mut() = Box::new(move || d.stop());
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::DiskUtility {
             let Some(_du) = aqua::diskutility::DiskUtility::new(&display, &tk) else {
                 println!("AquaDemo: failed to open Disk Utility.");

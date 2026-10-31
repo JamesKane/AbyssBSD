@@ -9,6 +9,7 @@ pub mod app_library;
 
 pub mod commands;
 pub mod context_menu;
+pub mod crash_report;
 pub mod desktop_icons;
 pub mod diskutility;
 pub mod dock;

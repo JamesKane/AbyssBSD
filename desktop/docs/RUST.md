@@ -1037,6 +1037,14 @@ focused. The toast's geometry (wrap with elision, stack, hit, expiry)
 is pure. Both goldens are identical (101 in the gate); live-notify's
 six checks are green, a notification crossing the portal.
 
+*R6t, Crash Reporter.* "… has unexpectedly quit", started by the keeper
+with `ABYSS_CRASH_*`; Ask the Agent… asks `jails` for a `debug` session
+on that crash and opens the Agent window on it, answered in the poll
+loop. The notice's wording and the button layout are pure and tested.
+The golden is identical (102 in the gate). live-crash-dialog is FreeBSD's
+(jails, lldb); on undertow both dialogs (a core, and none) come up with
+the log lines it reads.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

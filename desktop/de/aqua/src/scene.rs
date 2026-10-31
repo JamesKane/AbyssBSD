@@ -43,6 +43,8 @@ pub enum SceneKind {
     /// The notification centre: an OVERLAY surface only while there are
     /// toasts, and the `notify` service.
     Notify,
+    /// "… has unexpectedly quit": started by the keeper, live.
+    CrashReport,
 }
 
 impl SceneKind {
@@ -69,6 +71,7 @@ impl SceneKind {
             Some("activity") => Some((SceneKind::Activity, "Activity Monitor", 620, 360)),
             Some("diskutility") => Some((SceneKind::DiskUtility, "Disk Utility", 700, 440)),
             Some("notify") => Some((SceneKind::Notify, "Notifications", 800, 600)),
+            Some("crashreport") => Some((SceneKind::CrashReport, "", 480, 180)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -191,6 +194,11 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             // A fixed table: names, users and numbers that do not change.
             SceneKind::Activity => {
                 crate::activity::paint_activity(&mut c, cw, ch, &crate::activity::sample_view(), &crate::activity::sample_user);
+            }
+            SceneKind::CrashReport => {
+                let n = crate::crash_report::CrashNotice::new(1, "galculator", "SIGSEGV", true);
+                use crate::crash_report::CrashChoice::{Ask, Close};
+                crate::crash_report::paint_crash_report(&mut c, cw, ch, &n, None, &[Close, Ask]);
             }
             SceneKind::Grab => {
                 crate::grab::paint_grab_panel(&mut c, cw, ch, "Choose what to capture.");
