@@ -567,6 +567,31 @@ the code that encodes them, as in Swift. Gate: every live script that starts
 a session passes with a Rust undertow and a Swift toolkit. Then the metal
 check on the 12700KF: VT switch, session lock, output hotplug.
 
+*R4's first finding, 2026-10-30: `cwlroots` is not narrow.* §6.3 and
+§6.4 took it for a language-neutral shim with narrow headers. It is the
+listener trampoline and little else, because **Swift's C importer reads
+wlroots' own headers**: undertow calls 231 distinct `wlr_*` functions,
+reads about 300 struct fields through `.pointee`, and uses the
+headers' `static inline`s. Rust can do none of that without declaring the
+structs, and mirroring wlroots' layouts by hand would break at every
+wlroots release. So, keeping §6.4 (hand-written `extern "C"` over our own
+headers, no bindgen), **`cwlroots` grows**: a C accessor or call for each
+struct field and inline undertow touches, the wlroots types opaque to
+Rust. C stays thin and decides nothing; the compositor's logic is Rust's.
+R4 runs in passes: R4a the pure core (no wlroots at all), R4b the grown
+shim, R4c the backend, scene and outputs, R4d the seat and its protocols,
+R4e the shell protocols, then `undertowbin` and the gate.
+
+*R4a, the pure core.* `de/undertow` (crate `undertow`): the metronome
+(the vblank predictor, the measured latch margin, `Metronome` and the
+multi-output `Conductor`), the flight recorder, C6's switch latencies,
+the synthetic display and scene, and the placement rules (layer shell,
+snapping, Ebb's grid, the island slide, hit-testing, remembered places).
+`abyss-sys` gains `mono` (CLOCK_MONOTONIC and an absolute sleep, the
+clock wlroots stamps presents with). The recorder is the present
+thread's by `&mut` rather than shared through an atomic, there being no
+second reader yet.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

@@ -491,6 +491,14 @@ name = "text-model"
 version = "0.1.0"
 
 [[package]]
+name = "undertow"
+version = "0.1.0"
+dependencies = [
+ "abyss-sys",
+ "pool-config",
+]
+
+[[package]]
 name = "vents"
 version = "0.1.0"
 dependencies = [

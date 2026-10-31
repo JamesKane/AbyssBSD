@@ -1,0 +1,10 @@
+[package]
+name = "undertow"
+description = "Undertow: the compositor; so far its pure core: the metronome, the flight recorder, and the window rules (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+pool-config = { path = "../poolconfig" }
