@@ -42,7 +42,9 @@ run "cd $ABYSS_GUEST_SRC && cargo build --workspace --bins --examples $extra > /
 
 if [ "$do_test" -eq 1 ]; then
   echo "[build] cargo test"
-  run "cd $ABYSS_GUEST_SRC && cargo test --workspace > /tmp/abyss-cargo-test.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo-test.log; exit \$rc" \
+  # A non-interactive ssh gets no XDG_RUNTIME_DIR on FreeBSD, and undertow's
+  # tests bind a Wayland socket there (run.sh does the same).
+  run "cd $ABYSS_GUEST_SRC && . abyss/common.sh && abyss_ensure_runtime_dir && cargo test --workspace > /tmp/abyss-cargo-test.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo-test.log; exit \$rc" \
     || { echo "[build] FAILED: cargo test in the guest" >&2; exit 1; }
 fi
 echo "[build] done"
