@@ -19,6 +19,11 @@
 
 use crate::backend::{log, BackendError, WlrootsSession};
 use crate::decorations::Frames;
+use crate::ebb::Ebb;
+use crate::geometry::IslandSlide;
+use crate::shoals::ShoalBook;
+use crate::tide::OwnedLabel;
+use pool_config::IslandsConfig;
 use aquadraw::runner::Runner;
 use aquadraw::theme::Theme;
 use crate::displays::DisplayLayout;
@@ -242,8 +247,24 @@ pub struct Compositor {
     /// The window with the keyboard. The seat says so to the client (R4e).
     pub focused: RefCell<Option<Weak<Toplevel>>>,
     focus_hook: RefCell<Option<FocusHook>>,
+    pub config_dir: Option<String>,
+    /// The seat's pointer, once a seat exists: the display a keystroke
+    /// means when nothing is focused.
+    pub cursor: Cell<Option<(f64, f64)>>,
+    /// The window being dragged, by the seat (R4e).
+    pub moving: RefCell<Option<Weak<Toplevel>>>,
+    pub islands: RefCell<IslandsConfig>,
     pub active_islands: RefCell<HashMap<String, i32>>,
     pub island_inputs: RefCell<HashMap<String, u64>>,
+    pub island_slides: RefCell<HashMap<String, IslandSlide>>,
+    pub island_switches: Cell<u64>,
+    pub ebb: RefCell<Option<Ebb>>,
+    pub ebb_opens: Cell<u64>,
+    pub ebb_labels: RefCell<HashMap<u32, OwnedLabel>>,
+    pub shoal_book: RefCell<ShoalBook>,
+    pub strip_shown: Cell<bool>,
+    pub strip_labels: RefCell<HashMap<String, OwnedLabel>>,
+    pub recalls: Cell<u64>,
     last_id: Cell<u32>,
     cascade: Cell<i32>,
     orphaned_layers: RefCell<Vec<(Weak<Layer>, String)>>,
@@ -339,8 +360,21 @@ impl Compositor {
             frames: RefCell::default(),
             focused: RefCell::default(),
             focus_hook: RefCell::default(),
+            config_dir: config_dir.map(str::to_owned),
+            cursor: Cell::new(None),
+            moving: RefCell::default(),
+            islands: RefCell::new(IslandsConfig::load(config_dir)),
             active_islands: RefCell::default(),
             island_inputs: RefCell::default(),
+            island_slides: RefCell::default(),
+            island_switches: Cell::new(0),
+            ebb: RefCell::default(),
+            ebb_opens: Cell::new(0),
+            ebb_labels: RefCell::default(),
+            shoal_book: RefCell::new(ShoalBook::load(config_dir)),
+            strip_shown: Cell::new(false),
+            strip_labels: RefCell::default(),
+            recalls: Cell::new(0),
             last_id: Cell::new(0),
             cascade: Cell::new(0),
             orphaned_layers: RefCell::default(),
@@ -430,6 +464,10 @@ impl Compositor {
         self.focused.borrow().as_ref().and_then(Weak::upgrade)
     }
 
+    pub fn moving(&self) -> Option<Rc<Toplevel>> {
+        self.moving.borrow().as_ref().and_then(Weak::upgrade)
+    }
+
     // MARK: windows
 
     fn adopt_toplevel(&self, xdg: XdgToplevel) -> Rc<Toplevel> {
@@ -466,6 +504,7 @@ impl Compositor {
             t.note_key();
             c.place(&t);
             c.settle_island(&t, true);
+            c.shoal_rejoined(&t);
             c.publish(&t);
         }));
         let (_, wt) = both();
@@ -609,6 +648,10 @@ impl Compositor {
 
     fn forget(&self, t: &Rc<Toplevel>) {
         self.frames.borrow_mut().forget(t.id);
+        if let Some(e) = self.ebb.borrow_mut().as_mut() {
+            e.forget(t.id)
+        }
+        self.ebb_labels.borrow_mut().remove(&t.id);
         t.teardown();
         self.toplevels.borrow_mut().retain(|o| !Rc::ptr_eq(o, t));
         // **Closing the focused window used to leave focus on nothing**:
@@ -750,10 +793,8 @@ impl Compositor {
     /// focused (PHASE13 §6.3: a window is never lost).
     pub fn bring_to_front(&self, t: &Rc<Toplevel>) {
         if !self.is_on_active_island(t) {
-            // Switching islands is the islands pass's; until then, the
-            // window comes to the island being shown.
-            t.island.set(self.active_island(&t.island_display.borrow()));
-            self.refresh_suspended(t);
+            let d = t.island_display.borrow().clone();
+            self.switch_island(t.island.get(), Some(&d));
         }
         self.set_minimized(t, false);
         self.raise(t);
@@ -1267,6 +1308,8 @@ impl Compositor {
 impl Drop for Compositor {
     fn drop(&mut self) {
         self.frames.borrow_mut().release();
+        self.ebb_labels.borrow_mut().clear();
+        self.strip_labels.borrow_mut().clear();
         self.listeners.borrow_mut().clear();
         for p in self.popups.borrow().iter() {
             p.listeners.borrow_mut().clear();
@@ -1320,27 +1363,28 @@ impl World for CompositorWorld {
     fn is_on_active_island(&self, w: &SceneWindow) -> bool {
         self.0.active_island(&w.island_display) == w.island as i32
     }
-    fn ebb_frame(&mut self, _: &str, _: u64) -> Option<crate::ebb::Ebb> {
-        None
+    fn ebb_frame(&mut self, d: &str, now: u64) -> Option<Ebb> {
+        self.0.ebb_frame(d, now)
     }
-    fn island_view(&mut self, _: &str, _: u64) -> Option<f64> {
-        None
+    fn island_view(&mut self, d: &str, now: u64) -> Option<f64> {
+        self.0.island_view(d, now)
     }
-    fn strip_tiles(&self, _: &str) -> Vec<(usize, Rect)> {
-        vec![]
+    fn strip_tiles(&self, d: &str) -> Vec<(usize, Rect)> {
+        self.0.strip_tiles(d)
     }
-    fn shoal(&self, _: usize) -> (String, Vec<String>) {
-        (String::new(), vec![])
+    fn shoal(&self, i: usize) -> (String, Vec<String>) {
+        self.0.shoal_book.borrow().shoals.get(i).map(|s| (s.name.clone(), s.members.clone())).unwrap_or_default()
     }
     fn frame_texture(&mut self, w: &SceneWindow) -> Option<Texture> {
         let t = self.0.toplevels.borrow().iter().find(|t| t.id == w.id).cloned()?;
         self.0.frame_texture(&t)
     }
-    fn ebb_label(&mut self, _: &SceneWindow) -> Option<Label> {
-        None
+    fn ebb_label(&mut self, w: &SceneWindow) -> Option<Label> {
+        let t = self.0.toplevels.borrow().iter().find(|t| t.id == w.id).cloned()?;
+        self.0.ebb_label(&t)
     }
-    fn strip_label(&mut self, _: &str) -> Option<Label> {
-        None
+    fn strip_label(&mut self, name: &str) -> Option<Label> {
+        self.0.strip_label(name)
     }
     fn mapped_popups(&self) -> Vec<(Surface, i32, i32)> {
         self.0.mapped_popups().into_iter().map(|(p, (x, y))| (p.surface, x, y)).collect()

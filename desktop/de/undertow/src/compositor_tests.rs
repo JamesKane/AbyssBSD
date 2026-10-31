@@ -12,6 +12,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::geometry::EbbScope;
+use abyss_sys::mono;
 use aquadraw::theme::Theme;
 
 struct Rig {
@@ -20,12 +22,20 @@ struct Rig {
 }
 
 fn rig(tag: &str) -> Rig {
+    rig_with(tag, &[])
+}
+
+/// A rig whose config directory holds `files` (name, text) before start.
+fn rig_with(tag: &str, files: &[(&str, &str)]) -> Rig {
     let session = Rc::new(WlrootsSession::headless(1, 640, 480, 60_000, false).unwrap());
     let name = session.outputs()[0].name();
     let dir = std::env::temp_dir().join(format!("undertow-{tag}-{}", std::process::id())).to_string_lossy().into_owned();
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let layout = DisplayLayout { displays: vec![DisplayBox::new(&name, 0, 0, 640, 480)], ..DisplayLayout::default() };
+    for (name, text) in files {
+        std::fs::write(format!("{dir}/{name}"), text).unwrap();
+    }
+    let layout = DisplayLayout { displays: vec![DisplayBox::new(&name, 0, 0, 640, 480)] };
     let socket = format!("undertow-test-{tag}-{}", std::process::id());
     let c = Compositor::new(session, layout, Some(&dir), Some(&socket), Theme::default(), aquadraw::scene::runner(1)).unwrap();
     assert_eq!(c.socket_name, socket);
@@ -230,4 +240,142 @@ fn a_decorated_window_is_framed_and_its_frame_is_cached() {
         let n = c.toplevels.borrow().len();
         pump(c, || c.toplevels.borrow().len() < n);
     }
+}
+
+const ISLANDS: (&str, &str) = ("islands.ini", "[islands]\ncount = 3\nanimate = false\n");
+
+fn by_title(c: &Compositor, title: &str) -> Rc<Toplevel> {
+    c.toplevels.borrow().iter().find(|t| t.title().as_deref() == Some(title)).cloned().expect(title)
+}
+
+/// A switch is a commit (C6): what shows and who has the keyboard change at
+/// once, a hidden window is told it is suspended, the switch is stamped for
+/// the frame that draws it, and asking for a window elsewhere goes there.
+#[test]
+fn islands_switch_what_shows_and_who_has_the_keyboard() {
+    let r = rig_with("islands", &[ISLANDS]);
+    let c = &r.c;
+    let d = c.layout.borrow().displays[0].name.clone();
+    let (tx, _rx) = mpsc::channel();
+    let _a = client(&c.socket_name, "One", "org.test.one", (100, 60), (1.0, 0.0, 0.0), 5.0, tx.clone());
+    assert!(pump(c, || c.mapped_toplevels().len() == 1));
+    let one = by_title(c, "One");
+    assert_eq!(one.island.get(), 1);
+
+    c.switch_island(2, None);
+    assert_eq!(c.active_island(&d), 2);
+    assert!(c.mapped_toplevels().is_empty(), "island 1's window is not shown");
+    assert!(c.focused().is_none(), "nor focused");
+    assert!(one.suspended_said.get(), "and is told it is suspended");
+    assert!(c.island_inputs.borrow().contains_key(&d), "stamped for C6");
+
+    let _b = client(&c.socket_name, "Two", "org.test.two", (100, 60), (0.0, 1.0, 0.0), 5.0, tx);
+    assert!(pump(c, || c.mapped_toplevels().len() == 1 && c.mapped_toplevels()[0].title().as_deref() == Some("Two")));
+    let two = by_title(c, "Two");
+    assert_eq!(two.island.get(), 2, "a window maps on the island shown");
+
+    c.bring_to_front(&one);
+    assert_eq!(c.active_island(&d), 1, "asking for a window goes to its island");
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &one)));
+    assert!(!one.suspended_said.get() && two.suspended_said.get());
+
+    c.move_focused_window_to_island(3, false);
+    assert_eq!(one.island.get(), 3);
+    assert!(c.mapped_toplevels().is_empty(), "it went, and you stayed");
+    c.step_island(1);
+    c.step_island(1);
+    assert_eq!(c.active_island(&d), 3, "1 → 2 → 3");
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &one)));
+    c.step_island(1);
+    assert_eq!(c.active_island(&d), 1, "and wraps");
+    assert_eq!(c.island_switches.get(), 5);
+    for t in [one, two] {
+        t.xdg.send_close();
+    }
+    pump(c, || c.toplevels.borrow().is_empty());
+}
+
+/// Ebb lays the island's windows out, the scene draws them in their slots,
+/// and a click on one goes to it and puts the tide back.
+#[test]
+fn ebb_opens_draws_and_picks() {
+    let r = rig_with("ebb", &[ISLANDS]);
+    let c = &r.c;
+    let (tx, _rx) = mpsc::channel();
+    let _a = client(&c.socket_name, "Left", "org.test.left", (200, 120), (1.0, 0.0, 0.0), 5.0, tx.clone());
+    assert!(pump(c, || c.mapped_toplevels().len() == 1));
+    let _b = client(&c.socket_name, "Right", "org.test.right", (200, 120), (0.0, 0.0, 1.0), 5.0, tx);
+    assert!(pump(c, || c.mapped_toplevels().len() == 2 && c.mapped_toplevels().iter().all(|t| t.surface.texture().is_some())));
+    let d = c.layout.borrow().displays[0].name.clone();
+    c.toggle_ebb(EbbScope::Island);
+    let e = c.ebb_frame(&d, mono::now()).expect("open");
+    assert_eq!(e.slots.len(), 2);
+    assert_eq!(c.ebb_opens.get(), 1);
+    let left = by_title(c, "Left");
+    let slot = e.slots.iter().find(|s| s.window == left.id).unwrap().slot;
+
+    let display = c.layout.borrow().displays[0].clone();
+    let mut scene = SurfaceScene::new(c.world(), &display, c.metrics.get(), 64);
+    scene.latch_and_composite(mono::now(), 0);
+    assert_eq!(scene.count, 3, "the dimming and two windows in their slots");
+    assert_eq!(scene.entry(1).2.width, slot.width.min(200));
+
+    c.ebb_hover(slot.x as f64 + 5.0, slot.y as f64 + 5.0);
+    assert_eq!(c.ebb.borrow().as_ref().unwrap().hovered, Some(left.id));
+    c.ebb_click(slot.x as f64 + 5.0, slot.y as f64 + 5.0);
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &left)), "picked");
+    assert!(c.ebb_frame(&d, mono::now()).is_none(), "and the tide put back");
+    while !c.toplevels.borrow().is_empty() {
+        c.close_focused_window();
+        let n = c.toplevels.borrow().len();
+        pump(c, || c.toplevels.borrow().len() < n);
+    }
+}
+
+/// A shoal: made of one window, joined by another, recalled together from
+/// the Dock, and from the strip.
+#[test]
+fn shoals_are_made_joined_and_recalled() {
+    let r = rig_with("shoals", &[ISLANDS]);
+    let c = &r.c;
+    let (tx, _rx) = mpsc::channel();
+    let _a = client(&c.socket_name, "Mail", "org.test.mail", (100, 60), (1.0, 0.0, 0.0), 5.0, tx.clone());
+    assert!(pump(c, || c.mapped_toplevels().len() == 1));
+    c.new_shoal();
+    let _b = client(&c.socket_name, "Calendar", "org.test.cal", (100, 60), (0.0, 1.0, 0.0), 5.0, tx);
+    assert!(pump(c, || c.mapped_toplevels().len() == 2));
+    c.add_focused_to_shoal(None);
+    {
+        let book = c.shoal_book.borrow();
+        assert_eq!(book.shoals.len(), 1);
+        assert_eq!(book.shoals[0].members, ["org.test.mail/Mail", "org.test.cal/Calendar"]);
+    }
+    let saved = std::fs::read_to_string(format!("{}/shoals.ini", r._dir)).unwrap();
+    assert!(saved.contains("org.test.cal/Calendar"), "{saved}");
+
+    let (mail, cal) = (by_title(c, "Mail"), by_title(c, "Calendar"));
+    c.set_minimized(&mail, true);
+    c.set_minimized(&cal, true);
+    c.recall_shoal_number(1);
+    assert!(!mail.minimized.get() && !cal.minimized.get(), "both back");
+    assert!(c.focused().is_some_and(|f| Rc::ptr_eq(&f, &cal)), "the last focused");
+    assert_eq!(c.recalls.get(), 1);
+
+    c.set_minimized(&mail, true);
+    c.toggle_shoal_strip();
+    let d = c.layout.borrow().displays[0].name.clone();
+    let tiles = c.strip_tiles(&d);
+    assert_eq!(tiles.len(), 1);
+    let (_, t) = tiles[0];
+    assert!(c.strip_click(t.x as f64 + 3.0, t.y as f64 + 3.0));
+    assert!(!mail.minimized.get() && !c.strip_shown.get(), "recalled, and the strip went");
+    if c.runner.borrow().is_some() {
+        assert!(c.strip_label("Shoal 1").is_some_and(|l| l.width > 24 && l.height == 22));
+    }
+    c.remove_focused_from_shoal();
+    assert_eq!(c.shoal_book.borrow().shoals[0].members, ["org.test.mail/Mail"]);
+    for t in [mail, cal] {
+        t.xdg.send_close();
+    }
+    pump(c, || c.toplevels.borrow().is_empty());
 }

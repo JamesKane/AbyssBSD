@@ -25,6 +25,8 @@ pub struct Metrics {
 
 pub struct Text {
     pub render_scale: i32,
+    /// This thread's claim on CText (below); also what makes `Text` !Send.
+    _claim: Claim,
     shape_cache: HashMap<(String, i32, i32, i32), Vec<AtGlyph>>,
     face_cache: HashMap<i32, FontFace>,
     /// Each role's case and tracking (em), from the theme.
@@ -34,13 +36,56 @@ pub struct Text {
 
 const SHAPE_CACHE_CAP: usize = 1024;
 
+/// **CText is one thread's at a time.** Its FreeType library and face table
+/// are process globals ("everything here runs on the UI thread, one draw at
+/// a time": ctext.c), as Swift's `Text` is static. Two threads drawing text
+/// at once crashed in FreeType (RUST.md R4d: the compositor's tests, each a
+/// thread with its own runner). So a thread's first `Text` claims CText and
+/// its last gives it back; a `Text` made on another thread meanwhile waits.
+/// Reentrant within a thread, so one thread may hold several runners, and
+/// never contended in a program, which draws on one thread.
+struct Claim(std::marker::PhantomData<*const ()>);
+
+static OWNER: std::sync::Mutex<Option<std::thread::ThreadId>> = std::sync::Mutex::new(None);
+static RELEASED: std::sync::Condvar = std::sync::Condvar::new();
+thread_local! {
+    static HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+impl Claim {
+    fn take() -> Claim {
+        if HELD.get() == 0 {
+            let me = std::thread::current().id();
+            let mut owner = OWNER.lock().unwrap_or_else(|e| e.into_inner());
+            while owner.is_some_and(|o| o != me) {
+                owner = RELEASED.wait(owner).unwrap_or_else(|e| e.into_inner());
+            }
+            *owner = Some(me);
+        }
+        HELD.set(HELD.get() + 1);
+        Claim(std::marker::PhantomData)
+    }
+}
+
+impl Drop for Claim {
+    fn drop(&mut self) {
+        HELD.set(HELD.get() - 1);
+        if HELD.get() == 0 {
+            *OWNER.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            RELEASED.notify_all();
+        }
+    }
+}
+
 impl Text {
     /// None when no font could be opened (Text.available false).
     pub fn new(render_scale: i32) -> Option<Text> {
+        // Claimed before font_init, which is the first touch of the globals.
+        let claim = Claim::take();
         if !ffi::font_init() {
             return None;
         }
-        Some(Text { render_scale, shape_cache: HashMap::new(), face_cache: HashMap::new(), upper_roles: BTreeSet::new(), tracking_roles: BTreeMap::new() })
+        Some(Text { render_scale, _claim: claim, shape_cache: HashMap::new(), face_cache: HashMap::new(), upper_roles: BTreeSet::new(), tracking_roles: BTreeMap::new() })
     }
 
     /// Text.useRoles, for one theme's `[fonts]`: a mono role not found falls

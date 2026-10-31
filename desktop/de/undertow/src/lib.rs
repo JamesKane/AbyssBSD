@@ -21,6 +21,7 @@ pub mod scene;
 pub mod shoals;
 pub mod switch_latency;
 pub mod synthetic;
+pub mod tide;
 
 #[cfg(test)]
 mod tests;

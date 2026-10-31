@@ -698,6 +698,20 @@ place under (BACKLOG §5: Swift loses it; Rust keeps the last key), and
 tests' clients segfaulted): a headless backend now asks for pixman
 directly, `$WLR_RENDERER` still winning.
 
+*R4d, then: frames, islands, Ebb and shoals* (`decorations.rs`,
+`tide.rs`). xdg-decoration answered server-side, held until the first
+commit, each frame aquadraw's chrome cached until its size, focus, title
+or theme changes; the compositor takes the theme and a runner, and its
+frame metrics are the theme's. Island switches (the commit, the slide,
+the C6 stamp, `suspended`, focus), moving a window between islands,
+islands.ini reloaded; Ebb opened, hovered, picked and dismissed, with its
+labels; shoals made, joined, left, recalled from the keyboard and the
+strip, and saved. All tested with real clients. Finding: **CText is one
+thread's** (its FreeType library and face table are globals, as Swift's
+`Text` is static), and two tests drawing text at once crashed in
+FreeType. aquadraw's `Text` now claims CText for its thread, reentrantly,
+and is `!Send`; a program draws on one thread and never waits.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an
