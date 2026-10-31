@@ -186,15 +186,68 @@ fn a_pool_name_already_imported_is_refused() {
 fn pool_names_zfs_itself_would_reject() {
     // Each fails at `zpool create`, AFTER `gpart` has written the disk.
     let bad = |n: &str| problems(&with_pool(n), &machine()).iter().any(|p| matches!(p, BadPoolName { .. }));
-    for name in ["mirror", "raidz2", "spare", "9lives", "c0d0", "c9x", "", "a/b"] {
+    // libzfs reserves prefixes, not just names: `zpool create mirror2` fails.
+    for name in ["mirror", "raidz2", "spare", "9lives", "c0d0", "c9x", "", "a/b", "mirror2", "raidzpool", "draid1", "spares", "log", &"a".repeat(240)] {
         assert!(bad(name), "expected {name} to be refused");
     }
-    for name in ["abyss", "zroot", "tank", "abyss-2", "a.b", "cache2"] {
+    for name in ["abyss", "zroot", "tank", "abyss-2", "a.b", "cache2", "logs", "amirror", &"a".repeat(239)] {
         assert!(!bad(name), "expected {name} to be accepted");
     }
     // ZFS's letters are ASCII (Swift's are Unicode's, and pass these).
     for name in ["école", "pool²", "zé"] {
         assert!(bad(name), "expected {name} to be refused");
+    }
+}
+
+/// The settings refused, as `(what, value)`.
+fn bad_settings(p: &InstallPlan) -> Vec<(String, String)> {
+    problems(p, &machine()).into_iter().filter_map(|r| if let BadSetting { what, value, .. } = r { Some((what, value)) } else { None }).collect()
+}
+
+#[test]
+fn a_hostname_is_a_hostname_and_writes_no_lines_of_its_own() {
+    let bad = |h: &str| bad_settings(&InstallPlan { hostname: h.into(), ..rooted("ada0") }) == [("the computer's name".to_owned(), h.to_owned())];
+    for h in ["x\"\nabyss_desktop_user=\"root", "", "a b", "-a", "a-", "a..b", ".a", "a.", "`id`", "$(id)", "é", &"a".repeat(64), &["a"; 128].join(".")] {
+        assert!(bad(h), "expected {h:?} to be refused");
+    }
+    for h in ["abyss", "jaguar", "abyss-2", "a.example.org", "9lives", &"a".repeat(63)] {
+        assert!(bad_settings(&InstallPlan { hostname: h.into(), ..rooted("ada0") }).is_empty(), "expected {h:?} to be accepted");
+    }
+}
+
+#[test]
+fn a_timezone_or_keymap_is_a_name_not_a_path() {
+    let tz = |t: &str| bad_settings(&InstallPlan { timezone: t.into(), ..rooted("ada0") });
+    for t in ["../..", "../../etc/master.passwd", "/etc/passwd", "America/../../x", "./UTC", "America/", "Ame rica", "x\"y"] {
+        assert_eq!(tz(t), [("the time zone".to_owned(), t.to_owned())], "{t:?}");
+    }
+    for t in ["", "UTC", "America/Chicago", "America/Argentina/Buenos_Aires", "Etc/GMT+5", "Etc/GMT-14", "GMT0"] {
+        assert_eq!(tz(t), [], "{t:?}");
+    }
+    let km = |k: &str| bad_settings(&InstallPlan { keymap: k.into(), ..rooted("ada0") });
+    for k in ["../x", "a/b", "us.kbd\"\nx=\"y", ".kbd", "us kbd"] {
+        assert_eq!(km(k), [("the keyboard layout".to_owned(), k.to_owned())], "{k:?}");
+    }
+    for k in ["", "us.kbd", "fr.acc.kbd", "us.dvorak.kbd", "de.noacc.kbd", "uk.kbd"] {
+        assert_eq!(km(k), [], "{k:?}");
+    }
+}
+
+#[test]
+fn account_names_are_ones_pw_takes_and_full_names_keep_to_one_line() {
+    let with = |a: Account| bad_settings(&InstallPlan { accounts: vec![a], ..rooted("ada0") });
+    for n in ["", "-jo", "jo smith", "jo:x", "jo\"x", "jo`id`", "jo$x", "jö", "jo\n", &"j".repeat(33)] {
+        assert_eq!(with(Account::new(n, "$6$x")), [("the account name".to_owned(), n.to_owned())], "{n:?}");
+    }
+    for n in ["jkane", "jo.o-neil", "_svc", "samba$", "J_Kane", &"j".repeat(32)] {
+        assert_eq!(with(Account::new(n, "$6$x")), [], "{n:?}");
+    }
+    let full = |f: &str| with(Account { full_name: f.into(), ..Account::new("jo", "$6$x") });
+    for f in ["Jo:x", "Jo\nroot::0:0::/:/bin/sh", "Jo\t"] {
+        assert_eq!(full(f), [("the full name".to_owned(), f.to_owned())], "{f:?}");
+    }
+    for f in ["", "Jo O'Neil", "Zoë", "J. Kane, Esq."] {
+        assert_eq!(full(f), [], "{f:?}");
     }
 }
 
@@ -239,6 +292,7 @@ fn every_refusal_says_something_a_person_could_act_on() {
         DiskHoldsRunningRoot("ada0".into()),
         DiskTooSmall { disk: "ada0".into(), has: GIB, needs: 8 * GIB },
         BadPoolName { name: "mirror".into(), why: "that name is reserved by ZFS".into() },
+        BadSetting { what: "the time zone".into(), value: "../..".into(), why: "it must be a name under /usr/share/zoneinfo, not a path".into() },
         PoolNameInUse("zroot".into()),
         NoSets,
         BaseSetNotFirst(vec!["kernel.txz".into()]),

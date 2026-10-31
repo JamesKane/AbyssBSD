@@ -25,6 +25,9 @@
 //!              affine, applied to the points (curves transform exactly)
 //!   gradients  linearGradient and radialGradient (centre and radius; a focal
 //!              point is not read)
+//!   refused    clip-path, mask and filter (other than `none`), and a
+//!              gradient's gradientTransform or href: each changes the
+//!              picture, so dropping it would import something else
 //! ```
 //!
 //! Coordinates come out as fractions of the list's rect — `w*0.25 h*0.5` — so
@@ -394,7 +397,10 @@ struct Style {
     fill_opacity: f64,
     stroke_opacity: f64,
     opacity: f64,
-    round: bool, // stroke-linejoin / -linecap round
+    // stroke-linejoin and stroke-linecap, each inherited on its own, so a
+    // child can turn one off; the draw list has one `round` for both.
+    round_join: bool,
+    round_cap: bool,
     dash: Vec<f64>,
 }
 
@@ -407,7 +413,8 @@ impl Default for Style {
             fill_opacity: 1.0,
             stroke_opacity: 1.0,
             opacity: 1.0,
-            round: false,
+            round_join: false,
+            round_cap: false,
             dash: vec![],
         }
     }
@@ -650,14 +657,24 @@ impl Converter {
         } else {
             return Err(err("<svg> has neither a viewBox nor a width and height"));
         }
-        self.collect_gradients(root);
+        self.collect_gradients(root)?;
         // The root itself, so its fill, stroke and transform reach its
         // children (the Swift walked only the children).
         self.walk(std::slice::from_ref(root), &Style::default(), &IDENTITY)
     }
 
-    fn collect_gradients(&mut self, e: &Element) {
+    fn collect_gradients(&mut self, e: &Element) -> Result<()> {
         for c in &e.children {
+            if c.name == "linearGradient" || c.name == "radialGradient" {
+                // An inherited gradient (`href`) or a transformed one would
+                // import as some other gradient: refuse, as for any feature
+                // outside the subset.
+                let refused = c.attrs.keys().filter(|k| *k == "gradientTransform" || *k == "href" || k.ends_with(":href")).min();
+                if let Some(k) = refused {
+                    let id = c.attrs.get("id").map_or(String::new(), |i| format!(" id=\"{i}\""));
+                    return Err(err(format!("<{}{id}> {k}: svg2dl does not import {k}", c.name)));
+                }
+            }
             if (c.name == "linearGradient" || c.name == "radialGradient")
                 && let Some(id) = c.attrs.get("id")
             {
@@ -689,8 +706,9 @@ impl Converter {
                 }
                 self.gradients.insert(id.clone(), g);
             }
-            self.collect_gradients(c);
+            self.collect_gradients(c)?;
         }
+        Ok(())
     }
 
     fn walk(&mut self, els: &[Element], parent: &Style, parent_m: &Affine) -> Result<()> {
@@ -700,6 +718,11 @@ impl Converter {
             }
             let mut st = parent.clone();
             let a = style_attrs(e);
+            for k in ["clip-path", "mask", "filter"] {
+                if let Some(v) = a.get(k).filter(|v| trimmed(v) != "none") {
+                    return Err(err(format!("<{}> {k}=\"{v}\": svg2dl does not import {k}", e.name)));
+                }
+            }
             if a.get("fill-rule").map(String::as_str) == Some("evenodd") {
                 return Err(err(format!("<{}> fill-rule=evenodd: the draw-list format fills nonzero only", e.name)));
             }
@@ -722,10 +745,10 @@ impl Converter {
                 st.opacity *= v;
             }
             if let Some(v) = a.get("stroke-linejoin") {
-                st.round = v == "round" || st.round;
+                st.round_join = v == "round";
             }
             if let Some(v) = a.get("stroke-linecap") {
-                st.round = v == "round" || st.round;
+                st.round_cap = v == "round";
             }
             if let Some(v) = a.get("stroke-dasharray") {
                 st.dash = numbers(v);
@@ -928,7 +951,7 @@ impl Converter {
         }
         if let Some(s) = self.paint_words(&st.stroke, st.stroke_opacity * st.opacity, bbox, m)? {
             let mut line = format!("stroke {s} w*{}", self.fmt(st.stroke_width * m.scale() / self.vb.w));
-            if st.round {
+            if st.round_join || st.round_cap {
                 line += " round";
             }
             if !st.dash.is_empty() {
@@ -950,7 +973,7 @@ impl Converter {
             PaintSpec::Gradient(id) => id,
         };
         let Some(g) = self.gradients.get(id) else {
-            return Err(err(format!("url(#{id}): no linearGradient with that id")));
+            return Err(err(format!("url(#{id}): no gradient with that id")));
         };
         if g.stops.len() < 2 {
             return Err(err(format!("url(#{id}): a gradient wants two stops")));

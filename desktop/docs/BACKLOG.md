@@ -139,134 +139,32 @@ recommended; the 12700KF has no Wi-Fi card (§3, item 5).
 
 From HANDOFF §5.3, still true:
 
-- **svg2dl ignores some attributes instead of refusing them** (found
-  2026-10-31, porting it). `gradientTransform`, `href`, `clip-path`,
-  `mask` and `filter` are dropped silently, against the importer's
-  refuse-by-name rule; `stroke-linejoin`/`linecap="round"` cannot be
-  turned off by a child; and the radial-gradient error says "no
-  linearGradient". Rust kept all three, as Swift does; no file in the
-  tree uses them. Refuse them by name and fix the message.
-
-- **Activity Monitor's right-aligned column titles overhang their
-  columns** (found 2026-10-31, porting it). `paintActivity` measures each
-  header title at regular weight and draws it bold, so "PID", "% CPU",
-  "Threads" and "Real Memory" end a few points right of where the
-  numbers under them end. Rust matches it for now, since the `activity`
-  goldens are shared; fix both (measure with `.bold`) and regenerate
-  `activity` and `activity@2x` together.
-
-- **Swift's Agent window can lose a second requester's answer** (found
-  2026-10-31, porting it). `AgentApp.pending` holds the question's
-  connection, but `request()` overwrites it with the keeper's and sets it
-  to -1 when that reply comes. So once a write or host requester has
-  been answered, a second one in the same question reads `pending` as -1,
-  never sends its `answer`, and the agent waits on it forever. Rust keeps
-  the question's connection in a slot of its own (`AgentApp::stream`).
-  Fix the Swift half the same way while it runs; no golden pictures it.
-
-- **Swift's installer says "Choose an user account"** (found 2026-10-31,
-  porting it). `article()` picks "an" by the first letter, so the hub's
-  readiness line reads "an user account" when only the account is left.
-  Rust's installer gives each spoke its phrase with the article
-  (`Spoke::to_choose`). Fix the Swift half the same way while it runs; no
-  golden pictures that line.
-
-- **Swift's PoolConfig can't read a CRLF file** (decided 2026-10-30, after
-  the Rust port). Swift splits by Character, and `"\r\n"` is one, so a CRLF
-  `.ini` is one long key. Rust's `pool-config` reads it as LF; fix the Swift
-  half to match while it still runs, and drop `crlf*` from the fixtures'
-  `DIVERGENT` list. **Settings' editors have the same bug, and it loses
-  data** (found 2026-10-30): a CRLF `sysctl.conf` is one line to
-  `Settings.editSysctlConf`, so setting one key drops every other line, and
-  a CRLF `wpa_supplicant.conf` gets a second `ctrl_interface`. Rust's
-  `settings` splits at LF and treats CR as a blank; drop `sysctl-crlf` and
-  `wpa-crlf` from the settings fixtures' list too. **And `Keymaps`**: a
-  CRLF rc.conf is one line, so the keymap read back is the rest of the file
-  and the desktop types US (`keymap-crlf`); Fathom's probes miss a CRLF
-  capture's modules (`modules-crlf`), and SystemFacts reads a CRLF
-  `pciconf -lv` as one line (`pci-crlf`).
-- **The installer's pool-name rule is not ZFS's** (found 2026-10-30,
-  checked against `zfs_namecheck.c` and `libzfs_pool.c` in `src/`). Both
-  ways it fails do so **after `gpart` has written the disk**. Swift's
-  `isLetter` is Unicode's, so `école` passes (Rust's `install` is ASCII
-  already). And both halves reserve only exact names, where `zpool create`
-  refuses any name *beginning* `mirror`, `raidz`, `draid` or `spare`, so
-  `mirror2` passes the check and fails the install. The other way, ours are
-  stricter than ZFS (`cache`, `c0d0` and spaces are legal there), which is
-  harmless. Fix the prefixes in both.
-- **An install plan's hostname and keymap go into rc.conf unchecked**
-  (found 2026-10-30): `hostname="x\"\nabyss_desktop_user=\"root"` adds a
-  line (`check-hostname-injection` pins it), and a timezone of `../..`
-  copies any file of the new system to `/etc/localtime`. The caller is the
-  person installing, so this is a correctness hole more than a privilege
-  one; refuse a quote, a newline or `..` in both halves.
-- **Swift's installer service traps on sizes from the wire** (found
-  2026-10-30): `minimumDiskBytes` adds the ESP and swap sizes, so a plan
-  with either near `UInt64.max` crashes `problems` in the root service, and
-  a list count or progress index past `Int.max` traps the decoder. Rust's
-  `install` saturates and its wire reads only the fields a message holds.
-- **Swift's `Command.retitled` drops `writes`** (found 2026-10-30, porting
-  MenuModel). It rebuilds the command without the flag, so a retitled
-  command that writes would stop asking an agent first (P18.11). Nothing
-  hits it today: only Undo, Redo and Force Quit are retitled. Rust's
-  `menu-model` keeps the flag.
-- **Swift's MenuService blocks on a subscriber that stops reading**
-  (found 2026-10-30). Subscriber sockets are blocking with no send timeout,
-  so once one's buffer fills, `changed()` stalls the application's run loop.
-  Rust's `menu-wire` sets the request timeout as a send timeout and drops
-  the subscriber.
-- **Swift's D-Bus reader can be hung or crashed by a peer** (found
-  2026-10-30, porting the wire half). An array of `()` (any length) reads
-  nothing per element and loops for ever, and variants nested a few
-  thousand deep run the stack out: either stops `abyss-dbus` for every
-  application on the session. It also splits any signature (an unbalanced
-  `(` is an empty struct) and reads only a variant's first type. Rust's
-  `dbus` parses signatures and limits depth to the specification's 64; port
-  both to the Swift reader while it is the one running.
-- **Swift's undertow forgets where a window that closes itself was**
-  (found 2026-10-30, porting the compositor). The toplevel's destroy
-  handler calls `rememberPlace` "before letting go", but by the time
-  wlroots 0.20 emits `destroy` the title and app_id are already freed, so
-  `placeKey` is nil and nothing is stored: only a window closed some other
-  way keeps its place. Rust's undertow keeps the last key it saw (map,
-  `set_title`, `set_app_id`) and remembers under that; the test that
-  closes a window and reads its place back is
-  `a_window_maps_centred_focused_and_published_and_closes_on_request`.
-- **Swift's D-Bus bridge cannot forward a descriptor** (found 2026-10-30,
-  porting the endpoint). `BridgeEndpoint.flush` treats `ap_sendmsg_fds`
-  returning 0 as sent, but it returns the byte count, so every message with
-  an `h` in it reads as a failed write: the receiver is dropped, or, if
-  `errno` happens to say EAGAIN, its queue never moves again. Nothing ADE
-  serves passes one through the bridge today; a GTK app that does
-  (`OpenURI` with a descriptor, say) would lose its connection. Rust's
-  `dbusbridge` counts the bytes and sends the rest plain.
-- **Swift's settings runner keeps a stale staged copy's mode** (found
-  2026-10-30, porting the runner). `Runner.copyFile` opens
-  `<file>.abyss-staged` with `O_CREAT`, which sets the mode only when it
-  makes the file; one a crash left behind keeps its own, and is renamed
-  into place. A 0644 leftover would put the Wi-Fi keys in a world-readable
-  wpa_supplicant.conf. Rust's `settings-run` sets the mode after opening.
-- **TextEdit's Find Previous misses from the end of the text** (found
-  2026-10-30, porting TextModel). `TextModel.find(backward:)` starts at
-  the selection's start minus one, which can be past the last place a match
-  can begin, and spends its tries getting back: with the caret at the end of
-  "ab", finding "ab" backward finds nothing. Reset to the last possible
-  start, as Rust's `text-model` does (`find-backward-end`).
-- **Swift's jail plan lets a path in the person's home through** (found
-  2026-10-30, porting Jails). `JailPlan.under` uses `hasPrefix`, which is by
-  Character, so in `/home/abyss/◌́docs` the accent joins the `/` before it
-  and the path is not "under" `/home/abyss`: a class that mounts it is not
-  refused for reaching the person's own home (`combining-home`). The row is
-  the person's own `jails.ini`, so this weakens a confinement they set up
-  rather than giving anyone else a way in. Compare bytes (`utf8`), as
-  Rust's `jails` does; `secret`'s `contains` has the same shape.
-- **The vocabulary bridge runs a write unasked when an application will
-  not describe itself** (found 2026-10-30, porting Vocabulary). Requester
-  1's check is `try? menus.describe(s)`: when that fails, the check is
-  skipped and the verb is activated, so an application that stops answering
-  `describe` but still answers `activate` has a verb that writes run without
-  the person being asked (P18.11). Refuse instead, as Rust's `vocabulary`
-  does, in the words a failed activation already uses.
+- **The Swift-port findings are closed** (2026-10-31). The port found
+  seventeen bugs in the Swift code. Thirteen were Swift's alone, written
+  right in Rust from the start, and went when Swift was deleted at R7: CRLF
+  files read as one line (PoolConfig, Settings' editors, Keymaps, Fathom,
+  SystemFacts), the installer service trapping on wire sizes, the Agent
+  window losing a second requester's answer, "an user account",
+  `Command.retitled` dropping `writes`, MenuService blocking on a stalled
+  subscriber, the D-Bus reader hung or crashed by a peer, the bridge failing
+  every descriptor, undertow forgetting a self-closed window's place, a
+  stale staged copy's mode, Find Previous missing at the end, the jail
+  plan's `hasPrefix` by Character, and the vocabulary bridge running a write
+  unasked. The four Rust had kept are fixed:
+  - **Pool names follow `zpool create`**: a name *beginning* `mirror`,
+    `raidz`, `draid` or `spare` is refused, and `log`, and one too long for
+    `pool_namecheck`, all before `gpart` runs.
+  - **What the plan writes into the new system is checked**: the hostname
+    (RFC 1123), the keymap (a name, not a path), the time zone (no `..` or
+    leading `/`), account names (`pw`'s rule, plus a backquote) and full
+    names (no `:` or control characters). `check-hostname-injection` is now
+    a refusal.
+  - **svg2dl refuses `clip-path`, `mask`, `filter`, `gradientTransform`
+    and `href` by name**, a child can turn a round join or cap off, and a
+    missing gradient is "no gradient". All 45 SVGs in the tree import
+    byte for byte as before.
+  - **Activity Monitor measures its column titles bold**, as it draws
+    them; `activity` and `activity@2x` regenerated on both platforms.
 - **A desktop picture per island** (PHASE13 P13.7, deferred). The picture is
   drawn by the desktop process, an ordinary client that cannot know which
   island is showing. It needs that told to it: a small protocol, or a desktop

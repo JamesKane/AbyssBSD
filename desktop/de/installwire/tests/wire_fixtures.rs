@@ -22,6 +22,9 @@ const DIVERGENT: &[(&str, &str)] = &[
     ("check-pool-unicode", "a pool name ZFS refuses"),
     // A Character is a grapheme: to Swift, e + U+0308 is one letter.
     ("check-decomposed-name", "a combining mark is quoted"),
+    // Swift wrote the hostname into rc.conf unchecked, quote and newline
+    // and all; Rust refuses it before any disk is touched.
+    ("check-hostname-injection", "a hostname that writes rc.conf lines"),
     // A CRLF is one Character: Swift's rc.conf is one line.
     ("keymap-crlf", "CRLF lines"),
 ];

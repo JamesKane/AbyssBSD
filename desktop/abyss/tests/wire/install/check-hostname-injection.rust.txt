@@ -1,0 +1,8 @@
+check
+plan "ada0" pool="abyss" esp=272629760 swap=2147483648 dist="/usr/freebsd-dist" mountpoint="/mnt" hostname="x\"\nabyss_desktop_user=\"root" timezone="" keymap="" rootpw="*" erase=0 autologin=0
+set "base.txz"
+set "kernel.txz"
+account "jkane" "J Kane" "$6$fake" groups=["wheel"] shell="/bin/sh"
+disk "ada0" bytes=68719476736 descr="QEMU HARDDISK" mounted=[] root=0 pools=[] kinds=[] free=0 table=0
+machine none
+problem "the computer's name \"x\\\"\\nabyss_desktop_user=\\\"root\" cannot be used: '\"' is not allowed: only letters, digits, - and . are"

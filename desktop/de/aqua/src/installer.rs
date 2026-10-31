@@ -272,7 +272,7 @@ impl InstallerModel {
         for p in self.trial(d) {
             match p {
                 DiskHoldsRunningRoot(_) | DiskIsMounted { .. } | DiskTooSmall { .. } | NotAWholeDisk(_) | DiskIsFull { .. } => return p.message(),
-                EmptyDisk | NoSuchDisk { .. } | BadPoolName { .. } | PoolNameInUse(_) | NoSets | BaseSetNotFirst(_) | SizeNotWholeMiB { .. } | RelativePath { .. } | NoAdministrator => continue,
+                EmptyDisk | NoSuchDisk { .. } | BadPoolName { .. } | BadSetting { .. } | PoolNameInUse(_) | NoSets | BaseSetNotFirst(_) | SizeNotWholeMiB { .. } | RelativePath { .. } | NoAdministrator => continue,
             }
         }
         String::new()
@@ -284,7 +284,7 @@ impl InstallerModel {
         use PlanRefusal::*;
         self.trial(d).iter().any(|p| match p {
             DiskHoldsRunningRoot(_) | DiskIsMounted { .. } | DiskTooSmall { .. } | NotAWholeDisk(_) => true,
-            DiskIsFull { .. } | EmptyDisk | NoSuchDisk { .. } | BadPoolName { .. } | PoolNameInUse(_) | NoSets | BaseSetNotFirst(_) | SizeNotWholeMiB { .. } | RelativePath { .. } | NoAdministrator => false,
+            DiskIsFull { .. } | EmptyDisk | NoSuchDisk { .. } | BadPoolName { .. } | BadSetting { .. } | PoolNameInUse(_) | NoSets | BaseSetNotFirst(_) | SizeNotWholeMiB { .. } | RelativePath { .. } | NoAdministrator => false,
         })
     }
 

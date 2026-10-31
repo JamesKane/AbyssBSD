@@ -156,9 +156,9 @@ pub fn paint_activity(c: &mut Canvas, w: f64, h: f64, v: &ActivityView, user_nam
     let mut x = 8.0;
     for (col, title, width, right) in COLUMNS {
         let s = format!("{title}{}", if col == v.sort_by { if v.ascending { " ▲" } else { " ▼" } } else { "" });
-        // Measured regular and drawn bold, as Swift's is (BACKLOG §5): the
-        // shared golden holds it so until both are fixed.
-        let tx = if right { x + width - 8.0 - c.text_width(&s, 11.0, Style::Regular, Role::Interface) } else { x };
+        // Measured as it is drawn, bold, so a right-aligned title ends
+        // where the numbers under it end.
+        let tx = if right { x + width - 8.0 - c.text_width(&s, 11.0, Style::Bold, Role::Interface) } else { x };
         text(c, &s, tx, l.header.y + 14.0, t.body_text, Style::Bold);
         x += width
     }

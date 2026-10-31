@@ -107,6 +107,48 @@ fn what_is_outside_the_subset_is_refused_by_name() {
     assert_eq!(error("<html/>").as_deref(), Some("the document is <html>, not <svg>"));
 }
 
+/// Each of these changes the picture, so importing without it would draw
+/// something else: refused by name, as anything outside the subset is.
+#[test]
+fn clipping_masks_filters_and_gradient_tricks_are_refused_not_dropped() {
+    let shape = |attr: &str| error(&format!("<svg viewBox=\"0 0 1 1\"><rect width=\"1\" height=\"1\" {attr}/></svg>"));
+    assert_eq!(shape("clip-path=\"url(#c)\"").as_deref(), Some("<rect> clip-path=\"url(#c)\": svg2dl does not import clip-path"));
+    assert_eq!(shape("mask=\"url(#m)\"").as_deref(), Some("<rect> mask=\"url(#m)\": svg2dl does not import mask"));
+    assert_eq!(shape("style=\"filter: url(#f)\"").as_deref(), Some("<rect> filter=\"url(#f)\": svg2dl does not import filter"));
+    // `none` is what no attribute means.
+    assert_eq!(shape("clip-path=\"none\" mask=\"none\" filter=\"none\""), None);
+    let gradient = |attr: &str| {
+        error(&format!(
+            "<svg viewBox=\"0 0 1 1\"><defs><linearGradient id=\"g\" {attr}><stop offset=\"0\"/><stop offset=\"1\"/></linearGradient></defs><rect width=\"1\" height=\"1\" fill=\"url(#g)\"/></svg>"
+        ))
+    };
+    assert_eq!(gradient("gradientTransform=\"rotate(90)\"").as_deref(), Some("<linearGradient id=\"g\"> gradientTransform: svg2dl does not import gradientTransform"));
+    assert_eq!(gradient("xlink:href=\"#h\"").as_deref(), Some("<linearGradient id=\"g\"> xlink:href: svg2dl does not import xlink:href"));
+    assert_eq!(gradient("href=\"#h\"").as_deref(), Some("<linearGradient id=\"g\"> href: svg2dl does not import href"));
+    assert_eq!(gradient(""), None);
+    // A missing radial gradient is not called a linear one.
+    assert_eq!(
+        error("<svg viewBox=\"0 0 1 1\"><rect width=\"1\" height=\"1\" fill=\"url(#nope)\"/></svg>").as_deref(),
+        Some("url(#nope): no gradient with that id")
+    );
+}
+
+/// Round joins and round caps inherit separately, and a child can turn
+/// either off; the list's one `round` is either of them.
+#[test]
+fn a_child_can_turn_round_strokes_off() {
+    let list = |g: &str, p: &str| {
+        draw_list("t", &format!("<svg viewBox=\"0 0 10 10\"><g {g}><path d=\"M0 0 L10 10\" fill=\"none\" stroke=\"#000\" {p}/></g></svg>")).unwrap()
+    };
+    let round = |g: &str, p: &str| list(g, p).contains(" round");
+    assert!(round("stroke-linejoin=\"round\"", ""));
+    assert!(round("stroke-linecap=\"round\"", ""));
+    assert!(!round("stroke-linejoin=\"round\"", "stroke-linejoin=\"miter\""));
+    assert!(!round("stroke-linecap=\"round\"", "stroke-linecap=\"butt\""));
+    assert!(round("stroke-linejoin=\"round\" stroke-linecap=\"round\"", "stroke-linejoin=\"miter\""), "the cap is still round");
+    assert!(!round("", ""));
+}
+
 // MARK: the port's own
 
 /// Swift's `Double(String)`: strtod's whole-string forms, and nothing with
