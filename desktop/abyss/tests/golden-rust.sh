@@ -75,6 +75,12 @@ menubar-muted@2x|menubar-muted@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_
 menubar-agent-waiting@2x|menubar-agent-waiting@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_AGENTS=waiting:2
 menubar-agent-idle|menubar-agent-idle|aquademo:menubar|1|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_AGENTS=idle:1
 trench-menubar|trench-menubar|aquademo:menubar|1|ABYSS_THEME=trench ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=2
+dock|dock|aquademo:dock|1|
+dock-running@2x|dock-running@2x|aquademo:dock|2|AQUA_DOCK_RUNNING=1
+dock-agent-waiting@2x|dock-agent-waiting@2x|aquademo:dock|2|AQUA_DOCK_RUNNING=1 AQUA_AGENTS=waiting:2
+dock-agent-working|dock-agent-working|aquademo:dock|1|AQUA_DOCK_RUNNING=1 AQUA_AGENTS=working:1
+trench-dock|trench-dock|aquademo:dock|1|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1
+trench-dock-agent|trench-dock-agent|aquademo:dock|1|ABYSS_THEME=trench AQUA_DOCK_RUNNING=1 AQUA_AGENTS=waiting:1
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

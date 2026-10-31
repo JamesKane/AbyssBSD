@@ -65,6 +65,15 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Dock {
+            let Some(_dock) = aqua::dock::Dock::new(&display, &tk) else {
+                println!("AquaDemo: failed to create the Dock (does the compositor offer wlr-layer-shell?).");
+                exit(1)
+            };
+            println!("AquaDemo: Dock (layer-shell BOTTOM) is up.");
+            display.run();
+            exit(0)
+        }
         let Some(_window) = AquaWindow::new(&display, &tk, title, kind, w, h) else {
             println!("AquaDemo: failed to create the window.");
             exit(1)

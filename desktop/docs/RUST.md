@@ -906,6 +906,28 @@ against wl-clipboard both ways. **`abyss-displays` (de/displaysctl) is
 ported and swapped**: live-displays-config, -displays and -displays-pane
 green on it. Drag and drop waits for the Finder (R6) to be tried live.
 
+*R6a–c, the desktop, the menu bar and the Dock.* The three shell
+components, and what they stand on: the Finder's model and file
+operations, application icons (`.icns` too), the Launcher and Recent
+Items, AppLibrary, agent presence, the island menu, the status items and
+the volume slider, the contextual-menu helper. abyss-sys gains PNG
+loading and a local clock; the Display gains repeating timers, where
+Swift used a timerfd. Swift's tests come with each (60 in aqua now);
+where they set `HOME` or the config directory, the Rust functions take
+the directory or the switch instead, so no test changes the process's
+environment. **All 18 of their goldens are identical to Swift's**
+(wallpaper, eleven menu bars, six Docks): 53 in the gate. Live, with a
+scratch AquaDemo that runs the ported scenes in Rust and the rest in
+Swift, green: live-menu-focus, -submenus, -context, -window, -islands-bar,
+-shoals, -menubar-volume, -undo, -displays, -menus-gtk, -dnd, -dock-apps,
+-screenshot, -undertow-shell, -appearance, -session, -locksession,
+-switchuser, -greeter, -islandslide, -gtk, -textedit, -kiosk, -xcursor
+and -idlepolicy. live-menus and live-session-gtk wait for the Finder the
+desktop hosts (opening a folder from the desktop is a hook until then);
+live-sway fails on the all-Swift tree as well (System Preferences never
+maps under sway), not this port's. AquaDemo stays out of rust-bins until
+every scene is ported.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

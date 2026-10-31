@@ -22,6 +22,8 @@ pub enum SceneKind {
     Wallpaper,
     /// The menu bar: a TOP layer surface live; over the wallpaper in a PNG.
     MenuBar,
+    /// The Dock: a BOTTOM layer surface live; over the wallpaper in a PNG.
+    Dock,
 }
 
 impl SceneKind {
@@ -35,6 +37,7 @@ impl SceneKind {
             Some("sheet") => Some((SceneKind::Sheet, "Sheets", 440, 320)),
             Some("wallpaper") => Some((SceneKind::Wallpaper, "Desktop", 800, 600)),
             Some("menubar") => Some((SceneKind::MenuBar, "Menu Bar", 800, 600)),
+            Some("dock") => Some((SceneKind::Dock, "Dock", 800, 600)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -69,7 +72,7 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
         let was = runner.text.render_scale;
         runner.text.render_scale = scale; // shape and hint on the device grid
         // The shell's surfaces are full-bleed: no grey desktop, no inset.
-        if matches!(kind, SceneKind::Wallpaper | SceneKind::MenuBar) {
+        if matches!(kind, SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock) {
             let mut c = Canvas::new(&cr, runner, theme);
             crate::wallpaper::paint_wallpaper(&mut c, width as f64, height as f64);
             if kind == SceneKind::Wallpaper {
@@ -77,8 +80,10 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
                 let bounds = Rect::new(0.0, top, width as f64, height as f64 - top);
                 // The desktop's own icons, over a fixed listing.
                 crate::desktop_icons::paint_desktop_icons(&mut c, bounds, &crate::desktop_icons::desktop_sample_entries(), Some(1));
-            } else {
+            } else if kind == SceneKind::MenuBar {
                 paint_menu_bar_scene(&mut c, width as f64);
+            } else {
+                paint_dock_scene(&mut c, width as f64, height as f64);
             }
             runner.text.render_scale = was;
             drop(cr);
@@ -112,7 +117,7 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             SceneKind::Widgets => {
                 crate::widgets::paint_widgets(&mut c, cw, ch, &crate::widgets::WidgetState::default(), Some(crate::widgets::WidgetFocus::Ok));
             }
-            SceneKind::Wallpaper | SceneKind::MenuBar => {}
+            SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock => {}
         }
         cr.restore();
         runner.text.render_scale = was;
@@ -149,6 +154,30 @@ fn paint_menu_bar_scene(c: &mut Canvas, w: f64) {
     };
     let h = c.theme.tokens.menu_bar_height;
     paint_menu_bar(c, w, h, &menus_for(&crate::finder_commands::finder_menu_bar()), &s);
+}
+
+/// The stock Dock as the headless render has it, at the output's bottom:
+/// the pointer near a tile to show the curve; AQUA_DOCK_RUNNING marks every
+/// other application running (never the Trash); AQUA_AGENTS adds the Agent
+/// tile and its badge.
+fn paint_dock_scene(c: &mut Canvas, w: f64, h: f64) {
+    use crate::dock::{default_pinned, dock_surface_height, paint_dock, DockItem};
+    let pictured = pictured_agents();
+    let dock_h = dock_surface_height(&c.theme.tokens, 48.0);
+    let mut items = default_pinned(pool_config::Agents::on(None));
+    if !pictured.is_empty()
+        && let Some(b) = crate::dock::builtin_running("org.abyssbsd.agent")
+    {
+        let at = items.len().min(3);
+        items.insert(at, DockItem { command: None, environment: vec![], ..b })
+    }
+    items.push(DockItem::trash(false));
+    let running = std::env::var_os("AQUA_DOCK_RUNNING").is_some();
+    let flags: Vec<bool> = items.iter().enumerate().map(|(i, it)| running && i % 2 == 0 && !it.is_trash).collect();
+    c.cr.save();
+    c.cr.translate(0.0, h - dock_h);
+    paint_dock(c, w, dock_h, &items, &flags, Some(w * 0.42), 48.0, true, crate::agent_presence::AgentBadge::of(&pictured));
+    c.cr.restore();
 }
 
 /// An open menu (Scene.swift's renderMenuPNG): the Finder's File menu with

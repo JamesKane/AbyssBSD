@@ -4,9 +4,11 @@
 
 pub mod agent_presence;
 pub mod app_icon;
+pub mod app_library;
 pub mod commands;
 pub mod context_menu;
 pub mod desktop_icons;
+pub mod dock;
 pub mod finder_commands;
 pub mod finder_model;
 pub mod finder_ops;
