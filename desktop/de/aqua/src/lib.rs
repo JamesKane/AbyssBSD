@@ -3,6 +3,7 @@
 //! the window scene; the widgets, menus and the Wayland half follow.
 
 pub mod activity;
+pub mod agent_app;
 pub mod agent_presence;
 pub mod app_icon;
 pub mod app_library;

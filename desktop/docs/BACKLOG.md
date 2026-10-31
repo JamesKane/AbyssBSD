@@ -146,6 +146,15 @@ From HANDOFF §5.3, still true:
   goldens are shared; fix both (measure with `.bold`) and regenerate
   `activity` and `activity@2x` together.
 
+- **Swift's Agent window can lose a second requester's answer** (found
+  2026-10-31, porting it). `AgentApp.pending` holds the question's
+  connection, but `request()` overwrites it with the keeper's and sets it
+  to -1 when that reply comes. So once a write or host requester has
+  been answered, a second one in the same question reads `pending` as -1,
+  never sends its `answer`, and the agent waits on it forever. Rust keeps
+  the question's connection in a slot of its own (`AgentApp::stream`).
+  Fix the Swift half the same way while it runs; no golden pictures it.
+
 - **Swift's installer says "Choose an user account"** (found 2026-10-31,
   porting it). `article()` picks "an" by the first letter, so the hub's
   readiness line reads "an user account" when only the account is left.

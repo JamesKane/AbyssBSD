@@ -1053,6 +1053,18 @@ golden for it; live-power's ten checks are green on it, claims 7 and 8
 being the dialog's. Its refusal path is unexercised here (this account is
 in wheel).
 
+*R6v, the Agent window.* The chat window outside the jail: a session
+from the keeper (or one handed to it, a crash's), each tool call a line
+as it starts, the answer, the presence the Dock and menu bar read, Give
+and Take Back, and requesters 1, 3 and 4. One divergence: Swift keeps a
+single `pending` descriptor for keeper requests and the question's
+connection, so a keeper request made while a requester is up overwrote
+it; here the question's connection has a slot of its own. The four
+goldens are identical (106 in the gate). The live-agent-* scripts are
+FreeBSD's (jails); on Linux a stub abyss-model and an unjailed
+abyss-agent answered the window's question with a tool call, and Quit
+said bye and ended the agent. With it every AquaDemo scene is Rust.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

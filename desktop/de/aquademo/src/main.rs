@@ -136,6 +136,19 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Agent {
+            // The chat window, outside the jail, talking to an agent session
+            // the keeper starts inside one.
+            let Some(app) = aqua::agent_app::AgentApp::new(&display, &tk) else {
+                println!("AquaDemo: could not open Agent.");
+                exit(1)
+            };
+            let d = display.clone();
+            *app.on_quit.borrow_mut() = Box::new(move || d.stop());
+            eprintln!("AquaDemo: Agent is up.");
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::CrashReport {
             // Started by the keeper for a confined program that died of a
             // signal (ABYSS_CRASH_*).

@@ -45,6 +45,8 @@ pub enum SceneKind {
     Notify,
     /// "… has unexpectedly quit": started by the keeper, live.
     CrashReport,
+    /// The Agent window: its conversation, live with a session.
+    Agent,
 }
 
 impl SceneKind {
@@ -71,6 +73,7 @@ impl SceneKind {
             Some("activity") => Some((SceneKind::Activity, "Activity Monitor", 620, 360)),
             Some("diskutility") => Some((SceneKind::DiskUtility, "Disk Utility", 700, 440)),
             Some("notify") => Some((SceneKind::Notify, "Notifications", 800, 600)),
+            Some("agent") => Some((SceneKind::Agent, "Agent", 560, 460)),
             Some("crashreport") => Some((SceneKind::CrashReport, "", 480, 180)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
@@ -195,6 +198,7 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             SceneKind::Activity => {
                 crate::activity::paint_activity(&mut c, cw, ch, &crate::activity::sample_view(), &crate::activity::sample_user);
             }
+            SceneKind::Agent => crate::agent_app::paint_sample(&mut c, cw, ch),
             SceneKind::CrashReport => {
                 let n = crate::crash_report::CrashNotice::new(1, "galculator", "SIGSEGV", true);
                 use crate::crash_report::CrashChoice::{Ask, Close};

@@ -129,6 +129,10 @@ diskutility@2x|diskutility@2x|aquademo:diskutility|2|
 systemprofiler|systemprofiler|aquademo:systemprofiler|1|
 notify|notify|aquademo:notify|1|
 crashreport|crashreport|aquademo:crashreport|1|
+agent|agent|aquademo:agent|1|
+agent-give|agent-give|aquademo:agent|1|AQUA_AGENT_PICKER=1
+agent-budget|agent-budget|aquademo:agent|1|AQUA_AGENT_REQUESTER=1
+agent-write|agent-write|aquademo:agent|1|AQUA_AGENT_REQUESTER=write
 trench-notify|trench-notify|aquademo:notify|1|ABYSS_THEME=trench
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
