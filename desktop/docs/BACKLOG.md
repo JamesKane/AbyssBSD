@@ -6,7 +6,8 @@ This is the list to work from; the phase docs keep the detail._
 
 **Where it stands (2026-10-02):** §1 and §2 are done, Phases 13, 15, 16
 and 18 have closed, and the next phase is 17 (PLAN). What is left here is §3's
-metal items, §5's standing items and §6's kernel items.
+metal items, §5's standing items, §6's kernel items and §7's tech debt
+(toolkit assumptions outside the compatibility layer, 2026-10-31).
 
 **The constraint that shapes it:** the bring-up machine's USB is in use elsewhere
 again (2026-10-02, to be rebuilt), so **nothing here may need metal to be
@@ -370,3 +371,60 @@ scheduled; each is small and self-contained:
 - a **per-channel volume ioctl** for `sndstat`, if P14.6 chooses route (a);
 - `allow.rtprio`, already planned, and a **real-time CPU budget** to go with
   it — FreeBSD has no `RLIMIT_RTTIME` (Phase 18).
+
+## 7. Tech debt: toolkit assumptions outside the compatibility layer
+
+_Found 2026-10-31, scanning dependencies after R7._ **The rule:** the
+desktop is pure, with no GTK, Qt, GLib or X11 assumptions anywhere but the
+compatibility layer for foreign applications (`abyss-dbus` and the `dbus*`
+crates, `appgen`, `appbundles`). The Rust workspace already meets it at the
+crate level: its only crates.io dependencies are `cc`, `libc`, `shlex` and
+`find-msvc-tools`. These are what still break it. None blocks anything.
+
+- **T.4 — Our libraries load GLib and X11 (M).** `abyss-sys` links the
+  system's cairo and harfbuzz, and FreeBSD packages both with GLib (harfbuzz
+  unconditionally, cairo `GLIB=on`), and cairo with `X11=on` (libX11, xcb).
+  So every desktop binary loads GLib and X11, and the medium, whose
+  libraries are the `ldd` closure of our binaries (`live-image.sh`), ships
+  them. Build cairo and harfbuzz statically inside `abyss-sys` with GLib and
+  X11 off, so the desktop's closure no longer depends on how the system
+  packages were configured. GTK applications keep the system's full builds:
+  GTK needs cairo's GLib layer, which is why turning `GLIB` off in the
+  overlay is the wrong fix. **Done when:** `ldd` of every desktop binary
+  names no libglib, libgobject, libX11 or libxcb, on Linux and FreeBSD.
+
+- **T.5 — Ports options that pull in X11, GLib and a D-Bus library (S).**
+  FreeBSD's default package options, as `pkg rquery` reports them:
+  - wlroots020 `X11=on`: Xwayland and the xcb-util libraries, against
+    PRODUCT §5.2's "no XWayland". `undertow` uses the X11 backend only to
+    name a nested output (`de/cwlroots/access.c`).
+  - libinput `LIBWACOM=on`: libwacom brings glib, libgudev, python312 and
+    lua54.
+  - seatd `BASU=on`: basu is systemd's sd-bus, for a logind backend we do
+    not use.
+  - libxkbcommon `X11=on`: libxcb.
+  - mesa-libs and mesa-dri `X11=on`: stays while Firefox ESR (GTK) needs
+    it; it belongs to the compatibility layer.
+
+  Set the first four off in the overlay's options for the desktop's
+  packages (P17.4's bulk). **Done when:** `pkg install abyss-desktop` into a
+  clean jail installs no xwayland, glib, python or basu.
+
+- **T.6 — GTK glue in the core crates (M).** The glue is correct; it lives
+  in the wrong crates:
+  - `undertow` speaks `gtk_shell1` (`de/cwlroots/menus.c`,
+    `de/undertow/src/menus.rs`, `advertise_global_menus_to_gtk`). The
+    compositor has to speak the protocol, but it can sit in one module that
+    reports a menu address and nothing GTK-shaped.
+  - The menu bar has `MenuKind::Gtk` (`de/surface/src/menubar_focus.rs`,
+    `de/aqua/src/menubar.rs`), and `menumodel` has `GtkMenuAddress`. The bar
+    needs only "this window's menus are served by bridge X at address Y".
+  - `anchor` sets `GTK_USE_PORTAL` (`de/anchor/src/session.rs`), `jails`
+    sets `GDK_BACKEND`, `GTK_USE_PORTAL` and `GDK_DEBUG`
+    (`de/jails/src/plan.rs`), and `jailkeeper` starts the GTK menu bridge
+    (`gtk_side`). Make these a foreign-toolkit profile owned by the
+    compatibility crates, which the session and the keeper apply without
+    knowing which toolkit it is for.
+
+  **Done when:** a grep for `gtk`, `gdk` or `glib` in `de/` hits only the
+  compatibility crates and the one `undertow` protocol module.
