@@ -836,6 +836,19 @@ golden-rust.sh runs it as golden.sh runs Swift's: **25 goldens, pixel for
 pixel**, the five scenes in Aqua, Trench (neon, daylight, neon-hc) and
 the chrome-test theme, at 1x and 2x.
 
+*R5b and R5c, the menus and the icons.* The Finder's command model
+(FinderCommands.swift: its verbs, exhaustive, its menu bar, its
+contextual menus, the bar's static enablement), a drawn menu's rows and
+geometry (Commands.swift), and `AquaMenu` up to what needs a popup
+surface: rows, hover, the keyboard's highlight, drawing. Submenus and
+the popup come with surface (R5d). The icon sheet and the draw-list
+sheet with a theme's roles. With these, **every toolkit scene the goldens
+hold matches pixel for pixel: 35 goldens** in golden-rust.sh (frames,
+cursors, window, widgets, scroll, tabs, sheet, menus, icons, the
+draw-list sheets, in every theme that draws them). The goldens left are
+the shell's (wallpaper, menu bar, Dock, toasts) and the applications',
+which are R6's.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

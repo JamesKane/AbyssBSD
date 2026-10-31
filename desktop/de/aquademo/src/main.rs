@@ -27,6 +27,21 @@ fn main() {
         }
     }
     let scene = env("AQUA_SCENE");
+    // Render-only scenes for the golden gate: an open menu, the icons, the
+    // draw-list sheet.
+    if let Some(s @ ("menu" | "icons" | "drawlist")) = scene.as_deref() {
+        let Some(out) = env("AQUA_RENDER_PNG") else {
+            eprintln!("AquaDemo: the {s} scene is render-only (AQUA_RENDER_PNG)");
+            exit(2)
+        };
+        let ok = match s {
+            "menu" => aqua::scene::render_menu_png(&out, scale, env("AQUA_MENU_MARKS").is_some(), &mut runner, &theme),
+            "icons" => aqua::scene::render_icon_sheet_png(&out, env("AQUA_DRAWLIST").as_deref(), scale, &mut runner, &theme),
+            _ => aqua::scene::render_drawlist_png(&out, &env("AQUA_DRAWLIST").unwrap_or_else(|| "abyss/tests/drawlist-sample.dl".into()), scale, &mut runner),
+        };
+        println!("{}", if ok { format!("AquaDemo: wrote {out}") } else { "AquaDemo: PNG render failed".into() });
+        exit(if ok { 0 } else { 1 })
+    }
     let Some((kind, title, w, h)) = SceneKind::named(scene.as_deref()) else {
         eprintln!("AquaDemo: the scene {} is not ported to Rust yet", scene.unwrap_or_default());
         exit(2)

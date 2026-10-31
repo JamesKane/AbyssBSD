@@ -8,3 +8,4 @@ publish.workspace = true
 [dependencies]
 abyss-sys.workspace = true
 aquadraw = { path = "../aquadraw" }
+menu-model = { path = "../menumodel" }

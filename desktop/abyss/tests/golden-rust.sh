@@ -53,7 +53,17 @@ trench-tabs|trench-tabs|aquademo:tabs|1|ABYSS_THEME=trench
 trench-scroll|trench-scroll|aquademo:scroll|1|ABYSS_THEME=trench
 trench-hc-widgets|trench-hc-widgets|aquademo:widgets|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc
 trench-day-widgets|trench-day-widgets|aquademo:widgets|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
-trench-day-window|trench-day-window|aquademo:window|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight'
+trench-day-window|trench-day-window|aquademo:window|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
+menu|menu|aquademo:menu|1|
+menu@2x|menu@2x|aquademo:menu|2|
+menu-marks|menu-marks|aquademo:menu|1|AQUA_MENU_MARKS=1
+menu-marks@2x|menu-marks@2x|aquademo:menu|2|AQUA_MENU_MARKS=1
+trench-menu|trench-menu|aquademo:menu|1|ABYSS_THEME=trench AQUA_MENU_MARKS=1
+icons|icons|aquademo:icons|1|
+icons@2x|icons@2x|aquademo:icons|2|
+trench-icons|trench-icons|aquademo:icons|1|ABYSS_THEME=trench
+svg-beacon@2x|svg-beacon@2x|aquademo:icons|2|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl
+drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then
   vm="$root/abyss/vm"

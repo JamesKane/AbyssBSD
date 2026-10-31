@@ -95,3 +95,130 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
     cs.flush();
     cs.write_png(path)
 }
+
+/// An open menu (Scene.swift's renderMenuPNG): the Finder's File menu with
+/// New Folder hovered, or, with `marks`, the parts File never shows: a
+/// checked row, and a submenu's ▸ plain, disabled and highlighted.
+pub fn render_menu_png(path: &str, scale: i32, marks: bool, runner: &mut Runner, theme: &Theme) -> bool {
+    use crate::commands::{aqua_menu_items, aqua_menu_rows, AquaMenuItem};
+    use crate::finder_commands::{finder_menu_bar, static_enablement};
+    use crate::menu::AquaMenu;
+    let t = theme.tokens.clone();
+    let rows = if marks {
+        vec![AquaMenuItem::new("as Icons"), AquaMenuItem::new("as List"), AquaMenuItem::separator(), AquaMenuItem::new("Arrange By").submenu(), AquaMenuItem::new("Label").disabled().submenu(), AquaMenuItem::new("Show View Options").key("⌘J").submenu()]
+    } else {
+        let bar = finder_menu_bar();
+        let Some(file) = bar.menus.iter().find(|m| m.title == "File") else { return false };
+        aqua_menu_items(file, &static_enablement)
+    };
+    let hover = if marks { rows.len() - 1 } else { 1 };
+    let mut menu = AquaMenu::new(rows, if marks { Some(0) } else { None });
+    let was = runner.text.render_scale;
+    runner.text.render_scale = scale;
+    let w = menu.preferred_width(runner, &t).max(150.0) as i32;
+    let h = menu.preferred_height(&t).ceil() as i32;
+    let (ry, rh) = aqua_menu_rows(&menu.items, &t)[hover];
+    menu.pointer_moved(ry + rh / 2.0, &t);
+    let cs = Surface::image(ffi::FORMAT_ARGB32, w * scale, h * scale);
+    {
+        let cr = Context::new(&cs);
+        cr.scale(scale as f64, scale as f64);
+        // A transparent ground, so the rounded corners read.
+        cr.set_operator(0); // CLEAR
+        cr.paint();
+        cr.set_operator(ffi::OPERATOR_OVER);
+        let mut c = Canvas::new(&cr, runner, theme);
+        menu.render(&mut c, w as f64, h as f64);
+    }
+    runner.text.render_scale = was;
+    cs.flush();
+    cs.write_png(path)
+}
+
+/// Every icon in the theme, or in a list file, at 16, 32 and 64 points
+/// (Scene.swift's renderIconSheetPNG): `icon.*` and `dock.icon.*`, sorted,
+/// twenty to a column.
+pub fn render_icon_sheet_png(path: &str, list_file: Option<&str>, scale: i32, runner: &mut Runner, theme: &Theme) -> bool {
+    use aquadraw::drawlist::{DrawListFile, DrawState};
+    use aquadraw::runner::DrawContext;
+    let own;
+    let lists = match list_file {
+        None => &theme.lists,
+        Some(f) => {
+            let Ok(text) = std::fs::read_to_string(f) else { return false };
+            match DrawListFile::parse(&text) {
+                Ok(l) => {
+                    own = l;
+                    &own
+                }
+                Err(e) => {
+                    eprintln!("AquaDemo: {f}: {e}");
+                    return false;
+                }
+            }
+        }
+    };
+    let mut names: Vec<&String> = lists.lists.keys().filter(|k| (k.starts_with("icon.") || k.starts_with("dock.icon.")) && !k.ends_with(".small")).collect();
+    names.sort();
+    if names.is_empty() {
+        return false;
+    }
+    let per_column = 20;
+    let columns = names.len().div_ceil(per_column);
+    let (row_h, col_w) = (72.0, 140.0);
+    let (w, h) = ((col_w * columns as f64) as i32 + 8, (row_h * names.len().min(per_column) as f64) as i32 + 8);
+    let cs = Surface::image(ffi::FORMAT_ARGB32, w * scale, h * scale);
+    let was = runner.text.render_scale;
+    runner.text.render_scale = scale;
+    {
+        let cr = Context::new(&cs);
+        cr.scale(scale as f64, scale as f64);
+        let bg = theme.tokens.content_background;
+        cr.set_source_rgba(bg.r, bg.g, bg.b, bg.a);
+        cr.paint();
+        let small_below = theme.tokens.icon_small_below;
+        for (i, n) in names.iter().enumerate() {
+            let (x0, y0) = (4.0 + col_w * (i / per_column) as f64, 4.0 + row_h * (i % per_column) as f64);
+            let mut x = x0;
+            for size in [16.0, 32.0, 64.0] {
+                let r = Rect::new(x, y0 + (64.0 - size) / 2.0, size, size);
+                if list_file.is_none() {
+                    Canvas::new(&cr, runner, theme).icon(n, r);
+                } else {
+                    let small = format!("{n}.small");
+                    let name = if r.w < small_below && lists.get(&small).is_some() { small.as_str() } else { n.as_str() };
+                    if let Some(l) = lists.get(name) {
+                        cr.new_path();
+                        runner.run(l, &cr, &DrawContext::new(r, DrawState::NORMAL, ""));
+                    }
+                }
+                x += size + 6.0;
+            }
+        }
+    }
+    runner.text.render_scale = was;
+    cs.flush();
+    cs.write_png(path)
+}
+
+/// R0's draw-list sheet, from `list_file`, with the loaded theme's roles.
+pub fn render_drawlist_png(path: &str, list_file: &str, scale: i32, runner: &mut Runner) -> bool {
+    let Ok(text) = std::fs::read_to_string(list_file) else { return false };
+    let file = match aquadraw::drawlist::DrawListFile::parse(&text) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("AquaDemo: {list_file}: {e}");
+            return false;
+        }
+    };
+    let was = runner.text.render_scale;
+    runner.text.render_scale = scale;
+    let cs = Surface::image(ffi::FORMAT_ARGB32, aquadraw::scene::WIDTH * scale, aquadraw::scene::HEIGHT * scale);
+    {
+        let cr = Context::new(&cs);
+        aquadraw::scene::drawlist(&cr, scale, &file, runner);
+    }
+    runner.text.render_scale = was;
+    cs.flush();
+    cs.write_png(path)
+}

@@ -2,6 +2,9 @@
 //! ported from the Swift beside it, drawn on aquadraw's `Canvas`. So far
 //! the window scene; the widgets, menus and the Wayland half follow.
 
+pub mod commands;
+pub mod finder_commands;
+pub mod menu;
 pub mod scene;
 pub mod scroll;
 pub mod sheet;
