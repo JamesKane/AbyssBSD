@@ -5,7 +5,7 @@
 pub mod agent_presence;
 pub mod app_icon;
 pub mod app_library;
-pub mod appearance;
+
 pub mod commands;
 pub mod context_menu;
 pub mod desktop_icons;
@@ -23,6 +23,7 @@ pub mod login_window;
 pub mod menu;
 pub mod menubar;
 pub mod menubar_status;
+pub mod prefs;
 pub mod scene;
 pub mod scroll;
 pub mod setup_assistant;

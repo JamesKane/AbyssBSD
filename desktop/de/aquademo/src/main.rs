@@ -85,6 +85,21 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Prefs {
+            let Some(app) = aqua::prefs::app::SystemPreferences::new(&display, &tk, (w, h)) else {
+                println!("AquaDemo: could not open System Preferences.");
+                exit(1)
+            };
+            let d = std::rc::Rc::downgrade(&display);
+            app.on_quit(move || {
+                if let Some(d) = d.upgrade() {
+                    d.stop()
+                }
+            });
+            eprintln!("AquaDemo: System Preferences is up ({} panes)", aqua::prefs::all_panes().count());
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::Dock {
             let Some(_dock) = aqua::dock::Dock::new(&display, &tk) else {
                 println!("AquaDemo: failed to create the Dock (does the compositor offer wlr-layer-shell?).");

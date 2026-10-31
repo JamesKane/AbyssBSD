@@ -712,9 +712,11 @@ impl Reported {
         for t in ts.iter().filter(|t| t.mapped.get()) {
             let key = t.place_key().unwrap_or_else(|| "?".into());
             let flags = if t.minimized.get() { " min" } else if t.maximized.get() { " max" } else { "" };
-            let line = format!("{},{} {}x{}{flags}", t.x.get(), t.y.get(), t.width(), t.height());
+            // The key with the geometry: a window renamed in place (a pane's
+            // title) is said again, as its tile is renamed.
+            let line = format!("{key} {},{} {}x{}{flags}", t.x.get(), t.y.get(), t.width(), t.height());
             if self.geometry.get(&t.id) != Some(&line) {
-                out(&format!("window {key} {line}"));
+                out(&format!("window {line}"));
                 self.geometry.insert(t.id, line);
             }
         }

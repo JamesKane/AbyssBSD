@@ -26,6 +26,8 @@ pub enum SceneKind {
     Dock,
     /// The Finder: its own application, many windows.
     Finder,
+    /// System Preferences.
+    Prefs,
 }
 
 impl SceneKind {
@@ -41,6 +43,7 @@ impl SceneKind {
             Some("menubar") => Some((SceneKind::MenuBar, "Menu Bar", 800, 600)),
             Some("dock") => Some((SceneKind::Dock, "Dock", 800, 600)),
             Some("finder") => Some((SceneKind::Finder, "Finder", 520, 400)),
+            Some("sysprefs") => Some((SceneKind::Prefs, "System Preferences", 760, 620)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -119,6 +122,14 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             }
             SceneKind::Widgets => {
                 crate::widgets::paint_widgets(&mut c, cw, ch, &crate::widgets::WidgetState::default(), Some(crate::widgets::WidgetFocus::Ok));
+            }
+            // AQUA_PREFS_PANE=<id> pictures a pane's page (P14.1).
+            SceneKind::Prefs => {
+                let mut m = crate::prefs::PrefsModel::default();
+                if let Ok(p) = std::env::var("AQUA_PREFS_PANE") {
+                    m.view = crate::prefs::PrefsView::Pane(p)
+                }
+                crate::prefs::paint_system_preferences(&mut c, cw, ch, &m, &crate::prefs::app::sample_panes());
             }
             SceneKind::Finder => {
                 crate::finder::paint_finder(&mut c, cw, ch, &finder_scene_state());

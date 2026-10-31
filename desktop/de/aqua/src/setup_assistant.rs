@@ -13,7 +13,7 @@
 //! Finishing or skipping writes `setup.ini`, so the next login goes straight
 //! to the desktop; closing the window without either asks again next time.
 
-use crate::appearance::{self, InstalledTheme};
+use crate::prefs::appearance_catalogue::{self as appearance, InstalledTheme};
 use crate::toolkit::Toolkit;
 use aquadraw::canvas::Canvas;
 use aquadraw::chrome::{chrome_hit, window_chrome, ChromeHit, Gadget};

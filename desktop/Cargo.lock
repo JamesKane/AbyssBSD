@@ -106,6 +106,8 @@ dependencies = [
  "menu-model",
  "menu-wire",
  "pool-config",
+ "settings",
+ "settings-wire",
  "spawn",
  "surface",
  "vents",
