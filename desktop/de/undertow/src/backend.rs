@@ -160,13 +160,6 @@ impl WlrootsSession {
 
     pub fn new(kind: Kind, verbose: bool) -> Result<WlrootsSession, BackendError> {
         wlr::log(verbose);
-        // **Software rendering for headless only.** A GPU's buffers are not
-        // CPU-readable, which would make capture impossible and the two
-        // machines' difference invisible until it failed. On a real backend
-        // the pin would be wrong. WLR_RENDERER from the environment wins.
-        if matches!(kind, Kind::Headless { .. }) {
-            wlr::prefer_pixman_renderer();
-        }
         let display = Rc::new(Display::create().ok_or(BackendError::NoDisplay)?);
         let event_loop = display.event_loop();
         let (backend, session) = match &kind {
@@ -175,7 +168,17 @@ impl WlrootsSession {
             // the device descriptors: both kept.
             Kind::Auto => Backend::autocreate(event_loop).ok_or(BackendError::NoBackend)?,
         };
-        let renderer = backend.renderer().ok_or(BackendError::NoRenderer)?;
+        // **Software rendering for headless only.** A GPU's buffers are not
+        // CPU-readable, which would make capture impossible and the two
+        // machines' difference invisible until it failed. On a real backend
+        // the pin would be wrong. WLR_RENDERER from the environment wins.
+        // Asked for directly, where Swift sets WLR_RENDERER: the environment
+        // is not written while other threads may read it (a test's clients).
+        let renderer = match kind {
+            Kind::Headless { .. } => backend.renderer_preferring_pixman(),
+            Kind::Auto => backend.renderer(),
+        }
+        .ok_or(BackendError::NoRenderer)?;
         let allocator = backend.allocator(renderer).ok_or(BackendError::NoAllocator)?;
         let state = Rc::new(RefCell::new(State {
             kind: kind.clone(),

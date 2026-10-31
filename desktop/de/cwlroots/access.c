@@ -2,6 +2,7 @@
 #include "tw-access.h"
 
 #include <stdlib.h>
+#include <time.h>
 
 #define TW_SIGNAL(type, sig) \
     struct tw_listener *tw_##type##_on_##sig(struct wlr_##type *o, tw_notify_fn fn, void *ctx) { \
@@ -13,6 +14,29 @@ TW_SIGNAL(output, destroy)
 TW_SIGNAL(output, present)
 TW_SIGNAL(output, needs_frame)
 TW_SIGNAL(output, frame)
+TW_SIGNAL(compositor, new_surface)
+TW_SIGNAL(surface, map)
+TW_SIGNAL(surface, unmap)
+TW_SIGNAL(surface, commit)
+TW_SIGNAL(surface, destroy)
+TW_SIGNAL(xdg_shell, new_toplevel)
+TW_SIGNAL(xdg_shell, new_popup)
+TW_SIGNAL(xdg_toplevel, destroy)
+TW_SIGNAL(xdg_toplevel, request_move)
+TW_SIGNAL(xdg_toplevel, request_resize)
+TW_SIGNAL(xdg_toplevel, request_maximize)
+TW_SIGNAL(xdg_toplevel, request_minimize)
+TW_SIGNAL(xdg_toplevel, request_fullscreen)
+TW_SIGNAL(xdg_toplevel, set_title)
+TW_SIGNAL(xdg_toplevel, set_app_id)
+TW_SIGNAL(xdg_popup, destroy)
+TW_SIGNAL(layer_shell_v1, new_surface)
+TW_SIGNAL(layer_surface_v1, destroy)
+TW_SIGNAL(foreign_toplevel_handle_v1, request_activate)
+TW_SIGNAL(foreign_toplevel_handle_v1, request_close)
+TW_SIGNAL(foreign_toplevel_handle_v1, request_minimize)
+TW_SIGNAL(foreign_toplevel_handle_v1, request_maximize)
+TW_SIGNAL(xdg_activation_v1, request_activate)
 #undef TW_SIGNAL
 
 const char *tw_output_name(const struct wlr_output *o) { return o->name; }
@@ -92,4 +116,98 @@ void tw_surface_source_box(struct wlr_surface *s, double out[4]) {
     struct wlr_fbox b = { 0 };
     wlr_surface_get_buffer_source_box(s, &b);
     out[0] = b.x; out[1] = b.y; out[2] = b.width; out[3] = b.height;
+}
+
+bool tw_surface_committed_buffer(const struct wlr_surface *s) {
+    return (s->current.committed & WLR_SURFACE_STATE_BUFFER) != 0;
+}
+
+static void frame_done(struct wlr_surface *s, int sx, int sy, void *data) {
+    (void)sx; (void)sy;
+    wlr_surface_send_frame_done(s, data);
+}
+
+void tw_surface_frame_done_tree(struct wlr_surface *s) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    wlr_surface_for_each_surface(s, frame_done, &now);
+}
+
+int tw_surface_client_pid(struct wlr_surface *s) {
+    if (!s->resource) return -1;
+    pid_t pid = -1;
+    wl_client_get_credentials(wl_resource_get_client(s->resource), &pid, NULL, NULL);
+    return (int)pid;
+}
+
+struct wlr_surface *tw_xdg_toplevel_surface(const struct wlr_xdg_toplevel *t) { return t->base->surface; }
+const char *tw_xdg_toplevel_app_id(const struct wlr_xdg_toplevel *t) { return t->app_id; }
+const char *tw_xdg_toplevel_title(const struct wlr_xdg_toplevel *t) { return t->title; }
+bool tw_xdg_toplevel_initial_commit(const struct wlr_xdg_toplevel *t) { return t->base->initial_commit; }
+bool tw_xdg_toplevel_initialized(const struct wlr_xdg_toplevel *t) { return t->base->initialized; }
+
+uint32_t tw_xdg_toplevel_requested(const struct wlr_xdg_toplevel *t) {
+    return (t->requested.maximized ? 1u : 0u) | (t->requested.minimized ? 2u : 0u)
+         | (t->requested.fullscreen ? 4u : 0u);
+}
+
+void tw_xdg_toplevel_geometry(const struct wlr_xdg_toplevel *t, int32_t out[2]) {
+    out[0] = t->base->current.geometry.x;
+    out[1] = t->base->current.geometry.y;
+}
+
+uint32_t tw_xdg_resize_edges(const void *event) {
+    return ((const struct wlr_xdg_toplevel_resize_event *)event)->edges;
+}
+
+void tw_xdg_toplevel_offer_capabilities(struct wlr_xdg_toplevel *t) {
+    wlr_xdg_toplevel_set_wm_capabilities(t, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE
+        | WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN | WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE);
+}
+
+struct wlr_surface *tw_xdg_popup_surface(const struct wlr_xdg_popup *p) { return p->base->surface; }
+struct wlr_surface *tw_xdg_popup_parent(const struct wlr_xdg_popup *p) { return p->parent; }
+bool tw_xdg_popup_initial_commit(const struct wlr_xdg_popup *p) { return p->base->initial_commit; }
+
+void tw_xdg_popup_geometry(const struct wlr_xdg_popup *p, int32_t out[4]) {
+    out[0] = p->current.geometry.x;
+    out[1] = p->current.geometry.y;
+    out[2] = p->base->current.geometry.x;
+    out[3] = p->base->current.geometry.y;
+}
+
+void tw_xdg_popup_unconstrain(struct wlr_xdg_popup *p, int32_t x, int32_t y, int32_t width, int32_t height) {
+    struct wlr_box box = { .x = x, .y = y, .width = width, .height = height };
+    wlr_xdg_popup_unconstrain_from_box(p, &box);
+}
+
+struct wlr_surface *tw_layer_surface(const struct wlr_layer_surface_v1 *l) { return l->surface; }
+const char *tw_layer_namespace(const struct wlr_layer_surface_v1 *l) { return l->namespace ? l->namespace : ""; }
+uint32_t tw_layer_layer(const struct wlr_layer_surface_v1 *l) { return (uint32_t)l->current.layer; }
+uint32_t tw_layer_keyboard_interactive(const struct wlr_layer_surface_v1 *l) {
+    return (uint32_t)l->current.keyboard_interactive;
+}
+
+void tw_layer_request_read(const struct wlr_layer_surface_v1 *l, struct tw_layer_request *out) {
+    const struct wlr_layer_surface_v1_state *s = &l->current;
+    out->anchor = s->anchor;
+    out->desired_width = s->desired_width;
+    out->desired_height = s->desired_height;
+    out->margin_top = s->margin.top;
+    out->margin_right = s->margin.right;
+    out->margin_bottom = s->margin.bottom;
+    out->margin_left = s->margin.left;
+    out->exclusive_zone = s->exclusive_zone;
+}
+
+struct wlr_output *tw_layer_output(const struct wlr_layer_surface_v1 *l) { return l->output; }
+void tw_layer_set_output(struct wlr_layer_surface_v1 *l, struct wlr_output *o) { l->output = o; }
+
+bool tw_foreign_event_flag(const void *event, int maximize) {
+    if (maximize) return ((const struct wlr_foreign_toplevel_handle_v1_maximized_event *)event)->maximized;
+    return ((const struct wlr_foreign_toplevel_handle_v1_minimized_event *)event)->minimized;
+}
+
+struct wlr_surface *tw_activation_surface(const void *event) {
+    return ((const struct wlr_xdg_activation_v1_request_activate_event *)event)->surface;
 }

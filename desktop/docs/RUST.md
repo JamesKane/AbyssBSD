@@ -672,6 +672,32 @@ headless output, pixels read back; windows wait for clients (R4e). The
 cursor's textures are aquadraw's rasteriser, cached per shape, scale and
 theme; drawing the cursor is the Seat's (R4d).
 
+*R4d and R4e swap.* Seat.swift routes to the compositor's toplevels,
+layer surfaces, popups, lock, drags, Ebb and shoals at every turn, so the
+compositor comes first (R4d) and the seat after (R4e).
+
+*R4d, first: the compositor core* (`compositor.rs`; Compositor.swift,
+LayerShell.swift's surfaces, Popups.swift). The globals and the socket;
+toplevels (the first commit's configure and capabilities, placement,
+cascade, remembered places, focus as the window sees it, stacking,
+maximize, minimize, fullscreen, the Dock's foreign-toplevel handles,
+`suspended`), layer surfaces and their arrangement, popups and their
+unconstraining, outputs lost and returned, the frame callbacks (the
+hidden clock included), and the scene's `World`. Swift's back-pointing
+classes are `Rc`s with `Cell`/`RefCell` fields, each borrowed only for a
+moment and never across a call into wlroots, so they are reentrant as
+Swift's are and destroy signals stay synchronous. Focus moves the
+window's state and calls a hook the seat will take. Tested with **real
+clients** (an shm xdg_toplevel per thread, on `ShmWindow::open_on`'s named
+socket): mapping, centring, cascading, focus, the Dock handle, close,
+remembered places, minimize and maximize and their keyboard rules,
+stacking, Cmd-Q, and the scene drawing a client's pixels where it was put.
+Two findings: **a destroyed toplevel has no title left** to remember its
+place under (BACKLOG §5: Swift loses it; Rust keeps the last key), and
+**setting `WLR_RENDERER` races with other threads' `getenv`** (the
+tests' clients segfaulted): a headless backend now asks for pixman
+directly, `$WLR_RENDERER` still winning.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

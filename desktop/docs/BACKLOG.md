@@ -190,6 +190,15 @@ From HANDOFF §5.3, still true:
   `(` is an empty struct) and reads only a variant's first type. Rust's
   `dbus` parses signatures and limits depth to the specification's 64; port
   both to the Swift reader while it is the one running.
+- **Swift's undertow forgets where a window that closes itself was**
+  (found 2026-10-30, porting the compositor). The toplevel's destroy
+  handler calls `rememberPlace` "before letting go", but by the time
+  wlroots 0.20 emits `destroy` the title and app_id are already freed, so
+  `placeKey` is nil and nothing is stored: only a window closed some other
+  way keeps its place. Rust's undertow keeps the last key it saw (map,
+  `set_title`, `set_app_id`) and remembers under that; the test that
+  closes a window and reads its place back is
+  `a_window_maps_centred_focused_and_published_and_closes_on_request`.
 - **Swift's D-Bus bridge cannot forward a descriptor** (found 2026-10-30,
   porting the endpoint). `BridgeEndpoint.flush` treats `ap_sendmsg_fds`
   returning 0 as sent, but it returns the byte count, so every message with

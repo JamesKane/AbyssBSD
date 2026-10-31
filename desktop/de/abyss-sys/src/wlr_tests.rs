@@ -9,13 +9,11 @@ use std::rc::Rc;
 #[test]
 fn a_headless_frame_is_drawn_committed_presented_and_read_back() {
     log(false);
-    // Pixman, as undertow pins it for headless: CPU-readable buffers.
-    // SAFETY: the test sets it before any thread could read the environment.
-    unsafe { std::env::set_var("WLR_RENDERER", "pixman") };
     let display = Display::create().unwrap();
     let l = display.event_loop();
     let backend = Backend::headless(l).unwrap();
-    let renderer = backend.renderer().unwrap();
+    // Pixman, as undertow pins it for headless: CPU-readable buffers.
+    let renderer = backend.renderer_preferring_pixman().unwrap();
     let allocator = backend.allocator(renderer).unwrap();
 
     let seen: Rc<RefCell<Vec<Output>>> = Rc::default();

@@ -4,6 +4,7 @@
 //! comes over a grown `cwlroots` (RUST.md §6.4).
 
 pub mod backend;
+pub mod compositor;
 pub mod cursor_images;
 pub mod displays;
 pub mod ebb;

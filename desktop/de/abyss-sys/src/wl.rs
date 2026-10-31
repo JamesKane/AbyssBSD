@@ -150,7 +150,15 @@ impl ShmWindow {
     /// Connect to $WAYLAND_DISPLAY and map a `w`x`h` window (logical
     /// pixels; the buffer is `scale` times that).
     pub fn open(title: &str, app_id: &str, w: i32, h: i32, scale: i32) -> Result<ShmWindow, String> {
-        let display = unsafe { wl_display_connect(ptr::null()) };
+        ShmWindow::open_on(None, title, app_id, w, h, scale)
+    }
+
+    /// `open`, on the socket `name` (in $XDG_RUNTIME_DIR) rather than
+    /// $WAYLAND_DISPLAY's: a test's compositor, without touching the
+    /// environment of a process with other threads.
+    pub fn open_on(name: Option<&str>, title: &str, app_id: &str, w: i32, h: i32, scale: i32) -> Result<ShmWindow, String> {
+        let name = name.map(|n| CString::new(n).unwrap_or_default());
+        let display = unsafe { wl_display_connect(name.as_ref().map_or(ptr::null(), |n| n.as_ptr())) };
         if display.is_null() {
             return Err("no Wayland display".into());
         }

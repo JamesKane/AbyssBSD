@@ -16,6 +16,21 @@ macro_rules! opaque {
     ($($c:ident),*) => { $( #[allow(non_camel_case_types)] #[repr(C)] pub struct $c { _p: [u8; 0] } )* };
 }
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
+opaque!(wlr_compositor, wlr_xdg_shell, wlr_xdg_toplevel, wlr_xdg_popup, wlr_layer_shell_v1, wlr_layer_surface_v1, wlr_foreign_toplevel_manager_v1, wlr_foreign_toplevel_handle_v1, wlr_xdg_activation_v1, wlr_output_layout);
+
+/// tw-access.h's `struct tw_layer_request`: what a layer surface asks for.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LayerRequestRaw {
+    pub anchor: u32,
+    pub desired_width: u32,
+    pub desired_height: u32,
+    pub margin_top: i32,
+    pub margin_right: i32,
+    pub margin_bottom: i32,
+    pub margin_left: i32,
+    pub exclusive_zone: i32,
+}
 
 type Notify = extern "C" fn(*mut c_void, *mut c_void);
 type FdFn = extern "C" fn(c_int, u32, *mut c_void) -> c_int;
@@ -146,6 +161,7 @@ unsafe extern "C" {
     fn wlr_backend_destroy(b: *mut wlr_backend);
     fn wlr_headless_add_output(b: *mut wlr_backend, w: u32, h: u32) -> *mut wlr_output;
     fn wlr_renderer_autocreate(b: *mut wlr_backend) -> *mut wlr_renderer;
+    fn wlr_pixman_renderer_create() -> *mut wlr_renderer;
     fn wlr_renderer_destroy(r: *mut wlr_renderer);
     fn wlr_allocator_autocreate(b: *mut wlr_backend, r: *mut wlr_renderer) -> *mut wlr_allocator;
     fn wlr_allocator_destroy(a: *mut wlr_allocator);
@@ -174,23 +190,123 @@ unsafe extern "C" {
     fn wlr_surface_set_preferred_buffer_scale(s: *mut wlr_surface, scale: i32);
     fn wlr_presentation_surface_textured_on_output(s: *mut wlr_surface, o: *mut wlr_output);
     fn wlr_output_transform_invert(t: c_int) -> c_int;
+
+    fn tw_compositor_on_new_surface(o: *mut wlr_compositor, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_surface_on_map(o: *mut wlr_surface, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_surface_on_unmap(o: *mut wlr_surface, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_surface_on_commit(o: *mut wlr_surface, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_surface_on_destroy(o: *mut wlr_surface, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_shell_on_new_toplevel(o: *mut wlr_xdg_shell, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_shell_on_new_popup(o: *mut wlr_xdg_shell, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_destroy(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_request_move(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_request_resize(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_request_maximize(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_request_minimize(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_request_fullscreen(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_set_title(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_toplevel_on_set_app_id(o: *mut wlr_xdg_toplevel, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_popup_on_destroy(o: *mut wlr_xdg_popup, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_layer_shell_v1_on_new_surface(o: *mut wlr_layer_shell_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_layer_surface_v1_on_destroy(o: *mut wlr_layer_surface_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_foreign_toplevel_handle_v1_on_request_activate(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_foreign_toplevel_handle_v1_on_request_close(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_foreign_toplevel_handle_v1_on_request_minimize(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_foreign_toplevel_handle_v1_on_request_maximize(o: *mut wlr_foreign_toplevel_handle_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_xdg_activation_v1_on_request_activate(o: *mut wlr_xdg_activation_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+
+    fn tw_surface_committed_buffer(s: *const wlr_surface) -> bool;
+    fn tw_surface_frame_done_tree(s: *mut wlr_surface);
+    fn tw_surface_client_pid(s: *mut wlr_surface) -> c_int;
+    fn tw_xdg_toplevel_surface(t: *const wlr_xdg_toplevel) -> *mut wlr_surface;
+    fn tw_xdg_toplevel_app_id(t: *const wlr_xdg_toplevel) -> *const c_char;
+    fn tw_xdg_toplevel_title(t: *const wlr_xdg_toplevel) -> *const c_char;
+    fn tw_xdg_toplevel_initial_commit(t: *const wlr_xdg_toplevel) -> bool;
+    fn tw_xdg_toplevel_initialized(t: *const wlr_xdg_toplevel) -> bool;
+    fn tw_xdg_toplevel_requested(t: *const wlr_xdg_toplevel) -> u32;
+    fn tw_xdg_toplevel_geometry(t: *const wlr_xdg_toplevel, out: *mut i32);
+    fn tw_xdg_resize_edges(e: *const c_void) -> u32;
+    fn tw_xdg_toplevel_offer_capabilities(t: *mut wlr_xdg_toplevel);
+    fn tw_xdg_popup_surface(p: *const wlr_xdg_popup) -> *mut wlr_surface;
+    fn tw_xdg_popup_parent(p: *const wlr_xdg_popup) -> *mut wlr_surface;
+    fn tw_xdg_popup_initial_commit(p: *const wlr_xdg_popup) -> bool;
+    fn tw_xdg_popup_geometry(p: *const wlr_xdg_popup, out: *mut i32);
+    fn tw_xdg_popup_unconstrain(p: *mut wlr_xdg_popup, x: i32, y: i32, w: i32, h: i32);
+    fn tw_layer_surface(l: *const wlr_layer_surface_v1) -> *mut wlr_surface;
+    fn tw_layer_namespace(l: *const wlr_layer_surface_v1) -> *const c_char;
+    fn tw_layer_layer(l: *const wlr_layer_surface_v1) -> u32;
+    fn tw_layer_keyboard_interactive(l: *const wlr_layer_surface_v1) -> u32;
+    fn tw_layer_request_read(l: *const wlr_layer_surface_v1, out: *mut LayerRequestRaw);
+    fn tw_layer_output(l: *const wlr_layer_surface_v1) -> *mut wlr_output;
+    fn tw_layer_set_output(l: *mut wlr_layer_surface_v1, o: *mut wlr_output);
+    fn tw_foreign_event_flag(e: *const c_void, maximize: c_int) -> bool;
+    fn tw_activation_surface(e: *const c_void) -> *mut wlr_surface;
+
+    fn wlr_compositor_create(d: *mut wl_display, version: u32, r: *mut wlr_renderer) -> *mut wlr_compositor;
+    fn wlr_subcompositor_create(d: *mut wl_display) -> *mut c_void;
+    fn wlr_data_device_manager_create(d: *mut wl_display) -> *mut c_void;
+    fn wlr_viewporter_create(d: *mut wl_display) -> *mut c_void;
+    fn wlr_fractional_scale_manager_v1_create(d: *mut wl_display, version: u32) -> *mut c_void;
+    fn wlr_shm_create_with_renderer(d: *mut wl_display, version: u32, r: *mut wlr_renderer) -> *mut c_void;
+    fn wlr_presentation_create(d: *mut wl_display, b: *mut wlr_backend, version: u32) -> *mut c_void;
+    fn wlr_linux_dmabuf_v1_create_with_renderer(d: *mut wl_display, version: u32, r: *mut wlr_renderer) -> *mut c_void;
+    fn wlr_xdg_shell_create(d: *mut wl_display, version: u32) -> *mut wlr_xdg_shell;
+    fn wlr_layer_shell_v1_create(d: *mut wl_display, version: u32) -> *mut wlr_layer_shell_v1;
+    fn wlr_foreign_toplevel_manager_v1_create(d: *mut wl_display) -> *mut wlr_foreign_toplevel_manager_v1;
+    fn wlr_screencopy_manager_v1_create(d: *mut wl_display) -> *mut c_void;
+    fn wlr_xdg_activation_v1_create(d: *mut wl_display) -> *mut wlr_xdg_activation_v1;
+    fn wlr_output_layout_create(d: *mut wl_display) -> *mut wlr_output_layout;
+    fn wlr_output_layout_add(l: *mut wlr_output_layout, o: *mut wlr_output, x: c_int, y: c_int) -> *mut c_void;
+    fn wlr_xdg_output_manager_v1_create(d: *mut wl_display, l: *mut wlr_output_layout) -> *mut c_void;
+
+    fn wlr_xdg_toplevel_set_size(t: *mut wlr_xdg_toplevel, w: i32, h: i32) -> u32;
+    fn wlr_xdg_toplevel_set_bounds(t: *mut wlr_xdg_toplevel, w: i32, h: i32) -> u32;
+    fn wlr_xdg_toplevel_set_maximized(t: *mut wlr_xdg_toplevel, on: bool) -> u32;
+    fn wlr_xdg_toplevel_set_fullscreen(t: *mut wlr_xdg_toplevel, on: bool) -> u32;
+    fn wlr_xdg_toplevel_set_activated(t: *mut wlr_xdg_toplevel, on: bool) -> u32;
+    fn wlr_xdg_toplevel_set_suspended(t: *mut wlr_xdg_toplevel, on: bool) -> u32;
+    fn wlr_xdg_toplevel_send_close(t: *mut wlr_xdg_toplevel);
+    fn wlr_layer_surface_v1_configure(l: *mut wlr_layer_surface_v1, w: u32, h: u32) -> u32;
+    fn wlr_foreign_toplevel_handle_v1_create(m: *mut wlr_foreign_toplevel_manager_v1) -> *mut wlr_foreign_toplevel_handle_v1;
+    fn wlr_foreign_toplevel_handle_v1_destroy(h: *mut wlr_foreign_toplevel_handle_v1);
+    fn wlr_foreign_toplevel_handle_v1_set_title(h: *mut wlr_foreign_toplevel_handle_v1, s: *const c_char);
+    fn wlr_foreign_toplevel_handle_v1_set_app_id(h: *mut wlr_foreign_toplevel_handle_v1, s: *const c_char);
+    fn wlr_foreign_toplevel_handle_v1_set_minimized(h: *mut wlr_foreign_toplevel_handle_v1, on: bool);
+    fn wlr_foreign_toplevel_handle_v1_set_maximized(h: *mut wlr_foreign_toplevel_handle_v1, on: bool);
+    fn wlr_foreign_toplevel_handle_v1_set_activated(h: *mut wlr_foreign_toplevel_handle_v1, on: bool);
+}
+
+fn text(p: *const c_char) -> Option<String> {
+    (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
+}
+
+fn cstr(s: &str) -> CString {
+    CString::new(s.replace('\0', "")).unwrap_or_default()
+}
+
+/// A typed listener on one of tw-access.h's signals: `f` gets the signal's
+/// data turned into what it carries.
+macro_rules! signal {
+    ($(#[$m:meta])* $name:ident, $hook:ident, $c:ident, || ) => {
+        $(#[$m])*
+        pub fn $name(self, mut f: impl FnMut() + 'static) -> Option<Listener> {
+            let p = self.0.as_ptr();
+            Listener::attach(Box::new(move |_| f()), |n, c| unsafe { $hook(p as *mut $c, n, c) })
+        }
+    };
+    ($(#[$m:meta])* $name:ident, $hook:ident, $c:ident, |$d:ident| -> $t:ty $conv:block) => {
+        $(#[$m])*
+        pub fn $name(self, mut f: impl FnMut($t) + 'static) -> Option<Listener> {
+            let p = self.0.as_ptr();
+            Listener::attach(Box::new(move |$d: *mut c_void| { if !$d.is_null() { f($conv) } }), |n, c| unsafe { $hook(p as *mut $c, n, c) })
+        }
+    };
 }
 
 /// wlroots' own logging: silent, or everything.
 pub fn log(verbose: bool) {
     unsafe {
         if verbose { tw_log_verbose() } else { tw_log_silence() }
-    }
-}
-
-/// Pin wlroots' renderer to pixman unless `WLR_RENDERER` says otherwise:
-/// headless runs need CPU-readable buffers. Call before the backend exists,
-/// and so before any thread could read the environment.
-pub fn prefer_pixman_renderer() {
-    if std::env::var_os("WLR_RENDERER").is_none() {
-        // SAFETY: called while the process is single-threaded (before
-        // wlroots, which is the only thing that would read it, starts).
-        unsafe { std::env::set_var("WLR_RENDERER", "pixman") };
     }
 }
 
@@ -233,6 +349,16 @@ handle!(Texture, wlr_texture);
 handle!(Surface, wlr_surface);
 handle!(InputDevice, wlr_input_device);
 handle!(Timeline, wlr_drm_syncobj_timeline);
+handle!(Compositor, wlr_compositor);
+handle!(XdgShell, wlr_xdg_shell);
+handle!(XdgToplevel, wlr_xdg_toplevel);
+handle!(XdgPopup, wlr_xdg_popup);
+handle!(LayerShell, wlr_layer_shell_v1);
+handle!(LayerSurface, wlr_layer_surface_v1);
+handle!(ForeignManager, wlr_foreign_toplevel_manager_v1);
+handle!(ForeignHandle, wlr_foreign_toplevel_handle_v1);
+handle!(Activation, wlr_xdg_activation_v1);
+handle!(OutputLayout, wlr_output_layout);
 
 // MARK: listeners
 
@@ -415,6 +541,15 @@ impl Backend {
     }
     pub fn renderer(self) -> Option<Renderer> {
         Renderer::from_raw(unsafe { wlr_renderer_autocreate(self.0.as_ptr()) })
+    }
+    /// Pixman, unless `$WLR_RENDERER` names another: what a headless run
+    /// needs (CPU-readable buffers), chosen without writing the environment,
+    /// which another thread may be reading.
+    pub fn renderer_preferring_pixman(self) -> Option<Renderer> {
+        if std::env::var_os("WLR_RENDERER").is_some() {
+            return self.renderer();
+        }
+        Renderer::from_raw(unsafe { wlr_pixman_renderer_create() })
     }
     pub fn allocator(self, r: Renderer) -> Option<Allocator> {
         Allocator::from_raw(unsafe { wlr_allocator_autocreate(self.0.as_ptr(), r.0.as_ptr()) })
@@ -663,6 +798,270 @@ impl Surface {
     pub fn textured_on_output(self, o: Output) {
         unsafe { wlr_presentation_surface_textured_on_output(self.0.as_ptr(), o.0.as_ptr()) }
     }
+}
+
+impl Surface {
+    signal!(on_map, tw_surface_on_map, wlr_surface, ||);
+    signal!(on_unmap, tw_surface_on_unmap, wlr_surface, ||);
+    signal!(on_commit, tw_surface_on_commit, wlr_surface, ||);
+    signal!(on_destroy, tw_surface_on_destroy, wlr_surface, ||);
+    /// Whether the commit just made attached a buffer.
+    pub fn committed_buffer(self) -> bool {
+        unsafe { tw_surface_committed_buffer(self.0.as_ptr()) }
+    }
+    /// Frame-done, now, to it **and every subsurface under it**: a
+    /// subsurface asks for its own callbacks, and one never answered draws
+    /// once and waits for ever.
+    pub fn frame_done_tree(self) {
+        unsafe { tw_surface_frame_done_tree(self.0.as_ptr()) }
+    }
+    /// The pid of the client that owns it, if the kernel says.
+    pub fn client_pid(self) -> Option<i32> {
+        let p = unsafe { tw_surface_client_pid(self.0.as_ptr()) };
+        (p > 0).then_some(p)
+    }
+}
+
+/// The globals a compositor offers, each made once on the display.
+pub mod globals {
+    use super::*;
+
+    /// wl_compositor, which makes client buffers into textures on commit.
+    pub fn compositor(d: &Display, version: u32, r: Renderer) -> Option<Compositor> {
+        Compositor::from_raw(unsafe { wlr_compositor_create(d.0.as_ptr(), version, r.0.as_ptr()) })
+    }
+    pub fn subcompositor(d: &Display) -> bool {
+        !unsafe { wlr_subcompositor_create(d.0.as_ptr()) }.is_null()
+    }
+    pub fn data_device_manager(d: &Display) -> bool {
+        !unsafe { wlr_data_device_manager_create(d.0.as_ptr()) }.is_null()
+    }
+    pub fn viewporter(d: &Display) -> bool {
+        !unsafe { wlr_viewporter_create(d.0.as_ptr()) }.is_null()
+    }
+    pub fn fractional_scale(d: &Display, version: u32) -> bool {
+        !unsafe { wlr_fractional_scale_manager_v1_create(d.0.as_ptr(), version) }.is_null()
+    }
+    pub fn shm(d: &Display, version: u32, r: Renderer) -> bool {
+        !unsafe { wlr_shm_create_with_renderer(d.0.as_ptr(), version, r.0.as_ptr()) }.is_null()
+    }
+    pub fn presentation(d: &Display, b: Backend, version: u32) -> bool {
+        !unsafe { wlr_presentation_create(d.0.as_ptr(), b.0.as_ptr(), version) }.is_null()
+    }
+    /// None when the renderer imports no dma-bufs (pixman).
+    pub fn linux_dmabuf(d: &Display, version: u32, r: Renderer) -> bool {
+        !unsafe { wlr_linux_dmabuf_v1_create_with_renderer(d.0.as_ptr(), version, r.0.as_ptr()) }.is_null()
+    }
+    pub fn xdg_shell(d: &Display, version: u32) -> Option<XdgShell> {
+        XdgShell::from_raw(unsafe { wlr_xdg_shell_create(d.0.as_ptr(), version) })
+    }
+    pub fn layer_shell(d: &Display, version: u32) -> Option<LayerShell> {
+        LayerShell::from_raw(unsafe { wlr_layer_shell_v1_create(d.0.as_ptr(), version) })
+    }
+    pub fn foreign_toplevel_manager(d: &Display) -> Option<ForeignManager> {
+        ForeignManager::from_raw(unsafe { wlr_foreign_toplevel_manager_v1_create(d.0.as_ptr()) })
+    }
+    pub fn screencopy(d: &Display) -> bool {
+        !unsafe { wlr_screencopy_manager_v1_create(d.0.as_ptr()) }.is_null()
+    }
+    pub fn xdg_activation(d: &Display) -> Option<Activation> {
+        Activation::from_raw(unsafe { wlr_xdg_activation_v1_create(d.0.as_ptr()) })
+    }
+    pub fn output_layout(d: &Display) -> Option<OutputLayout> {
+        OutputLayout::from_raw(unsafe { wlr_output_layout_create(d.0.as_ptr()) })
+    }
+    pub fn xdg_output_manager(d: &Display, l: OutputLayout) -> bool {
+        !unsafe { wlr_xdg_output_manager_v1_create(d.0.as_ptr(), l.0.as_ptr()) }.is_null()
+    }
+}
+
+impl Compositor {
+    signal!(on_new_surface, tw_compositor_on_new_surface, wlr_compositor, ||);
+}
+
+impl OutputLayout {
+    pub fn add(self, o: Output, x: i32, y: i32) {
+        unsafe { wlr_output_layout_add(self.0.as_ptr(), o.0.as_ptr(), x, y) };
+    }
+}
+
+impl XdgShell {
+    signal!(on_new_toplevel, tw_xdg_shell_on_new_toplevel, wlr_xdg_shell, |d| -> XdgToplevel { XdgToplevel(NonNull::new(d as *mut wlr_xdg_toplevel).unwrap()) });
+    signal!(on_new_popup, tw_xdg_shell_on_new_popup, wlr_xdg_shell, |d| -> XdgPopup { XdgPopup(NonNull::new(d as *mut wlr_xdg_popup).unwrap()) });
+}
+
+/// What a toplevel asked for before or since its last configure.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Requested {
+    pub maximized: bool,
+    pub minimized: bool,
+    pub fullscreen: bool,
+}
+
+impl XdgToplevel {
+    signal!(on_destroy, tw_xdg_toplevel_on_destroy, wlr_xdg_toplevel, ||);
+    signal!(on_request_move, tw_xdg_toplevel_on_request_move, wlr_xdg_toplevel, ||);
+    signal!(
+        /// The edges to resize from (wlr_edges).
+        on_request_resize, tw_xdg_toplevel_on_request_resize, wlr_xdg_toplevel, |d| -> u32 { unsafe { tw_xdg_resize_edges(d) } });
+    signal!(on_request_maximize, tw_xdg_toplevel_on_request_maximize, wlr_xdg_toplevel, ||);
+    signal!(on_request_minimize, tw_xdg_toplevel_on_request_minimize, wlr_xdg_toplevel, ||);
+    signal!(on_request_fullscreen, tw_xdg_toplevel_on_request_fullscreen, wlr_xdg_toplevel, ||);
+    signal!(on_set_title, tw_xdg_toplevel_on_set_title, wlr_xdg_toplevel, ||);
+    signal!(on_set_app_id, tw_xdg_toplevel_on_set_app_id, wlr_xdg_toplevel, ||);
+
+    pub fn surface(self) -> Surface {
+        Surface::from_raw(unsafe { tw_xdg_toplevel_surface(self.0.as_ptr()) }).expect("a toplevel has a surface")
+    }
+    pub fn app_id(self) -> Option<String> {
+        text(unsafe { tw_xdg_toplevel_app_id(self.0.as_ptr()) })
+    }
+    pub fn title(self) -> Option<String> {
+        text(unsafe { tw_xdg_toplevel_title(self.0.as_ptr()) })
+    }
+    /// The client's first commit, which must be answered with a configure.
+    pub fn initial_commit(self) -> bool {
+        unsafe { tw_xdg_toplevel_initial_commit(self.0.as_ptr()) }
+    }
+    /// Past its first commit: a configure may be scheduled now.
+    pub fn initialized(self) -> bool {
+        unsafe { tw_xdg_toplevel_initialized(self.0.as_ptr()) }
+    }
+    pub fn requested(self) -> Requested {
+        let r = unsafe { tw_xdg_toplevel_requested(self.0.as_ptr()) };
+        Requested { maximized: r & 1 != 0, minimized: r & 2 != 0, fullscreen: r & 4 != 0 }
+    }
+    /// The window geometry's offset in its surface.
+    pub fn geometry_offset(self) -> (i32, i32) {
+        let mut g = [0i32; 2];
+        unsafe { tw_xdg_toplevel_geometry(self.0.as_ptr(), g.as_mut_ptr()) };
+        (g[0], g[1])
+    }
+    pub fn set_size(self, w: i32, h: i32) {
+        unsafe { wlr_xdg_toplevel_set_size(self.0.as_ptr(), w, h) };
+    }
+    pub fn set_bounds(self, w: i32, h: i32) {
+        unsafe { wlr_xdg_toplevel_set_bounds(self.0.as_ptr(), w, h) };
+    }
+    pub fn set_maximized(self, on: bool) {
+        unsafe { wlr_xdg_toplevel_set_maximized(self.0.as_ptr(), on) };
+    }
+    pub fn set_fullscreen(self, on: bool) {
+        unsafe { wlr_xdg_toplevel_set_fullscreen(self.0.as_ptr(), on) };
+    }
+    pub fn set_activated(self, on: bool) {
+        unsafe { wlr_xdg_toplevel_set_activated(self.0.as_ptr(), on) };
+    }
+    pub fn set_suspended(self, on: bool) {
+        unsafe { wlr_xdg_toplevel_set_suspended(self.0.as_ptr(), on) };
+    }
+    pub fn send_close(self) {
+        unsafe { wlr_xdg_toplevel_send_close(self.0.as_ptr()) }
+    }
+    /// Maximize, fullscreen and minimize: what undertow does if asked (not
+    /// the window menu, which it does not draw).
+    pub fn offer_capabilities(self) {
+        unsafe { tw_xdg_toplevel_offer_capabilities(self.0.as_ptr()) }
+    }
+}
+
+impl XdgPopup {
+    signal!(on_destroy, tw_xdg_popup_on_destroy, wlr_xdg_popup, ||);
+    pub fn surface(self) -> Surface {
+        Surface::from_raw(unsafe { tw_xdg_popup_surface(self.0.as_ptr()) }).expect("a popup has a surface")
+    }
+    pub fn parent(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_xdg_popup_parent(self.0.as_ptr()) })
+    }
+    pub fn initial_commit(self) -> bool {
+        unsafe { tw_xdg_popup_initial_commit(self.0.as_ptr()) }
+    }
+    /// Its position (relative to its parent's window geometry), and its own
+    /// geometry's offset in its surface.
+    pub fn geometry(self) -> ((i32, i32), (i32, i32)) {
+        let mut g = [0i32; 4];
+        unsafe { tw_xdg_popup_geometry(self.0.as_ptr(), g.as_mut_ptr()) };
+        ((g[0], g[1]), (g[2], g[3]))
+    }
+    /// Keep it inside `box`, in its root's coordinates.
+    pub fn unconstrain(self, x: i32, y: i32, w: i32, h: i32) {
+        unsafe { tw_xdg_popup_unconstrain(self.0.as_ptr(), x, y, w, h) }
+    }
+}
+
+impl LayerShell {
+    signal!(on_new_surface, tw_layer_shell_v1_on_new_surface, wlr_layer_shell_v1, |d| -> LayerSurface { LayerSurface(NonNull::new(d as *mut wlr_layer_surface_v1).unwrap()) });
+}
+
+impl LayerSurface {
+    signal!(on_destroy, tw_layer_surface_v1_on_destroy, wlr_layer_surface_v1, ||);
+    pub fn surface(self) -> Surface {
+        Surface::from_raw(unsafe { tw_layer_surface(self.0.as_ptr()) }).expect("a layer surface has a surface")
+    }
+    pub fn namespace(self) -> String {
+        text(unsafe { tw_layer_namespace(self.0.as_ptr()) }).unwrap_or_default()
+    }
+    /// 0 background, 1 bottom, 2 top, 3 overlay: the paint order.
+    pub fn layer(self) -> u32 {
+        unsafe { tw_layer_layer(self.0.as_ptr()) }
+    }
+    /// 0 none, 1 exclusive, 2 on demand.
+    pub fn keyboard_interactive(self) -> u32 {
+        unsafe { tw_layer_keyboard_interactive(self.0.as_ptr()) }
+    }
+    pub fn request(self) -> LayerRequestRaw {
+        let mut r = LayerRequestRaw::default();
+        unsafe { tw_layer_request_read(self.0.as_ptr(), &mut r) };
+        r
+    }
+    pub fn output(self) -> Option<Output> {
+        Output::from_raw(unsafe { tw_layer_output(self.0.as_ptr()) })
+    }
+    pub fn set_output(self, o: Option<Output>) {
+        unsafe { tw_layer_set_output(self.0.as_ptr(), o.map_or(std::ptr::null_mut(), |o| o.0.as_ptr())) }
+    }
+    pub fn configure(self, w: u32, h: u32) {
+        unsafe { wlr_layer_surface_v1_configure(self.0.as_ptr(), w, h) };
+    }
+}
+
+impl ForeignManager {
+    pub fn create_handle(self) -> Option<ForeignHandle> {
+        ForeignHandle::from_raw(unsafe { wlr_foreign_toplevel_handle_v1_create(self.0.as_ptr()) })
+    }
+}
+
+impl ForeignHandle {
+    signal!(on_request_activate, tw_foreign_toplevel_handle_v1_on_request_activate, wlr_foreign_toplevel_handle_v1, ||);
+    signal!(on_request_close, tw_foreign_toplevel_handle_v1_on_request_close, wlr_foreign_toplevel_handle_v1, ||);
+    signal!(on_request_minimize, tw_foreign_toplevel_handle_v1_on_request_minimize, wlr_foreign_toplevel_handle_v1, |d| -> bool { unsafe { tw_foreign_event_flag(d, 0) } });
+    signal!(on_request_maximize, tw_foreign_toplevel_handle_v1_on_request_maximize, wlr_foreign_toplevel_handle_v1, |d| -> bool { unsafe { tw_foreign_event_flag(d, 1) } });
+    pub fn destroy(self) {
+        unsafe { wlr_foreign_toplevel_handle_v1_destroy(self.0.as_ptr()) }
+    }
+    pub fn set_title(self, s: &str) {
+        let c = cstr(s);
+        unsafe { wlr_foreign_toplevel_handle_v1_set_title(self.0.as_ptr(), c.as_ptr()) }
+    }
+    pub fn set_app_id(self, s: &str) {
+        let c = cstr(s);
+        unsafe { wlr_foreign_toplevel_handle_v1_set_app_id(self.0.as_ptr(), c.as_ptr()) }
+    }
+    pub fn set_minimized(self, on: bool) {
+        unsafe { wlr_foreign_toplevel_handle_v1_set_minimized(self.0.as_ptr(), on) }
+    }
+    pub fn set_maximized(self, on: bool) {
+        unsafe { wlr_foreign_toplevel_handle_v1_set_maximized(self.0.as_ptr(), on) }
+    }
+    pub fn set_activated(self, on: bool) {
+        unsafe { wlr_foreign_toplevel_handle_v1_set_activated(self.0.as_ptr(), on) }
+    }
+}
+
+impl Activation {
+    signal!(
+        /// The surface a client asks to raise (its own, with a token).
+        on_request_activate, tw_xdg_activation_v1_on_request_activate, wlr_xdg_activation_v1, |d| -> Option<Surface> { Surface::from_raw(unsafe { tw_activation_surface(d) }) });
 }
 
 #[cfg(test)]
