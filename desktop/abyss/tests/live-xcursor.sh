@@ -88,11 +88,15 @@ run() {
   WAYLAND_DISPLAY="$wd" "$work/vpointer" 800 600 < "$work/vp.in" > "$work/vp.log" 2>&1 &
   vp=$!; exec 3>"$work/vp.in"
   i=0; while ! grep -q ready "$work/vp.log" 2>/dev/null && [ $i -lt 60 ]; do sleep 0.1; i=$((i + 1)); done
+  # Said here rather than as a write error on the fifo a line later, which
+  # is all a full run's log kept of it once.
+  grep -q ready "$work/vp.log" 2>/dev/null || fail "vpointer never said ready ($1): $(tail -3 "$work/vp.log" 2>/dev/null)"
   env WAYLAND_DISPLAY="$wd" XCURSOR_THEME="$2" XCURSOR_SIZE=24 \
       XCURSOR_PATH="$work/icons:/usr/local/share/icons:/usr/share/icons" \
       "$work/cursortest" < "$work/a.in" > "$work/a.log" 2>&1 &
   ap=$!; exec 5>"$work/a.in"
   i=0; while ! grep -q '^ready' "$work/a.log" 2>/dev/null && [ $i -lt 60 ]; do sleep 0.1; i=$((i + 1)); done
+  grep -q '^ready' "$work/a.log" 2>/dev/null || fail "cursortest never said ready ($1): $(tail -3 "$work/a.log" 2>/dev/null)"
   printf '%s\n' "$3" >&5; sleep 0.3
   # Its window is centred: 400x300 at (200,150). The pointer goes to
   # (300,250) inside it — away from the middle, where nothing else lands.

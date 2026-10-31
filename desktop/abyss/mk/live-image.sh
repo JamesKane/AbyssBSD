@@ -426,7 +426,7 @@ libs=""
 for b in $BINARIES; do
   [ -x "$builddir/$b" ] || die "no $b in $builddir — run swift build first"
   libs="$libs
-$(ldd "$builddir/$b" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/')"
+$(ldd "$builddir/$b" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/' || true)"  # a pure-Rust binary links nothing there: no match is no failure
 done
 # The dlopened roots, closed over exactly like the binaries above.
 [ -d "$DLOPEN_DIR" ] \
@@ -444,7 +444,7 @@ done
 for r in $dlopen_roots; do
   libs="$libs
 $r
-$(ldd "$r" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/')"
+$(ldd "$r" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/' || true)"
 done
 
 libs=$(echo "$libs" | sort -u | grep .)

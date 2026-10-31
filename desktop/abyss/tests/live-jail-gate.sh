@@ -75,7 +75,7 @@ cleanup() {
   sudo rm -rf "$T"
 }
 trap cleanup EXIT INT TERM HUP
-fail() { echo "FAIL: $1"; for f in jd.log keeper.log bar.log pt.log xdg/jails/app-net/bridge.log; do tail -5 "$T/$f" 2>/dev/null | sed "s/^/  $f| /"; done
+fail() { echo "FAIL: $1"; for f in jd.log keeper.log bar.log pt.log xdg/jails/app-net/bridge.log; do tail -5 "$T/$f" 2>/dev/null | sed "s#^#  $f| #"; done
          grep -E '^window' "$T/ut.out" 2>/dev/null | tail -4 | sed "s/^/  undertow| /"; exit 1; }
 count() { n=$(grep -c -- "$1" "$2" 2>/dev/null) || true; echo "${n:-0}"; }
 await() { i=0; while [ "$(count "$2" "$1")" -lt "${4:-1}" ] && [ $i -lt "${5:-200}" ]; do i=$((i + 1)); sleep 0.1; done
@@ -123,7 +123,7 @@ grep -q 'abyss-jail launch' "$other" && fail "an application [apps] does not lis
 echo "ok: 1. galculator's bundle launches confined in app, Firefox's in app-net, and the rest ($(basename "$other") among them) do not"
 
 # ------------------------------------------------- 2. galculator and zenity
-PATH="$root/$D:$PATH" sh "$gal" > "$T/l-gal" 2>&1 || fail "galculator's bundle: $(cat "$T/l-gal")"
+PATH="$D:$PATH" sh "$gal" > "$T/l-gal" 2>&1 || fail "galculator's bundle: $(cat "$T/l-gal")"
 $D/abyss-jail launch app -- zenity --info --text "confined" > "$T/l-zen" 2>&1 || fail "zenity's launch: $(cat "$T/l-zen")"
 await "$T/ut.out" '^window-jail galculator[^ ]* engine=org.abyssbsd.jail app=app ' "galculator's window is not the app jail's"
 await "$T/ut.out" '^window-jail zenity[^ ]* engine=org.abyssbsd.jail app=app ' "zenity's window is not the app jail's"
@@ -165,7 +165,7 @@ user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 user_pref("widget.use-xdg-desktop-portal.file-picker", 1);
 EOF
-PATH="$root/$D:$PATH" sh "$ff" --no-remote --profile "/home/$me/ffprof" --kiosk "http://127.0.0.1:$port/" > "$T/l-ff" 2>&1 \
+PATH="$D:$PATH" sh "$ff" --no-remote --profile "/home/$me/ffprof" --kiosk "http://127.0.0.1:$port/" > "$T/l-ff" 2>&1 \
   || fail "Firefox's bundle: $(cat "$T/l-ff")"
 await "$T/ut.out" '^window-jail .*firefox.* engine=org.abyssbsd.jail app=app-net ' "Firefox's window is not app-net's" 1 600
 want="232 176 76"; i=0

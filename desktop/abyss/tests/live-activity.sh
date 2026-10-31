@@ -185,8 +185,13 @@ else
   click $(at all); sleep 0.4
   printf 'k 1\n' >&4; sleep 0.3                                  # Escape: clear the filter
   printf 't %s\n' "$daemon" >&4
-  i=0; until [ -n "$(row_y "$dpid")" ]; do
-    [ $i -ge 60 ] && fail "$daemon (pid $dpid) is not in All Processes"; sleep 0.1; i=$((i + 1)); done
+  # Wait for where the typing ends, not the first list naming it: the
+  # cleared filter's whole list has the daemon too, lower down, and a click
+  # at that row lands on nothing once the filter narrows (the rows line
+  # unchanged for 0.5s, and naming it).
+  i=0; last=""
+  until rows=$(grep 'Activity Monitor: rows ' "$log" | tail -1); [ -n "$(row_y "$dpid")" ] && [ "$rows" = "$last" ]; do
+    [ $i -ge 30 ] && fail "$daemon (pid $dpid) is not in All Processes"; last=$rows; sleep 0.5; i=$((i + 1)); done
   quit_row "$dpid" "$daemon" quit
   await "Activity Monitor: quit $daemon (pid $dpid, uid 0): asked the helper" 0 "the quit did not go to the helper"
   await 'Activity Monitor: helper: done' 0 "the helper did not accept the plan: $(grep 'helper:' "$log" | tail -1)" 50

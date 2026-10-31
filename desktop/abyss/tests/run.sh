@@ -54,6 +54,9 @@ quiet() {
   _log=$(mktemp /tmp/abyss-run.XXXXXX)
   if sh "$@" > "$_log" 2>&1; then rm -f "$_log"; return 0; fi
   echo "FAIL: $(basename "$1") — its last words:"
+  # Its own FAIL line first: a test that dumps logs after it (the jail
+  # gate's fail()) pushed the reason out of the tail.
+  grep '^FAIL' "$_log" | head -3 | sed 's/^/   | /'
   tail -25 "$_log" | sed 's/^/   | /'
   rm -f "$_log"
   return 1
