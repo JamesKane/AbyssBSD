@@ -24,6 +24,7 @@ settings = { path = "../settings" }
 settings-wire = { path = "../settingswire" }
 spawn = { path = "../spawn" }
 surface = { path = "../surface" }
+system-facts = { path = "../systemfacts" }
 terminal = { path = "../terminal" }
 text-model = { path = "../textmodel" }
 vents = { path = "../vents" }

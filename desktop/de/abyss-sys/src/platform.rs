@@ -153,6 +153,53 @@ pub fn local_timestamp() -> String {
     )
 }
 
+/// This machine's host name.
+pub fn hostname() -> String {
+    let mut buf = [0u8; 256];
+    if unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) } != 0 {
+        return String::new();
+    }
+    String::from_utf8_lossy(&buf[..buf.iter().position(|&b| b == 0).unwrap_or(buf.len())]).into_owned()
+}
+
+/// uname(3): the system's name, release and machine.
+pub fn uname() -> (String, String, String) {
+    let mut u: libc::utsname = unsafe { std::mem::zeroed() };
+    if unsafe { libc::uname(&mut u) } != 0 {
+        return Default::default();
+    }
+    let field = |f: &[libc::c_char]| unsafe { std::ffi::CStr::from_ptr(f.as_ptr()) }.to_string_lossy().into_owned();
+    (field(&u.sysname), field(&u.release), field(&u.machine))
+}
+
+/// The volume holding `path`: its size and how much of it is used, in bytes.
+pub fn volume_usage(path: &str) -> Option<(u64, u64)> {
+    let p = std::ffi::CString::new(path).ok()?;
+    let mut v: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(p.as_ptr(), &mut v) } != 0 {
+        return None;
+    }
+    let (blocks, free, size) = (v.f_blocks as u64, v.f_bfree as u64, v.f_frsize as u64);
+    Some((blocks * size, (blocks - free) * size))
+}
+
+/// The filesystem type of the volume holding `path` (`zfs`, `ufs`): FreeBSD
+/// says; elsewhere None.
+#[cfg(target_os = "freebsd")]
+pub fn fs_type(path: &str) -> Option<String> {
+    let p = std::ffi::CString::new(path).ok()?;
+    let mut s: libc::statfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statfs(p.as_ptr(), &mut s) } != 0 {
+        return None;
+    }
+    Some(unsafe { std::ffi::CStr::from_ptr(s.f_fstypename.as_ptr()) }.to_string_lossy().into_owned())
+}
+
+#[cfg(not(target_os = "freebsd"))]
+pub fn fs_type(_path: &str) -> Option<String> {
+    None
+}
+
 /// Bytes free to an unprivileged writer on the volume holding `path`.
 pub fn free_space(path: &str) -> Option<u64> {
     let p = std::ffi::CString::new(path).ok()?;

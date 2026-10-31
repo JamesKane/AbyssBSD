@@ -1022,6 +1022,14 @@ abyss-sys gains `civil_time` (local or UTC). Both goldens are identical
 only that the window says ZFS is missing; its claims run in the FreeBSD
 guest and wait for it.
 
+*R6r, System Profiler.* The facts gathered here over `system-facts`'
+parsers (sysctl, kenv, pciconf or the bound DRM driver, swapinfo, the
+root volume, the compositor's displays), each unknown when it cannot be
+read; Copy and Refresh. abyss-sys gains `hostname`, `uname`,
+`volume_usage` and `fs_type` (FreeBSD's statfs). Its golden is the
+window full-bleed, identical (99 in the gate); live-systemprofiler is
+green on Linux, and its check against the machine runs on FreeBSD.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

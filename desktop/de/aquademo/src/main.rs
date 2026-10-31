@@ -37,6 +37,27 @@ fn main() {
         println!("{}", if ok { format!("AquaDemo: wrote {out}") } else { "AquaDemo: PNG render failed".into() });
         exit(if ok { 0 } else { 1 })
     }
+    // System Profiler: its own window, as tall as its facts; the golden is
+    // that window full-bleed, from a fixed machine.
+    if scene.as_deref() == Some("systemprofiler") {
+        if let Some(out) = env("AQUA_RENDER_PNG") {
+            let ok = aqua::system_profiler::render_png(&out, scale, &mut tk.runner.borrow_mut(), &tk.theme.borrow());
+            println!("{}", if ok { format!("AquaDemo: wrote {out}") } else { "AquaDemo: PNG render failed".into() });
+            exit(if ok { 0 } else { 1 })
+        }
+        let Some(display) = surface::Display::connect() else {
+            println!("AquaDemo: cannot connect to a Wayland compositor (is WAYLAND_DISPLAY set, and does it offer xdg-shell?).");
+            exit(1)
+        };
+        tk.follow_appearance(&display);
+        let Some(_app) = aqua::system_profiler::SystemProfiler::new(&display, &tk) else {
+            println!("AquaDemo: could not open System Profiler.");
+            exit(1)
+        };
+        eprintln!("AquaDemo: System Profiler is up.");
+        display.run();
+        exit(0)
+    }
     // The session's own scenes: each a surface of its own, not a window.
     if let Some(s @ ("lock" | "loginwindow" | "setupassistant")) = scene.as_deref() {
         let Some(display) = surface::Display::connect() else {

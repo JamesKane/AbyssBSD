@@ -115,6 +115,7 @@ dependencies = [
  "settings-wire",
  "spawn",
  "surface",
+ "system-facts",
  "terminal",
  "text-model",
  "vents",
