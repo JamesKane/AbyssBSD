@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — undo, decided (P10.5).
+# AbyssBSD desktop — undo, decided (P10.5).
 #
 # Undo is per window and a command like any other (PHASE10 §6.3): `edit.undo`
 # and `edit.redo` are verbs, and the Edit menu's two rows are derived from the
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
-[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$menu" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$menu" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-undo.XXXXXX)
 rundir=$(mktemp -d /tmp/abyss-undor.XXXXXX)

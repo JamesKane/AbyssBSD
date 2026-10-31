@@ -1,17 +1,14 @@
 #!/bin/sh
 # Build (and by default test) the repo inside the FreeBSD VM.
 #
-# This is the Phase-3 dev loop in one command: rsync the host tree into the
-# guest, then run swift there. Swift lives off PATH on FreeBSD
-# (ABYSS_GUEST_SWIFT_BIN — see config.sh), and a non-interactive
-# `ssh host 'cmd'` reads no profile, so the PATH is set explicitly here rather
-# than assumed.
+# The dev loop in one command: rsync the host tree into the guest, then run
+# cargo there.
 #
 # Usage:
-#   ./build.sh                 # sync + swift and cargo build + both tests
-#   ./build.sh --no-test       # sync + swift and cargo build
+#   ./build.sh                 # sync + cargo build + cargo test
+#   ./build.sh --no-test       # sync + cargo build
 #   ./build.sh --no-sync       # build what is already in the guest
-#   ./build.sh -- <args>       # pass extra args to `swift build` (e.g. -c release)
+#   ./build.sh -- <args>       # pass extra args to `cargo build` (e.g. --release)
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/config.sh"
@@ -24,7 +21,7 @@ while [ $# -gt 0 ]; do
     --no-sync) do_sync=0 ;;
     --no-test) do_test=0 ;;
     --) shift; extra="$*"; break ;;
-    *) echo "usage: build.sh [--no-sync] [--no-test] [-- <swift build args>]" >&2; exit 2 ;;
+    *) echo "usage: build.sh [--no-sync] [--no-test] [-- <cargo build args>]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -34,32 +31,18 @@ done
 # shellcheck disable=SC2046
 run() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@$ABYSS_SSH_HOST" "$@"; }
 
-# FreeBSD's cairo.pc carries -D_THREAD_SAFE, which SwiftPM refuses to forward
-# ("prohibited flag(s)") and drops. It is benign for us and would otherwise be
-# the only thing on stderr, so it is filtered out of the transcript here.
-filter='grep -v "^warning: prohibited flag"'
-
-# **The status of swift, not of the filter** (P11.10). Piped straight into
-# the filter, a failed build's exit status was the grep's: "[build] done" was
-# printed over a compile error, and everything after it — goldens, tests in
-# the guest — ran against the binaries the last good build left. So swift's
-# output goes to a file, is filtered from there, and swift's status is the
-# command's.
-echo "[build] swift build ${extra}"
-run "export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && swift build $extra > /tmp/abyss-build.log 2>&1; rc=\$?; $filter < /tmp/abyss-build.log; exit \$rc" \
-  || { echo "[build] FAILED: swift build in the guest" >&2; exit 1; }
-
-# The Rust half (docs/RUST.md R1), from the same synced tree.
-echo "[build] cargo build"
-run "cd $ABYSS_GUEST_SRC && cargo build --workspace --bins --examples > /tmp/abyss-cargo.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo.log; exit \$rc" \
+# **The status of the build, not of the filter** (P11.10). Piped straight
+# into a filter, a failed build's exit status was the filter's: "[build] done"
+# was printed over a compile error, and everything after it ran against the
+# binaries the last good build left. So the output goes to a file, and the
+# build's status is the command's.
+echo "[build] cargo build ${extra}"
+run "cd $ABYSS_GUEST_SRC && cargo build --workspace --bins --examples $extra > /tmp/abyss-cargo.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo.log; exit \$rc" \
   || { echo "[build] FAILED: cargo build in the guest" >&2; exit 1; }
 
 if [ "$do_test" -eq 1 ]; then
   echo "[build] cargo test"
   run "cd $ABYSS_GUEST_SRC && cargo test --workspace > /tmp/abyss-cargo-test.log 2>&1; rc=\$?; tail -3 /tmp/abyss-cargo-test.log; exit \$rc" \
     || { echo "[build] FAILED: cargo test in the guest" >&2; exit 1; }
-  echo "[build] swift test"
-  run "export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && swift test > /tmp/abyss-test.log 2>&1; rc=\$?; $filter < /tmp/abyss-test.log | tail -5; exit \$rc" \
-    || { echo "[build] FAILED: swift test in the guest" >&2; exit 1; }
 fi
 echo "[build] done"

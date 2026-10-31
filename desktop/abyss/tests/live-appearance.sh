@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the theme changes while the desktop runs (PHASE14 P14.2).
+# AbyssBSD desktop — the theme changes while the desktop runs (PHASE14 P14.2).
 #
 # The choice lives in appearance.ini (`abyss-theme set`, and the General pane,
 # write it by atomic rename); every process that draws watches the config
@@ -32,7 +32,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 theme="$ABYSS_BIN_DIR/abyss-theme"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$theme" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$theme" ] && [ -x "$grab" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=800

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — C2, the isolation proof (PHASE6.md P6.5; DESKTOP.md §0).
+# AbyssBSD desktop — C2, the isolation proof (PHASE6.md P6.5; DESKTOP.md §0).
 #
 #   "No client can cause a missed flip. A program in an infinite loop, flooding
 #    its socket, or never drawing again simply shows its last committed frame;
@@ -29,7 +29,7 @@ abyss_ensure_runtime_dir
 out=${1:-}
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$client" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] || abyss_build
 
 W=800
 H=600

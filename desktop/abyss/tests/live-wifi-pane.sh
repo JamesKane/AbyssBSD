@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Wi-Fi on the Network pane (PHASE14 P14.5c).
+# AbyssBSD desktop — Wi-Fi on the Network pane (PHASE14 P14.5c).
 #
 # System Preferences driven by the virtual pointer and keyboard, against a real
 # helper and — in the guest — the Wi-Fi lab. Claims:
@@ -30,7 +30,7 @@ client="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
 helper="$ABYSS_BIN_DIR/abyss-settings"
 vents="$ABYSS_BIN_DIR/ventsctl"
-for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1

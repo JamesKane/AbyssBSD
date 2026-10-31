@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the menu bar's volume item is real (PHASE14 P14.6d).
+# AbyssBSD desktop — the menu bar's volume item is real (PHASE14 P14.6d).
 #
 # It said "no mixer" from P3.7 on, because neither the dev box nor the build VM
 # had one. The guest's snd_dummy has one. Claims:
@@ -23,7 +23,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$client" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1
 

@@ -1,4 +1,4 @@
-/* AbyssBSD Swift DE — a stock GtkApplication with a menubar (PHASE10 §4.1).
+/* AbyssBSD desktop — a stock GtkApplication with a menubar (PHASE10 §4.1).
  *
  * The other end of Phase 10's foreign half: File (New, Open…, Quit) and Edit
  * (Copy, Paste — Paste disabled) as app.* actions, exported by GTK's own code on

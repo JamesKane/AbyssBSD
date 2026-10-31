@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — from the login window to a session and back (PHASE16
+# AbyssBSD desktop — from the login window to a session and back (PHASE16
 # P16.5b).
 #
 # The daemon's own loop (`abyss-loginstub --greeter`: the real LoginService
@@ -26,7 +26,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
-for b in undertow AquaDemo abyss-loginstub anchor abyssctl abyss-idle; do [ -x "$bin/$b" ] || { swift build; break; }; done
+for b in undertow AquaDemo abyss-loginstub anchor abyssctl abyss-idle; do [ -x "$bin/$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-grt.XXXXXX)

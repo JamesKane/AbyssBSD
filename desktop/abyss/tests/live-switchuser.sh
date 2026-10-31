@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — fast user switching (PHASE16 P16.6b).
+# AbyssBSD desktop — fast user switching (PHASE16 P16.6b).
 #
 # The daemon's own loop (`abyss-loginstub --greeter`) running real sessions —
 # anchor, undertow, the login window, each person's lock screen and agent —
@@ -30,7 +30,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
-for b in undertow AquaDemo abyss-loginstub abyss-loginctl anchor abyssctl abyss-idle; do [ -x "$bin/$b" ] || { swift build; break; }; done
+for b in undertow AquaDemo abyss-loginstub abyss-loginctl anchor abyssctl abyss-idle; do [ -x "$bin/$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-fus.XXXXXX)

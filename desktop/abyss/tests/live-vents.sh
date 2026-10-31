@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the hardware bridges, against the real machine (P3.7).
+# AbyssBSD desktop — the hardware bridges, against the real machine (P3.7).
 #
 # The unit tests cover the parsing; this covers the kernel. On FreeBSD it reads
 # real sysctls and watches **real devd events**, triggered here by creating and
@@ -17,7 +17,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/abyss/common.sh"
 cd "$root"
 ctl="$ABYSS_BIN_DIR/ventsctl"
-[ -x "$ctl" ] || swift build
+[ -x "$ctl" ] || abyss_build
 [ -x "$ctl" ] || { echo "FAIL: no ventsctl binary"; exit 1; }
 
 os=$(uname -s)

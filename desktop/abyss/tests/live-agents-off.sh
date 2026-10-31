@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — off is one file, absent (PHASE18 P18.13a).
+# AbyssBSD desktop — off is one file, absent (PHASE18 P18.13a).
 #
 # A new account has no agents.ini, so no agents: the keeper starts none, the
 # chord is the application's, and a crash is reported without Ask the Agent.
@@ -23,7 +23,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-off.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

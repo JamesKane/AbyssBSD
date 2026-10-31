@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — explicit sync, on our own compositor (BACKLOG U.3b).
+# AbyssBSD desktop — explicit sync, on our own compositor (BACKLOG U.3b).
 #
 # linux-drm-syncobj-v1: a GPU client's buffer comes with an acquire point
 # (don't read it before this) and a release point (signal this when done with
@@ -26,7 +26,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-syncobj.XXXXXX)
 cleanup() {

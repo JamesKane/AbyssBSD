@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — D-Bus, against GLib (PHASE8.md P8.1; BACKLOG D.1).
+# AbyssBSD desktop — D-Bus, against GLib (PHASE8.md P8.1; BACKLOG D.1).
 #
 # The claim: our hand-written D-Bus implementation is correct — not
 # self-consistent, correct. So **the client on the other end is never our own
@@ -24,7 +24,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 
 probe="$ABYSS_BIN_DIR/dbusprobe"
-[ -x "$probe" ] && [ -x "$ABYSS_BIN_DIR/abyss-dbus" ] || swift build
+[ -x "$probe" ] && [ -x "$ABYSS_BIN_DIR/abyss-dbus" ] || abyss_build
 command -v gdbus >/dev/null || { echo "FAIL: gdbus (GLib) not installed — it is the independent caller"; exit 1; }
 
 work=$(mktemp -d /tmp/abyss-dbus.XXXXXX)

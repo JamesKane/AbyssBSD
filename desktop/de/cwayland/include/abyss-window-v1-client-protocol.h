@@ -32,7 +32,7 @@ extern "C" {
  * @section page_copyright_abyss_window_v1 Copyright
  * <pre>
  *
- * AbyssBSD Swift DE. Same terms as the rest of the tree.
+ * AbyssBSD desktop. Same terms as the rest of the tree.
  * </pre>
  */
 struct abyss_window_manager_v1;

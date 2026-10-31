@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the file-chooser portal, end to end (PHASE7.md P7.2).
+# AbyssBSD desktop — the file-chooser portal, end to end (PHASE7.md P7.2).
 #
 # The claim under test: a client asks the desktop for a file, a human picks one
 # in the Finder, and the client receives an OPEN DESCRIPTOR for a path it never
@@ -20,7 +20,7 @@ abyss_ensure_runtime_dir
 portal="$ABYSS_BIN_DIR/abyss-portal"
 probe="$ABYSS_BIN_DIR/ipcprobe"
 bin="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$portal" ] && [ -x "$probe" ] && [ -x "$bin" ] || swift build
+[ -x "$portal" ] && [ -x "$probe" ] && [ -x "$bin" ] || abyss_build
 
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 

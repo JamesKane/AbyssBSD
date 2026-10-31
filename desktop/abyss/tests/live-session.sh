@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the dev session, live under a headless compositor (P2.10).
+# AbyssBSD desktop — the dev session, live under a headless compositor (P2.10).
 #
 # live-sway.sh proves one component at a time. This proves they compose into a
 # *desktop*: `abyss/session.sh` starts a compositor and brings the desktop, the
@@ -21,7 +21,7 @@ out="${1:-${TMPDIR:-/tmp}/aqua-session-$$.png}"
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }
 
-swift build
+abyss_build
 
 W=800; H=600
 

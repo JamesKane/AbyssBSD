@@ -350,7 +350,8 @@ pub fn jaguar_lists() -> &'static DrawListFile {
 /// Where themes live, in order: `$ABYSS_THEME_DIR`, the person's config
 /// dir (`<config>/themes`), the install (`<prefix>/share/abyss/themes`
 /// beside `<prefix>/bin`), and, for a build tree, the repository's
-/// `themes/`, found by walking up to the directory holding Package.swift.
+/// `themes/`, found by walking up to the workspace: the directory holding
+/// both Cargo.toml and `themes/`.
 pub fn search_path(config_dir: Option<&str>) -> Vec<String> {
     let mut dirs = vec![];
     if let Ok(d) = std::env::var("ABYSS_THEME_DIR")
@@ -371,7 +372,9 @@ pub fn search_path(config_dir: Option<&str>) -> Vec<String> {
         for _ in 0..5 {
             let Some((up, _)) = d.rsplit_once('/').filter(|(u, _)| !u.is_empty()) else { break };
             d = up;
-            if std::path::Path::new(&format!("{d}/Package.swift")).exists() {
+            if std::path::Path::new(&format!("{d}/Cargo.toml")).exists()
+                && std::path::Path::new(&format!("{d}/themes")).is_dir()
+            {
                 dirs.push(format!("{d}/themes"));
                 break;
             }

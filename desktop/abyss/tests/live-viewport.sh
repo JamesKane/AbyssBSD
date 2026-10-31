@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a surface's buffer, cropped, turned and scaled (BACKLOG U.8).
+# AbyssBSD desktop — a surface's buffer, cropped, turned and scaled (BACKLOG U.8).
 #
 # undertow drew every client buffer whole and upright. `vptest` is the client,
 # one mode per run of undertow, each checked in undertow's own capture:
@@ -21,7 +21,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-viewport.XXXXXX)

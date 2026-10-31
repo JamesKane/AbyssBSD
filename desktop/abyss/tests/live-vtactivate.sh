@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the login daemon's VT switch, on real vt(4) (PHASE16,
+# AbyssBSD desktop — the login daemon's VT switch, on real vt(4) (PHASE16,
 # found on the 12700KF; HANDOFF §2.116).
 #
 # The daemon puts the login window on VT 9 and sessions on 10–16. vt(4) only

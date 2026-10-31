@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the budget requester, and taking a give back (PHASE18 P18.11a).
+# AbyssBSD desktop — the budget requester, and taking a give back (PHASE18 P18.11a).
 #
 # Real processes: a compositor, TextEdit, abyss-jaild, the keeper, the Agent
 # window, abyss-model (stub; 100 tokens a reply, a budget of 250), abyss-vocab
@@ -25,7 +25,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-rq.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

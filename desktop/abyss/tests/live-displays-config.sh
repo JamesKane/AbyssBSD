@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — rearranging the displays, by protocol (PHASE14 P14.7b).
+# AbyssBSD desktop — rearranging the displays, by protocol (PHASE14 P14.7b).
 #
 # undertow with two headless outputs, driven by `abyss-displays` over
 # wlr-output-management-v1 — the protocol wlr-randr and kanshi speak, and the
@@ -25,7 +25,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 ctl="$ABYSS_BIN_DIR/abyss-displays"
-[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$ctl" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$ctl" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-dispcfg.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — ask the Finder what it can do, and have it do it (P10.2).
+# AbyssBSD desktop — ask the Finder what it can do, and have it do it (P10.2).
 #
 # The first consumer of an application's vocabulary is `abyssmenu`, which cannot
 # draw a menu at all. If a verb only works from the menu bar, the surface is a
@@ -30,7 +30,7 @@ cd "$root"
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
-[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$menu" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$menu" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-vocab.XXXXXX)
 rundir=$(mktemp -d /tmp/abyss-vocr.XXXXXX)

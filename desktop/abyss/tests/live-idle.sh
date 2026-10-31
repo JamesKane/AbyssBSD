@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the displays sleep, something can hold them awake, and
+# AbyssBSD desktop — the displays sleep, something can hold them awake, and
 # the primary selection pastes (BACKLOG U.9).
 #
 # `idletest` is the client: a window that draws on every frame callback, as a
@@ -26,7 +26,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-idle.XXXXXX)

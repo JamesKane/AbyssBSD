@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — every installed port as an application (PHASE15 P15.1).
+# AbyssBSD desktop — every installed port as an application (PHASE15 P15.1).
 #
 # `abyss-appgen` turns desktop entries into bundles the Finder and the Dock
 # understand. Claims, on fixture entries written here and — where the machine
@@ -37,11 +37,11 @@ appgen="$ABYSS_BIN_DIR/abyss-appgen"
 undertow="$ABYSS_BIN_DIR/undertow"
 demo="$ABYSS_BIN_DIR/AquaDemo"
 # What a launcher names: the binary's absolute path, so it runs from
-# anywhere: the path it was found at (Rust, which follows abyss/rust-bins
-# when AquaDemo changes language), or that path resolved (Swift).
+# anywhere: the path it was found at, or that path resolved (when
+# $ABYSS_BIN_DIR is a directory of links).
 demo_real=$(realpath "$demo")
 demo_abs=$(cd "$(dirname "$demo")" && pwd -L)/AquaDemo
-for b in "$appgen" "$undertow" "$demo"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$appgen" "$undertow" "$demo"; do [ -x "$b" ] || { abyss_build; break; }; done
 # The SVG half needs rsvg-convert (librsvg; the guest has it with GTK). Without
 # it the fixture's icon is a PNG from the tree, and only the rasterising is not
 # checked — said, not silently skipped.

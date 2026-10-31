@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a manual address, set through the settings helper,
+# AbyssBSD desktop — a manual address, set through the settings helper,
 # survives a reboot (PHASE14 P14.4, the gate: §6.3).
 #
 # The claim: on an INSTALLED machine, the administrator asks the root helper

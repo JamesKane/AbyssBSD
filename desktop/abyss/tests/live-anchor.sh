@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the session supervisor, supervising real processes (P3.6).
+# AbyssBSD desktop — the session supervisor, supervising real processes (P3.6).
 #
 # The unit tests cover the decisions; this covers the syscalls. Two parts:
 #
@@ -22,7 +22,7 @@ out="${1:-${TMPDIR:-/tmp}/anchor-session.png}"
 anchor="$ABYSS_BIN_DIR/anchor"
 ctl="$ABYSS_BIN_DIR/abyssctl"
 bin="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$anchor" ] && [ -x "$ctl" ] && [ -x "$bin" ] || swift build
+[ -x "$anchor" ] && [ -x "$ctl" ] && [ -x "$bin" ] || abyss_build
 
 # Short path: a unix socket must fit in sockaddr_un.sun_path (HANDOFF §2.32).
 rundir=$(mktemp -d /tmp/abyss-anchor.XXXXXX)

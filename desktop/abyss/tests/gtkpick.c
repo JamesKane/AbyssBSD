@@ -1,4 +1,4 @@
-/* AbyssBSD Swift DE — a stock GTK 3 application asking for a file (P8.3).
+/* AbyssBSD desktop — a stock GTK 3 application asking for a file (P8.3).
  *
  * This is the client the whole D-Bus phase exists for. It knows nothing about
  * AbyssBSD: it calls `gtk_file_chooser_native_new` and `gtk_native_dialog_run`,

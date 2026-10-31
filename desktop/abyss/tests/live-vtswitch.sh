@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a VT switched away and back (PHASE16, found on metal).
+# AbyssBSD desktop — a VT switched away and back (PHASE16, found on metal).
 #
 # wlroots 0.20 destroys every DRM output when the session is paused — Ctrl-Alt-F2,
 # or fast user switching — and announces them again when it resumes. undertow
@@ -27,7 +27,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-vt.XXXXXX)

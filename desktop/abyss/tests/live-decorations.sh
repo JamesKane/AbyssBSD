@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a foreign window gets an Aqua frame (P9.6).
+# AbyssBSD desktop — a foreign window gets an Aqua frame (P9.6).
 #
 # A GTK application draws its own headerbar, and on a Jaguar desktop that looks
 # broken in a way no missing feature does. `xdg-decoration-unstable-v1` is how a
@@ -29,7 +29,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-deco.XXXXXX)

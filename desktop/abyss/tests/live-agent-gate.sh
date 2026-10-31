@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the gate for agents (PHASE18 P18.14).
+# AbyssBSD desktop — the gate for agents (PHASE18 P18.14).
 #
 # 18b end to end, as a person meets it, against PLAN's verify list. Real
 # everything: abyss-jaild as root, undertow, the session's keeper, abyss-model
@@ -40,7 +40,7 @@ cd "$root"
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 [ -x /usr/bin/lldb ] || { echo "FAIL: no /usr/bin/lldb (it is in base)"; exit 1; }
 model=""; [ "${1:-}" = --model ] && model=$2
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab abyss-fetch AquaDemo undertow abyssmenu abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-gate.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

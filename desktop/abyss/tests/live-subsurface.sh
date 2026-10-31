@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a window made of subsurfaces, on our own compositor (U.1).
+# AbyssBSD desktop — a window made of subsurfaces, on our own compositor (U.1).
 #
 # undertow advertised `wl_subcompositor` from Phase 6 and never drew, framed or
 # hit-tested a subsurface (docs/API-STUDY.md §1.3): each window was one texture
@@ -35,7 +35,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=800

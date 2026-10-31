@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — input, through our own compositor (PHASE6.md P6.4).
+# AbyssBSD desktop — input, through our own compositor (PHASE6.md P6.4).
 #
 # The claim: a pointer event enters `undertow`, is routed to the right surface,
 # and the CLIENT ACTS ON IT. Not "the compositor received input" — that proves
@@ -21,7 +21,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$client" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] || abyss_build
 
 W=800
 H=600

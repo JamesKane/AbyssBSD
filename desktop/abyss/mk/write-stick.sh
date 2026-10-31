@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — put the live medium on a USB stick (PHASE4 §1).
+# AbyssBSD desktop — put the live medium on a USB stick (PHASE4 §1).
 #
 # `abyss/mk/live-image.sh` produces a **whole-disk** image: a GPT carrying an
 # ESP, a `freebsd-boot` partition, and the UFS root. UEFI firmware reads the

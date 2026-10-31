@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Sound pane (PHASE14 P14.6c).
+# AbyssBSD desktop — the Sound pane (PHASE14 P14.6c).
 #
 # System Preferences on our compositor, its Sound pane driven by the virtual
 # pointer, against the guest's snd_dummy — a real pcm device with a real mixer
@@ -31,7 +31,7 @@ client="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
 helper="$ABYSS_BIN_DIR/abyss-settings"
 vents="$ABYSS_BIN_DIR/ventsctl"
-for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1

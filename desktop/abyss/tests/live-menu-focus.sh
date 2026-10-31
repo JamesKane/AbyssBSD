@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the compositor knows whose menus are whose (P10.3).
+# AbyssBSD desktop — the compositor knows whose menus are whose (P10.3).
 #
 # A global menu bar has to show the focused application's menus, and only the
 # compositor knows which surface is focused. So an application tells undertow,
@@ -30,7 +30,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-mfocus.XXXXXX)
 rundir=$(mktemp -d /tmp/abyss-mfocr.XXXXXX)

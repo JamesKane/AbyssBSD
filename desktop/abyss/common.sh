@@ -1,18 +1,20 @@
 # shellcheck shell=sh
 # Shared helpers for the AbyssBSD dev/test scripts. Source this; don't run it.
 
-# Where the desktop's binaries are (RUST.md §3.1): every script runs them
-# from $ABYSS_BIN_DIR, never from a build tree by name, so a component
-# changes language by changing the directory its binary is found in. The
-# default is .build/abyss-bin when abyss/mk/bin-dir.sh has made it (SwiftPM's
-# binaries, and Cargo's for what abyss/rust-bins names), else SwiftPM's debug
-# products. The sourcing script has set $root (or $here) to the desktop.
+# Where the desktop's binaries are: every script runs them from
+# $ABYSS_BIN_DIR, never from a build tree by name. The default is Cargo's
+# debug build (target/debug, or $CARGO_TARGET_DIR/debug). The sourcing
+# script has set $root (or $here) to the desktop.
 _abyss_root=${root:-${here:-$(pwd)}}
-if [ -z "${ABYSS_BIN_DIR:-}" ] && [ -d "$_abyss_root/.build/abyss-bin" ]; then
-  ABYSS_BIN_DIR=$_abyss_root/.build/abyss-bin
-fi
-: "${ABYSS_BIN_DIR:=$_abyss_root/.build/debug}"
+: "${ABYSS_BIN_DIR:=${CARGO_TARGET_DIR:-$_abyss_root/target}/debug}"
 export ABYSS_BIN_DIR
+
+# Build every binary the scripts start (and the examples golden-rust.sh
+# draws with). A script calls this when one of its binaries is missing; when
+# they are all there it is skipped, so a run that built once builds once.
+abyss_build() {
+  (cd "$_abyss_root" && cargo build -q --workspace --bins --examples)
+}
 
 # Make sure XDG_RUNTIME_DIR names a usable directory.
 #

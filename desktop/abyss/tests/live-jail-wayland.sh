@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Wayland boundary of a jail (PHASE18 P18.3).
+# AbyssBSD desktop — the Wayland boundary of a jail (PHASE18 P18.3).
 #
 # A client that came in through a socket registered with wp_security_context_v1
 # is jailed: it is shown an allowlist of globals, and nothing that watches,
@@ -25,7 +25,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 protos=$(pkg-config --variable=pkgdatadir wayland-protocols)
 sc="$protos/staging/security-context/security-context-v1.xml"

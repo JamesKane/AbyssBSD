@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — System Preferences is an application (PHASE14 P14.1).
+# AbyssBSD desktop — System Preferences is an application (PHASE14 P14.1).
 #
 # Until Phase 14 it was a painting of a pane grid. Driven here on our own
 # compositor three ways, each checked on the application's own word and the
@@ -25,7 +25,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
-[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$menu" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$menu" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=1024; H=768

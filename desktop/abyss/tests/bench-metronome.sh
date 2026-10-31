@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the frame contract, gated (PHASE6.md P6.1; DESKTOP.md §0).
+# AbyssBSD desktop — the frame contract, gated (PHASE6.md P6.1; DESKTOP.md §0).
 #
 # "We don't claim the frame budget — we fail CI when we miss it." (C5)
 #
@@ -21,7 +21,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 
 bin="$ABYSS_BIN_DIR/undertow"
-[ -x "$bin" ] || swift build
+[ -x "$bin" ] || abyss_build
 
 # The composite budget. DESKTOP.md's C1 is 2 ms p99 for the compositor's own
 # per-frame CPU work; we assert against that number and not a softer one.

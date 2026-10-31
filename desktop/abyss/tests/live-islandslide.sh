@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the island slide is decoration (PHASE13 P13.3, PRODUCT §7.2).
+# AbyssBSD desktop — the island slide is decoration (PHASE13 P13.3, PRODUCT §7.2).
 #
 # Commit first, animate second: the island, the focus and the keys change on
 # the frame the switch is asked for, and the slide only moves pixels. Slowed to
@@ -26,7 +26,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-slide.XXXXXX)

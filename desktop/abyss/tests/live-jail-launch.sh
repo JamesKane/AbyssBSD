@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — launching confined (PHASE18 P18.5).
+# AbyssBSD desktop — launching confined (PHASE18 P18.5).
 #
 # The session's half: `abyss-jail serve` holds a jail per class, with the
 # jail's own Wayland socket, bus and portal, and starts programs in it when
@@ -28,7 +28,7 @@ cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 for t in gdbus zenity galculator; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
-for b in abyss-jaild abyss-jail abyss-portal abyss-dbus abyss-appgen undertow; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-portal abyss-dbus abyss-appgen undertow; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-jl.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

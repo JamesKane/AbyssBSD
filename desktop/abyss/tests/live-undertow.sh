@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a real client on our own compositor (PHASE6.md P6.3).
+# AbyssBSD desktop — a real client on our own compositor (PHASE6.md P6.3).
 #
 # The claim: `undertow` is a compositor. Not "it schedules frames" (P6.1) and not
 # "it drives wlroots" (P6.2), but the thing an application can connect to — an
@@ -21,7 +21,7 @@ abyss_ensure_runtime_dir
 out=${1:-}
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$client" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] || abyss_build
 
 W=800
 H=600

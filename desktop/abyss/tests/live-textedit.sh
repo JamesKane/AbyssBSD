@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — TextEdit: a file opened, edited, saved, and its bytes
+# AbyssBSD desktop — TextEdit: a file opened, edited, saved, and its bytes
 # read back (PHASE15 P15.5).
 #
 # On our compositor, typed into by the virtual keyboard and clicked by the
@@ -34,7 +34,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 portal="$ABYSS_BIN_DIR/abyss-portal"
-for b in "$undertow" "$aqua" "$portal"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$aqua" "$portal"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=1024; H=768

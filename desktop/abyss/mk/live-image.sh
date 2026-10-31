@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — build the live medium (PHASE5.md P5.3).
+# AbyssBSD desktop — build the live medium (PHASE5.md P5.3).
 #
 # A bootable image carrying FreeBSD, our desktop, and everything it links —
 # built out of the **same distribution sets the installer extracts**, with base
@@ -36,11 +36,9 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 out="/home/$(id -un)/abyss-live.img"
 dist="${ABYSS_DIST_DIR:-/home/$(id -un)/dist}"
 stage="${TMPDIR:-/tmp}/abyss-live-stage"
-# The binaries the harness runs (abyss/mk/bin-dir.sh): each in the language
-# abyss/rust-bins says (RUST.md §3.1), so a medium carries what was tested;
-# SwiftPM's own build where that directory has not been made.
-builddir="$root/.build/abyss-bin"
-[ -d "$builddir" ] || builddir="$root/.build/debug"
+# The binaries the harness runs (common.sh's ABYSS_BIN_DIR, Cargo's debug
+# build), so a medium carries what was tested.
+builddir="${ABYSS_BIN_DIR:-${CARGO_TARGET_DIR:-$root/target}/debug}"
 size=3g
 keep=0
 # Whether the medium stays up after its session ends. Off by default so a test
@@ -106,7 +104,7 @@ die() { echo "live-image: $1" >&2; exit 1; }
 
 [ "$(uname -s)" = FreeBSD ] || die "the medium is built on FreeBSD (makefs, mkimg, and an ldd that agrees with it)"
 [ -s "$dist/base.txz" ] && [ -s "$dist/kernel.txz" ] || die "no distribution sets in $dist"
-[ -x "$builddir/undertow" ] || die "no build in $builddir — run swift build first"
+[ -x "$builddir/undertow" ] || die "no build in $builddir — run cargo build first"
 sudo -n true 2>/dev/null || die "this needs passwordless sudo (it extracts a base system)"
 # The GPU modules — drm-kmod and the AMD firmware — come from the monorepo's
 # forks, built against the sets' own kernel sources (abyss/mk/gpu-kmods.sh),
@@ -437,7 +435,7 @@ sudo mkdir -p "$de/usr/local/bin" "$de/usr/local/libexec" "$de/etc/rc.d"
 
 libs=""
 for b in $BINARIES; do
-  [ -x "$builddir/$b" ] || die "no $b in $builddir — run swift build first"
+  [ -x "$builddir/$b" ] || die "no $b in $builddir — run cargo build first"
   libs="$libs
 $(ldd "$builddir/$b" 2>/dev/null | awk '{print $3}' | grep '^/usr/local/' || true)"  # a pure-Rust binary links nothing there: no match is no failure
 done

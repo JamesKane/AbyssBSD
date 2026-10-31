@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — run every live mode, in order, and report.
+# AbyssBSD desktop — run every live mode, in order, and report.
 #
 # `live-sway.sh` proves one thing at a time and `live-session.sh` proves they
 # compose; both are meant to be run by hand while working on the thing they
@@ -44,10 +44,10 @@ command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }
 command -v timeout >/dev/null || { echo "FAIL: timeout(1) not found"; exit 1; }
 
-# Build once here so a per-mode `swift build` is a no-op and a compile error
+# Build once here so a per-mode abyss_build is a no-op and a compile error
 # fails the run immediately rather than 26 times.
-echo "== swift build =="
-swift build
+echo "== cargo build =="
+abyss_build
 
 # label:arguments to live-sway.sh. The label is what -filters match and what
 # names the PNG; keep it short. Order runs cheap/foundational first so an early

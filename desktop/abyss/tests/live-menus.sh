@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the menu bar is the frontmost application's (P10.4).
+# AbyssBSD desktop — the menu bar is the frontmost application's (P10.4).
 #
 # Everything before this pass drew File/Edit/View for nobody. Now the bar asks
 # the compositor who is frontmost (P10.3), asks that application what it can do
@@ -29,7 +29,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-menus.XXXXXX)

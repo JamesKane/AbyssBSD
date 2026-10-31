@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a GPU client, on our own compositor (U.3).
+# AbyssBSD desktop — a GPU client, on our own compositor (U.3).
 #
 # undertow offered wl_shm and nothing else, and Mesa's Wayland WSI hands the
 # compositor dma-bufs: with no `linux-dmabuf`, vkcube on RADV segfaulted and
@@ -36,7 +36,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] || abyss_build
 
 W=800
 H=600

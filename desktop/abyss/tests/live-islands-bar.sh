@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — islands in the menu bar and the Dock (PHASE13 P13.4).
+# AbyssBSD desktop — islands in the menu bar and the Dock (PHASE13 P13.4).
 #
 # PRODUCT §7.3's fourth member: once a window can be somewhere you are not,
 # something on screen must always know where it is. The menu bar's island item
@@ -27,7 +27,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-ib.XXXXXX)

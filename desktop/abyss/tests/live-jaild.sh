@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — abyss-jaild, the root half of confinement (PHASE18 P18.2).
+# AbyssBSD desktop — abyss-jaild, the root half of confinement (PHASE18 P18.2).
 #
 # The real daemon, as root, in temporary roots and homes; the person asks with
 # `abyss-jail`. FreeBSD only (Linux has no jails: skipped, and said so). Needs
@@ -27,7 +27,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-[ -x $ABYSS_BIN_DIR/abyss-jaild ] && [ -x $ABYSS_BIN_DIR/abyss-jail ] || swift build
+[ -x $ABYSS_BIN_DIR/abyss-jaild ] && [ -x $ABYSS_BIN_DIR/abyss-jail ] || abyss_build
 
 W=$(mktemp -d /tmp/abyss-jd.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild $ABYSS_BIN_DIR/abyss-jail "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — measure a local model behind abyss-model (PHASE18 §6b.1).
+# AbyssBSD desktop — measure a local model behind abyss-model (PHASE18 §6b.1).
 #
 # A candidate is a default only once it has run here: loaded by ports'
 # llama-server under abyss-model, on this machine's GPU (or CPU), answering

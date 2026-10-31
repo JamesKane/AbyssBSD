@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the screenshot portal (PHASE7.md P7.5).
+# AbyssBSD desktop — the screenshot portal (PHASE7.md P7.5).
 #
 # The file chooser's claim was "the app reads a file it could not have opened".
 # This one is sharper, because the capability isn't a file the user already had:
@@ -28,7 +28,7 @@ portal="$ABYSS_BIN_DIR/abyss-portal"
 client="$ABYSS_BIN_DIR/abyssopen"
 grabber="$ABYSS_BIN_DIR/abyssgrab"
 bin="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$portal" ] && [ -x "$client" ] && [ -x "$grabber" ] && [ -x "$bin" ] || swift build
+[ -x "$portal" ] && [ -x "$client" ] && [ -x "$grabber" ] && [ -x "$bin" ] || abyss_build
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 
 # The output we capture, so the assertion on the PNG's size is an exact one.

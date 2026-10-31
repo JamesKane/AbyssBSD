@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Aqua login window (PHASE16 P16.5a).
+# AbyssBSD desktop — the Aqua login window (PHASE16 P16.5a).
 #
 # `AQUA_SCENE=loginwindow` over undertow, asking the daemon's own loop
 # (`abyss-loginstub`: the real LoginService, PAM replaced by a password file,
@@ -26,7 +26,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
-for b in undertow AquaDemo abyss-loginstub abyssgrab; do [ -x "$bin/$b" ] || { swift build; break; }; done
+for b in undertow AquaDemo abyss-loginstub abyssgrab; do [ -x "$bin/$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-lgw.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — locking the session, three ways (PHASE16 P16.2c).
+# AbyssBSD desktop — locking the session, three ways (PHASE16 P16.2c).
 #
 # undertow with a privileged socket, anchor supervising the menu bar there,
 # and a window (blue) on the ordinary socket — the shape of a real session.
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
 for b in undertow abyssgrab AquaDemo abyss-loginstub anchor abyssctl; do
-  [ -x "$bin/$b" ] || { swift build; break; }
+  [ -x "$bin/$b" ] || { abyss_build; break; }
 done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

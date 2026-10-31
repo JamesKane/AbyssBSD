@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — real programs on a pseudo-terminal, through Terminal's
+# AbyssBSD desktop — real programs on a pseudo-terminal, through Terminal's
 # screen model (PHASE15 P15.4a).
 #
 # `abyss-vt` runs a program on a real pty, feeds what it writes through the VT
@@ -22,7 +22,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/abyss/common.sh"
 cd "$root"
 vt="$ABYSS_BIN_DIR/abyss-vt"
-[ -x "$vt" ] || swift build --product abyss-vt
+[ -x "$vt" ] || abyss_build
 work=$(mktemp -d /tmp/abyss-vt.XXXXXX)
 trap 'rm -rf "$work"' EXIT INT TERM HUP
 fail() { echo "FAIL: $1"; [ -s "$work/out" ] && sed 's/^/  screen| /' "$work/out"; exit 1; }

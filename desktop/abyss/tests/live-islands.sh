@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Islands, in the compositor (PHASE13 P13.1).
+# AbyssBSD desktop — Islands, in the compositor (PHASE13 P13.1).
 #
 # Workspaces per display: a window is on an island, a display shows one island,
 # and a window on an island nobody is looking at is treated as a minimised one
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-isl.XXXXXX)

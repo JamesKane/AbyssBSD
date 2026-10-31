@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the clipboard actually crosses a process boundary (P9.1).
+# AbyssBSD desktop — the clipboard actually crosses a process boundary (P9.1).
 #
 # Two of our own processes and our own compositor: one `abyssclip copy` holds a
 # selection, another `abyssclip paste` reads it. Against **undertow**, because
@@ -50,7 +50,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 clip="$ABYSS_BIN_DIR/abyssclip"
-[ -x "$undertow" ] && [ -x "$clip" ] || swift build
+[ -x "$undertow" ] && [ -x "$clip" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-clip.XXXXXX)
 cleanup() {

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the depth gadget sends a window to the back (P11.6).
+# AbyssBSD desktop — the depth gadget sends a window to the back (P11.6).
 #
 # Depth is the one window operation Phase 11 adds, and it has two paths:
 #
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-depth.XXXXXX)

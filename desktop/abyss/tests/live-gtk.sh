@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a real GTK application gets the Finder (PHASE8.md P8.3).
+# AbyssBSD desktop — a real GTK application gets the Finder (PHASE8.md P8.3).
 #
 # This is the pass that deletes PHASE7 §6.7's caveat. P8.2 proved the protocol
 # with `gdbus`, which is a D-Bus client rather than an application; the claim
@@ -45,7 +45,7 @@ portal="$ABYSS_BIN_DIR/abyss-portal"
 bridge="$ABYSS_BIN_DIR/abyss-dbus"
 undertow="$ABYSS_BIN_DIR/undertow"
 demo="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$undertow" ] && [ -x "$demo" ] || swift build
+[ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$undertow" ] && [ -x "$demo" ] || abyss_build
 
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }
 

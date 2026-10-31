@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the pointer's picture (BACKLOG U.7).
+# AbyssBSD desktop — the pointer's picture (BACKLOG U.7).
 #
 # undertow drew a white rectangle for the pointer and ignored every client's
 # cursor. Now the theme draws it (`cursor.*` draw lists), the compositor picks
@@ -27,7 +27,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-cursor.XXXXXX)

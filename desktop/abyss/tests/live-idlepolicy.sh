@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the session's idle policy (PHASE16 P16.3).
+# AbyssBSD desktop — the session's idle policy (PHASE16 P16.3).
 #
 # A real-shaped session — undertow with a privileged socket, anchor running
 # the bar and `abyss-idle` — with a minute made a second (ABYSS_IDLE_MINUTE)
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
 for b in undertow AquaDemo abyss-loginstub anchor abyssctl abyss-idle; do
-  [ -x "$bin/$b" ] || { swift build; break; }
+  [ -x "$bin/$b" ] || { abyss_build; break; }
 done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 

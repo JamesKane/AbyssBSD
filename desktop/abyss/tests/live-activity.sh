@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Activity Monitor: a process started by the test appears,
+# AbyssBSD desktop — Activity Monitor: a process started by the test appears,
 # is quit from the window, and is gone (PHASE15 P15.7).
 #
 # Real processes with names nothing else has (copies of sleep), the virtual
@@ -25,7 +25,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 helper="$ABYSS_BIN_DIR/abyss-settings"
-for b in "$undertow" "$aqua" "$helper"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$aqua" "$helper"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=1024; H=768

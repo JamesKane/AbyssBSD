@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — install from the medium, reboot, and land in the Jaguar
+# AbyssBSD desktop — install from the medium, reboot, and land in the Jaguar
 # desktop (PHASE5.md P5.5). The last pass of the phase.
 #
 # The claim, and it is the whole point of everything above it:

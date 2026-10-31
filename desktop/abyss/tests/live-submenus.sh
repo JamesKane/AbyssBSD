@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — submenus open (PHASE10 P10.8, BACKLOG).
+# AbyssBSD desktop — submenus open (PHASE10 P10.8, BACKLOG).
 #
 # The bar drew a submenu's ▸ from P10.1 and nothing ever opened one; every
 # application's menus were one level deep. `gtkmenu`, a stock GtkApplication
@@ -29,7 +29,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 bridge="$ABYSS_BIN_DIR/abyss-dbus"
-[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$bridge" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$bridge" ] || abyss_build
 command -v wayland-scanner >/dev/null || { echo "SKIP: no wayland-scanner"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-msub.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — accounts, through the settings helper (PHASE16 P16.6a).
+# AbyssBSD desktop — accounts, through the settings helper (PHASE16 P16.6a).
 #
 # `abyss-settings` (root) commanded by `abyss-settingsctl accounts` (this
 # user), as the Accounts pane commands it. On FreeBSD, as root, against a
@@ -29,7 +29,7 @@ cd "$root"
 
 helper="$ABYSS_BIN_DIR/abyss-settings"
 ctl="$ABYSS_BIN_DIR/abyss-settingsctl"
-[ -x "$helper" ] && [ -x "$ctl" ] || swift build
+[ -x "$helper" ] && [ -x "$ctl" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-accounts.XXXXXX)
 chmod 755 "$work"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a minimized window keeps a clock, and is told why (U.2).
+# AbyssBSD desktop — a minimized window keeps a clock, and is told why (U.2).
 #
 # undertow withheld every frame callback from a minimized window, and a client
 # presenting in FIFO mode — Mesa's default: SDL, Blender, zed — blocks in its
@@ -25,7 +25,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-hidden.XXXXXX)
 cleanup() {

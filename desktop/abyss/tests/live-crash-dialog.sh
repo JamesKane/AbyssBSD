@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — "… has unexpectedly quit", and Ask the Agent (PHASE18 P18.9b).
+# AbyssBSD desktop — "… has unexpectedly quit", and Ask the Agent (PHASE18 P18.9b).
 #
 # As a person meets it: a confined program crashes, the keeper puts up Crash
 # Reporter, the person clicks Ask the Agent…, and the Agent window opens on a
@@ -27,7 +27,7 @@ cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 [ -x /usr/bin/lldb ] || { echo "FAIL: no /usr/bin/lldb (it is in base)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-cd.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — System Preferences' Accounts pane (PHASE16 P16.6a).
+# AbyssBSD desktop — System Preferences' Accounts pane (PHASE16 P16.6a).
 #
 # System Preferences on our compositor, driven by the virtual pointer and
 # keyboard, with the settings helper behind it — on FreeBSD as root, against
@@ -27,7 +27,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
 helper="$ABYSS_BIN_DIR/abyss-settings"
-for b in "$undertow" "$client" "$menu" "$helper"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$client" "$menu" "$helper"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1

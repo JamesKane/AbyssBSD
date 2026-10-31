@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the menus the desktop owns (P10.8).
+# AbyssBSD desktop — the menus the desktop owns (P10.8).
 #
 # Contextual menus are the same commands the menu bar shows, at the pointer;
 # the system menu's items do what they say. On our own compositor, with a real
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null || { echo "SKIP: no wayland-scanner"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-ctx.XXXXXX)

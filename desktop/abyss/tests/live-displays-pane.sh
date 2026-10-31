@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Displays pane (PHASE14 P14.7c).
+# AbyssBSD desktop — the Displays pane (PHASE14 P14.7c).
 #
 # System Preferences on undertow with two headless outputs, its Displays pane
 # driven by the virtual pointer. Claims:
@@ -26,7 +26,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
 ctl="$ABYSS_BIN_DIR/abyss-displays"
-for b in "$undertow" "$client" "$menu" "$ctl"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$client" "$menu" "$ctl"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-disppane.XXXXXX)

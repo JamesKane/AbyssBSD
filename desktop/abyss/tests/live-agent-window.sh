@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Agent window (PHASE18 P18.8b).
+# AbyssBSD desktop — the Agent window (PHASE18 P18.8b).
 #
 # The chat window, outside the jail, as a person uses it: a real compositor,
 # abyss-jaild as root, the session's keeper, abyss-model with a stub backend,
@@ -26,7 +26,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent AquaDemo undertow abyssmenu; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-aw.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — an agent drives what it was given (PHASE18 P18.10).
+# AbyssBSD desktop — an agent drives what it was given (PHASE18 P18.10).
 #
 # Real processes: a compositor, TextEdit and Grab (each publishing its menus
 # as a vocabulary, Phase 10), abyss-jaild, the keeper, and an agent session:
@@ -28,7 +28,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent abyss-vocab AquaDemo undertow; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-av.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

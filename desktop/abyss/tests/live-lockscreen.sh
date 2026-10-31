@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Aqua lock screen (PHASE16 P16.2b).
+# AbyssBSD desktop — the Aqua lock screen (PHASE16 P16.2b).
 #
 # The lock screen (`AQUA_SCENE=lock`) over undertow, asking a stand-in
 # authenticator (`abyss-loginstub`: the real Authenticator — uid from the
@@ -34,7 +34,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 stub="$ABYSS_BIN_DIR/abyss-loginstub"
-for b in "$undertow" "$grab" "$aqua" "$stub"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$grab" "$aqua" "$stub"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-lks.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a client is told when its frames were shown (U.4).
+# AbyssBSD desktop — a client is told when its frames were shown (U.4).
 #
 # undertow offered no wp_presentation, so a toolkit could only estimate when a
 # frame reached the display (F-101; docs/API-STUDY.md §2) — while the
@@ -28,7 +28,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-present.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Aqua shell, on our own compositor (PHASE6.md P6.6).
+# AbyssBSD desktop — the Aqua shell, on our own compositor (PHASE6.md P6.6).
 #
 # The destination of Phase 6: the wallpaper, the menu bar and the Dock — three
 # separate `wlr-layer-shell` clients written in Phase 2 against sway — brought up
@@ -25,7 +25,7 @@ out=${1:-}
 undertow="$ABYSS_BIN_DIR/undertow"
 demo="$ABYSS_BIN_DIR/AquaDemo"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$grab" ] || abyss_build
 
 W=800
 H=600

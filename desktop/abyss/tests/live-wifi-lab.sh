@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Wi-Fi lab works, and survives (PHASE14 P14.5).
+# AbyssBSD desktop — the Wi-Fi lab works, and survives (PHASE14 P14.5).
 #
 # The harness for P14.5's join: two wtap(4) radios, hostapd (WPA2-PSK) on one,
 # a station on the other. 15.0's wtap cannot do either mode, so there the lab

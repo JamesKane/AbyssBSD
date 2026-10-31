@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — notifications, end to end (PHASE7.md P7.4).
+# AbyssBSD desktop — notifications, end to end (PHASE7.md P7.4).
 #
 # `abyssnotify` → the portal → the notification centre → an Aqua toast on an
 # OVERLAY layer surface. That is the path a jailed app takes: it never holds the
@@ -23,7 +23,7 @@ out="${1:-${TMPDIR:-/tmp}/abyss-toast.png}"
 bin="$ABYSS_BIN_DIR/AquaDemo"
 portal="$ABYSS_BIN_DIR/abyss-portal"
 notify="$ABYSS_BIN_DIR/abyssnotify"
-[ -x "$bin" ] && [ -x "$portal" ] && [ -x "$notify" ] || swift build
+[ -x "$bin" ] && [ -x "$portal" ] && [ -x "$notify" ] || abyss_build
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }
 

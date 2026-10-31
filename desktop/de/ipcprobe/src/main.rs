@@ -1,6 +1,4 @@
-//! ipcprobe, in Rust (main.swift beside it): two real processes, one
-//! descriptor. Same modes, same output, so either half of a pair can be
-//! either language (abyss/tests/live-ipc-mixed.sh runs all four).
+//! ipcprobe: two real processes, one descriptor (abyss/tests/live-ipc.sh).
 //!
 //!   ipcprobe serve <service>          bind, handle one request, print what
 //!                                     came through the descriptor, reply

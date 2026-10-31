@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the medium carries a browser that runs (PHASE15 P15.3b).
+# AbyssBSD desktop — the medium carries a browser that runs (PHASE15 P15.3b).
 #
 # `live-image.sh --keep` leaves its staging root: base.txz, kernel.txz, and
 # exactly what the medium carries in /usr/local — nothing from the builder's

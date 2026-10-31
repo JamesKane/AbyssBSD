@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — System Profiler: what this computer is, fastfetch's
+# AbyssBSD desktop — System Profiler: what this computer is, fastfetch's
 # report in a window.
 #
 # The app under our compositor, read against the machine itself. Claims:
@@ -23,7 +23,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
-for b in undertow AquaDemo; do [ -x "$bin/$b" ] || { swift build; break; }; done
+for b in undertow AquaDemo; do [ -x "$bin/$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-sysprof.XXXXXX)

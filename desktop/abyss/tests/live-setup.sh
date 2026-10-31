@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Setup Assistant at an account's first login
+# AbyssBSD desktop — the Setup Assistant at an account's first login
 # (PHASE16 P16.7).
 #
 # A real session under anchor, with a fresh config directory for each
@@ -22,7 +22,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 bin="$ABYSS_BIN_DIR"
-for b in undertow AquaDemo anchor abyssctl; do [ -x "$bin/$b" ] || { swift build; break; }; done
+for b in undertow AquaDemo anchor abyssctl; do [ -x "$bin/$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-setup.XXXXXX)

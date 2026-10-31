@@ -143,7 +143,7 @@ case "$cmd" in
     # shellcheck disable=SC2046
     guest() { ssh $(abyss_ssh_opts) "$ABYSS_SSH_USER@127.0.0.1" "$@"; }
     there() { ssh $opts "$user@$host" "$@"; }
-    guest "cd $ABYSS_GUEST_SRC/.build/debug && ls $BINARIES" >/dev/null \
+    guest "cd $ABYSS_GUEST_SRC/target/debug && ls $BINARIES" >/dev/null \
       || die "the VM has no build of one of: $BINARIES"
     # Stopped first: FreeBSD will not let a running executable be overwritten
     # (ETXTBSY), and a half-replaced session is worse than a stopped one.
@@ -156,7 +156,7 @@ case "$cmd" in
     # image installs with `install`, as root; a push must agree.
     own="--uid 0 --gid 0 --uname root --gname wheel"
     echo "metal: binaries -> $host:/usr/local/bin"
-    guest "cd $ABYSS_GUEST_SRC/.build/debug && tar $own -cf - $BINARIES" \
+    guest "cd $ABYSS_GUEST_SRC/target/debug && tar $own -cf - $BINARIES" \
       | there "tar -xpf - -C /usr/local/bin"
     echo "metal: $DATA_DIRS -> $host:/usr/local/share/abyss"
     there "cd /usr/local/share/abyss && rm -rf $DATA_DIRS"

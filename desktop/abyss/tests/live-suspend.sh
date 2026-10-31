@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — an Aqua window, told it cannot be seen, stops drawing
+# AbyssBSD desktop — an Aqua window, told it cannot be seen, stops drawing
 # (BACKLOG T.3).
 #
 # The toolkit bound xdg-shell v2, so an Aqua window never heard v6's
@@ -26,7 +26,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 theme="$ABYSS_BIN_DIR/abyss-theme"
-[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$theme" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$theme" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-susp.XXXXXX)
 cleanup() {

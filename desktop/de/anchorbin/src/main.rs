@@ -36,9 +36,8 @@ fn fail(msg: &str) -> ! {
 
 /// The directory this binary was run from, so the default components find
 /// AquaDemo and the services beside it without a PATH search. **As invoked,
-/// not resolved**: the harness runs every binary from one directory of
-/// links into both builds (abyss/mk/bin-dir.sh), and the siblings are there,
-/// not beside the file a link points to. Run by bare name (from `$PATH`),
+/// not resolved**: $ABYSS_BIN_DIR may be a directory of links, and the
+/// siblings are there, not beside the file a link points to. Run by bare name (from `$PATH`),
 /// the executable's own path.
 fn self_directory() -> Option<String> {
     let argv0 = std::env::args().next().filter(|a| a.contains('/'));

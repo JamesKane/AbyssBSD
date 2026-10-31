@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — our cursors, for the toolkits that draw their own (BACKLOG U.7b).
+# AbyssBSD desktop — our cursors, for the toolkits that draw their own (BACKLOG U.7b).
 #
 # GTK 3, SDL and X clients do not ask the compositor for a shape (U.7); they
 # load an XCursor theme through libwayland-cursor or libXcursor, by the name in
@@ -27,7 +27,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 theme="$ABYSS_BIN_DIR/abyss-theme"
-[ -x "$undertow" ] && [ -x "$theme" ] || swift build
+[ -x "$undertow" ] && [ -x "$theme" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-xcursor.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Ebb, the Exposé (PHASE13 P13.5, PRODUCT §7.3).
+# AbyssBSD desktop — Ebb, the Exposé (PHASE13 P13.5, PRODUCT §7.3).
 #
 # Every window of a scope, scaled into its own slot and side by side, the
 # desktop dimmed behind; one click to pick; Escape puts the tide back. A view,
@@ -25,7 +25,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-ebb.XXXXXX)

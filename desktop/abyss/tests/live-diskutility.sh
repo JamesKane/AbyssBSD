@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Disk Utility: a snapshot of a scratch dataset is made, a
+# AbyssBSD desktop — Disk Utility: a snapshot of a scratch dataset is made, a
 # file is changed, and a rollback brings it back (PHASE15 P15.8).
 #
 # On FreeBSD with ZFS and passwordless sudo: a scratch dataset made for the
@@ -29,7 +29,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 helper="$ABYSS_BIN_DIR/abyss-settings"
 ctl="$ABYSS_BIN_DIR/abyss-settingsctl"
-for b in "$undertow" "$aqua" "$helper" "$ctl"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$aqua" "$helper" "$ctl"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=1024; H=768

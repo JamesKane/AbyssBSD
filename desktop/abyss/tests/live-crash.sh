@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a confined crash, read by a debug agent (PHASE18 P18.9a).
+# AbyssBSD desktop — a confined crash, read by a debug agent (PHASE18 P18.9a).
 #
 # Real processes: abyss-jaild as root — started with a core size of 0, as some
 # rc setups leave it — the session's keeper, programs in the app jail, and a
@@ -24,7 +24,7 @@ cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 [ -x /usr/bin/lldb ] || { echo "FAIL: no /usr/bin/lldb (it is in base)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-cr.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

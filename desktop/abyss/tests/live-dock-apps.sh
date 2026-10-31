@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Dock carries installed applications (PHASE15 P15.2).
+# AbyssBSD desktop — the Dock carries installed applications (PHASE15 P15.2).
 #
 # A bundle `abyss-appgen` wrote (P15.1) is pinned by `dock.ini`, on our own
 # compositor, driven by the virtual pointer. Claims:
@@ -41,7 +41,7 @@ abyss_ensure_runtime_dir
 appgen="$ABYSS_BIN_DIR/abyss-appgen"
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-for b in "$appgen" "$undertow" "$aqua"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$appgen" "$undertow" "$aqua"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-dockapps.XXXXXX)

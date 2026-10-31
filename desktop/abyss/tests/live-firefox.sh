@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the browser (PHASE15 P15.3).
+# AbyssBSD desktop — the browser (PHASE15 P15.3).
 #
 # Firefox ESR, the port, launched the way the desktop launches it — through the
 # bundle `abyss-appgen` made from its real desktop entry — on our compositor,
@@ -39,7 +39,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 demo="$ABYSS_BIN_DIR/AquaDemo"
 appgen="$ABYSS_BIN_DIR/abyss-appgen"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-for b in "$portal" "$bridge" "$undertow" "$demo" "$appgen" "$grab"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$portal" "$bridge" "$undertow" "$demo" "$appgen" "$grab"; do [ -x "$b" ] || { abyss_build; break; }; done
 
 W=1024; H=768
 work=$(mktemp -d /tmp/abyss-ff.XXXXXX)

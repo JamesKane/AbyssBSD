@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the portal on the session bus, end to end (PHASE8.md P8.2).
+# AbyssBSD desktop — the portal on the session bus, end to end (PHASE8.md P8.2).
 #
 # The claim under test: a caller that knows nothing about AbyssBSD calls
 # `org.freedesktop.portal.FileChooser.OpenFile` on the session bus, **the Finder
@@ -29,7 +29,7 @@ portal="$ABYSS_BIN_DIR/abyss-portal"
 bridge="$ABYSS_BIN_DIR/abyss-dbus"
 probe="$ABYSS_BIN_DIR/dbusprobe"
 bin="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$probe" ] && [ -x "$bin" ] || swift build
+[ -x "$portal" ] && [ -x "$bridge" ] && [ -x "$probe" ] && [ -x "$bin" ] || abyss_build
 
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }

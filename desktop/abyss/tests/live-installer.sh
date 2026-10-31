@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the Aqua installer, driven by a real pointer and a real
+# AbyssBSD desktop — the Aqua installer, driven by a real pointer and a real
 # keyboard, on our own compositor (PHASE5.md P5.4).
 #
 # The claim:
@@ -37,7 +37,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 svc="$ABYSS_BIN_DIR/abyss-install"
-[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$svc" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$svc" ] || abyss_build
 
 W=1024
 H=768

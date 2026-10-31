@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — undertow drives several outputs (PHASE14 P14.7a).
+# AbyssBSD desktop — undertow drives several outputs (PHASE14 P14.7a).
 #
 # Three headless outputs: the main display (640x480 at 0,0), one to its right
 # (800x600 at 640,0), and one to its left and lower (320x240 at -320,100) — so
@@ -25,7 +25,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$client" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-displays.XXXXXX)

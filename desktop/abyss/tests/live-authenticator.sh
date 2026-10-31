@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the session's authenticator (PHASE16 P16.1).
+# AbyssBSD desktop — the session's authenticator (PHASE16 P16.1).
 #
 # Nothing unprivileged can check a password on FreeBSD (PHASE16 §4.2), so
 # `abyss-loginwindow` — root — answers one question for whoever asks: *is this
@@ -47,7 +47,7 @@ cd "$root"
 
 daemon="$ABYSS_BIN_DIR/abyss-loginwindow"
 ctl="$ABYSS_BIN_DIR/abyss-loginctl"
-[ -x "$daemon" ] && [ -x "$ctl" ] || swift build
+[ -x "$daemon" ] && [ -x "$ctl" ] || abyss_build
 
 fail() { echo "FAIL: $1"; [ -s "${work:-/nonexistent}/daemon.log" ] && sed 's/^/  daemon| /' "$work/daemon.log" | tail -8; exit 1; }
 

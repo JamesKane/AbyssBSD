@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — an input method, through undertow (BACKLOG U.5).
+# AbyssBSD desktop — an input method, through undertow (BACKLOG U.5).
 #
 # text-input-v3 (the application's field) and input-method-v2 (the input
 # method), relayed by undertow. The application is not ours — zenity's GTK
@@ -22,7 +22,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 command -v zenity >/dev/null 2>&1 || { echo "FAIL: no zenity — the test's text-input client (dnf/pkg install zenity)"; exit 1; }
 

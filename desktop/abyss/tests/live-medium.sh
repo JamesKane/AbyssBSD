@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the live medium boots into the Jaguar desktop
+# AbyssBSD desktop — the live medium boots into the Jaguar desktop
 # (PHASE5.md P5.3).
 #
 # The claim:

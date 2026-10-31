@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — TLS, verified or refused (PHASE18 P18.12a).
+# AbyssBSD desktop — TLS, verified or refused (PHASE18 P18.12a).
 #
 # The client is ours (abyss-model fetch, over CTLS and the base system's
 # OpenSSL); the server is not: `openssl s_server`, with certificates this test
@@ -22,7 +22,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/abyss/common.sh"
 cd "$root"
 bin="$ABYSS_BIN_DIR/abyss-model"
-[ -x "$bin" ] || swift build --product abyss-model
+[ -x "$bin" ] || abyss_build
 command -v openssl >/dev/null || { echo "FAIL: openssl not installed — it is the server"; exit 1; }
 
 W=$(mktemp -d /tmp/abyss-tls.XXXXXX)

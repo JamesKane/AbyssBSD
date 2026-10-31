@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Energy Saver (PHASE14 P14.8).
+# AbyssBSD desktop — Energy Saver (PHASE14 P14.8).
 #
 # System Preferences on our compositor, its Energy Saver pane driven by the
 # virtual pointer. Claims:
@@ -35,7 +35,7 @@ client="$ABYSS_BIN_DIR/AquaDemo"
 menu="$ABYSS_BIN_DIR/abyssmenu"
 helper="$ABYSS_BIN_DIR/abyss-settings"
 vents="$ABYSS_BIN_DIR/ventsctl"
-for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$client" "$menu" "$helper" "$vents"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 freebsd=0; [ "$(uname -s)" = FreeBSD ] && freebsd=1

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — present on damage (BACKLOG M.1).
+# AbyssBSD desktop — present on damage (BACKLOG M.1).
 #
 # undertow composed and committed a frame every vblank whatever had changed —
 # sixty a second of identical frames on a static screen, every one a GPU pass
@@ -23,7 +23,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-dmg.XXXXXX)

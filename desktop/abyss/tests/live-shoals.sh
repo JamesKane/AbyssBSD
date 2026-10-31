@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Shoals: a working set, recalled together (PHASE13 P13.6).
+# AbyssBSD desktop — Shoals: a working set, recalled together (PHASE13 P13.6).
 #
 # Stage Manager done properly (PRODUCT §7.3): the set is explicit, recall
 # raises it where its windows were last left and moves nothing else, and it
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-shoal.XXXXXX)

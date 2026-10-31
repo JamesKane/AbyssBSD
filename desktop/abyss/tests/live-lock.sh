@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the pointer, locked and confined (BACKLOG U.6).
+# AbyssBSD desktop — the pointer, locked and confined (BACKLOG U.6).
 #
 # relative-pointer-v1 and pointer-constraints-v1: what a game turning its
 # camera, or Blender rotating a view, needs. `locktest` stands where they
@@ -24,7 +24,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-lock.XXXXXX)

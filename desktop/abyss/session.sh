@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — dev session launcher (Phase 2.10).
+# AbyssBSD desktop — dev session launcher (Phase 2.10).
 #
 # One command that brings the shell up as a *desktop* rather than as three
 # separate AQUA_SCENE processes: it starts (or targets) a compositor, then runs
@@ -24,7 +24,7 @@
 #     --screenshot F  once every component has mapped, capture the session to F.
 #     --once          exit as soon as everything has mapped (and been captured).
 #     --rundir DIR    put logs/pids here (default: a temp dir, removed on exit).
-#     --no-build      skip `swift build`.
+#     --no-build      skip the cargo build.
 #     --no-follow     don't tail the component logs to this terminal.
 #
 # Ctrl-C (or a `swaymsg exit` in the nested session) shuts the whole session
@@ -72,7 +72,7 @@ if [ -z "$mode" ]; then
   if [ -n "${WAYLAND_DISPLAY:-}" ]; then mode="nested"; else mode="headless"; fi
 fi
 
-[ "$build" = 1 ] && swift build
+[ "$build" = 1 ] && abyss_build
 [ -x "$bin" ] || { echo "session: $bin not built"; exit 1; }
 if [ "$mode" != "attach" ]; then
   command -v sway >/dev/null || { echo "session: sway not installed"; exit 1; }

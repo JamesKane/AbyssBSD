@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the control plane, between two real processes (P3.5).
+# AbyssBSD desktop — the control plane, between two real processes (P3.5).
 #
 # The unit tests prove the codec and prove SCM_RIGHTS over a socketpair. This
 # proves the thing the component exists for: a *separate process* connects to a
@@ -13,8 +13,7 @@
 # Usage: abyss/tests/live-ipc.sh
 #
 # ABYSS_IPC_SERVER / ABYSS_IPC_CLIENT name each end's ipcprobe when they
-# differ: live-ipc-mixed.sh runs the Swift and the Rust ones against each
-# other (docs/RUST.md R2).
+# differ (R2 ran Swift's and Rust's against each other this way).
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -22,7 +21,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 
 probe="$ABYSS_BIN_DIR/ipcprobe"
-[ -x "$probe" ] || swift build
+[ -x "$probe" ] || abyss_build
 [ -x "$probe" ] || { echo "FAIL: no ipcprobe binary at $probe"; exit 1; }
 server_probe=${ABYSS_IPC_SERVER:-$probe}
 client_probe=${ABYSS_IPC_CLIENT:-$probe}

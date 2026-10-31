@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — what only a compositor can do (PHASE6.md P6.7).
+# AbyssBSD desktop — what only a compositor can do (PHASE6.md P6.7).
 #
 # The debt HANDOFF §2.22 recorded in Phase 2, when the spatial Finder was built:
 #
@@ -28,7 +28,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 
 W=800
 H=600

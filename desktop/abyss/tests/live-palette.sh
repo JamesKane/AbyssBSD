@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the portal tells foreign toolkits the loaded theme (P11.10).
+# AbyssBSD desktop — the portal tells foreign toolkits the loaded theme (P11.10).
 #
 # GTK asks org.freedesktop.portal.Settings how the desktop looks —
 # color-scheme, accent-color, contrast — and until P11.10 abyss-dbus answered
@@ -17,7 +17,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 . "$root/abyss/common.sh"
 bridge="$ABYSS_BIN_DIR/abyss-dbus"
-[ -x "$bridge" ] && [ -x "$ABYSS_BIN_DIR/abyss-theme" ] || swift build
+[ -x "$bridge" ] && [ -x "$ABYSS_BIN_DIR/abyss-theme" ] || abyss_build
 command -v gdbus >/dev/null 2>&1 || { echo "SKIP: no gdbus (GLib, the independent reader)"; exit 0; }
 
 rundir=$(mktemp -d /tmp/abyss-palette.XXXXXX)

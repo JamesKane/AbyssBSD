@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a window that starts fullscreen (BACKLOG F.1).
+# AbyssBSD desktop — a window that starts fullscreen (BACKLOG F.1).
 #
 # `firefox --kiosk` asks for fullscreen before its first commit and then sends
 # unset_maximized for a window that was never maximized. undertow "restored"
@@ -22,7 +22,7 @@ cd "$root"
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-kiosk.XXXXXX)

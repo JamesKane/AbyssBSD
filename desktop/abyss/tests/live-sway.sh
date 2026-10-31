@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — live on-screen smoke test under a real compositor.
+# AbyssBSD desktop — live on-screen smoke test under a real compositor.
 #
 # The `run.sh` PNG path renders a scene straight to a cairo image surface; it
 # never builds a Surface.Window, so it can't catch bugs in the live Wayland
@@ -99,7 +99,7 @@ abyss_ensure_runtime_dir      # FreeBSD sets none; sway refuses without it
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 command -v grim >/dev/null || { echo "FAIL: grim not installed"; exit 1; }
 
-swift build
+abyss_build
 
 # Build the virtual-input helpers up front (fail fast) when we'll inject.
 vp_dir=""

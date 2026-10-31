@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — C6, gating the build (PHASE13 P13.2, PRODUCT §7.2).
+# AbyssBSD desktop — C6, gating the build (PHASE13 P13.2, PRODUCT §7.2).
 #
 #   C6 — an island switch is committed within 2 frames of the input that asked
 #   for it, and any animation is decoration that can be skipped, interrupted
@@ -33,7 +33,7 @@ cd "$root"
 abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
-[ -x "$undertow" ] || swift build
+[ -x "$undertow" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 HZ=60

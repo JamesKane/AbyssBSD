@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — one command boots a desktop a foreign app can use (P8.4).
+# AbyssBSD desktop — one command boots a desktop a foreign app can use (P8.4).
 #
 # P8.3 proved the claim with six processes started by hand and a shell script
 # holding the environment together. This proves it with **one command**:
@@ -44,7 +44,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 demo="$ABYSS_BIN_DIR/AquaDemo"
 bridge="$ABYSS_BIN_DIR/abyss-dbus"
 [ -x "$anchor" ] && [ -x "$ctl" ] && [ -x "$undertow" ] && [ -x "$demo" ] && [ -x "$bridge" ] \
-  || swift build
+  || abyss_build
 
 command -v gdbus >/dev/null || { echo "FAIL: gdbus not installed"; exit 1; }
 

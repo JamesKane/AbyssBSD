@@ -35,7 +35,7 @@ struct wl_resource;
  * @section page_copyright_abyss_menu_v1 Copyright
  * <pre>
  *
- * AbyssBSD Swift DE. PHASE10.md P10.3.
+ * AbyssBSD desktop. PHASE10.md P10.3.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),

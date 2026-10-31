@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the golden-image gate (PHASE11 P11.1).
+# AbyssBSD desktop — the golden-image gate (PHASE11 P11.1).
 #
 # Every deterministic scene the toolkit can draw, rendered offscreen and
 # compared with a committed golden image **pixel for pixel**. This is the gate
@@ -25,7 +25,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/abyss/common.sh"
 cd "$root"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$aqua" ] || swift build
+[ -x "$aqua" ] || abyss_build
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 dir="$root/abyss/tests/golden/$os"
@@ -163,9 +163,9 @@ render() {  # render NAME SCENE EXTRA OUT
     || { echo "FAIL: $1 did not render: $(tail -2 "$work/$1.log")"; return 1; }
 }
 
-# **No Swift knows a theme's name** but the default's (PHASE11 P11.9, PRODUCT
+# **No code knows a theme's name** but the default's (PHASE11 P11.9, PRODUCT
 # §8.3): a second look that the code names is a back door, not a theme.
-if git -C "$root" grep -qi trench -- 'de/*.swift' 'de/*.c' 'de/*.h' 2>/dev/null \
+if git -C "$root" grep -qi trench -- 'de/*.rs' 'de/*.c' 'de/*.h' 2>/dev/null \
    || grep -rqi trench "$root/de" 2>/dev/null; then
   echo "FAIL: code under de/ names the trench theme: $(grep -rli trench "$root/de" | head -3)"
   exit 1
@@ -224,9 +224,9 @@ EOF
     continue
   fi
   if ! verdict=$("$work/pngdiff" "$dir/$name.png" "$out" "$work/$name.diff.png"); then
-    mkdir -p "$root/.build/golden-diff"
-    cp "$out" "$root/.build/golden-diff/$name.actual.png"
-    cp "$work/$name.diff.png" "$root/.build/golden-diff/$name.diff.png" 2>/dev/null || true
+    mkdir -p "$root/target/golden-diff"
+    cp "$out" "$root/target/golden-diff/$name.actual.png"
+    cp "$work/$name.diff.png" "$root/target/golden-diff/$name.diff.png" 2>/dev/null || true
     echo "moved: $name — $verdict"
     moved="$moved $name"
   fi
@@ -237,7 +237,7 @@ unset IFS
 [ -z "$missing" ] || { echo "FAIL: no golden for:$missing (run with --update, on purpose)"; exit 1; }
 if [ -n "$moved" ]; then
   echo "FAIL: pixels moved in:$moved"
-  echo "      actual and diff images are in .build/golden-diff/"
+  echo "      actual and diff images are in target/golden-diff/"
   exit 1
 fi
 echo "all green ($checked scenes, pixel for pixel, on $os)."

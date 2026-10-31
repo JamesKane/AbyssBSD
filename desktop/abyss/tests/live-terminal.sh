@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Terminal, a shell in a window (PHASE15 P15.4b).
+# AbyssBSD desktop — Terminal, a shell in a window (PHASE15 P15.4b).
 #
 # The application on our compositor, typed into by the virtual keyboard and
 # clicked by the virtual pointer. Claims:
@@ -34,7 +34,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-for b in "$undertow" "$aqua" "$grab"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$aqua" "$grab"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=1024; H=768

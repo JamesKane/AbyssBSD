@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — joining a Wi-Fi network, through the helper (PHASE14 P14.5).
+# AbyssBSD desktop — joining a Wi-Fi network, through the helper (PHASE14 P14.5).
 #
 # The lab (live-wifi-lab.sh) gives an access point, "abyss-lab" (WPA2-PSK), on a
 # simulated radio; the machine's own radio is `wtap1`. `abyss-settingsctl`
@@ -33,7 +33,7 @@ abyss_ensure_runtime_dir
 helper="$ABYSS_BIN_DIR/abyss-settings"
 ctl="$ABYSS_BIN_DIR/abyss-settingsctl"
 lab="$root/abyss/tests/wtap/lab.sh"
-[ -x "$helper" ] && [ -x "$ctl" ] || swift build
+[ -x "$helper" ] && [ -x "$ctl" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-wifi.XXXXXX)
 chmod 755 "$work"

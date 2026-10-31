@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the settings helper, as a service (PHASE14 P14.3).
+# AbyssBSD desktop — the settings helper, as a service (PHASE14 P14.3).
 #
 # `abyss-settings` (root) commanded by `abyss-settingsctl` (this user), over
 # CurrentIPC, exactly as System Preferences will command it. Claims:
@@ -34,7 +34,7 @@ abyss_ensure_runtime_dir
 
 helper="$ABYSS_BIN_DIR/abyss-settings"
 ctl="$ABYSS_BIN_DIR/abyss-settingsctl"
-[ -x "$helper" ] && [ -x "$ctl" ] || swift build
+[ -x "$helper" ] && [ -x "$ctl" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-settings.XXXXXX)
 chmod 755 "$work"                       # a root helper writes here, as well as us

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a GTK application's menus, in our menu bar (P10.6).
+# AbyssBSD desktop — a GTK application's menus, in our menu bar (P10.6).
 #
 # The other end is never ours (§2.39): `gtkmenu` is a stock GtkApplication,
 # dlopen'd, whose menus are exported by GTK's own code. Between it and the bar:
@@ -29,7 +29,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 bridge="$ABYSS_BIN_DIR/abyss-dbus"
-[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$bridge" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] && [ -x "$bridge" ] || abyss_build
 command -v wayland-scanner >/dev/null || { echo "SKIP: no wayland-scanner"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-mgtk.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — an agent in its jail (PHASE18 P18.8).
+# AbyssBSD desktop — an agent in its jail (PHASE18 P18.8).
 #
 # Real processes: abyss-jaild as root, the session's keeper, abyss-model
 # outside the jail with a stub backend, abyss-agent inside. FreeBSD only;
@@ -26,7 +26,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
-for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-model abyss-agent; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-ag.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*

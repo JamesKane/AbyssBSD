@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — abyss-model, the one way to a model (PHASE18 P18.7).
+# AbyssBSD desktop — abyss-model, the one way to a model (PHASE18 P18.7).
 #
 # The claims, each with a client that is not our code:
 #   1. an OpenAI client (curl, over the unix socket) gets the backend's
@@ -30,7 +30,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/abyss/common.sh"
 cd "$root"
 bin="$ABYSS_BIN_DIR/abyss-model"
-[ -x "$bin" ] || swift build --product abyss-model
+[ -x "$bin" ] || abyss_build
 command -v curl >/dev/null || { echo "FAIL: curl not installed — it is the independent client"; exit 1; }
 
 work=$(mktemp -d /tmp/abyss-model.XXXXXX)

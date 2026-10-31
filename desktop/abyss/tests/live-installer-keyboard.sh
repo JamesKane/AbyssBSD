@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the installer's keyboard choice applies on the medium
+# AbyssBSD desktop — the installer's keyboard choice applies on the medium
 # (BACKLOG T.2).
 #
 # The installer wrote the chosen layout to the installed system's rc.conf and
@@ -31,7 +31,7 @@ abyss_ensure_runtime_dir
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
 svc="$ABYSS_BIN_DIR/abyss-install"
-[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$svc" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] && [ -x "$svc" ] || abyss_build
 
 W=1024
 H=768

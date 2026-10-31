@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a surface is told which outputs it is on (BACKLOG U.10).
+# AbyssBSD desktop — a surface is told which outputs it is on (BACKLOG U.10).
 #
 # undertow never sent wl_surface.enter or leave, to any surface (HANDOFF §2.71),
 # so a client could not learn its output — and so not its scale. With several
@@ -24,7 +24,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 client="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$client" ] || swift build
+[ -x "$undertow" ] && [ -x "$client" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-enter.XXXXXX)

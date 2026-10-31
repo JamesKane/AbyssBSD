@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a window can be moved, resized, zoomed and put away (P9.4).
+# AbyssBSD desktop — a window can be moved, resized, zoomed and put away (P9.4).
 #
 # Against undertow, because both halves are new and neither existed anywhere:
 # `Surface.Window` sent exactly two toplevel requests before this pass
@@ -28,7 +28,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-window.XXXXXX)

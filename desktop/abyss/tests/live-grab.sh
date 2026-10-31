@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — Grab: a region's pixels in the saved file match the
+# AbyssBSD desktop — Grab: a region's pixels in the saved file match the
 # screen (PHASE15 P15.6).
 #
 # A still scene — the wallpaper and a System Preferences window, nothing that
@@ -31,7 +31,7 @@ undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
 portal="$ABYSS_BIN_DIR/abyss-portal"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-for b in "$undertow" "$aqua" "$portal" "$grab"; do [ -x "$b" ] || { swift build; break; }; done
+for b in "$undertow" "$aqua" "$portal" "$grab"; do [ -x "$b" ] || { abyss_build; break; }; done
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 W=1024; H=768

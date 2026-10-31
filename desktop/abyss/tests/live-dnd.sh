@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — a file is dragged out of the Finder and onto the Trash (P9.3).
+# AbyssBSD desktop — a file is dragged out of the Finder and onto the Trash (P9.3).
 #
 # Two of our own processes, our own compositor, and a real pointer: the Finder
 # holds a file, the Dock holds the Trash, and the file crosses between them
@@ -31,7 +31,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-dnd.XXXXXX)

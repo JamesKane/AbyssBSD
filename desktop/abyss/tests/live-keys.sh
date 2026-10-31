@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the desktop hears a key before the application does (P9.5).
+# AbyssBSD desktop — the desktop hears a key before the application does (P9.5).
 #
 # Until this pass `Seat` forwarded every key straight to
 # `wlr_seat_keyboard_notify_key`, so Cmd-Tab did nothing and there was nowhere
@@ -24,7 +24,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 aqua="$ABYSS_BIN_DIR/AquaDemo"
-[ -x "$undertow" ] && [ -x "$aqua" ] || swift build
+[ -x "$undertow" ] && [ -x "$aqua" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-keys.XXXXXX)

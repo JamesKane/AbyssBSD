@@ -1,7 +1,7 @@
 #!/bin/sh
-# AbyssBSD Swift DE — build + test loop.
+# AbyssBSD desktop (ADE) — build + test loop.
 #
-# Default lane (fast, no compositor): build the SwiftPM package, run the unit
+# Default lane (fast, no compositor): build the Cargo workspace, run the unit
 # tests, and render one headless Aqua frame as a smoke test. Exits non-zero on
 # any failure (CI-friendly).
 #
@@ -24,7 +24,7 @@
 # The --vm lane is the Phase-3 addition: it syncs the tree into the build VM
 # (abyss/vm/*) and runs the identical script there, because the target is
 # FreeBSD and only FreeBSD can tell us the truth about kqueue, sysctl and the
-# fonts. Swift lives off PATH in the guest, so the lane spells out where it is.
+# fonts.
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -96,7 +96,7 @@ if [ "$vm" -eq 1 ]; then
   phase "syncing to the FreeBSD VM"
   "$root/abyss/vm/sync.sh"
   phase "abyss/tests/run.sh, in the guest"
-  remote="export PATH=$ABYSS_GUEST_SWIFT_BIN:\$PATH; cd $ABYSS_GUEST_SRC && sh abyss/tests/run.sh"
+  remote="cd $ABYSS_GUEST_SRC && sh abyss/tests/run.sh"
   [ "$live" -eq 1 ] && remote="$remote --live"
   [ "$full" -eq 1 ] && remote="$remote --full"
   # **Not `exec`.** Replacing this shell with ssh would take the timing with it:
@@ -114,30 +114,18 @@ fi
 # from Phase 6 the *unit tests* need one too, because `undertow` binds a Wayland
 # socket and `wl_display_add_socket_auto` has nowhere to put it without one. The
 # live scripts have sourced this helper since Phase 3; it belongs here as well
-# now that `swift test` can care.
+# now that the unit tests can care.
 . "$root/abyss/common.sh"
 abyss_ensure_runtime_dir
 
-phase "swift build"
-swift build
-
-phase "swift test"
-swift test
-
-# The Rust half (docs/RUST.md R1): built and tested beside the Swift on every
-# pass, on both platforms.
 phase "cargo build"
 cargo build --workspace --bins --examples
 
 phase "cargo test"
 cargo test --workspace
 
-# What the rest of the run starts: SwiftPM's binaries, and Cargo's for each
-# name abyss/rust-bins lists (RUST.md §3.1).
-phase "the binaries the harness runs"
-sh "$root/abyss/mk/bin-dir.sh"
-ABYSS_BIN_DIR=$root/.build/abyss-bin
-export ABYSS_BIN_DIR
+# What the rest of the run starts (common.sh): Cargo's debug build.
+echo "binaries: $ABYSS_BIN_DIR"
 
 # Every pass still compiles and links for FreeBSD/riscv64 (RUST.md §3.4,
 # §6.9): a cross-build, where the sysroot is (the Linux host); the riscv64
@@ -160,19 +148,15 @@ rm -f "$out"
 phase "golden images"
 sh "$root/abyss/tests/golden.sh"
 
-# The Rust half against the same goldens: each scene as a PNG, and in a
+# The same goldens drawn by the examples: each scene as a PNG, and in a
 # window on a headless sway (RUST.md §3.2).
-phase "golden images, Rust"
+phase "golden images, examples"
 sh "$root/abyss/tests/golden-rust.sh"
 
 # Two real processes handing a descriptor over the control plane. In the default
 # lane because it needs no compositor and takes about a second.
 phase "control plane, two processes"
 sh "$root/abyss/tests/live-ipc.sh"
-
-# The same between Swift and Rust, each end either language (RUST.md R2).
-phase "control plane, Swift and Rust"
-sh "$root/abyss/tests/live-ipc-mixed.sh"
 
 # The compositor's frame contract (C1 + the allocation-free present path). In
 # the default lane on purpose: it needs no compositor, no GPU and no display,

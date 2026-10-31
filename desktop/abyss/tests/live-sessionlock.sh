@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the session lock, in undertow (PHASE16 P16.2a).
+# AbyssBSD desktop — the session lock, in undertow (PHASE16 P16.2a).
 #
 # ext-session-lock-v1 is the boundary between a locked desktop and whoever is
 # standing at it (PHASE16 §6.6), so this test pushes on it from every side.
@@ -36,7 +36,7 @@ abyss_ensure_runtime_dir
 
 undertow="$ABYSS_BIN_DIR/undertow"
 grab="$ABYSS_BIN_DIR/abyssgrab"
-[ -x "$undertow" ] && [ -x "$grab" ] || swift build
+[ -x "$undertow" ] && [ -x "$grab" ] || abyss_build
 command -v wayland-scanner >/dev/null 2>&1 || { echo "note: no wayland-scanner, skipping"; exit 0; }
 
 work=$(mktemp -d /tmp/abyss-lock.XXXXXX)

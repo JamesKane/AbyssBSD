@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the installer installs, and what it installed boots
+# AbyssBSD desktop — the installer installs, and what it installed boots
 # (PHASE5.md P5.2).
 #
 # This is the pass where the phase's claim becomes true, and the claim is not
@@ -42,7 +42,7 @@ abyss_ensure_runtime_dir
 
 svc="$ABYSS_BIN_DIR/abyss-install"
 ctl="$ABYSS_BIN_DIR/abyss-installctl"
-[ -x "$svc" ] && [ -x "$ctl" ] || swift build
+[ -x "$svc" ] && [ -x "$ctl" ] || abyss_build
 
 work=$(mktemp -d /tmp/abyss-inst.XXXXXX)
 rundir=$(mktemp -d /tmp/abyss-instr.XXXXXX)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — the capability claim, proved (PHASE7.md P7.3).
+# AbyssBSD desktop — the capability claim, proved (PHASE7.md P7.3).
 #
 # live-portal.sh shows a client receiving a descriptor. This shows the claim that
 # makes the design worth having: the client has **no filesystem at all** — it is
@@ -23,7 +23,7 @@ abyss_ensure_runtime_dir
 
 portal="$ABYSS_BIN_DIR/abyss-portal"
 client="$ABYSS_BIN_DIR/abyssopen"
-[ -x "$portal" ] && [ -x "$client" ] || swift build
+[ -x "$portal" ] && [ -x "$client" ] || abyss_build
 command -v sway >/dev/null || { echo "FAIL: sway not installed"; exit 1; }
 
 rundir=$(mktemp -d /tmp/abyss-sbx.XXXXXX)

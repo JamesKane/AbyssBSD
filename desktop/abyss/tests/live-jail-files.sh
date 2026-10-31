@@ -1,5 +1,5 @@
 #!/bin/sh
-# AbyssBSD Swift DE — files into a jail through the Open panel (PHASE18 P18.4).
+# AbyssBSD desktop — files into a jail through the Open panel (PHASE18 P18.4).
 #
 # A jail has no path to the person's files. One gets in when they choose it:
 # the jailed application asks org.freedesktop.portal.FileChooser on the jail's
@@ -33,7 +33,7 @@ cd "$root"
 [ "$(uname -s)" = FreeBSD ] || { echo "note: jails are FreeBSD's — skipping on $(uname -s)"; exit 0; }
 sudo -n true 2>/dev/null || { echo "FAIL: this needs passwordless sudo (the daemon runs as root)"; exit 1; }
 for t in gdbus pkg-config; do command -v $t > /dev/null || { echo "FAIL: $t not installed"; exit 1; }; done
-for b in abyss-jaild abyss-jail abyss-portal abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || swift build; done
+for b in abyss-jaild abyss-jail abyss-portal abyss-dbus; do [ -x $ABYSS_BIN_DIR/$b ] || abyss_build; done
 
 W=$(mktemp -d /tmp/abyss-jf.XXXXXX); chmod 755 "$W"
 mkdir "$W/bin"; cp $ABYSS_BIN_DIR/abyss-jaild $ABYSS_BIN_DIR/abyss-jail "$W/bin/"; chmod 755 "$W/bin" "$W/bin/"*
