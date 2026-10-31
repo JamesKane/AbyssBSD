@@ -184,10 +184,9 @@ fn main() {
         // as SwiftPM builds CWlroots over CAbyssProtocols.
         let protocols = de.join("cabyssprotocols");
         w.file(cwlroots.join("cwlroots.c")).file(cwlroots.join("access.c")).file(cwlroots.join("menus.c")).include(cwlroots.join("include"));
-        for p in ["abyss-menu-v1-protocol.c", "abyss-window-v1-protocol.c", "gtk-shell-protocol.c"] {
-            println!("cargo:rerun-if-changed={}", protocols.join(p).display());
-            w.file(protocols.join(p));
-        }
+        // The protocols' tables are the client library's, below: one copy
+        // for both halves.
+        let _ = &protocols;
         let wlroots = ["wlroots-0.20", "wayland-server", "pixman-1", "xkbcommon"];
         for flag in pkg_config_of(&["--cflags"], &wlroots) {
             if let Some(dir) = flag.strip_prefix("-I") {
@@ -231,6 +230,23 @@ fn main() {
     // With the keeper's half of wp_security_context_v1 (cwayland_jail.c,
     // P18.5), abyss-idle's ext-idle-notify (idle.c, P16.3), and those
     // protocols' code.
+    // And the generated client glue (wlc.c, abyss/tools/gen-wl-client.py)
+    // with every protocol table the toolkit binds, shared with the server
+    // half (cwlroots) so each exists once.
+    let tables = [
+        protocols.join("abyss-menu-v1-protocol.c"),
+        protocols.join("abyss-window-v1-protocol.c"),
+        protocols.join("gtk-shell-protocol.c"),
+        cwayland.join("wlr-layer-shell-unstable-v1-protocol.c"),
+        cwayland.join("wlr-foreign-toplevel-management-unstable-v1-protocol.c"),
+        cwayland.join("xdg-activation-v1-protocol.c"),
+        cwayland.join("wlr-screencopy-unstable-v1-protocol.c"),
+        cwayland.join("wlr-output-management-unstable-v1-protocol.c"),
+        cwayland.join("ext-session-lock-v1-protocol.c"),
+    ];
+    for f in tables.iter().chain([&here.join("wlc.c")]) {
+        println!("cargo:rerun-if-changed={}", f.display());
+    }
     for f in [
         here.join("wl.c"),
         protocols.join("xdg-shell-protocol.c"),
@@ -243,6 +259,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", f.display());
     }
     let mut wl = cc::Build::new();
+    wl.files(&tables).file(here.join("wlc.c"));
     wl.file(here.join("wl.c"))
         .file(protocols.join("xdg-shell-protocol.c"))
         .file(cwayland.join("cwayland_shm.c"))
@@ -251,7 +268,8 @@ fn main() {
         .file(here.join("idle.c"))
         .file(cwayland.join("ext-idle-notify-v1-protocol.c"))
         .include(cwayland.join("include"));
-    for flag in pkg_config_of(&["--cflags"], &["wayland-client"]) {
+    // xkbcommon with it: the toolkit's keyboard (src/xkb.rs).
+    for flag in pkg_config_of(&["--cflags"], &["wayland-client", "xkbcommon"]) {
         if let Some(dir) = flag.strip_prefix("-I") {
             wl.include(dir);
         } else {
@@ -259,7 +277,7 @@ fn main() {
         }
     }
     wl.compile("abw");
-    for flag in pkg_config_of(&["--libs"], &["wayland-client"]) {
+    for flag in pkg_config_of(&["--libs"], &["wayland-client", "xkbcommon"]) {
         if let Some(dir) = flag.strip_prefix("-L") {
             println!("cargo:rustc-link-search=native={dir}");
         } else if let Some(lib) = flag.strip_prefix("-l") {

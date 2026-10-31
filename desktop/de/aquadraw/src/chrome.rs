@@ -101,9 +101,8 @@ impl ChromeLayout {
     }
 }
 
-/// Rect.contains as Drawing.swift has it: every edge inclusive.
 fn contains(r: Rect, x: f64, y: f64) -> bool {
-    x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
+    r.contains(x, y)
 }
 
 /// Lay out the frame of a `w`×`h` window from the theme `t`. `foreign` is

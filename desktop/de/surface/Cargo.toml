@@ -1,0 +1,10 @@
+[package]
+name = "surface"
+description = "Surface: the toolkit's Wayland client (Swift: *.swift beside it)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyss-sys.workspace = true
+libc.workspace = true

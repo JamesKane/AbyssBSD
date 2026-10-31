@@ -22,6 +22,11 @@ impl Rect {
     pub const fn new(x: f64, y: f64, w: f64, h: f64) -> Rect {
         Rect { x, y, w, h }
     }
+
+    /// As Drawing.swift has it: every edge inclusive.
+    pub fn contains(&self, x: f64, y: f64) -> bool {
+        x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
+    }
 }
 
 pub struct DrawContext {

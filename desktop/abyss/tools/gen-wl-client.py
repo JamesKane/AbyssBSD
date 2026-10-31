@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""Generate the Rust toolkit's Wayland client glue (RUST.md R5d).
+
+libwayland's requests are `static inline`s in wayland-scanner's headers:
+Swift's importer calls them, Rust cannot. This reads the same protocol XML
+the scanner reads and writes:
+
+  de/abyss-sys/wlc.c      a C wrapper per request (`wlc_<iface>_<request>`),
+                          calling the scanner's inline, so the C compiler
+                          checks every argument against the real header;
+  de/abyss-sys/src/wlc.rs the Rust `extern` declarations for them, a
+                          `#[repr(C)]` listener per interface, and the
+                          interface tables (for wl_registry.bind).
+
+Not bindgen: no header is parsed; the protocol's own XML is the source, as it
+is the scanner's. Run it when a protocol changes, and commit the output:
+
+  python3 abyss/tools/gen-wl-client.py
+"""
+import os
+import xml.etree.ElementTree as ET
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CORE = "/usr/share/wayland/wayland.xml"
+# The protocols the toolkit speaks, and the header each one's C comes from.
+PROTOCOLS = [
+    (CORE, "wayland-client.h"),
+    ("protocols/xdg-shell.xml", "xdg-shell-client-protocol.h"),
+    ("protocols/wlr-layer-shell-unstable-v1.xml", "wlr-layer-shell-unstable-v1-client-protocol.h"),
+    ("protocols/wlr-foreign-toplevel-management-unstable-v1.xml", "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"),
+    ("protocols/xdg-activation-v1.xml", "xdg-activation-v1-client-protocol.h"),
+    ("protocols/wlr-screencopy-unstable-v1.xml", "wlr-screencopy-unstable-v1-client-protocol.h"),
+    ("protocols/wlr-output-management-unstable-v1.xml", "wlr-output-management-unstable-v1-client-protocol.h"),
+    ("protocols/ext-session-lock-v1.xml", "ext-session-lock-v1-client-protocol.h"),
+    ("protocols/ext-idle-notify-v1.xml", "ext-idle-notify-v1-client-protocol.h"),
+    ("protocols/security-context-v1.xml", "security-context-v1-client-protocol.h"),
+    ("protocols/abyss-menu-v1.xml", "abyss-menu-v1-client-protocol.h"),
+    ("protocols/abyss-window-v1.xml", "abyss-window-v1-client-protocol.h"),
+]
+# wl_display is libwayland's own, and wl_registry.bind's untyped new_id is
+# wl_registry_bind's; neither is generated.
+SKIP_INTERFACES = {"wl_display"}
+
+C_TYPE = {"int": "int32_t", "uint": "uint32_t", "fixed": "wl_fixed_t", "string": "const char *", "array": "struct wl_array *", "fd": "int32_t"}
+RS_TYPE = {"int": "i32", "uint": "u32", "fixed": "i32", "string": "*const c_char", "array": "*mut WlArray", "fd": "i32", "object": "*mut Proxy", "new_id": "*mut Proxy"}
+RS_KEYWORDS = {"type", "move", "ref", "fn", "match", "use", "mod", "self", "loop", "box", "where", "in", "impl", "struct", "enum", "trait", "const", "static", "async", "await", "dyn", "final", "override", "virtual", "yield", "macro", "priv", "abstract", "become", "do", "typeof", "unsized", "try"}
+
+
+def rs_name(n):
+    return f"r#{n}" if n in RS_KEYWORDS else n
+
+
+def c_arg(a):
+    t = a.get("type")
+    if t == "object":
+        i = a.get("interface")
+        return f"struct {i} *" if i else "void *"
+    return C_TYPE[t]
+
+
+def camel(n):
+    return "".join(p[:1].upper() + p[1:] for p in n.split("_"))
+
+
+def const_name(n):
+    return n.upper()
+
+
+def req_rs_param(a):
+    t, nul = a.get("type"), a.get("allow-null") == "true"
+    if t == "object":
+        return "Option<Obj>" if nul else "Obj"
+    if t == "string":
+        return "Option<&str>" if nul else "&str"
+    if t == "array":
+        return "&[u8]"
+    if t == "fd":
+        return "BorrowedFd<'_>"
+    if t == "fixed":
+        return "f64"
+    return {"int": "i32", "uint": "u32"}[t]
+
+
+def req_rs_pass(a):
+    n, t, nul = rs_name(a.get("name")), a.get("type"), a.get("allow-null") == "true"
+    if t == "object":
+        return f"{n}.map_or(std::ptr::null_mut(), Obj::raw)" if nul else f"{n}.raw()"
+    if t == "string":
+        return f"{n}.map(cstr).as_ref().map_or(std::ptr::null(), |c| c.as_ptr())" if nul else f"cstr({n}).as_ptr()"
+    if t == "array":
+        return f"&mut WlArray {{ size: {n}.len(), alloc: {n}.len(), data: {n}.as_ptr() as *mut c_void }}"
+    if t == "fd":
+        return f"{n}.as_raw_fd()"
+    if t == "fixed":
+        return f"({n} * 256.0) as i32"
+    return n
+
+
+def ev_rs_type(a):
+    t = a.get("type")
+    return {"int": "i32", "uint": "u32", "fixed": "f64", "string": "String", "object": "Option<Obj>",
+            "new_id": "Option<Obj>", "array": "Vec<u8>", "fd": "OwnedFd"}[t]
+
+
+def ev_rs_decode(a, i):
+    t = a.get("type")
+    return {"int": f"a[{i}].i", "uint": f"a[{i}].u", "fixed": f"a[{i}].i as f64 / 256.0",
+            "string": f"string(a[{i}].s)", "object": f"Obj::from_raw(a[{i}].o)", "new_id": f"Obj::from_raw(a[{i}].o)",
+            "array": f"array(a[{i}].a)", "fd": f"OwnedFd::from_raw_fd(a[{i}].h)"}[t]
+
+
+HEADER = """//! GENERATED by abyss/tools/gen-wl-client.py from the protocols' XML: do
+//! not edit.
+//!
+//! The Wayland client, safely: a module per interface with its requests
+//! (calling wlc.c's wrapper of the scanner's inline), its enums' values, its
+//! events as an `Event` enum, and `listen`, which hands every event of one
+//! object to a closure (through `wl_proxy_add_dispatcher`, so an event with
+//! no handler is ignored rather than libwayland's abort). A destructor
+//! request forgets the object's closure.
+//!
+//! An `Obj` is a handle, not an owner: a request on one already destroyed is
+//! the caller's bug, as with the compositor's handles (wlr.rs).
+#![allow(non_camel_case_types, non_upper_case_globals, clippy::too_many_arguments, clippy::missing_safety_doc, unused_imports, unused_variables, dead_code)]
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
+use std::ptr::NonNull;
+use std::rc::Rc;
+
+#[repr(C)]
+pub struct Proxy {
+    _p: [u8; 0],
+}
+#[repr(C)]
+pub struct WlInterface {
+    _p: [u8; 0],
+}
+#[repr(C)]
+pub struct WlArray {
+    pub size: usize,
+    pub alloc: usize,
+    pub data: *mut c_void,
+}
+#[repr(C)]
+struct WlDisplay {
+    _p: [u8; 0],
+}
+
+/// `union wl_argument`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+union Arg {
+    i: i32,
+    u: u32,
+    s: *const c_char,
+    o: *mut Proxy,
+    a: *mut WlArray,
+    h: i32,
+}
+
+/// A Wayland object of ours.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Obj(NonNull<Proxy>);
+
+impl Obj {
+    fn from_raw(p: *mut Proxy) -> Option<Obj> {
+        NonNull::new(p).map(Obj)
+    }
+    fn raw(self) -> *mut Proxy {
+        self.0.as_ptr()
+    }
+    /// The protocol object id, for logs.
+    pub fn id(self) -> u32 {
+        unsafe { wl_proxy_get_id(self.raw()) }
+    }
+    pub fn version(self) -> u32 {
+        unsafe { wl_proxy_get_version(self.raw()) }
+    }
+}
+
+/// An interface's table, for `wl_registry::bind`.
+#[derive(Clone, Copy)]
+pub struct Interface(&'static WlInterface);
+
+fn cstr(s: &str) -> CString {
+    CString::new(s.replace('\\0', "")).unwrap()
+}
+unsafe fn string(s: *const c_char) -> String {
+    if s.is_null() { String::new() } else { unsafe { CStr::from_ptr(s) }.to_string_lossy().into_owned() }
+}
+unsafe fn array(a: *mut WlArray) -> Vec<u8> {
+    if a.is_null() || unsafe { (*a).size } == 0 {
+        return Vec::new();
+    }
+    unsafe { std::slice::from_raw_parts((*a).data as *const u8, (*a).size) }.to_vec()
+}
+
+/// An array of `uint`s (xdg_toplevel's states), as the protocol packs them.
+pub fn u32s(bytes: &[u8]) -> Vec<u32> {
+    bytes.as_chunks::<4>().0.iter().map(|c| u32::from_ne_bytes(*c)).collect()
+}
+
+type Handler = Rc<dyn Fn(u32, *const Arg)>;
+
+thread_local! {
+    /// Every listened-to object's closure, by proxy.
+    static HANDLERS: RefCell<HashMap<usize, Handler>> = RefCell::new(HashMap::new());
+}
+
+static IMPLEMENTATION: u8 = 0;
+
+unsafe extern "C" fn dispatch(_impl: *const c_void, target: *mut c_void, opcode: u32, _msg: *const c_void, args: *const Arg) -> c_int {
+    // A clone, so a handler may destroy its own object (and drop the map's).
+    let h = HANDLERS.with(|m| m.borrow().get(&(target as usize)).cloned());
+    if let Some(h) = h {
+        h(opcode, args)
+    }
+    0
+}
+
+fn listen_raw(o: Obj, h: Handler) {
+    HANDLERS.with(|m| m.borrow_mut().insert(o.raw() as usize, h));
+    unsafe { wl_proxy_add_dispatcher(o.raw(), dispatch, &IMPLEMENTATION as *const u8 as *const c_void, std::ptr::null_mut()) };
+}
+
+fn forget(o: Obj) {
+    // Taken out and dropped after the borrow: a closure's captures may
+    // themselves destroy objects as they drop.
+    let h = HANDLERS.with(|m| m.borrow_mut().remove(&(o.raw() as usize)));
+    drop(h);
+}
+
+/// The connection.
+pub struct Connection(NonNull<WlDisplay>);
+
+impl Connection {
+    /// `WAYLAND_DISPLAY`, or `name`.
+    pub fn connect(name: Option<&str>) -> Option<Connection> {
+        let n = name.map(cstr);
+        NonNull::new(unsafe { wl_display_connect(n.as_ref().map_or(std::ptr::null(), |c| c.as_ptr())) }).map(Connection)
+    }
+    fn d(&self) -> *mut WlDisplay {
+        self.0.as_ptr()
+    }
+    pub fn registry(&self) -> Option<Obj> {
+        Obj::from_raw(unsafe { wlc_wl_display_get_registry(self.d()) })
+    }
+    pub fn fd(&self) -> i32 {
+        unsafe { wl_display_get_fd(self.d()) }
+    }
+    pub fn flush(&self) -> i32 {
+        unsafe { wl_display_flush(self.d()) }
+    }
+    pub fn roundtrip(&self) -> i32 {
+        unsafe { wl_display_roundtrip(self.d()) }
+    }
+    pub fn dispatch_pending(&self) -> i32 {
+        unsafe { wl_display_dispatch_pending(self.d()) }
+    }
+    pub fn prepare_read(&self) -> i32 {
+        unsafe { wl_display_prepare_read(self.d()) }
+    }
+    pub fn read_events(&self) -> i32 {
+        unsafe { wl_display_read_events(self.d()) }
+    }
+    pub fn cancel_read(&self) {
+        unsafe { wl_display_cancel_read(self.d()) }
+    }
+    pub fn error(&self) -> i32 {
+        unsafe { wl_display_get_error(self.d()) }
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        unsafe { wl_display_disconnect(self.d()) }
+    }
+}
+
+pub mod wl_registry_bind {
+    use super::*;
+    /// `wl_registry.bind`, whose new_id is untyped and so not generated.
+    pub fn bind(registry: Obj, name: u32, interface: Interface, version: u32) -> Option<Obj> {
+        Obj::from_raw(unsafe { wlc_wl_registry_bind(registry.raw(), name, interface.0, version) })
+    }
+}
+
+/// An anonymous shared-memory file of `size` bytes (cwayland's helper).
+pub fn create_shm(size: usize) -> Option<OwnedFd> {
+    let fd = unsafe { aw_create_shm(size) };
+    (fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+unsafe extern "C" {
+    fn wl_display_connect(name: *const c_char) -> *mut WlDisplay;
+    fn wl_display_disconnect(d: *mut WlDisplay);
+    fn wl_display_get_fd(d: *mut WlDisplay) -> c_int;
+    fn wl_display_flush(d: *mut WlDisplay) -> c_int;
+    fn wl_display_roundtrip(d: *mut WlDisplay) -> c_int;
+    fn wl_display_dispatch_pending(d: *mut WlDisplay) -> c_int;
+    fn wl_display_prepare_read(d: *mut WlDisplay) -> c_int;
+    fn wl_display_read_events(d: *mut WlDisplay) -> c_int;
+    fn wl_display_cancel_read(d: *mut WlDisplay);
+    fn wl_display_get_error(d: *mut WlDisplay) -> c_int;
+    fn wl_proxy_get_id(p: *mut Proxy) -> u32;
+    fn wl_proxy_get_version(p: *mut Proxy) -> u32;
+    fn wl_proxy_add_dispatcher(p: *mut Proxy, f: unsafe extern "C" fn(*const c_void, *mut c_void, u32, *const c_void, *const Arg) -> c_int, implementation: *const c_void, data: *mut c_void) -> c_int;
+    fn wlc_wl_display_get_registry(d: *mut WlDisplay) -> *mut Proxy;
+    fn wlc_wl_registry_bind(r: *mut Proxy, name: u32, iface: *const WlInterface, version: u32) -> *mut Proxy;
+    fn aw_create_shm(size: usize) -> c_int;
+"""
+
+
+def main():
+    c = ["/* GENERATED by abyss/tools/gen-wl-client.py from the protocols' XML: do not edit. */",
+         "/* A wrapper per request, calling wayland-scanner's static inline. */",
+         "#include <stdint.h>", "#include <wayland-client.h>",
+         "struct wl_registry *wlc_wl_display_get_registry(struct wl_display *d) { return wl_display_get_registry(d); }",
+         "void *wlc_wl_registry_bind(struct wl_registry *r, uint32_t name, const struct wl_interface *i, uint32_t v) { return wl_registry_bind(r, name, i, v); }"]
+    externs, tables, mods = [], [], []
+    count = 0
+    for path, header in PROTOCOLS:
+        if header != "wayland-client.h":
+            c.append(f'#include "{header}"')
+        xml = path if path.startswith("/") else os.path.join(ROOT, path)
+        proto = ET.parse(xml).getroot()
+        for iface in proto.findall("interface"):
+            name = iface.get("name")
+            if name in SKIP_INTERFACES:
+                continue
+            tables.append(f"    static {name}_interface: WlInterface;")
+            m = [f"pub mod {name} {{", "    use super::*;",
+                 f"    pub fn interface() -> Interface {{ Interface(unsafe {{ &{name}_interface }}) }}"]
+            have_destroy = False
+            for req in iface.findall("request"):
+                rname = req.get("name")
+                args = req.findall("arg")
+                new_ids = [a for a in args if a.get("type") == "new_id"]
+                if any(n.get("interface") is None for n in new_ids):
+                    continue  # wl_registry.bind: hand-written
+                destructor = req.get("type") == "destructor"
+                if rname == "destroy":
+                    have_destroy = True
+                plain = [a for a in args if a.get("type") != "new_id"]
+                ret_c = f"struct {new_ids[0].get('interface')} *" if new_ids else "void"
+                params = [f"struct {name} *p"] + [f"{c_arg(a)} {a.get('name')}" for a in plain]
+                call = ", ".join(["p"] + [a.get("name") for a in plain])
+                ret = "return " if new_ids else ""
+                c.append(f"{ret_c} wlc_{name}_{rname}({', '.join(params)}) {{ {ret}{name}_{rname}({call}); }}")
+                rparams = ["p: *mut Proxy"] + [f"{rs_name(a.get('name'))}: {RS_TYPE[a.get('type')]}" for a in plain]
+                rret = " -> *mut Proxy" if new_ids else ""
+                externs.append(f"    fn wlc_{name}_{rname}({', '.join(rparams)}){rret};")
+                sparams = ["o: Obj"] + [f"{rs_name(a.get('name'))}: {req_rs_param(a)}" for a in plain]
+                passes = ", ".join(["o.raw()"] + [req_rs_pass(a) for a in plain])
+                body = f"unsafe {{ wlc_{name}_{rname}({passes}) }}"
+                if new_ids:
+                    body = f"Obj::from_raw({body})"
+                if destructor:
+                    body = f"{body};\n        forget(o)"
+                sret = " -> Option<Obj>" if new_ids else ""
+                if destructor:
+                    m.append("    /// A destructor: forgets the object's closure too.")
+                m.append(f"    pub fn {rs_name(rname)}({', '.join(sparams)}){sret} {{\n        {body}\n    }}")
+                count += 1
+            if not have_destroy:
+                c.append(f"void wlc_{name}_destroy(struct {name} *p) {{ {name}_destroy(p); }}")
+                externs.append(f"    fn wlc_{name}_destroy(p: *mut Proxy);")
+                m.append("    /// The scanner's own destructor: libwayland forgets the proxy.")
+                m.append(f"    pub fn destroy(o: Obj) {{\n        unsafe {{ wlc_{name}_destroy(o.raw()) }};\n        forget(o)\n    }}")
+            for en in iface.findall("enum"):
+                for e in en.findall("entry"):
+                    m.append(f"    pub const {const_name(en.get('name'))}_{const_name(e.get('name'))}: u32 = {e.get('value')};")
+            events = iface.findall("event")
+            if events:
+                m.append("    #[derive(Debug)]")
+                m.append("    pub enum Event {")
+                for ev in events:
+                    fields = [f"{rs_name(a.get('name'))}: {ev_rs_type(a)}" for a in ev.findall("arg")]
+                    m.append(f"        {camel(ev.get('name'))} {{ {', '.join(fields)} }},")
+                m.append("    }")
+                m.append("    unsafe fn decode(opcode: u32, a: *const Arg) -> Option<Event> {")
+                m.append("        Some(match opcode {")
+                for i, ev in enumerate(events):
+                    eargs = ev.findall("arg")
+                    if eargs:
+                        m.append(f"            {i} => {{ let a = unsafe {{ std::slice::from_raw_parts(a, {len(eargs)}) }}; unsafe {{ Event::{camel(ev.get('name'))} {{ " +
+                                 ", ".join(f"{rs_name(x.get('name'))}: {ev_rs_decode(x, j)}" for j, x in enumerate(eargs)) + " } } }")
+                    else:
+                        m.append(f"            {i} => Event::{camel(ev.get('name'))} {{}},")
+                m.append("            _ => return None,")
+                m.append("        })")
+                m.append("    }")
+                m.append("    /// Every event of `o`, to `f`, until a destructor forgets it.")
+                m.append("    pub fn listen(o: Obj, f: impl Fn(Event) + 'static) {")
+                m.append("        listen_raw(o, Rc::new(move |op, a| if let Some(e) = unsafe { decode(op, a) } { f(e) }))")
+                m.append("    }")
+            m.append("}")
+            mods.append("\n".join(m))
+    rs = [HEADER] + tables + [""] + externs + ["}", ""] + mods
+    with open(os.path.join(ROOT, "de/abyss-sys/wlc.c"), "w") as f:
+        f.write("\n".join(c) + "\n")
+    with open(os.path.join(ROOT, "de/abyss-sys/src/wlc.rs"), "w") as f:
+        f.write("\n".join(rs) + "\n")
+    print(f"gen-wl-client: {count} requests, {len(mods)} interfaces")
+
+
+main()

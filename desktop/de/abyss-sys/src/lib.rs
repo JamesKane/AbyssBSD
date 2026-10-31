@@ -13,6 +13,7 @@ pub mod mono;
 pub mod pam;
 pub mod platform;
 pub mod sandbox;
+pub mod shm;
 pub mod poolwatch;
 pub mod proc;
 pub mod spawn;
@@ -21,6 +22,8 @@ pub mod tls;
 pub mod users;
 pub mod vents;
 pub mod wl;
+pub mod wlc;
+pub mod xkb;
 #[cfg(feature = "wlroots")]
 pub mod wlr;
 

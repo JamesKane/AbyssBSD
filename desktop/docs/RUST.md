@@ -849,6 +849,31 @@ draw-list sheets, in every theme that draws them). The goldens left are
 the shell's (wallpaper, menu bar, Dock, toasts) and the applications',
 which are R6's.
 
+*R5d, the Wayland client (surface), first pass.* libwayland's requests
+are `static inline`s Rust cannot call, so `abyss/tools/gen-wl-client.py`
+reads the protocols' XML (as wayland-scanner does) and writes
+`de/abyss-sys/wlc.c`, a wrapper per request over the scanner's inline, so
+the C compiler checks each against the real header, and `src/wlc.rs`, a
+safe module per interface: its requests, its enums' values, its events as
+an enum, and `listen`, which hands an object's events to a closure through
+`wl_proxy_add_dispatcher`. Two Swift traps go with it: an event with no
+handler is ignored, not libwayland's abort on a NULL listener slot, and a
+destructor request forgets its object's closure. The protocol tables now
+live once, in the client library, shared with cwlroots. Over it,
+`de/surface`: the Display (globals, outputs' scales, the seat routed by
+surface, key repeat, the run loop with extra descriptors), the toplevel
+Window (two shm buffers, frame pacing, configure states, xdg-shell v6
+suspension, bounds and capabilities, move/resize/zoom/minimize/lower), and
+the keyboard over xkbcommon; and in aqua the shared `Toolkit` (fonts,
+theme, following appearance.ini) and the live `AquaWindow` for the five
+toolkit scenes. With the Rust AquaDemo swapped in by hand, **live-suspend,
+-depth, -islands, -keys, -undertow, -undertow-input, -undertow-c2,
+-surface-enter and -displays-config are green**; live-window and
+-screenshot need the menu bar and the desktop (R6). Not yet: popups (the
+widgets' pop-up button opens nothing), layer surfaces, the clipboard,
+activation, screencopy, the session lock, idle notification, foreign
+toplevels, the menu bar's focus protocol.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

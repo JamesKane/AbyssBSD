@@ -9,3 +9,5 @@ publish.workspace = true
 abyss-sys.workspace = true
 aquadraw = { path = "../aquadraw" }
 menu-model = { path = "../menumodel" }
+pool-config = { path = "../poolconfig" }
+surface = { path = "../surface" }
