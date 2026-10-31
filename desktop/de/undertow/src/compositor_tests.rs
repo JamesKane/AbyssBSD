@@ -89,6 +89,7 @@ fn a_window_maps_centred_focused_and_published_and_closes_on_request() {
     assert!(t.foreign.get().is_some(), "and has a Dock tile");
     assert_eq!(*t.island_display.borrow(), c.layout.borrow().displays[0].name);
     assert!(c.surfaces_created.get() >= 1);
+    assert!(!c.explicit_sync.borrow().offered, "pixman keeps neither half: not offered");
 
     // Asked to close, the client closes, and the place is remembered.
     c.close_focused_window();
@@ -578,4 +579,48 @@ fn the_session_lock_holds() {
             t.xdg.send_close();
         }
     }
+}
+
+/// Display sleep (U.9): a short timeout sleeps the displays, every client
+/// then gets the slow clock, and activity wakes them; the hook hears both.
+#[test]
+fn the_displays_sleep_and_wake() {
+    let r = rig("sleep");
+    let c = &r.c;
+    let (tx, _rx) = mpsc::channel();
+    let _a = client(&c.socket_name, "Video", "org.test.video", (100, 60), (1.0, 0.0, 0.0), 5.0, tx);
+    assert!(pump(c, || c.mapped_toplevels().len() == 1));
+    c.update_surface_outputs(); // enter, and the scale: on the one display
+    c.start_display_sleep(Some(0.05));
+    let heard = Rc::new(RefCell::new(vec![]));
+    let h = heard.clone();
+    c.display_sleep.borrow().as_ref().unwrap().on_change(move |asleep| h.borrow_mut().push(asleep));
+    c.display_sleep_tick();
+    assert!(!c.displays_asleep());
+    thread::sleep(Duration::from_millis(80));
+    c.display_sleep_tick();
+    assert!(c.displays_asleep(), "after the timeout without input");
+    c.end_frame(); // the slow clock: no panic, nothing owed
+    c.activity(None);
+    assert!(!c.displays_asleep());
+    assert_eq!(*heard.borrow(), [true, false]);
+    let ds = c.display_sleep.borrow();
+    assert_eq!((ds.as_ref().unwrap().sleeps.get(), ds.as_ref().unwrap().wakes.get()), (1, 1));
+    drop(ds);
+    c.close_focused_window();
+    pump(c, || c.toplevels.borrow().is_empty());
+}
+
+/// A saved setting (displays.ini) put on an output before the run.
+#[test]
+fn a_saved_display_setting_is_committed() {
+    use crate::displays::DisplaySetting;
+    use crate::output_management::commit_setting;
+    let r = rig("setting");
+    let o = r.c.session.outputs()[0];
+    let s = DisplaySetting { name: o.name(), enabled: true, mode_width: 800, mode_height: 600, refresh_milli_hz: 60_000, x: 0, y: 0, scale: 2.0 };
+    assert!(commit_setting(&s, o));
+    assert_eq!((o.width(), o.height(), o.scale()), (800, 600, 2.0));
+    assert!(r.c.output_management.borrow().is_some(), "wlr-output-management is offered");
+    r.c.publish_outputs();
 }

@@ -284,9 +284,17 @@ pub struct Compositor {
     /// The session lock (P16.2), and the seat's ear for it.
     pub lock: RefCell<crate::session_lock::LockState>,
     pub(crate) lock_hook: RefCell<Option<LockHook>>,
+    /// linux-drm-syncobj (U.3b), where it can be kept.
+    pub explicit_sync: RefCell<crate::explicit_sync::ExplicitSync>,
+    /// wlr-output-management (P14.7b), and the run loop's ear for it.
+    pub output_management: RefCell<Option<crate::output_management::OutputManagement>>,
+    pub(crate) outputs_applied: RefCell<Option<crate::output_management::AppliedHook>>,
+    /// Display sleep (U.9), once the run loop starts it.
+    pub display_sleep: RefCell<Option<crate::display_sleep::DisplaySleep>>,
     last_id: Cell<u32>,
     cascade: Cell<i32>,
     locked_frame_at: Cell<u64>,
+    asleep_frame_at: Cell<u64>,
     orphaned_layers: RefCell<Vec<(Weak<Layer>, String)>>,
     // Counters, for the tests and the logs.
     pub surfaces_created: Cell<u64>,
@@ -401,9 +409,14 @@ impl Compositor {
             privileged_socket_name: opts.privileged_socket.map(str::to_owned),
             lock: RefCell::default(),
             lock_hook: RefCell::default(),
+            explicit_sync: RefCell::default(),
+            output_management: RefCell::default(),
+            outputs_applied: RefCell::default(),
+            display_sleep: RefCell::default(),
             last_id: Cell::new(0),
             cascade: Cell::new(0),
             locked_frame_at: Cell::new(0),
+            asleep_frame_at: Cell::new(0),
             orphaned_layers: RefCell::default(),
             surfaces_created: Cell::new(0),
             restored_count: Cell::new(0),
@@ -472,6 +485,13 @@ impl Compositor {
                     c.raise(&t)
                 }
             }));
+        }
+        let om = c.offer_output_management();
+        *c.output_management.borrow_mut() = om;
+        c.publish_outputs();
+        if let Some(l) = c.offer_explicit_sync(comp) {
+            ls.push(l);
+            c.explicit_sync.borrow_mut().offered = true;
         }
         *c.listeners.borrow_mut() = ls;
 
@@ -1197,6 +1217,7 @@ impl Compositor {
             false
         });
         self.arrange_layers();
+        self.publish_outputs();
         log(&format!("output {name} back — {back} layer surface(s) on it again"));
     }
 
@@ -1357,6 +1378,30 @@ impl Compositor {
     /// Without it a client renders one frame and waits for ever.
     pub fn send_frame_done(&self) {
         let now = mono::now();
+        // **Displays asleep (U.9): everyone gets the slow clock.** Nothing
+        // is shown, but a FIFO client blocked on its callback must still be
+        // let go now and then (U.2).
+        if self.displays_asleep() {
+            if now.saturating_sub(self.asleep_frame_at.get()) < HIDDEN_FRAME_PERIOD_NS {
+                return;
+            }
+            self.asleep_frame_at.set(now);
+            let ts: Vec<Rc<Toplevel>> = self.toplevels.borrow().iter().filter(|t| t.mapped.get()).cloned().collect();
+            for t in ts {
+                t.surface.frame_done_tree();
+            }
+            for l in self.mapped_layers() {
+                l.surface.frame_done_tree();
+            }
+            for (p, _) in self.mapped_popups() {
+                p.surface.frame_done_tree();
+            }
+            let ls: Vec<Surface> = self.lock.borrow().surfaces.iter().map(|e| e.surface).collect();
+            for s in ls {
+                s.frame_done_tree();
+            }
+            return;
+        }
         // **Locked (P16.2): the lock screen at the display's rate, and
         // everything behind it the slow clock**: nothing of it is shown, but
         // a FIFO client must still be let go now and then (U.2). Without
@@ -1425,6 +1470,8 @@ impl Drop for Compositor {
         // While the display, which the menu globals live on, is alive.
         self.menu_state.borrow_mut().addresses_clear();
         self.lock.borrow_mut().clear();
+        self.display_sleep.borrow_mut().take();
+        self.output_management.borrow_mut().take();
         self.menus.borrow_mut().take();
         self.frames.borrow_mut().release();
         self.ebb_labels.borrow_mut().clear();
@@ -1511,8 +1558,8 @@ impl World for CompositorWorld {
     fn input_method_popups(&self) -> Vec<(Surface, i32, i32)> {
         vec![]
     }
-    fn acquire(&self, _: Surface) -> Option<(Timeline, u64)> {
-        None
+    fn acquire(&self, s: Surface) -> Option<(Timeline, u64)> {
+        if self.0.explicit_sync.borrow().offered { s.acquire_point() } else { None }
     }
     fn cursor_signature(&self) -> u64 {
         0

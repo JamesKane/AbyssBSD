@@ -61,6 +61,10 @@ TW_SIGNAL(session_lock_v1, new_surface)
 TW_SIGNAL(session_lock_v1, unlock)
 TW_SIGNAL(session_lock_v1, destroy)
 TW_SIGNAL(session_lock_surface_v1, destroy)
+TW_SIGNAL(output_manager_v1, apply)
+TW_SIGNAL(output_manager_v1, test)
+TW_SIGNAL(idle_inhibit_manager_v1, new_inhibitor)
+TW_SIGNAL(idle_inhibitor_v1, destroy)
 #undef TW_SIGNAL
 
 /* MARK: outputs */
@@ -192,6 +196,43 @@ void tw_decoration_server_side(struct wlr_xdg_toplevel_decoration_v1 *d);
 const struct wl_global *tw_session_lock_manager_global(const struct wlr_session_lock_manager_v1 *m);
 struct wlr_surface *tw_lock_surface_surface(const struct wlr_session_lock_surface_v1 *s);
 struct wlr_output *tw_lock_surface_output(const struct wlr_session_lock_surface_v1 *s);
+
+/* MARK: explicit sync (linux-drm-syncobj-v1, U.3b) */
+
+/* Why it cannot be offered: 0 it can, 1 the renderer takes no timeline
+ * waits, 2 the backend's output commits take none. */
+int tw_syncobj_unsupported(const struct wlr_renderer *r, const struct wlr_backend *b);
+/* The manager on the renderer's DRM node; false if it refused. */
+bool tw_syncobj_create(struct wl_display *d, struct wlr_renderer *r);
+/* A commit brought a new buffer with an acquire point: arm its release
+ * (wlroots 0.20 keeps the release point private; the protocol requires the
+ * two together). True if one was armed. */
+bool tw_syncobj_arm_release(struct wlr_surface *s);
+/* The surface's acquire point, for the renderer to wait on. */
+bool tw_syncobj_acquire(struct wlr_surface *s, struct wlr_drm_syncobj_timeline **timeline, uint64_t *point);
+
+/* MARK: output management (wlr-output-management-v1, P14.7b) */
+
+/* What one head of a configuration asks for. The mode is its chosen mode's,
+ * else its custom mode's. */
+struct tw_head_ask {
+    struct wlr_output *output;
+    bool enabled;
+    int32_t mode_width, mode_height, refresh_mhz;
+    int32_t x, y;
+    double scale;
+};
+void tw_head_read(const struct wlr_output_configuration_head_v1 *h, struct tw_head_ask *out);
+/* Apply the head's state to its output: test only, or commit. */
+bool tw_head_try(struct wlr_output_configuration_head_v1 *h, bool commit);
+/* Tell every client what is true: one head per output, at x, y and scale. */
+void tw_output_manager_publish(struct wlr_output_manager_v1 *m, struct wlr_output **outputs,
+                               const int32_t *x, const int32_t *y, const double *scale, size_t n);
+void tw_output_state_set_scale(struct wlr_output_state *s, double scale);
+
+/* MARK: display sleep (idle-inhibit-v1, ext-idle-notify-v1, U.9) */
+
+struct wlr_surface *tw_idle_inhibitor_surface(const struct wlr_idle_inhibitor_v1 *i);
 
 /* MARK: foreign toplevels, activation */
 

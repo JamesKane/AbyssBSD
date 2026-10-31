@@ -733,6 +733,19 @@ through `LockEvent`s. Its test drives Swift's own probe
 (abyss/tests/lockclient.c, built as live-sessionlock.sh builds it), and is
 `#[ignore]`d until R4e: the probe binds wl_seat.
 
+*R4d, the rest of the compositor's protocols* (`explicit_sync.rs`,
+`output_management.rs`, `display_sleep.rs`). linux-drm-syncobj offered
+only where the renderer and backend both take timelines (pixman: not,
+and said so), the scene waiting on acquire points, each new buffer's
+release armed. wlr-output-management: published from the layout, a
+configuration checked, test-committed whole, then committed, applied to
+the layout and written to displays.ini; `commit_setting` for the saved
+one at start. Display sleep over R4a's IdleClock: idle-inhibit,
+ext-idle-notify (its activity takes the seat's wlr_seat, R4e), and the
+slow clock while asleep. And wl_surface.enter/leave with the preferred
+scale, every loop iteration. The compositor's half of R4d is done; the
+seat is next.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

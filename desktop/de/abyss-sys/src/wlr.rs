@@ -18,6 +18,27 @@ macro_rules! opaque {
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
 opaque!(wlr_xdg_decoration_manager_v1, wlr_xdg_toplevel_decoration_v1);
 opaque!(wlr_session_lock_manager_v1, wlr_session_lock_v1, wlr_session_lock_surface_v1);
+opaque!(wlr_output_manager_v1, wlr_output_configuration_v1, wlr_output_configuration_head_v1, wlr_idle_inhibit_manager_v1, wlr_idle_inhibitor_v1, wlr_idle_notifier_v1, wlr_seat);
+
+/// tw-access.h's `struct tw_head_ask`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct HeadAsk {
+    output: *mut wlr_output,
+    pub enabled: bool,
+    pub mode_width: i32,
+    pub mode_height: i32,
+    pub refresh_mhz: i32,
+    pub x: i32,
+    pub y: i32,
+    pub scale: f64,
+}
+
+impl HeadAsk {
+    pub fn output(&self) -> Option<Output> {
+        Output::from_raw(self.output)
+    }
+}
 opaque!(wlr_compositor, wlr_xdg_shell, wlr_xdg_toplevel, wlr_xdg_popup, wlr_layer_shell_v1, wlr_layer_surface_v1, wlr_foreign_toplevel_manager_v1, wlr_foreign_toplevel_handle_v1, wlr_xdg_activation_v1, wlr_output_layout);
 
 /// tw-access.h's `struct tw_layer_request`: what a layer surface asks for.
@@ -228,6 +249,30 @@ unsafe extern "C" {
     fn tw_session_lock_manager_global(m: *const wlr_session_lock_manager_v1) -> *const c_void;
     fn tw_lock_surface_surface(s: *const wlr_session_lock_surface_v1) -> *mut wlr_surface;
     fn tw_lock_surface_output(s: *const wlr_session_lock_surface_v1) -> *mut wlr_output;
+    fn tw_output_manager_v1_on_apply(o: *mut wlr_output_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_output_manager_v1_on_test(o: *mut wlr_output_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_idle_inhibit_manager_v1_on_new_inhibitor(o: *mut wlr_idle_inhibit_manager_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_idle_inhibitor_v1_on_destroy(o: *mut wlr_idle_inhibitor_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_head_read(h: *const wlr_output_configuration_head_v1, out: *mut HeadAsk);
+    fn tw_head_try(h: *mut wlr_output_configuration_head_v1, commit: bool) -> bool;
+    fn tw_output_manager_publish(m: *mut wlr_output_manager_v1, outputs: *mut *mut wlr_output, x: *const i32, y: *const i32, scale: *const f64, n: usize);
+    fn tw_output_state_set_scale(s: *mut wlr_output_state, scale: f64);
+    fn tw_output_config_heads(c: *mut wlr_output_configuration_v1, out: *mut *mut wlr_output_configuration_head_v1, max: usize) -> usize;
+    fn tw_idle_inhibitor_surface(i: *const wlr_idle_inhibitor_v1) -> *mut wlr_surface;
+    fn wlr_output_manager_v1_create(d: *mut wl_display) -> *mut wlr_output_manager_v1;
+    fn wlr_output_configuration_v1_send_succeeded(c: *mut wlr_output_configuration_v1);
+    fn wlr_output_configuration_v1_send_failed(c: *mut wlr_output_configuration_v1);
+    fn wlr_output_configuration_v1_destroy(c: *mut wlr_output_configuration_v1);
+    fn wlr_idle_inhibit_v1_create(d: *mut wl_display) -> *mut wlr_idle_inhibit_manager_v1;
+    fn wlr_idle_notifier_v1_create(d: *mut wl_display) -> *mut wlr_idle_notifier_v1;
+    fn wlr_idle_notifier_v1_notify_activity(n: *mut wlr_idle_notifier_v1, s: *mut wlr_seat);
+    fn wlr_idle_notifier_v1_set_inhibited(n: *mut wlr_idle_notifier_v1, on: bool);
+    fn wlr_surface_get_root_surface(s: *mut wlr_surface) -> *mut wlr_surface;
+    fn wlr_fractional_scale_v1_notify_scale(s: *mut wlr_surface, scale: f64);
+    fn tw_syncobj_unsupported(r: *const wlr_renderer, b: *const wlr_backend) -> c_int;
+    fn tw_syncobj_create(d: *mut wl_display, r: *mut wlr_renderer) -> bool;
+    fn tw_syncobj_arm_release(s: *mut wlr_surface) -> bool;
+    fn tw_syncobj_acquire(s: *mut wlr_surface, t: *mut *mut wlr_drm_syncobj_timeline, point: *mut u64) -> bool;
     fn wlr_session_lock_manager_v1_create(d: *mut wl_display) -> *mut wlr_session_lock_manager_v1;
     fn wlr_session_lock_v1_destroy(l: *mut wlr_session_lock_v1);
     fn wlr_session_lock_v1_send_locked(l: *mut wlr_session_lock_v1);
@@ -383,6 +428,22 @@ handle!(Decoration, wlr_xdg_toplevel_decoration_v1);
 handle!(LockManager, wlr_session_lock_manager_v1);
 handle!(Lock, wlr_session_lock_v1);
 handle!(LockSurface, wlr_session_lock_surface_v1);
+handle!(OutputManager, wlr_output_manager_v1);
+handle!(
+    /// A configuration a client asked to test or apply. Answer it, then
+    /// `destroy` it.
+    OutputConfig,
+    wlr_output_configuration_v1
+);
+handle!(ConfigHead, wlr_output_configuration_head_v1);
+handle!(IdleInhibitManager, wlr_idle_inhibit_manager_v1);
+handle!(IdleInhibitor, wlr_idle_inhibitor_v1);
+handle!(IdleNotifier, wlr_idle_notifier_v1);
+handle!(
+    /// A wlr_seat (the seat's own, R4e).
+    Seat,
+    wlr_seat
+);
 
 // MARK: listeners
 
@@ -638,6 +699,9 @@ impl OutputState {
     pub fn set_mode(&mut self, m: Mode) {
         unsafe { wlr_output_state_set_mode(self.0.as_ptr(), m.0.as_ptr()) }
     }
+    pub fn set_scale(&mut self, scale: f64) {
+        unsafe { tw_output_state_set_scale(self.0.as_ptr(), scale) }
+    }
     /// The buffer a render pass left here.
     pub fn buffer(&self) -> Option<Buffer> {
         Buffer::from_raw(unsafe { tw_output_state_buffer(self.0.as_ptr()) })
@@ -829,6 +893,23 @@ impl Surface {
     signal!(on_unmap, tw_surface_on_unmap, wlr_surface, ||);
     signal!(on_commit, tw_surface_on_commit, wlr_surface, ||);
     signal!(on_destroy, tw_surface_on_destroy, wlr_surface, ||);
+    /// The root of the tree it is in (itself, unless a subsurface).
+    pub fn root(self) -> Surface {
+        Surface::from_raw(unsafe { wlr_surface_get_root_surface(self.0.as_ptr()) }).unwrap_or(self)
+    }
+    /// fractional-scale-v1's preferred scale (U.8); sent only on a change.
+    pub fn notify_fractional_scale(self, scale: f64) {
+        unsafe { wlr_fractional_scale_v1_notify_scale(self.0.as_ptr(), scale) }
+    }
+    /// A new buffer with an acquire point: arm its release (U.3b).
+    pub fn arm_release(self) -> bool {
+        unsafe { tw_syncobj_arm_release(self.0.as_ptr()) }
+    }
+    /// Its acquire point, for the renderer to wait on.
+    pub fn acquire_point(self) -> Option<(Timeline, u64)> {
+        let (mut t, mut p) = (std::ptr::null_mut(), 0u64);
+        unsafe { tw_syncobj_acquire(self.0.as_ptr(), &mut t, &mut p) }.then(|| (Timeline::from_raw(t), p)).and_then(|(t, p)| t.map(|t| (t, p)))
+    }
     /// Whether the commit just made attached a buffer.
     pub fn committed_buffer(self) -> bool {
         unsafe { tw_surface_committed_buffer(self.0.as_ptr()) }
@@ -901,6 +982,25 @@ pub mod globals {
     pub fn session_lock_manager(d: &Display) -> Option<LockManager> {
         LockManager::from_raw(unsafe { wlr_session_lock_manager_v1_create(d.0.as_ptr()) })
     }
+    /// linux-drm-syncobj-v1 (U.3b), where both halves can be kept:
+    /// Err says why not ("the renderer…", "the backend…", "the render node…").
+    pub fn explicit_sync(d: &Display, r: Renderer, b: Backend) -> Result<(), &'static str> {
+        match unsafe { tw_syncobj_unsupported(r.0.as_ptr(), b.0.as_ptr()) } {
+            1 => return Err("this renderer takes no timeline waits (pixman?); GPU clients use implicit sync"),
+            2 => return Err("this backend's output commits take no timelines"),
+            _ => {}
+        }
+        if unsafe { tw_syncobj_create(d.0.as_ptr(), r.0.as_ptr()) } { Ok(()) } else { Err("the render node refused a syncobj manager") }
+    }
+    pub fn output_manager(d: &Display) -> Option<OutputManager> {
+        OutputManager::from_raw(unsafe { wlr_output_manager_v1_create(d.0.as_ptr()) })
+    }
+    pub fn idle_inhibit(d: &Display) -> Option<IdleInhibitManager> {
+        IdleInhibitManager::from_raw(unsafe { wlr_idle_inhibit_v1_create(d.0.as_ptr()) })
+    }
+    pub fn idle_notifier(d: &Display) -> Option<IdleNotifier> {
+        IdleNotifier::from_raw(unsafe { wlr_idle_notifier_v1_create(d.0.as_ptr()) })
+    }
     pub fn xdg_output_manager(d: &Display, l: OutputLayout) -> bool {
         !unsafe { wlr_xdg_output_manager_v1_create(d.0.as_ptr(), l.0.as_ptr()) }.is_null()
     }
@@ -908,6 +1008,9 @@ pub mod globals {
 
 impl Compositor {
     signal!(on_new_surface, tw_compositor_on_new_surface, wlr_compositor, ||);
+    signal!(
+        /// The same signal, with the surface it made.
+        on_new_surface_with, tw_compositor_on_new_surface, wlr_compositor, |d| -> Surface { Surface(NonNull::new(d as *mut wlr_surface).unwrap()) });
 }
 
 impl OutputLayout {
@@ -1135,6 +1238,68 @@ impl LockSurface {
     }
     pub fn configure(self, w: u32, h: u32) {
         unsafe { wlr_session_lock_surface_v1_configure(self.0.as_ptr(), w, h) };
+    }
+}
+
+impl OutputManager {
+    signal!(on_apply, tw_output_manager_v1_on_apply, wlr_output_manager_v1, |d| -> OutputConfig { OutputConfig(NonNull::new(d as *mut wlr_output_configuration_v1).unwrap()) });
+    signal!(on_test, tw_output_manager_v1_on_test, wlr_output_manager_v1, |d| -> OutputConfig { OutputConfig(NonNull::new(d as *mut wlr_output_configuration_v1).unwrap()) });
+    /// Tell every client what is true now: each output at its place and scale.
+    pub fn publish(self, heads: &[(Output, i32, i32, f64)]) {
+        let mut outs: Vec<*mut wlr_output> = heads.iter().map(|h| h.0.0.as_ptr()).collect();
+        let xs: Vec<i32> = heads.iter().map(|h| h.1).collect();
+        let ys: Vec<i32> = heads.iter().map(|h| h.2).collect();
+        let ss: Vec<f64> = heads.iter().map(|h| h.3).collect();
+        unsafe { tw_output_manager_publish(self.0.as_ptr(), outs.as_mut_ptr(), xs.as_ptr(), ys.as_ptr(), ss.as_ptr(), heads.len()) }
+    }
+}
+
+impl OutputConfig {
+    pub fn heads(self) -> Vec<ConfigHead> {
+        let mut v = vec![std::ptr::null_mut(); 32];
+        let n = unsafe { tw_output_config_heads(self.0.as_ptr(), v.as_mut_ptr(), v.len()) }.min(32);
+        v[..n].iter().filter_map(|p| ConfigHead::from_raw(*p)).collect()
+    }
+    pub fn send_succeeded(self) {
+        unsafe { wlr_output_configuration_v1_send_succeeded(self.0.as_ptr()) }
+    }
+    pub fn send_failed(self) {
+        unsafe { wlr_output_configuration_v1_send_failed(self.0.as_ptr()) }
+    }
+    pub fn destroy(self) {
+        unsafe { wlr_output_configuration_v1_destroy(self.0.as_ptr()) }
+    }
+}
+
+impl ConfigHead {
+    pub fn ask(self) -> HeadAsk {
+        let mut a = HeadAsk { output: std::ptr::null_mut(), enabled: false, mode_width: 0, mode_height: 0, refresh_mhz: 0, x: 0, y: 0, scale: 1.0 };
+        unsafe { tw_head_read(self.0.as_ptr(), &mut a) };
+        a
+    }
+    /// Its state applied to its output: tested, or committed.
+    pub fn try_state(self, commit: bool) -> bool {
+        unsafe { tw_head_try(self.0.as_ptr(), commit) }
+    }
+}
+
+impl IdleInhibitManager {
+    signal!(on_new_inhibitor, tw_idle_inhibit_manager_v1_on_new_inhibitor, wlr_idle_inhibit_manager_v1, |d| -> IdleInhibitor { IdleInhibitor(NonNull::new(d as *mut wlr_idle_inhibitor_v1).unwrap()) });
+}
+
+impl IdleInhibitor {
+    signal!(on_destroy, tw_idle_inhibitor_v1_on_destroy, wlr_idle_inhibitor_v1, ||);
+    pub fn surface(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_idle_inhibitor_surface(self.0.as_ptr()) })
+    }
+}
+
+impl IdleNotifier {
+    pub fn notify_activity(self, seat: Seat) {
+        unsafe { wlr_idle_notifier_v1_notify_activity(self.0.as_ptr(), seat.0.as_ptr()) }
+    }
+    pub fn set_inhibited(self, on: bool) {
+        unsafe { wlr_idle_notifier_v1_set_inhibited(self.0.as_ptr(), on) }
     }
 }
 

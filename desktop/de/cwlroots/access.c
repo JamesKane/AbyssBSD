@@ -44,6 +44,10 @@ TW_SIGNAL(session_lock_v1, new_surface)
 TW_SIGNAL(session_lock_v1, unlock)
 TW_SIGNAL(session_lock_v1, destroy)
 TW_SIGNAL(session_lock_surface_v1, destroy)
+TW_SIGNAL(output_manager_v1, apply)
+TW_SIGNAL(output_manager_v1, test)
+TW_SIGNAL(idle_inhibit_manager_v1, new_inhibitor)
+TW_SIGNAL(idle_inhibitor_v1, destroy)
 #undef TW_SIGNAL
 
 const char *tw_output_name(const struct wlr_output *o) { return o->name; }
@@ -232,3 +236,74 @@ void tw_decoration_server_side(struct wlr_xdg_toplevel_decoration_v1 *d) {
 const struct wl_global *tw_session_lock_manager_global(const struct wlr_session_lock_manager_v1 *m) { return m->global; }
 struct wlr_surface *tw_lock_surface_surface(const struct wlr_session_lock_surface_v1 *s) { return s->surface; }
 struct wlr_output *tw_lock_surface_output(const struct wlr_session_lock_surface_v1 *s) { return s->output; }
+
+int tw_syncobj_unsupported(const struct wlr_renderer *r, const struct wlr_backend *b) {
+    if (!r->features.timeline) return 1;
+    if (!b->features.timeline) return 2;
+    return 0;
+}
+
+bool tw_syncobj_create(struct wl_display *d, struct wlr_renderer *r) {
+    int fd = wlr_renderer_get_drm_fd(r);
+    return fd >= 0 && wlr_linux_drm_syncobj_manager_v1_create(d, 1, fd) != NULL;
+}
+
+bool tw_syncobj_arm_release(struct wlr_surface *s) {
+    if (!(s->current.committed & WLR_SURFACE_STATE_BUFFER) || !s->buffer) return false;
+    struct wlr_linux_drm_syncobj_surface_v1_state *st = wlr_linux_drm_syncobj_v1_get_surface_state(s);
+    if (!st || !st->acquire_timeline) return false;
+    return wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer(st, &s->buffer->base);
+}
+
+bool tw_syncobj_acquire(struct wlr_surface *s, struct wlr_drm_syncobj_timeline **timeline, uint64_t *point) {
+    struct wlr_linux_drm_syncobj_surface_v1_state *st = wlr_linux_drm_syncobj_v1_get_surface_state(s);
+    if (!st || !st->acquire_timeline) return false;
+    *timeline = st->acquire_timeline;
+    *point = st->acquire_point;
+    return true;
+}
+
+void tw_head_read(const struct wlr_output_configuration_head_v1 *h, struct tw_head_ask *out) {
+    const struct wlr_output_head_v1_state *st = &h->state;
+    out->output = st->output;
+    out->enabled = st->enabled;
+    out->mode_width = st->custom_mode.width;
+    out->mode_height = st->custom_mode.height;
+    out->refresh_mhz = st->custom_mode.refresh;
+    if (st->mode) {
+        out->mode_width = st->mode->width;
+        out->mode_height = st->mode->height;
+        out->refresh_mhz = st->mode->refresh;
+    }
+    out->x = st->x;
+    out->y = st->y;
+    out->scale = st->scale;
+}
+
+bool tw_head_try(struct wlr_output_configuration_head_v1 *h, bool commit) {
+    if (!h->state.output) return false;
+    struct wlr_output_state os;
+    wlr_output_state_init(&os);
+    wlr_output_head_v1_state_apply(&h->state, &os);
+    bool ok = commit ? wlr_output_commit_state(h->state.output, &os) : wlr_output_test_state(h->state.output, &os);
+    wlr_output_state_finish(&os);
+    return ok;
+}
+
+void tw_output_manager_publish(struct wlr_output_manager_v1 *m, struct wlr_output **outputs,
+                               const int32_t *x, const int32_t *y, const double *scale, size_t n) {
+    struct wlr_output_configuration_v1 *config = wlr_output_configuration_v1_create();
+    if (!config) return;
+    for (size_t i = 0; i < n; i++) {
+        struct wlr_output_configuration_head_v1 *head = wlr_output_configuration_head_v1_create(config, outputs[i]);
+        if (!head) continue;
+        head->state.x = x[i];
+        head->state.y = y[i];
+        head->state.scale = (float)scale[i];
+    }
+    wlr_output_manager_v1_set_configuration(m, config); /* takes ownership */
+}
+
+void tw_output_state_set_scale(struct wlr_output_state *s, double scale) { wlr_output_state_set_scale(s, (float)scale); }
+
+struct wlr_surface *tw_idle_inhibitor_surface(const struct wlr_idle_inhibitor_v1 *i) { return i->surface; }
