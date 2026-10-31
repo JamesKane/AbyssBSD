@@ -357,6 +357,12 @@ impl Window {
         Popup::below(&self.backing.display, Parent::Xdg(self.xdg_surface), self.scale(), anchor, width, height, delegate)
     }
 
+    /// Ask the compositor to raise it (xdg-activation); false without the
+    /// protocol.
+    pub fn activate(&self) -> bool {
+        !self.backing.is_torn_down() && self.backing.display.activate(self.surface)
+    }
+
     pub fn set_title(&self, title: &str) {
         if !self.backing.is_torn_down() {
             xdg_toplevel::set_title(self.toplevel, title)

@@ -64,6 +64,20 @@ icons@2x|icons@2x|aquademo:icons|2|
 trench-icons|trench-icons|aquademo:icons|1|ABYSS_THEME=trench
 svg-beacon@2x|svg-beacon@2x|aquademo:icons|2|AQUA_DRAWLIST=abyss/tests/svg/beacon.dl
 wallpaper|wallpaper|aquademo:wallpaper|1|
+finder|finder|aquademo:finder|1|
+finder-list|finder-list|aquademo:finder|1|AQUA_FINDER_VIEW=list
+finder@2x|finder@2x|aquademo:finder|2|
+finder-rename|finder-rename|aquademo:finder|1|AQUA_FINDER_STATE=rename
+finder-list-rename@2x|finder-list-rename@2x|aquademo:finder|2|AQUA_FINDER_VIEW=list AQUA_FINDER_STATE=rename
+finder-back|finder-back|aquademo:finder|1|AQUA_FINDER_STATE=back
+finder-list-back|finder-list-back|aquademo:finder|1|AQUA_FINDER_VIEW=list AQUA_FINDER_STATE=back
+finder-applications|finder-applications|aquademo:finder|1|AQUA_FINDER_PATH=applications
+trench-finder|trench-finder|aquademo:finder|1|ABYSS_THEME=trench
+trench-finder-list|trench-finder-list|aquademo:finder|1|ABYSS_THEME=trench AQUA_FINDER_VIEW=list
+trench-finder-applications|trench-finder-applications|aquademo:finder|1|ABYSS_THEME=trench AQUA_FINDER_PATH=applications
+trench-finder-rename|trench-finder-rename|aquademo:finder|1|ABYSS_THEME=trench AQUA_FINDER_STATE=rename
+trench-hc-finder|trench-hc-finder|aquademo:finder|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=neon-hc
+trench-day-finder|trench-day-finder|aquademo:finder|1|ABYSS_THEME=trench ABYSS_THEME_SCHEME=daylight
 menubar|menubar|aquademo:menubar|1|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
 menubar@2x|menubar@2x|aquademo:menubar|2|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80
 menubar-system|menubar-system|aquademo:menubar|1|ABYSS_FAKE_VOLUME=60 ABYSS_FAKE_BATTERY=80 AQUA_MENUBAR_OPEN=0

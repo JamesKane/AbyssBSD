@@ -24,6 +24,8 @@ pub enum SceneKind {
     MenuBar,
     /// The Dock: a BOTTOM layer surface live; over the wallpaper in a PNG.
     Dock,
+    /// The Finder: its own application, many windows.
+    Finder,
 }
 
 impl SceneKind {
@@ -38,6 +40,7 @@ impl SceneKind {
             Some("wallpaper") => Some((SceneKind::Wallpaper, "Desktop", 800, 600)),
             Some("menubar") => Some((SceneKind::MenuBar, "Menu Bar", 800, 600)),
             Some("dock") => Some((SceneKind::Dock, "Dock", 800, 600)),
+            Some("finder") => Some((SceneKind::Finder, "Finder", 520, 400)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -117,6 +120,9 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             SceneKind::Widgets => {
                 crate::widgets::paint_widgets(&mut c, cw, ch, &crate::widgets::WidgetState::default(), Some(crate::widgets::WidgetFocus::Ok));
             }
+            SceneKind::Finder => {
+                crate::finder::paint_finder(&mut c, cw, ch, &finder_scene_state());
+            }
             SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock => {}
         }
         cr.restore();
@@ -124,6 +130,47 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
     }
     cs.flush();
     cs.write_png(path)
+}
+
+/// A fixed home folder, the same on any machine. AQUA_FINDER_PATH=
+/// applications pictures /Applications (the desktop's own, wearing the
+/// theme's icons, Utilities, and a port's bundle with no icon);
+/// AQUA_FINDER_VIEW=list the list; AQUA_FINDER_STATE "rename" (item 2's name
+/// edited, part selected, Back enabled) or "back" (Back held, the rename
+/// down to its caret).
+fn finder_scene_state() -> crate::finder::FinderState {
+    use crate::finder::{FinderEdit, FinderState};
+    use crate::finder_model::{finder_sample_entries, finder_sort, FinderEntry, FinderItemKind, FinderView};
+    let env = |k: &str| std::env::var(k).ok();
+    let apps = env("AQUA_FINDER_PATH").as_deref() == Some("applications");
+    let entries = if apps {
+        let mut v: Vec<FinderEntry> = app_bundles::BUILTIN_APPS.iter().filter(|b| b.folder == Some("")).map(|b| FinderEntry { icon_path: Some(format!("{}{}", crate::app_icon::THEME_PREFIX, b.theme_icon())), ..FinderEntry::new(&format!("{}.app", b.name), FinderItemKind::Application) }).collect();
+        v.push(FinderEntry::new("Utilities", FinderItemKind::Folder));
+        v.push(FinderEntry::new("Galculator.app", FinderItemKind::Application));
+        finder_sort(v)
+    } else {
+        finder_sample_entries()
+    };
+    let mut s = FinderState::new(if apps { "/Applications" } else { "/Users/abyss" }, entries);
+    s.selection = Some(2);
+    s.free_bytes = 39_600_000_000;
+    if env("AQUA_FINDER_VIEW").as_deref() == Some("list") {
+        s.view = FinderView::List
+    }
+    let name = s.entries[2].name.clone();
+    match env("AQUA_FINDER_STATE").as_deref() {
+        Some("rename") => {
+            s.can_go_back = true;
+            s.edit = Some(FinderEdit { index: 2, text: name, selected_prefix: 4 })
+        }
+        Some("back") => {
+            s.can_go_back = true;
+            s.back_pressed = true;
+            s.edit = Some(FinderEdit { index: 2, text: format!("{name} copy"), selected_prefix: 0 })
+        }
+        _ => {}
+    }
+    s
 }
 
 /// AQUA_AGENTS=STATE:N pictures N agent sessions in STATE (P18.13b): the

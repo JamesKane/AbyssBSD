@@ -153,6 +153,16 @@ pub fn local_timestamp() -> String {
     )
 }
 
+/// Bytes free to an unprivileged writer on the volume holding `path`.
+pub fn free_space(path: &str) -> Option<u64> {
+    let p = std::ffi::CString::new(path).ok()?;
+    let mut v: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(p.as_ptr(), &mut v) } != 0 {
+        return None;
+    }
+    Some(v.f_bavail as u64 * v.f_frsize as u64)
+}
+
 /// Now in local time: (hour 0…23, minute, weekday 0 = Sunday). A menu
 /// bar's clock.
 pub fn local_clock() -> Option<(i32, i32, i32)> {

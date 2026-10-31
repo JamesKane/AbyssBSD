@@ -65,6 +65,17 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Finder {
+            // The app owns its windows; this reference keeps them.
+            let finder = aqua::finder::FinderApp::new(&display, &tk, (w, h), true);
+            if !finder.open_initial_window(None) {
+                println!("AquaDemo: failed to create the Finder window.");
+                exit(1)
+            }
+            println!("AquaDemo: Finder is up ({}, {} mode).", aqua::finder::start_directory(), if finder.toolbar_visible() { "browser" } else { "spatial" });
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::Dock {
             let Some(_dock) = aqua::dock::Dock::new(&display, &tk) else {
                 println!("AquaDemo: failed to create the Dock (does the compositor offer wlr-layer-shell?).");

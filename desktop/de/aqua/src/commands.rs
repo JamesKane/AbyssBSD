@@ -2,7 +2,40 @@
 //! says, and where it sits, one function for paint and hit-test (§2.9).
 
 use aquadraw::tokens::ThemeTokens;
-use menu_model::{Command, Enablement, Menu, MenuItem};
+use menu_model::{Command, Enablement, Key, KeyEquivalent, Menu, MenuItem, Modifiers};
+use surface::{KeyEvent, KeyModifiers, KeySym};
+
+/// The key equivalent a press spells, or None for a key that cannot be one
+/// (Commands.swift). The character is the layout's keysym, lowercased, with
+/// Shift kept as a modifier: ⌘⇧N is `cmd('n', SHIFT)`. Caps Lock is
+/// ignored, as the compositor ignores it: a table that saw it would lose
+/// every shortcut while it is on.
+pub fn key_equivalent(keysym: u32, m: KeyModifiers) -> Option<KeyEquivalent> {
+    let key = match keysym {
+        KeySym::BACKSPACE => Key::Backspace,
+        KeySym::DELETE => Key::ForwardDelete,
+        KeySym::UP => Key::Up,
+        KeySym::DOWN => Key::Down,
+        KeySym::LEFT => Key::Left,
+        KeySym::RIGHT => Key::Right,
+        KeySym::ENTER => Key::Enter,
+        KeySym::ESCAPE => Key::Escape,
+        KeySym::TAB | KeySym::BACK_TAB => Key::Tab,
+        0x21..=0x7e => Key::Character(char::from_u32(keysym)?),
+        _ => return None,
+    };
+    let mut mods = Modifiers::NONE;
+    for (k, mm) in [(KeyModifiers::COMMAND, Modifiers::COMMAND), (KeyModifiers::SHIFT, Modifiers::SHIFT), (KeyModifiers::ALT, Modifiers::OPTION), (KeyModifiers::CONTROL, Modifiers::CONTROL)] {
+        if m.contains(k) {
+            mods = mods | mm
+        }
+    }
+    Some(KeyEquivalent::new(key, mods))
+}
+
+pub fn key_equivalent_of(e: &KeyEvent) -> Option<KeyEquivalent> {
+    key_equivalent(e.keysym, e.modifiers)
+}
 
 /// One row of a drawn menu.
 #[derive(Clone, Debug, PartialEq, Eq)]

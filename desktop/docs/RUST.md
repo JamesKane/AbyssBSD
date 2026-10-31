@@ -928,6 +928,19 @@ live-sway fails on the all-Swift tree as well (System Preferences never
 maps under sway), not this port's. AquaDemo stays out of rust-bins until
 every scene is ported.
 
+*R6d, the Finder.* Browser and spatial modes, icon and list views, inline
+rename, new folder, duplicate, copy, cut and paste through the system
+clipboard, drag and drop both ways, move to Trash, per-window Undo, the Go
+menu, type-select, contextual menus, its menu service (served from
+outside its cell, so a command that changes the menus says so after), and
+the portal's picker contract; the desktop hosts one and publishes its
+menus. Window gains `activate` (xdg-activation, for raising a spatial
+window). All 14 Finder goldens are identical (67 in the gate); 70 tests in
+aqua. Live, mixed: live-clipboard, -dnd, -gtk, -firefox, -portal,
+-portal-dbus, -menus, -session-gtk, -vocabulary, -grab, -textedit, -undo,
+-context, -menu-focus, -submenus, -window and -session green; live-menus
+and live-session-gtk, which waited for this, are green.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

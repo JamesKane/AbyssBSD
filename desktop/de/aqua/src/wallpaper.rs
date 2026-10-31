@@ -15,8 +15,8 @@
 //! The Desktop folder is `$ABYSS_DESKTOP_DIR`, else `$HOME/Desktop`.
 //!
 //! On a Mac the desktop *is* the Finder: a folder opened from it is a
-//! Finder window, in this process. Until the Finder is ported (R6) the
-//! opening is a hook the owner sets; a folder is logged as opened either way.
+//! Finder window, in this process, and the desktop publishes the Finder's
+//! menus.
 
 use crate::context_menu::open_context_menu;
 use crate::desktop_icons::{desktop_entries, desktop_index, paint_desktop_icons};
@@ -174,6 +174,8 @@ pub struct Wallpaper {
     state: RefCell<State>,
     watchers: RefCell<Vec<pool_config::Watcher>>,
     open_folder: RefCell<Option<OpenFolder>>,
+    /// The Finder the desktop is: windows opened from it are its.
+    finder: RefCell<Option<Rc<crate::finder::FinderApp>>>,
 }
 
 impl Wallpaper {
@@ -192,6 +194,7 @@ impl Wallpaper {
             state: RefCell::new(State { fill, entries: vec![], selection: None, pointer: (0.0, 0.0), last_click: None, context: None }),
             watchers: RefCell::default(),
             open_folder: RefCell::new(None),
+            finder: RefCell::new(None),
         });
         let pinned = std::env::var("AQUA_SCALE").ok().and_then(|s| s.parse::<i32>().ok()).filter(|v| *v > 0);
         let config = LayerConfig { layer: Layer::Background, namespace: "abyss.wallpaper".into(), anchor: anchor::ALL, exclusive_zone: -1, keyboard: KeyboardInteractivity::None, ..LayerConfig::default() };
@@ -200,6 +203,23 @@ impl Wallpaper {
         // A rewrite of desktop.ini repaints, with no polling.
         w.watch(display, None, |w| w.config_changed());
         if w.show_icons {
+            // **The desktop is the Finder** (P10.4): a Finder hosted here,
+            // which must not end the process with its last window, and whose
+            // menus the desktop's surface publishes, so the bar shows them
+            // when no window is frontmost.
+            let finder = crate::finder::FinderApp::new(display, toolkit, (520, 400), false);
+            if let (Some(name), Some(l)) = (finder.menu_service_name(), w.layer())
+                && l.publish_menus(&name)
+            {
+                log(&format!("the desktop publishes the Finder's menus at {name}"))
+            }
+            let f = Rc::downgrade(&finder);
+            w.on_open_folder(move |p| {
+                if let Some(f) = f.upgrade() {
+                    f.open_folder(p)
+                }
+            });
+            *w.finder.borrow_mut() = Some(finder);
             w.reload_icons();
             // The same on the Desktop folder: a file dropped there appears.
             if let Some(dir) = w.folder.clone() {
