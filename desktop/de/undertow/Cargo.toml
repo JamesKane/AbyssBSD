@@ -9,3 +9,4 @@ publish.workspace = true
 abyss-sys = { workspace = true, features = ["wlroots"] }
 libc.workspace = true
 pool-config = { path = "../poolconfig" }
+aquadraw = { path = "../aquadraw" }

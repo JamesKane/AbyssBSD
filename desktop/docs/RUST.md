@@ -657,6 +657,21 @@ calling it: wlroots raises it from inside commits and dispatches, where
 the painter may be borrowed. Five headless tests, the metronome driving a
 wlroots output among them.
 
+*R4c, second: the scene and the cursor's pictures* (`scene.rs`, `ebb.rs`,
+`cursor_images.rs`). The structure-of-arrays scene, its paint order, the
+lock, Ebb, island slides, the Shoals strip, subsurface trees, crops and
+transforms, explicit sync's waits, present-on-damage's signature, the
+cull, and the draw. Swift's scene reads the compositor; this one latches
+from a **`World` trait** the compositor will implement (R4d/e): windows,
+layers and popups as plain values, and calls for what only the compositor
+makes (a frame's texture, labels, Ebb, a slide). Ebb's slots name their
+window by id. The tests drive what needs no client (the lock colour, Ebb's
+dimming, the strip's plate and label, the cull across two displays at
+scale 2, the unchanged frame and the four things that redraw it) through a
+headless output, pixels read back; windows wait for clients (R4e). The
+cursor's textures are aquadraw's rasteriser, cached per shape, scale and
+theme; drawing the cursor is the Seat's (R4d).
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

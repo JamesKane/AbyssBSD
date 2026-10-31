@@ -4,7 +4,9 @@
 //! comes over a grown `cwlroots` (RUST.md §6.4).
 
 pub mod backend;
+pub mod cursor_images;
 pub mod displays;
+pub mod ebb;
 pub mod frame;
 pub mod geometry;
 pub mod idle;
@@ -13,6 +15,7 @@ pub mod metronome;
 pub mod output;
 pub mod places;
 pub mod recorder;
+pub mod scene;
 pub mod shoals;
 pub mod switch_latency;
 pub mod synthetic;
