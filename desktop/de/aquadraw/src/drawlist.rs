@@ -1,9 +1,11 @@
-//! DrawList.swift's model and parser. The whole vocabulary, except what needs
-//! a theme: colour tokens (`bodyText`) and metrics (`@name`) are parse errors
-//! here, and a `text` op must say `color=` and `size=` (the theme's bodyText
-//! and fontSize are its defaults in Swift).
+//! DrawList.swift's model and parser, the whole vocabulary. A colour token
+//! (`bodyText`) and a metric (`@name`) resolve to their index in the theme's
+//! key tables, read from whichever theme is loaded when the list runs; a
+//! `text` op without `color=` or `size=` draws in the theme's `bodyText` at
+//! its `fontSize`.
 
 use crate::color::{parse_double, parse_hex_u32, split_nonempty, theme_color, trim_spaces, Color};
+use crate::tokens::{ThemeTokens, METRIC_KEYS};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -86,6 +88,8 @@ pub enum Operand {
     Number(f64),
     Width,
     Height,
+    /// An index into the theme's metrics.
+    Metric(usize),
     Parameter(String),
     TextWidth(Box<Operand>, i32),
     Negate(Box<Operand>),
@@ -97,6 +101,8 @@ pub enum Operand {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ColorRef {
     Literal(Color),
+    /// An index into the theme's colours.
+    Token(usize),
     Parameter(String),
     Alpha(Box<ColorRef>, f64),
     Shift(Box<ColorRef>, f64),
@@ -178,7 +184,8 @@ pub struct TextOp {
     pub bold: bool,
     pub upper: bool,
     pub tracking: f64,
-    pub size: Operand,
+    /// None: the theme's fontSize.
+    pub size: Option<Operand>,
     pub color: ColorRef,
     pub placeholder: Option<ColorRef>,
     pub ghost: Option<Ghost>,
@@ -225,6 +232,7 @@ pub struct DrawList {
     pub hotspot: Option<(Operand, Operand)>,
 }
 
+#[derive(Clone, Default)]
 pub struct DrawListFile {
     pub lists: HashMap<String, DrawList>,
 }
@@ -235,6 +243,14 @@ impl DrawListFile {
     }
     pub fn get(&self, name: &str) -> Option<&DrawList> {
         self.lists.get(name)
+    }
+
+    /// These lists with `other`'s, `other`'s winning by name: a theme's
+    /// lists over Jaguar's.
+    pub fn merging(&self, other: &DrawListFile) -> DrawListFile {
+        let mut lists = self.lists.clone();
+        lists.extend(other.lists.iter().map(|(k, v)| (k.clone(), v.clone())));
+        DrawListFile { lists }
     }
 }
 
@@ -464,7 +480,10 @@ impl ExprParser<'_> {
             if c == '$' {
                 return Ok(Operand::Parameter(name));
             }
-            return Err(self.fail(&format!("@{name}: metrics need a theme, which this interpreter does not carry")));
+            return match ThemeTokens::metric_index(&name) {
+                Some(k) => Ok(Operand::Metric(k)),
+                None => Err(self.fail(&format!("@{name} is not a metric ({})", METRIC_KEYS.join(" ")))),
+            };
         }
         let name = self.identifier(false);
         match name.as_str() {
@@ -581,8 +600,10 @@ fn color(s: &str, line: usize) -> Result<ColorRef, DrawListError> {
     };
     let base = if name.starts_with('$') && name.chars().count() > 1 {
         ColorRef::Parameter(name[1..].to_string())
+    } else if let Some(k) = ThemeTokens::color_index(name) {
+        ColorRef::Token(k)
     } else {
-        return err(line, format!("{name} is not a colour (colour tokens need a theme, which this interpreter does not carry)"));
+        return err(line, format!("{name} is not a colour token"));
     };
     Ok(match alpha {
         Some(a) => ColorRef::Alpha(Box::new(base), a),
@@ -908,8 +929,8 @@ fn parse_text(args: &[String], line: usize) -> Result<Op, DrawListError> {
         bold: false,
         upper: false,
         tracking: 0.0,
-        size: Operand::Number(0.0),
-        color: ColorRef::Literal(Color::new(0.0, 0.0, 0.0, 0.0)),
+        size: None,
+        color: ColorRef::Token(ThemeTokens::color_index("bodyText").unwrap_or(0)),
         placeholder: None,
         ghost: None,
         ghost_alpha: 0.13,
@@ -917,7 +938,6 @@ fn parse_text(args: &[String], line: usize) -> Result<Op, DrawListError> {
         halo: None,
         halo_radius: Operand::Number(6.0),
     };
-    let (mut has_size, mut has_color) = (false, false);
     for opt in &args[3..] {
         match opt.as_str() {
             "left" => t.align = TextAlign::Left,
@@ -935,14 +955,8 @@ fn parse_text(args: &[String], line: usize) -> Result<Op, DrawListError> {
                         Some(n) => t.tracking = n,
                         None => return err(line, "tracking wants a number"),
                     },
-                    "size" => {
-                        t.size = operand(v, line)?;
-                        has_size = true
-                    }
-                    "color" => {
-                        t.color = color(v, line)?;
-                        has_color = true
-                    }
+                    "size" => t.size = Some(operand(v, line)?),
+                    "color" => t.color = color(v, line)?,
                     "placeholder" => t.placeholder = Some(color(v, line)?),
                     "ghost" => {
                         if v == "eights" {
@@ -967,12 +981,6 @@ fn parse_text(args: &[String], line: usize) -> Result<Op, DrawListError> {
                 }
             }
         }
-    }
-    if !has_color {
-        return err(line, "text without color= draws in the theme's bodyText, and this interpreter carries no theme");
-    }
-    if !has_size {
-        return err(line, "text without size= draws at the theme's fontSize, and this interpreter carries no theme");
     }
     Ok(Op::Text(Box::new(t)))
 }

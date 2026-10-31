@@ -75,6 +75,8 @@ pub struct AtGlyph {
     pub cluster: c_uint,
 }
 
+pub const OPERATOR_SOURCE: c_int = 1;
+pub const OPERATOR_OVER: c_int = 2;
 pub const FORMAT_ARGB32: c_int = 0;
 pub const FORMAT_A8: c_int = 2;
 const EXTEND_REPEAT: c_int = 1;
@@ -109,6 +111,7 @@ unsafe extern "C" {
     fn cairo_mask(cr: *mut cairo_t, p: *mut cairo_pattern_t);
     fn cairo_mask_surface(cr: *mut cairo_t, s: *mut cairo_surface_t, x: c_double, y: c_double);
     fn cairo_new_path(cr: *mut cairo_t);
+    fn cairo_set_operator(cr: *mut cairo_t, op: c_int);
     fn cairo_new_sub_path(cr: *mut cairo_t);
     fn cairo_close_path(cr: *mut cairo_t);
     fn cairo_move_to(cr: *mut cairo_t, x: c_double, y: c_double);
@@ -152,6 +155,9 @@ unsafe extern "C" {
     fn at_font_ascent_role(px: c_int, role: c_int) -> c_double;
     fn at_font_descent_role(px: c_int, role: c_int) -> c_double;
     fn at_font_set_role(role: c_int, family: *const c_char) -> c_int;
+    fn at_font_add_dir(dir: *const c_char);
+    fn at_font_role_family(role: c_int) -> *const c_char;
+    fn at_font_role_file(role: c_int) -> *const c_char;
 
     // de/cdraw
     fn cd_blur_a8(a: *mut u8, scratch: *mut u8, w: c_int, h: c_int, stride: c_int, radius: c_int);
@@ -179,6 +185,18 @@ impl Surface {
     pub fn write_png(&self, path: &str) -> bool {
         let Ok(p) = CString::new(path) else { return false };
         unsafe { cairo_surface_write_to_png(self.0, p.as_ptr()) == 0 }
+    }
+    /// An ARGB32 surface's `w`×`h` pixels, row-major without the stride's
+    /// padding (premultiplied, native-endian words). Flush first.
+    pub fn argb_pixels(&self, w: i32, h: i32) -> Vec<u32> {
+        let data = unsafe { cairo_image_surface_get_data(self.0) };
+        let (w, h) = (w.max(0) as usize, h.max(0) as usize);
+        if data.is_null() {
+            return vec![];
+        }
+        let words = self.stride() as usize / 4;
+        let rows = unsafe { std::slice::from_raw_parts(data as *const u32, words * h) };
+        (0..h).flat_map(|y| rows[y * words..y * words + w].iter().copied()).collect()
     }
     /// `cd_blur_a8` over this A8 surface's pixels, with a fresh scratch
     /// buffer of `w * h` bytes (as DrawList.swift allocates it).
@@ -346,6 +364,10 @@ impl Context {
     pub fn mask_surface(&self, s: &Surface, x: f64, y: f64) {
         unsafe { cairo_mask_surface(self.0, s.0, x, y) }
     }
+    /// cairo_operator_t: OPERATOR_SOURCE, OPERATOR_OVER.
+    pub fn set_operator(&self, op: c_int) {
+        unsafe { cairo_set_operator(self.0, op) }
+    }
     pub fn new_path(&self) {
         unsafe { cairo_new_path(self.0) }
     }
@@ -403,6 +425,20 @@ impl Drop for Context {
 
 pub fn font_init() -> bool {
     unsafe { at_font_init() != 0 }
+}
+
+/// Make a directory's font files known to fontconfig (a theme's fonts,
+/// P11.7), before any role is matched.
+pub fn font_add_dir(dir: &str) {
+    if let Ok(d) = CString::new(dir) {
+        unsafe { at_font_add_dir(d.as_ptr()) }
+    }
+}
+
+/// What a role resolved to: its family and the file it came from.
+pub fn font_role_resolved(role: i32) -> (String, String) {
+    let text = |p: *const c_char| if p.is_null() { "?".to_owned() } else { unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy().into_owned() };
+    unsafe { (text(at_font_role_family(role)), text(at_font_role_file(role))) }
 }
 
 /// at_font_set_role, as Theme.use reaches it through Text.useRoles.

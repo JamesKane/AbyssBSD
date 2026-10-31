@@ -7,3 +7,4 @@ publish.workspace = true
 
 [dependencies]
 abyss-sys.workspace = true
+pool-config = { path = "../poolconfig" }

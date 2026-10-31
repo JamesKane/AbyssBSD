@@ -2,14 +2,15 @@
 //! HarfBuzz runs painted with cairo-ft. The Swift statics (render scale,
 //! shape cache, face cache) live in `Text`, owned by the renderer.
 //!
-//! Not ported: the toy-text fallback (no font at all), and a theme's role
-//! case/tracking (`[fonts]` upper/tracking), which the aqua theme sets for
-//! no role.
+//! A theme's role case and tracking (`[fonts]` `chrome.upper`,
+//! `chrome.tracking`, P11.9) are applied while shaping, so a measurement and
+//! the drawing it lays out agree (§2.9). Not ported: the toy-text fallback
+//! (no font at all).
 
 use crate::color::Color;
 use crate::drawlist::Role;
 use abyss_sys::{self as ffi, AtGlyph, Context, FontFace, Glyph};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Style {
@@ -26,6 +27,9 @@ pub struct Text {
     pub render_scale: i32,
     shape_cache: HashMap<(String, i32, i32, i32), Vec<AtGlyph>>,
     face_cache: HashMap<i32, FontFace>,
+    /// Each role's case and tracking (em), from the theme.
+    upper_roles: BTreeSet<String>,
+    tracking_roles: BTreeMap<String, f64>,
 }
 
 const SHAPE_CACHE_CAP: usize = 1024;
@@ -36,7 +40,7 @@ impl Text {
         if !ffi::font_init() {
             return None;
         }
-        Some(Text { render_scale, shape_cache: HashMap::new(), face_cache: HashMap::new() })
+        Some(Text { render_scale, shape_cache: HashMap::new(), face_cache: HashMap::new(), upper_roles: BTreeSet::new(), tracking_roles: BTreeMap::new() })
     }
 
     /// Text.useRoles, for one theme's `[fonts]`: a mono role not found falls
@@ -48,6 +52,16 @@ impl Text {
             }
             self.shape_cache.clear();
         }
+    }
+
+    /// Text.useRoleStyle: a theme's case and tracking per role.
+    pub fn use_role_style(&mut self, upper: &BTreeSet<String>, tracking: &BTreeMap<String, f64>) {
+        if *upper == self.upper_roles && *tracking == self.tracking_roles {
+            return;
+        }
+        self.upper_roles = upper.clone();
+        self.tracking_roles = tracking.clone();
+        self.shape_cache.clear();
     }
 
     pub fn px(&self, size: f64) -> i32 {
@@ -62,7 +76,12 @@ impl Text {
         if let Some(g) = self.shape_cache.get(&key) {
             return g.clone();
         }
-        let glyphs = ffi::font_shape_role(s, px, style as i32, role as i32).unwrap_or_default();
+        let text = if self.upper_roles.contains(role.name()) { s.to_uppercase() } else { s.to_owned() };
+        let track = self.tracking_roles.get(role.name()).copied().unwrap_or(0.0) * f64::from(px);
+        let mut glyphs = ffi::font_shape_role(&text, px, style as i32, role as i32).unwrap_or_default();
+        if track != 0.0 {
+            glyphs.iter_mut().for_each(|g| g.x_advance += track);
+        }
         if self.shape_cache.len() >= SHAPE_CACHE_CAP {
             self.shape_cache.clear();
         }

@@ -605,6 +605,25 @@ undertow and a Swift toolkit") cannot be met without part of R5 first:
 the theme and the chrome layout, in Rust, before R4c draws a frame.
 `FrameMetrics` takes its two sizes as arguments until then.
 
+*The theme, pulled forward from R5 (2026-10-30).* `aquadraw` gains the
+theme engine: `tokens` (`ThemeTokens`, generated from Theme.swift's
+table: 121 colours, 62 metrics, 5 fonts, the chrome's gadgets),
+`theme` (ThemeLoader: the strict parse with Swift's wording, OKLCH
+mixes, schemes, bounded parameters, the search path, appearance.ini,
+draw/ and icons/, the compiled Jaguar lists), `legibility` (the floor,
+and the portal's palette), `chrome` (`window_chrome`, `chrome_hit`),
+`draw` (`paint`, `clip`, `paint_window_chrome`) and `cursor` (resolve,
+hotspot, draw, rasterise). Draw lists now resolve colour tokens and
+`@metrics`, and a `text` op without `color=`/`size=` takes the theme's.
+Two divergences: **the loaded theme is a value** (`Theme`, held by
+whoever draws and handed to its `Runner`) rather than Swift's global,
+and **the compiled Jaguar lists are the shipped files**, `include_str!`ed,
+so there is no generated JaguarLists to keep in step (the test checks
+that the list of files is the directory's). Held to five more goldens,
+pixel for pixel: `frame`, `frame-depth`, `trench-frame`, `cursors`,
+`cursors@2x`, now in `golden-rust.sh`; ThemeTests, ChromeTests and
+LegibilityTests ported. The XCursor writer stays for `abyss-theme` (R5).
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

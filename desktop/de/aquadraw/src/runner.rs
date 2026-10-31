@@ -6,6 +6,7 @@ use crate::color::{mix_oklch, Color};
 use crate::drawlist::*;
 use abyss_sys::{self as ffi, Context, Matrix, Pattern, Surface};
 use crate::text::{Style, Text};
+use crate::tokens::{ThemeTokens, COLOR_KEYS, METRIC_KEYS};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -67,6 +68,13 @@ struct HaloKey {
 
 pub struct Runner {
     pub text: Text,
+    /// The loaded theme's tokens by index (`ColorRef::Token`,
+    /// `Operand::Metric`), and its parameters, which a list reads as
+    /// `$name` when the widget passes none.
+    colors: Vec<Color>,
+    metrics: Vec<f64>,
+    font_size: f64,
+    theme_parameters: HashMap<String, f64>,
     glow_cache: HashMap<GlowKey, Surface>,
     halo_cache: HashMap<HaloKey, (Surface, f64, f64)>,
     noise_tiles: HashMap<u64, Surface>,
@@ -136,14 +144,45 @@ fn rounded_rect_bottom(cr: &Context, r: Rect, radius: f64) {
 }
 
 impl Runner {
+    /// A runner drawing with the compiled Jaguar until told otherwise.
     pub fn new(text: Text) -> Runner {
-        Runner {
+        let mut r = Runner {
             text,
+            colors: vec![],
+            metrics: vec![],
+            font_size: 0.0,
+            theme_parameters: HashMap::new(),
             glow_cache: HashMap::new(),
             halo_cache: HashMap::new(),
             noise_tiles: HashMap::new(),
             glows_computed: 0,
-        }
+        };
+        r.use_theme(&ThemeTokens::jaguar(), &HashMap::new());
+        r
+    }
+
+    /// Draw with `t` from now on (Theme.use's half that is the runner's):
+    /// its tokens, parameters, role families, case and tracking. Masks made
+    /// from the old theme's shapes and fonts go; noise tiles stay, a seed
+    /// and a strength being the same picture in every theme.
+    pub fn use_theme(&mut self, t: &ThemeTokens, parameters: &HashMap<String, f64>) {
+        self.colors = (0..COLOR_KEYS.len()).map(|i| t.color(i)).collect();
+        self.metrics = (0..METRIC_KEYS.len()).map(|i| t.metric(i)).collect();
+        self.font_size = t.font_size;
+        self.theme_parameters = parameters.clone();
+        self.glow_cache.clear();
+        self.halo_cache.clear();
+        self.text.use_role_style(&t.role_upper, &t.role_tracking);
+        self.text.use_roles(&[
+            (Role::Interface, t.font_interface.as_str()),
+            (Role::Chrome, t.font_chrome.as_str()),
+            (Role::Readout, t.font_readout.as_str()),
+            (Role::Mono, t.font_mono.as_str()),
+        ]);
+    }
+
+    fn parameter(&self, p: &str, ctx: &DrawContext) -> f64 {
+        ctx.parameters.get(p).or_else(|| self.theme_parameters.get(p)).copied().unwrap_or(0.0)
     }
 
     pub fn run(&mut self, list: &DrawList, cr: &Context, ctx: &DrawContext) {
@@ -284,6 +323,37 @@ impl Runner {
         cr.restore();
     }
 
+    /// Clip `cr` to the shape `list` describes (its shapes, the `and`s
+    /// included) and **leave the clip set**, for a caller that draws more
+    /// inside it (a window's gadgets and title inside its frame). The
+    /// caller saves and restores around it.
+    pub fn clip(&mut self, list: &DrawList, cr: &Context, ctx: &DrawContext) {
+        let (mut shape, mut more): (Option<&Shape>, Vec<&Shape>) = (None, vec![]);
+        for step in &list.steps {
+            match &step.op {
+                Op::Shape(s) => {
+                    shape = Some(s);
+                    more.clear();
+                }
+                Op::AndShape(s) => {
+                    if shape.is_none() {
+                        shape = Some(s)
+                    } else {
+                        more.push(s)
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(s) = shape else { return };
+        cr.save();
+        cr.translate(ctx.rect.x, ctx.rect.y);
+        // The path is in device space: it outlives the restore.
+        self.path(s, cr, ctx, &more);
+        cr.restore();
+        cr.clip();
+    }
+
     // MARK: operands and colours
 
     pub fn eval(&mut self, o: &Operand, ctx: &DrawContext) -> f64 {
@@ -291,8 +361,8 @@ impl Runner {
             Operand::Number(d) => *d,
             Operand::Width => ctx.rect.w,
             Operand::Height => ctx.rect.h,
-            // Swift falls back to Theme.parameters, which this carries none of.
-            Operand::Parameter(p) => ctx.parameters.get(p).copied().unwrap_or(0.0),
+            Operand::Metric(k) => self.metrics[*k],
+            Operand::Parameter(p) => self.parameter(p, ctx),
             Operand::TextWidth(size, role) => {
                 let sz = self.eval(size, ctx);
                 self.text.text_width(&ctx.label, sz, Style::Regular, Role::from_raw(*role))
@@ -328,6 +398,7 @@ impl Runner {
     pub fn resolve(&self, c: &ColorRef, ctx: &DrawContext) -> Color {
         match c {
             ColorRef::Literal(col) => *col,
+            ColorRef::Token(k) => self.colors[*k],
             ColorRef::Parameter(p) => ctx.colors.get(p).copied().unwrap_or(Color::new(0.0, 0.0, 0.0, 0.0)),
             ColorRef::Alpha(base, a) => self.resolve(base, ctx).with_a(*a),
             ColorRef::Shift(base, d) => {
@@ -341,7 +412,7 @@ impl Runner {
             }
             ColorRef::Fade(base, p) => {
                 let b = self.resolve(base, ctx);
-                b.with_a(b.a * ctx.parameters.get(p).copied().unwrap_or(0.0))
+                b.with_a(b.a * self.parameter(p, ctx))
             }
             ColorRef::Mix(a, b, t) => mix_oklch(self.resolve(a, ctx), self.resolve(b, ctx), *t),
         }
@@ -734,7 +805,10 @@ impl Runner {
         if t.upper {
             s = s.to_uppercase();
         }
-        let size = self.eval(&t.size, ctx);
+        let size = match &t.size {
+            Some(o) => self.eval(o, ctx),
+            None => self.font_size,
+        };
         let x = self.eval(&t.x, ctx);
         let y = self.eval(&t.y, ctx);
         let style = if t.bold { Style::Bold } else { Style::Regular };

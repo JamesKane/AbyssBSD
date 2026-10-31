@@ -10,9 +10,10 @@
 #
 # Each scene is drawn twice: to a PNG, and in a Wayland window that
 # window-shot.sh captures from a headless sway (needs sway and grim), both
-# held to the scene's one golden. Only `drawlist` so far: the scene needs no
-# theme. Each ported scene joins the list as it is ported, and the Swift
-# gate keeps every one.
+# held to the scene's one golden. The theme's scenes (`frame`, `cursors`)
+# are drawn to a PNG, with the theme chosen as golden.sh chooses it, and
+# only here: the guest has no themes/ yet. Each ported scene joins the list
+# as it is ported, and the Swift gate keeps every one.
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -26,11 +27,16 @@ mkdir -p "$work/home" "$work/cfg"
 cc -O1 "$root/abyss/tests/pngdiff.c" $(pkg-config --cflags --libs cairo) \
    -o "$work/pngdiff" || { echo "FAIL: could not build pngdiff"; exit 1; }
 
-# name | golden | how (png or window) | scale
-scenes='drawlist|drawlist|png|1
-drawlist@2x|drawlist@2x|png|2
-drawlist-window|drawlist|window|1
-drawlist-window@2x|drawlist@2x|window|2'
+# name | golden | how (png, window, or an example drawn to a PNG) | scale | env
+scenes='drawlist|drawlist|png|1|
+drawlist@2x|drawlist@2x|png|2|
+drawlist-window|drawlist|window|1|
+drawlist-window@2x|drawlist@2x|window|2|
+frame|frame|frame|1|
+frame-depth|frame-depth|frame|1|ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes
+trench-frame|trench-frame|frame|1|ABYSS_THEME=trench
+cursors|cursors|cursors|1|
+cursors@2x|cursors@2x|cursors|2|'
 
 if [ "$rv64" = 1 ]; then
   vm="$root/abyss/vm"
@@ -46,15 +52,19 @@ if [ "$rv64" = 1 ]; then
   rssh 'cat > ~/golden-rust/drawlist-sample.dl' < abyss/tests/drawlist-sample.dl
   rssh 'cat > ~/golden-rust/window-shot.sh' < abyss/tests/window-shot.sh
 else
-  cargo build -q --release --example drawlist --example window
+  cargo build -q --release --example drawlist --example window --example frame --example cursors
   bin="$root/target/release/examples"
   dir="$root/abyss/tests/golden/$(uname -s | tr '[:upper:]' '[:lower:]')"
 fi
 
-echo "$scenes" | while IFS='|' read -r name golden how scale; do
+echo "$scenes" | while IFS='|' read -r name golden how scale env; do
   out="$work/$name.png"
   # The scene's size in points, for the window's rectangle.
   size="520 200"
+  if [ "$rv64" = 1 ] && [ "$how" != png ] && [ "$how" != window ]; then
+    echo "  skip: $name (no themes/ in the guest yet)"
+    continue
+  fi
   if [ "$rv64" = 1 ]; then
     if [ "$how" = png ]; then
       rssh "cd ~/golden-rust && env -i HOME=\$PWD/home ABYSS_CONFIG_DIR=\$PWD/cfg LANG=C.UTF-8 TZ=UTC \
@@ -65,6 +75,10 @@ echo "$scenes" | while IFS='|' read -r name golden how scale; do
   elif [ "$how" = png ]; then
     env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" LANG=C.UTF-8 TZ=UTC \
       "$bin/drawlist" abyss/tests/drawlist-sample.dl "$out" "$scale" >/dev/null
+  elif [ "$how" != window ]; then
+    # shellcheck disable=SC2086 # env is words
+    env -i PATH="$PATH" HOME="$work/home" ABYSS_CONFIG_DIR="$work/cfg" LANG=C.UTF-8 TZ=UTC $env \
+      "$bin/$how" "$out" "$scale" 2>/dev/null
   else
     sh abyss/tests/window-shot.sh "$bin/window" abyss/tests/drawlist-sample.dl "$scale" $size "$out" || true
   fi
