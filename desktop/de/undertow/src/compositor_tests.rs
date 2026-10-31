@@ -37,7 +37,8 @@ fn rig_with(tag: &str, files: &[(&str, &str)]) -> Rig {
     }
     let layout = DisplayLayout { displays: vec![DisplayBox::new(&name, 0, 0, 640, 480)] };
     let socket = format!("undertow-test-{tag}-{}", std::process::id());
-    let c = Compositor::new(session, layout, Some(&dir), Some(&socket), Theme::default(), aquadraw::scene::runner(1)).unwrap();
+    let opts = Options { config_dir: Some(&dir), socket_name: Some(&socket), privileged_socket: None };
+    let c = Compositor::new(session, layout, opts, Theme::default(), aquadraw::scene::runner(1)).unwrap();
     assert_eq!(c.socket_name, socket);
     Rig { c, _dir: dir }
 }
@@ -378,4 +379,66 @@ fn shoals_are_made_joined_and_recalled() {
         t.xdg.send_close();
     }
     pump(c, || c.toplevels.borrow().is_empty());
+}
+
+/// The menus' policy, through the hooks menus.c calls: the bar is told the
+/// focused window's address, only when it changes; GTK's properties are an
+/// address only with menus to read; the desktop is the fallback; and
+/// window_at, lower and Force Quit answer as the compositor would.
+#[test]
+fn the_menu_bar_is_told_the_focused_windows_menus() {
+    use abyss_sys::wlr::menus::{GtkProperties, MenuHooks};
+    let dir = std::env::temp_dir().join(format!("undertow-priv-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let private = format!("{}/privileged", dir.display());
+    let session = Rc::new(WlrootsSession::headless(1, 640, 480, 60_000, false).unwrap());
+    let name = session.outputs()[0].name();
+    let socket = format!("undertow-test-menus-{}", std::process::id());
+    let opts = Options { config_dir: Some(&dir.to_string_lossy()), socket_name: Some(&socket), privileged_socket: Some(&private) };
+    let c = Compositor::new(session, DisplayLayout { displays: vec![DisplayBox::new(&name, 0, 0, 640, 480)] }, opts, Theme::default(), None).unwrap();
+    assert!(std::path::Path::new(&private).exists(), "the privileged socket");
+    let hooks = crate::menus::Hooks(Rc::downgrade(&c));
+
+    let (tx, _rx) = mpsc::channel();
+    let _a = client(&c.socket_name, "Doc", "org.test.edit", (100, 60), (1.0, 0.0, 0.0), 5.0, tx.clone());
+    assert!(pump(&c, || c.mapped_toplevels().len() == 1));
+    let doc = by_title(&c, "Doc");
+    assert_eq!(c.menus_current().app_id, "org.test.edit");
+    assert_eq!(c.menus_current().kind, crate::menus::Kind::None, "publishes no menus yet");
+
+    hooks.set_address(doc.surface, "abyss-menu:/run/edit.sock");
+    let f = c.menus_current();
+    assert_eq!((f.kind, f.address.as_str()), (crate::menus::Kind::Abyss, "abyss-menu:/run/edit.sock"));
+    let sent = c.menu_state.borrow().sent_count;
+    c.menus_focus_changed();
+    assert_eq!(c.menu_state.borrow().sent_count, sent, "nothing changed, nothing sent");
+
+    let _b = client(&c.socket_name, "Gimp", "org.test.gtk", (100, 60), (0.0, 1.0, 0.0), 5.0, tx);
+    assert!(pump(&c, || c.mapped_toplevels().len() == 2));
+    let gtk = by_title(&c, "Gimp");
+    hooks.set_gtk_properties(gtk.surface, GtkProperties { application_id: "org.test.gtk".into(), unique_bus_name: ":1.7".into(), menubar_path: "/org/test/menus/menubar".into(), ..GtkProperties::default() });
+    let f = c.menus_current();
+    assert_eq!(f.kind, crate::menus::Kind::Gtk);
+    assert_eq!(menu_model::GtkMenuAddress::from_encoded(&f.address).unwrap().bus_name, ":1.7");
+    hooks.set_gtk_properties(gtk.surface, GtkProperties { unique_bus_name: ":1.7".into(), ..GtkProperties::default() });
+    assert_eq!(c.menus_current().kind, crate::menus::Kind::None, "no menus to read: no address");
+
+    c.focus(&doc);
+    assert_eq!(c.menus_current().address, "abyss-menu:/run/edit.sock", "focus moved back");
+
+    let w = hooks.window_at(doc.x.get() + 5, doc.y.get() + 5).expect("a window there");
+    assert_eq!((w.title.as_str(), w.width, w.height), ("Doc", 100, 60));
+    assert!(hooks.window_at(-50, -50).is_none());
+    hooks.lower(doc.surface);
+    assert!(Rc::ptr_eq(&c.toplevels.borrow()[0], &doc), "the depth gadget, from a toolkit window");
+    assert!(c.force_quit("org.test.edit").is_empty(), "never ourselves (these clients are this process)");
+
+    for t in [doc, gtk] {
+        t.xdg.send_close();
+    }
+    pump(&c, || c.toplevels.borrow().is_empty());
+    assert_eq!(c.menus_current(), crate::menus::Focus::nothing());
+    drop(c);
+    let _ = std::fs::remove_dir_all(&dir);
 }

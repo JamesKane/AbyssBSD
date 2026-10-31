@@ -712,6 +712,18 @@ thread's** (its FreeType library and face table are globals, as Swift's
 FreeType. aquadraw's `Text` now claims CText for its thread, reentrantly,
 and is `!Send`; a program draws on one thread and never waits.
 
+*R4d, menus* (`menus.rs`, Menus.swift). menus.c and the protocols'
+generated code are built into abyss-sys's cwlroots as SwiftPM builds
+them; Rust mirrors `struct tw_menu_hooks` (ours) and trampolines it into a
+`MenuHooks` trait. The policy is ported: surface → address, the bar told
+on focus and address changes only when they differ, GTK's properties an
+address only with menus to read, the desktop's as the fallback, the
+bar's islands and shoals, Force Quit (never undertow itself), the depth
+gadget, `window_at`, the privileged socket and jails. `Compositor::new`
+takes an `Options` (config dir, socket, privileged socket). Tested through
+the hooks against real windows; a client of the protocols is Swift's
+until R5.
+
 **R5. The toolkit (L).** `aquadraw` (cairo through `cdraw`), `surface`
 (Wayland client), then `aqua`. Pass bar: **all 92 goldens match.** Cairo,
 FreeType and HarfBuzz are the same C libraries making the same calls, so an

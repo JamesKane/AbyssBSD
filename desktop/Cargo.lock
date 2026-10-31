@@ -498,6 +498,7 @@ dependencies = [
  "abyss-sys",
  "aquadraw",
  "libc",
+ "menu-model",
  "pool-config",
 ]
 

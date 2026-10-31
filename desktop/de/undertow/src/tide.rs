@@ -124,6 +124,7 @@ impl Compositor {
         } else if self.focused().is_some_and(|f| !self.is_on_active_island(&f)) {
             self.focus_topmost()
         }
+        self.menus_send_island(&d, None);
         log(&format!("island {d} {n} ({})", self.islands.borrow().name(n as i64)));
     }
 
@@ -175,6 +176,10 @@ impl Compositor {
         *self.islands.borrow_mut() = next.clone();
         for t in ts.iter().filter(|t| t.mapped.get()) {
             self.refresh_suspended(t)
+        }
+        let names: Vec<String> = self.layout.borrow().displays.iter().map(|d| d.name.clone()).collect();
+        for d in names {
+            self.menus_send_island(&d, None)
         }
         let names = if next.names.is_empty() { String::new() } else { format!(", named {}", next.names.join(",")) };
         log(&format!("islands.ini: {count} island(s), slide {}{names}", if next.animate { "on" } else { "off" }));

@@ -218,10 +218,21 @@ pub fn popup_surface_origin(parent: (i32, i32), parent_geometry: (i32, i32), pos
 
 type FocusHook = Box<dyn Fn(Option<&Rc<Toplevel>>)>;
 
+/// How a compositor is set up: where its settings live, and its sockets.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Options<'a> {
+    pub config_dir: Option<&'a str>,
+    /// Ask for this name (`wayland-1`); None takes the first free.
+    pub socket_name: Option<&'a str>,
+    /// Where the menu bar and lock screen connect (P10.3, P16.2c): named
+    /// like WAYLAND_DISPLAY, in $XDG_RUNTIME_DIR, or a path.
+    pub privileged_socket: Option<&'a str>,
+}
+
 /// The compositor: globals, a socket, and the lists of surfaces.
 pub struct Compositor {
     pub session: Rc<WlrootsSession>,
-    me: Weak<Compositor>,
+    pub(crate) me: Weak<Compositor>,
     pub layout: RefCell<DisplayLayout>,
     /// Each display's usable area: what is left once layer surfaces have
     /// reserved theirs.
@@ -265,6 +276,10 @@ pub struct Compositor {
     pub strip_shown: Cell<bool>,
     pub strip_labels: RefCell<HashMap<String, OwnedLabel>>,
     pub recalls: Cell<u64>,
+    /// The menu protocols (P10.3) and what the bars were told.
+    pub menus: RefCell<Option<wlr::menus::Menus>>,
+    pub menu_state: RefCell<crate::menus::MenuState>,
+    pub privileged_socket_name: Option<String>,
     last_id: Cell<u32>,
     cascade: Cell<i32>,
     orphaned_layers: RefCell<Vec<(Weak<Layer>, String)>>,
@@ -282,7 +297,8 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    pub fn new(session: Rc<WlrootsSession>, layout: DisplayLayout, config_dir: Option<&str>, socket_name: Option<&str>, theme: Theme, runner: Option<Runner>) -> Result<Rc<Compositor>, BackendError> {
+    pub fn new(session: Rc<WlrootsSession>, layout: DisplayLayout, opts: Options, theme: Theme, runner: Option<Runner>) -> Result<Rc<Compositor>, BackendError> {
+        let (config_dir, socket_name) = (opts.config_dir, opts.socket_name);
         let metrics = frame_metrics(&theme);
         let d = session.display();
         let renderer = session.renderer();
@@ -375,6 +391,9 @@ impl Compositor {
             strip_shown: Cell::new(false),
             strip_labels: RefCell::default(),
             recalls: Cell::new(0),
+            menus: RefCell::default(),
+            menu_state: RefCell::default(),
+            privileged_socket_name: opts.privileged_socket.map(str::to_owned),
             last_id: Cell::new(0),
             cascade: Cell::new(0),
             orphaned_layers: RefCell::default(),
@@ -447,6 +466,30 @@ impl Compositor {
             }));
         }
         *c.listeners.borrow_mut() = ls;
+
+        // Menus (P10.3): the manager for everyone, the bar's global only for
+        // clients that came in through the privileged socket (PHASE10 §6.1).
+        let m = wlr::menus::Menus::create(d, crate::menus::Hooks(Rc::downgrade(&c))).ok_or_else(|| BackendError::NoGlobals("abyss_menu_manager_v1".into()))?;
+        // Jailed clients (P18.3): what comes in through a jail's socket sees
+        // an allowlist.
+        if !m.enable_jails() {
+            log("no security-context manager: jails cannot be told apart");
+        }
+        if let Some(name) = opts.privileged_socket {
+            // Named like WAYLAND_DISPLAY and in the same directory, so a
+            // client reaches it with nothing but WAYLAND_DISPLAY=<name>.
+            let path = if name.starts_with('/') {
+                name.to_owned()
+            } else {
+                let dir = std::env::var("XDG_RUNTIME_DIR").ok().filter(|d| !d.is_empty()).ok_or(BackendError::NoSocket)?;
+                format!("{dir}/{name}")
+            };
+            m.add_privileged_socket(&path).map_err(|e| BackendError::PrivilegedSocket(path.clone(), e))?;
+            // A session with a bar can show GTK's menus in it, so GTK may
+            // stop drawing its own (PHASE10 §6.5). Without one it keeps them.
+            m.advertise_global_menus_to_gtk(true);
+        }
+        *c.menus.borrow_mut() = Some(m);
 
         Ok(c)
     }
@@ -563,11 +606,14 @@ impl Compositor {
                 t.describe()
             }
         }));
-        let (_, wt) = both();
+        let (wc, wt) = both();
         ls.extend(xdg.on_set_app_id(move || {
-            if let Some(t) = wt.upgrade() {
-                t.note_key();
-                t.describe()
+            let (Some(c), Some(t)) = (wc.upgrade(), wt.upgrade()) else { return };
+            t.note_key();
+            t.describe();
+            // The bar names the frontmost application by it (P10.3).
+            if c.focused().is_some_and(|f| Rc::ptr_eq(&f, &t)) {
+                c.menus_focus_changed()
             }
         }));
         *t.listeners.borrow_mut() = ls;
@@ -659,6 +705,7 @@ impl Compositor {
         if self.focused().is_some_and(|f| Rc::ptr_eq(&f, t)) {
             self.focus_topmost();
         }
+        self.menus_focus_changed();
     }
 
     /// Where a newly mapped window goes: centred, then cascaded, the Mac's
@@ -769,6 +816,8 @@ impl Compositor {
         *self.focused.borrow_mut() = Some(Rc::downgrade(t));
         t.xdg.set_activated(true);
         t.set_foreign_activated(true);
+        // And the menu bar, which shows whoever is frontmost (P10.3).
+        self.menus_focus_changed();
         if let Some(f) = &*self.focus_hook.borrow() {
             f(Some(t));
         }
@@ -779,9 +828,11 @@ impl Compositor {
         match self.mapped_toplevels().pop() {
             Some(t) => self.focus(&t),
             None => {
-                if let Some(old) = self.focused.borrow_mut().take().and_then(|w| w.upgrade()) {
+                let old = self.focused.borrow_mut().take().and_then(|w| w.upgrade());
+                if let Some(old) = old {
                     old.set_foreign_activated(false);
                 }
+                self.menus_focus_changed();
                 if let Some(f) = &*self.focus_hook.borrow() {
                     f(None);
                 }
@@ -1307,6 +1358,9 @@ impl Compositor {
 
 impl Drop for Compositor {
     fn drop(&mut self) {
+        // While the display, which the menu globals live on, is alive.
+        self.menu_state.borrow_mut().addresses_clear();
+        self.menus.borrow_mut().take();
         self.frames.borrow_mut().release();
         self.ebb_labels.borrow_mut().clear();
         self.strip_labels.borrow_mut().clear();

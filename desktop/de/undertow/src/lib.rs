@@ -13,6 +13,7 @@ pub mod frame;
 pub mod geometry;
 pub mod idle;
 pub mod keys;
+pub mod menus;
 pub mod metronome;
 pub mod output;
 pub mod places;

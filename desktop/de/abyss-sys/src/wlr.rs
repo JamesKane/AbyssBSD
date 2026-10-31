@@ -1090,6 +1090,284 @@ impl Activation {
         on_request_activate, tw_xdg_activation_v1_on_request_activate, wlr_xdg_activation_v1, |d| -> Option<Surface> { Surface::from_raw(unsafe { tw_activation_surface(d) }) });
 }
 
+/// The menu protocols undertow implements itself (cwlroots.h's "Menus",
+/// de/cwlroots/menus.c; PHASE10 P10.3): the plumbing is C, and what it
+/// means is the compositor's, through `MenuHooks`.
+pub mod menus {
+    use super::*;
+
+    opaque!(tw_menus, wl_resource, wl_client, wl_global, wlr_security_context_manager_v1);
+
+    type SetAddress = extern "C" fn(*mut c_void, *mut wlr_surface, *const c_char);
+    type Bound = extern "C" fn(*mut c_void, *mut wl_resource);
+    type GtkProps = extern "C" fn(*mut c_void, *mut wlr_surface, *const c_char, *const c_char, *const c_char, *const c_char, *const c_char, *const c_char);
+    type Str = extern "C" fn(*mut c_void, *const c_char);
+    type OnSurface = extern "C" fn(*mut c_void, *mut wlr_surface);
+    type WindowAt = extern "C" fn(*mut c_void, i32, i32, *mut i32, *mut *mut c_char, *mut *mut c_char) -> c_int;
+    type SwitchIsland = extern "C" fn(*mut c_void, *const c_char, u32);
+    type Activate = extern "C" fn(*mut c_void, u32);
+    type ShoalCommand = extern "C" fn(*mut c_void, *const c_char, u32);
+
+    /// cwlroots.h's `struct tw_menu_hooks`, in its order.
+    #[repr(C)]
+    struct RawHooks {
+        ctx: *mut c_void,
+        set_address: SetAddress,
+        menubar_bound: Bound,
+        set_gtk_properties: GtkProps,
+        force_quit: Str,
+        lower: OnSurface,
+        window_at: WindowAt,
+        list_islands: Bound,
+        switch_island: SwitchIsland,
+        activate_window: Activate,
+        shoal_command: ShoalCommand,
+    }
+
+    unsafe extern "C" {
+        fn tw_menus_create(d: *mut wl_display, h: *const RawHooks) -> *mut tw_menus;
+        fn tw_menus_destroy(m: *mut tw_menus);
+        fn tw_privileged_socket_add(m: *mut tw_menus, path: *const c_char) -> c_int;
+        fn tw_menus_add_privileged_global(m: *mut tw_menus, g: *const wl_global);
+        fn tw_menus_enable_jails(m: *mut tw_menus) -> *mut wlr_security_context_manager_v1;
+        fn tw_client_jail(m: *mut tw_menus, c: *mut wl_client, engine: *mut *const c_char, app: *mut *const c_char, instance: *mut *const c_char) -> bool;
+        fn tw_surface_client(s: *mut wlr_surface) -> *mut wl_client;
+        fn tw_menubar_send_focused(r: *mut wl_resource, kind: u32, address: *const c_char, app: *const c_char, jail: *const c_char);
+        fn tw_menubar_send_focused_all(m: *mut tw_menus, kind: u32, address: *const c_char, app: *const c_char, jail: *const c_char);
+        fn tw_menubar_count(m: *mut tw_menus) -> c_int;
+        fn tw_menubar_send_island(r: *mut wl_resource, display: *const c_char, island: u32, name: *const c_char, count: u32, main: u32);
+        fn tw_menubar_send_island_all(m: *mut tw_menus, display: *const c_char, island: u32, name: *const c_char, count: u32, main: u32);
+        fn tw_menubar_send_window(r: *mut wl_resource, id: u32, display: *const c_char, island: u32, app: *const c_char, title: *const c_char);
+        fn tw_menubar_send_window_pid(r: *mut wl_resource, id: u32, pid: c_int);
+        fn tw_menubar_send_islands_done(r: *mut wl_resource, names: *const c_char);
+        fn tw_menubar_send_shoal(r: *mut wl_resource, display: *const c_char, island: u32, index: u32, name: *const c_char, open: u32);
+        fn tw_gtk_set_global_menus(m: *mut tw_menus, on: bool);
+    }
+
+    /// What GTK says about a window's menus (gtk_surface1, P10.6).
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct GtkProperties {
+        pub application_id: String,
+        pub app_menu_path: String,
+        pub menubar_path: String,
+        pub window_object_path: String,
+        pub application_object_path: String,
+        pub unique_bus_name: String,
+    }
+
+    /// A topmost window, as `window_at` answers it: its box, frame included.
+    pub struct WindowAtAnswer {
+        pub x: i32,
+        pub y: i32,
+        pub width: i32,
+        pub height: i32,
+        pub app_id: String,
+        pub title: String,
+    }
+
+    /// What the menus' requests mean: the compositor's.
+    pub trait MenuHooks {
+        /// A client set (or, with "", cleared) the menu address of one of
+        /// its own surfaces.
+        fn set_address(&self, surface: Surface, address: &str);
+        /// A privileged client bound abyss_menubar_v1: send it the state.
+        fn menubar_bound(&self, bar: Menubar);
+        fn set_gtk_properties(&self, surface: Surface, p: GtkProperties);
+        /// The menu bar asked to force-quit an application (v2, P10.8).
+        fn force_quit(&self, app_id: &str);
+        /// A toolkit window's own depth gadget (abyss_window_manager_v1).
+        fn lower(&self, surface: Surface);
+        /// The topmost window at (x, y), for Grab (P15.6).
+        fn window_at(&self, x: i32, y: i32) -> Option<WindowAtAnswer>;
+        /// The bar's island menu (v3): answer with `send_window` for each
+        /// window, then `send_islands_done`.
+        fn list_islands(&self, bar: Menubar);
+        fn switch_island(&self, display: &str, island: u32);
+        fn activate_window(&self, id: u32);
+        /// Shoals (v4): one of the bar's verbs.
+        fn shoal_command(&self, verb: &str, arg: u32);
+    }
+
+    /// A bound abyss_menubar_v1.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Menubar(NonNull<wl_resource>);
+
+    fn s(p: *const c_char) -> String {
+        text(p).unwrap_or_default()
+    }
+
+    fn hooks<'a>(ctx: *mut c_void) -> &'a dyn MenuHooks {
+        unsafe { &**(ctx as *const Box<dyn MenuHooks>) }
+    }
+
+    extern "C" fn set_address(ctx: *mut c_void, surface: *mut wlr_surface, address: *const c_char) {
+        if let Some(sf) = Surface::from_raw(surface) {
+            hooks(ctx).set_address(sf, &s(address))
+        }
+    }
+    extern "C" fn menubar_bound(ctx: *mut c_void, r: *mut wl_resource) {
+        if let Some(r) = NonNull::new(r) {
+            hooks(ctx).menubar_bound(Menubar(r))
+        }
+    }
+    extern "C" fn set_gtk_properties(ctx: *mut c_void, surface: *mut wlr_surface, app: *const c_char, app_menu: *const c_char, menubar: *const c_char, window: *const c_char, app_path: *const c_char, bus: *const c_char) {
+        if let Some(sf) = Surface::from_raw(surface) {
+            hooks(ctx).set_gtk_properties(sf, GtkProperties { application_id: s(app), app_menu_path: s(app_menu), menubar_path: s(menubar), window_object_path: s(window), application_object_path: s(app_path), unique_bus_name: s(bus) })
+        }
+    }
+    extern "C" fn force_quit(ctx: *mut c_void, app: *const c_char) {
+        hooks(ctx).force_quit(&s(app))
+    }
+    extern "C" fn lower(ctx: *mut c_void, surface: *mut wlr_surface) {
+        if let Some(sf) = Surface::from_raw(surface) {
+            hooks(ctx).lower(sf)
+        }
+    }
+    extern "C" fn window_at(ctx: *mut c_void, x: i32, y: i32, b: *mut i32, app: *mut *mut c_char, title: *mut *mut c_char) -> c_int {
+        let Some(w) = hooks(ctx).window_at(x, y) else { return 0 };
+        if b.is_null() {
+            return 0;
+        }
+        // malloc'd, for the C to free.
+        let dup = |t: &str| unsafe { libc::strdup(cstr(t).as_ptr()) };
+        unsafe {
+            *b = w.x;
+            *b.add(1) = w.y;
+            *b.add(2) = w.width;
+            *b.add(3) = w.height;
+            if !app.is_null() {
+                *app = dup(&w.app_id);
+            }
+            if !title.is_null() {
+                *title = dup(&w.title);
+            }
+        }
+        1
+    }
+    extern "C" fn list_islands(ctx: *mut c_void, r: *mut wl_resource) {
+        if let Some(r) = NonNull::new(r) {
+            hooks(ctx).list_islands(Menubar(r))
+        }
+    }
+    extern "C" fn switch_island(ctx: *mut c_void, display: *const c_char, island: u32) {
+        hooks(ctx).switch_island(&s(display), island)
+    }
+    extern "C" fn activate_window(ctx: *mut c_void, id: u32) {
+        hooks(ctx).activate_window(id)
+    }
+    extern "C" fn shoal_command(ctx: *mut c_void, verb: *const c_char, arg: u32) {
+        hooks(ctx).shoal_command(&s(verb), arg)
+    }
+
+    /// The menu globals on a display, and the hooks they call. Destroyed on
+    /// drop, before the display.
+    pub struct Menus {
+        raw: NonNull<tw_menus>,
+        hooks: *mut Box<dyn MenuHooks>,
+    }
+
+    impl Menus {
+        pub fn create(d: &Display, h: impl MenuHooks + 'static) -> Option<Menus> {
+            let hooks: *mut Box<dyn MenuHooks> = Box::into_raw(Box::new(Box::new(h)));
+            let raw = RawHooks {
+                ctx: hooks as *mut c_void,
+                set_address,
+                menubar_bound,
+                set_gtk_properties,
+                force_quit,
+                lower,
+                window_at,
+                list_islands,
+                switch_island,
+                activate_window,
+                shoal_command,
+            };
+            match NonNull::new(unsafe { tw_menus_create(d.0.as_ptr(), &raw) }) {
+                Some(raw) => Some(Menus { raw, hooks }),
+                None => {
+                    drop(unsafe { Box::from_raw(hooks) });
+                    None
+                }
+            }
+        }
+        /// Listen on `path` (absolute) for privileged clients: they, and
+        /// only they, see abyss_menubar_v1. Err(errno).
+        pub fn add_privileged_socket(&self, path: &str) -> Result<(), i32> {
+            let rc = unsafe { tw_privileged_socket_add(self.raw.as_ptr(), cstr(path).as_ptr()) };
+            if rc == 0 { Ok(()) } else { Err(-rc) }
+        }
+        /// Offer a global (its address, as wlroots gives it) to the
+        /// privileged socket's clients only (P16.2c).
+        pub fn restrict_to_privileged(&self, global: *const c_void) {
+            unsafe { tw_menus_add_privileged_global(self.raw.as_ptr(), global as *const wl_global) }
+        }
+        /// Jailed clients (P18.3) see an allowlist. False with no
+        /// security-context manager.
+        pub fn enable_jails(&self) -> bool {
+            !unsafe { tw_menus_enable_jails(self.raw.as_ptr()) }.is_null()
+        }
+        /// The security context `surface`'s client came in through:
+        /// engine, app id, instance ("-" where unset).
+        pub fn jail(&self, surface: Surface) -> Option<(String, String, String)> {
+            let c = unsafe { tw_surface_client(surface.0.as_ptr()) };
+            if c.is_null() {
+                return None;
+            }
+            let (mut e, mut a, mut i) = (std::ptr::null(), std::ptr::null(), std::ptr::null());
+            if !unsafe { tw_client_jail(self.raw.as_ptr(), c, &mut e, &mut a, &mut i) } {
+                return None;
+            }
+            let t = |p| text(p).unwrap_or_else(|| "-".into());
+            Some((t(e), t(a), t(i)))
+        }
+        pub fn send_focused_all(&self, kind: u32, address: &str, app_id: &str, jail: &str) {
+            unsafe { tw_menubar_send_focused_all(self.raw.as_ptr(), kind, cstr(address).as_ptr(), cstr(app_id).as_ptr(), cstr(jail).as_ptr()) }
+        }
+        pub fn send_island_all(&self, display: &str, island: u32, name: &str, count: u32, main: bool) {
+            unsafe { tw_menubar_send_island_all(self.raw.as_ptr(), cstr(display).as_ptr(), island, cstr(name).as_ptr(), count, main as u32) }
+        }
+        pub fn menubar_count(&self) -> usize {
+            unsafe { tw_menubar_count(self.raw.as_ptr()) }.max(0) as usize
+        }
+        /// GTK stops drawing its own menubar only when this is on (§6.5).
+        pub fn advertise_global_menus_to_gtk(&self, on: bool) {
+            unsafe { tw_gtk_set_global_menus(self.raw.as_ptr(), on) }
+        }
+    }
+
+    impl Drop for Menus {
+        fn drop(&mut self) {
+            unsafe {
+                tw_menus_destroy(self.raw.as_ptr());
+                drop(Box::from_raw(self.hooks));
+            }
+        }
+    }
+
+    impl Menubar {
+        pub fn send_focused(self, kind: u32, address: &str, app_id: &str, jail: &str) {
+            unsafe { tw_menubar_send_focused(self.0.as_ptr(), kind, cstr(address).as_ptr(), cstr(app_id).as_ptr(), cstr(jail).as_ptr()) }
+        }
+        pub fn send_island(self, display: &str, island: u32, name: &str, count: u32, main: bool) {
+            unsafe { tw_menubar_send_island(self.0.as_ptr(), cstr(display).as_ptr(), island, cstr(name).as_ptr(), count, main as u32) }
+        }
+        pub fn send_window(self, id: u32, display: &str, island: u32, app_id: &str, title: &str, pid: Option<i32>) {
+            unsafe {
+                tw_menubar_send_window(self.0.as_ptr(), id, cstr(display).as_ptr(), island, cstr(app_id).as_ptr(), cstr(title).as_ptr());
+                // v6: whose it is, as Force Quit finds it (P10.8).
+                tw_menubar_send_window_pid(self.0.as_ptr(), id, pid.unwrap_or(-1));
+            }
+        }
+        pub fn send_shoal(self, display: &str, island: u32, index: u32, name: &str, open: u32) {
+            unsafe { tw_menubar_send_shoal(self.0.as_ptr(), cstr(display).as_ptr(), island, index, cstr(name).as_ptr(), open) }
+        }
+        /// The islands' names, tab-separated.
+        pub fn send_islands_done(self, names: &str) {
+            unsafe { tw_menubar_send_islands_done(self.0.as_ptr(), cstr(names).as_ptr()) }
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "wlr_tests.rs"]
 mod tests;

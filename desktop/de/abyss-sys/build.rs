@@ -177,10 +177,17 @@ fn main() {
     if env::var_os("CARGO_FEATURE_WLROOTS").is_some() {
         let cwlroots = de.join("cwlroots");
         let mut w = cc::Build::new();
-        for f in ["cwlroots.c", "access.c", "include/cwlroots.h", "include/tw-access.h"] {
+        for f in ["cwlroots.c", "access.c", "menus.c", "include/cwlroots.h", "include/tw-access.h"] {
             println!("cargo:rerun-if-changed={}", cwlroots.join(f).display());
         }
-        w.file(cwlroots.join("cwlroots.c")).file(cwlroots.join("access.c")).include(cwlroots.join("include"));
+        // And the menus (menus.c, P10.3) over the protocols' generated code,
+        // as SwiftPM builds CWlroots over CAbyssProtocols.
+        let protocols = de.join("cabyssprotocols");
+        w.file(cwlroots.join("cwlroots.c")).file(cwlroots.join("access.c")).file(cwlroots.join("menus.c")).include(cwlroots.join("include"));
+        for p in ["abyss-menu-v1-protocol.c", "abyss-window-v1-protocol.c", "gtk-shell-protocol.c"] {
+            println!("cargo:rerun-if-changed={}", protocols.join(p).display());
+            w.file(protocols.join(p));
+        }
         let wlroots = ["wlroots-0.20", "wayland-server", "pixman-1", "xkbcommon"];
         for flag in pkg_config_of(&["--cflags"], &wlroots) {
             if let Some(dir) = flag.strip_prefix("-I") {

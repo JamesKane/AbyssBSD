@@ -10,3 +10,4 @@ abyss-sys = { workspace = true, features = ["wlroots"] }
 libc.workspace = true
 pool-config = { path = "../poolconfig" }
 aquadraw = { path = "../aquadraw" }
+menu-model = { path = "../menumodel" }

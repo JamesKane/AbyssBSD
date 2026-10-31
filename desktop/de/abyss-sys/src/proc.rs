@@ -111,6 +111,11 @@ pub fn vt_activate(vt: i32) -> io::Result<()> {
 
 /// A pipe carrying the number of each of `sigs` as one byte, from a handler
 /// whose whole body is one write(2): how a poll loop hears SIGTERM.
+/// kill(2): `sig` to process `pid` (Force Quit's SIGKILL, P10.8).
+pub fn kill_pid(pid: i32, sig: i32) -> io::Result<()> {
+    if unsafe { libc::kill(pid, sig) } == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
 pub fn signal_pipe(sigs: &[i32]) -> io::Result<OwnedFd> {
     let fd = unsafe { ap_signal_pipe(sigs.as_ptr(), sigs.len() as c_int) };
     if fd < 0 { Err(io::Error::last_os_error()) } else { Ok(unsafe { OwnedFd::from_raw_fd(fd) }) }
