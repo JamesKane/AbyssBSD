@@ -127,6 +127,8 @@ activity@2x|activity@2x|aquademo:activity|2|
 diskutility|diskutility|aquademo:diskutility|1|
 diskutility@2x|diskutility@2x|aquademo:diskutility|2|
 systemprofiler|systemprofiler|aquademo:systemprofiler|1|
+notify|notify|aquademo:notify|1|
+trench-notify|trench-notify|aquademo:notify|1|ABYSS_THEME=trench
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

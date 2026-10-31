@@ -106,6 +106,18 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Notify {
+            let center = aqua::notify::NotifyCenter::new(&display, &tk);
+            if !center.start("notify") {
+                println!("AquaDemo: failed to bind the notify service.");
+                exit(1)
+            }
+            // No surface until a notification arrives: an empty OVERLAY
+            // surface would swallow clicks meant for the desktop.
+            println!("AquaDemo: notification centre is up (waiting for notifications).");
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::DiskUtility {
             let Some(_du) = aqua::diskutility::DiskUtility::new(&display, &tk) else {
                 println!("AquaDemo: failed to open Disk Utility.");

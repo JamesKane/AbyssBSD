@@ -27,6 +27,7 @@ pub mod login_window;
 pub mod menu;
 pub mod menubar;
 pub mod menubar_status;
+pub mod notify;
 pub mod prefs;
 pub mod scene;
 pub mod scroll;

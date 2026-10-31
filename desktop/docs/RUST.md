@@ -1030,6 +1030,13 @@ read; Copy and Refresh. abyss-sys gains `hostname`, `uname`,
 window full-bleed, identical (99 in the gate); live-systemprofiler is
 green on Linux, and its check against the machine runs on FreeBSD.
 
+*R6s, the notification centre.* The `notify` service, and toasts on an
+OVERLAY layer surface sized to the stack, made only while there are
+toasts and released when the last expires or is clicked away; never
+focused. The toast's geometry (wrap with elision, stack, hit, expiry)
+is pure. Both goldens are identical (101 in the gate); live-notify's
+six checks are green, a notification crossing the portal.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

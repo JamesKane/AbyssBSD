@@ -40,6 +40,9 @@ pub enum SceneKind {
     Activity,
     /// Disk Utility: disks, datasets, snapshots.
     DiskUtility,
+    /// The notification centre: an OVERLAY surface only while there are
+    /// toasts, and the `notify` service.
+    Notify,
 }
 
 impl SceneKind {
@@ -65,6 +68,7 @@ impl SceneKind {
             Some("grab") => Some((SceneKind::Grab, "Grab", 420, 150)),
             Some("activity") => Some((SceneKind::Activity, "Activity Monitor", 620, 360)),
             Some("diskutility") => Some((SceneKind::DiskUtility, "Disk Utility", 700, 440)),
+            Some("notify") => Some((SceneKind::Notify, "Notifications", 800, 600)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -178,6 +182,8 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
                 view.edit(|m| m.select(TextRange::new(TextPosition::new(2, 6), TextPosition::new(3, 9))));
                 crate::textedit::paint_textedit(&mut c, cw, ch, "Notes.txt — Edited", &mut view, Some("wraps"), false, true);
             }
+            // A sample stack: the toast without a live service to post into it.
+            SceneKind::Notify => crate::notify::paint_sample(&mut c, cw),
             // A fixed machine: one disk, a pool, a dataset with two snapshots.
             SceneKind::DiskUtility => {
                 crate::diskutility::paint_disk_utility(&mut c, cw, ch, &crate::diskutility::sample_view());
