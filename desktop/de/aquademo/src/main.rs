@@ -58,6 +58,24 @@ fn main() {
         display.run();
         exit(0)
     }
+    // "Are you sure…?": ABYSS_POWER_ASK is restart, shut-down or
+    // power-key (the default). A window, but no scene to render.
+    if scene.as_deref() == Some("powerdialog") {
+        let ask = env("ABYSS_POWER_ASK").and_then(|s| aqua::power_dialog::PowerAsk::from_name(&s)).unwrap_or(aqua::power_dialog::PowerAsk::PowerKey);
+        let Some(display) = surface::Display::connect() else {
+            println!("AquaDemo: cannot connect to a Wayland compositor (is WAYLAND_DISPLAY set, and does it offer xdg-shell?).");
+            exit(1)
+        };
+        tk.follow_appearance(&display);
+        let Some(dialog) = aqua::power_dialog::PowerDialog::new(&display, &tk, ask) else {
+            println!("AquaDemo: could not open the power dialog.");
+            exit(1)
+        };
+        let d = display.clone();
+        *dialog.on_done.borrow_mut() = Box::new(move || d.stop());
+        display.run();
+        exit(0)
+    }
     // The session's own scenes: each a surface of its own, not a window.
     if let Some(s @ ("lock" | "loginwindow" | "setupassistant")) = scene.as_deref() {
         let Some(display) = surface::Display::connect() else {

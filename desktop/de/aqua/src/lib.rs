@@ -29,6 +29,7 @@ pub mod menu;
 pub mod menubar;
 pub mod menubar_status;
 pub mod notify;
+pub mod power_dialog;
 pub mod prefs;
 pub mod scene;
 pub mod scroll;

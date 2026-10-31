@@ -1045,6 +1045,14 @@ The golden is identical (102 in the gate). live-crash-dialog is FreeBSD's
 (jails, lldb); on undertow both dialogs (a core, and none) come up with
 the log lines it reads.
 
+*R6u, the power dialog.* "Are you sure…?" for System > Restart… and Shut
+Down… and the power key, the choice sent to the login daemon, which says
+who may; a refusal is shown in its words, with an OK. The layout (stop on
+the right, Restart and Sleep on the left) is pure and tested. Swift has no
+golden for it; live-power's ten checks are green on it, claims 7 and 8
+being the dialog's. Its refusal path is unexercised here (this account is
+in wheel).
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity
