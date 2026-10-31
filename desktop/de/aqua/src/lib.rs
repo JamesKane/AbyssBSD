@@ -15,6 +15,7 @@ pub mod finder;
 pub mod finder_model;
 pub mod finder_ops;
 pub mod finder_picker;
+pub mod installer;
 pub mod island_menu;
 pub mod launcher;
 pub mod live_menu;

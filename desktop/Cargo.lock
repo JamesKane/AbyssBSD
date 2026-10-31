@@ -101,6 +101,8 @@ dependencies = [
  "app-bundles",
  "aquadraw",
  "current-ipc",
+ "install",
+ "install-wire",
  "libc",
  "login",
  "menu-model",

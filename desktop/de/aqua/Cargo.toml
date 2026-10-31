@@ -10,6 +10,8 @@ abyss-sys.workspace = true
 app-bundles = { path = "../appbundles" }
 aquadraw = { path = "../aquadraw" }
 current-ipc = { path = "../currentipc" }
+install = { path = "../install" }
+install-wire = { path = "../installwire" }
 libc.workspace = true
 login = { path = "../login" }
 menu-model = { path = "../menumodel" }

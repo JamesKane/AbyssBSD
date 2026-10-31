@@ -85,6 +85,22 @@ fn main() {
             display.run();
             exit(0)
         }
+        if kind == SceneKind::Installer {
+            // Ask the machine what it has, once, before the first frame: if
+            // the service is not there the hub says so on the disk spoke.
+            let (inventory, why) = aqua::installer::disks();
+            let n = inventory.disks.len();
+            let mut model = aqua::installer::InstallerModel::new(inventory);
+            model.inventory_error = why.clone();
+            let Some(_app) = aqua::installer::InstallerApp::new(&display, &tk, title, w, h, model) else {
+                println!("AquaDemo: failed to create the installer window.");
+                exit(1)
+            };
+            // stderr: unbuffered, for the test waiting on the log.
+            eprintln!("AquaDemo: installer is up — {n} disk(s){}", if why.is_empty() { String::new() } else { format!(", and: {why}") });
+            display.run();
+            exit(0)
+        }
         if kind == SceneKind::Prefs {
             let Some(app) = aqua::prefs::app::SystemPreferences::new(&display, &tk, (w, h)) else {
                 println!("AquaDemo: could not open System Preferences.");

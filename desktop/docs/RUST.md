@@ -965,6 +965,16 @@ live-prefs, -islands-pane, -energy-pane, -sound-pane, -displays-pane,
 -appearance and -setup green; live-agents-pane and -agents-off are
 FreeBSD-only and wait for the build guest.
 
+*R6k, the installer.* The hub and its spokes, the erase sheet with
+consent scoped to its disk, the plan (hashed here; `install-wire` and not
+the code that runs `gpart`), and its own window instead of a scene inside
+`AquaWindow`; the chrome handling the two share is one function now. One
+divergence: the hub's "Choose an user account" becomes "a user account",
+each spoke carrying its article (Swift's is BACKLOG §5). All 9 installer
+goldens are identical (88 in the gate). Live, mixed: live-installer and
+-installer-keyboard green; live-install drives `abyss-installctl` in the
+build VM, not this window, and was not run.
+
 **R6. Scenes and applications (L).** In this order: the desktop, menu bar
 and Dock; Finder; the lock screen, login window and Setup Assistant; System
 Preferences (all panes); the installer; Terminal, TextEdit, Grab, Activity

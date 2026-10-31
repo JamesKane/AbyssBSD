@@ -91,31 +91,7 @@ impl AquaWindow {
     /// **A client cannot move, resize or zoom its own window**: it asks.
     fn chrome_press(&self, w: &Window) -> bool {
         let (x, y) = self.state.borrow().pointer;
-        let (sw, sh) = w.size();
-        let t = self.toolkit.theme.borrow().tokens.clone();
-        match chrome_hit(&t, &window_chrome(&t, sw as f64, sh as f64, false), x, y) {
-            ChromeHit::Gadget(Gadget::Close) => {
-                w.close();
-                w.stop_display();
-            }
-            ChromeHit::Gadget(Gadget::Minimize) => {
-                w.minimize();
-            }
-            ChromeHit::Gadget(Gadget::Depth) => {
-                w.lower();
-            }
-            // The compositor's answer is what "zoomed" means: ask for the
-            // opposite of what it last said.
-            ChromeHit::Gadget(Gadget::Zoom) => w.set_maximized(!w.is_maximized()),
-            ChromeHit::Title => w.begin_move(),
-            ChromeHit::Resize(e) => w.begin_resize(match e {
-                ChromeEdge::Bottom => ResizeEdge::BOTTOM,
-                ChromeEdge::BottomLeft => ResizeEdge::BOTTOM_LEFT,
-                ChromeEdge::BottomRight => ResizeEdge::BOTTOM_RIGHT,
-            }),
-            ChromeHit::Gadget(Gadget::Pill) | ChromeHit::Content => return false,
-        }
-        true
+        chrome_press(&self.toolkit, w, x, y)
     }
 
     fn slider_value(s: &State, x: f64) -> f64 {
@@ -187,7 +163,7 @@ impl AquaWindow {
         let mut s = self.state.borrow_mut();
         let (x, y) = s.pointer;
         match self.kind {
-            SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock | SceneKind::Finder | SceneKind::Prefs => false,
+            SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock | SceneKind::Finder | SceneKind::Prefs | SceneKind::Installer => false,
             SceneKind::Window => {
                 if pressed {
                     s.button_pressed = s.button.contains(x, y);
@@ -321,7 +297,7 @@ impl AquaWindow {
     fn scene_key(&self, e: &KeyEvent) -> bool {
         let mut s = self.state.borrow_mut();
         match self.kind {
-            SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock | SceneKind::Finder | SceneKind::Prefs => false,
+            SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock | SceneKind::Finder | SceneKind::Prefs | SceneKind::Installer => false,
             SceneKind::Widgets => {
                 if !e.pressed {
                     // Let go of the button the keyboard held.
@@ -426,6 +402,37 @@ impl AquaWindow {
     }
 }
 
+/// A press at (x, y) on a window's chrome, acted on; false when it was not
+/// on the chrome. **A client cannot move, resize or zoom its own window**:
+/// it asks.
+pub(crate) fn chrome_press(toolkit: &Toolkit, w: &Window, x: f64, y: f64) -> bool {
+    let (sw, sh) = w.size();
+    let t = toolkit.theme.borrow().tokens.clone();
+    match chrome_hit(&t, &window_chrome(&t, sw as f64, sh as f64, false), x, y) {
+        ChromeHit::Gadget(Gadget::Close) => {
+            w.close();
+            w.stop_display();
+        }
+        ChromeHit::Gadget(Gadget::Minimize) => {
+            w.minimize();
+        }
+        ChromeHit::Gadget(Gadget::Depth) => {
+            w.lower();
+        }
+        // The compositor's answer is what "zoomed" means: ask for the
+        // opposite of what it last said.
+        ChromeHit::Gadget(Gadget::Zoom) => w.set_maximized(!w.is_maximized()),
+        ChromeHit::Title => w.begin_move(),
+        ChromeHit::Resize(e) => w.begin_resize(match e {
+            ChromeEdge::Bottom => ResizeEdge::BOTTOM,
+            ChromeEdge::BottomLeft => ResizeEdge::BOTTOM_LEFT,
+            ChromeEdge::BottomRight => ResizeEdge::BOTTOM_RIGHT,
+        }),
+        ChromeHit::Gadget(Gadget::Pill) | ChromeHit::Content => return false,
+    }
+    true
+}
+
 impl WindowDelegate for AquaWindow {
     fn render(&self, _w: &Window, target: &RenderTarget) {
         self.toolkit.draw(target, |c, w, h| {
@@ -442,7 +449,7 @@ impl WindowDelegate for AquaWindow {
                     let action = s.sheet_action.clone();
                     s.sheet = sheet::paint_sheet_scene(c, w, h, s.sheet_progress, s.sheet_visible, &action)
                 }
-                SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock | SceneKind::Finder | SceneKind::Prefs => {}
+                SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock | SceneKind::Finder | SceneKind::Prefs | SceneKind::Installer => {}
             }
         })
     }

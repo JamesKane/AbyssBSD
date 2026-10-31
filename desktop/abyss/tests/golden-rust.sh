@@ -107,6 +107,15 @@ sysprefs-agents|sysprefs-agents|aquademo:sysprefs|1|AQUA_PREFS_PANE=agents
 sysprefs-general|sysprefs-general|aquademo:sysprefs|1|AQUA_PREFS_PANE=general
 trench-sysprefs|trench-sysprefs|aquademo:sysprefs|1|ABYSS_THEME=trench
 trench-sysprefs-general|trench-sysprefs-general|aquademo:sysprefs|1|ABYSS_THEME=trench AQUA_PREFS_PANE=general
+installer-hub|installer-hub|aquademo:installer|1|
+installer-empty|installer-empty|aquademo:installer|1|AQUA_INSTALLER_PAGE=empty
+installer-disk|installer-disk|aquademo:installer|1|AQUA_INSTALLER_PAGE=disk
+installer-account|installer-account|aquademo:installer|1|AQUA_INSTALLER_PAGE=account
+installer-keyboard|installer-keyboard|aquademo:installer|1|AQUA_INSTALLER_PAGE=keyboard
+installer-confirm|installer-confirm|aquademo:installer|1|AQUA_INSTALLER_PAGE=confirm
+installer-installing|installer-installing|aquademo:installer|1|AQUA_INSTALLER_PAGE=installing
+installer-done|installer-done|aquademo:installer|1|AQUA_INSTALLER_PAGE=done
+trench-installer-disk|trench-installer-disk|aquademo:installer|1|ABYSS_THEME=trench AQUA_INSTALLER_PAGE=disk
 drawlist-roles@2x|drawlist-roles@2x|aquademo:drawlist|2|AQUA_DRAWLIST=abyss/tests/drawlist-sample.dl ABYSS_THEME=chrome-test ABYSS_THEME_DIR=abyss/tests/themes'
 
 if [ "$rv64" = 1 ]; then

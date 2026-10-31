@@ -138,6 +138,13 @@ recommended; the 12700KF has no Wi-Fi card (§3, item 5).
 
 From HANDOFF §5.3, still true:
 
+- **Swift's installer says "Choose an user account"** (found 2026-10-31,
+  porting it). `article()` picks "an" by the first letter, so the hub's
+  readiness line reads "an user account" when only the account is left.
+  Rust's installer gives each spoke its phrase with the article
+  (`Spoke::to_choose`). Fix the Swift half the same way while it runs; no
+  golden pictures that line.
+
 - **Swift's PoolConfig can't read a CRLF file** (decided 2026-10-30, after
   the Rust port). Swift splits by Character, and `"\r\n"` is one, so a CRLF
   `.ini` is one long key. Rust's `pool-config` reads it as LF; fix the Swift

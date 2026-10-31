@@ -28,6 +28,8 @@ pub enum SceneKind {
     Finder,
     /// System Preferences.
     Prefs,
+    /// The guided installer: its own window live.
+    Installer,
 }
 
 impl SceneKind {
@@ -44,6 +46,8 @@ impl SceneKind {
             Some("dock") => Some((SceneKind::Dock, "Dock", 800, 600)),
             Some("finder") => Some((SceneKind::Finder, "Finder", 520, 400)),
             Some("sysprefs") => Some((SceneKind::Prefs, "System Preferences", 760, 620)),
+            // Wide enough for a disk row to say why it cannot be used.
+            Some("installer") => Some((SceneKind::Installer, "Install AbyssBSD", 620, 460)),
             None | Some("window") => Some((SceneKind::Window, "AbyssBSD", 440, 300)),
             _ => None,
         }
@@ -148,6 +152,11 @@ pub fn render_scene_png(path: &str, kind: SceneKind, width: i32, height: i32, sc
             }
             SceneKind::Finder => {
                 crate::finder::paint_finder(&mut c, cw, ch, &finder_scene_state());
+            }
+            // A fixed synthetic machine; AQUA_INSTALLER_PAGE picks the screen.
+            SceneKind::Installer => {
+                let (m, focus) = crate::installer::sample_at(std::env::var("AQUA_INSTALLER_PAGE").ok().as_deref());
+                crate::installer::paint_installer(&mut c, cw, ch, &m, focus, false);
             }
             SceneKind::Wallpaper | SceneKind::MenuBar | SceneKind::Dock => {}
         }
