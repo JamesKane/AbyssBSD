@@ -75,7 +75,9 @@ impl PointerTarget {
 pub struct Seat {
     pub seat: wlr::Seat,
     c: Weak<Compositor>,
-    me: Weak<Seat>,
+    pub(crate) me: Weak<Seat>,
+    /// relative-pointer and pointer-constraints (U.6).
+    pub pointer_constraints: Option<crate::pointer_constraints::PointerConstraints>,
     listeners: RefCell<Vec<Listener>>,
     /// Listeners belonging to **one device**, by its address: a virtual
     /// pointer is a client resource, and wlroots asserts nothing still
@@ -131,6 +133,7 @@ impl Seat {
             seat,
             c: Rc::downgrade(c),
             me: me.clone(),
+            pointer_constraints: crate::pointer_constraints::PointerConstraints::new(d, me.clone()),
             listeners: RefCell::default(),
             device_listeners: RefCell::default(),
             cursor: Cell::new(start),
@@ -292,7 +295,7 @@ impl Seat {
         Ok(s)
     }
 
-    fn c(&self) -> Rc<Compositor> {
+    pub(crate) fn c(&self) -> Rc<Compositor> {
         self.c.upgrade().expect("the compositor outlives its seat")
     }
 
@@ -366,16 +369,17 @@ impl Seat {
         g.extend(p.on_motion_absolute(move |(x, y, t)| {
             let Some(s) = w.upgrade() else { return };
             // Absolute devices (a tablet, the virtual pointer) span the
-            // layout, and their delta is from where the pointer is.
+            // layout, and their delta is from where the pointer is: locked,
+            // the pointer stays and each report is a fresh delta from there.
             let b = s.c().layout.borrow().bounds();
             let (cx, cy) = s.cursor.get();
             let (dx, dy) = (b.x as f64 + x * b.width as f64 - cx, b.y as f64 + y * b.height as f64 - cy);
-            s.motion(dx, dy, t);
+            s.motion((dx, dy), (dx, dy), t);
         }));
         let w = me();
         g.extend(p.on_motion(move |m| {
             if let Some(s) = w.upgrade() {
-                s.motion(m.dx, m.dy, m.time_msec)
+                s.motion((m.dx, m.dy), (m.unaccel_dx, m.unaccel_dy), m.time_msec)
             }
         }));
         let w = me();
@@ -659,12 +663,30 @@ impl Seat {
         self.set_cursor_pos(x, y);
     }
 
-    /// A motion, from any pointer (pointer constraints join in R4e's next).
-    fn motion(&self, dx: f64, dy: f64, time_msec: u32) {
+    /// A motion, from any pointer: the delta goes to the client with the
+    /// pointer, then a constraint decides where the pointer itself goes.
+    fn motion(&self, d: (f64, f64), unaccel: (f64, f64), time_msec: u32) {
+        let c = self.c();
         // Any input is a person, and wakes sleeping displays (U.9).
-        self.c().activity(Some(self.seat));
+        c.activity(Some(self.seat));
         let (x, y) = self.cursor.get();
-        self.move_cursor(x + dx, y + dy, time_msec);
+        let to = (x + d.0, y + d.1);
+        if self.pointer_constraints.is_none() {
+            return self.move_cursor(to.0, to.1, time_msec);
+        }
+        self.send_relative(time_msec, d, unaccel);
+        // A move or resize grab owns the pointer, constraint or not.
+        if c.moving().is_some() || c.resizing().is_some() {
+            return self.move_cursor(to.0, to.1, time_msec);
+        }
+        match self.constrain((x, y), to) {
+            // Locked: the pointer stays, and the delta's frame closes here.
+            None => self.seat.pointer_frame(),
+            Some((nx, ny)) => {
+                self.move_cursor(nx, ny, time_msec);
+                self.refresh_constraints();
+            }
+        }
     }
 
     /// Put the pointer somewhere without telling the client it moved.
@@ -855,10 +877,15 @@ impl Seat {
     /// layer surface has it, in which case clicking the active window again
     /// gives it back.
     fn focus_moved(&self, t: Option<&Rc<Toplevel>>) {
-        let Some(t) = t else { return self.seat.keyboard_clear_focus() };
+        // A constraint holds only for the focused window: ⌘-Tab ends a lock.
+        let Some(t) = t else {
+            self.seat.keyboard_clear_focus();
+            return self.refresh_constraints();
+        };
         *self.keyboard_layer.borrow_mut() = None;
         // No keyboard yet: the focus is recorded, and told when one arrives.
         self.seat.keyboard_enter(t.surface);
+        self.refresh_constraints();
     }
 
     // MARK: the session lock (P16.2)
@@ -1108,6 +1135,10 @@ fn hit_layer<'a>(layers: impl DoubleEndedIterator<Item = &'a Rc<Layer>>, x: f64,
 
 impl Drop for Seat {
     fn drop(&mut self) {
+        if let Some(pc) = &self.pointer_constraints {
+            pc.listener.borrow_mut().take();
+            pc.entries.borrow_mut().clear();
+        }
         self.listeners.borrow_mut().clear();
         self.cursor_surface_listeners.borrow_mut().clear();
         self.drag_icon_listener.borrow_mut().take();

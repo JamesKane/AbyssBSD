@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 #include <xkbcommon/xkbcommon.h>
 
 #define TW_SIGNAL(type, sig) \
@@ -65,6 +66,9 @@ TW_SIGNAL(keyboard, key)
 TW_SIGNAL(keyboard, modifiers)
 TW_SIGNAL(input_device, destroy)
 TW_SIGNAL(drag_icon, destroy)
+TW_SIGNAL(pointer_constraints_v1, new_constraint)
+TW_SIGNAL(pointer_constraint_v1, set_region)
+TW_SIGNAL(pointer_constraint_v1, destroy)
 #undef TW_SIGNAL
 
 struct tw_listener *tw_seat_on_pointer_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx) {
@@ -517,3 +521,40 @@ size_t tw_keyboard_syms(struct wlr_keyboard *k, uint32_t keycode, uint32_t *out,
 }
 
 uint32_t tw_keysym_from_name(const char *name) { return xkb_keysym_from_name(name, XKB_KEYSYM_CASE_INSENSITIVE); }
+
+struct wlr_surface *tw_seat_pointer_focused(const struct wlr_seat *seat, double *sx, double *sy) {
+    *sx = seat->pointer_state.sx; *sy = seat->pointer_state.sy;
+    return seat->pointer_state.focused_surface;
+}
+
+void tw_relative_motion(struct wlr_relative_pointer_manager_v1 *m, struct wlr_seat *seat, uint32_t time_msec,
+                        double dx, double dy, double unaccel_dx, double unaccel_dy) {
+    wlr_relative_pointer_manager_v1_send_relative_motion(m, seat, (uint64_t)time_msec * 1000, dx, dy, unaccel_dx, unaccel_dy);
+}
+
+bool tw_constraint_locked(const struct wlr_pointer_constraint_v1 *c) { return c->type == WLR_POINTER_CONSTRAINT_V1_LOCKED; }
+struct wlr_surface *tw_constraint_surface(const struct wlr_pointer_constraint_v1 *c) { return c->surface; }
+
+bool tw_constraint_contains(struct wlr_pointer_constraint_v1 *c, double x, double y) {
+    return pixman_region32_contains_point(&c->region, (int)floor(x), (int)floor(y), NULL);
+}
+
+bool tw_constraint_nearest(struct wlr_pointer_constraint_v1 *c, double x, double y, double *nx, double *ny) {
+    int n = 0;
+    pixman_box32_t *boxes = pixman_region32_rectangles(&c->region, &n);
+    if (!boxes || n <= 0) return false;
+    double best = INFINITY;
+    for (int i = 0; i < n; i++) {
+        double cx = fmin(fmax(x, boxes[i].x1), boxes[i].x2 - 1);
+        double cy = fmin(fmax(y, boxes[i].y1), boxes[i].y2 - 1);
+        double d = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+        if (d < best) { best = d; *nx = cx; *ny = cy; }
+    }
+    return true;
+}
+
+bool tw_constraint_hint(const struct wlr_pointer_constraint_v1 *c, double *x, double *y) {
+    if (!c->current.cursor_hint.enabled) return false;
+    *x = c->current.cursor_hint.x; *y = c->current.cursor_hint.y;
+    return true;
+}

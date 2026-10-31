@@ -485,6 +485,19 @@ fn tool(name: &str) -> Option<std::path::PathBuf> {
                 }
                 cc.arg(format!("{root}/abyss/tests/{name}.c")).arg(out.join(format!("{name}-proto.c"))).args(pc(&["wayland-client", "xkbcommon"])?.split_whitespace());
             }
+            "locktest" => {
+                for n in ["relative-pointer", "pointer-constraints"] {
+                    if !scan(&format!("{root}/protocols/{n}-unstable-v1.xml"), n) {
+                        return None;
+                    }
+                }
+                cc.arg(format!("-I{root}/de/cwayland/include"))
+                    .arg(format!("{root}/abyss/tests/locktest.c"))
+                    .arg(format!("{root}/de/cabyssprotocols/xdg-shell-protocol.c"))
+                    .arg(out.join("relative-pointer-proto.c"))
+                    .arg(out.join("pointer-constraints-proto.c"))
+                    .args(pc(&["wayland-client"])?.split_whitespace());
+            }
             _ => return None,
         }
         cc.arg("-o").arg(&bin);
@@ -722,5 +735,83 @@ fn the_seat_routes_pointer_and_keys() {
     assert!(!tb.maximized.get());
     assert_eq!(seat.frame_clicks.get(), 1);
     drop((a, b, p, k));
+    pump(c, || c.toplevels.borrow().is_empty());
+}
+
+/// Pointer constraints (U.6), with live-lock.sh's own locktest: a lock
+/// holds the pointer while deltas still arrive, ⌘-Tab ends it, a
+/// confinement pulls the pointer back, and a hint is where it lands.
+#[test]
+fn pointer_locks_and_confinements_hold() {
+    let (Some(lt), Some(lc), Some(vp), Some(vk)) = (tool("locktest"), lockclient(), tool("vpointer"), tool("vkeyboard")) else { return };
+    let r = rig("plock");
+    let c = &r.c;
+    let seat = Seat::new(c).unwrap();
+    // The devices first: locktest binds wl_pointer at once, as live-lock.sh
+    // orders it.
+    let mut p = LockClient::start(&vp, &c.socket_name, &["640", "480"]);
+    let mut k = LockClient::start(&vk, &c.socket_name, &[]);
+    assert!(pump(c, || seat.capabilities.get() == 3));
+    let mut game = LockClient::start(&lt, &c.socket_name, &["org.test.game"]);
+    assert!(game.wait(c, "ready"));
+    let other = LockClient::start(&lc, &c.socket_name, &["window", "ffcc2222", "org.test.other"]);
+    assert!(pump(c, || c.mapped_toplevels().len() == 2));
+    let g = c.toplevels.borrow().iter().find(|t| t.app_id().as_deref() == Some("org.test.game")).cloned().unwrap();
+    let o = c.toplevels.borrow().iter().find(|t| t.app_id().as_deref() == Some("org.test.other")).cloned().unwrap();
+    g.x.set(0);
+    g.y.set(0);
+    o.x.set(400);
+    o.y.set(300);
+    p.say("m 50 50");
+    p.say("p");
+    p.say("r");
+    assert!(pump(c, || c.focused().is_some_and(|f| Rc::ptr_eq(&f, &g))), "the game focused");
+
+    game.say("l");
+    assert!(game.wait(c, "locked"), "the lock took effect");
+    let pc = seat.pointer_constraints.as_ref().unwrap();
+    assert_eq!(pc.locks.get(), 1);
+    let before = seat.cursor.get();
+    p.say("d 10 5");
+    assert!(game.wait_prefix(c, "rel").is_some(), "the delta still arrives");
+    assert_eq!(seat.cursor.get(), before, "and the pointer stays put");
+    assert!(pc.held.get() >= 1);
+
+    k.say("c 64 15"); // ⌘-Tab: the other window
+    assert!(game.wait(c, "unlocked"), "a lock does not survive ⌘-Tab");
+    assert!(!pc.is_active());
+
+    // Back to the game: a persistent lock comes back with the focus.
+    c.focus(&g);
+    assert!(game.wait(c, "locked"), "persistent: it holds again once the game is focused");
+    // Destroyed by the client: no event to it, and gone from us.
+    game.say("u");
+    assert!(pump(c, || !pc.is_active()));
+    // Confine it to a 40x40 box at (10,10), the pointer inside it (a
+    // confinement starts only there).
+    p.say("m 30 30");
+    assert!(pump(c, || seat.cursor.get() == (30.0, 30.0)));
+    game.say("c 10 10 40 40");
+    assert!(game.wait(c, "confined"));
+    p.say("d 200 0");
+    assert!(pump(c, || seat.cursor.get().0 < 60.0 && pc.held.get() >= 2), "pulled back into its box");
+    assert!(seat.cursor.get().0 >= 10.0 && seat.cursor.get().0 < 50.0, "{:?}", seat.cursor.get());
+    game.say("u");
+    assert!(pump(c, || !pc.is_active()));
+
+    // A lock with a hint: when it ends, the pointer lands on the hint.
+    game.say("l");
+    assert!(game.wait(c, "locked"));
+    game.say("h 70 80");
+    // A moment for the hint's commit: nothing announces it.
+    for _ in 0..20 {
+        c.session.dispatch(5);
+        c.end_frame();
+    }
+    game.say("u");
+    assert!(pump(c, || !pc.is_active()));
+    assert_eq!(seat.cursor.get(), (70.0, 80.0), "the pointer went to the hint");
+    assert!(pc.warps.get() >= 1);
+    drop((game, other, p, k));
     pump(c, || c.toplevels.borrow().is_empty());
 }

@@ -18,6 +18,7 @@ macro_rules! opaque {
 opaque!(wl_display, wl_event_loop, wl_event_source, wlr_backend, wlr_session, wlr_renderer, wlr_allocator, wlr_output, wlr_output_mode, wlr_output_state, wlr_render_pass, wlr_buffer, wlr_texture, wlr_surface, wlr_input_device, wlr_drm_syncobj_timeline, tw_listener);
 opaque!(wlr_xdg_decoration_manager_v1, wlr_xdg_toplevel_decoration_v1);
 opaque!(wlr_session_lock_manager_v1, wlr_session_lock_v1, wlr_session_lock_surface_v1);
+opaque!(wlr_relative_pointer_manager_v1, wlr_pointer_constraints_v1, wlr_pointer_constraint_v1);
 opaque!(wlr_pointer, wlr_keyboard, wlr_drag_icon, wlr_cursor_shape_manager_v1, wlr_virtual_pointer_manager_v1, wlr_virtual_keyboard_manager_v1);
 opaque!(wlr_output_manager_v1, wlr_output_configuration_v1, wlr_output_configuration_head_v1, wlr_idle_inhibit_manager_v1, wlr_idle_inhibitor_v1, wlr_idle_notifier_v1, wlr_seat);
 
@@ -269,6 +270,21 @@ unsafe extern "C" {
     fn tw_session_lock_manager_global(m: *const wlr_session_lock_manager_v1) -> *const c_void;
     fn tw_lock_surface_surface(s: *const wlr_session_lock_surface_v1) -> *mut wlr_surface;
     fn tw_lock_surface_output(s: *const wlr_session_lock_surface_v1) -> *mut wlr_output;
+    fn tw_pointer_constraints_v1_on_new_constraint(o: *mut wlr_pointer_constraints_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_constraint_v1_on_set_region(o: *mut wlr_pointer_constraint_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_pointer_constraint_v1_on_destroy(o: *mut wlr_pointer_constraint_v1, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
+    fn tw_seat_pointer_focused(s: *const wlr_seat, sx: *mut f64, sy: *mut f64) -> *mut wlr_surface;
+    fn tw_relative_motion(m: *mut wlr_relative_pointer_manager_v1, s: *mut wlr_seat, t: u32, dx: f64, dy: f64, udx: f64, udy: f64);
+    fn tw_constraint_locked(c: *const wlr_pointer_constraint_v1) -> bool;
+    fn tw_constraint_surface(c: *const wlr_pointer_constraint_v1) -> *mut wlr_surface;
+    fn tw_constraint_contains(c: *mut wlr_pointer_constraint_v1, x: f64, y: f64) -> bool;
+    fn tw_constraint_nearest(c: *mut wlr_pointer_constraint_v1, x: f64, y: f64, nx: *mut f64, ny: *mut f64) -> bool;
+    fn tw_constraint_hint(c: *const wlr_pointer_constraint_v1, x: *mut f64, y: *mut f64) -> bool;
+    fn wlr_relative_pointer_manager_v1_create(d: *mut wl_display) -> *mut wlr_relative_pointer_manager_v1;
+    fn wlr_pointer_constraints_v1_create(d: *mut wl_display) -> *mut wlr_pointer_constraints_v1;
+    fn wlr_pointer_constraints_v1_constraint_for_surface(m: *mut wlr_pointer_constraints_v1, s: *mut wlr_surface, seat: *mut wlr_seat) -> *mut wlr_pointer_constraint_v1;
+    fn wlr_pointer_constraint_v1_send_activated(c: *mut wlr_pointer_constraint_v1);
+    fn wlr_pointer_constraint_v1_send_deactivated(c: *mut wlr_pointer_constraint_v1);
     fn tw_seat_on_request_set_selection(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_seat_on_request_set_primary_selection(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
     fn tw_seat_on_request_start_drag(o: *mut wlr_seat, f: Notify, ctx: *mut c_void) -> *mut tw_listener;
@@ -518,6 +534,9 @@ handle!(Lock, wlr_session_lock_v1);
 handle!(LockSurface, wlr_session_lock_surface_v1);
 handle!(OutputManager, wlr_output_manager_v1);
 handle!(Pointer, wlr_pointer);
+handle!(RelativePointerManager, wlr_relative_pointer_manager_v1);
+handle!(ConstraintManager, wlr_pointer_constraints_v1);
+handle!(Constraint, wlr_pointer_constraint_v1);
 handle!(Keyboard, wlr_keyboard);
 handle!(DragIcon, wlr_drag_icon);
 handle!(CursorShapeManager, wlr_cursor_shape_manager_v1);
@@ -1098,6 +1117,12 @@ pub mod globals {
         }
         if unsafe { tw_syncobj_create(d.0.as_ptr(), r.0.as_ptr()) } { Ok(()) } else { Err("the render node refused a syncobj manager") }
     }
+    pub fn relative_pointer_manager(d: &Display) -> Option<RelativePointerManager> {
+        RelativePointerManager::from_raw(unsafe { wlr_relative_pointer_manager_v1_create(d.0.as_ptr()) })
+    }
+    pub fn pointer_constraints(d: &Display) -> Option<ConstraintManager> {
+        ConstraintManager::from_raw(unsafe { wlr_pointer_constraints_v1_create(d.0.as_ptr()) })
+    }
     pub fn seat(d: &Display, name: &str) -> Option<Seat> {
         Seat::from_raw(unsafe { wlr_seat_create(d.0.as_ptr(), cstr(name).as_ptr()) })
     }
@@ -1456,6 +1481,60 @@ impl Seat {
     /// Start it if its serial is a real press; else destroy its source.
     pub fn accept_drag(self, r: DragRequest) -> bool {
         unsafe { tw_seat_accept_drag(self.0.as_ptr(), r.0) }
+    }
+}
+
+impl Seat {
+    /// The surface with the pointer, and where in it the pointer is.
+    pub fn pointer_focused(self) -> Option<(Surface, f64, f64)> {
+        let (mut x, mut y) = (0.0, 0.0);
+        Surface::from_raw(unsafe { tw_seat_pointer_focused(self.0.as_ptr(), &mut x, &mut y) }).map(|s| (s, x, y))
+    }
+}
+
+impl RelativePointerManager {
+    /// A motion as a delta, accelerated and not, to whoever has the pointer.
+    pub fn send(self, seat: Seat, time_msec: u32, d: (f64, f64), unaccel: (f64, f64)) {
+        unsafe { tw_relative_motion(self.0.as_ptr(), seat.0.as_ptr(), time_msec, d.0, d.1, unaccel.0, unaccel.1) }
+    }
+}
+
+impl ConstraintManager {
+    signal!(on_new_constraint, tw_pointer_constraints_v1_on_new_constraint, wlr_pointer_constraints_v1, |d| -> Constraint { Constraint(NonNull::new(d as *mut wlr_pointer_constraint_v1).unwrap()) });
+    pub fn for_surface(self, s: Surface, seat: Seat) -> Option<Constraint> {
+        Constraint::from_raw(unsafe { wlr_pointer_constraints_v1_constraint_for_surface(self.0.as_ptr(), s.0.as_ptr(), seat.0.as_ptr()) })
+    }
+}
+
+impl Constraint {
+    signal!(on_set_region, tw_pointer_constraint_v1_on_set_region, wlr_pointer_constraint_v1, ||);
+    signal!(on_destroy, tw_pointer_constraint_v1_on_destroy, wlr_pointer_constraint_v1, ||);
+    /// Locked (not confined): the pointer does not move at all.
+    pub fn locked(self) -> bool {
+        unsafe { tw_constraint_locked(self.0.as_ptr()) }
+    }
+    pub fn surface(self) -> Option<Surface> {
+        Surface::from_raw(unsafe { tw_constraint_surface(self.0.as_ptr()) })
+    }
+    pub fn contains(self, x: f64, y: f64) -> bool {
+        unsafe { tw_constraint_contains(self.0.as_ptr(), x, y) }
+    }
+    /// The region's nearest point; None if it is empty.
+    pub fn nearest(self, x: f64, y: f64) -> Option<(f64, f64)> {
+        let (mut nx, mut ny) = (0.0, 0.0);
+        unsafe { tw_constraint_nearest(self.0.as_ptr(), x, y, &mut nx, &mut ny) }.then_some((nx, ny))
+    }
+    /// A lock's cursor hint: where the client drew its own cursor.
+    pub fn hint(self) -> Option<(f64, f64)> {
+        let (mut x, mut y) = (0.0, 0.0);
+        unsafe { tw_constraint_hint(self.0.as_ptr(), &mut x, &mut y) }.then_some((x, y))
+    }
+    pub fn send_activated(self) {
+        unsafe { wlr_pointer_constraint_v1_send_activated(self.0.as_ptr()) }
+    }
+    /// May destroy it (a oneshot constraint).
+    pub fn send_deactivated(self) {
+        unsafe { wlr_pointer_constraint_v1_send_deactivated(self.0.as_ptr()) }
     }
 }
 

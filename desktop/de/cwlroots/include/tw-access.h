@@ -81,6 +81,9 @@ TW_SIGNAL(keyboard, key)
 TW_SIGNAL(keyboard, modifiers)
 TW_SIGNAL(input_device, destroy)
 TW_SIGNAL(drag_icon, destroy)
+TW_SIGNAL(pointer_constraints_v1, new_constraint)
+TW_SIGNAL(pointer_constraint_v1, set_region)
+TW_SIGNAL(pointer_constraint_v1, destroy)
 #undef TW_SIGNAL
 /* The seat's pointer focus moved (pointer_state.events, not events). */
 struct tw_listener *tw_seat_on_pointer_focus_change(struct wlr_seat *s, tw_notify_fn fn, void *ctx);
@@ -321,6 +324,20 @@ uint32_t tw_keyboard_modifiers(struct wlr_keyboard *k);
  * ones not already there. How many, at most `max`, into out. */
 size_t tw_keyboard_syms(struct wlr_keyboard *k, uint32_t keycode, uint32_t *out, size_t max);
 uint32_t tw_keysym_from_name(const char *name);
+
+/* MARK: pointer constraints (relative-pointer, pointer-constraints, U.6) */
+
+/* The seat's pointer focus and where in it the pointer is. */
+struct wlr_surface *tw_seat_pointer_focused(const struct wlr_seat *seat, double *sx, double *sy);
+void tw_relative_motion(struct wlr_relative_pointer_manager_v1 *m, struct wlr_seat *seat, uint32_t time_msec,
+                        double dx, double dy, double unaccel_dx, double unaccel_dy);
+bool tw_constraint_locked(const struct wlr_pointer_constraint_v1 *c);
+struct wlr_surface *tw_constraint_surface(const struct wlr_pointer_constraint_v1 *c);
+bool tw_constraint_contains(struct wlr_pointer_constraint_v1 *c, double x, double y);
+/* The region's nearest point to (x, y), box by box; false if it is empty. */
+bool tw_constraint_nearest(struct wlr_pointer_constraint_v1 *c, double x, double y, double *nx, double *ny);
+/* A lock's cursor-position hint, if the client gave one. */
+bool tw_constraint_hint(const struct wlr_pointer_constraint_v1 *c, double *x, double *y);
 
 /* MARK: foreign toplevels, activation */
 

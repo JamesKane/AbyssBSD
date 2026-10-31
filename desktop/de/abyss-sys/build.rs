@@ -202,6 +202,7 @@ fn main() {
             }
         }
         w.compile("cwlroots");
+        println!("cargo:rustc-link-lib=m");
         for flag in pkg_config_of(&["--libs"], &wlroots) {
             if let Some(dir) = flag.strip_prefix("-L") {
                 println!("cargo:rustc-link-search=native={dir}");

@@ -21,6 +21,7 @@ pub mod metronome;
 pub mod output;
 pub mod output_management;
 pub mod places;
+pub mod pointer_constraints;
 pub mod recorder;
 pub mod scene;
 pub mod seat;
